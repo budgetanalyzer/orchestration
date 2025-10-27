@@ -26,6 +26,7 @@ REPOS=(
     "budget-analyzer-api"
     "budget-analyzer-web"
     "currency-service"
+    "service-common"
 )
 
 # Get the parent directory (two levels up from scripts dir, or one level up from repo root)

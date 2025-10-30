@@ -115,6 +115,43 @@ for REPO in "${REPOS[@]}"; do
         print_warning "Untracked files in $REPO"
     fi
 
+    # Check if on main branch
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$CURRENT_BRANCH" != "main" ]; then
+        print_error "Not on main branch in $REPO (currently on: $CURRENT_BRANCH)"
+        VALIDATION_FAILED=1
+        continue
+    fi
+
+    # Fetch latest from remote
+    print_info "Fetching latest from remote for $REPO..."
+    if ! git fetch origin main --quiet; then
+        print_error "Failed to fetch from remote for $REPO"
+        VALIDATION_FAILED=1
+        continue
+    fi
+
+    # Check if local is behind remote
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+    BASE=$(git merge-base @ @{u})
+
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        if [ "$LOCAL" = "$BASE" ]; then
+            print_error "$REPO is behind remote. Please pull latest changes."
+            VALIDATION_FAILED=1
+            continue
+        elif [ "$REMOTE" = "$BASE" ]; then
+            print_error "$REPO has unpushed commits. Please push before tagging."
+            VALIDATION_FAILED=1
+            continue
+        else
+            print_error "$REPO has diverged from remote. Please sync before tagging."
+            VALIDATION_FAILED=1
+            continue
+        fi
+    fi
+
     print_success "✓ $REPO"
 done
 

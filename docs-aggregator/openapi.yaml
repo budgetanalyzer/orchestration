@@ -27,7 +27,7 @@ tags:
   description: Endpoints for operations on exchange rates
   x-service: currency-service
 paths:
-  /transactions/search:
+  /v1/transactions/search:
     post:
       tags:
       - Transactions
@@ -76,7 +76,7 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /transactions/import:
+  /v1/transactions/import:
     post:
       tags:
       - Transactions
@@ -165,7 +165,7 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /transactions:
+  /v1/transactions:
     get:
       tags:
       - Transactions
@@ -199,7 +199,7 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /transactions/{id}:
+  /v1/transactions/{id}:
     get:
       tags:
       - Transactions
@@ -290,88 +290,7 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /exchange-rates/import:
-    post:
-      tags:
-      - Exchange Rates Handler
-      summary: Import CSV file containing USD exchange rate series from FRED
-      description: Imports USD exchange rates in the format provided by FRED, i.e.
-        https://fred.stlouisfed.org/series/DEXTHUS
-      operationId: importExchangeRates
-      parameters:
-      - name: targetCurrency
-        in: query
-        description: Target currency for exchange rate series.  Currently only supports
-          THB.
-        required: true
-        schema:
-          type: string
-          default: THB
-        example: THB
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: CSV file to upload
-              required:
-              - file
-        required: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ExchangeRateResponse'
-        '422':
-          description: Unprocessable Entity
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              examples:
-                CSV Parsing Error:
-                  summary: Invalid value found in csv file
-                  description: CSV Parsing Error
-                  value:
-                    type: APPLICATION_ERROR
-                    message: Invalid value in csv file
-                    code: CSV_PARSING_ERROR
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /exchange-rates:
+  /v1/exchange-rates:
     get:
       tags:
       - Exchange Rates Handler
@@ -429,7 +348,40 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /currencies:
+  /v1/exchange-rates/import:
+    get:
+      tags:
+      - Exchange Rates Handler
+      summary: Import latest available rates from FRED
+      description: Retrieve latest un-imported exchange rates from FRED- manually
+        triggers daily cron job
+      operationId: importLatestExchangeRates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResultResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/currencies:
     get:
       tags:
       - Currency Handler
@@ -596,12 +548,11 @@ components:
       - id
       - type
     ApiErrorResponse:
-      type: object
       description: Standard API error response format
       properties:
         type:
           type: string
-          description: Error type indicating the category and structure of the error
+          description: Error type categorization for API responses
           enum:
           - INVALID_REQUEST
           - VALIDATION_ERROR
@@ -618,7 +569,7 @@ components:
           type: string
           description: Machine-readable error code for specific application errors
             (required for APPLICATION_ERROR type)
-          example: CSV_FORMAT_NOT_SUPPORTED
+          example: CSV_PARSING_ERROR
         fieldErrors:
           type: array
           description: List of field-level validation errors (populated for VALIDATION_ERROR
@@ -629,7 +580,6 @@ components:
       - message
       - type
     FieldError:
-      type: object
       description: Field-level validation error details
       properties:
         field:
@@ -641,6 +591,7 @@ components:
           description: Error message
           example: must be a valid email address
         rejectedValue:
+          type: object
           description: Value that caused the error
           example: invalid@email
       required:
@@ -652,48 +603,18 @@ components:
       description: Exchange rate response
       properties:
         baseCurrency:
-          type: object
+          type: string
           description: Base currency for conversion (currently only USD supported)
           example: USD
-          properties:
-            currencyCode:
-              type: string
-            displayName:
-              type: string
-            symbol:
-              type: string
-            defaultFractionDigits:
-              type: integer
-              format: int32
-            numericCode:
-              type: integer
-              format: int32
-            numericCodeAsString:
-              type: string
         targetCurrency:
-          type: object
+          type: string
           description: Target currency for conversion (currently only THB supported)
           example: THB
-          properties:
-            currencyCode:
-              type: string
-            displayName:
-              type: string
-            symbol:
-              type: string
-            defaultFractionDigits:
-              type: integer
-              format: int32
-            numericCode:
-              type: integer
-              format: int32
-            numericCodeAsString:
-              type: string
         date:
           type: string
           format: date
           description: Date for the given rate
-          example: '2025-10-31'
+          example: '2025-11-02'
         rate:
           type: number
           description: Exchange rate for the given date
@@ -701,7 +622,9 @@ components:
         publishedDate:
           type: string
           format: date
-          description: Date for the given rate
+          description: Date the exchange rate was published.  FRED doesn't publish
+            rates for weekends and holidays, so we use the nearest previously published
+            rate
           example: '2025-10-31'
       required:
       - baseCurrency
@@ -709,3 +632,35 @@ components:
       - publishedDate
       - rate
       - targetCurrency
+    ImportResultResponse:
+      type: object
+      description: Import result response
+      properties:
+        newRecords:
+          type: integer
+          format: int32
+          description: Number of new exchange rates created
+          example: 10
+        updatedRecords:
+          type: integer
+          format: int32
+          description: Number of exchange rates that were updated due to having a
+            different rate than what we have stored- should never happen, rates shouldn't
+            change
+          example: 32.68
+        skippedRecords:
+          type: integer
+          format: int32
+          description: Number of rows in the csv that already had matching exchange
+            rates created in the database
+          example: '2025-10-31'
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the import
+          example: '2025-10-31'
+      required:
+      - newRecords
+      - skippedRecords
+      - timestamp
+      - updatedRecords

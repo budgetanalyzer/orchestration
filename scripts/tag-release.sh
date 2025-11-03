@@ -13,42 +13,9 @@
 
 set -e  # Exit on error
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Repository list (relative to parent directory)
-REPOS=(
-    "budget-analyzer"
-    "budget-analyzer-api"
-    "budget-analyzer-web"
-    "currency-service"
-    "service-common"
-)
-
-# Get the parent directory (two levels up from scripts dir, or one level up from repo root)
+# Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-PARENT_DIR="$(dirname "$REPO_ROOT")"
-
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+source "$SCRIPT_DIR/repo-config.sh"
 
 # Check if version argument is provided
 if [ $# -eq 0 ]; then
@@ -76,89 +43,29 @@ echo
 
 # Phase 1: Validation - check all repos exist and are clean
 print_info "Phase 1: Validating repositories..."
-VALIDATION_FAILED=0
 
+# Run the validation script
+if ! "$SCRIPT_DIR/validate-repos.sh"; then
+    print_error "Repository validation failed. Please fix the issues above before tagging."
+    exit 1
+fi
+
+# Additional validation: Check if tag already exists in any repository
+VALIDATION_FAILED=0
 for REPO in "${REPOS[@]}"; do
     REPO_PATH="$PARENT_DIR/$REPO"
-
-    # Check if repository exists
-    if [ ! -d "$REPO_PATH" ]; then
-        print_error "Repository not found: $REPO_PATH"
-        VALIDATION_FAILED=1
-        continue
-    fi
-
-    # Check if it's a git repository
-    if [ ! -d "$REPO_PATH/.git" ]; then
-        print_error "Not a git repository: $REPO_PATH"
-        VALIDATION_FAILED=1
-        continue
-    fi
-
-    # Check if tag already exists
     cd "$REPO_PATH"
+
     if git rev-parse "$VERSION" >/dev/null 2>&1; then
         print_warning "Tag $VERSION already exists in $REPO"
         VALIDATION_FAILED=1
-        continue
     fi
-
-    # Check for uncommitted changes
-    if ! git diff-index --quiet HEAD --; then
-        print_warning "Uncommitted changes in $REPO"
-        VALIDATION_FAILED=1
-        continue
-    fi
-
-    # Check for untracked files
-    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
-        print_warning "Untracked files in $REPO"
-    fi
-
-    # Check if on main branch
-    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    if [ "$CURRENT_BRANCH" != "main" ]; then
-        print_error "Not on main branch in $REPO (currently on: $CURRENT_BRANCH)"
-        VALIDATION_FAILED=1
-        continue
-    fi
-
-    # Fetch latest from remote
-    print_info "Fetching latest from remote for $REPO..."
-    if ! git fetch origin main --quiet; then
-        print_error "Failed to fetch from remote for $REPO"
-        VALIDATION_FAILED=1
-        continue
-    fi
-
-    # Check if local is behind remote
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u})
-    BASE=$(git merge-base @ @{u})
-
-    if [ "$LOCAL" != "$REMOTE" ]; then
-        if [ "$LOCAL" = "$BASE" ]; then
-            print_error "$REPO is behind remote. Please pull latest changes."
-            VALIDATION_FAILED=1
-            continue
-        elif [ "$REMOTE" = "$BASE" ]; then
-            print_error "$REPO has unpushed commits. Please push before tagging."
-            VALIDATION_FAILED=1
-            continue
-        else
-            print_error "$REPO has diverged from remote. Please sync before tagging."
-            VALIDATION_FAILED=1
-            continue
-        fi
-    fi
-
-    print_success "✓ $REPO"
 done
 
 echo
 
 if [ $VALIDATION_FAILED -eq 1 ]; then
-    print_error "Validation failed. Please fix the issues above before tagging."
+    print_error "Tag already exists in one or more repositories. Aborting."
     exit 1
 fi
 

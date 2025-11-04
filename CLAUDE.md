@@ -212,9 +212,10 @@ curl http://localhost:8080/api/currencies
 ## Service Repositories
 
 Each microservice is maintained in its own repository:
-- **budget-analyzer-web**: [repository URL]
-- **budget-analyzer-api**: [repository URL]
-- **currency-service**: [repository URL]
+- **service-common**: [https://github.com/bleurubin/service-common]
+- **budget-analyzer-api**: [https://github.com/bleurubin/budget-analyzer-api]
+- **currency-service**: [https://github.com/bleurubin/currency-service]
+- **budget-analyzer-web**: [https://github.com/bleurubin/budget-analyzer-web]
 
 ## Deployment
 

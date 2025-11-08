@@ -32,6 +32,24 @@ services:
       timeout: 3s
       retries: 3
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: budget-analyzer-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"      # AMQP port
+      - "15672:15672"    # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   nginx-gateway:
     image: nginx:alpine
     container_name: api-gateway

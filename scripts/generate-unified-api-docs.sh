@@ -64,13 +64,43 @@ if command -v yq &> /dev/null; then
     fi
 fi
 
-# Service endpoints
-TRANSACTION_SERVICE="http://localhost:8080/api/transaction-service/v3/api-docs"
-CURRENCY_SERVICE="http://localhost:8080/api/currency-service/v3/api-docs"
+# Service configurations: name|url|repo-path (using | as delimiter to avoid conflict with : in URLs)
+SERVICES=(
+    "transaction-service|http://localhost:8082/transaction-service/v3/api-docs.yaml|../transaction-service"
+    "currency-service|http://localhost:8084/currency-service/v3/api-docs.yaml|../currency-service"
+)
 
 print_info "Fetching OpenAPI specs from microservices..."
 
-# Fetch specs
+# Fetch and save individual service specs
+for SERVICE_CONFIG in "${SERVICES[@]}"; do
+    IFS='|' read -r SERVICE_NAME SERVICE_URL REPO_PATH <<< "$SERVICE_CONFIG"
+
+    print_info "Fetching $SERVICE_NAME..."
+
+    # Check if repo exists
+    if [ ! -d "$REPO_ROOT/$REPO_PATH" ]; then
+        print_warning "Repository not found at $REPO_ROOT/$REPO_PATH - skipping individual save"
+    else
+        # Create docs/api directory if needed
+        SERVICE_DOCS_DIR="$REPO_ROOT/$REPO_PATH/docs/api"
+        mkdir -p "$SERVICE_DOCS_DIR"
+
+        # Fetch YAML and save to service repo
+        if curl -sf "$SERVICE_URL" -o "$SERVICE_DOCS_DIR/openapi.yaml" 2>/dev/null; then
+            print_success "✓ Saved to $REPO_PATH/docs/api/openapi.yaml"
+        else
+            print_warning "Failed to save individual spec to $REPO_PATH/docs/api/openapi.yaml"
+        fi
+    fi
+done
+
+# Also fetch JSON for merging (use gateway endpoints)
+TRANSACTION_SERVICE="http://localhost:8080/api/transaction-service/v3/api-docs"
+CURRENCY_SERVICE="http://localhost:8080/api/currency-service/v3/api-docs"
+
+print_info "Fetching specs for merging..."
+
 BUDGET_SPEC=$(curl -sf "$TRANSACTION_SERVICE" 2>/dev/null)
 if [ $? -ne 0 ]; then
     print_error "Failed to fetch Budget Analyzer API spec from $TRANSACTION_SERVICE"

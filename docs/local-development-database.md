@@ -15,12 +15,12 @@ For local development, all microservices share a single PostgreSQL instance to a
 
 | Service | Database Name | Connection String |
 |---------|--------------|-------------------|
-| budget-analyzer-api | `budget_analyzer` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer` |
+| transaction-service | `budget_analyzer` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer` |
 | currency-service | `currency` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/currency` |
 
 ## Starting the Database
 
-From the root budget-analyzer directory:
+From the root orchestration directory:
 
 ```bash
 docker compose up

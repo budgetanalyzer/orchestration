@@ -9,8 +9,8 @@
 
 # Repository list (relative to parent directory)
 REPOS=(
-    "budget-analyzer"
-    "budget-analyzer-api"
+    "orchestration"
+    "transaction-service"
     "budget-analyzer-web"
     "currency-service"
     "service-common"

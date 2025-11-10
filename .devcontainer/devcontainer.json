@@ -1,8 +1,8 @@
 {
-  "name": "budget-analyzer",
+  "name": "orchestration",
   "dockerComposeFile": "../claude-code-sandbox/docker-compose.yml",
   "service": "claude-dev",
-  "workspaceFolder": "/workspace/budget-analyzer",
+  "workspaceFolder": "/workspace/orchestration",
   "shutdownAction": "none",
   
   "customizations": {

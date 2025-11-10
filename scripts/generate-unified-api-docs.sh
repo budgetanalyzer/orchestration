@@ -65,15 +65,15 @@ if command -v yq &> /dev/null; then
 fi
 
 # Service endpoints
-BUDGET_ANALYZER_API="http://localhost:8080/api/budget-analyzer-api/v3/api-docs"
+TRANSACTION_SERVICE="http://localhost:8080/api/transaction-service/v3/api-docs"
 CURRENCY_SERVICE="http://localhost:8080/api/currency-service/v3/api-docs"
 
 print_info "Fetching OpenAPI specs from microservices..."
 
 # Fetch specs
-BUDGET_SPEC=$(curl -sf "$BUDGET_ANALYZER_API" 2>/dev/null)
+BUDGET_SPEC=$(curl -sf "$TRANSACTION_SERVICE" 2>/dev/null)
 if [ $? -ne 0 ]; then
-    print_error "Failed to fetch Budget Analyzer API spec from $BUDGET_ANALYZER_API"
+    print_error "Failed to fetch Budget Analyzer API spec from $TRANSACTION_SERVICE"
     print_error "Make sure the service is running and accessible"
     exit 1
 fi
@@ -119,7 +119,7 @@ UNIFIED_SPEC=$(jq -n \
         }
     ],
     "tags": (
-        ($budget.tags // [] | map(. + {"x-service": "budget-analyzer-api"})) +
+        ($budget.tags // [] | map(. + {"x-service": "transaction-service"})) +
         ($currency.tags // [] | map(. + {"x-service": "currency-service"}))
     ),
     "paths": (

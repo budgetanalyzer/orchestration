@@ -309,7 +309,7 @@ This plan implements the security architecture defined in `security-architecture
 - `session-gateway` - Spring Cloud Gateway BFF (new repo)
 - `token-validation-service` - JWT validator for NGINX (new repo)
 - Updated: `budget-analyzer` - Docker Compose with all services
-- Updated: `budget-analyzer-api` - OAuth2 Resource Server
+- Updated: `transaction-service` - OAuth2 Resource Server
 - Updated: `currency-service` - OAuth2 Resource Server
 - Updated: `budget-analyzer-web` - Session Gateway integration
 

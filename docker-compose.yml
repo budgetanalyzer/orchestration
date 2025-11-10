@@ -34,7 +34,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: budget-analyzer-rabbitmq
+    container_name: shared-rabbitmq
     restart: always
     ports:
       - "5672:5672"      # AMQP port

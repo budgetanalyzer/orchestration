@@ -19,15 +19,13 @@
 #   0 - All repositories are valid and up to date
 #   1 - One or more repositories failed validation
 
-set -e  # Exit on error
-
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repo-config.sh"
 
 # Parse command line arguments
 FIX_MODE=0
-if [ "$1" = "--fix" ]; then
+if [ "$1" = "--fix" ] || [ "$1" = "--clean" ]; then
     FIX_MODE=1
     print_info "Running in fix mode - will attempt to fix issues automatically"
 fi
@@ -88,16 +86,31 @@ for REPO in "${REPOS[@]}"; do
 
     # Fetch latest from remote
     print_info "Fetching latest from remote for $REPO..."
-    if ! git fetch origin main --quiet; then
+    if ! git fetch origin main --quiet 2>/dev/null; then
         print_error "Failed to fetch from remote for $REPO"
         VALIDATION_FAILED=1
         continue
     fi
 
     # Check if local is behind remote
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u})
-    BASE=$(git merge-base @ @{u})
+    # Use error handling since these can fail if upstream isn't configured
+    if ! LOCAL=$(git rev-parse @ 2>/dev/null); then
+        print_error "Failed to get local revision for $REPO"
+        VALIDATION_FAILED=1
+        continue
+    fi
+
+    if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
+        print_error "No upstream branch configured for $REPO. Run: git branch --set-upstream-to=origin/main main"
+        VALIDATION_FAILED=1
+        continue
+    fi
+
+    if ! BASE=$(git merge-base @ @{u} 2>/dev/null); then
+        print_error "Failed to find merge base for $REPO"
+        VALIDATION_FAILED=1
+        continue
+    fi
 
     if [ "$LOCAL" != "$REMOTE" ]; then
         if [ "$LOCAL" = "$BASE" ]; then

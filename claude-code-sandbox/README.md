@@ -6,7 +6,7 @@ This configuration provides a sandboxed Claude Code environment shared across mu
 
 ```
 /home/devex/dev/
-├── budget-analyzer/
+├── orchestration/
 │   ├── claude-code-sandbox/          ← Shared configuration (this directory)
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.yml
@@ -14,7 +14,7 @@ This configuration provides a sandboxed Claude Code environment shared across mu
 │   │   └── README.md
 │   └── .devcontainer/
 │       └── devcontainer.json
-├── budget-analyzer-api/
+├── transaction-service/
 │   └── .devcontainer/
 │       └── devcontainer.json
 ├── budget-analyzer-web/
@@ -33,8 +33,8 @@ This configuration provides a sandboxed Claude Code environment shared across mu
 ### 1. Set Up Shared Configuration
 
 ```bash
-# Navigate to budget-analyzer project
-cd /home/devex/dev/budget-analyzer
+# Navigate to orchestration project
+cd /home/devex/dev/orchestration
 
 # Create claude-code-sandbox directory if it doesn't exist
 mkdir -p claude-code-sandbox
@@ -54,13 +54,13 @@ chmod +x claude-code-sandbox/entrypoint.sh
 For each project, create a `.devcontainer` directory and copy the corresponding devcontainer.json file:
 
 ```bash
-# budget-analyzer
-mkdir -p /home/devex/dev/budget-analyzer/.devcontainer
-# Copy budget-analyzer-devcontainer.json as devcontainer.json
+# orchestration
+mkdir -p /home/devex/dev/orchestration/.devcontainer
+# Copy orchestration-devcontainer.json as devcontainer.json
 
-# budget-analyzer-api
-mkdir -p /home/devex/dev/budget-analyzer-api/.devcontainer
-# Copy budget-analyzer-api-devcontainer.json as devcontainer.json
+# transaction-service
+mkdir -p /home/devex/dev/transaction-service/.devcontainer
+# Copy transaction-service-devcontainer.json as devcontainer.json
 
 # budget-analyzer-web
 mkdir -p /home/devex/dev/budget-analyzer-web/.devcontainer
@@ -92,9 +92,9 @@ source ~/.bashrc  # or source ~/.zshrc
 echo $ANTHROPIC_API_KEY
 
 # Verify file structure
-ls -la /home/devex/dev/budget-analyzer/claude-code-sandbox/
-ls -la /home/devex/dev/budget-analyzer/.devcontainer/
-ls -la /home/devex/dev/budget-analyzer-api/.devcontainer/
+ls -la /home/devex/dev/orchestration/claude-code-sandbox/
+ls -la /home/devex/dev/orchestration/.devcontainer/
+ls -la /home/devex/dev/transaction-service/.devcontainer/
 ```
 
 ## Usage
@@ -103,7 +103,7 @@ ls -la /home/devex/dev/budget-analyzer-api/.devcontainer/
 
 ```bash
 # Open any project in VS Code
-code /home/devex/dev/budget-analyzer
+code /home/devex/dev/orchestration
 
 # VS Code will detect the devcontainer configuration
 # Click "Reopen in Container" when prompted
@@ -137,7 +137,7 @@ You can have multiple VS Code windows open, each connected to the same container
 
 ```bash
 # Terminal 1
-code /home/devex/dev/budget-analyzer-api
+code /home/devex/dev/transaction-service
 
 # Terminal 2
 code /home/devex/dev/budget-analyzer-web
@@ -155,7 +155,7 @@ Both windows share the same container and tools but focus on different projects.
 
 ### Mounted Directories
 - `/home/devex/dev` → `/workspace` (read/write)
-- `/home/devex/dev/budget-analyzer/claude-code-sandbox` → `/workspace/budget-analyzer/claude-code-sandbox` (read-only)
+- `/home/devex/dev/orchestration/claude-code-sandbox` → `/workspace/orchestration/claude-code-sandbox` (read-only)
 
 ### Installed Tools
 - Node.js (latest LTS)
@@ -177,15 +177,15 @@ From within the container, all projects are accessible:
 ```bash
 # Inside container terminal
 ls /workspace
-# Shows: budget-analyzer, budget-analyzer-api, budget-analyzer-web, currency-service, service-common
+# Shows: orchestration, transaction-service, budget-analyzer-web, currency-service, service-common
 
-cd /workspace/budget-analyzer-api
+cd /workspace/transaction-service
 cd /workspace/currency-service
 ```
 
 Claude Code can reference files across all projects:
 ```
-"Compare the error handling in budget-analyzer-api 
+"Compare the error handling in transaction-service 
 with the approach in currency-service"
 ```
 
@@ -198,10 +198,10 @@ with the approach in currency-service"
 docker ps | grep claude-dev
 
 # View container logs
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml logs
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml logs
 
 # Rebuild container
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml build --no-cache
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml build --no-cache
 ```
 
 ### Permission Errors
@@ -237,8 +237,8 @@ docker exec -it <container-id> printenv ANTHROPIC_API_KEY
 This is intentional - the sandbox directory is mounted read-only for security. To modify configuration:
 
 1. Exit all devcontainer VS Code windows
-2. Stop the container: `docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml down`
-3. Edit files on host: `/home/devex/dev/budget-analyzer/claude-code-sandbox/`
+2. Stop the container: `docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml down`
+3. Edit files on host: `/home/devex/dev/orchestration/claude-code-sandbox/`
 4. Restart: Open any project in VS Code and reopen in container
 
 ### Java Version Issues
@@ -270,7 +270,7 @@ RUN npm install -g @angular/cli
 
 Then rebuild:
 ```bash
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml build
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml build
 ```
 
 ### Changing Java or Maven Versions
@@ -308,8 +308,8 @@ ports:
 
 ## Best Practices
 
-1. **Always specify project in Claude Code prompts**: "In budget-analyzer-api, add validation..."
-2. **Keep sandbox directory in git**: Commit to budget-analyzer repo for version control
+1. **Always specify project in Claude Code prompts**: "In transaction-service, add validation..."
+2. **Keep sandbox directory in git**: Commit to orchestration repo for version control
 3. **Use shutdownAction: none**: Keeps container running when switching between projects
 4. **Run services from host**: Don't run dev servers inside the container
 5. **Git operations from host**: Commit and push from your host terminal
@@ -321,12 +321,12 @@ ports:
 
 ```bash
 # Stop container
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml down
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml down
 
 # Update Dockerfile with new versions
 
 # Rebuild
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml build --no-cache
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml build --no-cache
 
 # Restart by opening any project in VS Code
 ```
@@ -335,13 +335,13 @@ docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-com
 
 ```bash
 # Stop container
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml down
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml down
 
 # Remove volumes (loses Claude Code credentials)
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml down -v
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml down -v
 
 # Remove images
-docker-compose -f /home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml down --rmi all
+docker-compose -f /home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml down --rmi all
 ```
 
 ## File Naming Reference
@@ -350,11 +350,11 @@ When copying files from the outputs directory:
 
 | Output File | Destination |
 |------------|-------------|
-| `Dockerfile` | `/home/devex/dev/budget-analyzer/claude-code-sandbox/Dockerfile` |
-| `docker-compose.yml` | `/home/devex/dev/budget-analyzer/claude-code-sandbox/docker-compose.yml` |
-| `entrypoint.sh` | `/home/devex/dev/budget-analyzer/claude-code-sandbox/entrypoint.sh` |
-| `budget-analyzer-devcontainer.json` | `/home/devex/dev/budget-analyzer/.devcontainer/devcontainer.json` |
-| `budget-analyzer-api-devcontainer.json` | `/home/devex/dev/budget-analyzer-api/.devcontainer/devcontainer.json` |
+| `Dockerfile` | `/home/devex/dev/orchestration/claude-code-sandbox/Dockerfile` |
+| `docker-compose.yml` | `/home/devex/dev/orchestration/claude-code-sandbox/docker-compose.yml` |
+| `entrypoint.sh` | `/home/devex/dev/orchestration/claude-code-sandbox/entrypoint.sh` |
+| `orchestration-devcontainer.json` | `/home/devex/dev/orchestration/.devcontainer/devcontainer.json` |
+| `transaction-service-devcontainer.json` | `/home/devex/dev/transaction-service/.devcontainer/devcontainer.json` |
 | `budget-analyzer-web-devcontainer.json` | `/home/devex/dev/budget-analyzer-web/.devcontainer/devcontainer.json` |
 | `currency-service-devcontainer.json` | `/home/devex/dev/currency-service/.devcontainer/devcontainer.json` |
 | `service-common-devcontainer.json` | `/home/devex/dev/service-common/.devcontainer/devcontainer.json` |

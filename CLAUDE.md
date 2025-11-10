@@ -13,10 +13,10 @@ This is an orchestration repository that manages the deployment and development 
    - Development server runs on port 3000
    - Production build served as static assets
 
-2. **budget-analyzer-api** - Spring Boot microservice
+2. **transaction-service** - Spring Boot microservice
    - Core business logic for budget and transaction management
    - Runs on port 8082
-   - RESTful API endpoints under `/budget-analyzer-api/*`
+   - RESTful API endpoints under `/transaction-service/*`
 
 3. **currency-service** - Spring Boot microservice
    - Currency conversion and exchange rate management
@@ -40,7 +40,7 @@ This is an orchestration repository that manages the deployment and development 
 ## Repository Structure
 
 ```
-budget-analyzer/
+orchestration/
 ├── claude.md                    # This file - AI assistant context
 ├── README.md                    # Human-readable project documentation
 ├── docker-compose.yml           # Development orchestration
@@ -84,7 +84,7 @@ docker-compose down
 ### Frontend Access Pattern
 
 The frontend should call the NGINX gateway at `http://localhost:8080/api/*`:
-- `/api/transactions` → routed to budget-analyzer-api
+- `/api/transactions` → routed to transaction-service
 - `/api/currencies` → routed to currency-service
 - `/api/exchange-rates` → routed to currency-service
 
@@ -212,10 +212,10 @@ curl http://localhost:8080/api/currencies
 ## Service Repositories
 
 Each microservice is maintained in its own repository:
-- **service-common**: [https://github.com/bleurubin/service-common]
-- **budget-analyzer-api**: [https://github.com/bleurubin/budget-analyzer-api]
-- **currency-service**: [https://github.com/bleurubin/currency-service]
-- **budget-analyzer-web**: [https://github.com/bleurubin/budget-analyzer-web]
+- **service-common**: [https://github.com/budget-analyzer/service-common]
+- **transaction-service**: [https://github.com/budget-analyzer/transaction-service]
+- **currency-service**: [https://github.com/budget-analyzer/currency-service]
+- **budget-analyzer-web**: [https://github.com/budget-analyzer/budget-analyzer-web]
 
 ## Deployment
 

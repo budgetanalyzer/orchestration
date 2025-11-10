@@ -35,7 +35,7 @@ docker compose rm -f shared-postgres 2>/dev/null || echo "Container already remo
 
 echo ""
 echo -e "${YELLOW}Step 3: Removing PostgreSQL volume...${NC}"
-docker volume rm budget-analyzer_shared-pgdata 2>/dev/null || echo "Volume already removed or doesn't exist"
+docker volume rm orchestration_shared-pgdata 2>/dev/null || echo "Volume already removed or doesn't exist"
 
 echo ""
 echo -e "${YELLOW}Step 4: Starting PostgreSQL container...${NC}"
@@ -79,7 +79,7 @@ echo -e "${GREEN}Database reset completed successfully!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Databases created:"
-echo "  - budget_analyzer (for budget-analyzer-api)"
+echo "  - budget_analyzer (for transaction-service)"
 echo "  - currency (for currency-service)"
 echo ""
 echo "Connection details:"

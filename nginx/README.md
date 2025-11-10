@@ -25,7 +25,7 @@ Nginx Gateway (Docker, port 8080)
 ### Upstream Services (in nginx.conf)
 
 ```nginx
-upstream budget_analyzer_api {
+upstream transaction_service {
     server host.docker.internal:8082;
 }
 
@@ -114,7 +114,7 @@ VITE_USE_MOCK_DATA=false
 **API calls:**
 ```typescript
 // Frontend sees resource paths (no service names!)
-apiClient.get('/transactions')        // Not /budget-analyzer-api/transactions
+apiClient.get('/transactions')        // Not /transaction-service/transactions
 apiClient.get('/currencies')          // Not /currency-service/currencies
 ```
 
@@ -148,8 +148,8 @@ docker exec api-gateway nginx -s reload
 1. Add location block in `nginx.conf`:
 ```nginx
 location /api/accounts {
-    rewrite ^/api/(.*)$ /budget-analyzer-api/$1 break;
-    proxy_pass http://budget_analyzer_api;
+    rewrite ^/api/(.*)$ /transaction-service/$1 break;
+    proxy_pass http://transaction_service;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -266,7 +266,7 @@ location / {
 **Cause:** Backend service not running or nginx can't reach it.
 
 **Fix:**
-1. Verify service is running: `curl http://localhost:8082/budget-analyzer-api/transactions`
+1. Verify service is running: `curl http://localhost:8082/transaction-service/transactions`
 2. Check nginx logs: `docker compose logs nginx-gateway`
 3. Verify Docker can reach host: `docker exec api-gateway ping host.docker.internal`
 

@@ -50,7 +50,7 @@
             console.log('Swagger UI Configuration:', {
                 baseUrl: baseUrl,
                 urls: [
-                    baseUrl + "/api/budget-analyzer-api/v3/api-docs",
+                    baseUrl + "/api/transaction-service/v3/api-docs",
                     baseUrl + "/api/currency-service/v3/api-docs"
                 ]
             });
@@ -58,8 +58,8 @@
             const ui = SwaggerUIBundle({
                 urls: [
                     {
-                        name: "Budget Analyzer Service",
-                        url: baseUrl + "/api/budget-analyzer-api/v3/api-docs"
+                        name: "Transaction Service",
+                        url: baseUrl + "/api/transaction-service/v3/api-docs"
                     },
                     {
                         name: "Currency Service",

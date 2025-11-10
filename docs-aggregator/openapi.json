@@ -27,12 +27,12 @@
     {
       "name": "Admin - Transactions",
       "description": "Admin operations for transactions",
-      "x-service": "budget-analyzer-api"
+      "x-service": "transaction-service"
     },
     {
       "name": "Transactions",
       "description": "Import and manipulate transactions",
-      "x-service": "budget-analyzer-api"
+      "x-service": "transaction-service"
     },
     {
       "name": "Exchange Rates Handler",

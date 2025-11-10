@@ -21,7 +21,7 @@ User Browser
 http://localhost:8080/api/docs (Swagger UI HTML)
     ↓
 Loads OpenAPI specs from:
-    - http://localhost:8080/api/budget-analyzer-api/v3/api-docs
+    - http://localhost:8080/api/transaction-service/v3/api-docs
     - http://localhost:8080/api/currency-service/v3/api-docs
     ↓
 "Try it out" requests → NGINX Gateway → Appropriate Microservice
@@ -37,7 +37,7 @@ The aggregator is configured in `index.html` with the following key settings:
 urls: [
     {
         name: "Budget Analyzer API",
-        url: baseUrl + "/api/budget-analyzer-api/v3/api-docs"
+        url: baseUrl + "/api/transaction-service/v3/api-docs"
     },
     {
         name: "Currency Service",

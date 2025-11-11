@@ -9,6 +9,34 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repo-config.sh"
 
+# Validates that cross-repo references have GitHub URLs
+# Args: $1=ref (@service-common/file.md), $2=path (service-common/file.md), $3=file
+# Returns: 0 if valid, 1 if error (and prints error message)
+validate_cross_repo_url() {
+    local ref="$1"
+    local path="$2"
+    local file="$3"
+    local first_segment="${path%%/*}"
+
+    # Check if first segment matches any repo in REPOS array
+    for repo in "${REPOS[@]}"; do
+        if [ "$first_segment" == "$repo" ]; then
+            # This is a cross-repo reference - validate GitHub URL
+            local total_refs=$(grep -oF "$ref" "$file" 2>/dev/null | wc -l)
+            local escaped_path=$(echo "$path" | sed 's/[.]/\\./g')
+            local refs_with_url=$(grep -oP "\[@[^]]*${escaped_path}[^]]*\]\(https://github\.com/[^)]+\)" "$file" 2>/dev/null | wc -l)
+
+            if [ "$total_refs" -gt "$refs_with_url" ]; then
+                echo "    ❌ Cross-repo reference $ref missing GitHub URL ($refs_with_url/$total_refs instances have URL)"
+                echo "       Expected: [$ref](https://github.com/budget-analyzer/$first_segment/...)"
+                return 1
+            fi
+            return 0
+        fi
+    done
+    return 0
+}
+
 print_info "Validating markdown files across all repositories..."
 echo ""
 
@@ -76,9 +104,11 @@ for REPO in "${REPOS[@]}"; do
         REFS=$(echo "$CONTENT_NO_CODEBLOCKS" | grep -oE '@[a-z][a-zA-Z0-9_-]*/[a-zA-Z0-9/_.-]+' 2>/dev/null || true)
 
         if [ -n "$REFS" ]; then
-            echo "    Found $(echo "$REFS" | wc -l) @references to validate..."
+            # Deduplicate references to avoid checking the same reference multiple times
+            UNIQUE_REFS=$(echo "$REFS" | sort -u)
+            echo "    Found $(echo "$UNIQUE_REFS" | wc -l) unique @references to validate..."
 
-            for ref in $REFS; do
+            for ref in $UNIQUE_REFS; do
                 # Remove @ prefix
                 path="${ref:1}"
 
@@ -98,6 +128,12 @@ for REPO in "${REPOS[@]}"; do
                    grep -q "Use @${path}" "$file" 2>/dev/null || \
                    grep -q "Example.*@${path}" "$file" 2>/dev/null; then
                     echo "    ⏭️  Skipped (placeholder/example): $ref"
+                    continue
+                fi
+
+                # Validate cross-repo references have GitHub URLs
+                if ! validate_cross_repo_url "$ref" "$path" "$file"; then
+                    ERRORS=$((ERRORS + 1))
                     continue
                 fi
 

@@ -1,6 +1,6 @@
 ## Primary Security Benefits Of BFF (Backend-for-Frontend) architecture
 
-### 1. **XSS Attack Protection (Lines 195-198, 369)**
+### 1. **XSS Attack Protection**
 **The Critical Advantage:** JWTs never reach the browser's JavaScript environment at all.
 
 - **BFF Pattern:** Session Gateway stores JWTs server-side in Redis. Browser only receives HTTP-only session cookies that JavaScript cannot access.
@@ -8,7 +8,7 @@
 
 **Impact:** Even if an attacker injects malicious JavaScript, they cannot steal authentication credentials.
 
-### 2. **Defense in Depth - Multiple Validation Layers (Lines 321-345)**
+### 2. **Defense in Depth - Multiple Validation Layers**
 
 The BFF architecture creates 4 independent security layers:
 
@@ -19,14 +19,14 @@ The BFF architecture creates 4 independent security layers:
 
 **Why this matters:** If one layer is compromised, others still protect the system. Direct JWT to NGINX eliminates the first critical layer.
 
-### 3. **Automatic Token Refresh Without Browser Involvement (Lines 226-236)**
+### 3. **Automatic Token Refresh Without Browser Involvement**
 
 - **BFF Pattern:** Session Gateway proactively refreshes tokens 5 minutes before expiration. Browser never sees or handles refresh tokens.
 - **Direct JWT:** Browser must store refresh tokens (even more sensitive than access tokens) and handle refresh logic in JavaScript, exposing another attack surface.
 
 **Security implication:** Refresh tokens are long-lived (8 hours to 30 days). Exposing them to XSS dramatically increases breach window.
 
-### 4. **Cookie Security Attributes (Lines 359-363)**
+### 4. **Cookie Security Attributes**
 
 Session cookies use triple protection:
 - **HttpOnly:** JavaScript cannot access
@@ -35,7 +35,7 @@ Session cookies use triple protection:
 
 JWTs in Authorization headers don't have these browser-level protections.
 
-### 5. **Reduced Attack Surface (Lines 194-198)**
+### 5. **Reduced Attack Surface**
 
 **BFF Pattern:**
 ```
@@ -58,7 +58,7 @@ Lines 10-12 emphasize this is for a **financial data application requiring maxim
 - Token theft could enable fraudulent transactions
 - The additional complexity is justified by the security gains
 
-## The Key Insight (Line 544)
+## The Key Insight
 
 > **Decision: Use BFF pattern**
 > **Rationale: Maximum security for browser-based financial application**

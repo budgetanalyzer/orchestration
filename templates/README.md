@@ -132,7 +132,7 @@ Services contain business logic. They use the @Service annotation...
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See @service-common/CLAUDE.md for architecture layers, naming conventions, and testing patterns.
+See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md) for architecture layers, naming conventions, and testing patterns.
 ```
 
 ### 3. Document the "Why"
@@ -203,7 +203,7 @@ After using a template, validate it:
 Handles payment transactions, invoice generation, and payment gateway integrations.
 
 ## Spring Boot Patterns
-See @service-common/CLAUDE.md for standard conventions.
+See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md) for standard conventions.
 
 ## Service-Specific Patterns
 

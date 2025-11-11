@@ -407,7 +407,7 @@ cat docker compose.yml | grep 'image:' | sort -u
 - Docker images: **Should be pinned** (TODO: pin versions in docker compose.yml)
 
 **See also:**
-- @service-common/docs/common-dependencies.md - Spring Boot dependency strategy
+- [@service-common/docs/common-dependencies.md](https://github.com/budget-analyzer/service-common/blob/main/docs/common-dependencies.md) - Spring Boot dependency strategy
 - @docs/development/local-environment.md - Setup requirements
 ```
 
@@ -759,7 +759,7 @@ transaction-service, currency-service, and future services likely have:
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See @service-common/CLAUDE.md for:
+See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -812,7 +812,7 @@ docker compose up shared-postgres
 ./mvnw test
 ```
 
-**See**: @orchestration/docs/development/local-environment.md for full setup
+**See**: [@orchestration/docs/development/local-environment.md](https://github.com/budget-analyzer/orchestration/blob/main/docs/development/local-environment.md) for full setup
 
 ## Discovery Commands
 
@@ -829,10 +829,10 @@ cat src/main/resources/application.yml
 
 ## AI Assistant Guidelines
 
-1. **Follow service-common patterns** - Reference @service-common/CLAUDE.md
+1. **Follow service-common patterns** - Reference [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md)
 2. **Check OpenAPI spec first** - See @docs/api/openapi.yaml for endpoints
 3. **Understand domain model** - Read @docs/domain-model.md before changes
-4. **Test everything** - Follow patterns in @service-common/docs/testing-patterns.md
+4. **Test everything** - Follow patterns in [@service-common/docs/testing-patterns.md](https://github.com/budget-analyzer/service-common/blob/main/docs/testing-patterns.md)
 5. **Service-specific only** - Don't modify cross-service patterns here
 
 [Add service-specific guidelines if needed]
@@ -857,7 +857,7 @@ Manages financial transactions, budget creation, and spending analysis.
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See @service-common/CLAUDE.md for:
+See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -941,7 +941,7 @@ cat src/main/resources/application.yml
 
 ## AI Assistant Guidelines
 
-1. **Follow service-common patterns** - See @service-common/CLAUDE.md
+1. **Follow service-common patterns** - See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md)
 2. **Transaction domain complexity** - Read @docs/domain-model.md before changes
 3. **Import feature** - See @docs/import-processing.md for bulk import logic
 4. **Database changes** - Create Flyway migrations, never alter schema directly
@@ -1663,7 +1663,7 @@ Create `templates/service-CLAUDE.md`:
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See @service-common/CLAUDE.md for:
+See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -1722,7 +1722,7 @@ cd {service-name}/
 curl http://localhost:{PORT}/actuator/health
 ```
 
-**See**: @orchestration/docs/development/local-environment.md
+**See**: [@orchestration/docs/development/local-environment.md](https://github.com/budget-analyzer/orchestration/blob/main/docs/development/local-environment.md)
 
 ## Discovery Commands
 
@@ -1739,7 +1739,7 @@ cat src/main/resources/application.yml
 
 ## AI Assistant Guidelines
 
-1. **Follow service-common patterns** - See @service-common/CLAUDE.md
+1. **Follow service-common patterns** - See [@service-common/CLAUDE.md](https://github.com/budget-analyzer/service-common/blob/main/CLAUDE.md)
 2. **Check OpenAPI spec first** - See @docs/api/openapi.yaml
 3. **Understand domain** - Read @docs/domain-model.md before changes
 4. **Test everything** - Follow @service-common/docs/testing-patterns.md
@@ -1785,7 +1785,7 @@ cat package.json | grep '"react"'
 
 **Pattern**: All API calls go through NGINX gateway at `http://localhost:8080/api/*`
 
-See @orchestration/nginx/nginx.dev.conf for available routes.
+See [@orchestration/nginx/nginx.dev.conf](https://github.com/budget-analyzer/orchestration/blob/main/nginx/nginx.dev.conf) for available routes.
 
 **Discovery**:
 ```bash
@@ -1840,7 +1840,7 @@ npm start
 open http://localhost:3000
 ```
 
-**Note**: Backend services must be running (see @orchestration/docs/development/local-environment.md)
+**Note**: Backend services must be running (see [@orchestration/docs/development/local-environment.md](https://github.com/budget-analyzer/orchestration/blob/main/docs/development/local-environment.md))
 
 ## Building
 
@@ -2170,7 +2170,7 @@ docker compose config | grep 'image:' | sort -u
 - Services: Inherit versions, never override
 
 **See**:
-- @service-common/docs/common-dependencies.md
+- [@service-common/docs/common-dependencies.md](https://github.com/budget-analyzer/service-common/blob/main/docs/common-dependencies.md)
 - @docs/development/local-environment.md
 ```
 

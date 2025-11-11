@@ -99,7 +99,7 @@ Common patterns documented once in service-common:
 - Testing patterns
 - Error handling
 - Code quality standards
-- See: [@service-common/docs/](../../../service-common/docs/)
+- See: [@service-common/docs/](https://github.com/budget-analyzer/service-common/tree/main/docs)
 
 ### 4. Production Parity
 Local development environment mirrors production architecture:
@@ -163,7 +163,7 @@ docker compose config | grep 'image:' | sort -u
 
 ### External APIs
 - currency-service → FRED API
-- Pattern: Provider abstraction (see [@service-common/docs/advanced-patterns.md](../../../service-common/docs/advanced-patterns.md))
+- Pattern: Provider abstraction (see [@service-common/docs/advanced-patterns.md](https://github.com/budget-analyzer/service-common/blob/main/docs/advanced-patterns.md))
 
 ## Data Management
 

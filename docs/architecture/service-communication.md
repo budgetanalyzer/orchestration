@@ -115,7 +115,7 @@ public class FredExchangeRateProvider implements ExchangeRateProvider {
 - Pluggable implementations
 
 **Documentation:**
-- Pattern details: [@service-common/docs/advanced-patterns.md](../../../service-common/docs/advanced-patterns.md#provider-abstraction-pattern)
+- Pattern details: [@service-common/docs/advanced-patterns.md](https://github.com/budget-analyzer/service-common/blob/main/docs/advanced-patterns.md#provider-abstraction-pattern)
 - Example: currency-service FRED integration
 
 ## Event-Driven Architecture
@@ -153,7 +153,7 @@ spring:
 - Future: Cross-service domain events
 
 **Documentation:**
-- Pattern: [@service-common/docs/advanced-patterns.md](../../../service-common/docs/advanced-patterns.md#event-driven-messaging)
+- Pattern: [@service-common/docs/advanced-patterns.md](https://github.com/budget-analyzer/service-common/blob/main/docs/advanced-patterns.md#event-driven-messaging)
 
 ## Communication Flow Examples
 
@@ -337,7 +337,7 @@ docker exec postgres psql -U budget_analyzer -c \
 
 ## References
 
-- **Patterns:** [@service-common/docs/advanced-patterns.md](../../../service-common/docs/advanced-patterns.md)
+- **Patterns:** [@service-common/docs/advanced-patterns.md](https://github.com/budget-analyzer/service-common/blob/main/docs/advanced-patterns.md)
 - **Gateway:** [resource-routing-pattern.md](resource-routing-pattern.md)
 - **Architecture:** [system-overview.md](system-overview.md)
 - **Security:** [security-architecture.md](security-architecture.md)

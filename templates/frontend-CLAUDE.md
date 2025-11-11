@@ -32,7 +32,7 @@ cat package.json | grep '"react"'
 
 **Pattern**: All API calls go through NGINX gateway at `http://localhost:8080/api/*`
 
-See @orchestration/nginx/nginx.dev.conf for available routes.
+See [@orchestration/nginx/nginx.dev.conf](https://github.com/budget-analyzer/orchestration/blob/main/nginx/nginx.dev.conf) for available routes.
 
 **Discovery**:
 ```bash
@@ -87,7 +87,7 @@ npm start
 open http://localhost:3000
 ```
 
-**Note**: Backend services must be running (see @orchestration/docs/development/local-environment.md)
+**Note**: Backend services must be running (see [@orchestration/docs/development/local-environment.md](https://github.com/budget-analyzer/orchestration/blob/main/docs/development/local-environment.md))
 
 ## Building
 

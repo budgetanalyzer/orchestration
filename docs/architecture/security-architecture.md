@@ -99,7 +99,7 @@ This document outlines the security architecture for a financial data applicatio
 - Enforce data-level permissions (service responsibility)
 
 **Why BFF Pattern:**
-The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifically for maximum security in a financial application. For detailed analysis of the security advantages, see [BFF Security Advantages](bff-security-advantages.md).
+The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifically for maximum security in a financial application. For detailed analysis of the security advantages, see [BFF Security Benefits](bff-security-benefits.md).
 
 ---
 

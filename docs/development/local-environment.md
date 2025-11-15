@@ -103,6 +103,25 @@ open http://localhost:8080
 
 ## Service-by-Service Setup
 
+### Shared Library (service-common)
+
+**Before running any backend services**, you must publish the shared `service-common` library to your local Maven repository:
+
+```bash
+cd service-common/
+./gradlew publishToMavenLocal
+```
+
+This makes the shared library available to all backend services (transaction-service, currency-service, etc.).
+
+**When to republish:**
+- After cloning service-common for the first time
+- After pulling updates to service-common
+- After making local changes to service-common
+
+**Troubleshooting:**
+If backend services fail to start with dependency errors like `Could not find com.budgetanalyzer:service-common:X.X.X`, republish service-common to Maven Local.
+
 ### Infrastructure Only
 
 Start just infrastructure (PostgreSQL, Redis, RabbitMQ, NGINX):

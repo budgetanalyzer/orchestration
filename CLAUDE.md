@@ -83,6 +83,7 @@ grep -A 3 "ports:" docker compose.yml
 **Stack Patterns**:
 - **Frontend**: React (see individual service package.json)
 - **Backend**: Spring Boot + Java (version managed in service-common)
+- **Build System**: Gradle (all backend services use Gradle with wrapper)
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (see docker compose.yml)
 - **Gateway**: NGINX (Alpine-based)
 

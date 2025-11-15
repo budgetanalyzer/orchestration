@@ -14,6 +14,7 @@ Clone all repositories side-by-side:
 ```bash
 cd /workspace
 git clone https://github.com/budget-analyzer/orchestration.git
+git clone https://github.com/budget-analyzer/service-common.git
 git clone https://github.com/budget-analyzer/transaction-service.git
 git clone https://github.com/budget-analyzer/currency-service.git
 git clone https://github.com/budget-analyzer/budget-analyzer-web.git
@@ -34,7 +35,20 @@ This starts:
 - Redis
 - RabbitMQ
 
-### 3. Verify Setup
+### 3. Publish service-common to Maven Local
+
+The backend services depend on the shared `service-common` library. You must publish it to your local Maven repository before running any backend services:
+
+```bash
+cd /workspace/service-common
+./gradlew publishToMavenLocal
+```
+
+This makes the shared library available to all services that depend on it (transaction-service, currency-service, etc.).
+
+**Note**: Re-run this command whenever you make changes to service-common.
+
+### 4. Verify Setup
 
 Check all services are running:
 
@@ -50,20 +64,20 @@ Access the application:
 
 All API requests go through the gateway: `http://localhost:8080/api/*`
 
-### 4. Start Backend Services
+### 5. Start Backend Services
 
 Each backend service can run locally or in Docker. For local development:
 
 **Transaction Service:**
 ```bash
 cd /workspace/transaction-service
-./mvnw spring-boot:run
+./gradlew bootRun
 ```
 
 **Currency Service:**
 ```bash
 cd /workspace/currency-service
-./mvnw spring-boot:run
+./gradlew bootRun
 ```
 
 **Frontend:**

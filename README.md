@@ -8,12 +8,6 @@ Orchestration repository for Budget Analyzer - a microservices-based personal fi
 
 This repository coordinates the deployment and local development environment for the Budget Analyzer application. Individual service code lives in separate repositories.
 
-**Budget Analyzer** helps you manage your personal finances by:
-- Tracking transactions across multiple accounts
-- Analyzing spending patterns and budgets
-- Managing currencies and exchange rates
-- Providing insights into your financial health
-
 ## Architecture
 
 The application follows a microservices architecture:
@@ -98,7 +92,7 @@ See [CLAUDE.md](CLAUDE.md)
 
 ## License
 
-Apache License 2.0
+MIT
 
 ## Contributing
 

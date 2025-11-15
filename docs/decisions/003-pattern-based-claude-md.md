@@ -45,6 +45,128 @@ From web research and codebase analysis:
 
 ---
 
+## Context Management & Just-in-Time Loading
+
+### The Token Efficiency Problem
+
+Traditional documentation approaches include all content in CLAUDE.md files, loading everything at startup. This creates several issues:
+
+**Token Waste:**
+- A comprehensive 500-line CLAUDE.md consumes ~5,000-10,000 tokens per conversation
+- Detailed API documentation, examples, and guides load even when not needed
+- Long conversations hit context limits faster
+- Higher costs for AI-assisted development
+
+**Maintenance Burden:**
+- Large files are harder to maintain
+- Duplication across multiple CLAUDE.md files
+- Changes ripple across many locations
+
+### Just-in-Time Loading: How It Works
+
+Claude Code uses **hierarchical loading** with just-in-time document access:
+
+**At Startup (Automatic):**
+1. Enterprise policy (system-wide)
+2. User memory (`~/.claude/CLAUDE.md`)
+3. Project root CLAUDE.md
+4. Parent directory CLAUDE.md files (up to root)
+
+**On-Demand (Just-in-Time):**
+1. Subdirectory CLAUDE.md files (loaded when accessing files in those subtrees)
+2. Files referenced with `@path/to/file` in conversation
+3. Detailed documentation only when Claude needs it
+
+**Quote from Anthropic:**
+> "Claude will also discover CLAUDE.md nested in subtrees under your current working directory. Instead of loading them at launch, they are only included when Claude reads files in those subtrees."
+
+### Understanding @references: Import vs. Reference Pattern
+
+**❌ Import Syntax (Loads at Startup):**
+```markdown
+@docs/domain-model.md
+```
+When used bare in CLAUDE.md, this imports the entire file content at startup. High token cost.
+
+**✅ Reference Pattern (Just-in-Time Loading):**
+```markdown
+### Domain Model
+See @docs/domain-model.md for detailed entity relationships.
+
+**When to consult**:
+- Adding new entities → Read @docs/domain-model.md
+- Understanding relationships → Read @docs/domain-model.md
+- Validating business rules → Read @docs/domain-model.md
+```
+
+This provides a **pointer** to the documentation without loading it. Claude reads it only when needed.
+
+### Token Efficiency Benefits
+
+**Documented Savings:**
+- 76-97% reduction in initial context window usage (case studies)
+- Faster conversation startup
+- Extended thinking without token waste
+- Ability to handle larger codebases
+
+**Example:**
+
+| Approach | Initial Tokens | Tokens After 10 Messages |
+|----------|---------------|-------------------------|
+| Full inclusion (500 lines) | ~8,000 | ~25,000 |
+| Pattern-based (150 lines) | ~2,000 | ~8,500 |
+| **Savings** | **75%** | **66%** |
+
+### Best Practices for Just-in-Time Loading
+
+**What to Include Directly in CLAUDE.md:**
+- ✅ Architectural principles (stable, always relevant)
+- ✅ Discovery commands (small, self-documenting)
+- ✅ Conventions and patterns (frequently referenced)
+- ✅ "When to consult" guidance (pointers to detailed docs)
+
+**What to Reference (Not Import):**
+- 📄 Detailed examples (`@docs/examples.md`)
+- 📄 API specifications (`@docs/api/openapi.yaml`)
+- 📄 Code snippets (`@docs/snippets.md`)
+- 📄 Historical context (`@docs/decisions/*.md`)
+- 📄 Comprehensive guides (`@docs/guides/*.md`)
+
+**Target Metrics:**
+- CLAUDE.md files: < 5,000 tokens (~150-200 lines)
+- Initial context: < 10,000 tokens total
+- Pattern-to-detail ratio: 80/20 (80% patterns, 20% specifics)
+
+### How This Plan Implements Just-in-Time Loading
+
+**Our pattern-based approach naturally enables just-in-time loading:**
+
+1. **Discovery commands** teach Claude how to find current state (no loading needed)
+2. **Reference patterns** (`See @docs/file.md`) provide pointers, not imports
+3. **Thin CLAUDE.md files** minimize initial context
+4. **Hierarchical structure** loads service-specific docs only when working in that service
+5. **"When to consult" guidance** tells Claude when to read detailed docs
+
+**Example from this plan:**
+```markdown
+### API Routes
+**Current Routes**: See @nginx/nginx.dev.conf (source of truth)
+
+**Discovery:**
+```bash
+cat nginx/nginx.dev.conf | grep "location /api"
+```
+
+**When to consult nginx.dev.conf**:
+- Adding new API routes → Read @nginx/nginx.dev.conf
+- Understanding routing patterns → Read @nginx/nginx.dev.conf
+- Troubleshooting gateway issues → Read @nginx/README.md
+```
+
+This costs ~100 tokens instead of ~2,000 tokens (importing full nginx.dev.conf).
+
+---
+
 ## Documentation Philosophy
 
 ### Core Principle: Pattern-Based Documentation
@@ -99,14 +221,14 @@ cat nginx/nginx.dev.conf | grep "location /api"
 
 ### When to Be Specific
 
-| Documentation Type | Specificity Level | Location | Rationale |
-|-------------------|------------------|----------|-----------|
-| Architecture patterns | ABSTRACT | orchestration/CLAUDE.md | Cross-service, rarely changes |
-| Service discovery | DISCOVERY COMMANDS | orchestration/CLAUDE.md | Always accurate |
-| Spring Boot patterns | PATTERN-BASED | service-common/CLAUDE.md | Naming conventions, not classes |
-| API contracts | FULLY SPECIFIC | service/docs/api/openapi.yaml | Machine-readable, versioned |
-| Business domain | SEMI-SPECIFIC | service/docs/domain.md | Service-specific, detailed |
-| Deployment config | FILE REFERENCES | orchestration/CLAUDE.md | Point to docker compose.yml |
+| Documentation Type | Specificity Level | Location | Loading Strategy | Token Impact |
+|-------------------|------------------|----------|------------------|--------------|
+| Architecture patterns | ABSTRACT | orchestration/CLAUDE.md | Always loaded | Low (~500) |
+| Service discovery | DISCOVERY COMMANDS | orchestration/CLAUDE.md | Always loaded | Very low (~100) |
+| Spring Boot patterns | PATTERN-BASED | service-common/CLAUDE.md | Loaded in subtree | Low (~800) |
+| API contracts | FULLY SPECIFIC | service/docs/api/openapi.yaml | Just-in-time (referenced) | Zero (until needed) |
+| Business domain | SEMI-SPECIFIC | service/docs/domain.md | Just-in-time (referenced) | Zero (until needed) |
+| Deployment config | FILE REFERENCES | orchestration/CLAUDE.md | Just-in-time (referenced) | Very low (~50) |
 
 **Rule of Thumb:**
 - If it changes during refactoring → Use patterns
@@ -302,50 +424,36 @@ The frontend should call the NGINX gateway at `http://localhost:8080/api/*`:
 ```markdown
 ### API Gateway Pattern
 
-**Frontend calls**: All requests go through NGINX gateway (`http://localhost:8080/api/*`)
+**Pattern**: Resource-based routing through NGINX gateway. Frontend calls clean paths like `/api/transactions`, NGINX routes to appropriate microservice with path transformation. All requests go through `http://localhost:8080/api/*`.
 
-**Routing Strategy**: Resource-based (not service-based)
-- Frontend is decoupled from service topology
-- Moving a resource to different service = NGINX config change only
-- No DNS resolver needed
-- Clean RESTful paths
+**Quick Reference**:
+- All routes defined in [nginx/nginx.dev.conf](nginx/nginx.dev.conf)
+- Routing pattern: `location /api/{resource}` → `rewrite ^/api/(.*)$` → `proxy_pass http://{upstream}`
+- Services use `host.docker.internal` to reach host services from Docker container
+- WebSocket support included for React HMR (hot module replacement)
+- Benefits: Frontend decoupled from service topology, services can be split/merged without frontend changes
 
-**Current Routes**: See @nginx/nginx.dev.conf (source of truth)
-
-**Discovery:**
+**Discovery** (inspect routes without reading full config):
 ```bash
 # List all API routes
-cat nginx/nginx.dev.conf | grep "location /api" | grep -v "#"
+grep "location /api" nginx/nginx.dev.conf | grep -v "#"
 
-# Test a specific route
-curl -v http://localhost:8080/api/v1/transactions
+# Test gateway routing
+curl -v http://localhost:8080/api/v1/health
 ```
 
-**Adding Routes:**
-1. Add location block in `nginx/nginx.dev.conf`:
-   ```nginx
-   location /api/v1/your-resource {
-       proxy_pass http://host.docker.internal:8082/your-resource;
-   }
-   ```
-2. Restart gateway: `docker compose restart nginx-gateway`
-3. Test: `curl http://localhost:8080/api/v1/your-resource`
-
-**Pattern Benefits:**
-- Frontend never knows which service handles a resource
-- Services can be split/merged without frontend changes
-- API versioning handled at gateway level
-
-**See also:**
-- @nginx/README.md - Routing configuration guide
-- @docs/architecture/resource-routing-pattern.md
+**When to consult detailed nginx documentation**:
+- Adding new API routes → Read "Adding a New Resource Route" in [nginx/README.md](nginx/README.md)
+- Adding new microservices → Read "Adding a New Microservice" in [nginx/README.md](nginx/README.md)
+- Moving resources between services → Read "Moving a Resource Between Services" in [nginx/README.md](nginx/README.md)
+- Troubleshooting gateway issues → Read "Troubleshooting" section in [nginx/README.md](nginx/README.md)
 ```
 
 **Benefits:**
 - ✅ Documents the pattern, not the inventory
-- ✅ Provides discovery commands
-- ✅ Explains the architectural principle
-- ✅ Shows how to extend
+- ✅ Provides discovery commands for quick reference
+- ✅ References detailed docs only when needed (just-in-time loading)
+- ✅ Token efficient: ~200 tokens vs. ~2,000 tokens (full nginx config)
 
 ---
 
@@ -836,6 +944,22 @@ cat src/main/resources/application.yml
 5. **Service-specific only** - Don't modify cross-service patterns here
 
 [Add service-specific guidelines if needed]
+
+## Context Management
+
+**This CLAUDE.md uses just-in-time document loading**:
+- Patterns and conventions are included directly (always relevant)
+- Detailed documentation is referenced with `@path/to/file` pointers
+- Discovery commands teach you how to find current state
+- When you need details, read the referenced files on-demand
+
+**When to load detailed docs**:
+- Working on API changes → Read @docs/api/openapi.yaml
+- Adding/modifying entities → Read @docs/domain-model.md
+- Database changes → Read @docs/database-schema.md
+- Service-specific features → Read relevant @docs/*.md files
+
+**Token efficiency**: This pattern keeps initial context under 2,000 tokens, saving 75%+ compared to full inclusion.
 ```
 
 ### Example: transaction-service/CLAUDE.md
@@ -1930,18 +2054,23 @@ npm run build && npx webpack-bundle-analyzer build/stats.json
 - [ ] All @references in CLAUDE.md files point to existing files
 - [ ] Discovery commands in CLAUDE.md files execute successfully
 - [ ] No duplicate Spring Boot pattern documentation across repos
+- [ ] CLAUDE.md files stay under 5,000 tokens (~150-200 lines)
+- [ ] Referenced docs are loaded just-in-time, not at startup
 
 ### Medium-term Goals
 - [ ] New team member can set up environment using only orchestration docs
 - [ ] Adding a new service doesn't require updating orchestration/CLAUDE.md
 - [ ] Refactoring a service doesn't require updating CLAUDE.md
 - [ ] CI validates documentation on every PR
+- [ ] Initial context window < 10,000 tokens across all loaded CLAUDE.md files
+- [ ] Token savings of 70%+ compared to full-inclusion approach
 
 ### Long-term Vision
 - [ ] Every service has complete API documentation (OpenAPI)
 - [ ] Every architectural decision has an ADR
 - [ ] Documentation coverage report shows 100% coverage
 - [ ] New service creation uses templates (10-minute setup)
+- [ ] Pattern-to-detail ratio maintained at 80/20 across all CLAUDE.md files
 
 ---
 
@@ -2020,7 +2149,13 @@ Thanks!
 ## FAQ
 
 ### Q: Why not just keep CLAUDE.md comprehensive and detailed?
-**A:** Comprehensive documentation drifts quickly. Pattern-based docs teach AI to discover current state, which is always accurate.
+**A:** Comprehensive documentation drifts quickly. Pattern-based docs teach AI to discover current state, which is always accurate. Additionally, comprehensive docs waste tokens - loading 500 lines of detailed docs costs ~8,000 tokens per conversation, even when only 10% is relevant.
+
+### Q: What's the difference between @import and @reference?
+**A:**
+- **@import** (bare `@docs/file.md` in CLAUDE.md): Loads file content at startup. Use sparingly.
+- **@reference** ("See @docs/file.md" with context): Provides a pointer for just-in-time loading. Claude reads it only when needed.
+- **Best practice**: Use reference patterns with "When to consult" guidance.
 
 ### Q: What if discovery commands break?
 **A:** The validation script (`scripts/validate-claude-context.sh`) catches this. Fix the command or update the pattern.
@@ -2032,16 +2167,19 @@ Thanks!
 **A:** The README.md files remain human-friendly. CLAUDE.md files are optimized for AI assistants. Both are important.
 
 ### Q: How do we know if CLAUDE.md is too specific?
-**A:** Ask: "If I refactor, do I need to update this?" If yes, it's too specific. Use a pattern instead.
+**A:** Ask: "If I refactor, do I need to update this?" If yes, it's too specific. Use a pattern instead. Also check: "Is this over 5,000 tokens?" If yes, it's too detailed.
 
 ### Q: Where do code examples go?
-**A:** In `docs/` directories with full examples. CLAUDE.md references them with @docs/file.md.
+**A:** In `docs/` directories with full examples. CLAUDE.md references them with @docs/file.md and "When to consult" guidance.
 
 ### Q: What if a pattern evolves?
 **A:** Update service-common/docs/ (the source of truth), then all services inherit the change. Document the evolution in CHANGELOG.md.
 
 ### Q: Do we need ADRs for every decision?
 **A:** Only architectural decisions that affect multiple services or have lasting impact.
+
+### Q: How do I measure token usage?
+**A:** Count lines × ~6-8 tokens/line for documentation. Use `/clear` frequently in Claude Code to reset context. Monitor conversation length - if hitting limits quickly, your CLAUDE.md files are too large.
 
 ---
 

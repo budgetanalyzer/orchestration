@@ -36,7 +36,7 @@ dependencies {
 
 **Pros**:
 - Maximum flexibility - services only get what they need
-- True minimal baseline (session-gateway might not need JPA)
+- True minimal baseline (e.g., read-only services might not need JPA)
 - No forced dependencies
 
 **Cons**:
@@ -128,60 +128,73 @@ budget-analyzer/spring-boot-service-template/
 
 ---
 
-### 3. Build Order: Full Template System First, Test with session-gateway
+### 3. Build Order: Full Template System First
 
-**Decision**: CONFIRMED - Build complete template system, then scaffold session-gateway
+**Decision**: CONFIRMED - Build complete template system first, validate with test services
 
 **Rationale**:
-- session-gateway is a real production service, not a test
-- Better to validate template thoroughly before using for production
-- session-gateway requirements inform template design
-- Can iterate on template before committing to structure
+- Better to validate template thoroughly before using for production services
+- Iterate on template based on learnings from test services
+- Can adjust template structure before committing to production use
 
 **Implementation Order**:
 1. Build GitHub template repository
 2. Create interactive creation script
 3. Document add-on patterns
 4. Test template with throwaway test services
-5. Scaffold session-gateway using validated template
-6. Iterate based on session-gateway learnings
+5. Validate with real service creation (post-template)
+6. Iterate based on learnings
+
+**Note on Reactive Services**: Services using Spring Cloud Gateway (reactive/WebFlux architecture) cannot use this servlet-based template. See Phase 7 for details.
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Service-Common Evaluation & Refactoring
+### Phase 1: Service-Common Audit & Standardization
 
 **Duration**: 1-2 days
 
 **Tasks**:
 
-1. **Analyze Current Service-Common Usage**
-   - List all classes/beans in service-common
-   - Identify which require Web/JPA dependencies
-   - Document autoconfiguration patterns
-   - Review exception handling requirements
+1. **Audit Existing Conditional Autoconfiguration** ✅
+   - Verify `@ConditionalOnWebApplication` on `DefaultApiExceptionHandler`
+   - Verify `@ConditionalOnProperty` on `HttpLoggingConfig`
+   - Document any other conditional patterns
+   - Results: Autoconfiguration patterns already properly implemented
 
-2. **Test compileOnly Pattern**
-   - Create branch: `experiment/compileonly-deps`
-   - Change Web/JPA to `compileOnly`
-   - Add `@ConditionalOnClass` to autoconfiguration
-   - Build service-common
-   - Test with transaction-service (add explicit deps)
-   - Test with currency-service (add explicit deps)
-   - Measure impact on service build files
+2. **Standardize Configuration Namespaces** ✅
+   - Fix transaction-service configuration namespace (budget-analyzer → budgetanalyzer)
+   - Update `@ConfigurationProperties` classes to match new namespace
+   - Verify currency-service already uses correct namespace
+   - Test that configuration still loads correctly
+   - Results: Both services now use consistent `budgetanalyzer.*` namespace
 
-3. **Decision**
-   - Review pros/cons based on actual experience
-   - Choose: Option A (compileOnly), B (implementation), or C (hybrid)
-   - Document decision in ADR
-   - Implement chosen approach
+3. **Standardize Java Version Management** ✅
+   - Add Java version to `gradle/libs.versions.toml` in both services
+   - Update `build.gradle.kts` to reference version from catalog
+   - Verify Java version is correctly applied
+   - Results: Both services use centralized Java version management
 
-4. **Deliverables**
-   - Updated service-common with chosen pattern
-   - ADR: `docs/decisions/005-service-common-dependency-strategy.md`
-   - Published service-common to mavenLocal
-   - Updated existing services if needed
+4. **Extract and Document Existing Config Files** ✅
+   - Extract `.editorconfig` from transaction-service
+   - Document `checkstyle.xml` (28KB Google Java Style)
+   - Document JVM args pattern for Java 24 compatibility
+   - Document test configuration patterns
+   - Results: Config files documented for template inclusion
+
+5. **Document Established Autoconfiguration Patterns** ✅
+   - Document existing autoconfiguration in service-common
+   - Verify patterns work correctly across both services
+   - No changes needed, patterns already well-established
+   - Results: Patterns documented for template users
+
+**Deliverables**:
+   - ✅ Transaction-service with standardized configuration namespaces
+   - ✅ Both services with centralized Java version management
+   - ✅ Documented config files (.editorconfig, checkstyle.xml)
+   - ✅ Documented JVM args and test patterns
+   - ✅ All tests passing after changes
 
 ---
 
@@ -233,8 +246,8 @@ budget-analyzer/spring-boot-service-template/
    ```
    src/
    ├── main/
-   │   ├── java/org/budgetanalyzer/{SERVICE_NAME}/
-   │   │   ├── {ServiceName}Application.java
+   │   ├── java/org/budgetanalyzer/{DOMAIN_NAME}/
+   │   │   ├── {ServiceClassName}Application.java
    │   │   ├── api/          # Controllers, DTOs
    │   │   ├── config/       # Configuration classes
    │   │   ├── domain/       # Entities, enums
@@ -243,8 +256,8 @@ budget-analyzer/spring-boot-service-template/
    │   └── resources/
    │       └── application.yml
    └── test/
-       ├── java/org/budgetanalyzer/{SERVICE_NAME}/
-       │   └── {ServiceName}ApplicationTests.java
+       ├── java/org/budgetanalyzer/{DOMAIN_NAME}/
+       │   └── {ServiceClassName}ApplicationTests.java
        └── resources/
            └── application.yml
    ```
@@ -262,22 +275,118 @@ budget-analyzer/spring-boot-service-template/
 3. **Placeholder System**
 
    **Placeholders**:
-   - `{SERVICE_NAME}` → kebab-case service name (e.g., `session-gateway`)
-   - `{SERVICE_CLASS_NAME}` → PascalCase class name (e.g., `SessionGateway`)
-   - `{SERVICE_PORT}` → Port number (e.g., `8083`)
-   - `{DATABASE_NAME}` → Database name (e.g., `session_gateway`)
+   - `{SERVICE_NAME}` → Full service name in kebab-case (e.g., `currency-service`, `transaction-service`)
+   - `{DOMAIN_NAME}` → Domain/package name (e.g., `currency`, `session`)
+     - Default: First word of service name
+     - User can override during script execution
+   - `{ServiceClassName}` → PascalCase class name (e.g., `Currency`, `Session`)
+     - Derived from `{DOMAIN_NAME}`
+   - `{SERVICE_PORT}` → Port number (e.g., `8082`)
+   - `{DATABASE_NAME}` → Database name (e.g., `currency`, `session`)
+     - Default: Same as `{DOMAIN_NAME}`
+     - User can override during script execution
    - `{SERVICE_COMMON_VERSION}` → service-common version (e.g., `0.0.1-SNAPSHOT`)
    - `{JAVA_VERSION}` → Java version (e.g., `24`)
+
+   **Package Structure Pattern**:
+   ```
+   org.budgetanalyzer.{DOMAIN_NAME}
+   ```
+
+   **Examples**:
+   - `currency-service` → package: `org.budgetanalyzer.currency`
+   - `transaction-service` → package: `org.budgetanalyzer.transaction`
 
    **Files with placeholders**:
    - `settings.gradle.kts`: rootProject.name
    - `gradle/libs.versions.toml`: serviceCommon version, java version
-   - `src/main/resources/application.yml`: server.port, context-path, application.name
+   - `src/main/resources/application.yml`: server.port, context-path, application.name, configuration properties
    - `src/main/java/.../Application.java`: package, class name
    - `CLAUDE.md`: Service name, port references
    - `README.md`: Service name, descriptions
 
-4. **Minimal Dependencies**
+4. **Configuration Namespace Standard**
+
+   **Root Namespace**: `budgetanalyzer` (no hyphens)
+
+   All configuration properties use `budgetanalyzer` as the root namespace, following a consistent pattern:
+
+   **Service-Common Configurations** (shared features from service-common):
+   ```yaml
+   budgetanalyzer:
+     service:
+       http-logging:
+         enabled: true
+         log-level: DEBUG
+         # ... etc
+   ```
+
+   **Service-Specific Configurations**:
+   ```yaml
+   budgetanalyzer:
+     {SERVICE_NAME}:  # e.g., currency-service, transaction-service
+       # Service-specific properties
+   ```
+
+   **Complete Example (Currency Service)**:
+   ```yaml
+   spring:
+     application:
+       name: currency-service
+
+   budgetanalyzer:
+     service:
+       http-logging:
+         enabled: true
+     currency-service:
+       exchange-rate-import:
+         cron: "0 0 23 * * ?"
+         import-on-startup: true
+   ```
+
+   **Java @ConfigurationProperties Classes**:
+   ```java
+   // Service-common feature
+   @ConfigurationProperties(prefix = "budgetanalyzer.service.http-logging")
+   public class HttpLoggingProperties { }
+
+   // Service-specific feature
+   @ConfigurationProperties(prefix = "budgetanalyzer.{SERVICE_NAME}.{feature-name}")
+   public class FeatureProperties { }
+   ```
+
+   **Why This Pattern?**
+   - Consistent across all services
+   - Clear ownership: `budgetanalyzer.service.*` = shared, `budgetanalyzer.{SERVICE_NAME}.*` = specific
+   - Prevents configuration collisions
+   - IDE auto-completion support
+
+5. **Database Naming Pattern**
+
+   **Default Behavior**: Dedicated database per service
+
+   **Naming Convention**:
+   - Database name = `{DOMAIN_NAME}` (e.g., `currency`, `session`)
+   - User can override during script execution
+
+   **Script Prompting**:
+   ```bash
+   Database name (default: {DOMAIN_NAME}, or specify custom): _
+   ```
+
+   **Template Configuration (application.yml)**:
+   ```yaml
+   spring:
+     datasource:
+       url: jdbc:postgresql://localhost:5432/{DATABASE_NAME}
+   ```
+
+   **Special Case - Transaction Service**:
+   - Uses shared database `budget_analyzer`
+   - Reason: Avoid confusion with SQL "transaction" concept
+   - **Note**: This is an exception, not recommended pattern
+
+6. **Minimal Dependencies**
 
    **libs.versions.toml**:
    ```toml
@@ -311,8 +420,21 @@ budget-analyzer/spring-boot-service-template/
    spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
    ```
 
-   **build.gradle.kts** (absolute minimum):
+   **build.gradle.kts** (absolute minimum with JVM args):
    ```kotlin
+   // JVM arguments for Java 24 compatibility
+   val jvmArgsList = listOf(
+       "--add-opens=java.base/java.nio=ALL-UNNAMED",
+       "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+       "--enable-native-access=ALL-UNNAMED"
+   )
+
+   java {
+       toolchain {
+           languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get().toInt()))
+       }
+   }
+
    dependencies {
        implementation(libs.service.common)
        implementation(libs.spring.boot.starter.actuator)
@@ -320,7 +442,137 @@ budget-analyzer/spring-boot-service-template/
        testImplementation(libs.spring.boot.starter.test)
        testRuntimeOnly(libs.junit.platform.launcher)
    }
+
+   tasks.withType<Test> {
+       jvmArgs = jvmArgsList
+   }
+
+   tasks.withType<JavaExec> {
+       jvmArgs = jvmArgsList
+   }
+
+   tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+       jvmArgs = jvmArgsList
+   }
    ```
+
+7. **Minimal application.yml with Standard Configurations**
+
+   **Enhanced Minimal application.yml**:
+   ```yaml
+   spring:
+     application:
+       name: {SERVICE_NAME}
+
+     datasource:
+       url: jdbc:postgresql://localhost:5432/{DATABASE_NAME}
+       username: ${DB_USERNAME:postgres}
+       password: ${DB_PASSWORD:postgres}
+
+     jpa:
+       hibernate:
+         ddl-auto: validate
+       open-in-view: false
+
+     flyway:
+       enabled: true
+       locations: classpath:db/migration
+
+     mvc:
+       servlet:
+         path: /{SERVICE_NAME}  # Context path
+
+     jackson:
+       default-property-inclusion: non_null
+       serialization:
+         indent-output: true
+         write-dates-as-timestamps: false
+       date-format: com.fasterxml.jackson.databind.util.StdDateFormat
+
+   management:
+     endpoints:
+       web:
+         exposure:
+           include: health,info,metrics
+     endpoint:
+       health:
+         show-details: when-authorized
+
+   logging:
+     level:
+       root: WARN
+       org.budgetanalyzer: TRACE
+
+   budgetanalyzer:
+     service:
+       http-logging:
+         enabled: true
+         log-level: DEBUG
+         include-request-body: true
+         include-response-body: true
+         max-body-size: 10000
+         exclude-patterns:
+           - /actuator/**
+           - /swagger-ui/**
+           - /v3/api-docs/**
+   ```
+
+   **Test Configuration (src/test/resources/application.yml)**:
+   ```yaml
+   spring:
+     datasource:
+       url: jdbc:postgresql://localhost:5432/test_{DATABASE_NAME}
+     jpa:
+       hibernate:
+         ddl-auto: create-drop
+     flyway:
+       enabled: false
+
+   logging:
+     level:
+       org.budgetanalyzer: DEBUG
+
+   budgetanalyzer:
+     {SERVICE_NAME}:
+       # Service-specific test properties
+   ```
+
+8. **Example Test Classes**
+
+   **Context Load Test (src/test/java/org/budgetanalyzer/{DOMAIN_NAME}/ApplicationTests.java)**:
+   ```java
+   @SpringBootTest
+   class ApplicationTests {
+       @Test
+       void contextLoads() {
+       }
+   }
+   ```
+
+9. **Code Quality Configuration Files**
+
+   **`.editorconfig`** (from transaction-service):
+   ```
+   root = true
+
+   [*]
+   charset = utf-8
+   end_of_line = lf
+   insert_final_newline = true
+
+   [*.java]
+   indent_style = space
+   indent_size = 2
+   trim_trailing_whitespace = true
+   ```
+
+   **`config/checkstyle/checkstyle.xml`**:
+   - Source: transaction-service/config/checkstyle/checkstyle.xml
+   - Size: 28KB (514 lines)
+   - Format: Google Java Style configuration
+   - Action: Copy complete file to template repository
+   - Note: This is a standard Google Java Style checkstyle configuration
+   - Enforces consistent code formatting across all services
 
 5. **Template Validation**
    - GitHub Actions workflow validates template builds
@@ -367,7 +619,7 @@ budget-analyzer/spring-boot-service-template/
    - Common caching patterns
    - Testing with TestContainers
 
-3. **rabbitmq-spring-cloud.md**
+3. **rabbitmq-spring-cloud.md** (future)
    - Purpose: Event-driven messaging
    - Dependencies (Spring Cloud Stream, Spring Modulith)
    - Configuration (exchanges, bindings)
@@ -375,32 +627,65 @@ budget-analyzer/spring-boot-service-template/
    - Event consumption patterns
    - Testing with TestContainers
 
-4. **webflux.md**
-   - Purpose: Reactive programming and external API calls
+4. **webclient.md** ✅
+   - Purpose: HTTP client for calling external APIs (WebFlux WebClient)
    - Dependencies
    - WebClient configuration
    - Common patterns (REST calls, error handling)
-   - Testing
+   - Testing with MockWebServer
+   - Real example: currency-service FRED API integration
 
-5. **shedlock.md**
+5. **testcontainers.md** ✅
+   - Purpose: Integration testing with real PostgreSQL
+   - Dependencies (TestContainers Core, PostgreSQL, JUnit Jupiter)
+   - Configuration (BaseRepositoryTest pattern)
+   - Usage examples (repository tests, integration tests)
+   - Singleton container pattern for faster tests
+   - CI/CD configuration
+
+6. **spring-modulith.md** ✅
+   - Purpose: Module boundaries and event-driven communication
+   - Dependencies
+   - Module structure and package organization
+   - Event publishing/subscribing with @ApplicationModuleListener
+   - Event persistence with JPA
+   - Module verification tests
+
+7. **scheduling.md** ✅
+   - Purpose: Scheduled tasks using @Scheduled
+   - Configuration (@EnableScheduling, thread pool)
+   - Usage examples (fixedRate, fixedDelay, cron)
+   - Real example: currency-service exchange rate import
+   - Distributed scheduling considerations (ShedLock reference)
+
+8. **shedlock.md** (future)
    - Purpose: Distributed scheduled task locking
    - Dependencies
    - Configuration
    - Database migration for shedlock table
    - Usage with @SchedulerLock
 
-6. **springdoc-openapi.md**
-   - Purpose: API documentation
+9. **springdoc-openapi.md** ✅
+   - Purpose: API documentation with OpenAPI/Swagger
    - Dependencies
-   - Configuration (OpenApiConfig)
-   - Annotations for documentation
+   - Configuration (extends BaseOpenApiConfig)
+   - Annotations for documentation (@Operation, @Schema, @Tag)
    - Accessing Swagger UI
+   - Real example: transaction-service API docs
 
-7. **spring-security.md** (future)
-   - Purpose: Authentication and authorization
-   - Dependencies
-   - Security configuration
-   - Common patterns
+10. **redis.md** (future)
+    - Purpose: Caching and session storage
+    - Dependencies
+    - Configuration
+    - Cache configuration class
+    - Common caching patterns
+    - Testing with TestContainers
+
+11. **spring-security.md** (future)
+    - Purpose: Authentication and authorization
+    - Dependencies
+    - Security configuration
+    - Common patterns
 
 **Each guide includes**:
 - Use cases and when to use
@@ -427,8 +712,9 @@ budget-analyzer/spring-boot-service-template/
 
 1. **Interactive Prompts**
    ```bash
-   Service name (e.g., 'session-gateway'):
-   Service port (e.g., 8083):
+   Service name (e.g., 'currency-service'):
+   Domain name [currency] (or specify custom):
+   Service port (e.g., 8082):
    Java version [24]:
    service-common version [0.0.1-SNAPSHOT]:
    PostgreSQL database name (leave empty for shared 'budget_analyzer'):
@@ -456,7 +742,7 @@ budget-analyzer/spring-boot-service-template/
    ```bash
    1. Clone GitHub template repository
    2. Replace all placeholders in files
-   3. Rename directories (org/budgetanalyzer/{SERVICE_NAME})
+   3. Rename directories (org/budgetanalyzer/{DOMAIN_NAME})
    4. Apply selected add-ons:
       - Add dependencies to libs.versions.toml
       - Add dependencies to build.gradle.kts
@@ -600,11 +886,27 @@ budget-analyzer/spring-boot-service-template/
 
 ---
 
-### Phase 7: session-gateway Scaffolding
+### Phase 7: Post-Template Development
 
-**Duration**: 1 day
+**Duration**: Ongoing
 
-**Process**:
+**Purpose**: This phase covers service development that occurs after the template system is in place.
+
+#### Note on Reactive Services (Spring Cloud Gateway)
+
+Some services may require reactive (WebFlux-based) architecture, such as API gateways. **These services cannot use this servlet-based microservice template.**
+
+**Architecture Differences**:
+- **Template services**: Spring Boot Web (servlet-based, blocking I/O)
+- **Reactive services**: Spring Cloud Gateway or WebFlux (reactive, non-blocking I/O)
+
+**Implication**: Reactive services (like session-gateway if it were to use Spring Cloud Gateway) must be created manually using Spring Cloud Gateway patterns and documentation. Do not attempt to use this template for reactive services.
+
+**Future Consideration**: If additional reactive services are needed, consider creating a separate "Spring Cloud Gateway Template" or "Reactive Microservice Template."
+
+#### Using the Template for New Services
+
+Once the template is ready, new servlet-based microservices follow this workflow:
 
 1. **Run Creation Script**
    ```bash
@@ -612,46 +914,31 @@ budget-analyzer/spring-boot-service-template/
    ./scripts/create-service.sh
    ```
 
-2. **Configuration**
-   - Service name: `session-gateway`
-   - Port: `8083`
-   - Java version: `24`
-   - service-common version: `0.0.1-SNAPSHOT`
-   - Database: `budget_analyzer` (shared)
-   - Add-ons:
-     - ✓ PostgreSQL + Flyway (for session storage)
-     - ✓ Redis (for token caching)
-     - ✓ SpringDoc OpenAPI (for API docs)
-     - ? WebFlux (for OAuth HTTP calls - TBD)
-     - ? Spring Security (for auth - TBD)
-
-3. **Validation**
+2. **Configure Service**
+   - Provide service name, port, database name
+   - Select add-ons based on requirements
    - Review generated structure
+
+3. **Validate**
    - Verify builds successfully
    - Verify runs locally
    - Run tests
 
-4. **Integration**
+4. **Integrate**
    - Add to orchestration docker-compose.yml
-   - Configure nginx routing (if needed)
+   - Configure nginx routing
    - Update orchestration documentation
 
-5. **Implementation**
-   - Implement session management logic
-   - Add OAuth flow handling
-   - Add token storage/retrieval
-   - Add session cookie management
+5. **Implement Features**
+   - Add domain logic
+   - Add API endpoints
    - Write tests
-
-6. **Learnings**
-   - Document any template improvements needed
-   - Update template based on experience
-   - Update documentation based on gaps found
+   - Deploy
 
 **Deliverables**:
-- session-gateway service scaffolded and functional
-- Integrated into orchestration
-- Template updated based on learnings
+- New services created using validated template
+- Services integrated into orchestration
+- Template continuously improved based on learnings
 
 ---
 
@@ -686,9 +973,9 @@ budget-analyzer/spring-boot-service-template/
    - Version control in place
 
 3. **Adoption**
-   - session-gateway uses template
-   - All future services use template
+   - New servlet-based services use template
    - Team trained on process
+   - Clear guidance for reactive services
 
 ---
 
@@ -759,11 +1046,11 @@ Week 2:
 Week 3:
 ├── Phase 4: Script Testing (2 days)
 ├── Phase 5: Documentation (2 days)
-├── Phase 6: Testing & Validation (2 days)
-├── Phase 7: session-gateway Scaffolding (1 day)
+├── Phase 6: Testing & Validation (3 days)
+└── Phase 7: Post-Template Development (ongoing)
 ```
 
-**Critical Path**: Phase 1 → Phase 2 → Phase 4 → Phase 7
+**Critical Path**: Phase 1 → Phase 2 → Phase 4 → Phase 6
 
 **Parallel Work**: Phase 3 can happen alongside Phase 4
 
@@ -826,15 +1113,15 @@ Week 3:
 **String Replacement**:
 ```bash
 # Service name conversions
-SERVICE_NAME="session-gateway"
-SERVICE_CLASS_NAME=$(echo $SERVICE_NAME | sed -r 's/(^|-)([a-z])/\U\2/g')  # SessionGateway
-SERVICE_PACKAGE=$(echo $SERVICE_NAME | tr '-' '')  # sessiongateway
+SERVICE_NAME="currency-service"  # User input
+DOMAIN_NAME="currency"           # Default: first word, or user override
+SERVICE_CLASS_NAME="Currency"    # Capitalized domain name
 
 # File content replacement
 find "$SERVICE_DIR" -type f -exec sed -i \
     -e "s/{SERVICE_NAME}/$SERVICE_NAME/g" \
-    -e "s/{SERVICE_CLASS_NAME}/$SERVICE_CLASS_NAME/g" \
-    -e "s/{SERVICE_PACKAGE}/$SERVICE_PACKAGE/g" \
+    -e "s/{DOMAIN_NAME}/$DOMAIN_NAME/g" \
+    -e "s/{ServiceClassName}/$SERVICE_CLASS_NAME/g" \
     -e "s/{SERVICE_PORT}/$SERVICE_PORT/g" \
     -e "s/{DATABASE_NAME}/$DATABASE_NAME/g" \
     -e "s/{SERVICE_COMMON_VERSION}/$SERVICE_COMMON_VERSION/g" \
@@ -844,22 +1131,22 @@ find "$SERVICE_DIR" -type f -exec sed -i \
 
 **Directory Renaming**:
 ```bash
-# Rename Java package directories
+# Rename Java package directories from template to actual domain name
 mv "$SERVICE_DIR/src/main/java/org/budgetanalyzer/template" \
-   "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$SERVICE_PACKAGE"
+   "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$DOMAIN_NAME"
 
 mv "$SERVICE_DIR/src/test/java/org/budgetanalyzer/template" \
-   "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$SERVICE_PACKAGE"
+   "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$DOMAIN_NAME"
 ```
 
 **File Renaming**:
 ```bash
 # Rename Application class
-mv "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$SERVICE_PACKAGE/TemplateApplication.java" \
-   "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$SERVICE_PACKAGE/${SERVICE_CLASS_NAME}Application.java"
+mv "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$DOMAIN_NAME/TemplateApplication.java" \
+   "$SERVICE_DIR/src/main/java/org/budgetanalyzer/$DOMAIN_NAME/${SERVICE_CLASS_NAME}Application.java"
 
-mv "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$SERVICE_PACKAGE/TemplateApplicationTests.java" \
-   "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$SERVICE_PACKAGE/${SERVICE_CLASS_NAME}ApplicationTests.java"
+mv "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$DOMAIN_NAME/TemplateApplicationTests.java" \
+   "$SERVICE_DIR/src/test/java/org/budgetanalyzer/$DOMAIN_NAME/${SERVICE_CLASS_NAME}ApplicationTests.java"
 ```
 
 ---
@@ -929,42 +1216,6 @@ fi
 
 ---
 
-## Appendix D: session-gateway Specific Requirements
-
-Based on the authentication implementation plan, session-gateway needs:
-
-**Core Functionality**:
-- OAuth flow management (authorization code flow)
-- Token storage (access + refresh tokens in Redis)
-- Session cookie issuance
-- Token refresh logic
-- Session validation
-
-**Dependencies Needed**:
-- ✓ PostgreSQL + Flyway (for session metadata, audit logs)
-- ✓ Redis (for token storage, session cache)
-- ✓ WebFlux (for OAuth HTTP calls to authorization server)
-- ✓ SpringDoc OpenAPI (for API documentation)
-- ? Spring Security OAuth2 Client (for OAuth flows)
-- ? Spring Session (for session management)
-
-**Port**: 8083
-
-**Key Endpoints**:
-- `POST /auth/login` - Initiate OAuth flow
-- `GET /auth/callback` - OAuth callback handler
-- `POST /auth/refresh` - Refresh access token
-- `POST /auth/logout` - Invalidate session
-- `GET /auth/validate` - Validate session
-
-**Integration Points**:
-- NGINX gateway (proxy OAuth flows)
-- Redis (shared instance)
-- PostgreSQL (shared database or dedicated)
-- External OAuth provider (Google, GitHub, etc.)
-
----
-
 ## Conclusion
 
 This plan provides a comprehensive roadmap for creating a standardized Spring Boot microservice template and creation system. The approach prioritizes:
@@ -973,8 +1224,8 @@ This plan provides a comprehensive roadmap for creating a standardized Spring Bo
 2. **GitHub template repository** as source of truth
 3. **Interactive creation script** for automation
 4. **Comprehensive documentation** for all patterns
-5. **session-gateway as validation** of the template system
+5. **Validation with test services** before production use
 
-Implementation will proceed in phases, with each phase building on the previous one. The plan balances immediate needs (session-gateway scaffolding) with long-term maintainability (template repository, documentation, automation).
+Implementation will proceed in phases, with each phase building on the previous one. The plan balances long-term maintainability (template repository, documentation, automation) with flexibility for different service types (servlet-based vs reactive).
 
 **Key Success Factor**: Completing Phase 1 (service-common evaluation) is critical for determining the final template structure.

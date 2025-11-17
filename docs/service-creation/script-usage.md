@@ -511,6 +511,30 @@ Spring Security: n
 
 ## Troubleshooting
 
+### "Template file not found" Error
+
+If you see errors like:
+```
+Error: Template file not found: /workspace/spring-boot-service-template/addons/postgresql-flyway/application.yml
+```
+
+**Solution**: Ensure `spring-boot-service-template` is cloned in `/workspace/`:
+```bash
+cd /workspace
+git clone https://github.com/budgetanalyzer/spring-boot-service-template.git
+```
+
+The script expects this repository structure:
+```
+/workspace/
+├── orchestration/                  # This repository
+│   └── scripts/create-service.sh
+├── spring-boot-service-template/   # Template repository
+│   ├── base/
+│   └── addons/
+└── {new-service}/                  # Generated service
+```
+
 ### Build Fails After Generation
 
 1. **Check service-web is published**:

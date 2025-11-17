@@ -49,6 +49,38 @@ Alternative approach using GitHub's "Use this template" feature:
 - **Purpose**: Single source of truth for microservice structure
 - **Updates**: Template versioned, changes via PR
 
+### Template System Architecture
+
+The service creation process uses a **template-based architecture** where all configuration text lives in the `spring-boot-service-template` repository as pre-verified template files.
+
+#### Benefits
+
+- ✅ **Pre-verified**: All YAML/SQL/TOML validated before use
+- ✅ **Testable**: Templates independently tested in CI/CD
+- ✅ **Maintainable**: Configuration changes made in template files, not shell scripts
+- ✅ **Documented**: Templates ARE the documentation source
+- ✅ **No duplication**: Single source of truth
+
+#### Template Structure
+
+- **Base template**: Minimal non-web baseline
+- **Add-on templates**: 8 add-ons in separate directories
+- **30 template files**: YAML, TOML, Kotlin, SQL, Java patches
+
+See [spring-boot-service-template/TEMPLATE_USAGE.md](https://github.com/budgetanalyzer/spring-boot-service-template/blob/main/TEMPLATE_USAGE.md) for details.
+
+#### How it Works
+
+1. Script clones base template
+2. Replaces placeholders (`{SERVICE_NAME}`, etc.)
+3. For each selected add-on:
+   - Copies template files
+   - Substitutes placeholders
+   - Appends to target files
+   - Applies patches if needed
+
+**No code generation**: Script only does file operations (copy, substitute, append)
+
 ### What's Included
 
 The template provides:

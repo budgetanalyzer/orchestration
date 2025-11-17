@@ -77,6 +77,7 @@ dependencies {
     api("com.fasterxml.jackson.core:jackson-databind")
     api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     api("org.slf4j:slf4j-api")
+    api("org.springframework.boot:spring-boot-starter-actuator")  // Health checks and metrics
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -832,18 +833,16 @@ budget-analyzer/spring-boot-service-template/
    spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 
    [libraries]
-   # Core dependencies
+   # Service-common shared libraries
+   service-core = { module = "org.budgetanalyzer:service-core", version.ref = "serviceCommon" }
+   service-web = { module = "org.budgetanalyzer:service-web", version.ref = "serviceCommon" }
+
+   # Spring Boot starters
    spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
-   service-common = { module = "org.budgetanalyzer:service-common", version.ref = "serviceCommon" }
 
    # Test dependencies
    spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
    junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }
-
-   # Common dependencies (add as needed)
-   spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
-   spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
-   spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
    ```
 
    **build.gradle.kts** (absolute minimum with JVM args):
@@ -862,7 +861,10 @@ budget-analyzer/spring-boot-service-template/
    }
 
    dependencies {
-       implementation(libs.service.common)
+       // Minimal foundation - logging, exceptions, utilities
+       implementation(libs.service.core)
+
+       // Health checks and metrics
        implementation(libs.spring.boot.starter.actuator)
 
        testImplementation(libs.spring.boot.starter.test)
@@ -882,31 +884,15 @@ budget-analyzer/spring-boot-service-template/
    }
    ```
 
+   **Note**: This provides a non-web baseline. Add `service-web` dependency for REST API services (see Spring Boot Web add-on).
+
 7. **Minimal application.yml with Standard Configurations**
 
-   **Enhanced Minimal application.yml**:
+   **Minimal Non-Web application.yml**:
    ```yaml
    spring:
      application:
        name: {SERVICE_NAME}
-
-     datasource:
-       url: jdbc:postgresql://localhost:5432/{DATABASE_NAME}
-       username: ${DB_USERNAME:postgres}
-       password: ${DB_PASSWORD:postgres}
-
-     jpa:
-       hibernate:
-         ddl-auto: validate
-       open-in-view: false
-
-     flyway:
-       enabled: true
-       locations: classpath:db/migration
-
-     mvc:
-       servlet:
-         path: /{SERVICE_NAME}  # Context path
 
      jackson:
        default-property-inclusion: non_null
@@ -929,31 +915,20 @@ budget-analyzer/spring-boot-service-template/
        root: WARN
        org.budgetanalyzer: TRACE
 
+   # Add service-specific configuration here
    budgetanalyzer:
-     service:
-       http-logging:
-         enabled: true
-         log-level: DEBUG
-         include-request-body: true
-         include-response-body: true
-         max-body-size: 10000
-         exclude-patterns:
-           - /actuator/**
-           - /swagger-ui/**
-           - /v3/api-docs/**
+     {SERVICE_NAME}:
+       # your-property: value
    ```
+
+   **Note**: Configuration is intentionally minimal. Add-ons will add their own configuration sections:
+   - **Spring Boot Web** - server.port, spring.mvc.servlet.path, budgetanalyzer.service.http-logging
+   - **PostgreSQL + Flyway** - spring.datasource, spring.jpa, spring.flyway
+   - **Redis** - spring.data.redis, spring.cache
+   - **RabbitMQ** - spring.rabbitmq, spring.cloud.stream
 
    **Test Configuration (src/test/resources/application.yml)**:
    ```yaml
-   spring:
-     datasource:
-       url: jdbc:postgresql://localhost:5432/test_{DATABASE_NAME}
-     jpa:
-       hibernate:
-         ddl-auto: create-drop
-     flyway:
-       enabled: false
-
    logging:
      level:
        org.budgetanalyzer: DEBUG
@@ -1250,57 +1225,84 @@ budget-analyzer/spring-boot-service-template/
 ### Phase 6: Testing & Validation
 
 **Duration**: 2-3 days
+**Status**: 🔄 In Progress (Phase 6.1 Complete, Full Testing Ongoing)
 
 **Test Scenarios**:
 
-1. **Minimal Service**
+1. **Minimal Non-Web Service**
    ```bash
    ./create-service.sh
    # Name: test-minimal
-   # Port: 9990
    # Add-ons: None
    ```
-   - Verify builds
-   - Verify runs (./gradlew bootRun)
-   - Verify actuator endpoints work
-   - Verify service-common autoconfiguration works
+   - Verify builds successfully
+   - Verify runs briefly (./gradlew bootRun) then exits (no web container)
+   - Verify service-core utilities available (logging, exceptions)
+   - Verify code quality checks pass (spotlessCheck, checkstyleMain)
 
-2. **PostgreSQL Service**
+2. **REST API Service**
    ```bash
    ./create-service.sh
-   # Name: test-postgresql
+   # Name: test-rest-api
    # Port: 9991
-   # Add-ons: PostgreSQL + Flyway
+   # Add-ons: Spring Boot Web, PostgreSQL + Flyway, SpringDoc OpenAPI
    ```
-   - Verify database connection
-   - Verify Flyway migrations run
-   - Verify JPA repositories work
-   - Verify soft-delete pattern works
+   - Verify builds successfully
+   - Verify runs with embedded Tomcat on port 9991
+   - Verify actuator endpoints accessible
+   - Verify Swagger UI accessible at /swagger-ui.html
+   - Verify database connection and migrations
+   - Verify HTTP request logging works
 
-3. **Full-Featured Service**
+3. **Message Consumer Service (Non-Web)**
+   ```bash
+   ./create-service.sh
+   # Name: test-consumer
+   # Add-ons: PostgreSQL + Flyway, RabbitMQ + Spring Cloud, Spring Modulith
+   ```
+   - Verify builds successfully
+   - Verify runs without web container (no Tomcat)
+   - Verify database connection works
+   - Verify RabbitMQ connection works
+   - Verify event handling setup correct
+
+4. **Scheduled Batch Service (Non-Web)**
+   ```bash
+   ./create-service.sh
+   # Name: test-batch
+   # Add-ons: PostgreSQL + Flyway, Scheduling, ShedLock
+   ```
+   - Verify builds successfully
+   - Verify runs without web container
+   - Verify scheduling configuration present
+   - Verify ShedLock database table created
+   - Verify database connection works
+
+5. **Full-Featured REST Service**
    ```bash
    ./create-service.sh
    # Name: test-full
    # Port: 9992
-   # Add-ons: All
+   # Add-ons: Spring Boot Web, PostgreSQL, Redis, TestContainers, SpringDoc
    ```
    - Verify all dependencies resolve
    - Verify builds successfully
    - Verify all autoconfiguration activates
    - Verify no conflicts between add-ons
 
-4. **Manual Template Usage**
+6. **Manual Template Usage**
    - Use GitHub "Use this template" button
    - Clone repository
    - Manually replace placeholders
+   - Add Spring Boot Web add-on manually
    - Verify builds
 
-5. **GitHub Template Validation**
+7. **GitHub Template Validation**
    - Verify CI/CD pipeline passes
    - Verify template repository builds
    - Verify no broken links in documentation
 
-6. **Code Quality**
+8. **Code Quality**
    - Run spotlessCheck on generated services
    - Run checkstyleMain on generated services
    - Verify no warnings/errors
@@ -1310,6 +1312,38 @@ budget-analyzer/spring-boot-service-template/
 - Issues documented and fixed
 - Template validated as production-ready
 
+**Current Status** (2025-11-17):
+
+**Completed**:
+- ✅ Phase 6.1: Service-common module split and auto-configuration refactoring
+- ✅ Test Scenario 1: Minimal Non-Web Service (passed with automated fix)
+- ✅ Template repository builds successfully
+- ✅ Automated testing script created (scripts/test-phase-6.sh)
+- ✅ Comprehensive testing guide created (docs/service-creation/phase-6-testing-guide.md)
+- ✅ DataSource auto-exclusion fix implemented in create-service.sh
+
+**In Progress**:
+- ⏳ Test Scenario 2: REST API Service (Web + PostgreSQL + SpringDoc)
+- ⏳ Test Scenario 3: Message Consumer Service
+- ⏳ Test Scenario 4: Scheduled Batch Service
+- ⏳ Test Scenario 5: Full-Featured REST Service
+- ⏳ Test Scenario 6: Manual Template Usage
+- ⏳ Test Scenario 7: GitHub Template Validation (build test passed)
+- ⏳ Test Scenario 8: Code Quality Checks
+
+**Blockers**:
+- ✅ Scheduling add-on implemented (blocker resolved)
+- ✅ TestContainers add-on implemented with smoke test pattern (blocker resolved)
+- ⚠️ ShedLock add-on fully implemented in template repository (see addons/shedlock)
+- Interactive script makes full automation challenging
+  (Note: This is a design choice, not a blocker. Non-interactive mode not currently needed.)
+
+**Next Actions**:
+1. Execute remaining test scenarios manually following phase-6-testing-guide.md
+2. Document results in phase-6-testing-report.md
+3. Implement missing add-ons or mark as future work
+4. Complete Phase 6 validation
+
 ---
 
 ### Phase 7: Post-Template Development
@@ -1318,21 +1352,49 @@ budget-analyzer/spring-boot-service-template/
 
 **Purpose**: This phase covers service development that occurs after the template system is in place.
 
-#### Note on Reactive Services (Spring Cloud Gateway)
+#### Template Service Types
 
-Some services may require reactive (WebFlux-based) architecture, such as API gateways. **These services cannot use this servlet-based microservice template.**
+This template supports multiple service types by using different add-on combinations:
 
-**Architecture Differences**:
-- **Template services**: Spring Boot Web (servlet-based, blocking I/O)
-- **Reactive services**: Spring Cloud Gateway or WebFlux (reactive, non-blocking I/O)
+**Supported Service Types:**
 
-**Implication**: Reactive services (like session-gateway if it were to use Spring Cloud Gateway) must be created manually using Spring Cloud Gateway patterns and documentation. Do not attempt to use this template for reactive services.
+1. **REST API Services** ✅
+   - Add-ons: Spring Boot Web (required), PostgreSQL, SpringDoc OpenAPI, etc.
+   - Use case: Traditional HTTP/JSON microservices
+   - Architecture: Servlet-based (blocking I/O) with embedded Tomcat
+   - Examples: transaction-service, currency-service
 
-**Future Consideration**: If additional reactive services are needed, consider creating a separate "Spring Cloud Gateway Template" or "Reactive Microservice Template."
+2. **Message Consumer Services** ✅
+   - Add-ons: RabbitMQ + Spring Cloud, PostgreSQL, Spring Modulith
+   - Use case: Event-driven background processors
+   - Architecture: No web container, listens to RabbitMQ queues
+   - Examples: Audit log processor, notification sender
+
+3. **Scheduled Batch Services** ✅
+   - Add-ons: Scheduling, ShedLock (for multi-instance), PostgreSQL
+   - Use case: Periodic background tasks, data imports, cleanup jobs
+   - Architecture: No web container, runs on schedule
+   - Examples: Currency rate importer, data archiver
+
+4. **CLI Tools** ✅
+   - Add-ons: None (base template only)
+   - Use case: Command-line utilities, one-off data migrations
+   - Architecture: Minimal Spring Boot, runs and exits
+   - Examples: Data migration tools, administrative utilities
+
+**Unsupported Service Types:**
+
+5. **Reactive Services** ❌
+   - Examples: Spring Cloud Gateway, fully reactive WebFlux applications
+   - Reason: Different architecture (reactive/non-blocking vs servlet/blocking)
+   - Solution: Create manually using Spring Cloud Gateway or WebFlux patterns
+   - Future: Consider separate "Reactive Microservice Template" if needed
+
+**Key Principle**: The template provides a **minimal non-web baseline** (`service-core` only). Add web support via the Spring Boot Web add-on only when needed for REST APIs. This allows the template to support both web and non-web service types.
 
 #### Using the Template for New Services
 
-Once the template is ready, new servlet-based microservices follow this workflow:
+Once the template is ready, new microservices follow this workflow:
 
 1. **Run Creation Script**
    ```bash
@@ -1341,23 +1403,31 @@ Once the template is ready, new servlet-based microservices follow this workflow
    ```
 
 2. **Configure Service**
-   - Provide service name, port, database name
-   - Select add-ons based on requirements
+   - Provide service name
+   - Provide port (if using Spring Boot Web add-on)
+   - Provide database name (if using PostgreSQL add-on)
+   - Select add-ons based on service type:
+     - **REST API**: Spring Boot Web, PostgreSQL, SpringDoc OpenAPI
+     - **Message Consumer**: RabbitMQ, PostgreSQL, Spring Modulith
+     - **Batch Job**: Scheduling, ShedLock (if multi-instance), PostgreSQL
+     - **CLI Tool**: None
    - Review generated structure
 
 3. **Validate**
    - Verify builds successfully
-   - Verify runs locally
+   - Verify runs locally (with or without web container, depending on add-ons)
    - Run tests
 
-4. **Integrate**
-   - Add to orchestration docker-compose.yml
-   - Configure nginx routing
+4. **Integrate** (if applicable)
+   - Add to orchestration docker-compose.yml (if using infrastructure services)
+   - Configure nginx routing (if REST API service)
    - Update orchestration documentation
 
 5. **Implement Features**
    - Add domain logic
-   - Add API endpoints
+   - Add API endpoints (if web service)
+   - Add message consumers (if messaging service)
+   - Add scheduled tasks (if batch service)
    - Write tests
    - Deploy
 

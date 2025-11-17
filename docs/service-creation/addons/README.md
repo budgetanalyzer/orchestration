@@ -9,19 +9,19 @@ The service template provides a **minimal baseline** with only the essential dep
 to incrementally add functionality based on your service's specific requirements.
 
 **Template Baseline Includes:**
-- Spring Boot Web (servlet-based)
 - Spring Boot Actuator (health checks, metrics)
-- service-common library (shared utilities, logging, exception handling)
+- service-core library (logging, exception classes, minimal utilities)
 - Code quality tools (Checkstyle, Spotless, EditorConfig)
 - Gradle build system with version catalog
 - Basic configuration (application.yml, logging)
 
-**Everything else is optional** and documented in the add-on guides below.
+**Everything else is optional** and documented in the add-on guides below, including web support for REST APIs.
 
 ## Quick Reference
 
 | Add-On | Purpose | When to Use | Complexity |
 |--------|---------|-------------|------------|
+| [Spring Boot Web](spring-boot-web.md) | REST API endpoints (servlet-based) | Expose HTTP endpoints | ⭐ Easy |
 | [PostgreSQL + Flyway](postgresql-flyway.md) | Database persistence & migrations | Need to store data | ⭐⭐ Medium |
 | [Redis](redis.md) | Caching & session storage | Performance optimization | ⭐⭐ Medium |
 | [TestContainers](testcontainers.md) | Integration testing with real services | Quality integration tests | ⭐ Easy |
@@ -35,10 +35,52 @@ to incrementally add functionality based on your service's specific requirements
 
 ## Add-On Guides
 
+### Web & HTTP
+
+#### [Spring Boot Web](spring-boot-web.md)
+REST API support with embedded Tomcat servlet container.
+
+**Template Files**: `spring-boot-service-template/addons/spring-boot-web/`
+- `libs.versions.toml` - Changes service-core to service-web
+- `build.gradle.kts` - Spring Boot Web dependencies (via service-web)
+- `application.yml` - Server port, servlet path, HTTP logging configuration
+- `Application.java.patch` - Removes DataSource exclusions (if PostgreSQL not selected)
+
+**Documentation**: [spring-boot-web.md](./spring-boot-web.md)
+
+**Use Cases:**
+- REST API microservices
+- Services exposing HTTP endpoints
+- Services requiring Spring MVC
+
+**Dependencies:** service-web (includes Spring Boot Starter Web, service-core)
+
+**Key Features:**
+- Spring Boot Web (embedded Tomcat)
+- HTTP request/response logging
+- Global exception handling
+- Base JPA entities (AuditableEntity, SoftDeletableEntity)
+- OpenAPI configuration support
+
+**Note:** Actuator (health checks, metrics) comes from service-core and is already available in the base template
+
+**Note:** Skip this add-on for non-web services (message consumers, batch jobs, CLI tools)
+
+---
+
 ### Data Persistence & Migration
 
 #### [PostgreSQL + Flyway](postgresql-flyway.md)
 Database persistence with version-controlled schema migrations.
+
+**Template Files**: `spring-boot-service-template/addons/postgresql-flyway/`
+- `libs.versions.toml` - Gradle dependencies (JPA, Flyway, PostgreSQL, H2)
+- `build.gradle.kts` - Gradle dependency declarations
+- `application.yml` - DataSource, JPA, Flyway configuration
+- `Application.java.patch` - Removes DataSource exclusions
+- `V1__initial_schema.sql` - Initial migration template
+
+**Documentation**: [postgresql-flyway.md](./postgresql-flyway.md)
 
 **Use Cases:**
 - Storing transactional data
@@ -60,6 +102,13 @@ Database persistence with version-controlled schema migrations.
 
 #### [Redis](redis.md)
 High-performance in-memory caching and session storage.
+
+**Template Files**: `spring-boot-service-template/addons/redis/`
+- `libs.versions.toml` - Spring Boot Data Redis, Spring Cache
+- `build.gradle.kts` - Redis dependencies
+- `application.yml` - Redis connection, cache configuration
+
+**Documentation**: [redis.md](./redis.md)
 
 **Use Cases:**
 - Caching expensive database queries
@@ -108,6 +157,12 @@ Integration testing with real Docker containers for PostgreSQL, Redis, RabbitMQ,
 #### [WebClient](webclient.md)
 Non-blocking HTTP client for calling external REST APIs (Spring WebFlux).
 
+**Template Files**: `spring-boot-service-template/addons/webflux/`
+- `libs.versions.toml` - Spring Boot WebFlux, Reactor Test
+- `build.gradle.kts` - WebFlux dependencies
+
+**Documentation**: [webclient.md](./webclient.md)
+
 **Use Cases:**
 - Calling external REST APIs
 - Microservice-to-microservice communication
@@ -131,6 +186,12 @@ Non-blocking HTTP client for calling external REST APIs (Spring WebFlux).
 
 #### [SpringDoc OpenAPI](springdoc-openapi.md)
 Automatic API documentation generation with Swagger UI.
+
+**Template Files**: `spring-boot-service-template/addons/springdoc/`
+- `libs.versions.toml` - SpringDoc OpenAPI version and library
+- `build.gradle.kts` - SpringDoc OpenAPI dependencies
+
+**Documentation**: [springdoc-openapi.md](./springdoc-openapi.md)
 
 **Use Cases:**
 - Documenting REST API endpoints
@@ -180,6 +241,14 @@ Module boundaries and event-driven communication within a modular monolith.
 
 #### [RabbitMQ + Spring Cloud Stream](rabbitmq-spring-cloud.md)
 Asynchronous messaging and event-driven communication between microservices.
+
+**Template Files**: `spring-boot-service-template/addons/rabbitmq-spring-cloud/`
+- `libs.versions.toml` - Spring Cloud Stream, RabbitMQ binder, Spring Modulith Events
+- `build.gradle.kts.dependencyManagement` - Spring Cloud BOM
+- `build.gradle.kts.dependencies` - RabbitMQ dependencies
+- `application.yml` - RabbitMQ connection, Spring Cloud Stream bindings
+
+**Documentation**: [rabbitmq-spring-cloud.md](./rabbitmq-spring-cloud.md)
 
 **Use Cases:**
 - Asynchronous inter-service communication
@@ -231,6 +300,13 @@ Basic scheduled tasks using Spring's @Scheduled annotation.
 #### [ShedLock](shedlock.md)
 Distributed scheduled task locking for clustered/multi-instance deployments.
 
+**Template Files**: `spring-boot-service-template/addons/shedlock/`
+- `libs.versions.toml` - ShedLock version and libraries
+- `build.gradle.kts` - ShedLock dependencies
+- `V2__create_shedlock_table.sql` - Database migration for shedlock table
+
+**Documentation**: [shedlock.md](./shedlock.md)
+
 **Use Cases:**
 - Scheduled tasks in horizontally scaled services
 - Ensuring tasks run exactly once
@@ -255,6 +331,12 @@ Distributed scheduled task locking for clustered/multi-instance deployments.
 
 #### [Spring Security](spring-security.md)
 JWT-based authentication and role-based authorization for REST APIs.
+
+**Template Files**: `spring-boot-service-template/addons/spring-security/`
+- `libs.versions.toml` - Spring Security libraries
+- `build.gradle.kts` - Spring Security dependencies
+
+**Documentation**: [spring-security.md](./spring-security.md)
 
 **Use Cases:**
 - Securing API endpoints
@@ -285,6 +367,7 @@ JWT-based authentication and role-based authorization for REST APIs.
 
 **Simple REST API Service:**
 ```
+✅ Spring Boot Web
 ✅ PostgreSQL + Flyway
 ✅ SpringDoc OpenAPI
 ✅ TestContainers
@@ -292,6 +375,7 @@ JWT-based authentication and role-based authorization for REST APIs.
 
 **REST API with Caching:**
 ```
+✅ Spring Boot Web
 ✅ PostgreSQL + Flyway
 ✅ Redis
 ✅ SpringDoc OpenAPI
@@ -300,6 +384,7 @@ JWT-based authentication and role-based authorization for REST APIs.
 
 **Service with External API Calls:**
 ```
+✅ Spring Boot Web
 ✅ PostgreSQL + Flyway
 ✅ WebClient
 ✅ Redis (for caching API responses)
@@ -307,14 +392,22 @@ JWT-based authentication and role-based authorization for REST APIs.
 ✅ TestContainers
 ```
 
-**Service with Scheduled Tasks (Single Instance):**
+**Message Consumer Service (Non-Web):**
+```
+✅ PostgreSQL + Flyway
+✅ RabbitMQ + Spring Cloud Stream
+✅ Spring Modulith
+✅ TestContainers
+```
+
+**Scheduled Batch Job (Non-Web, Single Instance):**
 ```
 ✅ PostgreSQL + Flyway
 ✅ Scheduling
 ✅ TestContainers
 ```
 
-**Service with Scheduled Tasks (Multi-Instance):**
+**Scheduled Batch Job (Non-Web, Multi-Instance):**
 ```
 ✅ PostgreSQL + Flyway
 ✅ Scheduling
@@ -322,16 +415,19 @@ JWT-based authentication and role-based authorization for REST APIs.
 ✅ TestContainers
 ```
 
-**Event-Driven Microservice:**
+**Event-Driven REST Microservice:**
 ```
+✅ Spring Boot Web
 ✅ PostgreSQL + Flyway
 ✅ Spring Modulith
 ✅ RabbitMQ + Spring Cloud Stream
+✅ SpringDoc OpenAPI
 ✅ TestContainers
 ```
 
-**Secured Microservice:**
+**Secured REST Microservice:**
 ```
+✅ Spring Boot Web
 ✅ PostgreSQL + Flyway
 ✅ Spring Security
 ✅ Redis (for refresh tokens)
@@ -342,6 +438,15 @@ JWT-based authentication and role-based authorization for REST APIs.
 ### Decision Tree
 
 ```
+Does your service expose HTTP REST endpoints?
+├─ Yes → Spring Boot Web
+│  │
+│  └─ Do you want API documentation?
+│     ├─ Yes → SpringDoc OpenAPI
+│     └─ No → Skip (but recommended)
+│
+└─ No → Skip Web (for message consumers, batch jobs, CLI tools)
+
 Do you need to store data?
 ├─ Yes → PostgreSQL + Flyway
 │  │
@@ -370,15 +475,11 @@ Do you need inter-service communication?
 │
 └─ No → Skip Messaging
 
-Do you need to secure endpoints?
+Do you need to secure endpoints? (REST APIs only)
 ├─ Yes → Spring Security
 │  └─ Consider: Redis (for refresh tokens)
 │
 └─ No → Skip Security (use for internal services only)
-
-Do you want API documentation?
-├─ Yes → SpringDoc OpenAPI
-└─ No → Skip (but recommended for all REST APIs)
 
 Writing integration tests?
 └─ Yes → TestContainers (highly recommended)

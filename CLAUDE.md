@@ -168,24 +168,70 @@ cd /workspace/orchestration
 **Location**: https://github.com/budgetanalyzer/spring-boot-service-template
 
 **What's included**:
-- Minimal Spring Boot setup with service-web dependency
+- **Minimal non-web baseline** with service-core dependency (logging, exceptions, utilities)
 - Gradle build with version catalog
 - Code quality tools (Checkstyle, Spotless)
 - Standard package structure
 - CLAUDE.md template
 - Java 24 support with JVM args
+- **Add-on ready** - Easy integration with web, database, messaging, and more
+
+### Template-Based Architecture
+
+**Principle**: All configuration text lives in pre-verified template files in the `spring-boot-service-template` repository, not embedded in shell scripts.
+
+**Benefits**:
+- Pre-verification of all YAML/SQL/TOML syntax
+- Independent testing of templates
+- Single source of truth (no duplication)
+- Easier maintenance and review
+
+**Structure**:
+```
+spring-boot-service-template/
+├── base/          # Minimal non-web baseline
+└── addons/        # 8 add-ons, 30 template files
+    ├── spring-boot-web/
+    ├── postgresql-flyway/
+    ├── redis/
+    └── ... (8 total)
+```
+
+**How it works**:
+1. Script clones base template
+2. Replaces placeholders ({SERVICE_NAME}, etc.)
+3. For each selected add-on:
+   - Copies template files
+   - Substitutes placeholders
+   - Appends to target files
+   - Applies patches if needed
+
+**No code generation**: Script only does file operations (copy, substitute, append)
 
 ### Add-Ons
 
-Optional add-ons for common requirements:
+Optional add-ons for different service types:
+
+**For REST API Services:**
+- **Spring Boot Web** ⭐ - REST endpoints, embedded Tomcat (required for web services)
 - **PostgreSQL + Flyway** - Database persistence with migrations
-- **Redis** - Caching and session storage
-- **RabbitMQ + Spring Cloud** - Event-driven messaging
-- **WebFlux WebClient** - Reactive HTTP client
-- **ShedLock** - Distributed scheduled task locking
 - **SpringDoc OpenAPI** - API documentation (Swagger UI)
-- **TestContainers** - Integration testing with real PostgreSQL
+- **Spring Security** - Authentication and authorization
+
+**For Message Consumer Services:**
+- **RabbitMQ + Spring Cloud** - Event-driven messaging
+- **PostgreSQL + Flyway** - Database persistence
 - **Spring Modulith** - Module boundaries and events
+
+**For Batch/Scheduled Services:**
+- **Scheduling** - Scheduled tasks (@Scheduled)
+- **ShedLock** - Distributed task locking (multi-instance)
+- **PostgreSQL + Flyway** - Database persistence
+
+**Performance & Testing:**
+- **Redis** - Caching and session storage
+- **WebClient** - Reactive HTTP client for external APIs
+- **TestContainers** - Integration testing with real services
 
 ### Documentation
 
@@ -198,20 +244,28 @@ Complete service creation documentation:
 ### Post-Creation Integration
 
 After creating a service:
-1. Add service to [docker-compose.yml](docker compose.yml)
-2. Configure NGINX routes in [nginx/nginx.dev.conf](nginx/nginx.dev.conf)
-3. Create database (if using PostgreSQL)
+1. Add service to [docker-compose.yml](docker compose.yml) (if using infrastructure services)
+2. Configure NGINX routes in [nginx/nginx.dev.conf](nginx/nginx.dev.conf) (if REST API service)
+3. Create database (if using PostgreSQL add-on)
 4. Update this CLAUDE.md with service information
 5. Implement domain logic
+
+### Supported Service Types
+
+The template supports:
+- ✅ **REST API Services** - Add Spring Boot Web add-on
+- ✅ **Message Consumer Services** - Add RabbitMQ add-on (no web container)
+- ✅ **Scheduled Batch Services** - Add Scheduling add-on (no web container)
+- ✅ **CLI Tools** - Use base template only (minimal dependencies)
 
 ### When NOT to Use Template
 
 **Do NOT use template for**:
-- Reactive services (Spring Cloud Gateway, WebFlux-based)
-- Non-Spring Boot applications
-- Frontend applications
+- ❌ **Reactive services** (Spring Cloud Gateway, fully reactive WebFlux applications)
+- ❌ **Non-Spring Boot applications**
+- ❌ **Frontend applications** (React, Vue, etc.)
 
-These require different architecture patterns.
+These require different architecture patterns. For reactive services, create manually using Spring Cloud Gateway or WebFlux documentation.
 
 ### Discovery
 

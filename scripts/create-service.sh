@@ -523,6 +523,7 @@ apply_addon_toml() {
         # Handle special case: Spring Boot Web replaces service-core with service-web
         if [ "$addon_name" = "spring-boot-web" ]; then
             sed -i 's/service-core/service-web/g' "$SERVICE_DIR/gradle/libs.versions.toml"
+            sed -i 's/service\.core/service.web/g' "$SERVICE_DIR/build.gradle.kts"
         else
             # Append to the [libraries] section (after the last library entry)
             # This avoids creating duplicate [libraries] headers
@@ -756,21 +757,29 @@ testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
 testcontainers-rabbitmq = { module = "org.testcontainers:rabbitmq" }
 EOF
 
-    # Add base dependencies to build.gradle.kts
-    cat >> "$SERVICE_DIR/build.gradle.kts" <<EOF
-
+    # Add base dependencies to build.gradle.kts (insert before closing brace of dependencies block)
+    local deps_content="
     // TestContainers
     testImplementation(platform(libs.testcontainers.bom))
-    testImplementation(libs.testcontainers.junit.jupiter)
-EOF
+    testImplementation(libs.testcontainers.junit.jupiter)"
 
     # Add specific container dependencies
     if [ "$USE_POSTGRESQL" = true ]; then
-        echo "    testImplementation(libs.testcontainers.postgresql)" >> "$SERVICE_DIR/build.gradle.kts"
+        deps_content="$deps_content
+    testImplementation(libs.testcontainers.postgresql)"
     fi
     if [ "$USE_RABBITMQ" = true ]; then
-        echo "    testImplementation(libs.testcontainers.rabbitmq)" >> "$SERVICE_DIR/build.gradle.kts"
+        deps_content="$deps_content
+    testImplementation(libs.testcontainers.rabbitmq)"
     fi
+
+    # Create temp file with the content
+    local temp_file=$(mktemp)
+    echo "$deps_content" > "$temp_file"
+
+    # Insert after the testRuntimeOnly line in dependencies block
+    sed -i "/testRuntimeOnly(libs.junit.platform.launcher)/r $temp_file" "$SERVICE_DIR/build.gradle.kts"
+    rm "$temp_file"
 
     # Generate ApplicationSmokeTest.java
     local test_file="$SERVICE_DIR/src/test/java/org/budgetanalyzer/$DOMAIN_NAME/ApplicationSmokeTest.java"

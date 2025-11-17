@@ -6,6 +6,10 @@
   "shutdownAction": "none",
   
   "initializeCommand": "bash ${localWorkspaceFolder}/claude-code-sandbox/setup-env.sh",
+
+  "remoteEnv": {
+    "SSH_AUTH_SOCK": ""
+  },
   
   "customizations": {
     "vscode": {

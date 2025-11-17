@@ -524,6 +524,8 @@ apply_addon_toml() {
         if [ "$addon_name" = "spring-boot-web" ]; then
             sed -i 's/service-core/service-web/g' "$SERVICE_DIR/gradle/libs.versions.toml"
         else
+            # Append to the [libraries] section (after the last library entry)
+            # This avoids creating duplicate [libraries] headers
             cat "$addon_toml" >> "$SERVICE_DIR/gradle/libs.versions.toml"
         fi
     fi
@@ -702,7 +704,6 @@ apply_testcontainers_addon() {
     local -a imports=()
     local -a declarations=()
     local -a properties=()
-    local -a gradle_deps=()
     local -a containers_used=()
 
     # Check which infrastructure add-ons are selected
@@ -717,7 +718,6 @@ apply_testcontainers_addon() {
         properties+=("        registry.add(\"spring.datasource.url\", postgres::getJdbcUrl);")
         properties+=("        registry.add(\"spring.datasource.username\", postgres::getUsername);")
         properties+=("        registry.add(\"spring.datasource.password\", postgres::getPassword);")
-        gradle_deps+=("    testImplementation(libs.testcontainers.postgresql)")
     fi
 
     if [ "$USE_REDIS" = true ]; then
@@ -739,7 +739,6 @@ apply_testcontainers_addon() {
         properties+=("        registry.add(\"spring.rabbitmq.port\", () -> rabbitmq.getMappedPort(5672).toString());")
         properties+=("        registry.add(\"spring.rabbitmq.username\", rabbitmq::getAdminUsername);")
         properties+=("        registry.add(\"spring.rabbitmq.password\", rabbitmq::getAdminPassword);")
-        gradle_deps+=("    testImplementation(libs.testcontainers.rabbitmq)")
     fi
 
     # If no infrastructure containers are selected, create a basic smoke test
@@ -747,17 +746,14 @@ apply_testcontainers_addon() {
         print_warning "No infrastructure add-ons selected. Creating basic smoke test without containers."
     fi
 
-    # Add TestContainers version to libs.versions.toml
+    # Add TestContainers dependencies to libs.versions.toml
     cat >> "$SERVICE_DIR/gradle/libs.versions.toml" <<EOF
 
 # TestContainers
-testcontainers = "1.19.3"
-
-[libraries.testcontainers]
-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
-postgresql = { module = "org.testcontainers:postgresql" }
-rabbitmq = { module = "org.testcontainers:rabbitmq" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version = "1.19.3" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql" }
+testcontainers-rabbitmq = { module = "org.testcontainers:rabbitmq" }
 EOF
 
     # Add base dependencies to build.gradle.kts
@@ -769,9 +765,12 @@ EOF
 EOF
 
     # Add specific container dependencies
-    for dep in "${gradle_deps[@]}"; do
-        echo "$dep" >> "$SERVICE_DIR/build.gradle.kts"
-    done
+    if [ "$USE_POSTGRESQL" = true ]; then
+        echo "    testImplementation(libs.testcontainers.postgresql)" >> "$SERVICE_DIR/build.gradle.kts"
+    fi
+    if [ "$USE_RABBITMQ" = true ]; then
+        echo "    testImplementation(libs.testcontainers.rabbitmq)" >> "$SERVICE_DIR/build.gradle.kts"
+    fi
 
     # Generate ApplicationSmokeTest.java
     local test_file="$SERVICE_DIR/src/test/java/org/budgetanalyzer/$DOMAIN_NAME/ApplicationSmokeTest.java"

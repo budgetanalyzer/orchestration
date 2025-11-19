@@ -35,10 +35,10 @@ docker compose ps
 **Service Types**:
 - **Frontend services**: React-based web applications (typically port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+, see docker compose.yml)
-- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081) - browser authentication and session management
+- **Session Gateway (BFF)**: Spring Cloud Gateway (port 443, HTTPS) - browser authentication and session management
 - **Token Validation Service**: Spring Boot service (port 8088) - JWT validation for NGINX
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (see docker compose.yml)
-- **API Gateway**: NGINX reverse proxy (port 8080) - internal routing and JWT validation
+- **API Gateway**: NGINX reverse proxy (port 443, HTTPS) - internal routing and JWT validation
 
 **Adding New Services**:
 1. Add service to [docker compose.yml](docker compose.yml)
@@ -53,27 +53,27 @@ docker compose ps
 
 **Browser Traffic** (OAuth2/Session-based):
 ```
-Browser → Session Gateway (8081) → NGINX (8080) → Backend Services
+Browser → Session Gateway (app.budgetanalyzer.localhost:443) → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
 ```
 
 **M2M Traffic** (Direct JWT):
 ```
-API Client → NGINX (8080) → Backend Services
+API Client → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
 ```
 
 ### Component Roles
 
-**Session Gateway (Port 8081) - BFF Layer**:
+**Session Gateway (Port 443, HTTPS) - BFF Layer**:
 - **Purpose**: Browser authentication and session security
 - **Responsibilities**:
   - Manages OAuth2 flows with Auth0
   - Stores JWTs in Redis (server-side, never exposed to browser)
-  - Issues HttpOnly session cookies to browsers
+  - Issues HttpOnly, Secure session cookies to browsers
   - Proactive token refresh before expiration
   - Proxies authenticated requests to NGINX with JWT injection
 - **Key Benefit**: Maximum security for browser-based financial application (JWTs never exposed to XSS)
 
-**NGINX (Port 8080) - API Gateway Layer**:
+**NGINX (Port 443, HTTPS) - API Gateway Layer**:
 - **Purpose**: Internal routing, JWT validation, and request processing
 - **Responsibilities**:
   - Validates JWTs via Token Validation Service (auth_request directive)
@@ -94,7 +94,7 @@ API Client → NGINX (8080) → Backend Services
 
 ### No CORS Needed
 
-**Same-Origin Architecture**: All browser requests go through Session Gateway (localhost:8081), which proxies to NGINX, which routes to backends. Browser sees single origin = no CORS issues!
+**Same-Origin Architecture**: All browser requests go through Session Gateway (app.budgetanalyzer.localhost), which proxies to NGINX, which routes to backends. Browser sees single origin = no CORS issues!
 
 **Traditional architecture (CORS required)**:
 ```
@@ -103,7 +103,7 @@ Browser → Frontend (3000) → Backend Services (8082+)  ❌ Different origins
 
 **Current architecture (No CORS)**:
 ```
-Browser → Session Gateway (8081) → NGINX (8080) → Backend Services  ✅ Same origin
+Browser → Session Gateway (app.budgetanalyzer.localhost) → NGINX (api.budgetanalyzer.localhost) → Backend Services  ✅ Same origin
 ```
 
 ### Resource-Based Routing
@@ -124,10 +124,10 @@ Browser → Session Gateway (8081) → NGINX (8080) → Backend Services  ✅ Sa
 grep "location /api" nginx/nginx.dev.conf | grep -v "#"
 
 # Test Session Gateway (browser entry point)
-curl -v http://localhost:8081/health
+curl -v https://app.budgetanalyzer.localhost/actuator/health
 
 # Test NGINX Gateway (internal)
-curl -v http://localhost:8080/health
+curl -v https://api.budgetanalyzer.localhost/health
 ```
 
 **When to consult detailed nginx documentation**:
@@ -140,8 +140,9 @@ curl -v http://localhost:8080/health
 
 | Port | Service | Purpose | Access |
 |------|---------|---------|--------|
-| 8081 | Session Gateway | Browser entry point, authentication | Public (browsers) |
-| 8080 | NGINX Gateway | Internal routing, JWT validation | Internal (Session Gateway, M2M) |
+| 443 | Session Gateway | Browser entry point (HTTPS), authentication | Public (browsers via app.budgetanalyzer.localhost) |
+| 443 | NGINX Gateway | Internal routing (HTTPS), JWT validation | Internal (Session Gateway, M2M via api.budgetanalyzer.localhost) |
+| 80 | NGINX Gateway | HTTP redirect to HTTPS | Internal (redirects only) |
 | 8088 | Token Validation | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | Business logic | Internal (NGINX only) |
 | 8084 | Currency Service | Business logic | Internal (NGINX only) |
@@ -186,6 +187,31 @@ grep -A 3 "ports:" docker compose.yml
 - JDK 17+ (for local Spring Boot development)
 - Node.js 18+ (for local React development)
 - Git
+- mkcert (for local HTTPS certificates)
+
+### First Time Setup
+
+**HTTPS Certificate Setup**:
+The application uses HTTPS for local development with clean subdomain URLs:
+- Session Gateway: `https://app.budgetanalyzer.localhost`
+- API Gateway: `https://api.budgetanalyzer.localhost`
+
+Run the setup script to generate trusted local certificates:
+```bash
+# Install mkcert (first time only)
+# macOS:   brew install mkcert nss
+# Linux:   See https://github.com/FiloSottile/mkcert#installation
+# Windows: choco install mkcert
+
+# Generate certificates
+./scripts/setup-local-https.sh
+```
+
+This script will:
+1. Install a local Certificate Authority (CA) in your system's trust store
+2. Generate a wildcard certificate for `*.budgetanalyzer.localhost`
+3. Convert the certificate to PKCS12 format for Spring Boot
+4. Your browser will automatically trust these certificates (no warnings!)
 
 ### Quick Start
 ```bash
@@ -194,6 +220,9 @@ docker compose up -d
 
 # View logs
 docker compose logs -f
+
+# Access application
+# Browser: https://app.budgetanalyzer.localhost
 
 # Stop all services
 docker compose down

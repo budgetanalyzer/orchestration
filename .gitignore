@@ -10,6 +10,8 @@
 !.env.example
 !.env.template
 *.env
+
+# SSL/TLS Certificates (never commit private keys!)
 *.key
 *.pem
 *.p12

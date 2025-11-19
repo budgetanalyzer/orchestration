@@ -5,9 +5,11 @@ This setup provides an nginx-based API gateway running in Docker that acts as a 
 ## Architecture
 
 ```
-Browser (localhost:8080)
+Browser (localhost:8081)
     ↓
-Nginx Gateway (Docker, port 8080)
+Session Gateway (BFF, port 8081) - OAuth2 authentication, session management
+    ↓
+Nginx Gateway (Docker, port 8080) - JWT validation, routing
     ├─→ / → React App (Vite dev server on localhost:3000)
     ├─→ /api/transactions → Budget Analyzer API (localhost:8082)
     ├─→ /api/currencies → Currency Service (localhost:8084)
@@ -15,8 +17,10 @@ Nginx Gateway (Docker, port 8080)
 ```
 
 **Key Benefits:**
-- Single origin (`localhost:8080`) - no CORS issues
+- Single origin (`localhost:8081` via Session Gateway) - no CORS issues
+- JWT tokens stored server-side in Redis - never exposed to browser (XSS protection)
 - Resource-based routing - frontend doesn't know about microservice architecture
+- Defense in depth - Session Gateway → NGINX validation → Backend authorization
 - Production parity - same routing logic in dev and prod
 - Easy to add/move/refactor services without frontend changes
 
@@ -84,21 +88,24 @@ docker compose up -d
 
 ### 4. Access your app
 
-Open your browser to **`http://localhost:8080`** (not `:3000`)
+Open your browser to **`http://localhost:8081`** (Session Gateway, not NGINX or Vite directly)
 
-All requests (React app, API calls, hot reload) go through nginx on port 8080.
+All requests (React app, API calls, hot reload) go through Session Gateway (8081) → NGINX (8080).
 
 ### 5. Verify it's working
 
 ```bash
-# Health check
+# Session Gateway health check (browser entry point)
+curl http://localhost:8081/health
+
+# NGINX health check (internal)
 curl http://localhost:8080/health
 
-# React app loads
-curl http://localhost:8080/
+# React app loads (through Session Gateway)
+curl http://localhost:8081/
 
-# API request (example)
-curl http://localhost:8080/api/transactions
+# API request requires authentication (through Session Gateway)
+# Browser will be redirected to Auth0 login
 ```
 
 ## Frontend Configuration
@@ -283,15 +290,23 @@ location / {
 **Fix:**
 1. Check browser console for WebSocket errors
 2. Verify nginx is proxying WebSocket upgrade headers
-3. Make sure you're accessing via `http://localhost:8080` not `:3000`
+3. Make sure you're accessing via `http://localhost:8081` (Session Gateway) not `:8080` or `:3000`
+4. Verify Session Gateway is proxying WebSocket connections correctly
 
 ### CORS issues
 
-**You shouldn't have CORS issues!** Everything is same-origin (`localhost:8080`).
+**You shouldn't have CORS issues!** Everything is same-origin (`localhost:8081` via Session Gateway).
+
+The BFF (Backend for Frontend) pattern eliminates CORS:
+- Browser sees single origin: `localhost:8081`
+- Session Gateway proxies to NGINX (8080)
+- NGINX proxies to backend services
+- No cross-origin requests = no CORS
 
 If you see CORS errors:
-1. Verify you're accessing via `http://localhost:8080` (not `:3000`)
+1. Verify you're accessing via `http://localhost:8081` (Session Gateway, not `:8080` or `:3000`)
 2. Check that `VITE_API_BASE_URL=/api` in `.env` (relative URL, not full URL)
+3. Check Session Gateway is running and configured correctly
 
 ### Services not accessible from Docker
 

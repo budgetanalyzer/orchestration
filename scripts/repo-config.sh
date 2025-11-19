@@ -10,10 +10,13 @@
 # Repository list (relative to parent directory)
 REPOS=(
     "orchestration"
-    "transaction-service"
-    "budget-analyzer-web"
-    "currency-service"
     "service-common"
+    "transaction-service"
+    "currency-service"
+    "budget-analyzer-web"
+    "session-gateway"
+    "token-validation-service"
+    "basic-repository-template"
 )
 
 # Colors for output

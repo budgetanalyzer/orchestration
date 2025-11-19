@@ -10,13 +10,15 @@ This repository coordinates the deployment and local development environment for
 
 ## Architecture
 
-The application follows a microservices architecture:
+The application follows a microservices architecture with BFF (Backend for Frontend) pattern:
 
 - **Frontend**: React 19 + TypeScript web application
+- **Session Gateway (BFF)**: Spring Cloud Gateway for browser authentication and session management
 - **Backend Services**: Spring Boot REST APIs
   - Transaction Service - Manages financial transactions
   - Currency Service - Handles currencies and exchange rates
-- **API Gateway**: NGINX reverse proxy for unified routing
+  - Token Validation Service - JWT validation for NGINX
+- **API Gateway**: NGINX reverse proxy for request routing and JWT validation
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ
 
 ## Quick Start
@@ -42,11 +44,13 @@ docker compose logs -f
 docker compose down
 ```
 
-The API gateway will be available at `http://localhost:8080`
+The application will be available at `http://localhost:8081` (Session Gateway)
 
 ### Service Ports
 
-- API Gateway (NGINX): `8080`
+- Session Gateway (BFF): `8081` (browser entry point)
+- API Gateway (NGINX): `8080` (internal routing)
+- Token Validation Service: `8088`
 - PostgreSQL: `5432`
 - Redis: `6379`
 - RabbitMQ: `5672` (Management UI: `15672`)
@@ -71,6 +75,9 @@ Each microservice is maintained in its own repository:
 - **transaction-service**: https://github.com/budgetanalyzer/transaction-service
 - **currency-service**: https://github.com/budgetanalyzer/currency-service
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web
+- **session-gateway**: https://github.com/budgetanalyzer/session-gateway
+- **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service
+- **basic-repository-template**: https://github.com/budgetanalyzer/basic-repository-template
 
 ## Development
 
@@ -86,6 +93,8 @@ See [CLAUDE.md](CLAUDE.md)
 
 - **Backend**: Spring Boot 3.x, Java 24
 - **Frontend**: React 19, TypeScript, Vite
+- **Session Management**: Spring Cloud Gateway, Redis
+- **Authentication**: Auth0 (OAuth2/OIDC)
 - **Database**: PostgreSQL
 - **Cache**: Redis
 - **Message Queue**: RabbitMQ

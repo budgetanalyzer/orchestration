@@ -18,6 +18,9 @@ git clone https://github.com/budgetanalyzer/service-common.git
 git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
+git clone https://github.com/budgetanalyzer/session-gateway.git
+git clone https://github.com/budgetanalyzer/token-validation-service.git
+git clone https://github.com/budgetanalyzer/basic-repository-template.git
 ```
 
 ### 2. Start Infrastructure
@@ -31,9 +34,9 @@ docker compose up -d
 
 This starts:
 - PostgreSQL (shared database for all services)
-- NGINX gateway (API gateway and reverse proxy)
-- Redis
-- RabbitMQ
+- NGINX gateway (API gateway, JWT validation, and reverse proxy)
+- Redis (session storage for Session Gateway)
+- RabbitMQ (message broker)
 
 ### 3. Publish service-common to Maven Local
 
@@ -57,14 +60,38 @@ docker compose ps
 ```
 
 Access the application:
-- **Frontend**: http://localhost:8080
-- **Unified API Documentation**: http://localhost:8080/api/docs
+- **Frontend (via Session Gateway)**: http://localhost:8081
+- **Unified API Documentation**: http://localhost:8080/api/docs (internal access)
 - **OpenAPI JSON**: http://localhost:8080/api/docs/openapi.json
 - **OpenAPI YAML**: http://localhost:8080/api/docs/openapi.yaml
 
-All API requests go through the gateway: `http://localhost:8080/api/*`
+**Important**: All browser requests go through Session Gateway: `http://localhost:8081`
+- Session Gateway (8081) handles authentication and proxies to NGINX
+- NGINX (8080) validates JWTs and routes to backend services
 
-### 5. Start Backend Services
+### 5. Start Session Gateway and Token Validation Service
+
+**Token Validation Service** (JWT validation for NGINX):
+```bash
+cd /workspace/token-validation-service
+# Configure Auth0 (optional for local dev - placeholder values work)
+# AUTH0_ISSUER_URI=https://your-tenant.auth0.com/
+./gradlew bootRun
+```
+
+**Session Gateway** (BFF - Browser authentication):
+```bash
+cd /workspace/session-gateway
+# Configure Auth0 credentials (required for OAuth login)
+# AUTH0_CLIENT_ID=your-client-id
+# AUTH0_CLIENT_SECRET=your-client-secret
+# AUTH0_ISSUER_URI=https://your-tenant.auth0.com/
+./gradlew bootRun
+```
+
+**Note**: See [docs/architecture/authentication-implementation-plan.md](../architecture/authentication-implementation-plan.md) for Auth0 setup details.
+
+### 6. Start Backend Services
 
 Each backend service can run locally or in Docker. For local development:
 
@@ -87,22 +114,40 @@ npm install
 npm run dev
 ```
 
-The frontend development server runs on port 3000 but NGINX serves it through port 8080.
+The frontend development server runs on port 3000 but is served through Session Gateway (8081) → NGINX (8080) → Vite (3000).
 
 ## Access Patterns
 
-All user-facing access goes through the NGINX gateway at `http://localhost:8080`.
+### Browser Access (via Session Gateway)
 
-**API Endpoints:**
-- Transactions: `http://localhost:8080/api/v1/transactions`
-- Currencies: `http://localhost:8080/api/v1/currencies`
-- Exchange Rates: `http://localhost:8080/api/v1/exchange-rates`
+All browser requests go through the **Session Gateway** at `http://localhost:8081`:
 
-**Development Tools (direct service access):**
+**Frontend:**
+- Application: `http://localhost:8081/`
+- Login: `http://localhost:8081/oauth2/authorization/auth0`
+- Logout: `http://localhost:8081/logout`
+
+**API Endpoints (authenticated, requires login):**
+- Transactions: `http://localhost:8081/api/v1/transactions`
+- Currencies: `http://localhost:8081/api/v1/currencies`
+- Exchange Rates: `http://localhost:8081/api/v1/exchange-rates`
+
+**Architecture Flow:**
+```
+Browser → Session Gateway (8081) → NGINX (8080) → Backend Services (8082+)
+         OAuth2/Session           JWT Validation    Business Logic
+```
+
+### Internal/Development Access
+
+**Direct Service Access (for debugging only):**
 - Transaction Service Swagger: `http://localhost:8082/swagger-ui.html`
 - Currency Service Swagger: `http://localhost:8084/swagger-ui.html`
 - Transaction Service Health: `http://localhost:8082/actuator/health`
 - Currency Service Health: `http://localhost:8084/actuator/health`
+- Token Validation Service Health: `http://localhost:8088/actuator/health`
+
+**Note**: Direct service access bypasses authentication - only for local development debugging.
 
 ## Next Steps
 

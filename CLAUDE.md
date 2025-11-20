@@ -286,6 +286,12 @@ Each microservice is maintained in its own repository:
 
 ## Notes for Claude Code
 
+**CRITICAL - Prerequisites First**: Before implementing any plan or feature:
+1. Check for prerequisites in documentation (e.g., "Prerequisites: service-common Enhancement")
+2. If prerequisites are NOT satisfied, STOP immediately and inform the user
+3. Do NOT attempt to hack around missing prerequisites - this leads to broken implementations that must be deleted
+4. Complete prerequisites first, then return to the original task
+
 When working on this project:
 - Follow the resource-based routing pattern for new API endpoints
 - Ensure Docker configurations remain simple and maintainable

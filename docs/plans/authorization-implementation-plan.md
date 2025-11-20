@@ -137,6 +137,15 @@ exports.onExecutePostLogin = async (event, api) => {
 
 ### 1.2 PostgreSQL Permission Schema
 
+**Migration Structure:**
+```
+db/migration/
+├── V1__initial_schema.sql      # All tables + indexes
+└── V2__seed_default_data.sql   # Default roles and permissions
+```
+
+#### V1__initial_schema.sql
+
 ```sql
 -- Core tables for authorization
 
@@ -238,6 +247,72 @@ CREATE INDEX idx_resource_permissions_resource ON resource_permissions(resource_
 CREATE INDEX idx_delegations_delegatee ON delegations(delegatee_id);
 CREATE INDEX idx_audit_log_user ON authorization_audit_log(user_id);
 CREATE INDEX idx_audit_log_timestamp ON authorization_audit_log(timestamp);
+```
+
+#### V2__seed_default_data.sql
+
+```sql
+-- Default roles
+INSERT INTO roles (id, name, description) VALUES
+('ADMIN', 'Administrator', 'Full system access'),
+('ACCOUNTANT', 'Accountant', 'Manage delegated accounts'),
+('AUDITOR', 'Auditor', 'Read-only access with full visibility'),
+('USER', 'User', 'Access to own resources only');
+
+-- Default permissions
+INSERT INTO permissions (id, name, resource_type, action) VALUES
+-- System permissions
+('users:read', 'View users', 'user', 'read'),
+('users:write', 'Create/update users', 'user', 'write'),
+('users:delete', 'Delete users', 'user', 'delete'),
+('audit:read', 'View audit logs', 'audit', 'read'),
+('reports:export', 'Export reports', 'report', 'export'),
+-- Transaction permissions
+('transactions:read', 'View transactions', 'transaction', 'read'),
+('transactions:write', 'Create/update transactions', 'transaction', 'write'),
+('transactions:delete', 'Delete transactions', 'transaction', 'delete'),
+('transactions:approve', 'Approve transactions', 'transaction', 'approve'),
+('transactions:bulk', 'Bulk operations', 'transaction', 'bulk'),
+-- Account permissions
+('accounts:read', 'View accounts', 'account', 'read'),
+('accounts:write', 'Create/update accounts', 'account', 'write'),
+('accounts:delete', 'Delete accounts', 'account', 'delete'),
+('accounts:delegate', 'Delegate access', 'account', 'delegate'),
+-- Budget permissions
+('budgets:read', 'View budgets', 'budget', 'read'),
+('budgets:write', 'Create/update budgets', 'budget', 'write'),
+('budgets:delete', 'Delete budgets', 'budget', 'delete');
+
+-- ADMIN gets all permissions
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT 'ADMIN', id FROM permissions;
+
+-- ACCOUNTANT permissions
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('ACCOUNTANT', 'transactions:read'),
+('ACCOUNTANT', 'transactions:write'),
+('ACCOUNTANT', 'transactions:approve'),
+('ACCOUNTANT', 'accounts:read'),
+('ACCOUNTANT', 'reports:export');
+
+-- AUDITOR permissions (read-only)
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('AUDITOR', 'transactions:read'),
+('AUDITOR', 'accounts:read'),
+('AUDITOR', 'budgets:read'),
+('AUDITOR', 'audit:read'),
+('AUDITOR', 'reports:export');
+
+-- USER permissions (own resources)
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('USER', 'transactions:read'),
+('USER', 'transactions:write'),
+('USER', 'transactions:delete'),
+('USER', 'accounts:read'),
+('USER', 'accounts:write'),
+('USER', 'accounts:delegate'),
+('USER', 'budgets:read'),
+('USER', 'budgets:write');
 ```
 
 ### 1.3 service-common Authorization Module
@@ -866,38 +941,16 @@ SYSTEM_ADMIN (platform-level, all access)
 
 ### 4.3 Default Role Permissions
 
-```sql
--- ADMIN gets all permissions
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT 'ADMIN', id FROM permissions;
+> **Implementation**: See `V2__seed_default_data.sql` in [Section 1.2](#12-postgresql-permission-schema)
 
--- ACCOUNTANT permissions
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('ACCOUNTANT', 'transactions:read'),
-('ACCOUNTANT', 'transactions:write'),
-('ACCOUNTANT', 'transactions:approve'),
-('ACCOUNTANT', 'accounts:read'),
-('ACCOUNTANT', 'reports:export');
+**Summary of role-permission mappings:**
 
--- AUDITOR permissions (read-only)
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('AUDITOR', 'transactions:read'),
-('AUDITOR', 'accounts:read'),
-('AUDITOR', 'budgets:read'),
-('AUDITOR', 'audit:read'),
-('AUDITOR', 'reports:export');
-
--- USER permissions (own resources)
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('USER', 'transactions:read'),
-('USER', 'transactions:write'),
-('USER', 'transactions:delete'),
-('USER', 'accounts:read'),
-('USER', 'accounts:write'),
-('USER', 'accounts:delegate'),
-('USER', 'budgets:read'),
-('USER', 'budgets:write');
-```
+| Role | Permissions |
+|------|-------------|
+| ADMIN | All permissions (dynamic SELECT from permissions table) |
+| ACCOUNTANT | `transactions:read`, `transactions:write`, `transactions:approve`, `accounts:read`, `reports:export` |
+| AUDITOR | `transactions:read`, `accounts:read`, `budgets:read`, `audit:read`, `reports:export` |
+| USER | `transactions:read/write/delete`, `accounts:read/write/delegate`, `budgets:read/write` |
 
 ### 4.4 Delegation Model
 

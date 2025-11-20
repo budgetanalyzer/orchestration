@@ -6,11 +6,11 @@ This directory contains a shared Docker-based development environment for Claude
 
 A single Docker container that provides a consistent development environment for all projects in the Budget Analyzer ecosystem. Each project has its own `.devcontainer/devcontainer.json` that connects to this shared container, allowing you to:
 
+- **🔒 SECURITY: Sandbox Claude Code file access to only the /workspace directory on the host**
 - Use the same tools (JDK, Node.js, Maven, Git) across all projects
 - Switch between projects instantly without rebuilding containers
 - Have Claude Code work seamlessly across the entire codebase in VS Code
 - Maintain consistent development environments
-- **🔒 SECURITY: Sandbox Claude Code file access to only the /workspace directory on the host**
 
 ## Directory Structure
 ```

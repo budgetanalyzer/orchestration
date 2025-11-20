@@ -10,7 +10,7 @@ A single Docker container that provides a consistent development environment for
 - Switch between projects instantly without rebuilding containers
 - Have Claude Code work seamlessly across the entire codebase in VS Code
 - Maintain consistent development environments
-- Sandbox Claude Code file access on the host
+- **🔒 SECURITY: Sandbox Claude Code file access to only the /workspace directory on the host**
 
 ## Directory Structure
 ```

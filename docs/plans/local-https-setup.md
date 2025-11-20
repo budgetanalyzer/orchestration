@@ -1,8 +1,13 @@
 # Local HTTPS Development Setup
 
-**Status**: Planned
+**Status**: Implemented (Revised Architecture)
 **Created**: 2025-11-19
+**Updated**: 2025-11-20
 **Goal**: Enable production-like HTTPS for local development with clean subdomain URLs
+
+## Architecture Revision Notes
+
+The original plan had Session Gateway directly on port 443. This was revised because binding to privileged ports (< 1024) requires root, setcap, or authbind. The revised architecture has NGINX handle all port 443 traffic and proxy to Session Gateway on port 8081.
 
 ## Problem Statement
 
@@ -27,14 +32,22 @@ Session Gateway → http://localhost:8080 (NGINX)
 NGINX → http://host.docker.internal:8082+ (Backend Services)
 ```
 
-### Target State (HTTPS)
+### Target State (HTTPS) - Revised Architecture
 ```
-Browser → https://app.budgetanalyzer.localhost (Session Gateway on :443)
+Browser → https://app.budgetanalyzer.localhost (NGINX on :443)
+    ↓
+NGINX → Session Gateway (:8081, HTTP internal)
     ↓
 Session Gateway → https://api.budgetanalyzer.localhost (NGINX on :443)
     ↓
 NGINX → http://host.docker.internal:8082+ (Backend Services)
 ```
+
+**Key Benefits of Revised Architecture:**
+- NGINX in Docker can easily bind to port 443 (runs as root inside container)
+- Session Gateway runs on unprivileged port 8081 without special permissions
+- Single SSL termination point simplifies certificate management
+- Standard pattern used in production environments
 
 ## Implementation Plan
 
@@ -180,41 +193,21 @@ nginx-gateway:
     - budget-analyzer
 ```
 
-### Phase 3: Session Gateway HTTPS Configuration
+### Phase 3: Session Gateway Configuration (Revised - No SSL)
 
-**Step 1: Convert Certificate to PKCS12 Format**
+**Note**: In the revised architecture, Session Gateway runs on HTTP port 8081 behind NGINX. NGINX handles SSL termination.
 
-Spring Boot requires PKCS12 keystore format (not PEM).
-
-```bash
-cd /workspace/session-gateway/src/main/resources
-mkdir -p certs
-cd /workspace/orchestration/nginx/certs
-
-# Convert to PKCS12
-openssl pkcs12 -export \
-  -in _wildcard.budgetanalyzer.localhost.pem \
-  -inkey _wildcard.budgetanalyzer.localhost-key.pem \
-  -out /workspace/session-gateway/src/main/resources/certs/budgetanalyzer.p12 \
-  -name budgetanalyzer \
-  -passout pass:changeit
-```
-
-**Step 2: Update application.yml**
+**Step 1: Update application.yml**
 
 **File**: `/workspace/session-gateway/src/main/resources/application.yml`
 
-Add SSL configuration:
+Configure for HTTP behind NGINX proxy:
 
 ```yaml
 server:
-  port: 443  # Change from 8081
-  ssl:
-    enabled: true
-    key-store: classpath:certs/budgetanalyzer.p12
-    key-store-password: changeit
-    key-store-type: PKCS12
-    key-alias: budgetanalyzer
+  port: 8081  # HTTP port behind NGINX
+  forward-headers-strategy: framework  # Trust X-Forwarded-* headers from NGINX
+  # No SSL configuration - NGINX handles SSL termination
 ```
 
 Update Spring Cloud Gateway routes to use HTTPS for NGINX:
@@ -225,56 +218,80 @@ spring:
     gateway:
       routes:
         - id: api-route
-          uri: https://api.budgetanalyzer.localhost  # Change from http://localhost:8080
+          uri: https://api.budgetanalyzer.localhost  # Standard port 443
           predicates:
             - Path=/api/**
           filters:
-            - name: TokenRelay
+            - StripPrefix=0
 ```
 
-Update Auth0 logout configuration (line 94):
+Update Auth0 logout configuration:
 
 ```yaml
 auth0:
   logout:
-    return-to: https://app.budgetanalyzer.localhost/  # Change from http://localhost:8081
+    return-to: https://app.budgetanalyzer.localhost  # Standard port 443
 ```
 
-**Step 3: Update Cookie Configuration**
+**Step 2: NGINX Configuration for Session Gateway Proxy**
 
-**File**: `/workspace/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/config/SessionConfig.java`
+**File**: `/workspace/orchestration/nginx/nginx.dev.conf`
 
-Line 57 - Enable secure cookies:
+Add server block to proxy app.budgetanalyzer.localhost to Session Gateway:
 
-```java
-// Change from:
-builder.secure(false);  // Set to true in production (HTTPS only)
+```nginx
+# Session Gateway upstream
+upstream session_gateway {
+    server host.docker.internal:8081;
+}
 
-// To:
-builder.secure(true);   // HTTPS required for local dev now
+# Server block for app.budgetanalyzer.localhost
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name app.budgetanalyzer.localhost;
+
+    # SSL configuration (same certs as api.budgetanalyzer.localhost)
+    ssl_certificate /etc/nginx/certs/_wildcard.budgetanalyzer.localhost.pem;
+    ssl_certificate_key /etc/nginx/certs/_wildcard.budgetanalyzer.localhost-key.pem;
+    # ... other SSL settings
+
+    location / {
+        proxy_pass http://session_gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}
 ```
 
-**Step 4: Update Docker Compose**
+**Step 3: Update Docker Compose**
 
 **File**: `/workspace/orchestration/docker-compose.yml`
 
-Update session-gateway service (if running in Docker):
+NGINX handles both ports:
 
 ```yaml
-session-gateway:
-  build:
-    context: ../session-gateway
-  container_name: session-gateway
+nginx-gateway:
+  image: nginx:alpine
+  container_name: api-gateway
   ports:
-    - "443:443"  # Change from 8081:8081
-  environment:
-    - SPRING_PROFILES_ACTIVE=dev
-    - SERVER_PORT=443
-  networks:
-    - budget-analyzer
+    - "443:443"    # HTTPS (handles both app. and api. subdomains)
+    - "80:80"      # HTTP (for redirects)
+  volumes:
+    - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    - ./nginx/includes:/etc/nginx/includes:ro
+    - ./nginx/certs:/etc/nginx/certs:ro
 ```
 
-**Note**: The PKCS12 keystore will be bundled into the JAR during build, so no additional volume mounts needed if using `classpath:` reference.
+**Note**: Session Gateway is not in docker-compose.yml - it runs locally via `./gradlew bootRun`.
 
 ### Phase 4: Auth0 Configuration Updates
 

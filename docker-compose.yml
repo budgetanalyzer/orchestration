@@ -54,7 +54,7 @@ services:
     image: nginx:alpine
     container_name: api-gateway
     ports:
-      - "443:443"    # HTTPS
+      - "443:443"    # HTTPS (handles both app. and api. subdomains)
       - "80:80"      # HTTP (for redirects)
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro

@@ -35,10 +35,10 @@ docker compose ps
 **Service Types**:
 - **Frontend services**: React-based web applications (typically port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+, see docker compose.yml)
-- **Session Gateway (BFF)**: Spring Cloud Gateway (port 443, HTTPS) - browser authentication and session management
+- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management (behind NGINX)
 - **Token Validation Service**: Spring Boot service (port 8088) - JWT validation for NGINX
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (see docker compose.yml)
-- **API Gateway**: NGINX reverse proxy (port 443, HTTPS) - internal routing and JWT validation
+- **API Gateway**: NGINX reverse proxy (port 443, HTTPS) - SSL termination, routing, and JWT validation
 
 **Adding New Services**:
 1. Add service to [docker compose.yml](docker compose.yml)
@@ -53,7 +53,7 @@ docker compose ps
 
 **Browser Traffic** (OAuth2/Session-based):
 ```
-Browser → Session Gateway (app.budgetanalyzer.localhost:443) → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
+Browser → NGINX (app.budgetanalyzer.localhost:443) → Session Gateway (8081) → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
 ```
 
 **M2M Traffic** (Direct JWT):
@@ -63,7 +63,20 @@ API Client → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
 
 ### Component Roles
 
-**Session Gateway (Port 443, HTTPS) - BFF Layer**:
+**NGINX (Port 443, HTTPS) - API Gateway Layer**:
+- **Purpose**: SSL termination, routing, JWT validation, and request processing
+- **Responsibilities**:
+  - Handles SSL/TLS termination for both app. and api. subdomains
+  - Proxies app.budgetanalyzer.localhost to Session Gateway
+  - Validates JWTs via Token Validation Service (auth_request directive)
+  - Routes requests to appropriate microservices
+  - Resource-based routing with path transformation
+  - Rate limiting per user/IP
+  - Load balancing and circuit breaking
+  - Serves React frontend (proxied from Vite dev server in development)
+- **Key Benefit**: Single entry point for all HTTPS traffic, eliminates privileged port issues
+
+**Session Gateway (Port 8081, HTTP) - BFF Layer**:
 - **Purpose**: Browser authentication and session security
 - **Responsibilities**:
   - Manages OAuth2 flows with Auth0
@@ -72,17 +85,6 @@ API Client → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
   - Proactive token refresh before expiration
   - Proxies authenticated requests to NGINX with JWT injection
 - **Key Benefit**: Maximum security for browser-based financial application (JWTs never exposed to XSS)
-
-**NGINX (Port 443, HTTPS) - API Gateway Layer**:
-- **Purpose**: Internal routing, JWT validation, and request processing
-- **Responsibilities**:
-  - Validates JWTs via Token Validation Service (auth_request directive)
-  - Routes requests to appropriate microservices
-  - Resource-based routing with path transformation
-  - Rate limiting per user/IP
-  - Load balancing and circuit breaking
-  - Serves React frontend (proxied from Vite dev server in development)
-- **Key Benefit**: Single source of truth for routing and validation
 
 **Token Validation Service (Port 8088)**:
 - **Purpose**: JWT signature verification for NGINX
@@ -123,10 +125,10 @@ Browser → Session Gateway (app.budgetanalyzer.localhost) → NGINX (api.budget
 # List all API routes
 grep "location /api" nginx/nginx.dev.conf | grep -v "#"
 
-# Test Session Gateway (browser entry point)
+# Test Session Gateway health (via NGINX)
 curl -v https://app.budgetanalyzer.localhost/actuator/health
 
-# Test NGINX Gateway (internal)
+# Test NGINX Gateway directly
 curl -v https://api.budgetanalyzer.localhost/health
 ```
 
@@ -140,9 +142,9 @@ curl -v https://api.budgetanalyzer.localhost/health
 
 | Port | Service | Purpose | Access |
 |------|---------|---------|--------|
-| 443 | Session Gateway | Browser entry point (HTTPS), authentication | Public (browsers via app.budgetanalyzer.localhost) |
-| 443 | NGINX Gateway | Internal routing (HTTPS), JWT validation | Internal (Session Gateway, M2M via api.budgetanalyzer.localhost) |
-| 80 | NGINX Gateway | HTTP redirect to HTTPS | Internal (redirects only) |
+| 443 | NGINX Gateway | SSL termination, routing (HTTPS) | Public (browsers via app. and api.budgetanalyzer.localhost) |
+| 80 | NGINX Gateway | HTTP redirect to HTTPS | Public (redirects only) |
+| 8081 | Session Gateway | Browser authentication, session management | Internal (NGINX only) |
 | 8088 | Token Validation | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | Business logic | Internal (NGINX only) |
 | 8084 | Currency Service | Business logic | Internal (NGINX only) |
@@ -151,10 +153,11 @@ curl -v https://api.budgetanalyzer.localhost/health
 ### Security Benefits
 
 **Defense in Depth**:
-1. **Session Gateway**: Prevents JWT exposure to browser (XSS protection)
-2. **NGINX auth_request**: Validates every API request before routing
-3. **Token Validation Service**: Cryptographic JWT verification
-4. **Backend Services**: Data-level authorization (user owns resource)
+1. **NGINX SSL Termination**: Handles all HTTPS traffic, routes to internal services
+2. **Session Gateway**: Prevents JWT exposure to browser (XSS protection)
+3. **NGINX auth_request**: Validates every API request before routing
+4. **Token Validation Service**: Cryptographic JWT verification
+5. **Backend Services**: Data-level authorization (user owns resource)
 
 **For detailed security architecture**: See [docs/architecture/security-architecture.md](docs/architecture/security-architecture.md)
 
@@ -193,8 +196,8 @@ grep -A 3 "ports:" docker compose.yml
 
 **HTTPS Certificate Setup**:
 The application uses HTTPS for local development with clean subdomain URLs:
-- Session Gateway: `https://app.budgetanalyzer.localhost`
-- API Gateway: `https://api.budgetanalyzer.localhost`
+- Browser entry point: `https://app.budgetanalyzer.localhost` (NGINX → Session Gateway)
+- API Gateway: `https://api.budgetanalyzer.localhost` (NGINX → Backend Services)
 
 Run the setup script to generate trusted local certificates:
 ```bash

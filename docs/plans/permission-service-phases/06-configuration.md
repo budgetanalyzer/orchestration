@@ -111,7 +111,7 @@ spring:
         contact = @Contact(name = "Budget Analyzer Team", email = "budgetanalyzer@proton.me"),
         license = @License(name = "MIT", url = "https://opensource.org/licenses/MIT")),
     servers = {
-      @Server(url = "http://localhost:8080/api", description = "Local (via gateway)"),
+      @Server(url = "https://api.budgetanalyzer.localhost/api", description = "Local (via gateway)"),
       @Server(url = "http://localhost:8086/permission-service", description = "Local (direct)"),
       @Server(url = "https://api.budgetanalyzer.org", description = "Production")
     })

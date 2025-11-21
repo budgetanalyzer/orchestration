@@ -109,7 +109,7 @@
 - **Configuration verified**:
   - Auth0 Client ID: `Pd4L6ijQmJhqx8tgqpuTiRRg5uKKAVyh`
   - Auth0 Domain: `dev-gcz1r8453xzz0317.us.auth0.com`
-  - Callback URL already configured in Auth0: `http://localhost:8081/login/oauth2/code/auth0`
+  - Callback URL already configured in Auth0: `https://app.budgetanalyzer.localhost/login/oauth2/code/auth0`
   - Social providers enabled: Google, Apple, Facebook
 - **Debugging approach**:
   - User wants to debug with consent ENABLED (not skip) to understand the full flow
@@ -124,7 +124,7 @@
   - Created: `/workspace/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/config/RequestLoggingWebFilter.java`
     - Logs all OAuth2-related incoming requests
   - Fixed: `/workspace/session-gateway/.env`
-    - Changed `AUTH0_LOGOUT_RETURN_TO` from `http://localhost:8080` to `http://localhost:8081`
+    - Changed `AUTH0_LOGOUT_RETURN_TO` from `http://localhost:8080` to `https://app.budgetanalyzer.localhost`
 - **Understanding Two Consent Screens**:
   - **Social Provider Consent** (Google/Apple/Facebook): "Allow Budget Analyzer to access your Google profile?" - REQUIRED, CANNOT be skipped, controlled by social provider
   - **Auth0 Application Consent**: "Allow Budget Analyzer to access your email?" - OPTIONAL, can be skipped for first-party apps, controlled by Auth0 "Skip User Consent" setting
@@ -187,7 +187,7 @@ This is the primary flow for browser-based users accessing the application:
 ┌─────────┐
 │ Browser │
 └────┬────┘
-     │ 1. User navigates to http://localhost:8081
+     │ 1. User navigates to https://app.budgetanalyzer.localhost
      ├──────────────────────────────────────────────────────────────┐
      │                                                               │
      ▼                                                               │
@@ -331,12 +331,12 @@ Machine-to-machine clients bypass Session Gateway and use JWT directly:
 #### **Web Browser Request Flow (Detailed Steps)**
 
 1. **Browser → Session Gateway (8081)**
-   - User navigates to `http://localhost:8081`
+   - User navigates to `https://app.budgetanalyzer.localhost`
    - If not authenticated, redirect to Auth0 OAuth flow
    - After authentication, JWT stored in Redis, session cookie issued
 
 2. **Browser → Session Gateway (8081) - API Request**
-   - Browser makes API call: `GET http://localhost:8081/api/v1/transactions`
+   - Browser makes API call: `GET https://app.budgetanalyzer.localhost/api/v1/transactions`
    - Includes session cookie: `Cookie: SESSION=<session-id>`
 
 3. **Session Gateway → Redis**
@@ -442,8 +442,8 @@ Machine-to-machine clients bypass Session Gateway and use JWT directly:
 ### Task 1.4: Set Up Auth0 Account
 - Create Auth0 account and tenant
 - Create Application: "budget-analyzer-web" (Regular Web Application)
-- Configure Allowed Callback URLs: http://localhost:8081/login/oauth2/code/auth0
-- Configure Allowed Logout URLs: http://localhost:8081/, http://localhost:3000
+- Configure Allowed Callback URLs: https://app.budgetanalyzer.localhost/login/oauth2/code/auth0
+- Configure Allowed Logout URLs: https://app.budgetanalyzer.localhost/, https://app.budgetanalyzer.localhost
 - Note down: Domain, Client ID, Client Secret
 - Create API: "budget-analyzer-api" with identifier (audience)
 

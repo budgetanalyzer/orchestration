@@ -71,6 +71,10 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
     && usermod -aG docker $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    
+# Set up bash aliases for vscode user
+COPY bash_aliases.sh /home/$USERNAME/.bash_aliases
+RUN chown $USER_UID:$USER_GID /home/$USERNAME/.bash_aliases
 
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code

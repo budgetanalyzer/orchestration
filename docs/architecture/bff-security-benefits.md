@@ -51,10 +51,10 @@ JWT traverses the entire public internet and browser environment.
 
 ## Financial Application Context
 
-Lines 10-12 emphasize this is for a **financial data application requiring maximum security**. For financial apps:
+For a financial data application requiring maximum security:
 
 - Regulatory compliance often requires server-side session management
-- Audit trails must show server-side validation (lines 453-471)
+- Audit trails must demonstrate server-side validation of all requests
 - Token theft could enable fraudulent transactions
 - The additional complexity is justified by the security gains
 

@@ -17,6 +17,7 @@ For local development, all microservices share a single PostgreSQL instance to a
 |---------|--------------|-------------------|
 | transaction-service | `budget_analyzer` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer` |
 | currency-service | `currency` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/currency` |
+| permission-service | `permission` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/permission` |
 
 ## Starting the Database
 

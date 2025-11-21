@@ -4,13 +4,28 @@ This directory contains a shared Docker-based development environment for Claude
 
 ## What This Is
 
-A single Docker container that provides a consistent development environment for all projects in the Budget Analyzer ecosystem. Each project has its own `.devcontainer/devcontainer.json` that connects to this shared container, allowing you to:
+A single Docker container that provides a consistent development environment for all projects in the Budget Analyzer ecosystem. You open the orchestration project in VS Code's devcontainer, and from there you have access to all service repositories:
 
 - **🔒 SECURITY: Sandbox Claude Code file access to only the /workspace directory on the host**
 - Use the same tools (JDK, Node.js, Maven, Git) across all projects
-- Switch between projects instantly without rebuilding containers
 - Have Claude Code work seamlessly across the entire codebase in VS Code
 - Maintain consistent development environments
+
+## Why This Matters
+
+**Claude Code gets a complete Linux system with full sudo access** - and that's the point.
+
+When Claude runs directly on your host machine, you're naturally cautious about what it can do. But inside this container, Claude has unrestricted access to:
+
+- **Full root privileges**: `sudo apt-get install anything` - compilers, libraries, database clients, whatever the task needs
+- **System-level operations**: Modify configurations, install global packages, compile from source
+- **Safe experimentation**: Try approaches that might fail spectacularly - the container is disposable
+
+This isn't just about security (though it is secure). It's about **removing friction**. Claude can install a missing tool, configure a service, or run commands that would make you nervous on your actual machine - all without risk. Your host system is completely isolated.
+
+If something goes wrong? `docker compose down && docker compose up`. Fresh start, zero consequences.
+
+**The tradeoff**: A bit more setup complexity in exchange for maximum capability with zero risk to your development machine.
 
 ## Directory Structure
 ```
@@ -23,38 +38,28 @@ A single Docker container that provides a consistent development environment for
 │   │   └── README.md                   This file
 │   └── .devcontainer/
 │       └── devcontainer.json           VS Code devcontainer config
-├── transaction-service/
-│   └── .devcontainer/
-│       └── devcontainer.json           Points to shared container
-├── budget-analyzer-web/
-│   └── .devcontainer/
-│       └── devcontainer.json           Points to shared container
-├── currency-service/
-│   └── .devcontainer/
-│       └── devcontainer.json           Points to shared container
-└── service-common/
-    └── .devcontainer/
-        └── devcontainer.json           Points to shared container
+├── transaction-service/                ← Accessible from container
+├── budget-analyzer-web/                ← Accessible from container
+├── currency-service/                   ← Accessible from container
+└── service-common/                     ← Accessible from container
 ```
 
 ## How It Works
 
-**Single Container, Multiple Projects**: One Docker container (`claude-dev`) runs continuously and mounts your workspace root as `/workspace`. Each project's devcontainer configuration connects to this same container but changes the workspace folder to focus on that specific project.
+**Single Entry Point**: Open the orchestration project in VS Code and reopen in the devcontainer. The container mounts your entire workspace root as `/workspace`, giving you access to all service repositories from one place.
 
 **Key Components**:
-- [Dockerfile](Dockerfile) - Defines the container image with all development tools
-- [docker-compose.yml](docker-compose.yml) - Configures container networking, volumes, and environment
-- [entrypoint.sh](entrypoint.sh) - Initializes the container and keeps it running
-- Each `.devcontainer/devcontainer.json` - VS Code configuration that connects to the shared container
+- [Dockerfile](../claude-code-sandbox/Dockerfile) - Defines the container image with all development tools
+- [docker-compose.yml](../claude-code-sandbox/docker-compose.yml) - Configures container networking, volumes, and environment
+- [entrypoint.sh](../claude-code-sandbox/entrypoint.sh) - Initializes the container and keeps it running
+- [.devcontainer/devcontainer.json](../.devcontainer/devcontainer.json) - VS Code configuration that starts the container
 
 ## Usage
 
-### Opening a Project in VS Code
+### Opening the Development Environment
 ```bash
-# Open any project in VS Code
+# Open orchestration in VS Code
 code ./orchestration
-code ./transaction-service
-code ./budget-analyzer-web
 
 # VS Code will detect the devcontainer configuration
 # Click "Reopen in Container" when prompted
@@ -63,35 +68,39 @@ code ./budget-analyzer-web
 
 ### How Container Startup Works
 
-**First time opening any project:**
+**First time:**
 1. Docker builds the image from Dockerfile (takes 5-10 minutes)
 2. Container starts and mounts your workspace
 3. Claude Code extension installs automatically
 4. Container remains running (due to `shutdownAction: none`)
 
-**Opening additional projects:**
+**Subsequent times:**
 1. Reuses the existing container (instant startup)
-2. Changes workspace folder to the opened project
-3. Same tools and environment available
+2. Same tools and environment available
 
 ### Using Claude Code in VS Code
 
 1. Click the Spark icon (⚡) in the VS Code sidebar
 2. Claude Code panel opens
-3. Start working: "Add unit tests to UserService.java"
+3. Start working: "Add unit tests to UserService.java in transaction-service"
 
 ### Working Across Multiple Projects
 
-You can have multiple VS Code windows open simultaneously, each connected to the same container but with different workspace folders:
+From within the container, all projects are accessible under `/workspace`:
 ```bash
-# Terminal 1
-code ./transaction-service
+# Inside container terminal
+ls /workspace
+# Shows: orchestration, transaction-service, budget-analyzer-web, currency-service, service-common
 
-# Terminal 2
-code ./budget-analyzer-web
+cd /workspace/transaction-service
+cd /workspace/currency-service
 ```
 
-Both windows share the same container and tools but focus on different projects.
+Claude Code can reference files across all projects:
+```
+"Compare the error handling in transaction-service
+with the approach in currency-service"
+```
 
 ## Configuration Details
 
@@ -116,29 +125,25 @@ Both windows share the same container and tools but focus on different projects.
 - Git
 - Claude Code CLI
 
-### Security Features
+### Safe Power Through Isolation
 
-- Sandbox directory mounted read-only for safety
-- Container user matches host user (no root access needed)
-- API key passed securely via environment variable
+The container design gives Claude maximum capability while protecting your system:
 
-### Workspace Access
+**What Claude CAN do (inside container)**:
+- Run `sudo` commands freely
+- Install any package via `apt-get`
+- Modify system configurations
+- Install global npm/pip packages
+- Compile and build anything
+- Create, modify, delete files in `/workspace`
 
-From within the container, all projects are accessible under `/workspace`:
-```bash
-# Inside container terminal
-ls /workspace
-# Shows: orchestration, transaction-service, budget-analyzer-web, currency-service, service-common
+**What Claude CANNOT do**:
+- Access files outside `/workspace`
+- Affect your host system's packages or configuration
+- Modify the sandbox configuration itself (mounted read-only)
+- Persist changes outside the container's designated volumes
 
-cd /workspace/transaction-service
-cd /workspace/currency-service
-```
-
-Claude Code can reference files across all projects:
-```
-"Compare the error handling in transaction-service 
-with the approach in currency-service"
-```
+**Self-protecting configuration**: The sandbox directory (`claude-code-sandbox/`) is mounted read-only inside the container. Claude cannot modify its own container configuration - even accidentally. To update the Dockerfile or docker-compose.yml, you must edit from outside the container on your host machine. This prevents Claude from inadvertently breaking its own environment.
 
 ## Troubleshooting
 
@@ -181,13 +186,13 @@ docker exec -it <container-id> printenv ANTHROPIC_API_KEY
 
 ### Cannot Modify Sandbox Files
 
-This is intentional - the sandbox directory is mounted read-only for security. To modify configuration:
+This is intentional - the sandbox directory is mounted read-only so Claude cannot modify its own container configuration. To modify configuration:
 
-1. Exit all devcontainer VS Code windows
+1. Exit the devcontainer VS Code window
 2. Stop the container: `docker compose -f ./orchestration/claude-code-sandbox/docker-compose.yml down`
 3. Edit files on host: `./orchestration/claude-code-sandbox/`
 4. Rebuild: `docker compose -f ./orchestration/claude-code-sandbox/docker-compose.yml build`
-5. Restart: Open any project in VS Code and reopen in container
+5. Restart: Open orchestration in VS Code and reopen in container
 
 ### Java Version Issues
 ```bash
@@ -225,7 +230,7 @@ Edit the version URLs in Dockerfile and rebuild.
 
 ### Adding VS Code Extensions
 
-Edit any project's `.devcontainer/devcontainer.json`:
+Edit `.devcontainer/devcontainer.json` in orchestration:
 ```json
 "customizations": {
   "vscode": {
@@ -236,8 +241,6 @@ Edit any project's `.devcontainer/devcontainer.json`:
   }
 }
 ```
-
-Note: Extensions are per-project configuration, though they run in the shared container.
 
 ### Network Configuration
 
@@ -261,8 +264,7 @@ ports:
 - **Keep sandbox directory in git**: Already committed to orchestration repo for version control
 - **Run services from host**: Don't run dev servers inside the container - use host terminal
 - **Git operations from host**: Commit and push from your host terminal, not container
-- **One container, multiple windows**: Open different projects in separate VS Code windows
-- **Read-only sandbox is intentional**: Prevents accidental changes to shared configuration
+- **Read-only sandbox is intentional**: Prevents Claude from modifying its own configuration
 
 ## Maintenance
 
@@ -276,7 +278,7 @@ docker compose -f ./orchestration/claude-code-sandbox/docker-compose.yml down
 # Rebuild
 docker compose -f ./orchestration/claude-code-sandbox/docker-compose.yml build --no-cache
 
-# Restart by opening any project in VS Code
+# Restart by opening orchestration in VS Code
 ```
 
 ### Cleaning Up
@@ -297,8 +299,8 @@ This setup follows the shared devcontainer pattern:
 
 - One Dockerfile builds the base image with all tools
 - One docker-compose.yml defines the container lifecycle
-- Multiple `.devcontainer/devcontainer.json` files reference the same container
-- VS Code's `workspaceFolder` setting determines which project is active
-- Container stays running (`shutdownAction: none`) for fast project switching
+- Single `.devcontainer/devcontainer.json` in orchestration starts the environment
+- All service repositories accessible under `/workspace`
+- Container stays running (`shutdownAction: none`) for fast reconnection
 
-This provides the benefits of containerization (consistency, isolation) without the overhead of managing multiple containers for each project.
+This provides the benefits of containerization (consistency, isolation) without the overhead of managing multiple containers or configurations.

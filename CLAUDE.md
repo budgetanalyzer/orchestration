@@ -273,7 +273,7 @@ Each microservice is maintained in its own repository:
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
 - **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
 - **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
-- **basic-repository-template**: https://github.com/budgetanalyzer/basic-repository-template - Template for creating new services
+- **permission-service**: https://github.com/budgetanalyzer/permission-service - Permission management API
 
 ## Best Practices
 

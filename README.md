@@ -80,6 +80,7 @@ Each microservice is maintained in its own repository:
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web
 - **session-gateway**: https://github.com/budgetanalyzer/session-gateway
 - **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service
+- **permission-service**: https://github.com/budgetanalyzer/permission-service
 - **basic-repository-template**: https://github.com/budgetanalyzer/basic-repository-template
 
 ## Development

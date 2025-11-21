@@ -20,7 +20,7 @@ git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
 git clone https://github.com/budgetanalyzer/session-gateway.git
 git clone https://github.com/budgetanalyzer/token-validation-service.git
-git clone https://github.com/budgetanalyzer/basic-repository-template.git
+git clone https://github.com/budgetanalyzer/permission-service.git
 ```
 
 ### 2. Start Infrastructure

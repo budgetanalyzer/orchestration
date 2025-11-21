@@ -299,4 +299,5 @@ When working on this project:
 - Each microservice lives in its own repository
 - This orchestration repo coordinates deployment and environment setup
 - All repositories should be cloned side-by-side in `/workspace/` for cross-repo documentation links to work
+- Ignore all files in docs/archive.  Never change them, they are just for historical reference.
 

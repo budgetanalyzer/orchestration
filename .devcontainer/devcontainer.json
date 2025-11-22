@@ -1,5 +1,5 @@
 {
-  "name": "orchestration",
+  "name": "Budget Analyzer",
   "dockerComposeFile": "../claude-code-sandbox/docker-compose.yml",
   "service": "claude-dev",
   "workspaceFolder": "/workspace/orchestration",

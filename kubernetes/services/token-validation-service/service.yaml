@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-validation-service
+  namespace: default
+  labels:
+    app: token-validation-service
+spec:
+  type: ClusterIP
+  selector:
+    app: token-validation-service
+  ports:
+  - name: http
+    port: 8088
+    targetPort: 8088
+    protocol: TCP

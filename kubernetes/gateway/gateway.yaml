@@ -1,19 +1,19 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: budget-analyzer-gateway
+  name: ingress-gateway
   namespace: default
 spec:
   gatewayClassName: envoy-proxy
   listeners:
   - name: https
-    hostname: "*.budgetanalyzer.local"
+    hostname: "*.budgetanalyzer.localhost"
     port: 443
     protocol: HTTPS
     tls:
       mode: Terminate
       certificateRefs:
-      - name: budgetanalyzer-local-wildcard-tls
+      - name: budgetanalyzer-localhost-wildcard-tls
     allowedRoutes:
       namespaces:
         from: Same

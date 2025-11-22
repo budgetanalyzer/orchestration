@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-validation-service
+  namespace: default
+  labels:
+    app: token-validation-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: token-validation-service
+  template:
+    metadata:
+      labels:
+        app: token-validation-service
+    spec:
+      containers:
+      - name: token-validation-service
+        image: token-validation-service:latest
+        imagePullPolicy: Never  # Use local Kind image
+        ports:
+        - containerPort: 8088
+          name: http
+        env:
+        # Auth0 Configuration
+        - name: AUTH0_ISSUER
+          value: "https://dev-gcz1r8453xzz0317.us.auth0.com/"
+        - name: AUTH0_AUDIENCE
+          value: "https://api.budgetanalyzer.com"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8088
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8088
+          initialDelaySeconds: 60
+          periodSeconds: 20

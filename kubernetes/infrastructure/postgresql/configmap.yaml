@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init
+  namespace: infrastructure
+  labels:
+    app: postgresql
+data:
+  01-init-databases.sql: |
+    -- Create separate databases for each microservice
+    -- This script runs automatically when PostgreSQL is first initialized
+
+    -- Database for budget analyzer (transactions, categories, budgets, etc.)
+    CREATE DATABASE budget_analyzer;
+    GRANT ALL PRIVILEGES ON DATABASE budget_analyzer TO budget_analyzer;
+
+    -- Database for currency service (exchange rates, currency data)
+    CREATE DATABASE currency;
+    GRANT ALL PRIVILEGES ON DATABASE currency TO budget_analyzer;
+
+    -- Database for permission service (RBAC, roles, delegations)
+    CREATE DATABASE permission;
+    GRANT ALL PRIVILEGES ON DATABASE permission TO budget_analyzer;

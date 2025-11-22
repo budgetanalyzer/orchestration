@@ -142,7 +142,7 @@ http {
     # ========================================================================
     server {
         listen 8080;
-        server_name api.budgetanalyzer.local;
+        server_name api.budgetanalyzer.localhost;
 
         # Prevent absolute redirects and port issues
         absolute_redirect off;
@@ -161,7 +161,7 @@ http {
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-XSS-Protection "1; mode=block" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://dev-gcz1r8453xzz0317.us.auth0.com https://app.budgetanalyzer.local; frame-ancestors 'self';" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://dev-gcz1r8453xzz0317.us.auth0.com https://app.budgetanalyzer.localhost; frame-ancestors 'self';" always;
 
         # Health check endpoint
         location /health {
@@ -372,7 +372,7 @@ EOF
 |--------|-----------------------------------|-------------------------------|
 | TLS | Handles SSL (port 443) | No SSL (port 8080) - Envoy Gateway handles TLS |
 | Service Discovery | `host.docker.internal:PORT` | K8s DNS: `service-name:PORT` |
-| Server Name | `*.budgetanalyzer.localhost` | `*.budgetanalyzer.local` |
+| Server Name | `*.budgetanalyzer.localhosthost` | `*.budgetanalyzer.localhost` |
 | Token Validation | `http://host.docker.internal:8088` | `http://token_validation_service/...` |
 | HTTP Redirect | Port 80 redirects to 443 | No redirect (Envoy handles) |
 

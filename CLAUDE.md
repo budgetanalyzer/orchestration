@@ -298,6 +298,7 @@ When working on this project:
 - Keep service independence - avoid tight coupling between services
 - Each microservice lives in its own repository
 - This orchestration repo coordinates deployment and environment setup
-- All repositories should be cloned side-by-side in `/workspace/` for cross-repo documentation links to work
+- All repositories should be cloned side-by-side in a common parent directory for cross-repo documentation links to work
+- **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
 - Ignore all files in docs/archive and docs/decisions.  Never change them, they are just for historical reference.
 

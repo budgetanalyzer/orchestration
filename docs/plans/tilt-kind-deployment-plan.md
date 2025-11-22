@@ -6,8 +6,8 @@
 Kind Cluster
 ├── Envoy Gateway (Gateway API implementation)
 │   ├── TLS termination via cert-manager
-│   ├── app.budgetanalyzer.local → session-gateway
-│   └── api.budgetanalyzer.local → nginx-gateway
+│   ├── app.budgetanalyzer.localhost → session-gateway
+│   └── api.budgetanalyzer.localhost → nginx-gateway
 │
 ├── nginx-gateway (Deployment, HTTP only)
 │   ├── auth_request → token-validation-service
@@ -44,13 +44,13 @@ Kind Cluster
 1. Install Kind cluster with port mappings (80, 443)
 2. Install cert-manager + self-signed ClusterIssuer
 3. Install Envoy Gateway via Helm
-4. Generate wildcard certificate for `*.budgetanalyzer.local`
-5. Configure `/etc/hosts` or local DNS for `*.budgetanalyzer.local`
+4. Generate wildcard certificate for `*.budgetanalyzer.localhost`
+5. Configure `/etc/hosts` or local DNS for `*.budgetanalyzer.localhost`
 
 ### Phase 2: Gateway API Configuration
 1. Create `Gateway` resource with HTTPS listeners
-2. Create `HTTPRoute` for `app.budgetanalyzer.local` → session-gateway
-3. Create `HTTPRoute` for `api.budgetanalyzer.local` → nginx-gateway
+2. Create `HTTPRoute` for `app.budgetanalyzer.localhost` → session-gateway
+3. Create `HTTPRoute` for `api.budgetanalyzer.localhost` → nginx-gateway
 4. Configure Envoy external authorization (ext_authz) for future mTLS path
 
 ### Phase 3: Infrastructure Services

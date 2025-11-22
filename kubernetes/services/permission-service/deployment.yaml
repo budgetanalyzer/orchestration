@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: permission-service
+  namespace: default
+  labels:
+    app: permission-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: permission-service
+  template:
+    metadata:
+      labels:
+        app: permission-service
+    spec:
+      containers:
+      - name: permission-service
+        image: permission-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8086
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        # Database connection
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: permission-url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: password
+        # Redis connection
+        - name: SPRING_DATA_REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: host
+        - name: SPRING_DATA_REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: port
+        # Auth0 Configuration
+        - name: AUTH0_ISSUER
+          value: "https://dev-gcz1r8453xzz0317.us.auth0.com/"
+        - name: AUTH0_AUDIENCE
+          value: "https://api.budgetanalyzer.com"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /permission-service/actuator/health
+            port: 8086
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /permission-service/actuator/health
+            port: 8086
+          initialDelaySeconds: 60
+          periodSeconds: 20

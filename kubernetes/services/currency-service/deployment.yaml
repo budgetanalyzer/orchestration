@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currency-service
+  namespace: default
+  labels:
+    app: currency-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: currency-service
+  template:
+    metadata:
+      labels:
+        app: currency-service
+    spec:
+      containers:
+      - name: currency-service
+        image: currency-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8084
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        # Database connection
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: currency-url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: password
+        # RabbitMQ connection
+        - name: SPRING_RABBITMQ_HOST
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: host
+        - name: SPRING_RABBITMQ_PORT
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: amqp-port
+        - name: SPRING_RABBITMQ_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: username
+        - name: SPRING_RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: password
+        # Redis connection
+        - name: SPRING_DATA_REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: host
+        - name: SPRING_DATA_REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: port
+        # Auth0 Configuration
+        - name: AUTH0_ISSUER
+          value: "https://dev-gcz1r8453xzz0317.us.auth0.com/"
+        - name: AUTH0_AUDIENCE
+          value: "https://api.budgetanalyzer.com"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /currency-service/actuator/health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /currency-service/actuator/health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 20

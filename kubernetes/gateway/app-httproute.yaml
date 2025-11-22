@@ -5,10 +5,10 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-  - name: budget-analyzer-gateway
+  - name: ingress-gateway
   hostnames:
-  - "app.budgetanalyzer.local"
+  - "app.budgetanalyzer.localhost"
   rules:
   - backendRefs:
     - name: session-gateway
-      port: 80
+      port: 8081

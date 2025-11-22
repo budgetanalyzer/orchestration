@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: budget-analyzer-web
+  namespace: default
+  labels:
+    app: budget-analyzer-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: budget-analyzer-web
+  template:
+    metadata:
+      labels:
+        app: budget-analyzer-web
+    spec:
+      containers:
+      - name: budget-analyzer-web
+        image: budget-analyzer-web:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "development"
+        # Vite configuration for Kubernetes
+        - name: VITE_API_BASE_URL
+          value: ""  # Empty for same-origin requests via session gateway
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 20

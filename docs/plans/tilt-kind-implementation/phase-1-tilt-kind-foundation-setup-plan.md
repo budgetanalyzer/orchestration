@@ -145,7 +145,7 @@ kubectl get pods -n envoy-gateway-system
 
 ## Step 4: Generate Wildcard TLS Certificate
 
-**Objective:** To create a wildcard TLS certificate for `*.budgetanalyzer.local` using the `selfsigned-issuer`.
+**Objective:** To create a wildcard TLS certificate for `*.budgetanalyzer.localhost` using the `selfsigned-issuer`.
 
 ### 4.1. Create the Certificate Manifest
 
@@ -156,15 +156,15 @@ cat <<EOF > wildcard-certificate.yaml
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: budgetanalyzer-local-wildcard-tls
+  name: budgetanalyzer-localhost-wildcard-tls
   namespace: default
 spec:
   isCA: false
   privateKey:
     rotationPolicy: Always
-  secretName: budgetanalyzer-local-wildcard-tls
+  secretName: budgetanalyzer-localhost-wildcard-tls
   dnsNames:
-  - "*.budgetanalyzer.local"
+  - "*.budgetanalyzer.localhost"
   issuerRef:
     name: selfsigned-issuer
     kind: ClusterIssuer
@@ -179,10 +179,10 @@ kubectl apply -f wildcard-certificate.yaml
 
 ```bash
 # Check certificate status
-kubectl get certificate budgetanalyzer-local-wildcard-tls -n default
+kubectl get certificate budgetanalyzer-localhost-wildcard-tls -n default
 
 # Check for the TLS secret
-kubectl get secret budgetanalyzer-local-wildcard-tls -n default
+kubectl get secret budgetanalyzer-localhost-wildcard-tls -n default
 ```
 
 **Expected Output:** The certificate should have a `READY` status of `True`, and the secret should be listed.
@@ -191,15 +191,15 @@ kubectl get secret budgetanalyzer-local-wildcard-tls -n default
 
 ## Step 5: Configure Local DNS
 
-**Objective:** To ensure that your local machine resolves `app.budgetanalyzer.local` and `api.budgetanalyzer.local` to `127.0.0.1`.
+**Objective:** To ensure that your local machine resolves `app.budgetanalyzer.localhost` and `api.budgetanalyzer.localhost` to `127.0.0.1`.
 
 ### 5.1. Update Hosts File
 
 **Action:** This step is manual and requires administrator privileges. You must add the following lines to your system's `hosts` file (e.g., `/etc/hosts` on Linux/macOS).
 
 ```
-127.0.0.1 app.budgetanalyzer.local
-127.0.0.1 api.budgetanalyzer.local
+127.0.0.1 app.budgetanalyzer.localhost
+127.0.0.1 api.budgetanalyzer.localhost
 ```
 **Note:** I cannot perform this action for you. Please edit the file yourself.
 
@@ -208,7 +208,7 @@ kubectl get secret budgetanalyzer-local-wildcard-tls -n default
 **Action:** Use a command like `ping` to test that the domains resolve correctly.
 
 ```bash
-ping -c 1 app.budgetanalyzer.local
+ping -c 1 app.budgetanalyzer.localhost
 ```
 
 **Expected Output:** The command should show that it is pinging `127.0.0.1`.

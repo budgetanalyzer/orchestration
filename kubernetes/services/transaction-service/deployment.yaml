@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  namespace: default
+  labels:
+    app: transaction-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transaction-service
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+    spec:
+      containers:
+      - name: transaction-service
+        image: transaction-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8082
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        # Database connection
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: budget-analyzer-url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-credentials
+              key: password
+        # RabbitMQ connection
+        - name: SPRING_RABBITMQ_HOST
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: host
+        - name: SPRING_RABBITMQ_PORT
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: amqp-port
+        - name: SPRING_RABBITMQ_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: username
+        - name: SPRING_RABBITMQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-credentials
+              key: password
+        # Auth0 Configuration
+        - name: AUTH0_ISSUER
+          value: "https://dev-gcz1r8453xzz0317.us.auth0.com/"
+        - name: AUTH0_AUDIENCE
+          value: "https://api.budgetanalyzer.com"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /transaction-service/actuator/health
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /transaction-service/actuator/health
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 20

@@ -81,13 +81,13 @@ spec:
   gatewayClassName: envoy-proxy
   listeners:
   - name: https
-    hostname: "*.budgetanalyzer.local"
+    hostname: "*.budgetanalyzer.localhost"
     port: 443
     protocol: HTTPS
     tls:
       mode: Terminate
       certificateRefs:
-      - name: budgetanalyzer-local-wildcard-tls
+      - name: budgetanalyzer-localhost-wildcard-tls
     allowedRoutes:
       namespaces:
         from: Same
@@ -116,7 +116,7 @@ kubectl get gateway budget-analyzer-gateway
 
 ## Step 3: Create the `app` HTTPRoute
 
-**Objective:** To create the routing rule that forwards all traffic for `app.budgetanalyzer.local` to our placeholder `session-gateway` service.
+**Objective:** To create the routing rule that forwards all traffic for `app.budgetanalyzer.localhost` to our placeholder `session-gateway` service.
 
 ### 3.1. Define the `app` HTTPRoute Manifest
 
@@ -133,7 +133,7 @@ spec:
   parentRefs:
   - name: budget-analyzer-gateway
   hostnames:
-  - "app.budgetanalyzer.local"
+  - "app.budgetanalyzer.localhost"
   rules:
   - backendRefs:
     - name: session-gateway
@@ -163,7 +163,7 @@ kubectl get httproute app-route
 
 ## Step 4: Create the `api` HTTPRoute
 
-**Objective:** To create the routing rule that forwards all traffic for `api.budgetanalyzer.local` to our placeholder `nginx-gateway` service.
+**Objective:** To create the routing rule that forwards all traffic for `api.budgetanalyzer.localhost` to our placeholder `nginx-gateway` service.
 
 ### 4.1. Define the `api` HTTPRoute Manifest
 
@@ -180,7 +180,7 @@ spec:
   parentRefs:
   - name: budget-analyzer-gateway
   hostnames:
-  - "api.budgetanalyzer.local"
+  - "api.budgetanalyzer.localhost"
   rules:
   - backendRefs:
     - name: nginx-gateway

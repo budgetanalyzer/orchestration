@@ -61,6 +61,31 @@ Browser → NGINX (app.budgetanalyzer.localhost:443) → Session Gateway (8081) 
 API Client → NGINX (api.budgetanalyzer.localhost:443) → Backend Services
 ```
 
+### Tilt/Kubernetes Architecture (Current)
+
+**IMPORTANT**: The flows above are for Docker Compose. In Tilt/Kubernetes, Envoy Gateway replaces NGINX for SSL termination and initial routing. NGINX is NOT in the session-gateway path.
+
+**Flow 1: Browser Authentication (app.budgetanalyzer.localhost)**
+```
+Browser → Envoy Gateway → session-gateway
+```
+- **No NGINX in this path**
+- Envoy should NOT set X-Forwarded-Host (no URL rewriting occurs)
+- Session-gateway uses Host header: `app.budgetanalyzer.localhost`
+- Cookie domain derived from Host header
+
+**Flow 2: API Requests (api.budgetanalyzer.localhost)**
+```
+Browser/session-gateway → Envoy Gateway → NGINX → backend services
+```
+- Envoy may rewrite Host to internal service name
+- X-Forwarded-Host should preserve: `api.budgetanalyzer.localhost`
+- Backend services see original client hostname
+
+**Header Rules**
+- **X-Forwarded-Host**: Only set when URL/host rewriting occurs
+- **Host**: Original value when no rewriting; internal service name when rewriting
+
 ### Component Roles
 
 **NGINX (Port 443, HTTPS) - API Gateway Layer**:
@@ -216,6 +241,17 @@ This script will:
 3. Convert the certificate to PKCS12 format for Spring Boot
 4. Your browser will automatically trust these certificates (no warnings!)
 
+**Environment Variables Setup**:
+Configure Auth0 credentials for authentication:
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env with your Auth0 credentials from https://manage.auth0.com/dashboard
+```
+
+The `.env` file is gitignored and loaded by Tilt via the dotenv extension. No shell exports needed!
+
 ### Quick Start
 ```bash
 # Start all infrastructure
@@ -291,6 +327,23 @@ Each microservice is maintained in its own repository:
 2. If prerequisites are NOT satisfied, STOP immediately and inform the user
 3. Do NOT attempt to hack around missing prerequisites - this leads to broken implementations that must be deleted
 4. Complete prerequisites first, then return to the original task
+
+### SSL/TLS Certificate Constraints
+
+**NEVER run SSL write operations** - Claude runs in a container with its own mkcert CA, but the user's browser trusts their host's mkcert CA. These are different CAs, so certificates generated in Claude's sandbox will cause browser SSL warnings.
+
+**Forbidden operations** (must be run by user on host):
+- `mkcert` (any certificate generation)
+- `openssl genrsa`, `openssl req -new`, `openssl x509 -req` (key/cert generation)
+- Any script that generates certificates (e.g., `setup-k8s-tls.sh`, `setup-local-https.sh`)
+
+**Allowed operations** (read-only):
+- `openssl x509 -text -noout` (inspect certificates)
+- `openssl verify` (verify certificate chains)
+- `kubectl get secret -o yaml` (view secrets)
+- Certificate file reads for debugging
+
+When SSL issues occur, guide the user to run certificate scripts on their host machine.
 
 When working on this project:
 - Follow the resource-based routing pattern for new API endpoints

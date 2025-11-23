@@ -9,6 +9,33 @@ spec:
   hostnames:
   - "app.budgetanalyzer.localhost"
   rules:
-  - backendRefs:
+  - timeouts:
+      request: "60s"  # Extended for file uploads
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Proto
+          value: "https"
+        # KNOWN ISSUE: Host Header Rewriting
+        #
+        # Expected behavior: Envoy Gateway should preserve the original Host header
+        # ("app.budgetanalyzer.localhost") when proxying to session-gateway, so that
+        # session-gateway can extract the correct cookie domain.
+        #
+        # Actual behavior: Envoy rewrites Host to the pod IP (e.g., "10.244.0.18:8081").
+        # This breaks cookie domain extraction because IPs cannot be used as domains.
+        #
+        # Attempted fixes that DID NOT work:
+        # - Setting X-Forwarded-Host header here (Envoy doesn't seem to honor it)
+        # - Relying on default Envoy behavior (it still rewrites Host)
+        #
+        # Current workaround: session-gateway uses a hardcoded domain override
+        # configured in application.yml (session.cookie.domain-override).
+        #
+        # TODO: Investigate Envoy Gateway BackendTrafficPolicy or other settings
+        # to preserve the original Host header. When fixed, session-gateway logs
+        # will show "DOMAIN MATCH" instead of "DOMAIN MISMATCH".
+    backendRefs:
     - name: session-gateway
       port: 8081

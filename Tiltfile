@@ -7,6 +7,11 @@
 load('ext://restart_process', 'docker_build_with_restart')
 load('ext://uibutton', 'cmd_button', 'location')
 load('ext://configmap', 'configmap_create')
+load('ext://dotenv', 'dotenv')
+
+# Load environment variables from .env file
+# Copy .env.example to .env and fill in your values
+dotenv()
 
 # Load common configuration
 load('./tilt/common.star',
@@ -167,11 +172,14 @@ data:
 '''))
 
 # Auth0 credentials for Session Gateway
-# NOTE: Replace these placeholder values with your actual Auth0 credentials
+# CLIENT_ID, CLIENT_SECRET, ISSUER_URI loaded from .env file via dotenv()
+# AUDIENCE and LOGOUT_RETURN_TO are hardcoded - users must use these exact values
 auth0_data = encode_secret_data({
-    'client-id': os.getenv('AUTH0_CLIENT_ID', 'your-auth0-client-id'),
-    'client-secret': os.getenv('AUTH0_CLIENT_SECRET', 'your-auth0-client-secret'),
-    'issuer-uri': os.getenv('AUTH0_ISSUER_URI', 'https://dev-gcz1r8453xzz0317.us.auth0.com/'),
+    'AUTH0_CLIENT_ID': os.getenv('AUTH0_CLIENT_ID', ''),
+    'AUTH0_CLIENT_SECRET': os.getenv('AUTH0_CLIENT_SECRET', ''),
+    'AUTH0_ISSUER_URI': os.getenv('AUTH0_ISSUER_URI', ''),
+    'AUTH0_AUDIENCE': 'https://api.budgetanalyzer.org',
+    'AUTH0_LOGOUT_RETURN_TO': 'https://app.budgetanalyzer.localhost',
 })
 
 k8s_yaml(blob('''
@@ -182,10 +190,35 @@ metadata:
   namespace: ''' + DEFAULT_NAMESPACE + '''
 type: Opaque
 data:
-  client-id: ''' + auth0_data['client-id'] + '''
-  client-secret: ''' + auth0_data['client-secret'] + '''
-  issuer-uri: ''' + auth0_data['issuer-uri'] + '''
+  AUTH0_CLIENT_ID: ''' + auth0_data['AUTH0_CLIENT_ID'] + '''
+  AUTH0_CLIENT_SECRET: ''' + auth0_data['AUTH0_CLIENT_SECRET'] + '''
+  AUTH0_ISSUER_URI: ''' + auth0_data['AUTH0_ISSUER_URI'] + '''
+  AUTH0_AUDIENCE: ''' + auth0_data['AUTH0_AUDIENCE'] + '''
+  AUTH0_LOGOUT_RETURN_TO: ''' + auth0_data['AUTH0_LOGOUT_RETURN_TO'] + '''
 '''))
+
+# ============================================================================
+# SERVICE-COMMON SHARED LIBRARY
+# ============================================================================
+
+# Publish service-common to Maven Local when it changes
+# All backend services depend on this
+local_resource(
+    'service-common-publish',
+    cmd='cd ' + get_repo_path('service-common') + ' && ./gradlew publishToMavenLocal --parallel --build-cache && ' +
+        'tilt trigger transaction-service-compile && ' +
+        'tilt trigger currency-service-compile && ' +
+        'tilt trigger permission-service-compile && ' +
+        'tilt trigger session-gateway-compile && ' +
+        'tilt trigger token-validation-service-compile',
+    deps=[
+        get_repo_path('service-common') + '/src',
+        get_repo_path('service-common') + '/build.gradle.kts',
+    ],
+    labels=['compile'],
+    allow_parallel=True,
+    auto_init=True
+)
 
 # ============================================================================
 # SPRING BOOT SERVICE BUILD PATTERN
@@ -211,6 +244,7 @@ def spring_boot_service(name, deps=[]):
             repo_path + '/src',
             repo_path + '/build.gradle.kts',
         ],
+        resource_deps=['service-common-publish'],
         labels=['compile'],
         allow_parallel=True,
         auto_init=True
@@ -293,6 +327,7 @@ local_resource(
         repo_path + '/src',
         repo_path + '/build.gradle.kts',
     ],
+    resource_deps=['service-common-publish'],
     labels=['compile'],
     allow_parallel=True
 )
@@ -356,6 +391,17 @@ configmap_create(
         'api-protection.conf=nginx/includes/api-protection.conf',
         'admin-api-protection.conf=nginx/includes/admin-api-protection.conf',
         'backend-headers.conf=nginx/includes/backend-headers.conf',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-docs',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'index.html=docs-aggregator/index.html',
+        'openapi.json=docs-aggregator/openapi.json',
+        'openapi.yaml=docs-aggregator/openapi.yaml',
     ],
     watch=True
 )
@@ -428,30 +474,6 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# cert-manager for TLS certificate management
-local_resource(
-    'cert-manager',
-    cmd='''
-        helm repo add jetstack https://charts.jetstack.io --force-update
-        helm upgrade --install cert-manager jetstack/cert-manager \
-            --namespace cert-manager \
-            --create-namespace \
-            --version v1.16.1 \
-            --set crds.enabled=true \
-            --wait
-    ''',
-    resource_deps=['gateway-api-crds'],
-    labels=['infrastructure'],
-)
-
-# Self-signed ClusterIssuer for local development certificates
-local_resource(
-    'cluster-issuer',
-    cmd='kubectl apply -f kubernetes/gateway/cluster-issuer.yaml',
-    resource_deps=['cert-manager'],
-    labels=['infrastructure'],
-)
-
 # Envoy Gateway - the Gateway API controller
 local_resource(
     'envoy-gateway',
@@ -486,11 +508,11 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Wildcard TLS certificate for *.budgetanalyzer.localhost
+# Wildcard TLS certificate for *.budgetanalyzer.localhost (using mkcert)
+# This runs on the HOST machine to install the CA in browser trust stores
 local_resource(
-    'wildcard-certificate',
-    cmd='kubectl apply -f wildcard-certificate.yaml',
-    resource_deps=['cluster-issuer'],
+    'mkcert-tls-secret',
+    cmd='./scripts/dev/setup-k8s-tls.sh',
     labels=['infrastructure'],
 )
 
@@ -499,10 +521,17 @@ local_resource(
     'ingress-gateway',
     cmd='''
         kubectl apply -f kubernetes/gateway/gateway.yaml
+        kubectl apply -f kubernetes/gateway/client-traffic-policy.yaml
         kubectl apply -f kubernetes/gateway/api-httproute.yaml
         kubectl apply -f kubernetes/gateway/app-httproute.yaml
     ''',
-    resource_deps=['gateway-class', 'wildcard-certificate'],
+    deps=[
+        'kubernetes/gateway/gateway.yaml',
+        'kubernetes/gateway/client-traffic-policy.yaml',
+        'kubernetes/gateway/api-httproute.yaml',
+        'kubernetes/gateway/app-httproute.yaml',
+    ],
+    resource_deps=['gateway-class', 'mkcert-tls-secret'],
     labels=['gateway'],
 )
 
@@ -514,7 +543,7 @@ local_resource(
 # Custom buttons for common operations
 cmd_button(
     'rebuild-all-backend',
-    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
+    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service session-gateway token-validation-service; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
     resource='transaction-service',
     icon_name='build',
     text='Rebuild All Backend'

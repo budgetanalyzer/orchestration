@@ -40,15 +40,96 @@ if ! kubectl cluster-info &>/dev/null; then
     exit 1
 fi
 
+# Check if certutil is installed (needed for browser trust stores)
+if ! command -v certutil &> /dev/null; then
+    echo "[WARN] certutil is not installed - browser trust stores won't be updated"
+    echo "       Install with: sudo apt install libnss3-tools"
+    CERTUTIL_AVAILABLE=false
+else
+    CERTUTIL_AVAILABLE=true
+fi
+
 echo "[OK] mkcert is installed"
 echo "[OK] kubectl is installed"
 echo "[OK] Kubernetes cluster is accessible"
+if [ "$CERTUTIL_AVAILABLE" = true ]; then
+    echo "[OK] certutil is installed"
+fi
 
-# Ensure mkcert CA is installed
+# Install mkcert CA to browser trust stores
 echo
-echo "Ensuring mkcert CA is installed..."
-mkcert -install 2>/dev/null || true
+echo "Installing mkcert CA to browser trust stores..."
+
+CA_ROOT="$(mkcert -CAROOT)"
+CA_FILE="$CA_ROOT/rootCA.pem"
+
+# Detect OS
+case "$(uname -s)" in
+    Linux*)  OS=linux;;
+    Darwin*) OS=macos;;
+    MINGW*|CYGWIN*|MSYS*) OS=windows;;
+    *)       OS=unknown;;
+esac
+
+if [ "$OS" = "linux" ] && [ "$CERTUTIL_AVAILABLE" = true ]; then
+    # Linux: Install to NSS trust stores (browsers)
+    echo "Installing CA to browser trust stores (NSS)..."
+    TRUST_STORES=nss mkcert -install
+
+    # Handle snap-installed Chromium (uses isolated NSS database)
+    SNAP_CHROMIUM_NSS="$HOME/snap/chromium/current/.pki/nssdb"
+    if [ -d "$SNAP_CHROMIUM_NSS" ]; then
+        if ! certutil -d sql:$SNAP_CHROMIUM_NSS -L 2>/dev/null | grep -q "mkcert"; then
+            echo "Installing CA to snap Chromium..."
+            certutil -d sql:$SNAP_CHROMIUM_NSS -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
+                echo "[OK] CA installed to snap Chromium" || \
+                echo "[WARN] Failed to install CA to snap Chromium"
+        else
+            echo "[SKIP] CA already in snap Chromium"
+        fi
+    fi
+
+    # Handle snap-installed Firefox (uses isolated profile directories)
+    SNAP_FIREFOX_DIR="$HOME/snap/firefox/common/.mozilla/firefox"
+    if [ -d "$SNAP_FIREFOX_DIR" ]; then
+        for profile in "$SNAP_FIREFOX_DIR"/*.default* "$SNAP_FIREFOX_DIR"/*.default-release*; do
+            if [ -d "$profile" ]; then
+                profile_name=$(basename "$profile")
+                if ! certutil -d sql:$profile -L 2>/dev/null | grep -q "mkcert"; then
+                    echo "Installing CA to snap Firefox profile ($profile_name)..."
+                    certutil -d sql:$profile -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
+                        echo "[OK] CA installed to snap Firefox" || \
+                        echo "[WARN] Failed to install CA to snap Firefox"
+                else
+                    echo "[SKIP] CA already in snap Firefox ($profile_name)"
+                fi
+            fi
+        done
+    fi
+
+    # Handle native Firefox profiles (non-snap)
+    NATIVE_FIREFOX_DIR="$HOME/.mozilla/firefox"
+    if [ -d "$NATIVE_FIREFOX_DIR" ]; then
+        for profile in "$NATIVE_FIREFOX_DIR"/*.default* "$NATIVE_FIREFOX_DIR"/*.default-release*; do
+            if [ -d "$profile" ]; then
+                profile_name=$(basename "$profile")
+                if ! certutil -d sql:$profile -L 2>/dev/null | grep -q "mkcert"; then
+                    echo "Installing CA to native Firefox profile ($profile_name)..."
+                    certutil -d sql:$profile -A -t "C,," -n "mkcert" -i "$CA_FILE" 2>/dev/null && \
+                        echo "[OK] CA installed to native Firefox" || true
+                fi
+            fi
+        done
+    fi
+
+else
+    # macOS/Windows or no certutil: use default mkcert install
+    mkcert -install
+fi
+
 echo "[OK] mkcert CA installed"
+echo
+echo "[NOTE] Restart your browser for certificate changes to take effect"
 
 # Create certs directory
 mkdir -p "$K8S_CERTS_DIR"

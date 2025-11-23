@@ -49,22 +49,10 @@ spec:
             secretKeyRef:
               name: redis-credentials
               key: port
-        # Auth0 Configuration
-        - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_AUTH0_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: client-id
-        - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_AUTH0_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: client-secret
-        - name: SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_AUTH0_ISSUER_URI
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: issuer-uri
+        # Auth0 Configuration - loaded from secret via envFrom
+        envFrom:
+        - secretRef:
+            name: auth0-credentials
         resources:
           requests:
             memory: "256Mi"
@@ -76,11 +64,15 @@ spec:
           httpGet:
             path: /actuator/health
             port: 8081
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
         livenessProbe:
           httpGet:
             path: /actuator/health
             port: 8081
-          initialDelaySeconds: 60
+          initialDelaySeconds: 120
           periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3

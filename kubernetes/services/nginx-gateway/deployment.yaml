@@ -29,6 +29,9 @@ spec:
         - name: nginx-includes
           mountPath: /etc/nginx/includes
           readOnly: true
+        - name: nginx-docs
+          mountPath: /usr/share/nginx/html/docs
+          readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -55,3 +58,6 @@ spec:
       - name: nginx-includes
         configMap:
           name: nginx-gateway-includes
+      - name: nginx-docs
+        configMap:
+          name: nginx-gateway-docs

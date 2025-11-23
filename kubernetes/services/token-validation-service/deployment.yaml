@@ -27,7 +27,7 @@ spec:
         - name: AUTH0_ISSUER
           value: "https://dev-gcz1r8453xzz0317.us.auth0.com/"
         - name: AUTH0_AUDIENCE
-          value: "https://api.budgetanalyzer.com"
+          value: "https://api.budgetanalyzer.org"
         - name: SPRING_PROFILES_ACTIVE
           value: "kubernetes"
         resources:

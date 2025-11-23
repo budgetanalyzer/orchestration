@@ -87,6 +87,7 @@ Clone all service repositories as **siblings** to the `orchestration` repo. The 
 cd "$(dirname /path/to/orchestration)"
 
 # Clone all service repos alongside orchestration
+git clone https://github.com/budgetanalyzer/service-common.git
 git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/permission-service.git
@@ -99,6 +100,7 @@ Your directory structure should look like:
 ```
 parent-directory/
 ├── orchestration/
+├── service-common/
 ├── transaction-service/
 ├── currency-service/
 ├── permission-service/
@@ -118,19 +120,39 @@ cd /path/to/orchestration
 
 This verifies all dependencies and repositories are properly configured.
 
-### 2. Create Kind Cluster
+### 2. Publish service-common to Maven Local
+
+The backend services depend on `service-common`. Publish it to your local Maven repository:
 
 ```bash
-kind create cluster --name kind
+cd /path/to/service-common
+./gradlew publishToMavenLocal
 ```
+
+### 3. Create Kind Cluster
+
+**Important**: Use the config file to enable port 443 mapping for HTTPS access:
+
+```bash
+cd /path/to/orchestration
+kind create cluster --config kind-cluster-config.yaml
+```
+
+This creates a cluster with port mappings:
+- Port 80 → HTTP redirect
+- Port 443 → HTTPS (via NodePort 30443)
 
 Verify the cluster:
 ```bash
 kind get clusters
 kubectl cluster-info --context kind-kind
+
+# Verify port mappings
+docker port kind-control-plane
+# Expected: 30443/tcp -> 0.0.0.0:443
 ```
 
-### 3. Configure DNS
+### 4. Configure DNS
 
 Add entries to `/etc/hosts`:
 
@@ -138,7 +160,7 @@ Add entries to `/etc/hosts`:
 echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
-### 4. Generate TLS Certificates
+### 5. Generate TLS Certificates
 
 ```bash
 ./scripts/dev/setup-k8s-tls.sh
@@ -148,7 +170,7 @@ This creates:
 - Trusted certificates for `*.budgetanalyzer.localhost`
 - Kubernetes TLS secret `budgetanalyzer-local-wildcard-tls`
 
-### 5. Configure Auth0 Credentials
+### 6. Configure Auth0 Credentials
 
 Set environment variables before running Tilt:
 
@@ -158,7 +180,7 @@ export AUTH0_CLIENT_SECRET="your-actual-client-secret"
 export AUTH0_ISSUER_URI="https://your-tenant.auth0.com/"
 ```
 
-### 6. Start Tilt
+### 7. Start Tilt
 
 ```bash
 cd /path/to/orchestration
@@ -260,13 +282,15 @@ After all services are healthy:
 
 | Port | Service | Purpose |
 |------|---------|---------|
+| 443 | Envoy Gateway | HTTPS entry point (via NodePort 30443) |
+| 80 | Envoy Gateway | HTTP redirect to HTTPS |
 | 3000 | budget-analyzer-web | Vite Dev Server |
 | 5432 | PostgreSQL | Database |
 | 6379 | Redis | Cache |
 | 5672 | RabbitMQ | AMQP |
 | 15672 | RabbitMQ | Management UI |
-| 8080 | nginx-gateway | API Gateway |
-| 8081 | session-gateway | BFF |
+| 8080 | nginx-gateway | API Gateway (internal) |
+| 8081 | session-gateway | BFF (internal) |
 | 8082 | transaction-service | Business Logic |
 | 8084 | currency-service | Business Logic |
 | 8086 | permission-service | Business Logic |
@@ -333,16 +357,31 @@ rm -rf nginx/certs/k8s
 
 ### Kind Cluster Issues
 
-Delete and recreate:
+Delete and recreate with the config file:
 ```bash
 kind delete cluster --name kind
-kind create cluster --name kind
+kind create cluster --config kind-cluster-config.yaml
 ```
 
 Then restart Tilt:
 ```bash
 tilt down
 tilt up
+```
+
+### Gradle Build Failures (service-web not found)
+
+If services fail to build with "Could not find org.budgetanalyzer:service-web":
+```bash
+cd /path/to/service-common
+./gradlew publishToMavenLocal
+```
+
+Then trigger rebuilds in Tilt:
+```bash
+tilt trigger transaction-service
+tilt trigger currency-service
+# ... etc
 ```
 
 ## Cleanup
@@ -369,7 +408,11 @@ Edit `/etc/hosts` and remove lines containing `budgetanalyzer.localhost`.
 ### One-liner Setup (after dependencies installed)
 
 ```bash
-kind create cluster --name kind && \
+# First, publish service-common (run once)
+cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orchestration
+
+# Then run the setup
+kind create cluster --config kind-cluster-config.yaml && \
 echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
 ./scripts/dev/setup-k8s-tls.sh && \
 export AUTH0_CLIENT_ID="your-id" AUTH0_CLIENT_SECRET="your-secret" && \
@@ -390,7 +433,7 @@ tilt up
 ```bash
 tilt down
 kind delete cluster --name kind
-kind create cluster --name kind
+kind create cluster --config kind-cluster-config.yaml
 ./scripts/dev/setup-k8s-tls.sh
 tilt up
 ```

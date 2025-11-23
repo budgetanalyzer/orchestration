@@ -168,9 +168,19 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
         echo "  Try: kubectl config use-context kind-kind"
         ((ERRORS++))
     fi
+
+    # Check port mappings for HTTPS access
+    if docker port kind-control-plane 2>/dev/null | grep -q "30443/tcp -> 0.0.0.0:443"; then
+        echo -e "${GREEN}✓${NC} Port 443 mapped correctly (30443 -> 443)"
+    else
+        echo -e "${YELLOW}!${NC} Port 443 NOT mapped correctly"
+        echo "  Cluster was created without kind-cluster-config.yaml"
+        echo "  Recreate with: kind delete cluster && cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
+        ((WARNINGS++))
+    fi
 else
     echo -e "${YELLOW}!${NC} Kind cluster 'kind' does not exist"
-    echo "  Create with: kind create cluster --name kind"
+    echo "  Create with: cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
     ((WARNINGS++))
 fi
 

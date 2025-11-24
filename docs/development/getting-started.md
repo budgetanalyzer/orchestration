@@ -7,6 +7,9 @@
 - kubectl (Kubernetes CLI)
 - Helm (for installing Envoy Gateway)
 - Tilt (development workflow orchestration)
+- JDK 24 (for Spring Boot development)
+- Node.js 18+ (for React development)
+- mkcert (for local HTTPS certificates)
 - Git
 
 Check prerequisites with:
@@ -16,52 +19,37 @@ Check prerequisites with:
 
 ## Quick Start
 
-### 1. Clone Repositories
-
-Clone all repositories side-by-side:
+### 1. Clone & Setup
 
 ```bash
-mkdir -p ~/workspace/budget-analyzer
-cd ~/workspace/budget-analyzer
 git clone https://github.com/budgetanalyzer/orchestration.git
-git clone https://github.com/budgetanalyzer/service-common.git
-git clone https://github.com/budgetanalyzer/transaction-service.git
-git clone https://github.com/budgetanalyzer/currency-service.git
-git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
-git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/token-validation-service.git
-git clone https://github.com/budgetanalyzer/permission-service.git
+cd orchestration
+./setup.sh
 ```
 
-### 2. Set Up Local HTTPS
+The setup script will:
+- Clone all service repositories
+- Create Kind cluster with correct port mappings
+- Configure DNS in `/etc/hosts`
+- Install Gateway API and Envoy Gateway
+- Generate TLS certificates
+- Create `.env` from template
 
-Run the setup script to generate trusted local certificates (on your host machine, not in containers):
+### 2. Configure External Services
+
+Edit `.env` with your credentials:
 
 ```bash
-cd orchestration/
-
-# Install mkcert first (if not installed)
-# macOS:   brew install mkcert nss
-# Linux:   See https://github.com/FiloSottile/mkcert#installation
-# Windows: choco install mkcert
-
-# Generate certificates and create Kubernetes TLS secret
-./scripts/dev/setup-k8s-tls.sh
+vim .env
 ```
 
-### 3. Configure Environment Variables
+**Required:**
+- **Auth0**: See [../setup/auth0-setup.md](../setup/auth0-setup.md)
+- **FRED API**: See [../setup/fred-api-setup.md](../setup/fred-api-setup.md)
+
+### 3. Start All Services
 
 ```bash
-# Copy the example file
-cp .env.example .env
-
-# Edit .env with your Auth0 credentials from https://manage.auth0.com/dashboard
-```
-
-### 4. Start All Services
-
-```bash
-cd orchestration/
 tilt up
 ```
 

@@ -1,0 +1,64 @@
+name: Test Setup Script
+
+on:
+  push:
+    branches: [main, setup]
+    paths:
+      - 'setup.sh'
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/test-setup.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Manual trigger button
+
+jobs:
+  test-setup:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate script syntax
+        shell: bash
+        run: |
+          bash -n setup.sh
+          find scripts -name "*.sh" -exec bash -n {} \;
+          find tests -name "*.sh" -exec bash -n {} \;
+
+      - name: Test prerequisite detection
+        shell: bash
+        run: |
+          # setup.sh should fail gracefully when tools are missing
+          if ./setup.sh 2>&1; then
+            echo "ERROR: Should have failed due to missing prerequisites"
+            exit 1
+          fi
+          echo "✓ Correctly detected missing prerequisites"
+
+      - name: Verify test infrastructure
+        if: runner.os == 'Linux'
+        run: |
+          # Check that DinD test files exist
+          test -f tests/setup-flow/docker-compose.test.yml
+          test -f tests/setup-flow/Dockerfile.test-env
+          test -f tests/setup-flow/test-setup-flow.sh
+
+  test-summary:
+    needs: test-setup
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.test-setup.result }}" == "success" ]; then
+            echo "✓ All platforms passed"
+          else
+            echo "✗ Some platforms failed"
+            exit 1
+          fi

@@ -1,0 +1,49 @@
+# docker-compose.test.yml - Orchestrates setup.sh flow testing with Docker-in-Docker
+#
+# This compose file creates:
+# 1. A Docker-in-Docker container that provides the Docker daemon
+# 2. A test runner container with all prerequisites installed
+
+services:
+  # Docker-in-Docker daemon
+  dind:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Test runner with prerequisites
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-env
+    depends_on:
+      dind:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://dind:2375
+      - SKIP_GIT_CLONE=true
+      - BA_TEST_MODE=true
+    volumes:
+      - test-repos:/repos
+      - test-kubeconfig:/home/testuser/.kube
+    networks:
+      - test-network
+    # Keep container running for test execution
+    tty: true
+    stdin_open: true
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  test-repos:
+  test-kubeconfig:

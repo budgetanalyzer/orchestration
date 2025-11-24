@@ -6,7 +6,7 @@ If you discover a security vulnerability in Budget Analyzer, please report it re
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, email **security@budgetanalyzer.ai** with:
+Instead, email **budgetanalyzer@proton.me** with:
 
 1. Description of the vulnerability
 2. Steps to reproduce

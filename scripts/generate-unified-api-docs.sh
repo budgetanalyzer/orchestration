@@ -142,7 +142,7 @@ UNIFIED_SPEC=$(jq -n \
         "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API and Currency Service into a single document for client code generation.",
         "contact": {
             "name": "Bleu Rubin",
-            "email": "support@bleurubin.com"
+            "email": "budgetanalyzer@proton.me"
         },
         "license": {
             "name": "MIT",

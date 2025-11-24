@@ -250,7 +250,7 @@ Each microservice is maintained in its own repository:
 
 ### Autonomous AI Execution Pattern
 
-**Key principle**: The only effective way to run AI agents is autonomously. Set clear success criteria, then run with `--dangerously-skip-permissions`.
+**Key principle**: An effective technique for running AI agents is autonomous execution. Set clear success criteria, then run with `--dangerously-skip-permissions`.
 
 **For detailed understanding of**:
 - Why autonomous execution is essential for AI agents

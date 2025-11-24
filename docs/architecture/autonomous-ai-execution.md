@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Core Principle**: The only effective way to run AI coding agents is to give them a clear task, define success criteria, and let them execute autonomously in a safe sandbox.
+**Core Principle**: An effective technique for running AI coding agents is to give them a clear task, define success criteria, and let them execute autonomously in a safe sandbox.
 
 This document explains the architectural pattern that makes this possible: containerized AI agent execution with full privileges, isolated from the host system.
 

@@ -294,14 +294,6 @@ tilt up
 tilt down
 ```
 
-### Tilt UI and Localhost CI/CD
-
-**Tilt UI** (http://localhost:10350) provides resource status, logs, and action buttons.
-
-**Localhost CI/CD**: service-common has special behavior. Clicking the `service-common-compile` button in Tilt UI automatically triggers recompilation of all downstream services (transaction-service, currency-service, permission-service, session-gateway, token-validation-service).
-
-This simulates CI/CD dependency graphs locally - when the shared library changes, all consumers rebuild automatically. The foundation is there (dependency tracking, automatic downstream triggers), but it didn't get taken further. Think of it as CI/CD-lite for local development.
-
 ### Troubleshooting
 
 **Quick commands**:

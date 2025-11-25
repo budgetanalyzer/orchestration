@@ -73,9 +73,8 @@ Open https://app.budgetanalyzer.localhost
 ## Documentation
 
 - [Getting Started](docs/development/getting-started.md)
-- [Architecture Overview](docs/architecture/overview.md)
+- [Architecture Overview](docs/architecture/system-overview.md)
 - [Development Guide](CLAUDE.md)
-- [Troubleshooting](docs/development/troubleshooting.md)
 
 ## Service Repositories
 

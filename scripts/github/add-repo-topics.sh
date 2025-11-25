@@ -56,34 +56,40 @@ echo "Adding topics to Budget Analyzer repositories..."
 echo ""
 
 set_topics "orchestration" \
-    microservices kubernetes tilt reference-architecture spring-boot oauth2 bff-pattern ai-assisted-development enterprise-security
+    microservices kubernetes tilt reference-architecture spring-boot oauth2 bff-pattern ai-assisted-development enterprise-security ai-native
 
 set_topics "session-gateway" \
-    bff spring-cloud-gateway oauth2 redis-session spring-boot
+    bff spring-cloud-gateway oauth2 redis-session spring-boot ai-native ai-assisted-development
 
 set_topics "token-validation-service" \
-    jwt spring-boot oauth2 microservice
+    jwt spring-boot oauth2 microservice ai-native ai-assisted-development
 
 set_topics "transaction-service" \
-    spring-boot microservice rest-api postgresql
+    spring-boot microservice rest-api postgresql ai-native ai-assisted-development
 
 set_topics "currency-service" \
-    spring-boot microservice rest-api redis
+    spring-boot microservice rest-api redis ai-native ai-assisted-development
 
 set_topics "permission-service" \
-    spring-boot microservice authorization rbac
+    spring-boot microservice authorization rbac ai-native ai-assisted-development
 
 set_topics "budget-analyzer-web" \
-    react typescript vite casl frontend
+    react typescript vite casl frontend ai-native ai-assisted-development
 
 set_topics "service-common" \
-    spring-boot java shared-library
+    spring-boot java shared-library ai-native ai-assisted-development
 
 set_topics "checkstyle-config" \
-    checkstyle java code-quality
+    checkstyle java code-quality ai-native ai-assisted-development
 
 set_topics "basic-repository-template" \
-    template spring-boot
+    template spring-boot ai-native ai-assisted-development
+
+set_topics "architecture-conversations" \
+    architecture documentation claude-code ai-native ai-assisted-development
+
+set_topics "claude-discovery" \
+    claude-code ai-native ai-assisted-development
 
 echo ""
 echo "Done! Topics added to all repositories."

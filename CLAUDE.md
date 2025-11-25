@@ -96,6 +96,7 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 **Two entry points**:
 - `app.budgetanalyzer.localhost` → Session Gateway (browser auth, session cookies)
 - `api.budgetanalyzer.localhost` → NGINX (JWT validation, routing)
+  - `api.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:
 - Same-origin architecture = no CORS issues

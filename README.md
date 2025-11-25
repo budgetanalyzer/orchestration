@@ -32,6 +32,8 @@ tilt up
 
 Open https://app.budgetanalyzer.localhost
 
+API Documentation: https://api.budgetanalyzer.localhost/api/docs
+
 ## Documentation
 
 - [Getting Started](docs/development/getting-started.md)

@@ -16,7 +16,7 @@
 - Git 2.40+
 
 **For Backend Development (Optional):**
-- JDK 21+ (for running services outside Docker)
+- JDK 24 (for running services outside Docker)
 - Gradle 8.5+ or use `./gradlew`
 
 **For Frontend Development (Optional):**

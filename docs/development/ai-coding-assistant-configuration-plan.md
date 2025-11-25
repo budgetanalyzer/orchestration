@@ -27,7 +27,7 @@ Maintain a single source of truth using standard markdown that works across all 
 - Implement domain-driven design patterns
 
 ## Code Standards
-- Use Java 17+ features
+- Use Java 24 features
 - Prefer immutable objects
 - Write comprehensive unit tests with JUnit 5
 

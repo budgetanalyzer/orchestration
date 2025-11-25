@@ -2,11 +2,15 @@
 
 ## Overview
 
-This plan outlines the steps to establish Budget Analyzer as a professional open source organization targeting enterprise architects and senior developers.
+This plan outlines the steps to establish Budget Analyzer as a reference architecture for discussing microservices patterns with enterprise architects.
 
-**Philosophy**: Minimal and simple. Clone and play.
+**Philosophy**: Minimal and simple. Clone and play. Discussion over code.
 
-**Target Audience**: Enterprise architects and senior developers, not beginners.
+**Target Audience**: Enterprise architects and senior developers who want to discuss patterns, not beginners looking for a tutorial.
+
+**Current Goal**: Find other architects to discuss these patterns with, not grow a user base for a budget app.
+
+**Project Status**: The reference architecture is complete. See [system-overview.md](../architecture/system-overview.md#intentional-boundaries) for intentional boundaries (data ownership is left as an exercise).
 
 ---
 
@@ -102,25 +106,27 @@ Reference: [deployment-architecture-gcp-demo-mode.md](../architecture/deployment
 
 ---
 
-## Phase 4: Discoverability & Marketing
+## Phase 4: Discoverability & Architect Outreach
 
 ### 4.1 README Enhancements
 
 - [x] Add architecture diagram to org README
 - [x] ~~Create "Why Budget Analyzer?" section~~ (skipped - architecture speaks for itself)
 
-### 4.2 External Presence
+### 4.2 Finding Other Architects
 
-- [ ] Submit to [awesome-microservices](https://github.com/mfornos/awesome-microservices)
-- [ ] Consider blog post about AI-assisted development journey
-- [ ] Highlight **AI-first containerized development architecture** as key differentiator:
+The goal is conversations about patterns, not user growth.
+
+- [ ] Submit to [awesome-microservices](https://github.com/mfornos/awesome-microservices) - as reference architecture
+- [ ] Blog post about AI-assisted development journey - share what we learned
+- [ ] Highlight **AI-first containerized development architecture** as discussion topic:
   - Effective technique for AI agents: autonomous execution with `--dangerously-skip-permissions`
   - VS Code devcontainer sandbox enables safe sudo access for AI agents
   - Docker wormhole pattern (PR #3) allows TestContainers integration tests
   - Test-driven AI pattern: define success criteria → run autonomously → verify
   - See [autonomous-ai-execution.md](../architecture/autonomous-ai-execution.md)
-- [ ] Add project to relevant Spring Boot/Kubernetes showcases
-- [ ] Share on relevant subreddits (r/java, r/kubernetes, r/microservices)
+- [ ] Frame data ownership as an open question: "Here's the problem, how would you solve it?"
+- [ ] Share on relevant subreddits (r/java, r/kubernetes, r/microservices) - seeking discussion, not users
 
 ---
 

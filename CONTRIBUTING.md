@@ -1,12 +1,28 @@
 # Contributing to Budget Analyzer
 
-Budget Analyzer is a reference architecture for enterprise architects and senior developers. We welcome contributions that improve the patterns, documentation, or implementation.
+Budget Analyzer is a reference architecture for enterprise architects and senior developers. This project has reached its intended scope - we're now focused on architectural discussions rather than new features.
+
+## What We're Looking For
+
+**High value contributions:**
+- Documentation improvements and clarifications
+- Architectural discussions (open an Issue or Discussion)
+- Bug fixes in existing functionality
+- Pattern explanations that help other architects
+
+**Out of scope:**
+- New features or services
+- Data ownership implementation ("which transactions belong to which user?")
+- Multi-tenancy / organization isolation
+
+The data ownership boundary is intentional - see [system-overview.md](docs/architecture/system-overview.md#intentional-boundaries) for why we stopped there.
 
 ## Philosophy
 
 - **Minimal and simple** - Less is more. Avoid over-engineering.
 - **Clone and play** - The system should work out of the box with minimal setup.
 - **Production parity** - Development environment mirrors production.
+- **Discussion over code** - We'd rather talk about patterns than generate more code.
 
 ## Getting Started
 

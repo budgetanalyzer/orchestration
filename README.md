@@ -1,6 +1,23 @@
 # Budget Analyzer
 
-A production-grade microservices financial management system built as an open-source learning resource for architects exploring AI-assisted development.
+A reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
+
+## Architecture Boundaries
+
+This project demonstrates production-grade patterns:
+
+- **Authentication**: OAuth2/OIDC with Auth0, BFF pattern, session management
+- **Authorization Infrastructure**: Roles, permissions, delegations (permission-service)
+- **API Gateway**: JWT validation, routing, rate limiting (NGINX + Envoy)
+- **Microservices**: Spring Boot, Kubernetes, Tilt local development
+
+It intentionally leaves unsolved:
+
+- **Data ownership**: Which transactions belong to which user?
+- **Cross-service user scoping**: How does transaction-service know to filter by owner?
+- **Multi-tenancy**: Organization-level data isolation
+
+This boundary is deliberate. Data ownership is domain-specific and opinionated - we surface the problem rather than prescribing a solution. We're more interested in discussing these patterns with other architects than generating more code.
 
 ## Quick Start
 

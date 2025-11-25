@@ -1,8 +1,16 @@
 # Users, Roles & Permissions Reference Implementation Plan
 
-> **Status**: Planning
+> **Status**: Documentation Only - Not Implemented
 > **Created**: 2025-11-20
-> **Goal**: Create a reference implementation of best practices for authorization in Spring Boot + Auth0 + React
+> **Goal**: Document the authorization challenge for architects adapting this reference
+
+---
+
+**IMPORTANT**: This plan documents the authorization architecture challenge but is **NOT implemented**. The permission-service exists and manages authorization metadata (roles, permissions, delegations), but the cross-service data ownership problem ("which transactions belong to which user?") is intentionally left as an exercise.
+
+We're surfacing the problem, not prescribing the solution. Data ownership is domain-specific and opinionated - see [system-overview.md](../architecture/system-overview.md#intentional-boundaries) for why we stopped here.
+
+---
 
 ## Executive Summary
 

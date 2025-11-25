@@ -2,9 +2,26 @@
 
 ## Project Overview
 
-This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a production-grade, microservices-based financial management system.
+This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
 
 **Purpose**: Manages cross-service concerns, local development setup, and deployment coordination. Individual service code lives in separate repositories.
+
+## Project Status: Reference Architecture Complete
+
+This project has reached its intended scope. We are no longer actively developing Budget Analyzer features - we're interested in discussing these patterns with other architects.
+
+**What's implemented:**
+- Authentication: OAuth2/OIDC with Auth0, BFF pattern, session management
+- Authorization infrastructure: Roles, permissions, delegations (permission-service)
+- API Gateway: JWT validation, routing (NGINX + Envoy)
+- Microservices patterns: Spring Boot, Kubernetes, Tilt
+
+**What's intentionally left unsolved:**
+- **Data ownership**: Which transactions belong to which user?
+- **Cross-service user scoping**: How does transaction-service filter by owner?
+- **Multi-tenancy**: Organization-level data isolation
+
+This boundary is deliberate. Data ownership is domain-specific and opinionated. The permission-service manages authorization metadata (who has what roles), but propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
 
 ## Development Environment Requirements
 
@@ -241,6 +258,12 @@ Each microservice is maintained in its own repository:
 6. **Living Documentation**: Verify accuracy by running discovery commands
 
 ## Notes for Claude Code
+
+**Project Focus**: This reference architecture is complete. Current priorities are:
+1. Documentation improvements and clarifications
+2. Architectural discussions and pattern explanations
+3. Bug fixes in existing functionality
+4. NOT new features or data-ownership implementation
 
 **CRITICAL - Prerequisites First**: Before implementing any plan or feature:
 1. Check for prerequisites in documentation (e.g., "Prerequisites: service-common Enhancement")

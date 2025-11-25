@@ -2,7 +2,27 @@
 
 This document outlines planned features and enhancements across the Budget Analyzer application. For current implementation details, see individual service CLAUDE.md files.
 
-**Last Updated**: 2025-11-11
+**Last Updated**: 2025-11-25
+
+---
+
+## Project Status: Reference Architecture Complete
+
+This project has reached its intended scope as a reference architecture. We are no longer actively developing Budget Analyzer features.
+
+**Current focus:**
+- Documentation improvements
+- Architectural discussions
+- Bug fixes in existing functionality
+
+**Out of scope (intentionally left as exercises):**
+- Data ownership: "Which transactions belong to which user?"
+- Cross-service user scoping
+- Multi-tenancy / organization isolation
+
+See [system-overview.md](architecture/system-overview.md#intentional-boundaries) for why this boundary exists.
+
+The items below remain as reference for what a production system might need - but we're not actively implementing them.
 
 ---
 

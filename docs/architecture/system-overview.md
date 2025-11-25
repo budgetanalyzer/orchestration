@@ -246,6 +246,53 @@ tilt get uiresources
 - **Transactional outbox**: Guarantees event delivery
 - **Idempotent consumers**: Services handle duplicate events
 
+## Intentional Boundaries
+
+This reference architecture deliberately stops before solving data ownership. Understanding where we stopped - and why - is as valuable as understanding what we built.
+
+### What's Implemented
+
+**Authentication & Sessions:**
+- OAuth2/OIDC flows with Auth0
+- BFF pattern (browser never sees JWT)
+- Redis-backed session management
+- Token refresh and lifecycle
+
+**Authorization Infrastructure:**
+- permission-service: Roles, permissions, delegations
+- Temporal tracking for compliance
+- Cascading revocation
+- Audit logging
+
+**Gateway Patterns:**
+- Envoy: SSL termination, ingress
+- Session Gateway: Session-to-JWT translation
+- NGINX: JWT validation, resource routing
+- Token Validation Service: JWKS-based verification
+
+### What's Left as an Exercise
+
+**Data Ownership** - the core unsolved problem:
+- Which transactions belong to which user?
+- How does transaction-service know to filter queries by owner?
+- How does user identity propagate from gateway to data layer?
+
+**Cross-Service User Scoping:**
+- Services receive a validated JWT with user identity
+- But: No implemented pattern for scoping queries by that identity
+- This is domain-specific and we're not prescribing a solution
+
+**Multi-Tenancy:**
+- permission-service schema includes `organization_id`
+- But: Organization-level isolation is not implemented
+- Patterns exist (row-level security, tenant headers) - we leave the choice to you
+
+### Why This Boundary?
+
+Data ownership is deeply domain-specific. A financial app might scope by account ownership, delegation chains, or organization membership. A SaaS product might use tenant IDs. A social app might use visibility rules.
+
+We demonstrate the infrastructure. You architect the ownership model.
+
 ## Deployment Architecture
 
 ### Local Development

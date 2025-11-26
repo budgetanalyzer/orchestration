@@ -1,5 +1,25 @@
 # Budget Analyzer - Orchestration Repository
 
+## Tree Position
+
+**Archetype**: coordinator
+**Scope**: budgetanalyzer ecosystem
+**Role**: System orchestrator; coordinates cross-cutting concerns and deployment
+
+### Relationships
+- **Coordinates**: All service repos (via patterns, not direct writes)
+- **Observed by**: architecture-conversations
+
+### Permissions
+- **Read**: All siblings via `../`
+- **Write**: This repository; capture conversations to `../architecture-conversations/`
+
+### Discovery
+```bash
+# What I coordinate
+ls -d /workspace/*-service /workspace/session-gateway /workspace/budget-analyzer-web
+```
+
 ## Project Overview
 
 This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
@@ -318,4 +338,8 @@ Claude's training data may default to an outdated year. When using WebSearch for
 1. Check `<env>Today's date</env>` for the actual current year
 2. Include that year in searches (e.g., "Spring Boot best practices 2025" not 2024)
 3. This ensures results reflect current standards, not outdated patterns
+
+## Conversation Capture
+
+When the user asks to save this conversation, write it to `/workspace/architecture-conversations/conversations/` following the format in INDEX.md.
 

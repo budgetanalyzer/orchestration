@@ -43,29 +43,11 @@ This project has reached its intended scope. We are no longer actively developin
 
 This boundary is deliberate. Data ownership is domain-specific and opinionated. The permission-service manages authorization metadata (who has what roles), but propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
 
-## Development Environment Requirements
+## Development Environment
 
-**This project is designed for AI-assisted development. Containerized agents are the default and expected approach.**
+**This project is designed for AI-assisted development.**
 
-### AI-Assisted Development (Primary Approach)
-
-**Required**: VS Code with Dev Containers extension
-
-**Why containerized agents are mandatory**:
-- AI agents need safe sudo access (container provides isolation from host system)
-- Consistent tooling pre-installed (JDK, Node.js, Maven, Docker CLI)
-- Workspace-wide context (all repositories accessible under `/workspace`)
-
-**Not supported**:
-- **Cursor**: Closed source, violates open source tool policy
-- **IntelliJ IDEA**: No containerized agent support
-- **Any editor without containerized agent architecture**: Cannot provide safe AI execution environment
-
-This is non-negotiable. AI agents operating outside containerized environments pose security risks and lack the consistent tooling required for this project.
-
-### Traditional Development (Not the Focus)
-
-You can work on this codebase without AI using any IDE (IntelliJ IDEA, VS Code, etc.), but that's the before times. This is an AI-first learning resource for architects exploring AI-assisted development.
+For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
 
 ## Architecture Principles
 

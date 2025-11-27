@@ -21,11 +21,12 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated -
 
 ## Quick Start
 
-See **[Getting Started](docs/development/getting-started.md)** for complete setup instructions including prerequisites.
+**For development environment setup**, use the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
+
+Once in the devcontainer:
 
 ```bash
-git clone https://github.com/budgetanalyzer/orchestration.git
-cd orchestration
+cd /workspace/orchestration
 ./setup.sh   # Will tell you if prerequisites are missing
 tilt up
 ```

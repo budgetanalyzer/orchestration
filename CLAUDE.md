@@ -277,6 +277,13 @@ Each microservice is maintained in its own repository:
 3. Do NOT attempt to hack around missing prerequisites - this leads to broken implementations that must be deleted
 4. Complete prerequisites first, then return to the original task
 
+### Planning Transparency
+
+**Write plans to `docs/plans/`, not hidden locations.** When planning work:
+- Create plan files in `docs/plans/` so they're visible and version-controlled
+- Don't use ephemeral plan modes that hide work from the user
+- Plans should be collaborative artifacts, not invisible scaffolding
+
 ### Autonomous AI Execution Pattern
 
 **Key principle**: An effective technique for running AI agents is autonomous execution. Set clear success criteria, then run with `--dangerously-skip-permissions`.

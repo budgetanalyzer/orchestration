@@ -130,11 +130,11 @@ else
 fi
 
 # =============================================================================
-# Step 4: Install Gateway API and Envoy Gateway
+# Step 4: Install Gateway API CRDs
 # =============================================================================
-print_step "Setting up Gateway API and Envoy Gateway..."
+print_step "Setting up Gateway API CRDs..."
 
-# Check Gateway API CRDs
+# Gateway API CRDs (required before Envoy Gateway, which Tilt installs via Helm)
 if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
     print_success "Gateway API CRDs already installed"
 else
@@ -143,16 +143,7 @@ else
     print_success "Gateway API CRDs installed"
 fi
 
-# Check Envoy Gateway
-if kubectl get deployment -n envoy-gateway-system envoy-gateway &> /dev/null; then
-    print_success "Envoy Gateway already installed"
-else
-    print_step "Installing Envoy Gateway..."
-    kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.2.1/install.yaml
-    print_step "Waiting for Envoy Gateway to be ready..."
-    kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
-    print_success "Envoy Gateway installed and ready"
-fi
+# Note: Envoy Gateway is installed by Tilt via Helm (see Tiltfile)
 
 # =============================================================================
 # Step 5: Generate TLS certificates

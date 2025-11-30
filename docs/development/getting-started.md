@@ -32,11 +32,12 @@ Want to see the microservices architecture running locally? Useful for understan
 1. File → Open Folder → `/workspace/orchestration`
 2. Follow the steps below
 
-From the devcontainer terminal:
+From your **host terminal** (not the devcontainer):
 
 ```bash
-cd /workspace/orchestration
-./setup.sh        # Creates cluster, certs, DNS
+cd path/to/workspace/orchestration
+./setup.sh        # Creates k3d cluster, certs, DNS
+cp .env.example .env
 vim .env          # Add Auth0 + FRED credentials (see below)
 tilt up           # Start everything
 ```

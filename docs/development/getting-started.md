@@ -17,24 +17,7 @@ tilt up
 
 Open https://app.budgetanalyzer.localhost when services are green.
 
----
-
-## Before You Start
-
-You need these tools installed on your **host machine** (not in containers):
-
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` |
-| [Kind](https://kind.sigs.k8s.io/) | Local Kubernetes | `brew install kind` |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Kubernetes CLI | `brew install kubectl` |
-| [Helm](https://helm.sh/) | Kubernetes packages | `brew install helm` |
-| [Tilt](https://tilt.dev/) | Dev orchestration | `brew install tilt-dev/tap/tilt` |
-| [mkcert](https://github.com/FiloSottile/mkcert) | Local HTTPS certs | `brew install mkcert` |
-
-**Linux?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it shows install commands for each missing tool.
-
-**VS Code + Dev Containers**: Recommended for AI-assisted development. The devcontainer provides a sandboxed Ubuntu environment with all build tools pre-installed.
+> **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
 
 ## External Services (~10 min one-time setup)
 

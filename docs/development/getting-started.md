@@ -1,14 +1,24 @@
 # Getting Started
 
-## Entry Point
-
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
 ```
 
-Open in VS Code → "Reopen in Container" when prompted. All repos are cloned automatically.
+Open in VS Code → "Reopen in Container" when prompted.
 
-From here you can explore the codebase, read architecture-conversations, or run the full system.
+You're now in the devcontainer with all repos at `/workspace`. But workspace itself is just the entry point — open the repo you want to work in:
+
+**File → Open Folder → /workspace → pick a repo**
+
+> **Don't just click repos in the sidebar.** That browses files but doesn't load the repo's CLAUDE.md. You need File → Open Folder to launch a new VS Code instance with the right context.
+
+| Repo | What's there |
+|------|--------------|
+| `architecture-conversations` | Architectural discourse and patterns |
+| `orchestration` | System orchestration, run the full app |
+| `transaction-service`, etc. | Individual microservices |
+
+Each repo has its own CLAUDE.md with context for that domain.
 
 ---
 

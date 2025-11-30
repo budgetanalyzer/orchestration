@@ -1,18 +1,26 @@
-# Getting Started with Local Development
+# Getting Started
 
-## Quick Start
+## Entry Point
 
 ```bash
-# 1. Clone and run setup
-git clone https://github.com/budgetanalyzer/orchestration.git
-cd orchestration
-./setup.sh
+git clone https://github.com/budgetanalyzer/workspace.git
+```
 
-# 2. Add your Auth0 + FRED credentials (see below)
-vim .env
+Open in VS Code → "Reopen in Container" when prompted. All repos are cloned automatically.
 
-# 3. Start everything
-tilt up
+From here you can explore the codebase, read architecture-conversations, or run the full system.
+
+---
+
+## Running Budget Analyzer
+
+From the devcontainer terminal:
+
+```bash
+cd /workspace/orchestration
+./setup.sh        # Creates cluster, certs, DNS
+vim .env          # Add Auth0 + FRED credentials (see below)
+tilt up           # Start everything
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.

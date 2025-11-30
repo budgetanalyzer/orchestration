@@ -1,83 +1,61 @@
 # Getting Started with Local Development
 
-## Prerequisites
-
-**This project is designed for AI-assisted development.** Containerized agents are mandatory.
-
-### Required Setup
-
-**VS Code with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)**
-
-The devcontainer provides:
-- Ubuntu 24.04 sandbox with safe sudo access for AI agents
-- Pre-installed: JDK 24, Node.js, Maven, Docker CLI, Git
-- Workspace-wide access to all repositories
-- Isolation from your host system
-
-**Host machine tools:**
-- Docker ([installation guide](https://docs.docker.com/get-docker/))
-- Kind (local Kubernetes cluster)
-- kubectl (Kubernetes CLI)
-- Helm (for installing Envoy Gateway)
-- Tilt (development workflow orchestration)
-- mkcert (for local HTTPS certificates)
-
-**Not supported**:
-- **Cursor**: Closed source
-- **IntelliJ IDEA**: No containerized agent support
-- **Any editor without containerized agent architecture**
-
-Check host prerequisites:
-```bash
-./scripts/dev/check-tilt-prerequisites.sh
-```
-
-> **Note**: You can work on this codebase without AI using any IDE, but that's not the focus of this project. This is an AI-first learning resource for architects exploring AI-assisted development.
-
 ## Quick Start
 
-### 1. Clone & Setup
-
 ```bash
+# 1. Clone and run setup
 git clone https://github.com/budgetanalyzer/orchestration.git
 cd orchestration
 ./setup.sh
-```
 
-The setup script will:
-- Clone all service repositories
-- Create Kind cluster with correct port mappings
-- Configure DNS in `/etc/hosts`
-- Install Gateway API and Envoy Gateway
-- Generate TLS certificates
-- Create `.env` from template
+# 2. Add your Auth0 + FRED credentials (see below)
+vim .env
 
-### 2. Configure External Services
-
-Edit `.env` with your credentials:
-
-```bash
-vi .env
-```
-
-**Required:**
-- **Auth0**: See [../setup/auth0-setup.md](../setup/auth0-setup.md)
-- **FRED API**: See [../setup/fred-api-setup.md](../setup/fred-api-setup.md)
-
-### 3. Start All Services
-
-```bash
+# 3. Start everything
 tilt up
 ```
 
-This will:
-- Build all service images
-- Deploy to local Kind cluster
-- Set up Envoy Gateway for SSL termination
-- Configure NGINX for JWT validation and routing
-- Start PostgreSQL, Redis, RabbitMQ
+Open https://app.budgetanalyzer.localhost when services are green.
 
-### 5. Access the Application
+---
+
+## Before You Start
+
+You need these tools installed on your **host machine** (not in containers):
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` |
+| [Kind](https://kind.sigs.k8s.io/) | Local Kubernetes | `brew install kind` |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Kubernetes CLI | `brew install kubectl` |
+| [Helm](https://helm.sh/) | Kubernetes packages | `brew install helm` |
+| [Tilt](https://tilt.dev/) | Dev orchestration | `brew install tilt-dev/tap/tilt` |
+| [mkcert](https://github.com/FiloSottile/mkcert) | Local HTTPS certs | `brew install mkcert` |
+
+**Linux?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it shows install commands for each missing tool.
+
+**VS Code + Dev Containers**: Recommended for AI-assisted development. The devcontainer provides a sandboxed Ubuntu environment with all build tools pre-installed.
+
+## External Services (~10 min one-time setup)
+
+The app needs two external accounts. Both are free:
+
+### Auth0 (authentication)
+
+1. Create account at [auth0.com](https://auth0.com)
+2. Create Application → "Regular Web Application"
+3. Copy Domain, Client ID, Client Secret to `.env`
+4. Full guide: [auth0-setup.md](../setup/auth0-setup.md)
+
+### FRED API (exchange rates)
+
+1. Get free key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html)
+2. Copy to `.env`
+3. Full guide: [fred-api-setup.md](../setup/fred-api-setup.md)
+
+---
+
+## Access the Application
 
 - **Tilt UI**: http://localhost:10350 (logs, status, buttons)
 - **Application**: https://app.budgetanalyzer.localhost

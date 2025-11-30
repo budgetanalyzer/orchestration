@@ -23,19 +23,7 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated -
 
 ## Quick Start
 
-**For development environment setup**, use the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
-
-Once in the devcontainer:
-
-```bash
-cd /workspace/orchestration
-./setup.sh   # Will tell you if prerequisites are missing
-tilt up
-```
-
-Open https://app.budgetanalyzer.localhost
-
-API Documentation: https://api.budgetanalyzer.localhost/api/docs
+See [Getting Started](docs/development/getting-started.md) for complete setup instructions.
 
 ## Documentation
 

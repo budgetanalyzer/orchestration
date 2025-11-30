@@ -6,23 +6,27 @@ git clone https://github.com/budgetanalyzer/workspace.git
 
 Open in VS Code → "Reopen in Container" when prompted.
 
-You're now in the devcontainer with all repos at `/workspace`. But workspace itself is just the entry point — open the repo you want to work in:
-
-**File → Open Folder → /workspace → pick a repo**
-
-> **Don't just click repos in the sidebar.** That browses files but doesn't load the repo's CLAUDE.md. You need File → Open Folder to launch a new VS Code instance with the right context.
-
-| Repo | What's there |
-|------|--------------|
-| `architecture-conversations` | Architectural discourse and patterns |
-| `orchestration` | System orchestration, run the full app |
-| `transaction-service`, etc. | Individual microservices |
-
-Each repo has its own CLAUDE.md with context for that domain.
+You're now in the devcontainer. Don't click repos in the sidebar — that browses files but doesn't load the repo's CLAUDE.md. Use File → Open Folder to get the right Claude context.
 
 ---
 
-## Running Budget Analyzer
+## Talk to Architecture Claude
+
+Want to discuss AI-native architecture patterns, explore how this system is designed, or understand the decisions behind it?
+
+1. File → Open Folder → `/workspace/architecture-conversations`
+2. Start a Claude Code conversation
+
+Claude has full context on the architectural patterns, 80+ prior conversations, and the relationships between repos.
+
+---
+
+## Run the Budget Analyzer App
+
+Want to see the microservices architecture running locally? Useful for understanding how the pieces connect or making changes to services.
+
+1. File → Open Folder → `/workspace/orchestration`
+2. Follow the steps below
 
 From the devcontainer terminal:
 

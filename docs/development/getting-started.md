@@ -1,5 +1,7 @@
 # Getting Started
 
+**Tested with:** VS Code, Claude Code (extension or terminal), Anthropic account.
+
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
 ```

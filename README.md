@@ -1,6 +1,8 @@
-# Budget Analyzer
+# Budget Analyzer Orchestration
 
-A reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
+> "Archetype: coordinator. Role: System orchestrator; coordinates cross-cutting concerns and deployment."
+>
+> — [CLAUDE.md](CLAUDE.md#tree-position)
 
 ## Architecture Boundaries
 

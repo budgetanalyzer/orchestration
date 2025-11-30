@@ -187,23 +187,13 @@ fi
 
 echo ""
 
-# 7. Check service API documentation
+# 7. Check service API documentation (live endpoints, not static files)
 echo "## Service API Documentation"
 echo ""
 
-for service in "transaction-service" "currency-service"; do
-    service_path="../$service"
-    if [ -d "$service_path" ]; then
-        openapi_path="$service_path/docs/api/openapi.yaml"
-        if [ -f "$openapi_path" ]; then
-            check_item 0 "$service has OpenAPI spec"
-        else
-            check_item 1 "$service missing OpenAPI spec (expected at docs/api/openapi.yaml)"
-        fi
-    else
-        note_item "$service not found (may not be cloned)"
-    fi
-done
+note_item "Services generate OpenAPI specs at runtime via springdoc-openapi"
+note_item "Access live specs at /v3/api-docs when services are running"
+note_item "Unified spec available at https://api.budgetanalyzer.localhost/api/docs/"
 
 echo ""
 

@@ -5,11 +5,14 @@
 # Usage: ./scripts/generate-unified-api-docs.sh
 #
 # This script will:
-# 1. Fetch OpenAPI specs from all running microservices
+# 1. Fetch OpenAPI specs from all running microservices (live endpoints)
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
 #
 # The unified spec can be used by clients to generate client libraries
+#
+# Note: Individual services generate their own specs at runtime via springdoc-openapi.
+# This script does NOT write static files to service repos - that's the anti-pattern.
 
 set -e
 
@@ -64,39 +67,7 @@ if command -v yq &> /dev/null; then
     fi
 fi
 
-# Service configurations: name|url|repo-path (using | as delimiter to avoid conflict with : in URLs)
-SERVICES=(
-    "transaction-service|http://localhost:8082/transaction-service/v3/api-docs.yaml|../transaction-service"
-    "currency-service|http://localhost:8084/currency-service/v3/api-docs.yaml|../currency-service"
-    "permission-service|http://localhost:8086/permission-service/v3/api-docs.yaml|../permission-service"
-)
-
-print_info "Fetching OpenAPI specs from microservices..."
-
-# Fetch and save individual service specs
-for SERVICE_CONFIG in "${SERVICES[@]}"; do
-    IFS='|' read -r SERVICE_NAME SERVICE_URL REPO_PATH <<< "$SERVICE_CONFIG"
-
-    print_info "Fetching $SERVICE_NAME..."
-
-    # Check if repo exists
-    if [ ! -d "$REPO_ROOT/$REPO_PATH" ]; then
-        print_warning "Repository not found at $REPO_ROOT/$REPO_PATH - skipping individual save"
-    else
-        # Create docs/api directory if needed
-        SERVICE_DOCS_DIR="$REPO_ROOT/$REPO_PATH/docs/api"
-        mkdir -p "$SERVICE_DOCS_DIR"
-
-        # Fetch YAML and save to service repo
-        if curl -sf "$SERVICE_URL" -o "$SERVICE_DOCS_DIR/openapi.yaml" 2>/dev/null; then
-            print_success "✓ Saved to $REPO_PATH/docs/api/openapi.yaml"
-        else
-            print_warning "Failed to save individual spec to $REPO_PATH/docs/api/openapi.yaml"
-        fi
-    fi
-done
-
-# Also fetch JSON for merging (use gateway endpoints)
+# Fetch JSON for merging (use gateway endpoints)
 TRANSACTION_SERVICE="https://api.budgetanalyzer.localhost/api/transaction-service/v3/api-docs"
 CURRENCY_SERVICE="https://api.budgetanalyzer.localhost/api/currency-service/v3/api-docs"
 PERMISSION_SERVICE="https://api.budgetanalyzer.localhost/api/permission-service/v3/api-docs"
@@ -142,7 +113,7 @@ UNIFIED_SPEC=$(jq -n \
         "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API and Currency Service into a single document for client code generation.",
         "contact": {
             "name": "Bleu Rubin",
-            "email": "budgetanalyzer@proton.me"
+            "email": "contact@budgetanalyzer.org"
         },
         "license": {
             "name": "MIT",

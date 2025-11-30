@@ -17,7 +17,7 @@ Want to discuss AI-native architecture patterns, explore how this system is desi
 1. File → Open Folder → `/workspace/architecture-conversations`
 2. Start a Claude Code conversation
 
-Claude has full context on the architectural patterns, 80+ prior conversations, and the relationships between repos.
+Claude has full context on the architectural patterns and the relationships between repos.
 
 ---
 

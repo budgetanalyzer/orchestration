@@ -68,11 +68,11 @@ For containerized development environment setup, see the [workspace](https://git
 # List all running resources
 tilt get uiresources
 
-# View pod status
-kubectl get pods -n budget-analyzer
+# View pod status (services run in default namespace)
+kubectl get pods
 
 # View service endpoints
-kubectl get svc -n budget-analyzer
+kubectl get svc
 ```
 
 **Service Types**:
@@ -85,6 +85,13 @@ kubectl get svc -n budget-analyzer
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, JWT validation, and load balancing
 
 **Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
+
+**Health Probes**: All Spring Boot services use a three-probe pattern:
+- **startupProbe**: Allows up to 120s for slow-starting JVM apps (5s × 24 checks). Pod won't receive traffic until startup succeeds.
+- **readinessProbe**: Checks if pod can accept traffic (10s interval)
+- **livenessProbe**: Checks if pod is healthy (20s interval)
+
+This prevents "connection refused" errors during deployments when services are still starting.
 
 ## BFF + API Gateway Hybrid Pattern
 
@@ -115,7 +122,7 @@ curl -v https://app.budgetanalyzer.localhost/actuator/health
 curl -v https://api.budgetanalyzer.localhost/health
 
 # View service ports
-kubectl get svc -n budget-analyzer
+kubectl get svc
 ```
 
 **When to consult detailed documentation**:
@@ -136,7 +143,7 @@ kubectl get svc -n budget-analyzer
 tilt get uiresources
 
 # View deployed images
-kubectl get pods -n budget-analyzer -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
+kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
 ```
 
 **Stack Patterns**:
@@ -190,14 +197,14 @@ tilt down
 
 **Quick commands**:
 ```bash
-# Check pod status
-kubectl get pods -n budget-analyzer
+# Check pod status (services run in default namespace)
+kubectl get pods
 
 # View logs for a service
-kubectl logs -n budget-analyzer deployment/nginx-gateway
+kubectl logs deployment/nginx-gateway
 
 # Check NGINX configuration validity
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec deployment/nginx-gateway -- nginx -t
 
 # View Envoy Gateway logs
 kubectl logs -n envoy-gateway-system deployment/envoy-gateway

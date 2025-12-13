@@ -90,6 +90,9 @@ spec:
             secretKeyRef:
               name: fred-api-credentials
               key: api-key
+        # Permission service for authorization
+        - name: PERMISSION_SERVICE_URL
+          value: "http://permission-service:8086/permission-service"
         resources:
           requests:
             memory: "256Mi"
@@ -97,15 +100,19 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /currency-service/actuator/health
+            port: 8084
+          periodSeconds: 5
+          failureThreshold: 24  # 5s * 24 = 120s max startup time
         readinessProbe:
           httpGet:
             path: /currency-service/actuator/health
             port: 8084
-          initialDelaySeconds: 60
           periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /currency-service/actuator/health
             port: 8084
-          initialDelaySeconds: 60
           periodSeconds: 20

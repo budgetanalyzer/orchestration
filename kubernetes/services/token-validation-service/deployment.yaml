@@ -43,15 +43,19 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8088
+          periodSeconds: 5
+          failureThreshold: 24  # 5s * 24 = 120s max startup time
         readinessProbe:
           httpGet:
             path: /actuator/health
             port: 8088
-          initialDelaySeconds: 30
           periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /actuator/health
             port: 8088
-          initialDelaySeconds: 60
           periodSeconds: 20

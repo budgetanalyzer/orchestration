@@ -20,6 +20,9 @@ tags:
 - name: Admin - Transactions
   description: Admin operations for transactions
   x-service: transaction-service
+- name: Saved Views
+  description: Create and manage saved transaction views
+  x-service: transaction-service
 - name: Transactions
   description: Import and manipulate transactions
   x-service: transaction-service
@@ -47,10 +50,476 @@ tags:
 - name: Audit
   description: Authorization audit logs for compliance and investigation
   x-service: permission-service
+- name: Authorization
+  description: Authorization decisions for domain services
+  x-service: permission-service
+- name: User Sync
+  description: User synchronization from identity provider
+  x-service: permission-service
 - name: Delegations
   description: User-to-user permission delegations for shared access
   x-service: permission-service
 paths:
+  /v1/views/{id}:
+    get:
+      tags:
+      - Saved Views
+      summary: Get a saved view
+      description: Gets a saved view by ID
+      operationId: getView
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    put:
+      tags:
+      - Saved Views
+      summary: Update a saved view
+      description: Updates a saved view's name or criteria
+      operationId: updateView
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSavedViewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+      - Saved Views
+      summary: Delete a saved view
+      description: Deletes a saved view
+      operationId: deleteView
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views:
+    get:
+      tags:
+      - Saved Views
+      summary: List saved views
+      description: Gets all saved views for the current user
+      operationId: listViews
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedViewResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    post:
+      tags:
+      - Saved Views
+      summary: Create a saved view
+      description: Creates a new saved view for the current user
+      operationId: createView
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedViewRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/pin/{txnId}:
+    post:
+      tags:
+      - Saved Views
+      summary: Pin a transaction
+      description: Pins a transaction to the view
+      operationId: pinTransaction
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: txnId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+      - Saved Views
+      summary: Unpin a transaction
+      description: Removes a pin from the view
+      operationId: unpinTransaction
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: txnId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/exclude/{txnId}:
+    post:
+      tags:
+      - Saved Views
+      summary: Exclude a transaction
+      description: Excludes a transaction from the view
+      operationId: excludeTransaction
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: txnId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+      - Saved Views
+      summary: Remove exclusion
+      description: Removes an exclusion, allowing the transaction to appear if it
+        matches criteria
+      operationId: unexcludeTransaction
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: txnId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/transactions/import:
     post:
       tags:
@@ -406,6 +875,57 @@ paths:
               example:
                 type: INVALID_REQUEST
                 message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/transactions:
+    get:
+      tags:
+      - Saved Views
+      summary: Get view transactions
+      description: Gets all transactions that belong to this view (matching criteria
+        + pinned - excluded)
+      operationId: getViewTransactions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ViewTransactionResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -1128,6 +1648,61 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/users/sync:
+    post:
+      tags:
+      - User Sync
+      summary: Sync user from identity provider
+      description: Creates or updates a user based on identity provider data. Called
+        by Session Gateway after successful login. New users are automatically assigned
+        the USER role.
+      operationId: syncUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserSyncRequest'
+        required: true
+      responses:
+        '200':
+          description: User synced successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserSyncResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '401':
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/roles:
     get:
       tags:
@@ -1353,6 +1928,104 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/authorize:
+    post:
+      tags:
+      - Authorization
+      summary: Check authorization
+      description: Checks if a user can perform an action on a resource type or specific
+        resource instance. For type-level checks (e.g., 'can user read currencies'),
+        omit resourceId and ownerId. For instance-level checks (e.g., 'can user read
+        transaction X'), include resourceId and ownerId.
+      operationId: authorize
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Authorization decision returned
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuthorizeResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/authorize/bulk:
+    post:
+      tags:
+      - Authorization
+      summary: Bulk authorization check
+      description: Filters a set of resources to those the user can access. More efficient
+        than individual checks for list operations.
+      operationId: bulkAuthorize
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkAuthorizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Accessible resource IDs returned
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BulkAuthorizeResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
         '500':
           description: Internal Server Error
           content:
@@ -1855,6 +2528,174 @@ paths:
                 message: Service Unavailable
 components:
   schemas:
+    UpdateSavedViewRequest:
+      type: object
+      description: Request to update a saved view
+      properties:
+        name:
+          type: string
+          description: New name for the view
+          example: SF Trip December 2024
+          maxLength: 255
+          minLength: 0
+        criteria:
+          $ref: '#/components/schemas/ViewCriteriaDto'
+          description: New filter criteria for the view
+        openEnded:
+          type: boolean
+          description: If true, the view includes transactions up to current date
+    ViewCriteriaDto:
+      type: object
+      description: Filter criteria for a saved view
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: Start date for transaction date range
+          example: '2024-12-01'
+        endDate:
+          type: string
+          format: date
+          description: End date for transaction date range (null for open-ended views)
+        accountIds:
+          type: array
+          description: Account IDs to filter by
+          items:
+            type: string
+          uniqueItems: true
+        minAmount:
+          type: number
+          description: Minimum transaction amount
+          example: 10.0
+        maxAmount:
+          type: number
+          description: Maximum transaction amount
+          example: 500.0
+        searchText:
+          type: string
+          description: Text to match in the transaction description
+          example: coffee
+    SavedViewResponse:
+      type: object
+      description: Saved view response
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the view
+        name:
+          type: string
+          description: Name of the view
+          example: SF Trip December 2024
+        criteria:
+          $ref: '#/components/schemas/ViewCriteriaDto'
+          description: Filter criteria for the view
+        openEnded:
+          type: boolean
+          description: If true, the view includes transactions up to the current date
+        pinnedCount:
+          type: integer
+          format: int32
+          description: Number of pinned transactions
+        excludedCount:
+          type: integer
+          format: int32
+          description: Number of excluded transactions
+        transactionCount:
+          type: integer
+          format: int64
+          description: Total number of transactions matching this view
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the view was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the view was last updated
+      required:
+      - createdAt
+      - criteria
+      - excludedCount
+      - id
+      - name
+      - openEnded
+      - pinnedCount
+      - transactionCount
+      - updatedAt
+    ApiErrorResponse:
+      description: Standard API error response format
+      properties:
+        type:
+          type: string
+          description: Error type categorization for API responses
+          enum:
+          - INVALID_REQUEST
+          - VALIDATION_ERROR
+          - NOT_FOUND
+          - APPLICATION_ERROR
+          - SERVICE_UNAVAILABLE
+          - INTERNAL_ERROR
+          - UNAUTHORIZED
+          - PERMISSION_DENIED
+          example: APPLICATION_ERROR
+        message:
+          type: string
+          description: Human-readable message describing the error
+          example: 'CSV format: fake-bank not supported'
+        code:
+          type: string
+          description: Machine-readable error code for specific application errors
+            (required for APPLICATION_ERROR type)
+          example: CSV_PARSING_ERROR
+        fieldErrors:
+          type: array
+          description: List of field-level validation errors (populated for VALIDATION_ERROR
+            type)
+          items:
+            $ref: '#/components/schemas/FieldError'
+      required:
+      - message
+      - type
+    FieldError:
+      description: Field-level validation error details
+      properties:
+        field:
+          type: string
+          description: Field that triggered the error
+          example: email
+        message:
+          type: string
+          description: Error message
+          example: must be a valid email address
+        rejectedValue:
+          type: object
+          description: Value that caused the error
+          example: invalid@email
+      required:
+      - field
+      - message
+      - rejectedValue
+    CreateSavedViewRequest:
+      type: object
+      description: Request to create a new saved view
+      properties:
+        name:
+          type: string
+          description: Name of the saved view
+          example: SF Trip December 2024
+          maxLength: 255
+          minLength: 0
+        criteria:
+          $ref: '#/components/schemas/ViewCriteriaDto'
+          description: Filter criteria for the view
+        openEnded:
+          type: boolean
+          description: If true, the view includes transactions up to current date
+          example: false
+      required:
+      - criteria
+      - name
     TransactionResponse:
       type: object
       description: Transaction response representing a financial transaction
@@ -1916,59 +2757,6 @@ components:
       - id
       - type
       - updatedAt
-    ApiErrorResponse:
-      description: Standard API error response format
-      properties:
-        type:
-          type: string
-          description: Error type categorization for API responses
-          enum:
-          - INVALID_REQUEST
-          - VALIDATION_ERROR
-          - NOT_FOUND
-          - APPLICATION_ERROR
-          - SERVICE_UNAVAILABLE
-          - INTERNAL_ERROR
-          - UNAUTHORIZED
-          - PERMISSION_DENIED
-          example: APPLICATION_ERROR
-        message:
-          type: string
-          description: Human-readable message describing the error
-          example: 'CSV format: fake-bank not supported'
-        code:
-          type: string
-          description: Machine-readable error code for specific application errors
-            (required for APPLICATION_ERROR type)
-          example: CSV_PARSING_ERROR
-        fieldErrors:
-          type: array
-          description: List of field-level validation errors (populated for VALIDATION_ERROR
-            type)
-          items:
-            $ref: '#/components/schemas/FieldError'
-      required:
-      - message
-      - type
-    FieldError:
-      description: Field-level validation error details
-      properties:
-        field:
-          type: string
-          description: Field that triggered the error
-          example: email
-        message:
-          type: string
-          description: Error message
-          example: must be a valid email address
-        rejectedValue:
-          type: object
-          description: Value that caused the error
-          example: invalid@email
-      required:
-      - field
-      - message
-      - rejectedValue
     BulkDeleteRequest:
       type: object
       description: Request to bulk delete multiple transactions
@@ -2090,6 +2878,64 @@ components:
           example: checking-12345
           maxLength: 100
           minLength: 0
+    ViewTransactionResponse:
+      type: object
+      description: Transaction response with view membership information
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
+        accountId:
+          type: string
+          description: Identifier for the account associated with the transaction
+        bankName:
+          type: string
+          description: Name of the bank where the transaction occurred
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+        currencyIsoCode:
+          type: string
+          description: ISO currency code for the transaction
+        amount:
+          type: number
+          description: Amount of the transaction
+        type:
+          type: string
+          description: Type of the transaction
+          enum:
+          - CREDIT
+          - DEBIT
+        description:
+          type: string
+          description: Description of the transaction
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+        membershipType:
+          type: string
+          description: How this transaction is included in the view (MATCHED or PINNED)
+          enum:
+          - MATCHED
+          - PINNED
+      required:
+      - amount
+      - bankName
+      - createdAt
+      - currencyIsoCode
+      - date
+      - description
+      - id
+      - membershipType
+      - type
+      - updatedAt
     CurrencySeriesUpdateRequest:
       type: object
       description: Request to update an existing currency series (currency code and
@@ -2315,6 +3161,42 @@ components:
           example: '2024-12-31T23:59:59Z'
       required:
       - roleId
+    UserSyncRequest:
+      type: object
+      properties:
+        auth0Sub:
+          type: string
+          description: Auth0 subject identifier
+          example: auth0|123456789
+          minLength: 1
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: user@example.com
+          minLength: 1
+        displayName:
+          type: string
+          description: User display name
+          example: John Doe
+      required:
+      - auth0Sub
+      - email
+    UserSyncResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: Internal user identifier
+          example: usr_abc123def456
+        email:
+          type: string
+          description: User email address
+          example: user@example.com
+        displayName:
+          type: string
+          description: User display name
+          example: John Doe
     ResourcePermissionRequest:
       type: object
       properties:
@@ -2476,6 +3358,102 @@ components:
           format: date-time
           description: When delegation was revoked
           example: '2024-06-15T14:00:00Z'
+    AuthorizeRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: User ID to authorize
+          example: auth0|abc123
+          minLength: 1
+        action:
+          type: string
+          description: Action to perform
+          example: read
+          minLength: 1
+        resourceType:
+          type: string
+          description: Resource type
+          example: currency
+          minLength: 1
+        resourceId:
+          type: string
+          description: Resource ID for instance-level checks
+          example: txn_123
+        ownerId:
+          type: string
+          description: Owner ID for ownership-based access
+        context:
+          $ref: '#/components/schemas/AuthorizeRequestContext'
+          description: Request context for audit logging
+      required:
+      - action
+      - resourceType
+      - userId
+    AuthorizeRequestContext:
+      type: object
+      properties:
+        clientIp:
+          type: string
+          description: Client IP address
+          example: 192.168.1.1
+        correlationId:
+          type: string
+          description: Correlation ID for request tracing
+          example: corr-abc-123
+        sourceService:
+          type: string
+          description: Source service name
+          example: currency-service
+    AuthorizeResponse:
+      type: object
+      properties:
+        granted:
+          type: boolean
+          description: Whether access is granted
+          example: true
+        reason:
+          type: string
+          description: Reason for the decision
+          example: User has currencies:read permission
+    BulkAuthorizeRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: User ID to authorize
+          example: auth0|abc123
+          minLength: 1
+        action:
+          type: string
+          description: Action to filter for
+          example: read
+          minLength: 1
+        resourceType:
+          type: string
+          description: Resource type
+          example: transaction
+          minLength: 1
+        resources:
+          type: object
+          additionalProperties:
+            type: string
+          description: Map of resource IDs to owner IDs
+          minProperties: 1
+      required:
+      - action
+      - resourceType
+      - resources
+      - userId
+    BulkAuthorizeResponse:
+      type: object
+      properties:
+        accessible:
+          type: array
+          description: Resource IDs the user can access
+          items:
+            type: string
+          uniqueItems: true
     UserPermissionsResponse:
       type: object
       properties:

@@ -4125,6 +4125,16 @@
             "description": "Account ID associated with the transaction",
             "example": "checking-12345"
           },
+          "currencyIsoCode": {
+            "type": "string",
+            "description": "ISO currency code for the transaction",
+            "example": "USD"
+          },
+          "bankName": {
+            "type": "string",
+            "description": "Bank name where the transaction occurred",
+            "example": "Capital One"
+          },
           "importedNow": {
             "type": "boolean",
             "description": "True if this transaction was imported in the current operation",

@@ -178,6 +178,15 @@ else
     fi
 fi
 
+# Copy to budget-analyzer-web for frontend consumption
+WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
+if [ -d "$WEB_DOCS_DIR" ]; then
+    cp "$OUTPUT_YAML" "$WEB_DOCS_DIR/budget-analyzer-api.yaml"
+    print_success "✓ Copied to budget-analyzer-web: $WEB_DOCS_DIR/budget-analyzer-api.yaml"
+else
+    print_warning "budget-analyzer-web/docs directory not found - skipping copy"
+fi
+
 echo
 print_success "=== Unified OpenAPI specification generated successfully ==="
 echo

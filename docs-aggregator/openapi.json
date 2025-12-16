@@ -817,7 +817,7 @@
           "Transactions"
         ],
         "summary": "Upload CSV file(s) containing transactions",
-        "description": "Imports transactions from one or more CSV files for a given account and format.",
+        "description": "Imports transactions from one or more CSV files for a given account and format. After import completes, detects any potential duplicate transactions and returns them grouped in the response for user review.",
         "operationId": "importTransactions",
         "parameters": [
           {
@@ -870,10 +870,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TransactionResponse"
-                  }
+                  "$ref": "#/components/schemas/ImportResponse"
                 }
               }
             }
@@ -4079,80 +4076,80 @@
           "name"
         ]
       },
-      "TransactionResponse": {
+      "DuplicateGroupResponse": {
         "type": "object",
-        "description": "Transaction response representing a financial transaction",
+        "description": "Group of duplicate transactions",
+        "properties": {
+          "groupKey": {
+            "type": "string",
+            "description": "Unique key identifying this duplicate group (date|amount|description|accountId)",
+            "example": "2024-01-15|-45.00|Amazon|checking-12345"
+          },
+          "transactions": {
+            "type": "array",
+            "description": "Transactions in this duplicate group",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateTransactionResponse"
+            }
+          }
+        }
+      },
+      "DuplicateTransactionResponse": {
+        "type": "object",
+        "description": "Transaction within a duplicate group",
         "properties": {
           "id": {
             "type": "integer",
             "format": "int64",
             "description": "Unique identifier for the transaction",
-            "example": 1
-          },
-          "accountId": {
-            "type": "string",
-            "description": "Identifier for the account associated with the transaction",
-            "example": "checking-3223"
-          },
-          "bankName": {
-            "type": "string",
-            "description": "Name of the bank where the transaction occurred",
-            "example": "Capital One"
+            "example": 12345
           },
           "date": {
             "type": "string",
             "format": "date",
             "description": "Date of the transaction",
-            "example": "2025-10-14"
-          },
-          "currencyIsoCode": {
-            "type": "string",
-            "description": "ISO currency code for the transaction",
-            "example": "USD"
+            "example": "2024-01-15"
           },
           "amount": {
             "type": "number",
             "description": "Amount of the transaction",
-            "example": 100.5
-          },
-          "type": {
-            "type": "string",
-            "description": "Type of the transaction",
-            "enum": [
-              "CREDIT",
-              "DEBIT"
-            ],
-            "example": "DEBIT"
+            "example": -45.0
           },
           "description": {
             "type": "string",
             "description": "Description of the transaction",
-            "example": "Grocery shopping"
+            "example": "Amazon"
           },
-          "createdAt": {
+          "accountId": {
             "type": "string",
-            "format": "date-time",
-            "description": "Timestamp when the transaction was created",
-            "example": "2025-10-14T10:30:00Z"
+            "description": "Account ID associated with the transaction",
+            "example": "checking-12345"
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Timestamp when the transaction was last updated",
-            "example": "2025-10-14T10:30:00Z"
+          "importedNow": {
+            "type": "boolean",
+            "description": "True if this transaction was imported in the current operation",
+            "example": true
           }
-        },
-        "required": [
-          "amount",
-          "bankName",
-          "createdAt",
-          "currencyIsoCode",
-          "date",
-          "description",
-          "id",
-          "type",
-          "updatedAt"
-        ]
+        }
+      },
+      "ImportResponse": {
+        "type": "object",
+        "description": "Response from CSV import operation",
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of transactions imported",
+            "example": 150
+          },
+          "duplicateGroups": {
+            "type": "array",
+            "description": "Groups of duplicate transactions detected after import. Empty if no duplicates were found.",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateGroupResponse"
+            }
+          }
+        }
       },
       "BulkDeleteRequest": {
         "type": "object",
@@ -4287,6 +4284,81 @@
             "example": "2025-10-15T00:00:00Z"
           }
         }
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "description": "Transaction response representing a financial transaction",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unique identifier for the transaction",
+            "example": 1
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Identifier for the account associated with the transaction",
+            "example": "checking-3223"
+          },
+          "bankName": {
+            "type": "string",
+            "description": "Name of the bank where the transaction occurred",
+            "example": "Capital One"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of the transaction",
+            "example": "2025-10-14"
+          },
+          "currencyIsoCode": {
+            "type": "string",
+            "description": "ISO currency code for the transaction",
+            "example": "USD"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount of the transaction",
+            "example": 100.5
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of the transaction",
+            "enum": [
+              "CREDIT",
+              "DEBIT"
+            ],
+            "example": "DEBIT"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the transaction",
+            "example": "Grocery shopping"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the transaction was created",
+            "example": "2025-10-14T10:30:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the transaction was last updated",
+            "example": "2025-10-14T10:30:00Z"
+          }
+        },
+        "required": [
+          "amount",
+          "bankName",
+          "createdAt",
+          "currencyIsoCode",
+          "date",
+          "description",
+          "id",
+          "type",
+          "updatedAt"
+        ]
       },
       "TransactionUpdateRequest": {
         "type": "object",

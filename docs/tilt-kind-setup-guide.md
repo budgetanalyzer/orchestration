@@ -87,13 +87,13 @@ Clone all service repositories as **siblings** to the `orchestration` repo. The 
 cd "$(dirname /path/to/orchestration)"
 
 # Clone all service repos alongside orchestration
-git clone https://github.com/budgetanalyzer/service-common.git
-git clone https://github.com/budgetanalyzer/transaction-service.git
-git clone https://github.com/budgetanalyzer/currency-service.git
-git clone https://github.com/budgetanalyzer/permission-service.git
-git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/token-validation-service.git
-git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
+git clone https://github.com/budgetanalyzerllc/service-common.git
+git clone https://github.com/budgetanalyzerllc/transaction-service.git
+git clone https://github.com/budgetanalyzerllc/currency-service.git
+git clone https://github.com/budgetanalyzerllc/permission-service.git
+git clone https://github.com/budgetanalyzerllc/session-gateway.git
+git clone https://github.com/budgetanalyzerllc/token-validation-service.git
+git clone https://github.com/budgetanalyzerllc/budget-analyzer-web.git
 ```
 
 Your directory structure should look like:

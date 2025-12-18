@@ -156,7 +156,7 @@ After implementation:
 # Or trigger manually from GitHub Actions tab
 
 # View results
-# Go to: https://github.com/budgetanalyzer/orchestration/actions
+# Go to: https://github.com/budgetanalyzerllc/orchestration/actions
 ```
 
 ## Directory Structure After Implementation

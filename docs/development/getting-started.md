@@ -3,7 +3,7 @@
 **Tested with:** VS Code, Claude Code (extension or terminal), Anthropic account. We use open source tools—Cursor is closed source.
 
 ```bash
-git clone https://github.com/budgetanalyzer/workspace.git
+git clone https://github.com/budgetanalyzerllc/workspace.git
 ```
 
 Open in VS Code → "Reopen in Container" when prompted.

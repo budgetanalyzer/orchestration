@@ -14,7 +14,7 @@ Create a new Spring Boot microservice to manage authorization data: users, roles
 | **Port** | 8086 |
 | **Database** | `permission` |
 | **Context Path** | `/permission-service` |
-| **Repository** | `https://github.com/budgetanalyzer/permission-service` |
+| **Repository** | `https://github.com/budgetanalyzerllc/permission-service` |
 
 ---
 
@@ -128,7 +128,7 @@ These fields are auto-populated via Spring Data JPA auditing when an `AuditorAwa
 
 ### 1.1 Create GitHub Repository
 
-- Create `https://github.com/budgetanalyzer/permission-service`
+- Create `https://github.com/budgetanalyzerllc/permission-service`
 - Clone to `/workspace/permission-service`
 
 ### 1.2 Initialize Project Structure

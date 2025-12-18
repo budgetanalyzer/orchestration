@@ -107,7 +107,7 @@ curl -v https://app.budgetanalyzer.localhost/actuator/health
 kubectl exec -n infrastructure deployment/redis -- redis-cli PING
 ```
 
-**Repository**: https://github.com/budgetanalyzer/session-gateway
+**Repository**: https://github.com/budgetanalyzerllc/session-gateway
 
 ### Token Validation Service (Port 8088)
 
@@ -132,7 +132,7 @@ kubectl logs -n budget-analyzer deployment/token-validation-service
 curl -H "Authorization: Bearer <JWT>" http://localhost:8088/validate
 ```
 
-**Repository**: https://github.com/budgetanalyzer/token-validation-service
+**Repository**: https://github.com/budgetanalyzerllc/token-validation-service
 
 ## Why This Pattern?
 
@@ -257,5 +257,5 @@ curl -v https://app.budgetanalyzer.localhost (check Set-Cookie header)
 
 - **NGINX Configuration**: [nginx/README.md](../../nginx/README.md)
 - **Security Architecture**: [security-architecture.md](security-architecture.md)
-- **Session Gateway Repository**: https://github.com/budgetanalyzer/session-gateway
-- **Token Validation Repository**: https://github.com/budgetanalyzer/token-validation-service
+- **Session Gateway Repository**: https://github.com/budgetanalyzerllc/session-gateway
+- **Token Validation Repository**: https://github.com/budgetanalyzerllc/token-validation-service

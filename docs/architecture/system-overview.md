@@ -159,7 +159,7 @@ Common patterns documented once in service-common:
 - Testing patterns
 - Error handling
 - Code quality standards
-- See: [@service-common/docs/](https://github.com/budgetanalyzer/service-common/tree/main/docs)
+- See: [@service-common/docs/](https://github.com/budgetanalyzerllc/service-common/tree/main/docs)
 
 ### 4. Production Parity
 Local development environment mirrors production architecture:
@@ -225,7 +225,7 @@ tilt get uiresources
 
 ### External APIs
 - currency-service → FRED API
-- Pattern: Provider abstraction (see [@service-common/docs/advanced-patterns.md](https://github.com/budgetanalyzer/service-common/blob/main/docs/advanced-patterns.md))
+- Pattern: Provider abstraction (see [@service-common/docs/advanced-patterns.md](https://github.com/budgetanalyzerllc/service-common/blob/main/docs/advanced-patterns.md))
 
 ## Data Management
 

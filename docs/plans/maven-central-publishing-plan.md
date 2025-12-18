@@ -110,7 +110,7 @@ nexusPublishing {
 apply(plugin = "signing")
 
 pom {
-    url.set("https://github.com/budgetanalyzer/service-common")
+    url.set("https://github.com/budgetanalyzerllc/service-common")
     developers {
         developer {
             id.set("budgetanalyzer")
@@ -118,8 +118,8 @@ pom {
         }
     }
     scm {
-        url.set("https://github.com/budgetanalyzer/service-common")
-        connection.set("scm:git:https://github.com/budgetanalyzer/service-common.git")
+        url.set("https://github.com/budgetanalyzerllc/service-common")
+        connection.set("scm:git:https://github.com/budgetanalyzerllc/service-common.git")
         developerConnection.set("scm:git:ssh://git@github.com:budgetanalyzer/service-common.git")
     }
 }

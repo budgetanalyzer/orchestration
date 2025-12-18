@@ -47,7 +47,7 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated. 
 
 **This project is designed for AI-assisted development.**
 
-For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
+For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzerllc/workspace) repository. That's where the devcontainer configuration lives.
 
 ## Architecture Principles
 
@@ -253,13 +253,13 @@ tree -L 2 -I 'node_modules|target'
 ## Service Repositories
 
 Each microservice is maintained in its own repository:
-- **service-common**: https://github.com/budgetanalyzer/service-common - Shared library for all backend services
-- **transaction-service**: https://github.com/budgetanalyzer/transaction-service - Transaction management API
-- **currency-service**: https://github.com/budgetanalyzer/currency-service - Currency and exchange rate API
-- **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
-- **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
-- **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
-- **permission-service**: https://github.com/budgetanalyzer/permission-service - Permission management API
+- **service-common**: https://github.com/budgetanalyzerllc/service-common - Shared library for all backend services
+- **transaction-service**: https://github.com/budgetanalyzerllc/transaction-service - Transaction management API
+- **currency-service**: https://github.com/budgetanalyzerllc/currency-service - Currency and exchange rate API
+- **budget-analyzer-web**: https://github.com/budgetanalyzerllc/budget-analyzer-web - React frontend application
+- **session-gateway**: https://github.com/budgetanalyzerllc/session-gateway - BFF for browser authentication
+- **token-validation-service**: https://github.com/budgetanalyzerllc/token-validation-service - JWT validation for NGINX
+- **permission-service**: https://github.com/budgetanalyzerllc/permission-service - Permission management API
 
 ## Best Practices
 

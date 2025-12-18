@@ -3875,7 +3875,7 @@
             "minLength": 0
           },
           "criteria": {
-            "$ref": "#/components/schemas/ViewCriteriaDto",
+            "$ref": "#/components/schemas/ViewCriteriaApi",
             "description": "New filter criteria for the view"
           },
           "openEnded": {
@@ -3884,7 +3884,7 @@
           }
         }
       },
-      "ViewCriteriaDto": {
+      "ViewCriteriaApi": {
         "type": "object",
         "description": "Filter criteria for a saved view",
         "properties": {
@@ -3902,6 +3902,30 @@
           "accountIds": {
             "type": "array",
             "description": "Account IDs to filter by",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "bankNames": {
+            "type": "array",
+            "description": "Bank names to filter by",
+            "example": [
+              "Capital One",
+              "Truist"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "currencyIsoCodes": {
+            "type": "array",
+            "description": "Currency ISO codes to filter by",
+            "example": [
+              "USD",
+              "EUR"
+            ],
             "items": {
               "type": "string"
             },
@@ -3939,7 +3963,7 @@
             "example": "SF Trip December 2024"
           },
           "criteria": {
-            "$ref": "#/components/schemas/ViewCriteriaDto",
+            "$ref": "#/components/schemas/ViewCriteriaApi",
             "description": "Filter criteria for the view"
           },
           "openEnded": {
@@ -4062,7 +4086,7 @@
             "minLength": 0
           },
           "criteria": {
-            "$ref": "#/components/schemas/ViewCriteriaDto",
+            "$ref": "#/components/schemas/ViewCriteriaApi",
             "description": "Filter criteria for the view"
           },
           "openEnded": {

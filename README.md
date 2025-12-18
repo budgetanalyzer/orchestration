@@ -33,13 +33,13 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 
 ## Service Repositories
 
-- [service-common](https://github.com/budgetanalyzer/service-common) - Shared library
-- [transaction-service](https://github.com/budgetanalyzer/transaction-service) - Transaction API
-- [currency-service](https://github.com/budgetanalyzer/currency-service) - Currency API
-- [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) - React frontend
-- [session-gateway](https://github.com/budgetanalyzer/session-gateway) - Authentication BFF
-- [token-validation-service](https://github.com/budgetanalyzer/token-validation-service) - JWT validation
-- [permission-service](https://github.com/budgetanalyzer/permission-service) - Permissions API
+- [service-common](https://github.com/budgetanalyzerllc/service-common) - Shared library
+- [transaction-service](https://github.com/budgetanalyzerllc/transaction-service) - Transaction API
+- [currency-service](https://github.com/budgetanalyzerllc/currency-service) - Currency API
+- [budget-analyzer-web](https://github.com/budgetanalyzerllc/budget-analyzer-web) - React frontend
+- [session-gateway](https://github.com/budgetanalyzerllc/session-gateway) - Authentication BFF
+- [token-validation-service](https://github.com/budgetanalyzerllc/token-validation-service) - JWT validation
+- [permission-service](https://github.com/budgetanalyzerllc/permission-service) - Permissions API
 
 ## License
 

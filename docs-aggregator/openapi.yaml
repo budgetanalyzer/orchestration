@@ -23,6 +23,9 @@ tags:
 - name: Saved Views
   description: Create and manage saved transaction views
   x-service: transaction-service
+- name: Statement Formats
+  description: Manage statement format configurations for imports
+  x-service: transaction-service
 - name: Transactions
   description: Import and manipulate transactions
   x-service: transaction-service
@@ -186,6 +189,164 @@ paths:
       responses:
         '204':
           description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/{formatKey}:
+    get:
+      tags:
+      - Statement Formats
+      summary: Get statement format details
+      description: Returns details of a specific statement format by its format key.
+      operationId: getFormat
+      parameters:
+      - name: formatKey
+        in: path
+        description: Unique format identifier
+        required: true
+        schema:
+          type: string
+        example: capital-one
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    put:
+      tags:
+      - Statement Formats
+      summary: Update a statement format
+      description: Updates an existing statement format. Only provided fields will
+        be updated. The format key and format type cannot be changed after creation.
+      operationId: updateFormat
+      parameters:
+      - name: formatKey
+        in: path
+        description: Unique format identifier
+        required: true
+        schema:
+          type: string
+        example: capital-one
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatementFormatRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+      - Statement Formats
+      summary: Disable a statement format
+      description: Disables a statement format (soft delete). Disabled formats will
+        not be available for file imports but can be re-enabled by updating the format.
+      operationId: disableFormat
+      parameters:
+      - name: formatKey
+        in: path
+        description: Unique format identifier
+        required: true
+        schema:
+          type: string
+        example: capital-one
+      responses:
+        '204':
+          description: Format successfully disabled
         '404':
           description: Not Found
           content:
@@ -520,26 +681,28 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /v1/transactions/import:
+  /v1/transactions/preview:
     post:
       tags:
       - Transactions
-      summary: Upload CSV file(s) containing transactions
-      description: Imports transactions from one or more CSV files for a given account
-        and format. After import completes, detects any potential duplicate transactions
-        and returns them grouped in the response for user review.
-      operationId: importTransactions
+      summary: Preview transactions from a file before import
+      description: Parses a CSV or PDF file and returns the extracted transactions
+        for review and editing before batch import. No data is persisted. The format
+        parameter is required and determines which parser to use. The response includes
+        any parsing warnings.
+      operationId: previewTransactions
       parameters:
       - name: format
         in: query
-        description: CSV format type
+        description: Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one'
+          for CSV). Use GET /v1/statement-formats to list available formats.
         required: true
         schema:
           type: string
-        example: capital-one
+        example: capital-one-yearly
       - name: accountId
         in: query
-        description: Account ID to associate transactions with
+        description: Account ID to pre-fill for all transactions
         required: false
         schema:
           type: string
@@ -550,14 +713,12 @@ paths:
             schema:
               type: object
               properties:
-                files:
-                  type: array
-                  description: CSV file(s) to upload
-                  items:
-                    type: string
-                    format: binary
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or PDF file to preview
               required:
-              - files
+              - file
         required: true
       responses:
         '200':
@@ -565,7 +726,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImportResponse'
+                $ref: '#/components/schemas/PreviewResponse'
         '422':
           description: Unprocessable Entity
           content:
@@ -573,37 +734,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               examples:
-                CSV Format Not Supported:
+                Format Not Supported:
                   summary: Invalid format parameter
-                  description: CSV Format Not Supported
+                  description: Format Not Supported
                   value:
                     type: APPLICATION_ERROR
-                    message: 'CSV format: fake-bank not supported'
-                    code: CSV_FORMAT_NOT_SUPPORTED
-                CSV Parsing Error:
+                    message: 'Format not supported: fake-bank'
+                    code: FORMAT_NOT_SUPPORTED
+                Parsing Error:
                   summary: Missing required column
-                  description: CSV Parsing Error
+                  description: Parsing Error
                   value:
                     type: APPLICATION_ERROR
-                    message: Missing value for required column 'Transaction Description'
-                      at line 1 in file 'bkk-bank-2025.csv'
+                    message: Missing value for required column 'Description' at line
+                      1
                     code: CSV_PARSING_ERROR
-                Transaction Date Too Old:
-                  summary: Date before year 2000
-                  description: Transaction Date Too Old
-                  value:
-                    type: APPLICATION_ERROR
-                    message: Transaction date 1999-12-31 is prior to year 2000
-                    code: TRANSACTION_DATE_TOO_OLD
-                Transaction Too Far In Future:
-                  summary: Date more than 1 day in the future
-                  description: Transaction Too Far In Future
-                  value:
-                    type: APPLICATION_ERROR
-                    message: Transaction date '2030-01-01' at line 3 in file 'capital-one-2030.csv'
-                      is more than 1 day in the future. Future-dated transactions
-                      are not allowed to prevent data entry errors.
-                    code: TRANSACTION_DATE_TOO_FAR_IN_FUTURE
         '400':
           description: Bad Request
           content:
@@ -671,6 +816,152 @@ paths:
               example:
                 type: INVALID_REQUEST
                 message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/batch:
+    post:
+      tags:
+      - Transactions
+      summary: Import a batch of transactions
+      description: Imports transactions from a batch request (typically from the preview
+        endpoint after user edits). Validates all transactions upfront and rejects
+        the entire batch if any fail. Duplicates (matching date + amount + description)
+        are skipped.
+      operationId: batchImportTransactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchImportRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchImportResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats:
+    get:
+      tags:
+      - Statement Formats
+      summary: List all statement formats
+      description: Returns all configured statement formats (both enabled and disabled).
+      operationId: listFormats
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatementFormatResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    post:
+      tags:
+      - Statement Formats
+      summary: Create a new statement format
+      description: Creates a new statement format configuration. For CSV formats,
+        the column header fields (dateHeader, descriptionHeader, creditHeader) are
+        required.
+      operationId: createFormat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStatementFormatRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                Duplicate Format Key:
+                  summary: Format key already exists
+                  description: Duplicate Format Key
+                  value:
+                    type: APPLICATION_ERROR
+                    message: 'Format key already exists: capital-one'
+                    code: FORMAT_KEY_ALREADY_EXISTS
         '500':
           description: Internal Server Error
           content:
@@ -2677,6 +2968,12 @@ components:
     FieldError:
       description: Field-level validation error details
       properties:
+        index:
+          type: integer
+          format: int32
+          description: Zero-based index of the item in a batch/list that caused the
+            error. Null for single-item validation errors.
+          example: 44
         field:
           type: string
           description: Field that triggered the error
@@ -2692,7 +2989,81 @@ components:
       required:
       - field
       - message
-      - rejectedValue
+    UpdateStatementFormatRequest:
+      type: object
+      properties:
+        bankName:
+          type: string
+          maxLength: 100
+          minLength: 0
+        defaultCurrencyIsoCode:
+          type: string
+          maxLength: 3
+          minLength: 3
+        dateHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        dateFormat:
+          type: string
+          maxLength: 50
+          minLength: 0
+        descriptionHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        creditHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        debitHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        typeHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        categoryHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        enabled:
+          type: boolean
+    StatementFormatResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        formatKey:
+          type: string
+        formatType:
+          type: string
+          enum:
+          - CSV
+          - PDF
+          - XLSX
+        bankName:
+          type: string
+        defaultCurrencyIsoCode:
+          type: string
+        dateHeader:
+          type: string
+        dateFormat:
+          type: string
+        descriptionHeader:
+          type: string
+        creditHeader:
+          type: string
+        debitHeader:
+          type: string
+        typeHeader:
+          type: string
+        categoryHeader:
+          type: string
+        enabled:
+          type: boolean
     CreateSavedViewRequest:
       type: object
       description: Request to create a new saved view
@@ -2713,72 +3084,97 @@ components:
       required:
       - criteria
       - name
-    DuplicateGroupResponse:
+    PreviewResponse:
       type: object
-      description: Group of duplicate transactions
+      description: Response from transaction preview containing extracted transactions
       properties:
-        groupKey:
+        sourceFile:
           type: string
-          description: Unique key identifying this duplicate group (date|amount|description|accountId)
-          example: 2024-01-15|-45.00|Amazon|checking-12345
+          description: Original filename of the uploaded file
+          example: cap-one-2024.csv
+        detectedFormat:
+          type: string
+          description: Detected format key used for parsing (informational)
+          example: capital-one-ytd
         transactions:
           type: array
-          description: Transactions in this duplicate group
+          description: List of extracted transactions ready for review
           items:
-            $ref: '#/components/schemas/DuplicateTransactionResponse'
-    DuplicateTransactionResponse:
+            $ref: '#/components/schemas/PreviewTransaction'
+        warnings:
+          type: array
+          description: List of warnings for fields with potential issues. Empty for
+            CSV extraction; populated for PDF extraction where OCR confidence may
+            be low.
+          items:
+            $ref: '#/components/schemas/PreviewWarning'
+    PreviewTransaction:
       type: object
-      description: Transaction within a duplicate group
+      description: Previewed transaction data before import
       properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique identifier for the transaction
-          example: 12345
         date:
           type: string
           format: date
           description: Date of the transaction
-          example: '2024-01-15'
-        amount:
-          type: number
-          description: Amount of the transaction
-          example: -45.0
+          example: '2024-04-12'
         description:
           type: string
           description: Description of the transaction
-          example: Amazon
-        accountId:
+          example: 'LOPEZ TAQUERIA #3'
+          minLength: 1
+        amount:
+          type: number
+          description: Amount of the transaction
+          example: 55.12
+        type:
           type: string
-          description: Account ID associated with the transaction
-          example: checking-12345
-        currencyIsoCode:
+          description: Type of the transaction
+          enum:
+          - CREDIT
+          - DEBIT
+          example: DEBIT
+        category:
           type: string
-          description: ISO currency code for the transaction
-          example: USD
+          description: Category extracted from source data
+          example: Dining
         bankName:
           type: string
-          description: Bank name where the transaction occurred
+          description: Name of the bank
           example: Capital One
-        importedNow:
-          type: boolean
-          description: True if this transaction was imported in the current operation
-          example: true
-    ImportResponse:
+          minLength: 1
+        currencyIsoCode:
+          type: string
+          description: ISO currency code
+          example: USD
+          minLength: 1
+        accountId:
+          type: string
+          description: Account identifier (may be null)
+          example: checking-12345
+      required:
+      - amount
+      - bankName
+      - currencyIsoCode
+      - date
+      - description
+      - type
+    PreviewWarning:
       type: object
-      description: Response from CSV import operation
+      description: Warning for a specific field in a previewed transaction
       properties:
-        imported:
+        index:
           type: integer
           format: int32
-          description: Number of transactions imported
-          example: 150
-        duplicateGroups:
-          type: array
-          description: Groups of duplicate transactions detected after import. Empty
-            if no duplicates were found.
-          items:
-            $ref: '#/components/schemas/DuplicateGroupResponse'
+          description: Zero-based index of the transaction in the preview list
+          example: 12
+        field:
+          type: string
+          description: Name of the field with the warning
+          example: amount
+        message:
+          type: string
+          description: Warning message
+          example: OCR confidence low
     BulkDeleteRequest:
       type: object
       description: Request to bulk delete multiple transactions
@@ -2814,6 +3210,153 @@ components:
           items:
             type: integer
             format: int64
+    BatchImportRequest:
+      type: object
+      description: Request for batch importing transactions
+      properties:
+        transactions:
+          type: array
+          description: List of transactions to import
+          items:
+            $ref: '#/components/schemas/PreviewTransaction'
+          minItems: 1
+      required:
+      - transactions
+    BatchImportResponse:
+      type: object
+      description: Response from batch transaction import
+      properties:
+        created:
+          type: integer
+          format: int32
+          description: Number of transactions created
+          example: 156
+        duplicatesSkipped:
+          type: integer
+          format: int32
+          description: Number of duplicates skipped
+          example: 3
+        transactions:
+          type: array
+          description: List of created transactions with IDs
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+    TransactionResponse:
+      type: object
+      description: Transaction response representing a financial transaction
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
+          example: 1
+        accountId:
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
+        bankName:
+          type: string
+          description: Name of the bank where the transaction occurred
+          example: Capital One
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2025-10-14'
+        currencyIsoCode:
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
+        amount:
+          type: number
+          description: Amount of the transaction
+          example: 100.5
+        type:
+          type: string
+          description: Type of the transaction
+          enum:
+          - CREDIT
+          - DEBIT
+          example: DEBIT
+        description:
+          type: string
+          description: Description of the transaction
+          example: Grocery shopping
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+          example: '2025-10-14T10:30:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+          example: '2025-10-14T10:30:00Z'
+      required:
+      - amount
+      - bankName
+      - createdAt
+      - currencyIsoCode
+      - date
+      - description
+      - id
+      - type
+      - updatedAt
+    CreateStatementFormatRequest:
+      type: object
+      properties:
+        formatKey:
+          type: string
+          maxLength: 50
+          minLength: 0
+          pattern: ^[a-z0-9-]+$
+        formatType:
+          type: string
+          enum:
+          - CSV
+          - PDF
+          - XLSX
+        bankName:
+          type: string
+          maxLength: 100
+          minLength: 0
+        defaultCurrencyIsoCode:
+          type: string
+          maxLength: 3
+          minLength: 3
+        dateHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        dateFormat:
+          type: string
+          maxLength: 50
+          minLength: 0
+        descriptionHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        creditHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        debitHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        typeHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+        categoryHeader:
+          type: string
+          maxLength: 50
+          minLength: 0
+      required:
+      - bankName
+      - defaultCurrencyIsoCode
+      - formatKey
+      - formatType
     TransactionFilter:
       type: object
       description: Filter for querying transactions by various fields
@@ -2884,67 +3427,6 @@ components:
           format: date-time
           description: End of last update timestamp range
           example: '2025-10-15T00:00:00Z'
-    TransactionResponse:
-      type: object
-      description: Transaction response representing a financial transaction
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique identifier for the transaction
-          example: 1
-        accountId:
-          type: string
-          description: Identifier for the account associated with the transaction
-          example: checking-3223
-        bankName:
-          type: string
-          description: Name of the bank where the transaction occurred
-          example: Capital One
-        date:
-          type: string
-          format: date
-          description: Date of the transaction
-          example: '2025-10-14'
-        currencyIsoCode:
-          type: string
-          description: ISO currency code for the transaction
-          example: USD
-        amount:
-          type: number
-          description: Amount of the transaction
-          example: 100.5
-        type:
-          type: string
-          description: Type of the transaction
-          enum:
-          - CREDIT
-          - DEBIT
-          example: DEBIT
-        description:
-          type: string
-          description: Description of the transaction
-          example: Grocery shopping
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was created
-          example: '2025-10-14T10:30:00Z'
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was last updated
-          example: '2025-10-14T10:30:00Z'
-      required:
-      - amount
-      - bankName
-      - createdAt
-      - currencyIsoCode
-      - date
-      - description
-      - id
-      - type
-      - updatedAt
     TransactionUpdateRequest:
       type: object
       description: Request to update a transaction's mutable fields

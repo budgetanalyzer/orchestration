@@ -4527,6 +4527,11 @@
       "UpdateStatementFormatRequest": {
         "type": "object",
         "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
           "bankName": {
             "type": "string",
             "maxLength": 100,
@@ -4585,6 +4590,9 @@
             "format": "int64"
           },
           "formatKey": {
+            "type": "string"
+          },
+          "displayName": {
             "type": "string"
           },
           "formatType": {
@@ -4940,6 +4948,11 @@
             "minLength": 0,
             "pattern": "^[a-z0-9-]+$"
           },
+          "displayName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
           "formatType": {
             "type": "string",
             "enum": [
@@ -4997,6 +5010,7 @@
         "required": [
           "bankName",
           "defaultCurrencyIsoCode",
+          "displayName",
           "formatKey",
           "formatType"
         ]

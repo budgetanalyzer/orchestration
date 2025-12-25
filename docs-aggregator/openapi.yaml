@@ -1187,9 +1187,9 @@ paths:
     get:
       tags:
       - Saved Views
-      summary: Get view transactions
-      description: Gets all transactions that belong to this view (matching criteria
-        + pinned - excluded)
+      summary: Get view transaction IDs
+      description: Gets IDs of active transactions in this view, grouped by membership
+        type (matched, pinned, excluded). Soft-deleted transactions are excluded.
       operationId: getViewTransactions
       parameters:
       - name: id
@@ -1204,9 +1204,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ViewTransactionResponse'
+                $ref: '#/components/schemas/ViewMembershipResponse'
         '404':
           description: Not Found
           content:
@@ -3454,64 +3452,45 @@ components:
           example: checking-12345
           maxLength: 100
           minLength: 0
-    ViewTransactionResponse:
+    ViewMembershipResponse:
       type: object
-      description: Transaction response with view membership information
+      description: Transaction IDs grouped by membership type in a saved view. Only
+        includes active (non-deleted) transactions.
       properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique identifier for the transaction
-        accountId:
-          type: string
-          description: Identifier for the account associated with the transaction
-        bankName:
-          type: string
-          description: Name of the bank where the transaction occurred
-        date:
-          type: string
-          format: date
-          description: Date of the transaction
-        currencyIsoCode:
-          type: string
-          description: ISO currency code for the transaction
-        amount:
-          type: number
-          description: Amount of the transaction
-        type:
-          type: string
-          description: Type of the transaction
-          enum:
-          - CREDIT
-          - DEBIT
-        description:
-          type: string
-          description: Description of the transaction
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was created
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was last updated
-        membershipType:
-          type: string
-          description: How this transaction is included in the view (MATCHED or PINNED)
-          enum:
-          - MATCHED
-          - PINNED
+        matched:
+          type: array
+          description: IDs of active transactions matching view criteria (excluding
+            excluded IDs)
+          example:
+          - 123
+          - 456
+          - 789
+          items:
+            type: integer
+            format: int64
+        pinned:
+          type: array
+          description: IDs of active transactions explicitly pinned (excluding those
+            already matched)
+          example:
+          - 101
+          - 102
+          items:
+            type: integer
+            format: int64
+        excluded:
+          type: array
+          description: IDs of active transactions explicitly excluded from matched
+            set
+          example:
+          - 234
+          items:
+            type: integer
+            format: int64
       required:
-      - amount
-      - bankName
-      - createdAt
-      - currencyIsoCode
-      - date
-      - description
-      - id
-      - membershipType
-      - type
-      - updatedAt
+      - excluded
+      - matched
+      - pinned
     CurrencySeriesUpdateRequest:
       type: object
       description: Request to update an existing currency series (currency code and

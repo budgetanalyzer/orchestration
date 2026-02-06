@@ -1,9 +1,5 @@
 # Budget Analyzer - Orchestration Repository
 
-## Current Date
-
-Use `<env>` block in system context for `Today's date`. Training data is stale — always check `<env>` when dating documents or determining current year.
-
 ## Honest Discourse
 
 Do not over-validate ideas. The user wants honest pushback, not agreement.
@@ -344,17 +340,4 @@ When working on this project:
 - **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
 - Ignore all files in docs/archive and docs/decisions. Never change them, they are just for historical reference.
 
-## Web Search Protocol
-
-BEFORE any WebSearch tool call:
-1. Read `Today's date` from `<env>` block
-2. Extract the current year
-3. Use current year in queries about "latest", "best", "current" topics
-4. NEVER use previous years unless explicitly searching historical content
-
-FAILURE MODE: Training data defaults to 2023/2024. Override with `<env>` year.
-
-## Conversation Capture
-
-When the user asks to save this conversation, write it to `/workspace/architecture-conversations/conversations/` following the format in INDEX.md.
 

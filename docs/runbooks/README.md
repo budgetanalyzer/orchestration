@@ -25,7 +25,7 @@ These runbooks follow a **decision tree approach**:
 ### Related Documentation
 - [Tilt Kind Setup Guide](../tilt-kind-setup-guide.md) - Initial setup instructions
 - [NGINX Gateway README](../../nginx/README.md) - Routing configuration
-- [CLAUDE.md](../../CLAUDE.md) - Architecture overview
+- [AGENTS.md](../../AGENTS.md) - Architecture overview
 
 ## Contributing
 

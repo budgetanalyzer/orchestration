@@ -2,7 +2,7 @@
 
 > "Archetype: coordinator. Role: System orchestrator; coordinates cross-cutting concerns and deployment."
 >
-> — [CLAUDE.md](CLAUDE.md#tree-position)
+> — [AGENTS.md](AGENTS.md#tree-position)
 
 ## Architecture Boundaries
 
@@ -29,7 +29,7 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 
 - [Getting Started](docs/development/getting-started.md)
 - [Architecture Overview](docs/architecture/system-overview.md)
-- [Development Guide](CLAUDE.md)
+- [Development Guide](AGENTS.md)
 
 ## Service Repositories
 

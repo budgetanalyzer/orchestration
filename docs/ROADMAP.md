@@ -1,6 +1,6 @@
 # Budget Analyzer Roadmap
 
-This document outlines planned features and enhancements across the Budget Analyzer application. For current implementation details, see individual service CLAUDE.md files.
+This document outlines planned features and enhancements across the Budget Analyzer application. For current implementation details, see individual service AGENTS.md files.
 
 **Last Updated**: 2025-11-25
 

@@ -61,8 +61,8 @@ echo
 # Phase 1: Validation - check all repos exist and are clean
 print_info "Phase 1: Validating repositories..."
 
-# Run the validation script
-if ! "$SCRIPT_DIR/validate-repos.sh"; then
+# Run the validation script (pass exclusions so it validates the same repo set)
+if ! EXCLUDE_REPOS="$(IFS=','; echo "${EXCLUDE_FROM_RELEASE[*]}")" "$SCRIPT_DIR/validate-repos.sh"; then
     print_error "Repository validation failed. Please fix the issues above before tagging."
     exit 1
 fi

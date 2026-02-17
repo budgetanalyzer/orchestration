@@ -24,7 +24,7 @@ spec:
           name: http
         env:
         # Auth0 Configuration
-        - name: AUTH0_ISSUER
+        - name: AUTH0_ISSUER_URI
           valueFrom:
             secretKeyRef:
               name: auth0-credentials

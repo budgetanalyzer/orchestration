@@ -493,7 +493,8 @@ local_resource(
         helm upgrade --install envoy-gateway oci://docker.io/envoyproxy/gateway-helm \
             --namespace envoy-gateway-system \
             --create-namespace \
-            --version v1.2.1
+            --version v1.2.1 \
+            --wait
     ''',
     resource_deps=['gateway-api-crds'],
     labels=['infrastructure'],

@@ -17,6 +17,23 @@ set -e  # Exit on error
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repo-config.sh"
 
+# Exclude non-release repositories
+EXCLUDE_FROM_RELEASE=("architecture-conversations")
+RELEASE_REPOS=()
+for REPO in "${REPOS[@]}"; do
+    SKIP=0
+    for EXCLUDED in "${EXCLUDE_FROM_RELEASE[@]}"; do
+        if [ "$REPO" = "$EXCLUDED" ]; then
+            SKIP=1
+            break
+        fi
+    done
+    if [ $SKIP -eq 0 ]; then
+        RELEASE_REPOS+=("$REPO")
+    fi
+done
+REPOS=("${RELEASE_REPOS[@]}")
+
 # Check if version argument is provided
 if [ $# -eq 0 ]; then
     print_error "No version specified"

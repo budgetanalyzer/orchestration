@@ -25,8 +25,13 @@
   ],
   "tags": [
     {
-      "name": "Admin - Transactions",
-      "description": "Admin operations for transactions",
+      "name": "Saved Views",
+      "description": "Create and manage saved transaction views",
+      "x-service": "transaction-service"
+    },
+    {
+      "name": "Statement Formats",
+      "description": "Manage statement format configurations for imports",
       "x-service": "transaction-service"
     },
     {
@@ -56,6 +61,962 @@
     }
   ],
   "paths": {
+    "/v1/views/{id}": {
+      "get": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Get a saved view",
+        "description": "Gets a saved view by ID",
+        "operationId": "getView",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Update a saved view",
+        "description": "Updates a saved view's name or criteria",
+        "operationId": "updateView",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSavedViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Delete a saved view",
+        "description": "Deletes a saved view",
+        "operationId": "deleteView",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/statement-formats/{formatKey}": {
+      "get": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Get statement format details",
+        "description": "Returns details of a specific statement format by its format key.",
+        "operationId": "getFormat",
+        "parameters": [
+          {
+            "name": "formatKey",
+            "in": "path",
+            "description": "Unique format identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "capital-one"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementFormatResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Update a statement format",
+        "description": "Updates an existing statement format. Only provided fields will be updated. The format key and format type cannot be changed after creation.",
+        "operationId": "updateFormat",
+        "parameters": [
+          {
+            "name": "formatKey",
+            "in": "path",
+            "description": "Unique format identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "capital-one"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStatementFormatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementFormatResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Disable a statement format",
+        "description": "Disables a statement format (soft delete). Disabled formats will not be available for file imports but can be re-enabled by updating the format.",
+        "operationId": "disableFormat",
+        "parameters": [
+          {
+            "name": "formatKey",
+            "in": "path",
+            "description": "Unique format identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "capital-one"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Format successfully disabled"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/views": {
+      "get": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "List saved views",
+        "description": "Gets all saved views for the current user",
+        "operationId": "listViews",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedViewResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Create a saved view",
+        "description": "Creates a new saved view for the current user",
+        "operationId": "createView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSavedViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/views/{id}/pin/{txnId}": {
+      "post": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Pin a transaction",
+        "description": "Pins a transaction to the view",
+        "operationId": "pinTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "txnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Unpin a transaction",
+        "description": "Removes a pin from the view",
+        "operationId": "unpinTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "txnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/views/{id}/exclude/{txnId}": {
+      "post": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Exclude a transaction",
+        "description": "Excludes a transaction from the view",
+        "operationId": "excludeTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "txnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Remove exclusion",
+        "description": "Removes an exclusion, allowing the transaction to appear if it matches criteria",
+        "operationId": "unexcludeTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "txnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/transactions/preview": {
       "post": {
         "tags": [
@@ -353,24 +1314,14 @@
         }
       }
     },
-    "/v1/admin/transactions/search": {
-      "post": {
+    "/v1/statement-formats": {
+      "get": {
         "tags": [
-          "Admin - Transactions"
+          "Statement Formats"
         ],
-        "summary": "Search transactions",
-        "description": "Paginated search over transactions",
-        "operationId": "searchTransactions",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TransactionFilter"
-              }
-            }
-          },
-          "required": true
-        },
+        "summary": "List all statement formats",
+        "description": "Returns all configured statement formats (both enabled and disabled).",
+        "operationId": "listFormats",
         "responses": {
           "200": {
             "description": "OK",
@@ -379,8 +1330,66 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/TransactionResponse"
+                    "$ref": "#/components/schemas/StatementFormatResponse"
                   }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Create a new statement format",
+        "description": "Creates a new statement format configuration. For CSV formats, the column header fields (dateHeader, descriptionHeader, creditHeader) are required.",
+        "operationId": "createFormat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStatementFormatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementFormatResponse"
                 }
               }
             }
@@ -395,6 +1404,27 @@
                 "example": {
                   "type": "INVALID_REQUEST",
                   "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "examples": {
+                  "Duplicate Format Key": {
+                    "summary": "Format key already exists",
+                    "description": "Duplicate Format Key",
+                    "value": {
+                      "type": "APPLICATION_ERROR",
+                      "message": "Format key already exists: capital-one",
+                      "code": "FORMAT_KEY_ALREADY_EXISTS"
+                    }
+                  }
                 }
               }
             }
@@ -633,6 +1663,81 @@
                 "example": {
                   "type": "INVALID_REQUEST",
                   "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/views/{id}/transactions": {
+      "get": {
+        "tags": [
+          "Saved Views"
+        ],
+        "summary": "Get view transaction IDs",
+        "description": "Gets IDs of active transactions in this view, grouped by membership type (matched, pinned, excluded). Soft-deleted transactions are excluded.",
+        "operationId": "getViewTransactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewMembershipResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
                 }
               }
             }
@@ -1280,6 +2385,151 @@
   },
   "components": {
     "schemas": {
+      "UpdateSavedViewRequest": {
+        "type": "object",
+        "description": "Request to update a saved view",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name for the view",
+            "example": "SF Trip December 2024",
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "criteria": {
+            "$ref": "#/components/schemas/ViewCriteriaApi",
+            "description": "New filter criteria for the view"
+          },
+          "openEnded": {
+            "type": "boolean",
+            "description": "If true, the view includes transactions up to current date"
+          }
+        }
+      },
+      "ViewCriteriaApi": {
+        "type": "object",
+        "description": "Filter criteria for a saved view",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date for transaction date range",
+            "example": "2024-12-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "description": "End date for transaction date range (null for open-ended views)"
+          },
+          "accountIds": {
+            "type": "array",
+            "description": "Account IDs to filter by",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "bankNames": {
+            "type": "array",
+            "description": "Bank names to filter by",
+            "example": [
+              "Capital One",
+              "Truist"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "currencyIsoCodes": {
+            "type": "array",
+            "description": "Currency ISO codes to filter by",
+            "example": [
+              "USD",
+              "EUR"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "minAmount": {
+            "type": "number",
+            "description": "Minimum transaction amount",
+            "example": 10.0
+          },
+          "maxAmount": {
+            "type": "number",
+            "description": "Maximum transaction amount",
+            "example": 500.0
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Text to match in the transaction description",
+            "example": "coffee"
+          }
+        }
+      },
+      "SavedViewResponse": {
+        "type": "object",
+        "description": "Saved view response",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the view"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the view",
+            "example": "SF Trip December 2024"
+          },
+          "criteria": {
+            "$ref": "#/components/schemas/ViewCriteriaApi",
+            "description": "Filter criteria for the view"
+          },
+          "openEnded": {
+            "type": "boolean",
+            "description": "If true, the view includes transactions up to the current date"
+          },
+          "pinnedCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of pinned transactions"
+          },
+          "excludedCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of excluded transactions"
+          },
+          "transactionCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of transactions matching this view"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the view was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the view was last updated"
+          }
+        },
+        "required": [
+          "createdAt",
+          "criteria",
+          "excludedCount",
+          "id",
+          "name",
+          "openEnded",
+          "pinnedCount",
+          "transactionCount",
+          "updatedAt"
+        ]
+      },
       "ApiErrorResponse": {
         "description": "Standard API error response format",
         "properties": {
@@ -1351,6 +2601,143 @@
           "message"
         ]
       },
+      "UpdateStatementFormatRequest": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "bankName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "defaultCurrencyIsoCode": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3
+          },
+          "dateHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "dateFormat": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "descriptionHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "creditHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "debitHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "typeHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "categoryHeader": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StatementFormatResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "formatKey": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "formatType": {
+            "type": "string",
+            "enum": [
+              "CSV",
+              "PDF",
+              "XLSX"
+            ]
+          },
+          "bankName": {
+            "type": "string"
+          },
+          "defaultCurrencyIsoCode": {
+            "type": "string"
+          },
+          "dateHeader": {
+            "type": "string"
+          },
+          "dateFormat": {
+            "type": "string"
+          },
+          "descriptionHeader": {
+            "type": "string"
+          },
+          "creditHeader": {
+            "type": "string"
+          },
+          "debitHeader": {
+            "type": "string"
+          },
+          "typeHeader": {
+            "type": "string"
+          },
+          "categoryHeader": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateSavedViewRequest": {
+        "type": "object",
+        "description": "Request to create a new saved view",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the saved view",
+            "example": "SF Trip December 2024",
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "criteria": {
+            "$ref": "#/components/schemas/ViewCriteriaApi",
+            "description": "Filter criteria for the view"
+          },
+          "openEnded": {
+            "type": "boolean",
+            "description": "If true, the view includes transactions up to current date",
+            "example": false
+          }
+        },
+        "required": [
+          "criteria",
+          "name"
+        ]
+      },
       "PreviewResponse": {
         "type": "object",
         "description": "Response from transaction preview containing extracted transactions",
@@ -1394,7 +2781,7 @@
           "description": {
             "type": "string",
             "description": "Description of the transaction",
-            "example": "LOPEZ TAQUERIA #3",
+            "example": "TAQUERIA DEL SOL #3",
             "minLength": 1
           },
           "amount": {
@@ -1629,92 +3016,81 @@
           "updatedAt"
         ]
       },
-      "TransactionFilter": {
+      "CreateStatementFormatRequest": {
         "type": "object",
-        "description": "Filter for querying transactions by various fields",
         "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Unique identifier for the transaction",
-            "example": 1
-          },
-          "accountId": {
+          "formatKey": {
             "type": "string",
-            "description": "Identifier for the account associated with the transaction",
-            "example": "checking-3223"
+            "maxLength": 50,
+            "minLength": 0,
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "formatType": {
+            "type": "string",
+            "enum": [
+              "CSV",
+              "PDF",
+              "XLSX"
+            ]
           },
           "bankName": {
             "type": "string",
-            "description": "Name of the bank where the transaction occurred",
-            "example": "Capital One"
+            "maxLength": 100,
+            "minLength": 0
           },
-          "dateFrom": {
+          "defaultCurrencyIsoCode": {
             "type": "string",
-            "format": "date",
-            "description": "Start date for transaction date range",
-            "example": "2025-10-01"
+            "maxLength": 3,
+            "minLength": 3
           },
-          "dateTo": {
+          "dateHeader": {
             "type": "string",
-            "format": "date",
-            "description": "End date for transaction date range",
-            "example": "2025-10-14"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "currencyIsoCode": {
+          "dateFormat": {
             "type": "string",
-            "description": "ISO currency code for the transaction",
-            "example": "USD"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "minAmount": {
-            "type": "number",
-            "description": "Minimum transaction amount",
-            "example": 10.0
-          },
-          "maxAmount": {
-            "type": "number",
-            "description": "Maximum transaction amount",
-            "example": 500.0
-          },
-          "type": {
+          "descriptionHeader": {
             "type": "string",
-            "description": "Type of the transaction",
-            "enum": [
-              "CREDIT",
-              "DEBIT"
-            ],
-            "example": "DEBIT"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "description": {
+          "creditHeader": {
             "type": "string",
-            "description": "Text to match in the transaction description",
-            "example": "Grocery"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "createdAfter": {
+          "debitHeader": {
             "type": "string",
-            "format": "date-time",
-            "description": "Start of creation timestamp range",
-            "example": "2025-10-14T00:00:00Z"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "createdBefore": {
+          "typeHeader": {
             "type": "string",
-            "format": "date-time",
-            "description": "End of creation timestamp range",
-            "example": "2025-10-15T00:00:00Z"
+            "maxLength": 50,
+            "minLength": 0
           },
-          "updatedAfter": {
+          "categoryHeader": {
             "type": "string",
-            "format": "date-time",
-            "description": "Start of last update timestamp range",
-            "example": "2025-10-14T00:00:00Z"
-          },
-          "updatedBefore": {
-            "type": "string",
-            "format": "date-time",
-            "description": "End of last update timestamp range",
-            "example": "2025-10-15T00:00:00Z"
+            "maxLength": 50,
+            "minLength": 0
           }
-        }
+        },
+        "required": [
+          "bankName",
+          "defaultCurrencyIsoCode",
+          "displayName",
+          "formatKey",
+          "formatType"
+        ]
       },
       "TransactionUpdateRequest": {
         "type": "object",
@@ -1735,6 +3111,53 @@
             "minLength": 0
           }
         }
+      },
+      "ViewMembershipResponse": {
+        "type": "object",
+        "description": "Transaction IDs grouped by membership type in a saved view. Only includes active (non-deleted) transactions.",
+        "properties": {
+          "matched": {
+            "type": "array",
+            "description": "IDs of active transactions matching view criteria (excluding excluded IDs)",
+            "example": [
+              123,
+              456,
+              789
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "pinned": {
+            "type": "array",
+            "description": "IDs of active transactions explicitly pinned (excluding those already matched)",
+            "example": [
+              101,
+              102
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "excluded": {
+            "type": "array",
+            "description": "IDs of active transactions explicitly excluded from matched set",
+            "example": [
+              234
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        },
+        "required": [
+          "excluded",
+          "matched",
+          "pinned"
+        ]
       },
       "CurrencySeriesUpdateRequest": {
         "type": "object",

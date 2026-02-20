@@ -71,7 +71,7 @@ This section describes how the BFF architecture enables rapid response when a us
 
 ### User Account Compromise Response
 
-When a user account is identified as compromised or malicious, the response involves both **authentication revocation** (Session Gateway) and **authorization revocation** (permission-service):
+When a user account is identified as compromised or malicious, the response involves **authentication revocation** (Session Gateway):
 
 **Immediate Actions:**
 
@@ -80,23 +80,6 @@ When a user account is identified as compromised or malicious, the response invo
    - Session Gateway rejects subsequent requests with invalid/missing session
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
-
-2. **Permission Revocation (Authorization Layer)**
-   - Soft-delete user in permission-service (cascades to all roles, permissions, delegations)
-   - Publish cache invalidation event via Redis pub/sub
-   - **Timeline:** 1-6 minutes (L1 cache: 1 min, L2 cache: 5 min)
-
-3. **Audit Trail Query**
-   - Query permission-service audit logs for recent activity
-   - Identify what resources were accessed during compromise window
-   - Temporal queries show point-in-time permissions
-
-**Why Both Layers Matter:**
-
-| Action | Effect | Timeline | Gap Coverage |
-|--------|--------|----------|--------------|
-| Session deletion | User cannot make new authenticated requests | Immediate | Primary response |
-| Permission revocation | Even if session somehow persists, authorization fails | 1-6 min | Defense in depth |
 
 ### Token Revocation Options
 
@@ -148,24 +131,12 @@ Check: Token Validation Service queries before signature validation
 
 **When to use:** Suspected active attack, regulatory requirement for instant revocation, high-value account compromise.
 
-### Comparison: Authentication vs Authorization Revocation
-
-Understanding when each approach applies:
-
-| Scenario | Primary Action | Secondary Action |
-|----------|---------------|------------------|
-| Account compromise | Session deletion (immediate) | Permission soft-delete (audit trail) |
-| Policy violation | Permission revocation (specific permissions) | Optional session deletion |
-| Role change (demotion) | Permission update (cache invalidates) | No session action needed |
-| Temporary suspension | Permission soft-delete | Session deletion (force re-auth) |
-| Permanent ban | Permission hard-delete | Session deletion + Auth0 block |
-
 ### Suspicious Activity Response
 
 For detected anomalies (rate limit triggers, unusual access patterns):
 
 1. **Immediate:** Rate limiting already in effect at NGINX (100 req/min default)
-2. **Short-term:** Temporary permission suspension via permission-service
+2. **Short-term:** Session deletion to force re-authentication
 3. **Investigation:** Query audit logs for access patterns
 4. **Resolution:** Either restore access or escalate to full revocation
 
@@ -174,101 +145,3 @@ For detected anomalies (rate limit triggers, unusual access patterns):
 See [Security Enhancements Roadmap](../plans/security-enhancements-roadmap.md) for planned improvements including:
 - Session Gateway bulk revocation API
 - JWT blacklist support in Token Validation Service
-- Permission-service suspension status
-
-## Permission-Service Integration
-
-The permission-service provides fine-grained authorization control that complements the BFF's authentication security.
-
-### Architecture Overview
-
-```
-┌─ Permission Management (Admin Operations) ─┐
-│  permission-service (port 8086)             │
-│  • CRUD for roles, permissions, delegations │
-│  • User suspension/soft-delete              │
-│  • Audit log queries                        │
-│  • Cache invalidation publishing            │
-└──────────────────────────────────────────────┘
-                    ↓
-           PostgreSQL (source of truth)
-                    ↓
-           Redis pub/sub (invalidation events)
-                    ↓
-┌─ Permission Evaluation (Request Path) ─────┐
-│  service-common library (in each service)   │
-│  • L1 cache: Caffeine (1 min TTL)          │
-│  • L2 cache: Redis (5 min TTL)             │
-│  • Database fallback                        │
-└──────────────────────────────────────────────┘
-```
-
-### Cache Invalidation Flow
-
-When permissions are revoked:
-
-1. **Admin action:** API call to permission-service
-2. **Database update:** PostgreSQL `revoked_at` timestamp set
-3. **Event publish:** Redis pub/sub message sent
-4. **Cache eviction:**
-   - All service instances receive event
-   - L1 (Caffeine) entries evicted immediately
-   - L2 (Redis) entries deleted
-5. **Next request:** Cache miss → database query → denial
-
-**Worst-case propagation time:**
-- If request arrives just before cache invalidation: up to 6 minutes (1 min L1 + 5 min L2)
-- Typical propagation: < 1 second (pub/sub is fast)
-
-### Soft Delete Cascade
-
-When a user is soft-deleted (threat response):
-
-```sql
--- permission-service cascade behavior
-UPDATE users SET deleted_at = NOW() WHERE id = ?;
--- Triggers cascade:
-UPDATE user_roles SET revoked_at = NOW() WHERE user_id = ?;
-UPDATE resource_permissions SET revoked_at = NOW() WHERE user_id = ?;
-UPDATE delegations SET revoked_at = NOW() WHERE delegator_id = ? OR delegatee_id = ?;
-```
-
-**Benefits:**
-- Single API call revokes all access
-- Audit trail preserved (soft delete, not hard delete)
-- Can restore user by clearing `deleted_at`
-- Point-in-time queries show historical permissions
-
-### Integration with Threat Response
-
-**For account compromise:**
-
-```
-1. Session Gateway: Delete Redis sessions (immediate auth block)
-2. Permission-service: Soft-delete user (authorization block + audit)
-3. Result: User blocked at both layers within seconds
-```
-
-**For permission abuse (legitimate user, wrong permissions):**
-
-```
-1. Permission-service: Revoke specific role or permission
-2. Cache invalidation propagates (1-6 min worst case)
-3. No session action needed (user can still authenticate)
-4. Result: User loses specific capability, maintains access
-```
-
-### Audit Capabilities
-
-The permission-service provides forensic capabilities for threat investigation:
-
-- **Point-in-time queries:** "What permissions did user X have at time T?"
-- **Change history:** "When was this permission granted/revoked?"
-- **Access patterns:** "Who accessed resource Y in the last 24 hours?"
-- **Delegation chains:** "How did user X obtain permission Z?"
-
-These capabilities are critical for:
-- Incident investigation
-- Compliance reporting
-- Access reviews
-- Forensic analysis after breach

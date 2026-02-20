@@ -62,7 +62,7 @@ check_repo() {
     else
         echo -e "${RED}✗${NC} $repo NOT found at $path"
         echo "  Repos must be siblings to orchestration. Clone with:"
-        echo "  cd $WORKSPACE_DIR && git clone https://github.com/budgetanalyzerllc/$repo.git"
+        echo "  cd $WORKSPACE_DIR && git clone https://github.com/budgetanalyzer/$repo.git"
         ((ERRORS++))
         return 1
     fi
@@ -114,7 +114,6 @@ echo "---------------------------------------------"
 REPOS=(
     "transaction-service"
     "currency-service"
-    "permission-service"
     "session-gateway"
     "token-validation-service"
     "budget-analyzer-web"
@@ -132,7 +131,6 @@ echo "---------------------------------------------"
 SPRING_SERVICES=(
     "transaction-service"
     "currency-service"
-    "permission-service"
     "session-gateway"
     "token-validation-service"
 )

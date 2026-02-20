@@ -49,9 +49,6 @@ spec:
             secretKeyRef:
               name: redis-credentials
               key: port
-        # Permission service for user sync
-        - name: PERMISSION_SERVICE_URL
-          value: "http://permission-service:8086/permission-service"
         # Auth0 Configuration - loaded from secret via envFrom
         envFrom:
         - secretRef:

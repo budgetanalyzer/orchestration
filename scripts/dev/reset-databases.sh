@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 DATA_ONLY=false
-DATABASES=("budget_analyzer" "currency" "permission")
+DATABASES=("budget_analyzer" "currency")
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -149,7 +149,6 @@ else
     echo "Restart services to run migrations:"
     echo -e "  ${YELLOW}tilt trigger transaction-service${NC}"
     echo -e "  ${YELLOW}tilt trigger currency-service${NC}"
-    echo -e "  ${YELLOW}tilt trigger permission-service${NC}"
     echo ""
     echo "Or restart everything:"
     echo -e "  ${YELLOW}tilt down && tilt up${NC}"

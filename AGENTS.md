@@ -1,15 +1,5 @@
 # Budget Analyzer - Orchestration Repository
 
-## Honest Discourse
-
-Do not over-validate ideas. The user wants honest pushback, not agreement.
-
-- If something seems wrong, say so directly
-- Distinguish "novel" from "obvious in retrospect"
-- Push back on vague claims — ask for concrete constraints
-- Don't say "great question" or "that's a really interesting point"
-- Skip the preamble and caveats — just answer
-
 ## Tree Position
 
 **Archetype**: coordinator
@@ -42,7 +32,6 @@ This project has reached its intended scope. We are no longer actively developin
 
 **What's implemented:**
 - Authentication: OAuth2/OIDC with Auth0, BFF pattern, session management
-- Authorization infrastructure: Roles, permissions, delegations (permission-service)
 - API Gateway: JWT validation, routing (NGINX + Envoy)
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
@@ -51,13 +40,13 @@ This project has reached its intended scope. We are no longer actively developin
 - **Cross-service user scoping**: How does transaction-service filter by owner?
 - **Multi-tenancy**: Organization-level data isolation
 
-This boundary is deliberate. Data ownership is domain-specific and opinionated. The permission-service manages authorization metadata (who has what roles), but propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
+This boundary is deliberate. Data ownership is domain-specific and opinionated. Propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
 
 ## Development Environment
 
 **This project is designed for AI-assisted development.**
 
-For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzerllc/workspace) repository. That's where the devcontainer configuration lives.
+For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
 
 ## Architecture Principles
 
@@ -236,7 +225,6 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── token-validation-service/   # JWT validation service
 ├── transaction-service/        # Transaction management
 ├── currency-service/           # Currency/exchange rates
-├── permission-service/         # Permission management
 ├── budget-analyzer-web/        # React frontend
 ├── service-common/             # Shared Java library
 ├── checkstyle-config/          # Shared checkstyle rules
@@ -263,13 +251,12 @@ tree -L 2 -I 'node_modules|target'
 ## Service Repositories
 
 Each microservice is maintained in its own repository:
-- **service-common**: https://github.com/budgetanalyzerllc/service-common - Shared library for all backend services
-- **transaction-service**: https://github.com/budgetanalyzerllc/transaction-service - Transaction management API
-- **currency-service**: https://github.com/budgetanalyzerllc/currency-service - Currency and exchange rate API
-- **budget-analyzer-web**: https://github.com/budgetanalyzerllc/budget-analyzer-web - React frontend application
-- **session-gateway**: https://github.com/budgetanalyzerllc/session-gateway - BFF for browser authentication
-- **token-validation-service**: https://github.com/budgetanalyzerllc/token-validation-service - JWT validation for NGINX
-- **permission-service**: https://github.com/budgetanalyzerllc/permission-service - Permission management API
+- **service-common**: https://github.com/budgetanalyzer/service-common - Shared library for all backend services
+- **transaction-service**: https://github.com/budgetanalyzer/transaction-service - Transaction management API
+- **currency-service**: https://github.com/budgetanalyzer/currency-service - Currency and exchange rate API
+- **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
+- **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
+- **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
 
 ## Best Practices
 
@@ -340,4 +327,12 @@ When working on this project:
 - **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
 - Ignore all files in docs/archive and docs/decisions. Never change them, they are just for historical reference.
 
+## Honest Discourse
 
+Do not over-validate ideas. The user wants honest pushback, not agreement.
+
+- If something seems wrong, say so directly
+- Distinguish "novel" from "obvious in retrospect"
+- Push back on vague claims — ask for concrete constraints
+- Don't say "great question" or "that's a really interesting point"
+- Skip the preamble and caveats — just answer

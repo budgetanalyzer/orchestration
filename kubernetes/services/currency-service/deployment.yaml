@@ -90,9 +90,6 @@ spec:
             secretKeyRef:
               name: fred-api-credentials
               key: api-key
-        # Permission service for authorization
-        - name: PERMISSION_SERVICE_URL
-          value: "http://permission-service:8086/permission-service"
         resources:
           requests:
             memory: "256Mi"

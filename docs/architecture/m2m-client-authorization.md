@@ -138,17 +138,6 @@ M2M clients use OAuth 2.0 scopes instead of role-based permissions:
 - Enforce business logic constraints
 - Scope-based query filtering (e.g., read-only clients can't write)
 
-### Integration with Permission-Service
-
-**Current State:**
-- M2M clients use Auth0 scopes (not permission-service roles)
-- Permission-service manages user permissions only
-
-**Future Considerations:**
-- Track M2M client access in permission-service audit logs
-- Map scopes to permission-service permissions for unified auditing
-- Client-level rate limiting via permission-service
-
 ## Threat Mitigation for M2M Clients
 
 ### Client Credential Compromise
@@ -351,13 +340,12 @@ location /api/ {
 | **Refresh tokens** | Yes (in Redis) | Optional |
 | **Session cookies** | Yes (HTTP-only) | No |
 | **Rate limiting** | Per user | Per client_id |
-| **Permissions** | Role-based (permission-service) | Scope-based (Auth0) |
+| **Permissions** | Role-based (Auth0) | Scope-based (Auth0) |
 | **Revocation** | Delete Redis session | Disable client in Auth0 |
 
 ## Future Enhancements
 
 See [Security Enhancements Roadmap](../plans/security-enhancements-roadmap.md) for planned improvements including:
-- Permission-service M2M audit integration
 - Per-client rate limiting
 - Mutual TLS (mTLS) for high-security integrations
 - Short-lived M2M tokens

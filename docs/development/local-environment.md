@@ -48,16 +48,15 @@ mkdir -p ~/workspace/budget-analyzer
 cd ~/workspace/budget-analyzer
 
 # Clone orchestration (required)
-git clone https://github.com/budgetanalyzerllc/orchestration.git
+git clone https://github.com/budgetanalyzer/orchestration.git
 
 # Clone services (as needed)
-git clone https://github.com/budgetanalyzerllc/service-common.git
-git clone https://github.com/budgetanalyzerllc/transaction-service.git
-git clone https://github.com/budgetanalyzerllc/currency-service.git
-git clone https://github.com/budgetanalyzerllc/budget-analyzer-web.git
-git clone https://github.com/budgetanalyzerllc/session-gateway.git
-git clone https://github.com/budgetanalyzerllc/token-validation-service.git
-git clone https://github.com/budgetanalyzerllc/permission-service.git
+git clone https://github.com/budgetanalyzer/service-common.git
+git clone https://github.com/budgetanalyzer/transaction-service.git
+git clone https://github.com/budgetanalyzer/currency-service.git
+git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
+git clone https://github.com/budgetanalyzer/session-gateway.git
+git clone https://github.com/budgetanalyzer/token-validation-service.git
 ```
 
 **Repository structure:**
@@ -67,7 +66,6 @@ git clone https://github.com/budgetanalyzerllc/permission-service.git
 ├── service-common/          # Shared Spring Boot library
 ├── transaction-service/     # Transaction microservice
 ├── currency-service/        # Currency microservice
-├── permission-service/      # Permission microservice
 ├── session-gateway/         # BFF for authentication
 ├── token-validation-service/ # JWT validation
 └── budget-analyzer-web/     # React frontend
@@ -138,7 +136,6 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `service-common-publish` - Publishes shared library to Maven Local
 - `transaction-service-compile` - Compiles transaction service
 - `currency-service-compile` - Compiles currency service
-- `permission-service-compile` - Compiles permission service
 - `session-gateway-compile` - Compiles session gateway
 - `token-validation-service-compile` - Compiles token validation service
 
@@ -236,7 +233,6 @@ postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
 | Session Gateway | 8081 | - | Internal (behind Envoy) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
 | currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
-| permission-service | 8086 | http://localhost:8086 | Direct access via port forward |
 | Token Validation | 8088 | http://localhost:8088 | Direct access via port forward |
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
 | PostgreSQL | 5432 | localhost:5432 | Database access |

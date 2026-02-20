@@ -39,7 +39,6 @@ kubectl cluster-info --context kind-kind
 | 8081 | session-gateway | HTTP | Browser auth/session management |
 | 8082 | transaction-service | HTTP | Transaction API |
 | 8084 | currency-service | HTTP | Currency API |
-| 8086 | permission-service | HTTP | Permission API |
 | 8088 | token-validation-service | HTTP | JWT validation |
 | 3000 | budget-analyzer-web | HTTP | React dev server |
 | **Infrastructure** |
@@ -50,7 +49,6 @@ kubectl cluster-info --context kind-kind
 | **Debug Ports** |
 | 5006 | transaction-service | JDWP | Remote debugging |
 | 5007 | currency-service | JDWP | Remote debugging |
-| 5008 | permission-service | JDWP | Remote debugging |
 | 5009 | session-gateway | JDWP | Remote debugging |
 | 5010 | token-validation-service | JDWP | Remote debugging |
 
@@ -61,7 +59,6 @@ kubectl cluster-info --context kind-kind
 curl http://localhost:8081/actuator/health  # session-gateway
 curl http://localhost:8082/actuator/health  # transaction-service
 curl http://localhost:8084/actuator/health  # currency-service
-curl http://localhost:8086/actuator/health  # permission-service
 curl http://localhost:8088/actuator/health  # token-validation-service
 
 # NGINX Gateway
@@ -128,7 +125,6 @@ Each service has JDWP enabled. Configure your IDE:
 |---------|------------|-------------------|
 | transaction-service | 5006 | Remote JVM Debug → localhost:5006 |
 | currency-service | 5007 | Remote JVM Debug → localhost:5007 |
-| permission-service | 5008 | Remote JVM Debug → localhost:5008 |
 | session-gateway | 5009 | Remote JVM Debug → localhost:5009 |
 | token-validation-service | 5010 | Remote JVM Debug → localhost:5010 |
 
@@ -473,7 +469,7 @@ alias logs-tx='kubectl logs -f deployment/transaction-service'
 alias logs-currency='kubectl logs -f deployment/currency-service'
 
 # Health checks
-alias health-all='for p in 8081 8082 8084 8086 8088; do echo "Port $p:"; curl -s http://localhost:$p/actuator/health | jq -r .status; done'
+alias health-all='for p in 8081 8082 8084 8088; do echo "Port $p:"; curl -s http://localhost:$p/actuator/health | jq -r .status; done'
 
 # Pod status
 alias pods='kubectl get pods -A'

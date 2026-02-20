@@ -1140,7 +1140,7 @@ jib {
         ]
         ports = ['8082']
         labels = [
-            'org.opencontainers.image.source': 'https://github.com/budgetanalyzerllc/transaction-service',
+            'org.opencontainers.image.source': 'https://github.com/budgetanalyzer/transaction-service',
             'org.opencontainers.image.version': project.version
         ]
         creationTime = 'USE_CURRENT_TIMESTAMP'

@@ -15,12 +15,11 @@ All backend services use GitHub Actions for continuous integration. Each service
 
 | Service | Status Badge |
 |---------|-------------|
-| service-common | [![Build](https://github.com/budgetanalyzerllc/service-common/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/service-common/actions/workflows/build.yml) |
-| token-validation-service | [![Build](https://github.com/budgetanalyzerllc/token-validation-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/token-validation-service/actions/workflows/build.yml) |
-| session-gateway | [![Build](https://github.com/budgetanalyzerllc/session-gateway/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/session-gateway/actions/workflows/build.yml) |
-| transaction-service | [![Build](https://github.com/budgetanalyzerllc/transaction-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/transaction-service/actions/workflows/build.yml) |
-| currency-service | [![Build](https://github.com/budgetanalyzerllc/currency-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/currency-service/actions/workflows/build.yml) |
-| permission-service | [![Build](https://github.com/budgetanalyzerllc/permission-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzerllc/permission-service/actions/workflows/build.yml) |
+| service-common | [![Build](https://github.com/budgetanalyzer/service-common/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/service-common/actions/workflows/build.yml) |
+| token-validation-service | [![Build](https://github.com/budgetanalyzer/token-validation-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/token-validation-service/actions/workflows/build.yml) |
+| session-gateway | [![Build](https://github.com/budgetanalyzer/session-gateway/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/session-gateway/actions/workflows/build.yml) |
+| transaction-service | [![Build](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml) |
+| currency-service | [![Build](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml) |
 
 ## Workflow Details
 
@@ -51,7 +50,7 @@ All workflows trigger on:
 The build enforces code quality via:
 
 - **Spotless**: Google Java Format (1.32.0)
-- **Checkstyle**: Style rules from [checkstyle-config](https://github.com/budgetanalyzerllc/checkstyle-config)
+- **Checkstyle**: Style rules from [checkstyle-config](https://github.com/budgetanalyzer/checkstyle-config)
 
 ### Dependencies
 

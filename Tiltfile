@@ -112,7 +112,6 @@ pg_data = encode_secret_data({
     'password': 'budget_analyzer',
     'budget-analyzer-url': 'jdbc:postgresql://postgresql.' + INFRA_NAMESPACE + ':5432/budget_analyzer',
     'currency-url': 'jdbc:postgresql://postgresql.' + INFRA_NAMESPACE + ':5432/currency',
-    'permission-url': 'jdbc:postgresql://postgresql.' + INFRA_NAMESPACE + ':5432/permission',
 })
 
 k8s_yaml(blob('''
@@ -127,7 +126,6 @@ data:
   password: ''' + pg_data['password'] + '''
   budget-analyzer-url: ''' + pg_data['budget-analyzer-url'] + '''
   currency-url: ''' + pg_data['currency-url'] + '''
-  permission-url: ''' + pg_data['permission-url'] + '''
 '''))
 
 # Redis credentials
@@ -222,7 +220,6 @@ local_resource(
     cmd='cd ' + get_repo_path('service-common') + ' && ./gradlew publishToMavenLocal --parallel --build-cache && ' +
         'tilt trigger transaction-service-compile && ' +
         'tilt trigger currency-service-compile && ' +
-        'tilt trigger permission-service-compile && ' +
         'tilt trigger session-gateway-compile && ' +
         'tilt trigger token-validation-service-compile',
     deps=[
@@ -301,12 +298,12 @@ EXPOSE ''' + str(port) + '''
     if debug_port:
         port_forwards_list.append(port_forward(debug_port, 5005, name='Debug'))
 
-    base_deps = ['postgresql', 'rabbitmq'] if name in ['transaction-service', 'currency-service', 'permission-service'] else []
+    base_deps = ['postgresql', 'rabbitmq'] if name in ['transaction-service', 'currency-service'] else []
 
     k8s_resource(
         name,
         port_forwards=port_forwards_list,
-        labels=['backend'] if name in ['transaction-service', 'currency-service', 'permission-service'] else ['gateway'],
+        labels=['backend'] if name in ['transaction-service', 'currency-service'] else ['gateway'],
         resource_deps=[name + '-compile'] + base_deps + deps,
     )
 
@@ -319,9 +316,6 @@ spring_boot_service('transaction-service')
 
 # Currency Service
 spring_boot_service('currency-service')
-
-# Permission Service
-spring_boot_service('permission-service')
 
 # ============================================================================
 # GATEWAY SERVICES
@@ -554,7 +548,7 @@ local_resource(
 # Custom buttons for common operations
 cmd_button(
     'rebuild-all-backend',
-    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service session-gateway token-validation-service; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
+    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service session-gateway token-validation-service; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
     resource='transaction-service',
     icon_name='build',
     text='Rebuild All Backend'

@@ -208,6 +208,6 @@ Root `build.gradle.kts` manages shared configuration:
 Subprojects inherit configuration and add module-specific dependencies.
 
 ## References
-- [Service-Common Repository](https://github.com/budgetanalyzerllc/service-common)
-- [Transaction Service](https://github.com/budgetanalyzerllc/transaction-service)
-- [Currency Service](https://github.com/budgetanalyzerllc/currency-service)
+- [Service-Common Repository](https://github.com/budgetanalyzer/service-common)
+- [Transaction Service](https://github.com/budgetanalyzer/transaction-service)
+- [Currency Service](https://github.com/budgetanalyzer/currency-service)

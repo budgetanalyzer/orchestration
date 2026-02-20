@@ -12,7 +12,6 @@
 | 8088 | Token Validation Service | HTTP | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
-| 8086 | Permission Service | HTTP | Permission management API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |
 | 5432 | PostgreSQL | TCP | Relational database | Internal (services only) |
 | 6379 | Redis | TCP | Session storage, caching | Internal (services only) |
@@ -34,7 +33,6 @@
 ### Business Services Layer (Internal)
 - **8082** - Transaction Service
 - **8084** - Currency Service
-- **8086** - Permission Service
 
 ### Frontend Layer (Development)
 - **3000** - React Dev Server (Tilt live reload)
@@ -86,8 +84,7 @@ kubectl exec -n budget-analyzer deployment/nginx-gateway -- curl http://transact
 **Business Services (8082+, even numbers)**:
 - 8082: Transaction Service
 - 8084: Currency Service
-- 8086: Permission Service
-- 8090+: Future services
+- 8086+: Future services
 
 **Frontend Development (3000-3999)**:
 - 3000: React Dev Server (standard React port)

@@ -940,7 +940,7 @@ transaction-service, currency-service, and future services likely have:
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See [@service-common/CLAUDE.md](https://github.com/budgetanalyzerllc/service-common/blob/main/CLAUDE.md) for:
+See [@service-common/CLAUDE.md](https://github.com/budgetanalyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -1054,7 +1054,7 @@ Manages financial transactions, budget creation, and spending analysis.
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See [@service-common/CLAUDE.md](https://github.com/budgetanalyzerllc/service-common/blob/main/CLAUDE.md) for:
+See [@service-common/CLAUDE.md](https://github.com/budgetanalyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -1860,7 +1860,7 @@ Create `templates/service-CLAUDE.md`:
 
 **This service follows standard Budget Analyzer Spring Boot conventions.**
 
-See [@service-common/CLAUDE.md](https://github.com/budgetanalyzerllc/service-common/blob/main/CLAUDE.md) for:
+See [@service-common/CLAUDE.md](https://github.com/budgetanalyzer/service-common/blob/main/CLAUDE.md) for:
 - Architecture layers (Controller → Service → Repository)
 - Naming conventions
 - Testing patterns
@@ -1982,7 +1982,7 @@ cat package.json | grep '"react"'
 
 **Pattern**: All API calls go through NGINX gateway at `http://localhost:8080/api/*`
 
-See [@orchestration/nginx/nginx.dev.conf](https://github.com/budgetanalyzerllc/orchestration/blob/main/nginx/nginx.dev.conf) for available routes.
+See [@orchestration/nginx/nginx.dev.conf](https://github.com/budgetanalyzer/orchestration/blob/main/nginx/nginx.dev.conf) for available routes.
 
 **Discovery**:
 ```bash

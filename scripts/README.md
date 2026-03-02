@@ -6,7 +6,7 @@ This directory contains automation and tooling scripts for the Budget Analyzer o
 
 ### validate-claude-context.sh
 
-Validates CLAUDE.md files for broken references and documentation issues.
+Validates AGENTS.md files for broken references and documentation issues.
 
 **Usage:**
 ```bash
@@ -24,7 +24,7 @@ cd scripts && ./validate-claude-context.sh
 
 **What it checks:**
 - `@references` point to existing files (e.g., `@nginx/nginx.dev.conf`)
-- CLAUDE.md files are not too large (< 200 lines recommended for pattern-based docs)
+- AGENTS.md files are not too large (< 200 lines recommended for pattern-based docs)
 - Common commands referenced (docker compose, mvnw) are available
 
 **Exit codes:**
@@ -32,7 +32,7 @@ cd scripts && ./validate-claude-context.sh
 - `1` - Validation failed (broken references found)
 
 **Recommended usage:**
-- Run before committing changes to CLAUDE.md files
+- Run before committing changes to AGENTS.md files
 - Add to CI/CD pipeline to catch drift early
 - Run after reorganizing documentation structure
 
@@ -55,7 +55,7 @@ cd scripts && ./doc-coverage-report.sh
 **Note:** The script automatically changes to the repository root directory, so it works correctly regardless of where you call it from.
 
 **What it reports:**
-- CLAUDE.md files presence and size
+- AGENTS.md files presence and size
 - Documentation structure (docs/architecture, docs/decisions, etc.)
 - Architecture Decision Records (ADRs)
 - NGINX gateway configuration
@@ -147,7 +147,7 @@ Current structure:
 ```
 scripts/
 ├── README.md                          # This file
-├── validate-claude-context.sh         # CLAUDE.md validation
+├── validate-claude-context.sh         # AGENTS.md validation
 ├── doc-coverage-report.sh             # Documentation coverage report
 ├── validate-repos.sh                  # Repository validation
 ├── repo-config.sh                     # Repository configuration

@@ -32,7 +32,6 @@ This project has reached its intended scope. We are no longer actively developin
 
 **What's implemented:**
 - Authentication: OAuth2/OIDC with Auth0, BFF pattern, session management
-- Authorization infrastructure: Roles, permissions, delegations (permission-service)
 - API Gateway: JWT validation, routing (NGINX + Envoy)
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
@@ -41,7 +40,7 @@ This project has reached its intended scope. We are no longer actively developin
 - **Cross-service user scoping**: How does transaction-service filter by owner?
 - **Multi-tenancy**: Organization-level data isolation
 
-This boundary is deliberate. Data ownership is domain-specific and opinionated. The permission-service manages authorization metadata (who has what roles), but propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
+This boundary is deliberate. Data ownership is domain-specific and opinionated. Propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
 
 ## Development Environment
 
@@ -68,11 +67,11 @@ For containerized development environment setup, see the [workspace](https://git
 # List all running resources
 tilt get uiresources
 
-# View pod status
-kubectl get pods -n budget-analyzer
+# View pod status (services run in default namespace)
+kubectl get pods
 
 # View service endpoints
-kubectl get svc -n budget-analyzer
+kubectl get svc
 ```
 
 **Service Types**:
@@ -85,6 +84,13 @@ kubectl get svc -n budget-analyzer
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, JWT validation, and load balancing
 
 **Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
+
+**Health Probes**: All Spring Boot services use a three-probe pattern:
+- **startupProbe**: Allows up to 120s for slow-starting JVM apps (5s × 24 checks). Pod won't receive traffic until startup succeeds.
+- **readinessProbe**: Checks if pod can accept traffic (10s interval)
+- **livenessProbe**: Checks if pod is healthy (20s interval)
+
+This prevents "connection refused" errors during deployments when services are still starting.
 
 ## BFF + API Gateway Hybrid Pattern
 
@@ -115,7 +121,7 @@ curl -v https://app.budgetanalyzer.localhost/actuator/health
 curl -v https://api.budgetanalyzer.localhost/health
 
 # View service ports
-kubectl get svc -n budget-analyzer
+kubectl get svc
 ```
 
 **When to consult detailed documentation**:
@@ -136,7 +142,7 @@ kubectl get svc -n budget-analyzer
 tilt get uiresources
 
 # View deployed images
-kubectl get pods -n budget-analyzer -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
+kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
 ```
 
 **Stack Patterns**:
@@ -190,14 +196,14 @@ tilt down
 
 **Quick commands**:
 ```bash
-# Check pod status
-kubectl get pods -n budget-analyzer
+# Check pod status (services run in default namespace)
+kubectl get pods
 
 # View logs for a service
-kubectl logs -n budget-analyzer deployment/nginx-gateway
+kubectl logs deployment/nginx-gateway
 
 # Check NGINX configuration validity
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec deployment/nginx-gateway -- nginx -t
 
 # View Envoy Gateway logs
 kubectl logs -n envoy-gateway-system deployment/envoy-gateway
@@ -219,7 +225,6 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── token-validation-service/   # JWT validation service
 ├── transaction-service/        # Transaction management
 ├── currency-service/           # Currency/exchange rates
-├── permission-service/         # Permission management
 ├── budget-analyzer-web/        # React frontend
 ├── service-common/             # Shared Java library
 ├── checkstyle-config/          # Shared checkstyle rules
@@ -252,7 +257,6 @@ Each microservice is maintained in its own repository:
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
 - **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
 - **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
-- **permission-service**: https://github.com/budgetanalyzer/permission-service - Permission management API
 
 ## Best Practices
 
@@ -323,17 +327,12 @@ When working on this project:
 - **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
 - Ignore all files in docs/archive and docs/decisions. Never change them, they are just for historical reference.
 
-## Web Search Protocol
+## Honest Discourse
 
-BEFORE any WebSearch tool call:
-1. Read `Today's date` from `<env>` block
-2. Extract the current year
-3. Use current year in queries about "latest", "best", "current" topics
-4. NEVER use previous years unless explicitly searching historical content
+Do not over-validate ideas. The user wants honest pushback, not agreement.
 
-FAILURE MODE: Training data defaults to 2023/2024. Override with `<env>` year.
-
-## Conversation Capture
-
-When the user asks to save this conversation, write it to `/workspace/architecture-conversations/conversations/` following the format in INDEX.md.
-
+- If something seems wrong, say so directly
+- Distinguish "novel" from "obvious in retrospect"
+- Push back on vague claims — ask for concrete constraints
+- Don't say "great question" or "that's a really interesting point"
+- Skip the preamble and caveats — just answer

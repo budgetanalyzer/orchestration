@@ -10,7 +10,7 @@ Open in VS Code → "Reopen in Container" when prompted.
 
 First time takes several minutes to download Docker images. Click "show log" in the VS Code notification to watch progress — otherwise it looks stuck.
 
-You're now in the devcontainer. You'll see all repos in the sidebar, but don't just click them — that browses files but doesn't load the repo's CLAUDE.md. Use File → Open Folder to launch a new VS Code instance with the right Claude context.
+You're now in the devcontainer. You'll see all repos in the sidebar, but don't just click them — that browses files but doesn't load the repo's AGENTS.md. Use File → Open Folder to launch a new VS Code instance with the right Claude context.
 
 ---
 

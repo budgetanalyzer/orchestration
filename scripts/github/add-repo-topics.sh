@@ -70,9 +70,6 @@ set_topics "transaction-service" \
 set_topics "currency-service" \
     spring-boot microservice rest-api redis ai-native ai-assisted-development
 
-set_topics "permission-service" \
-    spring-boot microservice authorization rbac ai-native ai-assisted-development
-
 set_topics "budget-analyzer-web" \
     react typescript vite casl frontend ai-native ai-assisted-development
 

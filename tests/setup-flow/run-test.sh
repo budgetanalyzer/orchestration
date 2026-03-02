@@ -72,7 +72,6 @@ REPOS=(
     "budget-analyzer-web"
     "session-gateway"
     "token-validation-service"
-    "permission-service"
 )
 
 MISSING_REPOS=()

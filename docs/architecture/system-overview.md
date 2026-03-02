@@ -60,14 +60,14 @@ Backend Services ─── business logic, data authorization
 │   :8081              │   │   :8080                           │
 └──────────────────────┘   └─────────┬────────────────────────┘
                                      │
-              ┌──────────────────────┼──────────────────────┐
-              ▼                      ▼                      ▼
-┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐
-│  Transaction Service │ │   Currency Service   │ │  Permission Service  │
-│   :8082              │ │   :8084              │ │   :8086              │
-└──────────┬───────────┘ └─────────┬────────────┘ └──────────┬───────────┘
-           │                       │                         │
-           ▼                       ▼                         ▼
+              ┌──────────────────────┴──────────────────────┐
+              ▼                                             ▼
+┌──────────────────────┐                      ┌──────────────────────┐
+│  Transaction Service │                      │   Currency Service   │
+│   :8082              │                      │   :8084              │
+└──────────┬───────────┘                      └─────────┬────────────┘
+           │                                            │
+           ▼                                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Shared Infrastructure                           │
 │  • PostgreSQL (primary database)                             │
@@ -119,11 +119,6 @@ Backend Services ─── business logic, data authorization
 - Key features: FRED API integration, scheduled imports, distributed caching
 - Database: PostgreSQL (currencies, exchange rates)
 - External: Federal Reserve Economic Data (FRED)
-
-**permission-service** (Port 8086)
-- Domain: User permissions and authorization
-- Key features: Role-based access control
-- Database: PostgreSQL (permissions, roles)
 
 ### Infrastructure Services
 
@@ -258,12 +253,6 @@ This reference architecture deliberately stops before solving data ownership. Un
 - Redis-backed session management
 - Token refresh and lifecycle
 
-**Authorization Infrastructure:**
-- permission-service: Roles, permissions, delegations
-- Temporal tracking for compliance
-- Cascading revocation
-- Audit logging
-
 **Gateway Patterns:**
 - Envoy: SSL termination, ingress
 - Session Gateway: Session-to-JWT translation
@@ -283,8 +272,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 - This is domain-specific and we're not prescribing a solution
 
 **Multi-Tenancy:**
-- permission-service schema includes `organization_id`
-- But: Organization-level isolation is not implemented
+- Organization-level isolation is not implemented
 - Patterns exist (row-level security, tenant headers) - we leave the choice to you
 
 ### Why This Boundary?

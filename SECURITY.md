@@ -28,7 +28,6 @@ This policy applies to all repositories in the Budget Analyzer organization:
 - token-validation-service
 - transaction-service
 - currency-service
-- permission-service
 - budget-analyzer-web
 - service-common
 

@@ -60,8 +60,7 @@ spec:
                 - |
                   pg_isready -U budget_analyzer &&
                   psql -U budget_analyzer -d budget_analyzer -c 'SELECT 1' &&
-                  psql -U budget_analyzer -d currency -c 'SELECT 1' &&
-                  psql -U budget_analyzer -d permission -c 'SELECT 1'
+                  psql -U budget_analyzer -d currency -c 'SELECT 1'
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5

@@ -2,14 +2,13 @@
 
 > "Archetype: coordinator. Role: System orchestrator; coordinates cross-cutting concerns and deployment."
 >
-> — [CLAUDE.md](CLAUDE.md#tree-position)
+> — [AGENTS.md](AGENTS.md#tree-position)
 
 ## Architecture Boundaries
 
 This project demonstrates production-grade patterns:
 
 - **Authentication**: OAuth2/OIDC with Auth0, BFF pattern, session management
-- **Authorization Infrastructure**: Roles, permissions, delegations (permission-service)
 - **API Gateway**: JWT validation, routing, rate limiting (NGINX + Envoy)
 - **Microservices**: Spring Boot, Kubernetes, Tilt local development
 
@@ -29,7 +28,7 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 
 - [Getting Started](docs/development/getting-started.md)
 - [Architecture Overview](docs/architecture/system-overview.md)
-- [Development Guide](CLAUDE.md)
+- [Development Guide](AGENTS.md)
 
 ## Service Repositories
 
@@ -39,7 +38,6 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 - [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) - React frontend
 - [session-gateway](https://github.com/budgetanalyzer/session-gateway) - Authentication BFF
 - [token-validation-service](https://github.com/budgetanalyzer/token-validation-service) - JWT validation
-- [permission-service](https://github.com/budgetanalyzer/permission-service) - Permissions API
 
 ## License
 

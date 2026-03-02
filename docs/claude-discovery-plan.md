@@ -26,7 +26,7 @@ This is **discovery**, not indexing. We're looking for the "five people on the p
 We're looking for a specific architectural approach, not a filename convention:
 - **Discovery commands over static lists** - repos that teach through exploration rather than exhaustive documentation
 - **Pattern recognition** - if someone independently adopted discovery-based documentation, they "get it"
-- **Filename agnostic** - whether it's README.md, CONTRIBUTING.md, or CLAUDE.md doesn't matter
+- **Filename agnostic** - whether it's README.md, CONTRIBUTING.md, or AGENTS.md doesn't matter
 - **Signal of sophistication** - using grep/kubectl/docker commands in docs shows production thinking
 
 The pattern is what matters. If a root markdown file contains discovery commands that help you understand the codebase, that architect independently figured out what we're looking for.
@@ -102,7 +102,7 @@ search_github_for_discovery_patterns(candidate_repos)
     - CONTRIBUTING.md
     - DEVELOPMENT.md
     - ARCHITECTURE.md
-    - CLAUDE.md (yes, still include it)
+    - AGENTS.md (yes, still include it)
 - Use GitHub REST API or GraphQL
 - Handle pagination (100 results at a time)
 - Handle rate limiting (5000 requests/hour authenticated)
@@ -191,7 +191,7 @@ generate_reports()
 ```
 claude-discovery/
 ├── README.md                    # Vision, usage, current findings
-├── CLAUDE.md                    # Meta: This tool's own CLAUDE.md
+├── AGENTS.md                    # Meta: This tool's own AGENTS.md
 ├── discoveries.json             # Machine-readable registry (generated)
 ├── DISCOVERIES.md               # Human-readable findings (generated)
 ├── .env.example                 # Template for GitHub token
@@ -303,7 +303,7 @@ The code is public not for user acquisition but for discoverability. Someone poi
 
 ### 5. AI-Native Architecture
 This tool itself should exemplify the patterns we're looking for:
-- Discoverable (its own CLAUDE.md)
+- Discoverable (its own AGENTS.md)
 - Pattern-based documentation
 - Simple, bounded context
 - Runnable without complex setup
@@ -371,7 +371,7 @@ We're in phase 1-2. Building this tool accelerates toward phase 3-4.
 ### Week 1: Foundation
 - [ ] Create `claude-discovery` repository
 - [ ] Write comprehensive README.md explaining vision
-- [ ] Write CLAUDE.md for the discovery tool itself
+- [ ] Write AGENTS.md for the discovery tool itself
 - [ ] Set up Python environment, dependencies
 
 ### Week 2: Core Search
@@ -412,7 +412,7 @@ This is how movements start: not with manifestos, but with people independently 
 
 1. **Create the repository**: `claude-discovery` at `/workspace/claude-discovery/`
 2. **Write the README**: Public-facing vision statement
-3. **Write the CLAUDE.md**: Self-documenting, meta
+3. **Write the AGENTS.md**: Self-documenting, meta
 4. **Implement search.py**: First working code
 5. **Run first search**: See what we find
 6. **Iterate**: Learn, refine, discover

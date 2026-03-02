@@ -22,6 +22,24 @@
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repo-config.sh"
+# Allow callers to exclude repos via EXCLUDE_REPOS (comma-separated)
+if [ -n "$EXCLUDE_REPOS" ]; then
+    IFS=',' read -ra _EXCLUDED <<< "$EXCLUDE_REPOS"
+    _FILTERED=()
+    for REPO in "${REPOS[@]}"; do
+        _SKIP=0
+        for _EX in "${_EXCLUDED[@]}"; do
+            if [ "$REPO" = "$_EX" ]; then
+                _SKIP=1
+                break
+            fi
+        done
+        if [ $_SKIP -eq 0 ]; then
+            _FILTERED+=("$REPO")
+        fi
+    done
+    REPOS=("${_FILTERED[@]}")
+fi
 
 # Parse command line arguments
 FIX_MODE=0

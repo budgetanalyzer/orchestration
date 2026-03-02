@@ -114,7 +114,6 @@ echo "---------------------------------------------"
 REPOS=(
     "transaction-service"
     "currency-service"
-    "permission-service"
     "session-gateway"
     "token-validation-service"
     "budget-analyzer-web"
@@ -132,7 +131,6 @@ echo "---------------------------------------------"
 SPRING_SERVICES=(
     "transaction-service"
     "currency-service"
-    "permission-service"
     "session-gateway"
     "token-validation-service"
 )

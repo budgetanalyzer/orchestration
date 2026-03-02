@@ -16,9 +16,7 @@ REPOS=(
     "budget-analyzer-web"
     "session-gateway"
     "token-validation-service"
-    "architecture-conversations"
     "checkstyle-config"
-    "claude-discovery"
 )
 
 # Colors for output

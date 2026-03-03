@@ -70,36 +70,55 @@ fi
 # Fetch JSON for merging (use gateway endpoints)
 TRANSACTION_SERVICE="https://api.budgetanalyzer.localhost/api/transaction-service/v3/api-docs"
 CURRENCY_SERVICE="https://api.budgetanalyzer.localhost/api/currency-service/v3/api-docs"
+SESSION_GATEWAY="https://app.budgetanalyzer.localhost/v3/api-docs"
 print_info "Fetching specs for merging..."
 
-BUDGET_SPEC=$(curl -sfk "$TRANSACTION_SERVICE" 2>/dev/null)
-if [ $? -ne 0 ]; then
+if ! BUDGET_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$TRANSACTION_SERVICE" 2>/dev/null); then
     print_error "Failed to fetch Budget Analyzer API spec from $TRANSACTION_SERVICE"
     print_error "Make sure the service is running and accessible"
     exit 1
 fi
 print_success "✓ Fetched Budget Analyzer API spec"
 
-CURRENCY_SPEC=$(curl -sfk "$CURRENCY_SERVICE" 2>/dev/null)
-if [ $? -ne 0 ]; then
+if ! CURRENCY_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$CURRENCY_SERVICE" 2>/dev/null); then
     print_error "Failed to fetch Currency Service spec from $CURRENCY_SERVICE"
     print_error "Make sure the service is running and accessible"
     exit 1
 fi
 print_success "✓ Fetched Currency Service spec"
 
+if ! SESSION_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$SESSION_GATEWAY" 2>/dev/null); then
+    print_error "Failed to fetch Session Gateway spec from $SESSION_GATEWAY"
+    print_error "Make sure the service is running and accessible"
+    exit 1
+fi
+print_success "✓ Fetched Session Gateway spec"
+
 print_info "Merging OpenAPI specifications..."
 
 # Create unified spec using jq
+# Session-gateway paths need a server override since they're served from app.budgetanalyzer.localhost
+# (the BFF entry point), not api.budgetanalyzer.localhost like the other services.
 UNIFIED_SPEC=$(jq -n \
     --argjson budget "$BUDGET_SPEC" \
-    --argjson currency "$CURRENCY_SPEC" '
+    --argjson currency "$CURRENCY_SPEC" \
+    --argjson session "$SESSION_SPEC" '
+
+# Add per-path server override to all session-gateway paths
+def with_session_servers:
+    to_entries | map(
+        .value += {"servers": [
+            {"url": "https://app.budgetanalyzer.localhost", "description": "Local environment (BFF)"},
+            {"url": "https://app.budgetanalyzer.org", "description": "Production environment (BFF)"}
+        ]}
+    ) | from_entries;
+
 {
     "openapi": "3.1.0",
     "info": {
         "title": "Budget Analyzer - Unified API",
         "version": "1.0",
-        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API and Currency Service into a single document for client code generation.",
+        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API, Currency Service, and Session Gateway into a single document for client code generation. Note: Session Gateway endpoints (User) are served from the BFF origin (app.*), not the API gateway.",
         "contact": {
             "name": "Bleu Rubin",
             "email": "contact@budgetanalyzer.org"
@@ -115,20 +134,21 @@ UNIFIED_SPEC=$(jq -n \
             "description": "Local environment (via gateway)"
         },
         {
-            "url": "https://api.bleurubin.com",
+            "url": "https://api.budgetanalyzer.org",
             "description": "Production environment"
         }
     ],
     "tags": (
         ($budget.tags // [] | map(. + {"x-service": "transaction-service"})) +
-        ($currency.tags // [] | map(. + {"x-service": "currency-service"}))
+        ($currency.tags // [] | map(. + {"x-service": "currency-service"})) +
+        ($session.tags // [] | map(. + {"x-service": "session-gateway"}))
     ),
     "paths": (
-        ($budget.paths // {}) + ($currency.paths // {})
+        ($budget.paths // {}) + ($currency.paths // {}) + (($session.paths // {}) | with_session_servers)
     ),
     "components": {
         "schemas": (
-            ($budget.components.schemas // {}) + ($currency.components.schemas // {})
+            ($budget.components.schemas // {}) + ($currency.components.schemas // {}) + ($session.components.schemas // {})
         )
     }
 }

@@ -23,17 +23,6 @@ spec:
         - containerPort: 8088
           name: http
         env:
-        # Auth0 Configuration
-        - name: AUTH0_ISSUER_URI
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: AUTH0_ISSUER_URI
-        - name: AUTH0_AUDIENCE
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: AUTH0_AUDIENCE
         - name: SPRING_PROFILES_ACTIVE
           value: "kubernetes"
         resources:

@@ -21,7 +21,7 @@ The BFF architecture creates 4 independent security layers:
 
 ### 3. **Automatic Token Refresh Without Browser Involvement**
 
-- **BFF Pattern:** Session Gateway proactively refreshes tokens 5 minutes before expiration. Browser never sees or handles refresh tokens.
+- **BFF Pattern:** Session Gateway proactively refreshes Auth0 tokens 5 minutes before expiration, then mints a new internal JWT for downstream services. Browser never sees or handles refresh tokens.
 - **Direct JWT:** Browser must store refresh tokens (even more sensitive than access tokens) and handle refresh logic in JavaScript, exposing another attack surface.
 
 **Security implication:** Refresh tokens are long-lived (8 hours to 30 days). Exposing them to XSS dramatically increases breach window.
@@ -99,7 +99,7 @@ The BFF architecture supports two approaches to token revocation, each with diff
 - No performance overhead on every request
 
 **Limitations:**
-- JWT technically remains valid until expiration (15-30 min)
+- Internal JWT technically remains valid until expiration (typically short-lived)
 - If attacker obtained JWT directly (unlikely in BFF), they could use it until expiration
 - Mitigated by: JWTs never exposed to browser in BFF pattern
 

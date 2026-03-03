@@ -49,7 +49,16 @@ spec:
             secretKeyRef:
               name: redis-credentials
               key: port
-        # Auth0 Configuration - loaded from secret via envFrom
+        # Permission service URL
+        - name: PERMISSION_SERVICE_URL
+          value: "http://permission-service:8086/permission-service"
+        # JWT signing key for gateway-minted JWTs
+        - name: JWT_SIGNING_PRIVATE_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: jwt-signing-credentials
+              key: private-key-pem
+        # IDP Configuration - loaded from secret via envFrom
         envFrom:
         - secretRef:
             name: auth0-credentials

@@ -2,9 +2,10 @@ openapi: 3.1.0
 info:
   title: Budget Analyzer - Unified API
   version: '1.0'
-  description: Unified API documentation for all Budget Analyzer microservices. This
-    specification combines the Budget Analyzer API and Currency Service into a single
-    document for client code generation.
+  description: 'Unified API documentation for all Budget Analyzer microservices. This
+    specification combines the Budget Analyzer API, Currency Service, and Session
+    Gateway into a single document for client code generation. Note: Session Gateway
+    endpoints (User) are served from the BFF origin (app.*), not the API gateway.'
   contact:
     name: Bleu Rubin
     email: contact@budgetanalyzer.org
@@ -14,7 +15,7 @@ info:
 servers:
 - url: https://api.budgetanalyzer.localhost/api
   description: Local environment (via gateway)
-- url: https://api.bleurubin.com
+- url: https://api.budgetanalyzer.org
   description: Production environment
 tags:
 - name: Saved Views
@@ -38,6 +39,9 @@ tags:
 - name: Admin - Currency Series Handler
   description: Admin endpoints for creating and updating currency series
   x-service: currency-service
+- name: User
+  description: Authentication status and user information
+  x-service: session-gateway
 paths:
   /v1/views/{id}:
     get:
@@ -1562,6 +1566,118 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /user:
+    get:
+      tags:
+      - User
+      summary: Get current user info
+      description: Returns the authenticated user's profile and roles. Returns 200
+        with user info if authenticated, or empty 401 if not.
+      operationId: getCurrentUser
+      parameters:
+      - name: session
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/WebSession'
+      responses:
+        '200':
+          description: Authenticated user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfoResponse'
+        '401':
+          description: Not authenticated
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    servers:
+    - url: https://app.budgetanalyzer.localhost
+      description: Local environment (BFF)
+    - url: https://app.budgetanalyzer.org
+      description: Production environment (BFF)
+  /logout:
+    get:
+      tags:
+      - logout-controller
+      operationId: logout
+      responses:
+        '200':
+          description: OK
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    servers:
+    - url: https://app.budgetanalyzer.localhost
+      description: Local environment (BFF)
+    - url: https://app.budgetanalyzer.org
+      description: Production environment (BFF)
+  /.well-known/jwks.json:
+    get:
+      tags:
+      - jwks-controller
+      operationId: jwks
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    servers:
+    - url: https://app.budgetanalyzer.localhost
+      description: Local environment (BFF)
+    - url: https://app.budgetanalyzer.org
+      description: Production environment (BFF)
 components:
   schemas:
     UpdateSavedViewRequest:
@@ -2330,3 +2446,62 @@ components:
       - publishedDate
       - rate
       - targetCurrency
+    WebSession:
+      type: object
+      properties:
+        maxIdleTime:
+          type: string
+        expired:
+          type: boolean
+        id:
+          type: string
+        started:
+          type: boolean
+        attributes:
+          type: object
+          additionalProperties: {}
+        lastAccessTime:
+          type: string
+          format: date-time
+        creationTime:
+          type: string
+          format: date-time
+    UserInfoResponse:
+      type: object
+      description: Authenticated user information
+      properties:
+        sub:
+          type: string
+          description: IDP subject identifier
+          example: auth0|abc123
+        name:
+          type: string
+          description: User's display name
+          example: Jane Doe
+        email:
+          type: string
+          description: User's email address
+          example: jane@example.com
+        picture:
+          type: string
+          description: Profile picture URL
+          example: https://example.com/photo.jpg
+        emailVerified:
+          type: boolean
+          description: Whether the user's email has been verified
+          example: true
+        authenticated:
+          type: boolean
+          description: Always true when this response is returned
+          example: true
+        registrationId:
+          type: string
+          description: OAuth2 client registration ID
+          example: idp
+        roles:
+          type: array
+          description: User's roles for UI visibility
+          example:
+          - USER
+          items:
+            type: string

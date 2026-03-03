@@ -17,7 +17,7 @@ Browser (https://app.budgetanalyzer.localhost)
 Envoy Gateway (:443) ─── SSL termination
     │
     ▼ HTTP
-Session Gateway (:8081) ─── JWT lookup from Redis, inject into header
+Session Gateway (:8081) ─── Calls permission-service (via service JWT), mints user JWT, injects into header
     │
     ▼ HTTPS
 Envoy Gateway (:443) ─── routes to api.budgetanalyzer.localhost
@@ -30,7 +30,7 @@ Backend Services ─── business logic, data authorization
 ```
 
 **Two entry points, same pattern:**
-- `app.budgetanalyzer.localhost` → Envoy → Session Gateway (browser auth, stores JWT in Redis)
+- `app.budgetanalyzer.localhost` → Envoy → Session Gateway (browser auth, mints internal JWT)
 - `api.budgetanalyzer.localhost` → Envoy → NGINX (API gateway, validates JWT)
 
 **Why this works:**
@@ -58,14 +58,14 @@ Backend Services ─── business logic, data authorization
 │   Session Gateway    │   │         NGINX API Gateway         │
 │   (BFF, OAuth2)      │──▶│   (JWT validation, routing)       │
 │   :8081              │   │   :8080                           │
-└──────────────────────┘   └─────────┬────────────────────────┘
-                                     │
-              ┌──────────────────────┴──────────────────────┐
-              ▼                                             ▼
-┌──────────────────────┐                      ┌──────────────────────┐
-│  Transaction Service │                      │   Currency Service   │
-│   :8082              │                      │   :8084              │
-└──────────┬───────────┘                      └─────────┬────────────┘
+└───────┬──────────────┘   └─────────┬────────────────────────┘
+        │                            │
+        ▼                 ┌──────────┴──────────────────────┐
+┌──────────────────────┐  ▼                                 ▼
+│  Permission Service  │  ┌──────────────────────┐  ┌──────────────────────┐
+│   :8086              │  │  Transaction Service │  │   Currency Service   │
+└──────────────────────┘  │   :8082              │  │   :8084              │
+                          └──────────┬───────────┘  └─────────┬────────────┘
            │                                            │
            ▼                                            ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -96,7 +96,9 @@ Backend Services ─── business logic, data authorization
 **Session Gateway (BFF)** (Port 8081)
 - OAuth2 authentication with Auth0
 - Session management via Redis
-- JWT storage (never exposed to browser)
+- Auth0 token storage; mints internal JWTs (never exposed to browser)
+- Calls permission-service to enrich user JWT with roles/permissions
+- Authenticates to permission-service via short-lived service JWT (reuses gateway RSA key; no Auth0 client credentials for internal M2M)
 
 **NGINX API Gateway** (Port 8080)
 - JWT validation via Token Validation Service
@@ -105,7 +107,7 @@ Backend Services ─── business logic, data authorization
 
 **Token Validation Service** (Port 8088)
 - JWT signature verification
-- JWKS integration with Auth0
+- JWKS integration with session-gateway
 
 ### Backend Microservices
 
@@ -255,7 +257,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 
 **Gateway Patterns:**
 - Envoy: SSL termination, ingress
-- Session Gateway: Session-to-JWT translation
+- Session Gateway: Session-to-JWT minting (with permissions); internal M2M via gateway service JWTs (not OAuth2 client credentials)
 - NGINX: JWT validation, resource routing
 - Token Validation Service: JWKS-based verification
 

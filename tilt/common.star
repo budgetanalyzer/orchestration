@@ -23,6 +23,7 @@ INFRA_NAMESPACE = 'infrastructure'
 SERVICE_PORTS = {
     'transaction-service': 8082,
     'currency-service': 8084,
+    'permission-service': 8086,
     'token-validation-service': 8088,
     'session-gateway': 8081,
     'budget-analyzer-web': 3000,
@@ -33,6 +34,7 @@ SERVICE_PORTS = {
 DEBUG_PORTS = {
     'transaction-service': 5006,
     'currency-service': 5007,
+    'permission-service': 5011,
     'token-validation-service': 5010,
     'session-gateway': 5009,
 }

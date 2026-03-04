@@ -40,7 +40,7 @@ Scroll down to **Application URIs** and configure:
 
 **Allowed Callback URLs**:
 ```
-https://app.budgetanalyzer.localhost/login/oauth2/code/auth0
+https://app.budgetanalyzer.localhost/login/oauth2/code/idp
 ```
 
 **Allowed Logout URLs**:
@@ -85,7 +85,7 @@ AUTH0_CLIENT_SECRET=your-client-secret-here
 
 ### "Invalid callback URL" error
 
-- Verify **Allowed Callback URLs** exactly matches: `https://app.budgetanalyzer.localhost/login/oauth2/code/auth0`
+- Verify **Allowed Callback URLs** exactly matches: `https://app.budgetanalyzer.localhost/login/oauth2/code/idp`
 - Check for trailing slashes or typos
 
 ### "Unauthorized" after login

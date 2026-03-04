@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: transaction-service
+  name: permission-service
   namespace: default
   labels:
-    app: transaction-service
+    app: permission-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: transaction-service
+      app: permission-service
   template:
     metadata:
       labels:
-        app: transaction-service
+        app: permission-service
     spec:
       containers:
-      - name: transaction-service
-        image: transaction-service:latest
+      - name: permission-service
+        image: permission-service:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 8082
+        - containerPort: 8086
           name: http
         env:
         - name: SPRING_PROFILES_ACTIVE
@@ -30,7 +30,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: postgresql-credentials
-              key: budget-analyzer-url
+              key: permission-url
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
@@ -41,27 +41,6 @@ spec:
             secretKeyRef:
               name: postgresql-credentials
               key: password
-        # RabbitMQ connection
-        - name: SPRING_RABBITMQ_HOST
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: host
-        - name: SPRING_RABBITMQ_PORT
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: amqp-port
-        - name: SPRING_RABBITMQ_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: username
-        - name: SPRING_RABBITMQ_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: password
         resources:
           requests:
             memory: "256Mi"
@@ -71,17 +50,17 @@ spec:
             cpu: "500m"
         startupProbe:
           httpGet:
-            path: /transaction-service/actuator/health
-            port: 8082
+            path: /permission-service/actuator/health
+            port: 8086
           periodSeconds: 5
           failureThreshold: 24  # 5s * 24 = 120s max startup time
         readinessProbe:
           httpGet:
-            path: /transaction-service/actuator/health
-            port: 8082
+            path: /permission-service/actuator/health
+            port: 8086
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /transaction-service/actuator/health
-            port: 8082
+            path: /permission-service/actuator/health
+            port: 8086
           periodSeconds: 20

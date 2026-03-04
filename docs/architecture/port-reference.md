@@ -9,6 +9,7 @@
 | 443 | Envoy Gateway | HTTPS | SSL termination, ingress | Public (browsers) |
 | 8080 | NGINX Gateway | HTTP | JWT validation, routing | Internal (Envoy only) |
 | 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Envoy only) |
+| 8086 | Permission Service | HTTP | Internal roles/permissions resolution | Internal (Session Gateway only) |
 | 8088 | Token Validation Service | HTTP | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
@@ -84,7 +85,8 @@ kubectl exec -n budget-analyzer deployment/nginx-gateway -- curl http://transact
 **Business Services (8082+, even numbers)**:
 - 8082: Transaction Service
 - 8084: Currency Service
-- 8086+: Future services
+- 8086: Permission Service
+- 8090+: Future services
 
 **Frontend Development (3000-3999)**:
 - 3000: React Dev Server (standard React port)

@@ -73,17 +73,6 @@ spec:
             secretKeyRef:
               name: redis-credentials
               key: port
-        # Auth0 Configuration
-        - name: AUTH0_ISSUER_URI
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: AUTH0_ISSUER_URI
-        - name: AUTH0_AUDIENCE
-          valueFrom:
-            secretKeyRef:
-              name: auth0-credentials
-              key: AUTH0_AUDIENCE
         # FRED API Configuration
         - name: FRED_API_KEY
           valueFrom:

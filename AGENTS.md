@@ -32,6 +32,7 @@ This project has reached its intended scope. We are no longer actively developin
 
 **What's implemented:**
 - Authentication: OAuth2/OIDC with Auth0, BFF pattern, session management
+- Internal M2M: Session Gateway mints short-lived service JWTs (reusing its RSA key) to authenticate to permission-service — no Auth0 dependency for internal traffic
 - API Gateway: JWT validation, routing (NGINX + Envoy)
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
@@ -77,7 +78,7 @@ kubectl get svc
 **Service Types**:
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
-- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
+- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication, session management, and internal service-to-service auth (mints service JWTs for permission-service calls)
 - **Token Validation Service**: Spring Boot service (port 8088) - JWT validation for NGINX
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
 - **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination and initial routing
@@ -104,6 +105,8 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 **Two entry points**:
 - `app.budgetanalyzer.localhost` → Session Gateway (browser auth, session cookies)
 - `api.budgetanalyzer.localhost` → NGINX (JWT validation, routing)
+
+**Note**: During JWT minting, Session Gateway also calls permission-service (:8086) to resolve roles/permissions, authenticating via a short-lived service JWT (not OAuth2 client credentials).
   - `api.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:
@@ -169,12 +172,8 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-# 1. Generate HTTPS certificates (see SSL/TLS section below for details)
-./scripts/dev/setup-k8s-tls.sh
-
-# 2. Configure Auth0 credentials
-cp .env.example .env
-# Edit .env with your Auth0 credentials
+./setup.sh        # Creates cluster, certs, DNS, .env, JWT signing key
+# Edit .env with your Auth0 and FRED API credentials
 ```
 
 ### Quick Start
@@ -225,6 +224,7 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── token-validation-service/   # JWT validation service
 ├── transaction-service/        # Transaction management
 ├── currency-service/           # Currency/exchange rates
+├── permission-service/         # Internal roles/permissions
 ├── budget-analyzer-web/        # React frontend
 ├── service-common/             # Shared Java library
 ├── checkstyle-config/          # Shared checkstyle rules
@@ -256,6 +256,7 @@ Each microservice is maintained in its own repository:
 - **currency-service**: https://github.com/budgetanalyzer/currency-service - Currency and exchange rate API
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
 - **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
+- **permission-service**: https://github.com/budgetanalyzer/permission-service - Internal roles/permissions resolution
 - **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
 
 ## Best Practices
@@ -267,7 +268,7 @@ Each microservice is maintained in its own repository:
 5. **API Versioning**: Version APIs to support backward compatibility
 6. **Living Documentation**: Verify accuracy by running discovery commands
 
-## Notes for Claude Code
+## NOTES FOR AI AGENTS
 
 **Project Focus**: This reference architecture is complete. Current priorities are:
 1. Documentation improvements and clarifications
@@ -280,6 +281,14 @@ Each microservice is maintained in its own repository:
 2. If prerequisites are NOT satisfied, STOP immediately and inform the user
 3. Do NOT attempt to hack around missing prerequisites - this leads to broken implementations that must be deleted
 4. Complete prerequisites first, then return to the original task
+
+### Cross-Repo Boundaries
+
+**Do NOT write code (Java, TypeScript, etc.) in sibling repositories.** This repo is the orchestrator — it coordinates, it doesn't implement. When debugging cross-service issues, read sibling repos freely but only write to:
+- This repository (orchestration)
+- Configuration files (e.g., `application.yml`) in sibling repos when fixing deployment/config issues
+
+If a fix requires code changes in a service repo, describe the needed changes and let the user handle it (or switch to that repo's context).
 
 ### Planning Transparency
 

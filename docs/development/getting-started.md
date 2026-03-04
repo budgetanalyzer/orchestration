@@ -36,8 +36,7 @@ From your **host terminal** (not the devcontainer):
 
 ```bash
 cd path/to/workspace/orchestration
-./setup.sh        # Creates k3d cluster, certs, DNS
-cp .env.example .env
+./setup.sh        # Creates cluster, certs, DNS, .env, JWT signing key
 vim .env          # Add Auth0 + FRED credentials (see below)
 tilt up           # Start everything
 ```

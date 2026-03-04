@@ -179,8 +179,10 @@ Auth failures after login?
 │   └── curl http://localhost:8088/actuator/health
 ├── Check Redis for session data
 │   └── kubectl exec -it deploy/redis -n infrastructure -- redis-cli keys "*"
-└── Check Auth0 credentials secret
-    └── kubectl get secret auth0-credentials -o yaml
+├── Check Auth0 credentials secret
+│   └── kubectl get secret auth0-credentials -o yaml
+└── Check jwt-signing-credentials secret (for JWT minting)
+    └── kubectl get secret jwt-signing-credentials -o yaml
 ```
 
 ### Issue: Database Connection Errors
@@ -203,7 +205,7 @@ Database connection errors?
 
 ### Session Gateway
 
-**Role**: Browser authentication, session management, JWT storage in Redis
+**Role**: Browser authentication, session management, internal JWT minting
 
 **Common Issues**:
 - OAuth2 redirect failures
@@ -230,15 +232,15 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli FLUSHALL
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `TokenRelayGatewayFilterFactory` - JWT injection
+- `JwtMinting` or `InternalJwt` - Internal JWT creation
 
 ### Token Validation Service
 
 **Role**: JWT signature verification for NGINX auth_request
 
 **Common Issues**:
-- JWKS fetch failures (can't reach Auth0)
-- Invalid issuer/audience claims
+- JWKS fetch failures (can't reach session-gateway)
+- Signature verification failures
 - Expired tokens
 
 **Debug Commands**:
@@ -315,7 +317,7 @@ Browser (https://app.budgetanalyzer.localhost/api/transactions)
     ↓
 Envoy Gateway (30443) - TLS termination
     ↓
-Session Gateway (8081) - Session → JWT lookup in Redis
+Session Gateway (8081) - Session lookup → Mints internal JWT
     ↓
 NGINX Gateway (8080) - auth_request to token-validation-service
     ↓

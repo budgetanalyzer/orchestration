@@ -18,3 +18,7 @@ data:
     CREATE DATABASE currency;
     GRANT ALL PRIVILEGES ON DATABASE currency TO budget_analyzer;
 
+    -- Database for permission service (roles, permissions)
+    CREATE DATABASE permission;
+    GRANT ALL PRIVILEGES ON DATABASE permission TO budget_analyzer;
+

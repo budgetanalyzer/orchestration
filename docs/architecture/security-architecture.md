@@ -3,7 +3,7 @@
 
 **Version:** 1.0  
 **Date:** November 10, 2025  
-**Status:** Design Proposal
+**Status:** Implemented
 
 ---
 
@@ -54,7 +54,7 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 │   Session Gateway      │       │                      │
 │   Port 8081 (HTTP)     │       │                      │
 │   • OAuth Flow Mgmt    │       │                      │
-│   • JWT in Redis       │       │                      │
+│   • Mints internal JWT │       │                      │
 │   • Token Lifecycle    │       │                      │
 └────────┬───────────────┘       │                      │
          │                       │                      │
@@ -70,18 +70,18 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 └────────┬─────────────────────────────────────────────────────────┘
          │
          ├──────► Token Validation Service (Port 8088)
-         │        • JWT signature verification
-         │        • Claims validation
+         │        • Verifies gateway-minted JWT signatures via JWKS
          │
          └──────► Backend Microservices
                   • Transaction Service (8082)
                   • Currency Service (8084)
+                  • Permission Service (8086)
                   • Data-level authorization
 
          ┌─────────────────────────────┐
          │   Identity Provider         │
          │   (Auth0/Keycloak/Other)    │
-         │   • Token Issuance          │
+         │   • User Authentication     │
          │   • User Management         │
          └─────────────────────────────┘
 ```
@@ -96,11 +96,13 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
-- Store JWTs server-side (Redis session store)
+- Store Auth0 tokens in Redis for refresh; mint internal JWTs for downstream services
 - Issue HTTP-only, secure session cookies to browsers
 - Proactive token refresh before expiration
 - Session lifecycle management (login/logout)
-- Proxy authenticated requests to NGINX with JWT
+- Mint internal JWT with user identity and permissions, forward to NGINX
+- Call permission-service to resolve roles/permissions for JWT claims, passing `email` and `displayName` extracted from the OAuth2 principal
+- Authenticate to permission-service using a short-lived service JWT (1-minute lifetime, `sub: "session-gateway"`, `type: "service"`) signed with the gateway's own RSA key — no Auth0 client credentials needed for internal traffic
 
 **Technology:** Spring Cloud Gateway with Spring Security OAuth2 Client
 
@@ -108,7 +110,7 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 - Minimal custom code (primarily configuration)
 - Native OAuth 2.0/OIDC support
 - Built-in session management with Redis
-- TokenRelay filter automatically forwards JWTs
+- Internal JWT minting with permission enrichment
 - Team expertise in Spring ecosystem
 - Production-grade for financial applications
 
@@ -158,10 +160,9 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 **Purpose:** Validate JWT authenticity and claims
 
 **Responsibilities:**
-- Verify JWT signatures against identity provider's public keys
+- Verify JWT signatures against session-gateway's JWKS endpoint
 - Cache public keys from JWKS endpoint
-- Validate issuer, audience, expiration claims
-- Distinguish between user tokens and M2M tokens
+- Validate expiration; signature verification sufficient for trusted internal tokens
 - Return user/client context to NGINX
 
 **Technology:** Spring Boot microservice
@@ -225,13 +226,13 @@ Service Logic:
 ```
 1. Browser sends request with session cookie → Session Gateway
 2. Session Gateway looks up session in Redis
-3. Session Gateway retrieves JWT from session
-4. Session Gateway checks JWT expiration (local check)
-5. If expired: Session Gateway refreshes token with Auth0
-6. If valid: Session Gateway adds JWT to Authorization header
+3. Session Gateway checks Auth0 token expiration
+4. If Auth0 token expired: Session Gateway refreshes with Auth0, then mints new internal JWT
+5. Session Gateway mints internal JWT with user identity and permissions
+6. Session Gateway adds internal JWT to Authorization header
 7. Session Gateway → NGINX with JWT
 8. NGINX validates JWT via Token Validation Service
-9. Token Validation Service verifies signature and claims
+9. Token Validation Service verifies signature against gateway JWKS
 10. If valid: NGINX routes to appropriate microservice
 11. Microservice validates user has permission for specific data
 12. Response flows back through NGINX → Session Gateway → Browser
@@ -247,11 +248,12 @@ Service Logic:
 ### Token Refresh Flow
 
 ```
-1. Session Gateway detects access token will expire soon (5 min threshold)
+1. Session Gateway detects Auth0 access token will expire soon (5 min threshold)
 2. Session Gateway → Auth0 token endpoint with refresh token
 3. Auth0 returns new access token (and optionally new refresh token)
-4. Session Gateway updates Redis session with new tokens
-5. Session Gateway continues request with new access token
+4. Session Gateway updates Redis session with new Auth0 tokens
+5. Session Gateway mints a new internal JWT for downstream services
+6. Session Gateway continues request with new internal JWT
 ```
 
 **Refresh Strategy:** Proactive refresh 5 minutes before expiration to avoid request failures
@@ -304,6 +306,58 @@ The mobile authentication approach will be finalized during mobile application d
 
 ---
 
+### Internal Service-to-Service Authentication (Gateway Service JWTs)
+
+Internal services do not use Auth0 client credentials for machine-to-machine calls. Instead, Session Gateway mints a service-identity JWT using its existing RSA key pair.
+
+**Why not OAuth2 client credentials for internal M2M?**
+- Client credentials require every calling service to obtain a token from Auth0, coupling all internal services to the identity provider
+- Token refresh, caching, and error handling for IdP calls must be implemented in every service
+- Auth0 rate limits and outages become blast radius for internal communication
+
+**Why not `permitAll()` on internal endpoints?**
+- Pushes security entirely to the network layer (Kubernetes network policy)
+- Any pod compromise grants unauthenticated access to all internal APIs
+- Violates defense-in-depth: no cryptographic proof of caller identity
+
+**How the gateway service JWT works:**
+
+```
+Gateway                              Permission-Service
+  │  1. Mint service JWT                │
+  │     sub: "session-gateway"          │
+  │     type: "service"                 │
+  │     aud: "budgetanalyzer-internal"  │
+  │     exp: now + 1 minute             │
+  │     (signed with gateway RSA key)   │
+  │                                     │
+  │  2. GET /internal/v1/users/{idpSub}/permissions
+  │     Authorization: Bearer <service-jwt>
+  │     ?email=...&displayName=...      │
+  │ ───────────────────────────────────>│
+  │                                     │  3. Validate JWT against gateway JWKS
+  │                                     │  4. @PreAuthorize("isAuthenticated()") ✓
+  │                                     │  5. syncUser + getPermissions
+  │  6. { userId, roles, permissions }  │
+  │ <───────────────────────────────────│
+  │                                     │
+  │  7. Mint USER JWT with enriched     │
+  │     claims (sub, roles, permissions)│
+```
+
+**Why this works without new infrastructure:**
+- Session Gateway already has an RSA key pair for signing user JWTs (`InternalJwtConfig`)
+- Permission-service already validates tokens against the gateway's JWKS endpoint
+- `@PreAuthorize("isAuthenticated()")` on permission-service endpoints works as-is — the service JWT is a valid, signed JWT
+- No new keys, no new JWKS endpoint, no new shared secrets
+
+**Architectural significance:**
+The BFF pattern incidentally makes Session Gateway a trust anchor for the entire internal network — not just for browser sessions. Internal services authenticate via gateway-signed tokens rather than either open endpoints or IdP coupling. Every internal call is cryptographically authenticated.
+
+**Contrast with external M2M:** External client credentials (above) go through Auth0 and bypass Session Gateway. Internal service calls are authenticated by the gateway itself and never touch Auth0.
+
+---
+
 ## Identity Provider Abstraction Strategy
 
 ### Design Goal
@@ -334,7 +388,7 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 - Clients: No changes (still call NGINX /auth/*)
 - Session Gateway: Update OAuth configuration
 - NGINX: Update proxy_pass destinations
-- Services: No changes (still validate JWT signatures)
+- Services: Validate against gateway JWKS (already provider-independent)
 
 ---
 
@@ -355,8 +409,8 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 - DDoS protection
 
 **Layer 3: Token Validation Service**
-- Cryptographic signature verification
-- Claims validation (issuer, audience, expiration)
+- Cryptographic signature verification against gateway JWKS
+- Expiration validation
 - Cached public key rotation handling
 
 **Layer 4: Backend Services**
@@ -367,10 +421,18 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 ### Token Configuration
 
-**Access Token:**
+**Internal User JWT** (gateway-minted, forwarded to NGINX):
 - Lifetime: 15-30 minutes
-- Algorithm: RS256 (asymmetric)
-- Claims: sub, iss, aud, exp, iat, roles/scopes
+- Algorithm: RS256 (asymmetric, signed by session-gateway)
+- Claims: sub (user ID from permission-service), roles, permissions, exp, iat
+- Validated by: Token Validation Service via gateway JWKS
+
+**Internal Service JWT** (gateway-minted, used for service-to-service calls):
+- Lifetime: 1 minute (used immediately, never cached)
+- Algorithm: RS256 (same gateway RSA key pair as user JWTs)
+- Claims: sub: "session-gateway", type: "service", aud: "budgetanalyzer-internal", exp, iat
+- No user claims (no roles, no permissions, no idp_sub)
+- Validated by: permission-service via gateway JWKS (same endpoint, same trust chain)
 
 **Refresh Token:**
 - Lifetime: 8 hours (web), 30 days (mobile)
@@ -572,6 +634,7 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 | Proactive token refresh | Avoid request failures due to expiration |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; Spring integration |
+| Gateway service JWTs for internal M2M | Eliminates IdP coupling for internal services; reuses existing RSA infrastructure |
 
 ---
 

@@ -16,7 +16,7 @@ Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080)
 
 **Key stages**:
 1. **Envoy**: SSL termination for all traffic
-2. **Session Gateway**: JWT lookup from Redis, inject into header
+2. **Session Gateway**: Mints internal JWT, injects into Authorization header
 3. **NGINX**: JWT validation, route to service
 
 **Two entry points**:
@@ -85,10 +85,12 @@ kubectl logs -n budget-analyzer deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Stores JWTs in Redis (server-side, never exposed to browser)
+- Stores Auth0 tokens in Redis for refresh; mints internal JWTs for downstream services
 - Issues HttpOnly, Secure session cookies to browsers
 - Proactive token refresh before expiration
-- Proxies authenticated requests to NGINX with JWT injection
+- Mints and injects internal JWT into proxied requests to NGINX
+- Calls permission-service to enrich user JWT with roles/permissions (email and displayName passed as query params)
+- Authenticates to permission-service using a short-lived service JWT signed with the gateway's own RSA key pair — no Auth0 client credentials needed for internal traffic
 
 **Key Benefit**: Maximum security for browser-based financial application (JWTs never exposed to XSS)
 
@@ -114,8 +116,8 @@ kubectl exec -n infrastructure deployment/redis -- redis-cli PING
 **Purpose**: JWT signature verification for NGINX
 
 **Responsibilities**:
-- Verifies JWT signatures using Auth0 JWKS
-- Validates issuer, audience, and expiration claims
+- Verifies JWT signatures using session-gateway JWKS
+- Validates signatures and expiration (trusted internal tokens)
 - Called by NGINX via auth_request for every protected endpoint
 
 **Key Benefit**: Centralized JWT validation logic, defense in depth
@@ -164,6 +166,9 @@ Browser → Session Gateway (app.budgetanalyzer.localhost) → NGINX (api.budget
 - BFF approach: Store JWT in Redis, issue secure session cookie → XSS cannot steal JWT
 - Financial application: Protecting access tokens is critical for user financial data
 
+**Internal M2M as an emergent BFF benefit:**
+Because Session Gateway already holds an RSA key pair for user JWT minting, it can also issue service-identity JWTs to authenticate itself to internal services (e.g., permission-service). This eliminates the need for OAuth2 client credentials between internal services, keeping internal traffic free of Auth0 dependency. See [Internal Service-to-Service Authentication](security-architecture.md#internal-service-to-service-authentication-gateway-service-jwts) for details.
+
 **For comprehensive security architecture**: See [security-architecture.md](security-architecture.md)
 
 ## Port Summary
@@ -173,6 +178,7 @@ Browser → Session Gateway (app.budgetanalyzer.localhost) → NGINX (api.budget
 | 443 | Envoy Gateway | SSL termination, ingress (HTTPS) | Public (browsers via app. and api.budgetanalyzer.localhost) |
 | 8080 | NGINX Gateway | JWT validation, routing | Internal (Envoy only) |
 | 8081 | Session Gateway | Browser authentication, session management | Internal (Envoy only) |
+| 8086 | Permission Service | Internal roles/permissions (authenticated via gateway service JWT) | Internal (Session Gateway only) |
 | 8088 | Token Validation | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | Business logic | Internal (NGINX only) |
 | 8084 | Currency Service | Business logic | Internal (NGINX only) |

@@ -108,7 +108,7 @@ END \$\$;
 " > /dev/null 2>&1
 
         echo -e "${GREEN}done${NC}"
-        ((RESET_COUNT++))
+        ((++RESET_COUNT))
     done
 else
     # Drop and recreate each database
@@ -130,7 +130,7 @@ else
             > /dev/null 2>&1
 
         echo -e "${GREEN}done${NC}"
-        ((RESET_COUNT++))
+        ((++RESET_COUNT))
     done
 fi
 

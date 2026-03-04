@@ -173,8 +173,7 @@ if [ "$HAS_YQ" = true ]; then
 else
     # Fallback: use Python if available
     if command -v python3 &> /dev/null; then
-        echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$OUTPUT_YAML" 2>/dev/null
-        if [ $? -eq 0 ]; then
+        if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$OUTPUT_YAML" 2>/dev/null; then
             print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
         else
             print_warning "yq not installed and Python yaml module not available - skipping YAML output"

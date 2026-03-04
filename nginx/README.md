@@ -255,7 +255,6 @@ Main NGINX configuration for Kubernetes deployment. Uses Kubernetes DNS names fo
 
 Shared configuration snippets:
 - `api-protection.conf` - JWT validation via auth_request
-- `admin-api-protection.conf` - Admin endpoint protection
 - `backend-headers.conf` - Standard proxy headers
 
 ## Production Considerations

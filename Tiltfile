@@ -418,7 +418,6 @@ configmap_create(
     namespace=DEFAULT_NAMESPACE,
     from_file=[
         'api-protection.conf=nginx/includes/api-protection.conf',
-        'admin-api-protection.conf=nginx/includes/admin-api-protection.conf',
         'backend-headers.conf=nginx/includes/backend-headers.conf',
     ],
     watch=True

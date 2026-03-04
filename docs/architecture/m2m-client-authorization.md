@@ -124,8 +124,6 @@ M2M clients use OAuth 2.0 scopes instead of role-based permissions:
 | `transactions:write` | Create/update transactions | POST/PUT /api/transactions |
 | `currency:read` | Read currency/exchange rates | GET /api/currencies |
 | `currency:write` | Update exchange rates | POST/PUT /api/currencies |
-| `admin:read` | Read admin data | GET /api/admin/* |
-| `admin:write` | Admin operations | POST/PUT/DELETE /api/admin/* |
 
 ### Scope Enforcement
 

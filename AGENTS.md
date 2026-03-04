@@ -268,7 +268,7 @@ Each microservice is maintained in its own repository:
 5. **API Versioning**: Version APIs to support backward compatibility
 6. **Living Documentation**: Verify accuracy by running discovery commands
 
-## Notes for Claude Code
+## NOTES FOR AI AGENTS
 
 **Project Focus**: This reference architecture is complete. Current priorities are:
 1. Documentation improvements and clarifications

@@ -1191,6 +1191,46 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/transactions/count:
+    get:
+      tags:
+      - Transactions
+      summary: Count transactions
+      description: Returns the count of active transactions matching the given filter
+        criteria. Non-admin users only count their own transactions.
+      operationId: countTransactions
+      parameters:
+      - name: filter
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/TransactionFilter'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: integer
+                format: int64
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/currencies/{id}:
     get:
       tags:
@@ -2278,6 +2318,76 @@ components:
       - excluded
       - matched
       - pinned
+    TransactionFilter:
+      type: object
+      description: Filter for querying transactions by various fields
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
+          example: 1
+        accountId:
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
+        bankName:
+          type: string
+          description: Name of the bank where the transaction occurred
+          example: Capital One
+        dateFrom:
+          type: string
+          format: date
+          description: Start date for transaction date range
+          example: '2025-10-01'
+        dateTo:
+          type: string
+          format: date
+          description: End date for transaction date range
+          example: '2025-10-14'
+        currencyIsoCode:
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
+        minAmount:
+          type: number
+          description: Minimum transaction amount
+          example: 10.0
+        maxAmount:
+          type: number
+          description: Maximum transaction amount
+          example: 500.0
+        type:
+          type: string
+          description: Type of the transaction
+          enum:
+          - CREDIT
+          - DEBIT
+          example: DEBIT
+        description:
+          type: string
+          description: Text to match in the transaction description
+          example: Grocery
+        createdAfter:
+          type: string
+          format: date-time
+          description: Start of creation timestamp range
+          example: '2025-10-14T00:00:00Z'
+        createdBefore:
+          type: string
+          format: date-time
+          description: End of creation timestamp range
+          example: '2025-10-15T00:00:00Z'
+        updatedAfter:
+          type: string
+          format: date-time
+          description: Start of last update timestamp range
+          example: '2025-10-14T00:00:00Z'
+        updatedBefore:
+          type: string
+          format: date-time
+          description: End of last update timestamp range
+          example: '2025-10-15T00:00:00Z'
     CurrencySeriesUpdateRequest:
       type: object
       description: Request to update an existing currency series (currency code and
@@ -2411,11 +2521,12 @@ components:
       properties:
         baseCurrency:
           type: string
-          description: Base currency for conversion (currently only USD supported)
+          description: Base currency (1 unit of base = rate units of target, currently
+            only USD supported)
           example: USD
         targetCurrency:
           type: string
-          description: Target currency for conversion (currently only THB supported)
+          description: Target currency
           example: THB
         date:
           type: string

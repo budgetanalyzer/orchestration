@@ -20,6 +20,10 @@
 ls -d /workspace/*-service /workspace/session-gateway /workspace/budget-analyzer-web
 ```
 
+## Code Exploration
+
+NEVER use Agent/subagent tools for code exploration. Use Grep, Glob, and Read directly.
+
 ## Project Overview
 
 This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.

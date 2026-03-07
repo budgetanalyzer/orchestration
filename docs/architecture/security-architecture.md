@@ -26,7 +26,7 @@ This document outlines the security architecture for a financial data applicatio
 **All browser traffic goes through Session Gateway.** Envoy handles SSL termination.
 
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080) → Services
+Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
 ```
 
 ### Component Architecture

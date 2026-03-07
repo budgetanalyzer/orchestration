@@ -11,7 +11,7 @@ Budget Analyzer uses a dual-gateway architecture that separates browser security
 **All browser traffic goes through Session Gateway.** Think of it as a maxiservice.
 
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080) → Services
+Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
 ```
 
 **Key stages**:

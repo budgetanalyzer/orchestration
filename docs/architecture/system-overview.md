@@ -19,10 +19,7 @@ Envoy Gateway (:443) ─── SSL termination
     ▼ HTTP
 Session Gateway (:8081) ─── Calls permission-service (via service JWT), mints user JWT, injects into header
     │
-    ▼ HTTPS
-Envoy Gateway (:443) ─── routes to api.budgetanalyzer.localhost
-    │
-    ▼ HTTP
+    ▼ HTTP (K8s internal: nginx-gateway:8080)
 NGINX Gateway (:8080) ─── JWT validation, route to service
     │
     ▼ HTTP

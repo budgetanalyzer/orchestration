@@ -103,7 +103,7 @@ This prevents "connection refused" errors during deployments when services are s
 
 **Request Flow**:
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → Envoy → NGINX (:8080) → Services
+Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
 ```
 
 **Two entry points**:

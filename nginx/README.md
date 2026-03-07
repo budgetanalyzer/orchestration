@@ -15,10 +15,7 @@ Envoy (:443) ─── SSL termination
     ▼
 Session Gateway (:8081) ─── JWT from Redis → inject header
     │
-    ▼
-Envoy (:443) ─── routes to api.budgetanalyzer.localhost
-    │
-    ▼
+    ▼ (K8s internal: nginx-gateway:8080)
 NGINX (:8080) ─── JWT validation, route to service
     │
     ├─→ /           → React App (:3000)
@@ -74,7 +71,7 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
-All requests go through Envoy Gateway (443) → Session Gateway (8081) → Envoy Gateway → NGINX (8080).
+All requests go through Envoy Gateway (443) → Session Gateway (8081) → NGINX (8080).
 
 ### 3. Verify it's working
 

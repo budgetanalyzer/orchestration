@@ -402,6 +402,31 @@ k8s_resource(
 )
 
 # ============================================================================
+# EXT-AUTHZ SERVICE (Go, gRPC external authorization)
+# ============================================================================
+
+docker_build(
+    'ext-authz',
+    context='ext-authz',
+    dockerfile='ext-authz/Dockerfile',
+)
+
+k8s_yaml([
+    'kubernetes/services/ext-authz/deployment.yaml',
+    'kubernetes/services/ext-authz/service.yaml',
+])
+
+k8s_resource(
+    'ext-authz',
+    port_forwards=[
+        port_forward(9001, 9001, name='gRPC'),
+        port_forward(8090, 8090, name='Health'),
+    ],
+    labels=['gateway'],
+    resource_deps=['redis'],
+)
+
+# ============================================================================
 # NGINX GATEWAY
 # ============================================================================
 
@@ -551,12 +576,14 @@ local_resource(
         kubectl apply -f kubernetes/gateway/client-traffic-policy.yaml
         kubectl apply -f kubernetes/gateway/api-httproute.yaml
         kubectl apply -f kubernetes/gateway/app-httproute.yaml
+        kubectl apply -f kubernetes/gateway/ext-authz-security-policy.yaml
     ''',
     deps=[
         'kubernetes/gateway/gateway.yaml',
         'kubernetes/gateway/client-traffic-policy.yaml',
         'kubernetes/gateway/api-httproute.yaml',
         'kubernetes/gateway/app-httproute.yaml',
+        'kubernetes/gateway/ext-authz-security-policy.yaml',
     ],
     resource_deps=['gateway-class', 'mkcert-tls-secret'],
     labels=['gateway'],

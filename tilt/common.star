@@ -28,6 +28,7 @@ SERVICE_PORTS = {
     'session-gateway': 8081,
     'budget-analyzer-web': 3000,
     'nginx-gateway': 8080,
+    'ext-authz': 9001,
 }
 
 # Debug ports for remote debugging

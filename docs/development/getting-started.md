@@ -36,7 +36,7 @@ From your **host terminal** (not the devcontainer):
 
 ```bash
 cd path/to/workspace/orchestration
-./setup.sh        # Creates cluster, certs, DNS, .env, JWT signing key
+./setup.sh        # Creates cluster, certs, DNS, .env
 vim .env          # Add Auth0 + FRED credentials (see below)
 tilt up           # Start everything
 ```

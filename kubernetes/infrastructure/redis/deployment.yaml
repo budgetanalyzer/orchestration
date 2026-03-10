@@ -22,9 +22,20 @@ spec:
             - name: redis
               containerPort: 6379
           command:
-            - redis-server
-            - --appendonly
-            - "yes"
+            - sh
+            - -c
+            - redis-server --appendonly yes --requirepass $(REDIS_PASSWORD)
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: password
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: password
           resources:
             requests:
               memory: 128Mi

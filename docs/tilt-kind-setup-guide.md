@@ -91,7 +91,6 @@ git clone https://github.com/budgetanalyzer/service-common.git
 git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/token-validation-service.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
 ```
 
@@ -103,7 +102,6 @@ parent-directory/
 ├── transaction-service/
 ├── currency-service/
 ├── session-gateway/
-├── token-validation-service/
 └── budget-analyzer-web/
 ```
 
@@ -204,7 +202,6 @@ kubectl get pods -n default
 # transaction-service-xxxxx               1/1     Running   0          2m
 # currency-service-xxxxx                  1/1     Running   0          2m
 # session-gateway-xxxxx                   1/1     Running   0          2m
-# token-validation-service-xxxxx          1/1     Running   0          2m
 # nginx-gateway-xxxxx                     1/1     Running   0          2m
 # budget-analyzer-web-xxxxx               1/1     Running   0          2m
 
@@ -245,10 +242,6 @@ curl http://localhost:8082/actuator/health
 curl http://localhost:8084/actuator/health
 # Expected: {"status":"UP",...}
 
-# Token Validation Service
-curl http://localhost:8088/actuator/health
-# Expected: {"status":"UP",...}
-
 # Session Gateway
 curl http://localhost:8081/actuator/health
 # Expected: {"status":"UP",...}
@@ -278,10 +271,8 @@ After all services are healthy:
 | 8081 | session-gateway | BFF (internal) |
 | 8082 | transaction-service | Business Logic |
 | 8084 | currency-service | Business Logic |
-| 8088 | token-validation-service | JWT Validation |
 | 5005 | transaction-service | Debug (JDWP) |
 | 5006 | currency-service | Debug (JDWP) |
-| 5008 | token-validation-service | Debug (JDWP) |
 | 5009 | session-gateway | Debug (JDWP) |
 
 ## Troubleshooting

@@ -4,55 +4,57 @@ This document describes the authorization flow for third-party applications and 
 
 ## Overview
 
-M2M (Machine-to-Machine) authentication allows external systems to securely access Budget Analyzer APIs using OAuth 2.0 Client Credentials flow. This is distinct from user authentication, which uses the BFF pattern with session cookies.
+M2M (Machine-to-Machine) authentication allows external systems to securely access Budget Analyzer APIs using token exchange via Session Gateway. Clients exchange their identity provider tokens for opaque session bearer tokens, which are validated per-request by Envoy ext_authz.
 
 ### When to Use M2M Authentication
 
 | Use Case | Authentication Method |
 |----------|----------------------|
 | Browser-based user access | BFF pattern (Session Gateway + session cookies) |
-| Third-party integrations | M2M (Client Credentials + JWT) |
-| Backend service-to-service | M2M (Client Credentials + JWT) |
-| Mobile apps (future) | Native Auth0 SDK or M2M proxy |
-| Scheduled jobs/automation | M2M (Client Credentials + JWT) |
+| Third-party integrations | M2M (Token exchange → opaque bearer token) |
+| Backend service-to-service | Network isolation (mTLS planned) |
+| Mobile apps (future) | Native Auth0 SDK + token exchange |
+| Scheduled jobs/automation | M2M (Token exchange → opaque bearer token) |
 
 ## Architecture Comparison
 
 ### Browser Authentication Flow (BFF Pattern)
 
 ```
-Browser → app.budgetanalyzer.localhost (NGINX)
-    ↓
+Browser → Envoy (app.budgetanalyzer.localhost, :443)
+    ↓ (auth paths)
 Session Gateway (8081)
-    ↓ (session cookie → JWT lookup in Redis)
-NGINX (api.budgetanalyzer.localhost)
-    ↓ (JWT validation)
-Backend Services
+    ↓ (session cookie → dual-write to Redis)
+Envoy ext_authz
+    ↓ (session validation, header injection)
+NGINX → Backend Services
 ```
 
 **Characteristics:**
 - Session cookies (HTTP-only, Secure, SameSite)
-- JWTs stored server-side in Redis
-- Stateful (session must exist)
+- Session data stored server-side in Redis (Spring Session + ext_authz schema)
+- Stateful (session must exist in Redis)
 - User-interactive OAuth2 flows
 
 ### M2M Authentication Flow
 
 ```
-M2M Client → api.budgetanalyzer.localhost (NGINX)
-    ↓ (JWT in Authorization header)
-Token Validation Service (8088)
-    ↓ (signature verification)
-Backend Services
+M2M Client → POST /auth/token/exchange (via Session Gateway)
+    ↓ (IDP access token → opaque session bearer token)
+M2M Client → Envoy (:443) with Bearer token
+    ↓
+ext_authz (:9001) validates session from Redis
+    ↓ (X-User-Id, X-Roles, X-Permissions headers injected)
+NGINX → Backend Services
 ```
 
 **Characteristics:**
-- Direct JWT usage (no session cookies)
-- Stateless (no Redis session)
-- Client Credentials OAuth2 flow
-- Scope-based permissions
+- Opaque bearer tokens (not JWTs on the wire)
+- Server-managed session in Redis (ext_authz schema)
+- Token exchange creates session with scoped permissions
+- Instant revocation via Redis key deletion
 
-## Client Credentials Flow
+## Token Exchange Flow
 
 ### Step 1: Client Registration
 
@@ -60,63 +62,73 @@ M2M clients are registered in Auth0 with:
 - **Client ID:** Public identifier
 - **Client Secret:** Confidential credential (never exposed in logs/UI)
 - **Allowed Scopes:** Permissions the client can request
-- **Token Lifetime:** Typically longer than user tokens (e.g., 24 hours)
+- **Token Lifetime:** Auth0 token used only for exchange (not for API access)
 
-### Step 2: Token Exchange
+### Step 2: Obtain IDP Token
 
 ```http
-POST /auth/token
-Host: api.budgetanalyzer.localhost
+POST /oauth/token
+Host: your-auth0-tenant.auth0.com
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=client_credentials
 &client_id=<client_id>
 &client_secret=<client_secret>
-&audience=https://api.budgetanalyzer.localhost
-&scope=transactions:read currency:read
+&audience=https://app.budgetanalyzer.localhost
+```
+
+### Step 3: Token Exchange
+
+```http
+POST /auth/token/exchange
+Host: app.budgetanalyzer.localhost
+Content-Type: application/json
+
+{
+  "accessToken": "<IDP access token>"
+}
 ```
 
 **Response:**
 ```json
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIs...",
-  "token_type": "Bearer",
-  "expires_in": 86400,
-  "scope": "transactions:read currency:read"
+  "token": "<opaque-session-id>",
+  "expiresIn": 1800,
+  "tokenType": "Bearer"
 }
 ```
 
 **Flow through infrastructure:**
-1. Client sends request to NGINX `/auth/token`
-2. NGINX proxies to Auth0 token endpoint
-3. Auth0 validates client_id/client_secret
-4. Auth0 returns JWT access token
-5. Client stores token securely (NOT in browser)
+1. Client sends IDP access token to Session Gateway via `/auth/token/exchange`
+2. Session Gateway validates token against IDP userinfo endpoint
+3. Session Gateway fetches permissions from permission-service
+4. Session Gateway creates session and dual-writes to ext_authz Redis schema
+5. Session Gateway returns opaque session bearer token
+6. Client stores token securely (NOT in browser)
 
-### Step 3: API Access
+### Step 4: API Access
 
 ```http
 GET /api/transactions
-Host: api.budgetanalyzer.localhost
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+Host: app.budgetanalyzer.localhost
+Authorization: Bearer <opaque-session-id>
 ```
 
 **Flow through infrastructure:**
-1. Request arrives at NGINX
-2. NGINX calls Token Validation Service (auth_request)
-3. Token Validation Service verifies:
-   - JWT signature (using Auth0 JWKS)
-   - Issuer and audience claims
-   - Expiration (exp claim)
-   - Scopes match requested resource
-4. NGINX proxies to backend service
-5. Backend service enforces data-level authorization
+1. Request arrives at Envoy (:443)
+2. Envoy calls ext_authz (:9001)
+3. ext_authz looks up session in Redis (`extauthz:session:{token}`)
+4. ext_authz validates session (checks expiry, reads permissions)
+5. ext_authz injects `X-User-Id`, `X-Roles`, `X-Permissions` headers
+6. Envoy routes to NGINX (:8080) with injected headers
+7. NGINX routes to backend service
+8. Backend service enforces data-level authorization
 
 ## Authorization Model
 
 ### Scope-Based Permissions
 
-M2M clients use OAuth 2.0 scopes instead of role-based permissions:
+M2M clients use scopes resolved from permission-service:
 
 | Scope | Description | Resources |
 |-------|-------------|-----------|
@@ -127,12 +139,12 @@ M2M clients use OAuth 2.0 scopes instead of role-based permissions:
 
 ### Scope Enforcement
 
-**Token Validation Service:**
-- Verifies requested scopes are present in JWT
-- Returns 403 Forbidden if scope missing
+**ext_authz Service:**
+- Injects permissions as `X-Permissions` header
+- Backend services read permissions from header
 
 **Backend Services:**
-- Extract scopes from JWT claims
+- Extract permissions from `X-Permissions` header
 - Enforce business logic constraints
 - Scope-based query filtering (e.g., read-only clients can't write)
 
@@ -147,14 +159,14 @@ M2M clients use OAuth 2.0 scopes instead of role-based permissions:
 
 **Immediate Response:**
 
-1. **Disable client in Auth0**
-   - Revokes ability to obtain new tokens
-   - Existing tokens remain valid until expiration (unlike browser sessions)
+1. **Session Revocation**
+   - Delete ext_authz Redis sessions for the compromised client
+   - Next request immediately fails at ext_authz
+   - **Timeline:** Immediate (next request rejected)
 
-2. **JWT Blacklist (if implemented)**
-   - Add client_id to Redis blacklist
-   - Token Validation Service rejects all tokens for client
-   - Timeline: Immediate
+2. **Disable client in Auth0**
+   - Revokes ability to obtain new IDP tokens
+   - Cannot exchange for new session tokens
 
 3. **Credential Rotation**
    - Generate new client_secret in Auth0
@@ -165,9 +177,9 @@ M2M clients use OAuth 2.0 scopes instead of role-based permissions:
 
 If client accesses resources outside intended scope:
 
-1. **Reduce scopes in Auth0**
-   - Remove unauthorized scopes from client configuration
-   - Next token request returns reduced scopes
+1. **Reduce scopes in permission-service**
+   - Remove unauthorized permissions from client configuration
+   - Next token exchange returns reduced permissions
 
 2. **Audit log review**
    - Query access logs for unauthorized resource access
@@ -184,7 +196,7 @@ M2M clients have separate rate limits:
 | Admin operations | 100 req/min | Sensitive operations |
 
 **Implementation:**
-- NGINX rate limiting by client_id (extracted from JWT)
+- NGINX rate limiting by client identifier (from X-User-Id header)
 - Different limits per scope/endpoint
 
 ## Security Best Practices
@@ -221,13 +233,13 @@ M2M clients have separate rate limits:
 ### Token Handling
 
 1. **Secure storage**
-   - Store tokens encrypted at rest
+   - Store opaque bearer tokens encrypted at rest
    - Never store in browser localStorage
    - Use OS credential stores when possible
 
 2. **Token refresh strategy**
-   - Refresh before expiration (e.g., at 80% lifetime)
-   - Handle refresh failures gracefully
+   - Exchange for new session token before expiration (at 80% lifetime)
+   - Handle exchange failures gracefully
    - Don't retry failed auth excessively (may trigger rate limits)
 
 3. **Transport security**
@@ -256,10 +268,10 @@ M2M clients have separate rate limits:
 
 | Event | Log Entry |
 |-------|-----------|
-| Token request | client_id, scopes requested, success/failure |
-| API access | client_id, endpoint, method, response code |
-| Rate limit trigger | client_id, endpoint, limit hit |
-| Scope violation | client_id, requested resource, missing scope |
+| Token exchange | client identifier, scopes resolved, success/failure |
+| API access | client identifier, endpoint, method, response code |
+| Rate limit trigger | client identifier, endpoint, limit hit |
+| Scope violation | client identifier, requested resource, missing scope |
 
 ### Log Format
 
@@ -283,31 +295,6 @@ M2M clients have separate rate limits:
 - "Which clients accessed resource Y?"
 - "What's the API usage pattern for client X?"
 
-## NGINX Configuration
-
-M2M traffic routes are defined in `nginx/nginx.dev.conf`:
-
-```nginx
-# Token exchange endpoint (M2M only)
-location /auth/token {
-    proxy_pass https://auth0.com/oauth/token;
-    # Rate limiting per IP
-    limit_req zone=auth_limit burst=5 nodelay;
-}
-
-# API endpoints (both user and M2M)
-location /api/ {
-    # JWT validation for all requests
-    auth_request /auth/validate;
-
-    # Extract client_id for rate limiting
-    auth_request_set $client_id $upstream_http_x_client_id;
-
-    # Route to backend
-    proxy_pass http://backend;
-}
-```
-
 ## Client Onboarding Process
 
 ### For Third-Party Integrations
@@ -315,8 +302,8 @@ location /api/ {
 1. **Agreement:** Legal/business agreement with third party
 2. **Registration:** Create M2M client in Auth0 with appropriate scopes
 3. **Credentials:** Securely transfer client_id and client_secret
-4. **Documentation:** Provide API documentation and examples
-5. **Testing:** Test in sandbox environment
+4. **Documentation:** Provide API documentation, token exchange examples
+5. **Testing:** Test token exchange and API access in sandbox environment
 6. **Production:** Enable production scopes after successful testing
 7. **Monitoring:** Set up alerts for the client
 
@@ -326,20 +313,21 @@ location /api/ {
 2. **Approval:** Security team approves scopes
 3. **Registration:** DevOps creates client in Auth0
 4. **Deployment:** Credentials deployed via secret management
-5. **Verification:** Service tests authentication
+5. **Verification:** Service tests token exchange and API access
 
 ## Comparison with User Authentication
 
 | Aspect | User (BFF) | M2M Client |
 |--------|-----------|------------|
-| **Auth flow** | Authorization Code + PKCE | Client Credentials |
-| **Token storage** | Redis (server-side) | Client application |
-| **Token lifetime** | 15-30 minutes | 1-24 hours |
-| **Refresh tokens** | Yes (in Redis) | Optional |
+| **Auth flow** | Authorization Code + PKCE | Client Credentials → Token Exchange |
+| **Token on wire** | Session cookie (opaque) | Bearer token (opaque) |
+| **Session storage** | Redis (Spring Session + ext_authz) | Redis (ext_authz) |
+| **Token lifetime** | 30 minutes (sliding) | 30 minutes |
+| **Refresh** | Proactive (Session Gateway) | Re-exchange before expiry |
 | **Session cookies** | Yes (HTTP-only) | No |
-| **Rate limiting** | Per user | Per client_id |
-| **Permissions** | Role-based (Auth0) | Scope-based (Auth0) |
-| **Revocation** | Delete Redis session | Disable client in Auth0 |
+| **Rate limiting** | Per user | Per client identifier |
+| **Permissions** | Role-based (permission-service) | Scope-based (permission-service) |
+| **Revocation** | Delete Redis session (instant) | Delete Redis session (instant) |
 
 ## Future Enhancements
 

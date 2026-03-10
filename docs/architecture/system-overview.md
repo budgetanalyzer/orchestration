@@ -5,7 +5,7 @@
 
 ## Request Flow
 
-**Browser traffic always goes through Session Gateway.** Think of it as a maxiservice - the browser connects to one thing.
+**Single entry point**: `app.budgetanalyzer.localhost`. Envoy handles SSL termination and ext_authz enforcement.
 
 ```
 BROWSER REQUEST FLOW
@@ -14,27 +14,26 @@ BROWSER REQUEST FLOW
 Browser (https://app.budgetanalyzer.localhost)
     │
     ▼ HTTPS
-Envoy Gateway (:443) ─── SSL termination
+Envoy Gateway (:443) ─── SSL termination, ext_authz on /api/* paths
     │
-    ▼ HTTP
-Session Gateway (:8081) ─── Calls permission-service (via service JWT), mints user JWT, injects into header
+    ├─ /auth/*, /login/*, /logout → Session Gateway (:8081) ─── auth lifecycle
     │
-    ▼ HTTP (K8s internal: nginx-gateway:8080)
-NGINX Gateway (:8080) ─── JWT validation, route to service
+    ├─ /api/* → ext_authz (:9001) validates session from Redis
+    │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
+    │           └─ NGINX Gateway (:8080) ─── routes to backend service
+    │
+    └─ /* → NGINX Gateway (:8080) ─── serves frontend (no auth required)
     │
     ▼ HTTP
 Backend Services ─── business logic, data authorization
 ```
 
-**Two entry points, same pattern:**
-- `app.budgetanalyzer.localhost` → Envoy → Session Gateway (browser auth, mints internal JWT)
-- `api.budgetanalyzer.localhost` → Envoy → NGINX (API gateway, validates JWT)
-
 **Why this works:**
-- Browser never sees JWT (XSS protection)
+- Browser never sees tokens (XSS protection)
 - Single origin = no CORS
 - Envoy handles all SSL
-- NGINX validates every request
+- ext_authz validates every API request
+- Session revocation is instant (Redis key delete)
 
 ## Architecture Overview
 
@@ -47,28 +46,34 @@ Backend Services ─── business logic, data authorization
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      Envoy Gateway (:443)                    │
-│              (SSL termination, ingress routing)              │
+│       (SSL termination, ext_authz enforcement, routing)      │
 └─────────┬──────────────────────────┬────────────────────────┘
-          │ app.*                    │ api.*
+          │ auth paths               │ /api/*, /*
           ▼                          ▼
-┌──────────────────────┐   ┌──────────────────────────────────┐
-│   Session Gateway    │   │         NGINX API Gateway         │
-│   (BFF, OAuth2)      │──▶│   (JWT validation, routing)       │
-│   :8081              │   │   :8080                           │
-└───────┬──────────────┘   └─────────┬────────────────────────┘
-        │                            │
-        ▼                 ┌──────────┴──────────────────────┐
-┌──────────────────────┐  ▼                                 ▼
-│  Permission Service  │  ┌──────────────────────┐  ┌──────────────────────┐
-│   :8086              │  │  Transaction Service │  │   Currency Service   │
-└──────────────────────┘  │   :8082              │  │   :8084              │
-                          └──────────┬───────────┘  └─────────┬────────────┘
-           │                                            │
-           ▼                                            ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│   Session Gateway    │   │   ext_authz (:9001)  │
+│   (BFF, OAuth2)      │   │   session validation │
+│   :8081              │   └──────────┬───────────┘
+└───────┬──────────────┘              │ headers injected
+        │                             ▼
+        ▼                   ┌──────────────────────────────────┐
+┌──────────────────────┐   │         NGINX API Gateway         │
+│  Permission Service  │   │   (routing, rate limiting)        │
+│   :8086              │   │   :8080                           │
+└──────────────────────┘   └─────────┬────────────────────────┘
+                                     │
+                          ┌──────────┴──────────────────────┐
+                          ▼                                 ▼
+                 ┌──────────────────────┐  ┌──────────────────────┐
+                 │  Transaction Service │  │   Currency Service   │
+                 │   :8082              │  │   :8084              │
+                 └──────────┬───────────┘  └─────────┬────────────┘
+          │                                            │
+          ▼                                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Shared Infrastructure                           │
 │  • PostgreSQL (primary database)                             │
-│  • Redis (session storage, caching)                          │
+│  • Redis (session storage + ext_authz schema, caching)       │
 │  • RabbitMQ (async messaging)                                │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -87,24 +92,26 @@ Backend Services ─── business logic, data authorization
 
 **Envoy Gateway** (Port 443)
 - SSL/TLS termination
-- Ingress routing based on hostname
+- ext_authz enforcement on `/api/*` paths
+- Ingress routing based on path
 - Kubernetes Gateway API compliant
+
+**ext_authz Service** (Port 9001 gRPC, Port 8090 Health)
+- Per-request session validation via Redis lookup
+- Header injection (X-User-Id, X-Roles, X-Permissions)
+- Go gRPC service implementing Envoy ext_authz protocol
 
 **Session Gateway (BFF)** (Port 8081)
 - OAuth2 authentication with Auth0
 - Session management via Redis
-- Auth0 token storage; mints internal JWTs (never exposed to browser)
-- Calls permission-service to enrich user JWT with roles/permissions
-- Authenticates to permission-service via short-lived service JWT (reuses gateway RSA key; no Auth0 client credentials for internal M2M)
+- Auth0 token storage; dual-writes session data to ext_authz Redis schema (never exposed to browser)
+- Calls permission-service to enrich session with roles/permissions
+- Token exchange endpoint for native/M2M clients
 
 **NGINX API Gateway** (Port 8080)
-- JWT validation via Token Validation Service
 - Resource-based routing
+- Rate limiting
 - Load balancing
-
-**Token Validation Service** (Port 8088)
-- JWT signature verification
-- JWKS integration with session-gateway
 
 ### Backend Microservices
 
@@ -127,7 +134,7 @@ Backend Services ─── business logic, data authorization
 - Managed via Flyway migrations per service
 
 **Redis**
-- Session storage (Session Gateway)
+- Session storage (Session Gateway - Spring Session + ext_authz schema)
 - Distributed caching (currency-service)
 
 **RabbitMQ**
@@ -203,13 +210,13 @@ tilt get uiresources
 - PostgreSQL 16+
 - Redis 7+
 - RabbitMQ 3.x
-- Envoy Gateway (ingress)
+- Envoy Gateway (ingress + ext_authz)
 - NGINX (API gateway)
 
 ## Service Communication Patterns
 
 ### Synchronous (REST)
-- Frontend → Envoy → Session Gateway → NGINX → Services
+- Frontend → Envoy → ext_authz → NGINX → Services
 - Used for: User-initiated actions, queries
 
 ### Asynchronous (Events)
@@ -231,7 +238,7 @@ tilt get uiresources
 
 ### Caching Strategy
 - **Redis distributed cache**: Used by currency-service
-- **Session storage**: Used by session-gateway
+- **Session storage**: Used by session-gateway (Spring Session + ext_authz schema)
 - **TTL-based expiration**: Configurable per cache
 - **Cache-aside pattern**: Services manage cache population
 
@@ -248,15 +255,16 @@ This reference architecture deliberately stops before solving data ownership. Un
 
 **Authentication & Sessions:**
 - OAuth2/OIDC flows with Auth0
-- BFF pattern (browser never sees JWT)
+- BFF pattern (browser never sees tokens)
 - Redis-backed session management
 - Token refresh and lifecycle
+- ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**
-- Envoy: SSL termination, ingress
-- Session Gateway: Session-to-JWT minting (with permissions); internal M2M via gateway service JWTs (not OAuth2 client credentials)
-- NGINX: JWT validation, resource routing
-- Token Validation Service: JWKS-based verification
+- Envoy: SSL termination, ext_authz enforcement, ingress
+- Session Gateway: Auth lifecycle, session dual-write to ext_authz Redis schema
+- ext_authz: Per-request session validation, header injection
+- NGINX: Resource routing, rate limiting
 
 ### What's Left as an Exercise
 
@@ -266,7 +274,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 - How does user identity propagate from gateway to data layer?
 
 **Cross-Service User Scoping:**
-- Services receive a validated JWT with user identity
+- Services receive validated identity via X-User-Id, X-Roles, X-Permissions headers
 - But: No implemented pattern for scoping queries by that identity
 - This is domain-specific and we're not prescribing a solution
 
@@ -301,10 +309,10 @@ We demonstrate the infrastructure. You architect the ownership model.
 tilt get uiresources
 
 # View pod status
-kubectl get pods -n budget-analyzer
+kubectl get pods
 
 # View service endpoints
-kubectl get svc -n budget-analyzer
+kubectl get svc
 
 # View API routes
 grep "location /api" nginx/nginx.k8s.conf | grep -v "#"

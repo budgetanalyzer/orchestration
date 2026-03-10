@@ -15,7 +15,7 @@
   },
   "servers": [
     {
-      "url": "https://api.budgetanalyzer.localhost/api",
+      "url": "https://app.budgetanalyzer.localhost/api",
       "description": "Local environment (via gateway)"
     },
     {

@@ -1,0 +1,114 @@
+# Backend services: only accept traffic from nginx-gateway
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: transaction-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: transaction-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: currency-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: currency-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+# permission-service: accepts from nginx-gateway and session-gateway
+# (session-gateway calls permission-service during session creation)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: permission-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: permission-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/default/sa/nginx-gateway"
+              - "cluster.local/ns/default/sa/session-gateway"
+---
+# nginx-gateway: accepts from envoy-gateway proxy only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: nginx-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"
+---
+# ext-authz: accepts from envoy-gateway proxy (gRPC ext_authz calls)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ext-authz-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ext-authz
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"]
+---
+# session-gateway: accepts from envoy-gateway proxy (browser traffic via app.budgetanalyzer.localhost)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: session-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: session-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"]
+---
+# budget-analyzer-web: accepts from nginx-gateway (proxied by nginx)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: budget-analyzer-web-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: budget-analyzer-web
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]

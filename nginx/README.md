@@ -1,6 +1,6 @@
 # NGINX API Gateway for Kubernetes
 
-NGINX handles JWT validation and routes requests to backend microservices.
+NGINX handles routing and rate limiting for backend microservices. Authentication is handled by Envoy ext_authz before requests reach NGINX.
 
 ## Request Flow
 
@@ -10,13 +10,12 @@ NGINX handles JWT validation and routes requests to backend microservices.
 Browser (https://app.budgetanalyzer.localhost)
     │
     ▼
-Envoy (:443) ─── SSL termination
+Envoy (:443) ─── SSL termination + ext_authz session validation
     │
-    ▼
-Session Gateway (:8081) ─── JWT from Redis → inject header
+    ├─→ /auth/*, /oauth2/*, /login/*, /logout → Session Gateway (:8081)
     │
     ▼ (K8s internal: nginx-gateway:8080)
-NGINX (:8080) ─── JWT validation, route to service
+NGINX (:8080) ─── rate limiting, route to service
     │
     ├─→ /           → React App (:3000)
     ├─→ /api/transactions → Transaction Service (:8082)
@@ -26,9 +25,9 @@ NGINX (:8080) ─── JWT validation, route to service
 
 **Why this works:**
 - Single origin = no CORS
-- JWT never in browser = XSS protection
+- Opaque session tokens = no JWTs exposed to browser (XSS protection)
 - Resource-based routing = frontend decoupled from services
-- Defense in depth = Session Gateway → NGINX → Backend
+- ext_authz at Envoy layer validates sessions before reaching NGINX
 
 ## Service Configuration
 
@@ -71,18 +70,16 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
-All requests go through Envoy Gateway (443) → Session Gateway (8081) → NGINX (8080).
+API requests go through Envoy Gateway (443) → ext_authz → NGINX (8080).
+Auth requests go through Envoy Gateway (443) → Session Gateway (8081).
 
 ### 3. Verify it's working
 
 ```bash
-# NGINX Gateway health check
-curl https://api.budgetanalyzer.localhost/health
+# NGINX Gateway health check (via Envoy)
+curl https://app.budgetanalyzer.localhost/health
 
-# Session Gateway health check
-curl https://app.budgetanalyzer.localhost/actuator/health
-
-# React app loads (through Session Gateway)
+# React app loads
 curl https://app.budgetanalyzer.localhost/
 ```
 
@@ -130,8 +127,8 @@ tilt trigger nginx-gateway-config
 1. Add location block in `nginx.k8s.conf`:
 ```nginx
 location /api/accounts {
-    include /etc/nginx/includes/api-protection.conf;
-
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
     rewrite ^/api/(.*)$ /v1/$1 break;
     proxy_pass http://transaction_service;
     include /etc/nginx/includes/backend-headers.conf;
@@ -159,8 +156,8 @@ upstream reports_service {
 2. Add location blocks for its resources:
 ```nginx
 location /api/reports {
-    include /etc/nginx/includes/api-protection.conf;
-
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
     rewrite ^/api/(.*)$ /v1/$1 break;
     proxy_pass http://reports_service;
     include /etc/nginx/includes/backend-headers.conf;
@@ -179,8 +176,8 @@ location /api/reports {
 
 ```nginx
 location /api/transactions {
-    include /etc/nginx/includes/api-protection.conf;
-
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
     rewrite ^/api/(.*)$ /v1/$1 break;
     proxy_pass http://new_transaction_service;  # Changed upstream
     include /etc/nginx/includes/backend-headers.conf;
@@ -211,12 +208,12 @@ This is the power of resource-based routing!
 
 ### Getting 401 Unauthorized
 
-**Cause:** JWT validation failed.
+**Cause:** ext_authz session validation failed.
 
 **Fix:**
-1. Check Token Validation Service is running: `kubectl get pods -n budget-analyzer | grep token-validation`
-2. Check Token Validation logs: `kubectl logs -n budget-analyzer deployment/token-validation-service`
-3. Verify JWT is being passed correctly from Session Gateway
+1. Check ext-authz is running: `kubectl get pods | grep ext-authz`
+2. Check ext-authz logs: `kubectl logs deployment/ext-authz`
+3. Verify session cookie is being sent and Redis has session data
 
 ### CORS issues
 
@@ -251,8 +248,7 @@ Main NGINX configuration for Kubernetes deployment. Uses Kubernetes DNS names fo
 ### includes/
 
 Shared configuration snippets:
-- `api-protection.conf` - JWT validation via auth_request
-- `backend-headers.conf` - Standard proxy headers
+- `backend-headers.conf` - Standard proxy headers and identity header forwarding
 
 ## Production Considerations
 

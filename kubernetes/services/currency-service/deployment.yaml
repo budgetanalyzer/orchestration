@@ -15,6 +15,7 @@ spec:
       labels:
         app: currency-service
     spec:
+      serviceAccountName: currency-service
       containers:
       - name: currency-service
         image: currency-service:latest
@@ -73,6 +74,11 @@ spec:
             secretKeyRef:
               name: redis-credentials
               key: port
+        - name: SPRING_DATA_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
         # FRED API Configuration
         - name: FRED_API_KEY
           valueFrom:

@@ -7,6 +7,11 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      envoyDeployment:
+        pod:
+          annotations:
+            sidecar.istio.io/inject: "true"
+            traffic.sidecar.istio.io/excludeInboundPorts: "10443"
       envoyService:
         type: NodePort
         patch:

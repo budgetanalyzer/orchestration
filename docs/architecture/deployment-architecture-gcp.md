@@ -105,12 +105,13 @@ This document defines the deployment architecture for Budget Analyzer on Google 
 │                      │                    │                           │
 │                      │                    ↓                           │
 │                      │            [HTTP-only Cookie]                  │
-│                      │            [JWT in Redis]                      │
+│                      │            [Session in Redis]                  │
 │                      │                    │                           │
 │                      │                    ↓                           │
-│                      └──→ NGINX Gateway (GKE, port 8080)             │
-│                                  │                                    │
-│                                  ├──→ [Token Validation Service]      │
+│                      └──→ ext_authz (GKE, port 9001 gRPC)            │
+│                                  │ session validation from Redis      │
+│                                  ↓ inject X-User-Id, X-Roles headers │
+│                           NGINX Gateway (GKE, port 8080)             │
 │                                  │                                    │
 │                                  ├─→ transaction-service (GKE)        │
 │                                  └─→ currency-service (GKE)           │
@@ -145,7 +146,7 @@ Based on [docker-compose.yml](../../docker-compose.yml):
 
 **Gateway Layer:**
 - NGINX Gateway: Resource-based routing (`/api/v1/transactions` → transaction-service)
-- Token Validation Service: JWT validation for NGINX (port 8088, **not yet implemented**)
+- ext_authz: Per-request session validation (port 9001 gRPC, implemented)
 
 ---
 
@@ -725,7 +726,7 @@ management:
 **Problem:**
 - Session Gateway (BFF pattern) not yet implemented
 - No authentication or authorization layer exists
-- All API endpoints are publicly accessible without JWT validation
+- All API endpoints are publicly accessible without session validation
 - Financial data (transactions, budgets) completely unprotected
 
 **Architecture Gap:**
@@ -737,17 +738,16 @@ Browser → NGINX Gateway → Backend Services (no auth)
 
 Required for production:
 ```
-Browser → Session Gateway → NGINX Gateway → Backend Services
-         [Session Cookie]  [JWT Header]
+Browser → Envoy → ext_authz (session validation) → NGINX → Backend Services
+         [Session Cookie]  [X-User-Id, X-Roles headers]
 ```
 
 **Components Not Yet Built:**
 1. Session Gateway (Spring Cloud Gateway with OAuth2)
-2. Token Validation Service (port 8088)
+2. ext_authz service (gRPC, port 9001)
 3. Auth0 tenant configuration
-4. NGINX JWT validation via auth_request
-5. Backend OAuth2 Resource Server configuration
-6. Redis session storage integration
+4. Envoy ext_authz integration
+5. Redis session storage integration
 
 **Impact:**
 - **Cannot deploy with real user data**
@@ -767,9 +767,9 @@ Browser → Session Gateway → NGINX Gateway → Backend Services
 - **Critical:** No public access whatsoever
 
 **Phase 2 (8 weeks):** Implement authentication architecture
-1. Week 1-2: Session Gateway + Token Validation Service
-2. Week 3-4: Auth0 integration + NGINX JWT validation
-3. Week 5-6: Backend OAuth2 Resource Server configuration
+1. Week 1-2: Session Gateway + ext_authz service
+2. Week 3-4: Auth0 integration + Envoy ext_authz configuration
+3. Week 5-6: End-to-end session validation and header injection
 4. Week 7-8: Testing, security audit, penetration testing
 
 **Phase 3 (Production):** Public deployment
@@ -789,11 +789,10 @@ Browser → Session Gateway → NGINX Gateway → Backend Services
 
 **Acceptance Criteria for Production:**
 - [ ] Session Gateway deployed and tested
-- [ ] Token Validation Service operational
+- [ ] ext_authz service operational (gRPC + health)
 - [ ] Auth0 tenant configured with production settings
-- [ ] NGINX Gateway validating JWTs via auth_request
-- [ ] All backend services configured as OAuth2 Resource Servers
-- [ ] Redis cluster for session storage with HA
+- [ ] Envoy Gateway configured with ext_authz enforcement
+- [ ] Redis cluster for session storage with HA (Spring Session + ext_authz schema)
 - [ ] End-to-end authentication flow tested
 - [ ] Security audit completed
 - [ ] Penetration testing passed
@@ -2013,24 +2012,24 @@ export const config = configs[env as keyof typeof configs];
 
 **Summary Tasks:**
 
-#### Weeks 1-2: Session Gateway + Token Validation Service
+#### Weeks 1-2: Session Gateway + ext_authz Service
 - Implement Spring Cloud Gateway with Spring Security OAuth2
 - Configure OAuth2 Client for Auth0 integration
-- Implement token validation service (port 8088)
-- Store JWTs in Redis, issue HTTP-only session cookies
+- Deploy ext_authz gRPC service (port 9001)
+- Store sessions in Redis (Spring Session + ext_authz schema), issue HTTP-only session cookies
 - Proactive token refresh (5 min before expiration)
 
-#### Weeks 3-4: Auth0 Integration + NGINX JWT Validation
+#### Weeks 3-4: Auth0 Integration + Envoy ext_authz Configuration
 - Configure Auth0 tenant (production settings)
 - Set up Auth0 application (SPA + API)
-- Update Gateway API with JWT validation via auth_request
-- Proxy `/auth/*` endpoints to Auth0 via NGINX
+- Configure Envoy Gateway with ext_authz enforcement on `/api/*` paths
+- Route auth paths to Session Gateway
 
-#### Weeks 5-6: Backend OAuth2 Resource Server Configuration
-- Add Spring Security OAuth2 Resource Server to transaction-service
-- Add Spring Security OAuth2 Resource Server to currency-service
-- Configure JWT validation against Auth0 JWKS endpoint
-- Implement data-level authorization (query scoping by user ID)
+#### Weeks 5-6: End-to-End Session Validation
+- Verify ext_authz header injection (X-User-Id, X-Roles, X-Permissions)
+- Backend services read identity from injected headers
+- Implement data-level authorization (query scoping by user ID from headers)
+- Token exchange endpoint for M2M clients
 
 #### Weeks 7-8: Testing, Security Audit, Penetration Testing
 - End-to-end authentication flow testing
@@ -2041,21 +2040,20 @@ export const config = configs[env as keyof typeof configs];
 
 **Deliverables:**
 - [ ] Session Gateway deployed to GKE
-- [ ] Token Validation Service deployed to GKE
+- [ ] ext_authz service deployed to GKE (gRPC + health)
 - [ ] Auth0 tenant configured (production)
-- [ ] Gateway API validating JWTs
-- [ ] Backend services configured as OAuth2 Resource Servers
-- [ ] Redis cluster for session storage (HA)
+- [ ] Envoy Gateway configured with ext_authz enforcement
+- [ ] Redis cluster for session storage (Spring Session + ext_authz schema, HA)
 - [ ] End-to-end auth flow tested
 - [ ] Security audit passed
 - [ ] Penetration testing passed
 
 **Success Criteria:**
 - User can sign up/login via Auth0
-- JWT stored in Redis, never exposed to browser
+- Session data stored in Redis, never exposed to browser
 - Session cookie (HTTP-only, Secure, SameSite=Strict) issued
-- NGINX Gateway validates JWT before proxying to backends
-- Backend services reject requests without valid JWT
+- ext_authz validates every API request and injects identity headers
+- Backend services read X-User-Id from headers for authorization
 - User can only access their own transactions (data-level authorization)
 - Token refresh works seamlessly (no user interruption)
 
@@ -2460,110 +2458,54 @@ spec:
       weight: 100
 ```
 
-#### Step 4: Add JWT Validation (Session Gateway Integration)
+#### Step 4: Add ext_authz Session Validation
 
-**Current NGINX (auth_request pattern):**
+**Current architecture (local dev):**
 
-```nginx
-location /api/ {
-    auth_request /validate_token;
-    # ... proxy to backend
-}
+Envoy Gateway with ext_authz SecurityPolicy validates sessions from Redis on every `/api/*` request, injecting `X-User-Id`, `X-Roles`, `X-Permissions` headers before routing to NGINX.
 
-location /validate_token {
-    internal;
-    proxy_pass http://token_validation_service:8088/validate;
-}
-```
-
-**Gateway API with GCP Backend Service:**
+**Gateway API with Envoy ext_authz:**
 
 ```yaml
-# kubernetes/gateway/authenticated-route.yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: authenticated-transaction-route
-  namespace: default
-  annotations:
-    # GCP-specific: Cloud Armor security policy
-    cloud.google.com/armor-config: '{"budget-analyzer-policy": "enabled"}'
-spec:
-  parentRefs:
-  - name: api-gateway
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /api/v1/transactions
-    filters:
-    # Request header modification (add JWT from session)
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        add:
-        - name: X-Forwarded-For
-          value: "{client-ip}"
-    backendRefs:
-    # First: Validate token
-    - name: token-validation-service
-      port: 8088
-      weight: 0  # Not actually routing here, using for auth
-      filters:
-      - type: RequestHeaderModifier
-        requestHeaderModifier:
-          set:
-          - name: X-Auth-Request-Redirect
-            value: "/api/v1/transactions"
-    # Then: Route to backend
-    - name: transaction-service
-      port: 8082
-      weight: 100
-```
-
-**Note:** Gateway API doesn't have native `auth_request` equivalent. Options:
-
-**Option A: Use External Authorization (recommended):**
-
-Deploy Envoy Gateway or similar with external authorization filter:
-
-```yaml
-# Using Envoy Gateway (more portable than GCP-specific)
+# Using Envoy Gateway SecurityPolicy for ext_authz
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
-  name: jwt-validation
+  name: ext-authz-policy
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: transaction-route
+    name: api-route
   extAuth:
     grpc:
       backendRef:
-        name: token-validation-service
-        port: 8088
+        name: ext-authz
+        port: 9001
 ```
+
+This is the same pattern used in local development — Envoy ext_authz is Envoy-native and works identically in GKE.
 
 **Option B: Use Service Mesh (Linkerd, future):**
 
-Linkerd with external authorization policy:
+Linkerd with authorization policy for mTLS between services:
 
 ```yaml
 apiVersion: policy.linkerd.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
-  name: jwt-required
+  name: service-auth
 spec:
   targetRef:
     group: ""
     kind: Service
     name: transaction-service
   requiredAuthenticationRefs:
-  - name: jwt-auth
+  - name: mesh-tls
     kind: MeshTLSAuthentication
 ```
 
-**Recommendation for Phase 1:** Deploy NGINX Gateway in GKE (containerized) with auth_request until service mesh is implemented in Phase 2.
+**Recommendation:** Use Envoy ext_authz (already implemented in local dev). Service mesh adds mTLS for inter-service authentication as a future enhancement.
 
 #### Step 5: Frontend Routing
 

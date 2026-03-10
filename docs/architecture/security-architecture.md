@@ -1,8 +1,8 @@
 # Financial Application Security Architecture
 ## Design Document
 
-**Version:** 1.0  
-**Date:** November 10, 2025  
+**Version:** 2.0
+**Date:** March 10, 2026
 **Status:** Implemented
 
 ---
@@ -23,10 +23,11 @@ This document outlines the security architecture for a financial data applicatio
 
 ### Request Flow
 
-**All browser traffic goes through Session Gateway.** Envoy handles SSL termination.
+**All browser traffic enters through Envoy.** Envoy handles SSL termination and ext_authz enforcement.
 
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
+Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 ```
 
 ### Component Architecture
@@ -39,38 +40,37 @@ Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Servi
 │  (Port 3000)            (Native)              (External API)    │
 └────────┬───────────────────────┬──────────────────────┬─────────┘
          │                       │                      │
-         │ Session Cookie        │ JWT                  │ JWT
+         │ Session Cookie        │ Bearer Token          │ Bearer Token
          │ (HTTPS)               │ (HTTPS)              │ (HTTPS)
          ▼                       ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Envoy Gateway (Port 443, HTTPS)               │
 │                    • SSL Termination (all traffic)               │
-│                    • Routes app.* → Session Gateway              │
-│                    • Routes api.* → NGINX                        │
+│                    • ext_authz enforcement on /api/* paths       │
+│                    • Routes /auth/*, /login/*, /logout →         │
+│                      Session Gateway                             │
+│                    • Routes /api/*, /* → NGINX                   │
 └────────┬───────────────────────┬──────────────────────┬─────────┘
-         │ HTTP                  │ HTTP                 │ HTTP
+         │                       │                      │
          ▼                       │                      │
 ┌────────────────────────┐       │                      │
-│   Session Gateway      │       │                      │
-│   Port 8081 (HTTP)     │       │                      │
-│   • OAuth Flow Mgmt    │       │                      │
-│   • Mints internal JWT │       │                      │
-│   • Token Lifecycle    │       │                      │
-└────────┬───────────────┘       │                      │
-         │                       │                      │
-         └───────────────────────┴──────────────────────┘
-                        │ JWT in Authorization header
-                        ▼
+│   ext_authz gRPC       │       │                      │
+│   Port 9001            │       │                      │
+│   • Session lookup     │       │                      │
+│     in Redis           │       │                      │
+│   • Header injection   │       │                      │
+│     (X-User-Id, etc.)  │       │                      │
+└────────────────────────┘       │                      │
+                                 │                      │
+         ┌───────────────────────┴──────────────────────┘
+         │ Validated headers (X-User-Id, X-Roles, X-Permissions)
+         ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    NGINX API Gateway (Port 8080, HTTP)           │
 │                    • Request Routing                             │
-│                    • JWT Validation via Token Validation Service │
 │                    • Rate Limiting                               │
 │                    • Load Balancing                              │
-└────────┬─────────────────────────────────────────────────────────┘
-         │
-         ├──────► Token Validation Service (Port 8088)
-         │        • Verifies gateway-minted JWT signatures via JWKS
+└────────┬────────────────────────────────────────────────────────┘
          │
          └──────► Backend Microservices
                   • Transaction Service (8082)
@@ -78,12 +78,15 @@ Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Servi
                   • Permission Service (8086)
                   • Data-level authorization
 
-         ┌─────────────────────────────┐
-         │   Identity Provider         │
-         │   (Auth0/Keycloak/Other)    │
-         │   • User Authentication     │
-         │   • User Management         │
-         └─────────────────────────────┘
+┌────────────────────────┐       ┌─────────────────────────────┐
+│   Session Gateway      │       │   Identity Provider         │
+│   Port 8081 (HTTP)     │       │   (Auth0/Keycloak/Other)    │
+│   • OAuth Flow Mgmt    │       │   • User Authentication     │
+│   • Session lifecycle  │       │   • User Management         │
+│   • ext_authz dual-    │       └─────────────────────────────┘
+│     write to Redis     │
+│   • Token exchange     │
+└────────────────────────┘
 ```
 
 ---
@@ -96,13 +99,13 @@ Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Servi
 
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
-- Store Auth0 tokens in Redis for refresh; mint internal JWTs for downstream services
+- Store Auth0 tokens in Redis for refresh
+- Dual-write session data (userId, roles, permissions) to ext_authz Redis schema for Envoy-based authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Proactive token refresh before expiration
 - Session lifecycle management (login/logout)
-- Mint internal JWT with user identity and permissions, forward to NGINX
-- Call permission-service to resolve roles/permissions for JWT claims, passing `email` and `displayName` extracted from the OAuth2 principal
-- Authenticate to permission-service using a short-lived service JWT (1-minute lifetime, `sub: "session-gateway"`, `type: "service"`) signed with the gateway's own RSA key — no Auth0 client credentials needed for internal traffic
+- Call permission-service to resolve roles/permissions, passing `email` and `displayName` extracted from the OAuth2 principal
+- Provide token exchange endpoint for native PKCE/M2M clients (`POST /auth/token/exchange`)
 
 **Technology:** Spring Cloud Gateway with Spring Security OAuth2 Client
 
@@ -110,33 +113,47 @@ Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Servi
 - Minimal custom code (primarily configuration)
 - Native OAuth 2.0/OIDC support
 - Built-in session management with Redis
-- Internal JWT minting with permission enrichment
+- Permission enrichment on login and token refresh
 - Team expertise in Spring ecosystem
 - Production-grade for financial applications
 
 **Does NOT:**
-- Validate JWT signatures (NGINX responsibility)
 - Route between microservices (NGINX responsibility)
 - Enforce data-level permissions (service responsibility)
+- Validate sessions per-request (ext_authz responsibility)
 
 **Why BFF Pattern:**
 The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifically for maximum security in a financial application. For detailed analysis of the security advantages, see [BFF Security Benefits](bff-security-benefits.md).
 
 ---
 
-### 2. NGINX API Gateway
+### 2. ext_authz Service
 
-**Purpose:** Internal API gateway and security perimeter for backend services
+**Purpose:** Per-request session validation at the Envoy layer
+
+**Responsibilities:**
+- Validate session tokens by looking up ext_authz Redis hash (`extauthz:session:{id}`)
+- Inject `X-User-Id`, `X-Roles`, `X-Permissions` headers into authorized requests
+- Reject unauthorized requests before they reach NGINX or backend services
+
+**Technology:** Go gRPC service implementing Envoy ext_authz protocol
+
+**Integration:** Called by Envoy on every request to `/api/*` paths
+
+---
+
+### 3. NGINX API Gateway
+
+**Purpose:** Internal API gateway for routing and rate limiting
 
 **Responsibilities:**
 - Route requests to appropriate microservices
-- Validate JWT signatures via Token Validation Service
 - Rate limiting per user/client
 - Load balancing across service instances
 - WAF integration points
 - Circuit breaking and retry logic
 
-**Note:** SSL/TLS termination is handled by Envoy Gateway, not NGINX.
+**Note:** SSL/TLS termination is handled by Envoy Gateway, not NGINX. Session validation is handled by ext_authz at the Envoy layer — NGINX receives pre-validated requests with identity headers already injected.
 
 **Technology:** NGINX (industry standard)
 
@@ -151,23 +168,8 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 **Does NOT:**
 - Manage user sessions (Session Gateway responsibility)
 - Handle OAuth flows (Session Gateway responsibility)
+- Validate sessions or tokens (ext_authz responsibility)
 - Enforce data-level permissions (service responsibility)
-
----
-
-### 3. Token Validation Service
-
-**Purpose:** Validate JWT authenticity and claims
-
-**Responsibilities:**
-- Verify JWT signatures against session-gateway's JWKS endpoint
-- Cache public keys from JWKS endpoint
-- Validate expiration; signature verification sufficient for trusted internal tokens
-- Return user/client context to NGINX
-
-**Technology:** Spring Boot microservice
-
-**Integration:** Called by NGINX via `auth_request` directive
 
 ---
 
@@ -182,15 +184,15 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 - Audit logging of data access
 - Business logic execution
 
-**Critical Security Rule:** Always validate that the authenticated user (from JWT claims) has permission to access the specific data being requested.
+**Critical Security Rule:** Always validate that the authenticated user (from `X-User-Id` header injected by ext_authz) has permission to access the specific data being requested.
 
 **Example:**
 ```
 Request: GET /api/budget/accounts/12345
-JWT Claims: { "sub": "user-abc-123", ... }
+Headers: X-User-Id: user-abc-123, X-Roles: ROLE_USER, X-Permissions: transactions:read
 
 Service Logic:
-1. Extract user ID from JWT: "user-abc-123"
+1. Extract user ID from X-User-Id header: "user-abc-123"
 2. Query: SELECT * FROM accounts WHERE id = 12345 AND user_id = 'user-abc-123'
 3. If no rows: return 403 Forbidden
 4. Otherwise: return account data
@@ -209,39 +211,39 @@ Service Logic:
 4. User authenticates at Auth0 (enters credentials)
 5. Auth0 redirects to Session Gateway /callback with authorization code
 6. Session Gateway exchanges code for tokens (access + refresh)
-7. Session Gateway stores tokens in Redis
-8. Session Gateway sets HTTP-only session cookie in browser
-9. Browser redirected to application home page
+7. Session Gateway stores Auth0 tokens in Redis
+8. Session Gateway calls permission-service to resolve roles/permissions
+9. Session Gateway dual-writes session data to ext_authz Redis schema
+10. Session Gateway sets HTTP-only session cookie in browser
+11. Browser redirected to application home page
 ```
 
 **Security Benefits:**
-- JWT never exposed to browser JavaScript
+- Tokens never exposed to browser JavaScript
 - Tokens immune to XSS attacks
 - Session cookie has HttpOnly, Secure, SameSite attributes
+- ext_authz session enables per-request validation at the Envoy layer
 
 ---
 
 ### API Request Flow (Authenticated User)
 
 ```
-1. Browser sends request with session cookie → Session Gateway
-2. Session Gateway looks up session in Redis
-3. Session Gateway checks Auth0 token expiration
-4. If Auth0 token expired: Session Gateway refreshes with Auth0, then mints new internal JWT
-5. Session Gateway mints internal JWT with user identity and permissions
-6. Session Gateway adds internal JWT to Authorization header
-7. Session Gateway → NGINX with JWT
-8. NGINX validates JWT via Token Validation Service
-9. Token Validation Service verifies signature against gateway JWKS
-10. If valid: NGINX routes to appropriate microservice
-11. Microservice validates user has permission for specific data
-12. Response flows back through NGINX → Session Gateway → Browser
+1. Browser sends request with session cookie → Envoy (:443)
+2. Envoy calls ext_authz gRPC service (:9001)
+3. ext_authz looks up session in Redis (extauthz:session:{id})
+4. If valid: ext_authz injects X-User-Id, X-Roles, X-Permissions headers
+5. Envoy routes to NGINX (:8080) with injected headers
+6. NGINX routes to appropriate microservice
+7. Microservice reads identity from headers, validates user has permission for specific data
+8. Response flows back through NGINX → Envoy → Browser
 ```
 
 **Key Points:**
-- Auth0 only contacted when tokens need refresh (every 15-30 min)
-- NGINX validates every request (defense in depth)
+- ext_authz validates every request (defense in depth)
+- Session revocation is instant — delete Redis key, next request fails
 - Microservices enforce data-level permissions
+- No cryptographic verification at runtime — Redis is trusted internal infrastructure
 
 ---
 
@@ -252,8 +254,9 @@ Service Logic:
 2. Session Gateway → Auth0 token endpoint with refresh token
 3. Auth0 returns new access token (and optionally new refresh token)
 4. Session Gateway updates Redis session with new Auth0 tokens
-5. Session Gateway mints a new internal JWT for downstream services
-6. Session Gateway continues request with new internal JWT
+5. Session Gateway re-fetches permissions from permission-service
+6. Session Gateway updates ext_authz Redis hash with refreshed session data
+7. Session Gateway continues request
 ```
 
 **Refresh Strategy:** Proactive refresh 5 minutes before expiration to avoid request failures
@@ -269,7 +272,7 @@ Mobile app authentication strategy is still being evaluated. We will assess the 
 **Option 1: Direct Auth0 Integration**
 - Mobile app uses Auth0 native SDKs
 - Tokens stored in secure OS storage (Keychain/Keystore)
-- Direct API calls to NGINX (bypasses Session Gateway)
+- Token exchange via Session Gateway (`POST /auth/token/exchange`)
 - Simpler implementation with proven SDKs
 
 **Option 2: NGINX Proxy Pattern**
@@ -291,86 +294,46 @@ The mobile authentication approach will be finalized during mobile application d
 ### Client Credentials Flow (M2M)
 
 ```
-1. 3rd party → NGINX /auth/token with client_id/client_secret
-2. NGINX proxies to Auth0 token endpoint
-3. Auth0 validates credentials and returns access token
-4. NGINX returns token to 3rd party
-5. 3rd party → NGINX /api/* with JWT (bypasses Session Gateway)
-6. NGINX validates JWT and routes to services
+1. External client obtains Auth0 access token via client_credentials grant
+2. Client exchanges Auth0 token for opaque session via POST /auth/token/exchange
+3. Session Gateway validates token, creates session, writes ext_authz Redis hash
+4. Client uses opaque bearer token for API calls
+5. Envoy ext_authz validates bearer token from Redis
+6. If valid: routes to backend service with identity headers
 ```
 
 **Security:**
-- Separate token validation logic for M2M vs user tokens
-- M2M tokens have different claims structure
-- Scoped permissions instead of user roles
+- Token exchange creates a server-managed session — no long-lived tokens on wire
+- ext_authz validates every request
+- Scoped permissions resolved from permission-service
 
 ---
 
-### Internal Service-to-Service Authentication (Gateway Service JWTs)
+### Internal Service-to-Service Authentication
 
-Internal services do not use Auth0 client credentials for machine-to-machine calls. Instead, Session Gateway mints a service-identity JWT using its existing RSA key pair.
+Internal services currently rely on network isolation for authentication. Permission-service is called directly by Session Gateway without bearer authentication — Kubernetes network policies restrict access.
 
-**Why not OAuth2 client credentials for internal M2M?**
-- Client credentials require every calling service to obtain a token from Auth0, coupling all internal services to the identity provider
-- Token refresh, caching, and error handling for IdP calls must be implemented in every service
-- Auth0 rate limits and outages become blast radius for internal communication
+**Current approach:**
+- Session Gateway calls permission-service via internal Kubernetes DNS
+- No bearer token or cryptographic proof of caller identity
+- Security relies on network isolation (only Session Gateway can reach permission-service)
 
-**Why not `permitAll()` on internal endpoints?**
-- Pushes security entirely to the network layer (Kubernetes network policy)
-- Any pod compromise grants unauthenticated access to all internal APIs
-- Violates defense-in-depth: no cryptographic proof of caller identity
-
-**How the gateway service JWT works:**
-
-```
-Gateway                              Permission-Service
-  │  1. Mint service JWT                │
-  │     sub: "session-gateway"          │
-  │     type: "service"                 │
-  │     aud: "budgetanalyzer-internal"  │
-  │     exp: now + 1 minute             │
-  │     (signed with gateway RSA key)   │
-  │                                     │
-  │  2. GET /internal/v1/users/{idpSub}/permissions
-  │     Authorization: Bearer <service-jwt>
-  │     ?email=...&displayName=...      │
-  │ ───────────────────────────────────>│
-  │                                     │  3. Validate JWT against gateway JWKS
-  │                                     │  4. @PreAuthorize("isAuthenticated()") ✓
-  │                                     │  5. syncUser + getPermissions
-  │  6. { userId, roles, permissions }  │
-  │ <───────────────────────────────────│
-  │                                     │
-  │  7. Mint USER JWT with enriched     │
-  │     claims (sub, roles, permissions)│
-```
-
-**Why this works without new infrastructure:**
-- Session Gateway already has an RSA key pair for signing user JWTs (`InternalJwtConfig`)
-- Permission-service already validates tokens against the gateway's JWKS endpoint
-- `@PreAuthorize("isAuthenticated()")` on permission-service endpoints works as-is — the service JWT is a valid, signed JWT
-- No new keys, no new JWKS endpoint, no new shared secrets
-
-**Architectural significance:**
-The BFF pattern incidentally makes Session Gateway a trust anchor for the entire internal network — not just for browser sessions. Internal services authenticate via gateway-signed tokens rather than either open endpoints or IdP coupling. Every internal call is cryptographically authenticated.
-
-**Contrast with external M2M:** External client credentials (above) go through Auth0 and bypass Session Gateway. Internal service calls are authenticated by the gateway itself and never touch Auth0.
+**Future enhancement:** mTLS via service mesh (Linkerd) will provide cryptographic caller authentication without application-level token management.
 
 ---
 
 ## Identity Provider Abstraction Strategy
 
 ### Design Goal
-Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. Clients never directly interact with Auth0 or know which provider is used.
+Prevent vendor lock-in by abstracting identity provider behind Session Gateway. Clients never directly interact with Auth0 or know which provider is used.
 
 ### Implementation
 
-**All authentication endpoints proxied through NGINX:**
-- `/auth/authorize` - Initiate OAuth flow
-- `/auth/token` - Token exchange and refresh
-- `/auth/callback` - OAuth callback handler
-- `/auth/logout` - End session
-- `/auth/jwks` - Public keys (optional)
+**All authentication flows go through Session Gateway:**
+- `/auth/*` - Auth lifecycle endpoints
+- `/login/*` - OAuth2 login initiation
+- `/logout` - End session
+- `/auth/token/exchange` - Token exchange for native/M2M clients
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes
@@ -381,14 +344,14 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 ### Migration Path
 
-**Current:** Auth0  
+**Current:** Auth0
 **Future Options:** Okta, Keycloak, Azure AD, custom solution
 
 **Migration Impact:**
-- Clients: No changes (still call NGINX /auth/*)
+- Clients: No changes (still use session cookies or token exchange)
 - Session Gateway: Update OAuth configuration
-- NGINX: Update proxy_pass destinations
-- Services: Validate against gateway JWKS (already provider-independent)
+- ext_authz: No changes (reads from Redis, provider-independent)
+- Services: No changes (read identity from headers, provider-independent)
 
 ---
 
@@ -402,18 +365,12 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 - HTTP-only, Secure, SameSite cookies
 - Session timeout and absolute expiration
 
-**Layer 2: NGINX API Gateway**
-- Independent JWT validation (don't trust upstream)
-- Rate limiting per user/client
-- Request sanitization
-- DDoS protection
+**Layer 2: ext_authz (Envoy)**
+- Per-request session validation from Redis
+- Header injection (X-User-Id, X-Roles, X-Permissions)
+- Rejects unauthorized requests before they reach backend services
 
-**Layer 3: Token Validation Service**
-- Cryptographic signature verification against gateway JWKS
-- Expiration validation
-- Cached public key rotation handling
-
-**Layer 4: Backend Services**
+**Layer 3: Backend Services**
 - Data-level authorization
 - Query scoping by authenticated user
 - Audit logging of sensitive data access
@@ -421,18 +378,16 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 ### Token Configuration
 
-**Internal User JWT** (gateway-minted, forwarded to NGINX):
-- Lifetime: 15-30 minutes
-- Algorithm: RS256 (asymmetric, signed by session-gateway)
-- Claims: sub (user ID from permission-service), roles, permissions, exp, iat
-- Validated by: Token Validation Service via gateway JWKS
+**Opaque Session Token** (cookie or bearer token):
+- Lifetime: 30 minutes (sliding expiration)
+- Format: Opaque session ID (no sensitive data encoded)
+- Storage: Redis (Spring Session + ext_authz hash)
+- Validated by: ext_authz service via Redis lookup
 
-**Internal Service JWT** (gateway-minted, used for service-to-service calls):
-- Lifetime: 1 minute (used immediately, never cached)
-- Algorithm: RS256 (same gateway RSA key pair as user JWTs)
-- Claims: sub: "session-gateway", type: "service", aud: "budgetanalyzer-internal", exp, iat
-- No user claims (no roles, no permissions, no idp_sub)
-- Validated by: permission-service via gateway JWKS (same endpoint, same trust chain)
+**ext_authz Redis Hash** (`extauthz:session:{id}`):
+- Fields: `user_id`, `roles` (comma-joined), `permissions` (comma-joined), `created_at`, `expires_at`
+- TTL: Matches Spring Session timeout (30 minutes)
+- Written by: Session Gateway on login, token refresh, and token exchange
 
 **Refresh Token:**
 - Lifetime: 8 hours (web), 30 days (mobile)
@@ -444,19 +399,20 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 - HttpOnly: true (prevents JavaScript access)
 - Secure: true (HTTPS only)
 - SameSite: Strict (CSRF protection)
-- Max-Age: 30 minutes (matches access token)
+- Max-Age: 30 minutes (matches session timeout)
 
 ### Threat Mitigation
 
 | Threat | Mitigation |
 |--------|-----------|
 | XSS token theft | Tokens never in browser; HTTP-only cookies |
-| Token replay | Short expiration; signature validation |
+| Token replay | Short session expiration; server-side session validation |
 | CSRF | SameSite cookies; CSRF tokens on state changes |
 | Unauthorized data access | Service-layer authorization by user ID |
 | Credential stuffing | Rate limiting at NGINX; Auth0 anomaly detection |
-| Token tampering | RSA signature verification |
+| Session hijacking | Opaque session IDs; Redis-backed validation |
 | Man-in-the-middle | HTTPS/TLS everywhere; HSTS headers |
+| Instant revocation | Delete Redis session — next request fails immediately |
 
 ---
 
@@ -465,10 +421,10 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Session Gateway | Spring Cloud Gateway | Team expertise; minimal code; OAuth 2.0 native support |
+| ext_authz | Go gRPC service | Lightweight; Envoy-native protocol; low latency |
 | API Gateway | NGINX | Industry standard; proven reliability; operational maturity |
-| Session Store | Redis | Fast; distributed; Spring Session integration |
-| Identity Provider | Auth0 (abstracted) | Managed service; swappable via NGINX proxy |
-| Token Validation | Spring Boot | Consistent with microservices; Spring Security JWT |
+| Session Store | Redis | Fast; distributed; Spring Session integration; ext_authz schema |
+| Identity Provider | Auth0 (abstracted) | Managed service; swappable via Session Gateway |
 | Backend Services | Spring Boot | Existing architecture; team expertise |
 
 ---
@@ -479,14 +435,16 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Load Balancer (ALB)                        │
+│                    Envoy Gateway (443)                          │
+│                    • SSL Termination                           │
+│                    • ext_authz enforcement                     │
 └────────┬────────────────────────────┬──────────────────────────┘
          │                            │
     ┌────▼────┐                  ┌────▼────┐
     │ Session │                  │ Session │
     │ Gateway │◄────────────────►│ Gateway │
     │   (1)   │   Redis Cluster  │   (2)   │
-    └────┬────┘                  └────┬────┘
+    └─────────┘                  └─────────┘
          │                            │
     ┌────▼────────────────────────────▼────┐
     │          NGINX Cluster                │
@@ -506,7 +464,7 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 **Redis Cluster:**
 - 3-node cluster with sentinel
-- Session replication across nodes
+- Session replication across nodes (Spring Session + ext_authz schema)
 - Automatic failover
 
 **NGINX:**
@@ -522,14 +480,14 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 
 **Metrics to Track:**
 - Session Gateway: Active sessions, token refresh rate, OAuth flow success/failure
+- ext_authz: Validation latency, hit/miss ratio, rejection rate
 - NGINX: Request rate, error rate, latency percentiles
-- Token Validation: Validation failures, public key cache hits
 - Services: Authorization failures, data access patterns
 
 **Alerting Thresholds:**
-- Token validation failure rate > 1%
+- ext_authz rejection rate spike > 5% (may indicate session store issues)
 - Session Gateway error rate > 0.5%
-- JWT expiration before refresh > 0.1%
+- Redis connection failures
 - Unauthorized data access attempts
 
 ### Logging Strategy
@@ -538,7 +496,7 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 - All authentication events (login, logout, token refresh)
 - All authorization failures
 - All sensitive data access with user context
-- Token validation failures
+- ext_authz validation failures
 
 **Log Format:**
 ```json
@@ -557,14 +515,15 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 ### Session Management
 
 **Redis Configuration:**
-- Key pattern: `spring:session:sessions:{session-id}`
+- Spring Session key pattern: `spring:session:sessions:{session-id}`
+- ext_authz key pattern: `extauthz:session:{session-id}`
 - TTL: 30 minutes (sliding expiration)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery
 
 **Session Cleanup:**
 - Expired sessions automatically removed by Redis TTL
-- Explicit session invalidation on logout
+- Explicit session invalidation on logout (both Spring Session and ext_authz keys)
 - Bulk session revocation capability for security incidents
 
 ---
@@ -574,24 +533,25 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 ### Phase 1: Infrastructure Setup
 1. Deploy Redis cluster
 2. Deploy Session Gateway (Spring Cloud Gateway)
-3. Configure NGINX proxy rules
-4. Set up monitoring and alerting
+3. Deploy ext_authz gRPC service
+4. Configure Envoy Gateway with ext_authz
+5. Set up monitoring and alerting
 
 ### Phase 2: Authentication Integration
 1. Configure Session Gateway with Auth0
 2. Test OAuth flows (authorization code + PKCE)
-3. Test token refresh mechanism
+3. Test token refresh mechanism with ext_authz dual-write
 4. Verify session management
 
 ### Phase 3: API Integration
 1. Update React app to use Session Gateway
-2. Test authenticated API calls
-3. Verify JWT forwarding to NGINX
-4. Test token expiration and refresh
+2. Test authenticated API calls through ext_authz
+3. Verify header injection and backend service authorization
+4. Test session expiration and refresh
 
 ### Phase 4: Security Validation
 1. Penetration testing
-2. Token lifecycle testing
+2. Session lifecycle testing
 3. Session fixation testing
 4. Authorization bypass testing
 5. Load testing with realistic user patterns
@@ -610,13 +570,13 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 1. **Step-up Authentication:** Require re-authentication for sensitive operations
 2. **Device Fingerprinting:** Track and alert on suspicious device changes
 3. **Behavioral Analytics:** Detect anomalous access patterns
-4. **Token Binding:** Bind tokens to specific devices/channels
+4. **Token Binding:** Bind sessions to specific devices/channels
 5. **GraphQL Gateway:** Add GraphQL layer for frontend aggregation
 
 ### Scalability Considerations
 1. **Geo-distributed Redis:** Multi-region session replication
 2. **Edge Deployment:** Deploy Session Gateway closer to users
-3. **Token Caching:** Cache validated tokens to reduce validation overhead
+3. **Session Caching:** Cache validated sessions at ext_authz layer to reduce Redis lookups
 4. **API Gateway Sharding:** Split NGINX by service domain
 
 ---
@@ -629,19 +589,20 @@ Prevent vendor lock-in by abstracting identity provider behind NGINX endpoints. 
 | Keep NGINX as API gateway | Industry standard; operational maturity; team familiarity |
 | Spring Cloud Gateway for BFF | Team expertise; minimal code; native OAuth support |
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
-| RS256 token algorithm | Asymmetric signing; public key distribution |
-| 15-30 min access token lifetime | Balance security vs user experience |
+| Opaque session tokens | Instant revocation via Redis delete; no expiry window |
+| Envoy ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol |
+| 30 min session timeout | Balance security vs user experience |
 | Proactive token refresh | Avoid request failures due to expiration |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; Spring integration |
-| Gateway service JWTs for internal M2M | Eliminates IdP coupling for internal services; reuses existing RSA infrastructure |
+| Network isolation for internal M2M | Simplicity; mTLS planned for future cryptographic authentication |
 
 ---
 
 ## Document Approval
 
-**Prepared by:** Senior Software Architect  
-**Review Required:** Security Team, DevOps Team, Engineering Leadership  
+**Prepared by:** Senior Software Architect
+**Review Required:** Security Team, DevOps Team, Engineering Leadership
 **Next Review Date:** Upon architecture changes or security incidents
 
 ---

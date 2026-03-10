@@ -93,11 +93,6 @@ AUTH0_CLIENT_SECRET=your-client-secret-here
 - Ensure the API audience is configured correctly
 - Verify `AUTH0_ISSUER_URI` ends with `/`
 
-### Token validation failures
-
-- Check the Token Validation Service logs: `kubectl logs -n budget-analyzer deployment/token-validation-service`
-- Ensure JWKS endpoint is accessible from your cluster
-
 ## Security Notes
 
 - Never commit `.env` to version control

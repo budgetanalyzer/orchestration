@@ -15,6 +15,7 @@ spec:
       labels:
         app: ext-authz
     spec:
+      serviceAccountName: ext-authz
       containers:
       - name: ext-authz
         image: ext-authz:latest
@@ -28,7 +29,12 @@ spec:
         - name: REDIS_ADDR
           value: "redis.infrastructure:6379"
         - name: ENFORCE_MODE
-          value: "false"
+          value: "true"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
         - name: REDIS_TLS
           value: "false"
         - name: LOG_FORMAT

@@ -6,16 +6,17 @@
 
 | Port | Service | Protocol | Purpose | Access Level |
 |------|---------|----------|---------|--------------|
-| 443 | Envoy Gateway | HTTPS | SSL termination, ingress | Public (browsers) |
-| 8080 | NGINX Gateway | HTTP | JWT validation, routing | Internal (Envoy only) |
+| 443 | Envoy Gateway | HTTPS | SSL termination, ext_authz enforcement, ingress | Public (browsers) |
+| 9001 | ext_authz | gRPC | Per-request session validation | Internal (Envoy only) |
+| 8090 | ext_authz | HTTP | Health endpoint | Internal (probes only) |
+| 8080 | NGINX Gateway | HTTP | Routing, rate limiting | Internal (Envoy only) |
 | 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Envoy only) |
 | 8086 | Permission Service | HTTP | Internal roles/permissions resolution | Internal (Session Gateway only) |
-| 8088 | Token Validation Service | HTTP | JWT signature verification | Internal (NGINX only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |
 | 5432 | PostgreSQL | TCP | Relational database | Internal (services only) |
-| 6379 | Redis | TCP | Session storage, caching | Internal (services only) |
+| 6379 | Redis | TCP | Session storage (Spring Session + ext_authz schema), caching | Internal (services only) |
 | 5672 | RabbitMQ | AMQP | Message broker | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
 
@@ -23,13 +24,14 @@
 
 ### Public Layer (Browser Accessible)
 - **443** - Envoy Gateway (HTTPS)
-  - `app.budgetanalyzer.localhost` → Session Gateway
-  - `api.budgetanalyzer.localhost` → NGINX Gateway
+  - `app.budgetanalyzer.localhost` → routes to Session Gateway (auth paths) or NGINX (API/frontend paths)
+  - ext_authz enforced on `/api/*` paths
 
 ### Gateway Layer (Internal)
-- **8080** - NGINX Gateway (API routing, JWT validation)
+- **9001** - ext_authz gRPC (session validation, header injection)
+- **8090** - ext_authz health (HTTP health probes)
+- **8080** - NGINX Gateway (API routing, rate limiting)
 - **8081** - Session Gateway (BFF, session management)
-- **8088** - Token Validation Service (JWT verification)
 
 ### Business Services Layer (Internal)
 - **8082** - Transaction Service
@@ -40,7 +42,7 @@
 
 ### Infrastructure Layer (Internal)
 - **5432** - PostgreSQL (database)
-- **6379** - Redis (session storage)
+- **6379** - Redis (session storage + ext_authz schema)
 - **5672** - RabbitMQ (messaging)
 - **15672** - RabbitMQ Management UI
 
@@ -48,13 +50,13 @@
 
 **List all Kubernetes services and ports**:
 ```bash
-kubectl get svc -n budget-analyzer
+kubectl get svc
 ```
 
 **Check specific service port mapping**:
 ```bash
-kubectl describe svc nginx-gateway -n budget-analyzer
-kubectl describe svc session-gateway -n budget-analyzer
+kubectl describe svc nginx-gateway
+kubectl describe svc session-gateway
 ```
 
 **List all infrastructure services**:
@@ -64,29 +66,29 @@ kubectl get svc -n infrastructure
 
 **View pod port bindings**:
 ```bash
-kubectl get pods -n budget-analyzer -o wide
+kubectl get pods -o wide
 ```
 
 **Test service connectivity**:
 ```bash
 # From inside a pod
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- curl http://transaction-service:8082/actuator/health
+kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/actuator/health
 ```
 
 ## Port Assignment Convention
 
 **Pattern**: Ports are assigned based on service layer and creation order.
 
-**Gateway Layer (8080-8089)**:
+**Gateway Layer (8080-8089, 9001)**:
 - 8080: NGINX Gateway (API routing)
 - 8081: Session Gateway (BFF)
-- 8088: Token Validation Service (JWT verification)
+- 9001: ext_authz gRPC (session validation)
+- 8090: ext_authz health
 
 **Business Services (8082+, even numbers)**:
 - 8082: Transaction Service
 - 8084: Currency Service
 - 8086: Permission Service
-- 8090+: Future services
 
 **Frontend Development (3000-3999)**:
 - 3000: React Dev Server (standard React port)
@@ -109,7 +111,7 @@ kubectl exec -n budget-analyzer deployment/nginx-gateway -- curl http://transact
 2. **Check for conflicts**:
 ```bash
 # List all currently used ports
-kubectl get svc -n budget-analyzer -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.ports[*].port}{"\n"}{end}'
+kubectl get svc -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.ports[*].port}{"\n"}{end}'
 ```
 
 3. **Update this document** with the new port assignment
@@ -148,14 +150,14 @@ kubectl get svc --all-namespaces | grep <port>
 
 **Check network policies**:
 ```bash
-kubectl get networkpolicies -n budget-analyzer
+kubectl get networkpolicies
 kubectl get networkpolicies -n infrastructure
 ```
 
 **Verify service is not exposed publicly**:
 ```bash
 # Should only show Envoy Gateway on 443
-kubectl get svc -n budget-analyzer --field-selector spec.type=LoadBalancer
+kubectl get svc --field-selector spec.type=LoadBalancer
 ```
 
 ## Related Documentation

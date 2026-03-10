@@ -134,6 +134,7 @@ data:
 redis_data = encode_secret_data({
     'host': 'redis.' + INFRA_NAMESPACE,
     'port': '6379',
+    'password': os.getenv('REDIS_PASSWORD', 'budget-analyzer-redis'),
 })
 
 k8s_yaml(blob('''
@@ -146,6 +147,23 @@ type: Opaque
 data:
   host: ''' + redis_data['host'] + '''
   port: ''' + redis_data['port'] + '''
+  password: ''' + redis_data['password'] + '''
+'''))
+
+# Redis credentials (infrastructure namespace — Redis reads its own password)
+redis_infra_data = encode_secret_data({
+    'password': os.getenv('REDIS_PASSWORD', 'budget-analyzer-redis'),
+})
+
+k8s_yaml(blob('''
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-credentials
+  namespace: ''' + INFRA_NAMESPACE + '''
+type: Opaque
+data:
+  password: ''' + redis_infra_data['password'] + '''
 '''))
 
 # RabbitMQ credentials
@@ -211,23 +229,6 @@ data:
   api-key: ''' + fred_data['api-key'] + '''
 '''))
 
-# JWT signing credentials for gateway-minted JWTs
-# Generate with: ./scripts/dev/generate-jwt-signing-key.sh
-jwt_data = encode_secret_data({
-    'private-key-pem': os.getenv('JWT_SIGNING_PRIVATE_KEY_PEM', ''),
-})
-
-k8s_yaml(blob('''
-apiVersion: v1
-kind: Secret
-metadata:
-  name: jwt-signing-credentials
-  namespace: ''' + DEFAULT_NAMESPACE + '''
-type: Opaque
-data:
-  private-key-pem: ''' + jwt_data['private-key-pem'] + '''
-'''))
-
 # ============================================================================
 # SERVICE-COMMON SHARED LIBRARY
 # ============================================================================
@@ -240,8 +241,7 @@ local_resource(
         'tilt trigger transaction-service-compile && ' +
         'tilt trigger currency-service-compile && ' +
         'tilt trigger permission-service-compile && ' +
-        'tilt trigger session-gateway-compile && ' +
-        'tilt trigger token-validation-service-compile',
+        'tilt trigger session-gateway-compile',
     deps=[
         get_repo_path('service-common') + '/src',
         get_repo_path('service-common') + '/build.gradle.kts',
@@ -307,6 +307,7 @@ EXPOSE ''' + str(port) + '''
 
     # Step 3: Load Kubernetes manifests
     k8s_yaml([
+        'kubernetes/services/' + name + '/serviceaccount.yaml',
         'kubernetes/services/' + name + '/deployment.yaml',
         'kubernetes/services/' + name + '/service.yaml',
     ])
@@ -318,7 +319,7 @@ EXPOSE ''' + str(port) + '''
     if debug_port:
         port_forwards_list.append(port_forward(debug_port, 5005, name='Debug'))
 
-    base_deps = ['postgresql', 'rabbitmq'] if name in ['transaction-service', 'currency-service'] else ['postgresql'] if name == 'permission-service' else []
+    base_deps = ['postgresql', 'rabbitmq', 'istio-injection'] if name in ['transaction-service', 'currency-service'] else ['postgresql', 'istio-injection'] if name == 'permission-service' else ['istio-injection']
 
     k8s_resource(
         name,
@@ -343,9 +344,6 @@ spring_boot_service('permission-service')
 # ============================================================================
 # GATEWAY SERVICES
 # ============================================================================
-
-# Token Validation Service
-spring_boot_service('token-validation-service', deps=['redis'])
 
 # Session Gateway
 repo_path = get_repo_path('session-gateway')
@@ -386,6 +384,7 @@ EXPOSE 8081
 )
 
 k8s_yaml([
+    'kubernetes/services/session-gateway/serviceaccount.yaml',
     'kubernetes/services/session-gateway/deployment.yaml',
     'kubernetes/services/session-gateway/service.yaml',
     'kubernetes/services/session-gateway/configmap.yaml',
@@ -398,7 +397,7 @@ k8s_resource(
         port_forward(5009, 5005, name='Debug'),
     ],
     labels=['gateway'],
-    resource_deps=['redis', 'token-validation-service', 'permission-service']
+    resource_deps=['redis', 'permission-service', 'istio-injection']
 )
 
 # ============================================================================
@@ -412,6 +411,7 @@ docker_build(
 )
 
 k8s_yaml([
+    'kubernetes/services/ext-authz/serviceaccount.yaml',
     'kubernetes/services/ext-authz/deployment.yaml',
     'kubernetes/services/ext-authz/service.yaml',
 ])
@@ -423,7 +423,7 @@ k8s_resource(
         port_forward(8090, 8090, name='Health'),
     ],
     labels=['gateway'],
-    resource_deps=['redis'],
+    resource_deps=['redis', 'istio-injection'],
 )
 
 # ============================================================================
@@ -442,7 +442,6 @@ configmap_create(
     'nginx-gateway-includes',
     namespace=DEFAULT_NAMESPACE,
     from_file=[
-        'api-protection.conf=nginx/includes/api-protection.conf',
         'backend-headers.conf=nginx/includes/backend-headers.conf',
     ],
     watch=True
@@ -460,6 +459,7 @@ configmap_create(
 )
 
 k8s_yaml([
+    'kubernetes/services/nginx-gateway/serviceaccount.yaml',
     'kubernetes/services/nginx-gateway/deployment.yaml',
     'kubernetes/services/nginx-gateway/service.yaml',
 ])
@@ -470,7 +470,7 @@ k8s_resource(
         port_forward(8080, 8080, name='HTTP'),
     ],
     labels=['gateway'],
-    resource_deps=['session-gateway', 'token-validation-service']
+    resource_deps=['istio-injection']
 )
 
 # ============================================================================
@@ -500,6 +500,7 @@ docker_build(
 )
 
 k8s_yaml([
+    'kubernetes/services/budget-analyzer-web/serviceaccount.yaml',
     'kubernetes/services/budget-analyzer-web/deployment.yaml',
     'kubernetes/services/budget-analyzer-web/service.yaml',
 ])
@@ -510,7 +511,7 @@ k8s_resource(
         port_forward(3000, 3000, name='Vite Dev Server'),
     ],
     labels=['frontend'],
-    resource_deps=['nginx-gateway'],
+    resource_deps=['nginx-gateway', 'istio-injection'],
     links=[
         link('https://app.budgetanalyzer.localhost', 'Application'),
     ]
@@ -541,14 +542,73 @@ local_resource(
 )
 
 # ============================================================================
+# ISTIO SERVICE MESH
+# ============================================================================
+
+# Istio Base CRDs
+local_resource(
+    'istio-base',
+    cmd='''
+        helm upgrade --install istio-base istio/base \
+            --namespace istio-system \
+            --create-namespace \
+            --version 1.24.3 \
+            --wait
+    ''',
+    labels=['infrastructure'],
+)
+
+# Istio Control Plane
+local_resource(
+    'istiod',
+    cmd='''
+        helm upgrade --install istiod istio/istiod \
+            --namespace istio-system \
+            --version 1.24.3 \
+            --set pilot.resources.requests.memory=256Mi \
+            --set pilot.resources.requests.cpu=100m \
+            --wait
+    ''',
+    resource_deps=['istio-base'],
+    labels=['infrastructure'],
+)
+
+# Namespace labeling for sidecar injection
+local_resource(
+    'istio-injection',
+    cmd='''
+        kubectl label namespace default istio-injection=enabled --overwrite
+        kubectl label namespace infrastructure istio-injection=disabled --overwrite
+    ''',
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
+# Istio security policies (PeerAuthentication + AuthorizationPolicy)
+local_resource(
+    'istio-security-policies',
+    cmd='''
+        kubectl apply -f kubernetes/istio/peer-authentication.yaml
+        kubectl apply -f kubernetes/istio/authorization-policies.yaml
+    ''',
+    deps=[
+        'kubernetes/istio/peer-authentication.yaml',
+        'kubernetes/istio/authorization-policies.yaml',
+    ],
+    resource_deps=['istiod', 'istio-injection'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
 # GATEWAY API RESOURCES
 # ============================================================================
 
 # EnvoyProxy configuration (needs envoy-gateway-system namespace from helm chart)
+# Depends on istiod so sidecar webhook exists when EG proxy pod is created
 local_resource(
     'envoy-proxy-config',
     cmd='kubectl apply -f kubernetes/gateway/envoy-proxy-config.yaml',
-    resource_deps=['envoy-gateway'],
+    resource_deps=['envoy-gateway', 'istiod'],
     labels=['infrastructure'],
 )
 
@@ -574,6 +634,7 @@ local_resource(
     cmd='''
         kubectl apply -f kubernetes/gateway/gateway.yaml
         kubectl apply -f kubernetes/gateway/client-traffic-policy.yaml
+        kubectl apply -f kubernetes/gateway/auth-httproute.yaml
         kubectl apply -f kubernetes/gateway/api-httproute.yaml
         kubectl apply -f kubernetes/gateway/app-httproute.yaml
         kubectl apply -f kubernetes/gateway/ext-authz-security-policy.yaml
@@ -581,6 +642,7 @@ local_resource(
     deps=[
         'kubernetes/gateway/gateway.yaml',
         'kubernetes/gateway/client-traffic-policy.yaml',
+        'kubernetes/gateway/auth-httproute.yaml',
         'kubernetes/gateway/api-httproute.yaml',
         'kubernetes/gateway/app-httproute.yaml',
         'kubernetes/gateway/ext-authz-security-policy.yaml',
@@ -597,7 +659,7 @@ local_resource(
 # Custom buttons for common operations
 cmd_button(
     'rebuild-all-backend',
-    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service session-gateway token-validation-service; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
+    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service session-gateway; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
     resource='transaction-service',
     icon_name='build',
     text='Rebuild All Backend'

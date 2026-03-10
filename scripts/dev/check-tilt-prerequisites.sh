@@ -115,7 +115,6 @@ REPOS=(
     "transaction-service"
     "currency-service"
     "session-gateway"
-    "token-validation-service"
     "budget-analyzer-web"
 )
 
@@ -132,7 +131,6 @@ SPRING_SERVICES=(
     "transaction-service"
     "currency-service"
     "session-gateway"
-    "token-validation-service"
 )
 
 for service in "${SPRING_SERVICES[@]}"; do
@@ -243,7 +241,7 @@ if grep -q "budgetanalyzer.localhost" /etc/hosts 2>/dev/null; then
     done
 else
     echo -e "${YELLOW}!${NC} budgetanalyzer.localhost NOT in /etc/hosts"
-    echo "  Add with: echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts"
+    echo "  Add with: echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts"
     ((WARNINGS++))
 fi
 

@@ -9,7 +9,7 @@
 This project demonstrates production-grade patterns:
 
 - **Authentication**: OAuth2/OIDC with Auth0, BFF pattern, session management
-- **API Gateway**: JWT validation, routing, rate limiting (NGINX + Envoy)
+- **API Gateway**: Session validation (ext_authz), routing, rate limiting (NGINX + Envoy)
 - **Microservices**: Spring Boot, Kubernetes, Tilt local development
 
 It intentionally leaves unsolved:
@@ -37,7 +37,6 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 - [currency-service](https://github.com/budgetanalyzer/currency-service) - Currency API
 - [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) - React frontend
 - [session-gateway](https://github.com/budgetanalyzer/session-gateway) - Authentication BFF
-- [token-validation-service](https://github.com/budgetanalyzer/token-validation-service) - JWT validation
 
 ## License
 

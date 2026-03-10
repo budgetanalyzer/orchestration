@@ -15,6 +15,7 @@ spec:
       labels:
         app: transaction-service
     spec:
+      serviceAccountName: transaction-service
       containers:
       - name: transaction-service
         image: transaction-service:latest

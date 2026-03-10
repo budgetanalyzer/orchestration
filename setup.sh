@@ -117,12 +117,12 @@ else
     print_warning "DNS entries not found in /etc/hosts"
     echo ""
     echo "  Add the following line to /etc/hosts:"
-    echo "  127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost"
+    echo "  127.0.0.1  app.budgetanalyzer.localhost"
     echo ""
     read -p "  Add automatically? (requires sudo) [y/N] " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost" | sudo tee -a /etc/hosts > /dev/null
+        echo "127.0.0.1  app.budgetanalyzer.localhost" | sudo tee -a /etc/hosts > /dev/null
         print_success "DNS entries added to /etc/hosts"
     else
         print_warning "Skipped. Please add DNS entries manually before running tilt up"
@@ -146,14 +146,27 @@ fi
 # Note: Envoy Gateway is installed by Tilt via Helm (see Tiltfile)
 
 # =============================================================================
-# Step 5: Generate TLS certificates
+# Step 5: Install Istio Helm repository
+# =============================================================================
+print_step "Setting up Istio Helm repository..."
+
+if helm repo list 2>/dev/null | grep -q "^istio"; then
+    print_success "Istio Helm repository already configured"
+else
+    helm repo add istio https://istio-release.storage.googleapis.com/charts
+    helm repo update istio
+    print_success "Istio Helm repository added"
+fi
+
+# =============================================================================
+# Step 6: Generate TLS certificates
 # =============================================================================
 print_step "Setting up TLS certificates..."
 
 "$SCRIPT_DIR/scripts/dev/setup-k8s-tls.sh"
 
 # =============================================================================
-# Step 6: Create .env file
+# Step 7: Create .env file
 # =============================================================================
 print_step "Setting up environment file..."
 
@@ -163,13 +176,6 @@ else
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
     print_success ".env file created from .env.example"
 fi
-
-# =============================================================================
-# Step 7: Generate JWT signing key
-# =============================================================================
-print_step "Setting up JWT signing key..."
-
-"$SCRIPT_DIR/scripts/dev/generate-jwt-signing-key.sh"
 
 # =============================================================================
 # Setup Complete!

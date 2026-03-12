@@ -15,6 +15,7 @@ REPOS=(
     "currency-service"
     "budget-analyzer-web"
     "session-gateway"
+    "permission-service"
     "checkstyle-config"
 )
 

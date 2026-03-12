@@ -115,6 +115,7 @@ REPOS=(
     "transaction-service"
     "currency-service"
     "session-gateway"
+    "permission-service"
     "budget-analyzer-web"
 )
 
@@ -131,6 +132,7 @@ SPRING_SERVICES=(
     "transaction-service"
     "currency-service"
     "session-gateway"
+    "permission-service"
 )
 
 for service in "${SPRING_SERVICES[@]}"; do

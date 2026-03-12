@@ -88,7 +88,7 @@ REPOS=(
     "currency-service"
     "budget-analyzer-web"
     "session-gateway"
-    "token-validation-service"
+    "permission-service"
 )
 
 REPOS_OK=true

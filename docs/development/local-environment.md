@@ -56,7 +56,6 @@ git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
 git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/token-validation-service.git
 ```
 
 **Repository structure:**
@@ -66,8 +65,7 @@ git clone https://github.com/budgetanalyzer/token-validation-service.git
 ├── service-common/          # Shared Spring Boot library
 ├── transaction-service/     # Transaction microservice
 ├── currency-service/        # Currency microservice
-├── session-gateway/         # BFF for authentication
-├── token-validation-service/ # JWT validation
+├── session-gateway/         # Unified session gateway
 └── budget-analyzer-web/     # React frontend
 ```
 
@@ -137,8 +135,6 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `transaction-service-compile` - Compiles transaction service
 - `currency-service-compile` - Compiles currency service
 - `session-gateway-compile` - Compiles session gateway
-- `token-validation-service-compile` - Compiles token validation service
-
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
@@ -229,11 +225,10 @@ postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
 |---------|------|-----|-------|
 | Envoy Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
 | Envoy Gateway | 443 | https://api.budgetanalyzer.localhost | API gateway |
-| NGINX Gateway | 8080 | - | Internal (JWT validation, routing) |
+| NGINX Gateway | 8080 | - | Internal (routing) |
 | Session Gateway | 8081 | - | Internal (behind Envoy) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
 | currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
-| Token Validation | 8088 | http://localhost:8088 | Direct access via port forward |
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
 | PostgreSQL | 5432 | localhost:5432 | Database access |
 | Redis | 6379 | localhost:6379 | Cache access |

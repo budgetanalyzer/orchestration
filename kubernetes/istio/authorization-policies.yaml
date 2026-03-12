@@ -1,0 +1,79 @@
+# ============================================================================
+# Authorization Policies for east-west (service-to-service) traffic
+# ============================================================================
+#
+# Ingress-facing services (nginx-gateway, ext-authz, session-gateway) do NOT
+# have AuthorizationPolicies because they receive traffic from the Envoy Gateway
+# proxy, which is outside the Istio mesh and has no mTLS identity. The Envoy
+# Gateway itself is the security boundary for these services (TLS termination,
+# ext_authz enforcement).
+#
+# Internal services below use STRICT mTLS AuthorizationPolicies to restrict
+# which mesh services can call them.
+# ============================================================================
+
+# Backend services: only accept traffic from nginx-gateway
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: transaction-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: transaction-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: currency-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: currency-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+# permission-service: accepts from nginx-gateway and session-gateway
+# (session-gateway calls permission-service during session creation)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: permission-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: permission-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/default/sa/nginx-gateway"
+              - "cluster.local/ns/default/sa/session-gateway"
+---
+# budget-analyzer-web: accepts from nginx-gateway (proxied by nginx)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: budget-analyzer-web-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: budget-analyzer-web
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]

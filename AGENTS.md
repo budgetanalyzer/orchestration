@@ -35,9 +35,8 @@ This orchestration repository coordinates the deployment and development environ
 This project has reached its intended scope. We are no longer actively developing Budget Analyzer features - we're interested in discussing these patterns with other architects.
 
 **What's implemented:**
-- Authentication: OAuth2/OIDC with Auth0, BFF pattern, session management
-- Internal M2M: Session Gateway mints short-lived service JWTs (reusing its RSA key) to authenticate to permission-service — no Auth0 dependency for internal traffic
-- API Gateway: JWT validation, routing (NGINX + Envoy)
+- Authentication: OAuth2/OIDC with Auth0, BFF pattern, opaque session tokens + ext_authz
+- API Gateway: Envoy ext_authz for session validation, NGINX for routing and rate limiting
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
 **What's intentionally left unsolved:**
@@ -58,7 +57,7 @@ For containerized development environment setup, see the [workspace](https://git
 - **Production Parity**: Development environment faithfully recreates production
 - **Microservices**: Independently deployable services with clear boundaries
 - **BFF Pattern**: Session Gateway provides browser security and authentication management
-- **API Gateway Pattern**: NGINX provides unified routing, JWT validation, and load balancing
+- **API Gateway Pattern**: NGINX provides unified routing, rate limiting, and load balancing
 - **Resource-Based Routing**: Frontend remains decoupled from service topology
 - **Defense in Depth**: Multiple security layers (Session Gateway → NGINX → Services)
 - **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development
@@ -82,11 +81,11 @@ kubectl get svc
 **Service Types**:
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
-- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication, session management, and internal service-to-service auth (mints service JWTs for permission-service calls)
-- **Token Validation Service**: Spring Boot service (port 8088) - JWT validation for NGINX
+- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
+- **ext-authz**: Go HTTP service (port 9002) - Envoy external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
-- **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination and initial routing
-- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, JWT validation, and load balancing
+- **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination, routing, and ext_authz enforcement
+- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, rate limiting, and load balancing
 
 **Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
 
@@ -103,29 +102,30 @@ This prevents "connection refused" errors during deployments when services are s
 
 **Request Flow**:
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
+Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 ```
 
-**Two entry points**:
-- `app.budgetanalyzer.localhost` → Session Gateway (browser auth, session cookies)
-- `api.budgetanalyzer.localhost` → NGINX (JWT validation, routing)
+**Single entry point**: `app.budgetanalyzer.localhost`
+- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/api/*` → NGINX (ext_authz enforced, routing to backends)
+- `/*` → NGINX (frontend, no auth required)
 
-**Note**: During JWT minting, Session Gateway also calls permission-service (:8086) to resolve roles/permissions, authenticating via a short-lived service JWT (not OAuth2 client credentials).
-  - `api.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
+**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions.
+  - `app.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:
 - Same-origin architecture = no CORS issues
-- JWTs never exposed to browser (XSS protection for financial data)
-- Centralized JWT validation and routing
+- Opaque session tokens = no JWTs exposed to browser (XSS protection)
+- Centralized session validation via ext_authz at the Envoy layer
 
 **Discovery**:
 ```bash
 # List all API routes
 grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
 
-# Test gateways
-curl -v https://app.budgetanalyzer.localhost/actuator/health
-curl -v https://api.budgetanalyzer.localhost/health
+# Test gateway
+curl -v https://app.budgetanalyzer.localhost/health
 
 # View service ports
 kubectl get svc
@@ -176,7 +176,7 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-./setup.sh        # Creates cluster, certs, DNS, .env, JWT signing key
+./setup.sh        # Creates cluster, certs, DNS, .env
 # Edit .env with your Auth0 and FRED API credentials
 ```
 
@@ -224,8 +224,7 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── .github/                    # Organization-level GitHub config (templates, profile README)
 ├── workspace/                  # Devcontainer entry point (clone this first)
 ├── orchestration/              # This repo - deployment coordination
-├── session-gateway/            # BFF service
-├── token-validation-service/   # JWT validation service
+├── session-gateway/            # BFF service (auth lifecycle)
 ├── transaction-service/        # Transaction management
 ├── currency-service/           # Currency/exchange rates
 ├── permission-service/         # Internal roles/permissions
@@ -261,7 +260,6 @@ Each microservice is maintained in its own repository:
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
 - **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
 - **permission-service**: https://github.com/budgetanalyzer/permission-service - Internal roles/permissions resolution
-- **token-validation-service**: https://github.com/budgetanalyzer/token-validation-service - JWT validation for NGINX
 
 ## Best Practices
 

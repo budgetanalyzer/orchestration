@@ -61,8 +61,8 @@ set_topics "orchestration" \
 set_topics "session-gateway" \
     bff spring-cloud-gateway oauth2 redis-session spring-boot ai-native ai-assisted-development
 
-set_topics "token-validation-service" \
-    jwt spring-boot oauth2 microservice ai-native ai-assisted-development
+set_topics "permission-service" \
+    spring-boot microservice permissions rbac ai-native ai-assisted-development
 
 set_topics "transaction-service" \
     spring-boot microservice rest-api postgresql ai-native ai-assisted-development

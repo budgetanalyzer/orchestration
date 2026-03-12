@@ -24,10 +24,10 @@ SERVICE_PORTS = {
     'transaction-service': 8082,
     'currency-service': 8084,
     'permission-service': 8086,
-    'token-validation-service': 8088,
     'session-gateway': 8081,
     'budget-analyzer-web': 3000,
     'nginx-gateway': 8080,
+    'ext-authz': 9001,
 }
 
 # Debug ports for remote debugging
@@ -35,7 +35,6 @@ DEBUG_PORTS = {
     'transaction-service': 5006,
     'currency-service': 5007,
     'permission-service': 5011,
-    'token-validation-service': 5010,
     'session-gateway': 5009,
 }
 

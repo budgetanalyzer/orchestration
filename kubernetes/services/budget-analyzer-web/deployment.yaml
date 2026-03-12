@@ -15,6 +15,7 @@ spec:
       labels:
         app: budget-analyzer-web
     spec:
+      serviceAccountName: budget-analyzer-web
       containers:
       - name: budget-analyzer-web
         image: budget-analyzer-web:latest

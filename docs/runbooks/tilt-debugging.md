@@ -39,7 +39,8 @@ kubectl cluster-info --context kind-kind
 | 8081 | session-gateway | HTTP | Browser auth/session management |
 | 8082 | transaction-service | HTTP | Transaction API |
 | 8084 | currency-service | HTTP | Currency API |
-| 8088 | token-validation-service | HTTP | JWT validation |
+| 9001 | ext-authz | gRPC | Session validation |
+| 8090 | ext-authz | HTTP | Health check |
 | 3000 | budget-analyzer-web | HTTP | React dev server |
 | **Infrastructure** |
 | 5432 | postgresql | TCP | Database |
@@ -50,7 +51,6 @@ kubectl cluster-info --context kind-kind
 | 5006 | transaction-service | JDWP | Remote debugging |
 | 5007 | currency-service | JDWP | Remote debugging |
 | 5009 | session-gateway | JDWP | Remote debugging |
-| 5010 | token-validation-service | JDWP | Remote debugging |
 
 ### Service Health Endpoints
 
@@ -59,7 +59,6 @@ kubectl cluster-info --context kind-kind
 curl http://localhost:8081/actuator/health  # session-gateway
 curl http://localhost:8082/actuator/health  # transaction-service
 curl http://localhost:8084/actuator/health  # currency-service
-curl http://localhost:8088/actuator/health  # token-validation-service
 
 # NGINX Gateway
 curl http://localhost:8080/health
@@ -126,7 +125,6 @@ Each service has JDWP enabled. Configure your IDE:
 | transaction-service | 5006 | Remote JVM Debug → localhost:5006 |
 | currency-service | 5007 | Remote JVM Debug → localhost:5007 |
 | session-gateway | 5009 | Remote JVM Debug → localhost:5009 |
-| token-validation-service | 5010 | Remote JVM Debug → localhost:5010 |
 
 ---
 
@@ -154,10 +152,10 @@ Pod not starting?
 ```
 502 Bad Gateway?
 ├── Which endpoint?
-│   ├── app.budgetanalyzer.localhost
-│   │   └── Check session-gateway: kubectl logs -f deployment/session-gateway
-│   └── api.budgetanalyzer.localhost
-│       └── Check nginx-gateway: kubectl logs -f deployment/nginx-gateway
+│   ├── app.budgetanalyzer.localhost (frontend)
+│   │   └── Check nginx-gateway: kubectl logs -f deployment/nginx-gateway
+│   └── app.budgetanalyzer.localhost/api/*
+│       └── Check ext-authz + nginx-gateway logs
 ├── Is upstream service running?
 │   └── kubectl get pods | grep <service-name>
 └── Check NGINX upstream config
@@ -169,20 +167,18 @@ Pod not starting?
 ```
 Auth failures after login?
 ├── Check browser DevTools → Network tab
-│   ├── Request missing Authorization header?
-│   │   └── Session Gateway not injecting JWT
+│   ├── Request missing SESSION cookie?
+│   │   └── Session Gateway not setting cookie after login
 │   │       └── kubectl logs -f deployment/session-gateway
-│   └── Request has Authorization but still 401/403?
-│       └── JWT validation failing
-│           └── kubectl logs -f deployment/token-validation-service
-├── Check token-validation-service health
-│   └── curl http://localhost:8088/actuator/health
+│   └── Request has SESSION cookie but still 401/403?
+│       └── ext_authz session validation failing
+│           └── kubectl logs -f deployment/ext-authz
+├── Check ext-authz health
+│   └── curl http://localhost:8090/healthz
 ├── Check Redis for session data
 │   └── kubectl exec -it deploy/redis -n infrastructure -- redis-cli keys "*"
-├── Check Auth0 credentials secret
-│   └── kubectl get secret auth0-credentials -o yaml
-└── Check jwt-signing-credentials secret (for JWT minting)
-    └── kubectl get secret jwt-signing-credentials -o yaml
+└── Check Auth0 credentials secret
+    └── kubectl get secret auth0-credentials -o yaml
 ```
 
 ### Issue: Database Connection Errors
@@ -205,12 +201,11 @@ Database connection errors?
 
 ### Session Gateway
 
-**Role**: Browser authentication, session management, internal JWT minting
+**Role**: Browser authentication and session management
 
 **Common Issues**:
 - OAuth2 redirect failures
 - Session not persisting
-- JWT not being injected into proxied requests
 
 **Debug Commands**:
 ```bash
@@ -232,41 +227,12 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli FLUSHALL
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `JwtMinting` or `InternalJwt` - Internal JWT creation
-
-### Token Validation Service
-
-**Role**: JWT signature verification for NGINX auth_request
-
-**Common Issues**:
-- JWKS fetch failures (can't reach session-gateway)
-- Signature verification failures
-- Expired tokens
-
-**Debug Commands**:
-```bash
-# Check logs
-kubectl logs -f deployment/token-validation-service
-
-# Health check
-curl http://localhost:8088/actuator/health
-
-# Test validation endpoint directly (if exposed)
-curl -H "Authorization: Bearer <jwt>" http://localhost:8088/auth/validate
-```
-
-**Log Patterns to Watch**:
-- `JwtDecoder` - Token decoding
-- `JwkSetUri` - JWKS fetching
-- `InvalidClaimException` - Claim validation failures
-
 ### NGINX Gateway
 
-**Role**: HTTP routing, JWT validation via auth_request, load balancing
+**Role**: HTTP routing, rate limiting, load balancing
 
 **Common Issues**:
 - Upstream connection refused
-- auth_request failures
 - Routing misconfigurations
 
 **Debug Commands**:
@@ -283,7 +249,6 @@ curl http://localhost:8080/health
 
 **Log Patterns to Watch**:
 - `upstream` - Connection to backend services
-- `auth_request` - JWT validation calls
 - `[error]` - Any error-level messages
 
 ### Transaction/Currency Services
@@ -317,13 +282,9 @@ Browser (https://app.budgetanalyzer.localhost/api/transactions)
     ↓
 Envoy Gateway (30443) - TLS termination
     ↓
-Session Gateway (8081) - Session lookup → Mints internal JWT
-    ↓
-NGINX Gateway (8080) - auth_request to token-validation-service
-    ↓
-Token Validation Service (8088) - JWT signature verification
+ext-authz (9001) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
     ↓ (if valid)
-NGINX Gateway (8080) - Route to backend
+NGINX Gateway (8080) - Rate limiting, route to backend
     ↓
 Transaction Service (8082) - Business logic
 ```
@@ -341,9 +302,9 @@ Note: Status code, response body, request headers
 kubectl logs -f deployment/envoy-gateway -n envoy-gateway-system | grep <path>
 ```
 
-**Step 3: Check Session Gateway**
+**Step 3: Check ext-authz**
 ```bash
-kubectl logs -f deployment/session-gateway | grep -E "(proxy|forward|token)"
+kubectl logs -f deployment/ext-authz
 ```
 
 **Step 4: Check NGINX Gateway**
@@ -351,12 +312,7 @@ kubectl logs -f deployment/session-gateway | grep -E "(proxy|forward|token)"
 kubectl logs -f deployment/nginx-gateway | grep <path>
 ```
 
-**Step 5: Check Token Validation**
-```bash
-kubectl logs -f deployment/token-validation-service
-```
-
-**Step 6: Check Backend Service**
+**Step 5: Check Backend Service**
 ```bash
 kubectl logs -f deployment/transaction-service
 ```
@@ -370,10 +326,7 @@ curl http://localhost:8082/actuator/health
 # 2. Test NGINX routing (no auth)
 curl http://localhost:8080/health
 
-# 3. Test through Envoy (HTTPS, no auth)
-curl -k https://api.budgetanalyzer.localhost/health
-
-# 4. Test full flow (requires valid session cookie)
+# 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
 curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/api/transactions
 ```
@@ -405,25 +358,19 @@ curl http://localhost:8082/actuator/health  # Should return UP
 curl http://localhost:8084/actuator/health  # Should return UP
 ```
 
-**4. Check token-validation-service**
+**4. Check ext-authz**
 ```bash
 # Health
-curl http://localhost:8088/actuator/health
+curl http://localhost:8090/healthz
 
-# Logs - look for validation failures
-kubectl logs -f deployment/token-validation-service
+# Logs - look for session validation failures
+kubectl logs -f deployment/ext-authz
 ```
 
-**5. Check session-gateway JWT injection**
+**5. Check NGINX routing**
 ```bash
-# Logs - look for token relay
-kubectl logs -f deployment/session-gateway | grep -i token
-```
-
-**6. Check NGINX auth_request flow**
-```bash
-# Logs - look for auth_request calls and upstream errors
-kubectl logs -f deployment/nginx-gateway | grep -E "(auth|upstream|error)"
+# Logs - look for upstream errors
+kubectl logs -f deployment/nginx-gateway | grep -E "(upstream|error)"
 ```
 
 **7. Verify secrets are configured**
@@ -445,8 +392,8 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli keys "*"
 
 | Error | Likely Cause | Fix |
 |-------|--------------|-----|
-| 401 Unauthorized | JWT not present or invalid | Check session-gateway logs for token injection |
-| 403 Forbidden | JWT valid but claims rejected | Check token-validation-service logs, verify audience/issuer |
+| 401 Unauthorized | Session cookie missing or invalid | Check ext-authz logs, verify Redis session data |
+| 403 Forbidden | Session valid but insufficient permissions | Check ext-authz logs, verify session roles/permissions |
 | 502 Bad Gateway | Backend service not running | Check pod status, restart service |
 | 504 Gateway Timeout | Backend service slow or hung | Check service logs, database connections |
 | Network Error | Envoy/NGINX misconfiguration | Check gateway logs, verify routes |
@@ -465,13 +412,13 @@ alias tui='open http://localhost:10350'
 
 # Quick log access
 alias logs-session='kubectl logs -f deployment/session-gateway'
-alias logs-token='kubectl logs -f deployment/token-validation-service'
+alias logs-authz='kubectl logs -f deployment/ext-authz'
 alias logs-nginx='kubectl logs -f deployment/nginx-gateway'
 alias logs-tx='kubectl logs -f deployment/transaction-service'
 alias logs-currency='kubectl logs -f deployment/currency-service'
 
 # Health checks
-alias health-all='for p in 8081 8082 8084 8088; do echo "Port $p:"; curl -s http://localhost:$p/actuator/health | jq -r .status; done'
+alias health-all='for p in 8081 8082 8084; do echo "Port $p:"; curl -s http://localhost:$p/actuator/health | jq -r .status; done && echo "ext-authz:"; curl -s http://localhost:8090/healthz'
 
 # Pod status
 alias pods='kubectl get pods -A'

@@ -15,6 +15,7 @@ spec:
       labels:
         app: nginx-gateway
     spec:
+      serviceAccountName: nginx-gateway
       containers:
       - name: nginx
         image: nginx:alpine

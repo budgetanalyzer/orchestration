@@ -15,6 +15,7 @@ spec:
       labels:
         app: permission-service
     spec:
+      serviceAccountName: permission-service
       containers:
       - name: permission-service
         image: permission-service:latest

@@ -1,28 +1,27 @@
 ## Primary Security Benefits Of BFF (Backend-for-Frontend) architecture
 
 ### 1. **XSS Attack Protection**
-**The Critical Advantage:** JWTs never reach the browser's JavaScript environment at all.
+**The Critical Advantage:** Tokens never reach the browser's JavaScript environment at all.
 
-- **BFF Pattern:** Session Gateway stores JWTs server-side in Redis. Browser only receives HTTP-only session cookies that JavaScript cannot access.
-- **Direct JWT:** Browser must store JWT in localStorage or sessionStorage, making it vulnerable to XSS attacks. Any malicious script can steal the token.
+- **BFF Pattern:** Session Gateway stores Auth0 tokens server-side in Redis. Browser only receives HTTP-only session cookies that JavaScript cannot access. Session data is dual-written to ext_authz Redis schema for per-request validation.
+- **Direct Token:** Browser must store tokens in localStorage or sessionStorage, making them vulnerable to XSS attacks. Any malicious script can steal the token.
 
 **Impact:** Even if an attacker injects malicious JavaScript, they cannot steal authentication credentials.
 
 ### 2. **Defense in Depth - Multiple Validation Layers**
 
-The BFF architecture creates 4 independent security layers:
+The BFF architecture creates 3 independent security layers:
 
-1. **Session Gateway** - Validates session cookies, manages token lifecycle
-2. **NGINX** - Independently validates JWT signatures (doesn't trust Session Gateway)
-3. **Token Validation Service** - Cryptographic verification
-4. **Backend Services** - Data-level authorization
+1. **Session Gateway** - Validates session cookies, manages token lifecycle, dual-writes to ext_authz Redis
+2. **ext_authz (Envoy)** - Per-request session validation from Redis, header injection
+3. **Backend Services** - Data-level authorization
 
-**Why this matters:** If one layer is compromised, others still protect the system. Direct JWT to NGINX eliminates the first critical layer.
+**Why this matters:** If one layer is compromised, others still protect the system.
 
 ### 3. **Automatic Token Refresh Without Browser Involvement**
 
-- **BFF Pattern:** Session Gateway proactively refreshes Auth0 tokens 5 minutes before expiration, then mints a new internal JWT for downstream services. Browser never sees or handles refresh tokens.
-- **Direct JWT:** Browser must store refresh tokens (even more sensitive than access tokens) and handle refresh logic in JavaScript, exposing another attack surface.
+- **BFF Pattern:** Session Gateway proactively refreshes Auth0 tokens 5 minutes before expiration, re-fetches permissions from permission-service, and updates the ext_authz Redis session. Browser never sees or handles refresh tokens.
+- **Direct Token:** Browser must store refresh tokens (even more sensitive than access tokens) and handle refresh logic in JavaScript, exposing another attack surface.
 
 **Security implication:** Refresh tokens are long-lived (8 hours to 30 days). Exposing them to XSS dramatically increases breach window.
 
@@ -33,21 +32,21 @@ Session cookies use triple protection:
 - **Secure:** Only transmitted over HTTPS
 - **SameSite: Strict:** Protection against CSRF attacks
 
-JWTs in Authorization headers don't have these browser-level protections.
+Tokens in Authorization headers don't have these browser-level protections.
 
 ### 5. **Reduced Attack Surface**
 
 **BFF Pattern:**
 ```
-Browser → Session Cookie → Session Gateway → JWT → NGINX
+Browser → Session Cookie → Envoy → ext_authz (Redis lookup) → NGINX → Services
 ```
-JWT exists only in server-to-server communication over internal network.
+Tokens exist only server-side in Redis. Nothing sensitive on the wire except an opaque session ID.
 
-**Direct JWT:**
+**Direct Token:**
 ```
-Browser → JWT → NGINX
+Browser → Token → API Gateway
 ```
-JWT traverses the entire public internet and browser environment.
+Token traverses the entire public internet and browser environment.
 
 ## Financial Application Context
 
@@ -71,65 +70,36 @@ This section describes how the BFF architecture enables rapid response when a us
 
 ### User Account Compromise Response
 
-When a user account is identified as compromised or malicious, the response involves **authentication revocation** (Session Gateway):
+When a user account is identified as compromised or malicious, the response involves **session revocation** (immediate):
 
 **Immediate Actions:**
 
-1. **Session Invalidation (Authentication Layer)**
-   - Delete all Redis sessions for the user
-   - Session Gateway rejects subsequent requests with invalid/missing session
+1. **Session Deletion**
+   - Delete all Redis sessions for the user (both Spring Session and ext_authz keys)
+   - ext_authz immediately rejects subsequent requests (session not found in Redis)
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
 
-### Token Revocation Options
+### Token Revocation
 
-The BFF architecture supports two approaches to token revocation, each with different trade-offs:
-
-#### Option A: Session Deletion (Recommended)
+The ext_authz architecture provides **instant revocation by design**:
 
 **How it works:**
-- Delete user's session(s) from Redis
+- Delete user's session(s) from Redis (both `spring:session:*` and `extauthz:session:*` keys)
+- ext_authz lookup fails on next request → 401 returned by Envoy
 - Session cookie becomes invalid (no matching session)
-- Existing JWT in Session Gateway memory becomes orphaned
 - User redirected to login
 
 **Advantages:**
-- Simple implementation
-- No additional infrastructure
-- No performance overhead on every request
+- Instant revocation — no token expiry window to wait out
+- Simple implementation — just delete Redis keys
+- No additional infrastructure (no blacklist needed)
+- No performance overhead on every request (Redis lookup is the normal path anyway)
 
-**Limitations:**
-- Internal JWT technically remains valid until expiration (typically short-lived)
-- If attacker obtained JWT directly (unlikely in BFF), they could use it until expiration
-- Mitigated by: JWTs never exposed to browser in BFF pattern
+**Why this is better than JWT revocation:**
+With JWTs, revocation requires either waiting for token expiry or maintaining a blacklist that must be checked on every request. Opaque sessions backed by Redis have instant revocation as a natural property — deleting the key is all it takes.
 
-**When to use:** Default approach for account compromise, user-initiated logout, password changes.
-
-#### Option B: JWT Blacklist (For Instant Revocation)
-
-**How it works:**
-- Maintain a blacklist of revoked JWTs or user IDs in Redis
-- Token Validation Service checks blacklist before validating signature
-- Revoked tokens immediately rejected
-
-**Implementation approach:**
-```
-Redis key: jwt:blacklist:{jti} or jwt:blacklist:user:{user_id}
-TTL: Match JWT expiration time (auto-cleanup)
-Check: Token Validation Service queries before signature validation
-```
-
-**Advantages:**
-- Instant revocation (next request fails)
-- Works even if attacker obtained JWT
-- Useful for high-security scenarios
-
-**Limitations:**
-- Performance overhead: Redis lookup on every API request
-- Complexity: Token Validation Service must be modified
-- Memory: Blacklist entries consume Redis memory until expiration
-
-**When to use:** Suspected active attack, regulatory requirement for instant revocation, high-value account compromise.
+**When to use:** Account compromise, user-initiated logout, password changes, security incidents, administrative actions.
 
 ### Suspicious Activity Response
 
@@ -144,4 +114,4 @@ For detected anomalies (rate limit triggers, unusual access patterns):
 
 See [Security Enhancements Roadmap](../plans/security-enhancements-roadmap.md) for planned improvements including:
 - Session Gateway bulk revocation API
-- JWT blacklist support in Token Validation Service
+- Per-user session listing and selective revocation

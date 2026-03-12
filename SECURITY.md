@@ -25,7 +25,6 @@ This policy applies to all repositories in the Budget Analyzer organization:
 
 - orchestration
 - session-gateway
-- token-validation-service
 - transaction-service
 - currency-service
 - budget-analyzer-web

@@ -1,41 +1,45 @@
 # BFF + API Gateway Hybrid Pattern
 
-**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing and validation.
+**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing, and Envoy ext_authz for per-request session validation.
 
 ## Overview
 
-Budget Analyzer uses a dual-gateway architecture that separates browser security concerns (Session Gateway) from API routing and validation (NGINX Gateway). This provides maximum security for financial data while maintaining clean separation of concerns.
+Budget Analyzer uses a multi-layer gateway architecture that separates browser security concerns (Session Gateway) from session validation (ext_authz) and API routing (NGINX Gateway). This provides maximum security for financial data while maintaining clean separation of concerns.
 
 ## Request Flow
 
-**All browser traffic goes through Session Gateway.** Think of it as a maxiservice.
+**Single entry point**: `app.budgetanalyzer.localhost`
 
 ```
-Browser → Envoy (:443) → Session Gateway (:8081) → NGINX (:8080) → Services
+Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 ```
 
 **Key stages**:
-1. **Envoy**: SSL termination for all traffic
-2. **Session Gateway**: Mints internal JWT, injects into Authorization header
-3. **NGINX**: JWT validation, route to service
+1. **Envoy**: SSL termination, ext_authz enforcement on `/api/*` paths
+2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
+3. **NGINX**: Route to appropriate backend service
+4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/login/*`, `/logout`)
 
-**Two entry points**:
-- `app.budgetanalyzer.localhost` → Envoy → Session Gateway (browser auth)
-- `api.budgetanalyzer.localhost` → Envoy → NGINX (API gateway)
+**Routing**:
+- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/api/*` → NGINX (ext_authz enforced, routing to backends)
+- `/*` → NGINX (frontend, no auth required)
 
 ## Component Roles
 
 ### Envoy Gateway (Port 443, HTTPS) - Ingress Layer
 
-**Purpose**: SSL termination and initial routing
+**Purpose**: SSL termination, ext_authz enforcement, and initial routing
 
 **Responsibilities**:
-- Handles SSL/TLS termination for both app. and api. subdomains
-- Routes app.budgetanalyzer.localhost to Session Gateway
-- Routes api.budgetanalyzer.localhost to NGINX
+- Handles SSL/TLS termination for all traffic
+- Enforces ext_authz on `/api/*` paths (session validation before routing)
+- Routes auth paths to Session Gateway
+- Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
 
-**Key Benefit**: Modern, Kubernetes-native ingress with SSL termination
+**Key Benefit**: Per-request session validation at the edge, before requests reach any backend
 
 **Discovery**:
 ```bash
@@ -49,18 +53,40 @@ kubectl logs -n envoy-gateway-system deployment/envoy-gateway
 kubectl get gateway budget-analyzer-gateway -n budget-analyzer -o yaml
 ```
 
-### NGINX (Port 8080, HTTP) - API Gateway Layer
+### ext_authz Service (Port 9002 HTTP, Port 8090 Health) - Authorization Layer
 
-**Purpose**: JWT validation, routing, and request processing
+**Purpose**: Per-request session validation via Redis lookup
 
 **Responsibilities**:
-- Validates JWTs via Token Validation Service (auth_request directive)
+- Validates session tokens by looking up `extauthz:session:{id}` in Redis
+- Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
+- Returns 401 for invalid/expired sessions (request rejected by Envoy)
+
+**Key Benefit**: Centralized session validation, instant revocation via Redis key deletion
+
+**Discovery**:
+```bash
+# Check ext_authz service status
+kubectl get pods -l app=ext-authz
+
+# View ext_authz logs
+kubectl logs deployment/ext-authz
+
+# Check ext_authz health
+curl http://ext-authz:8090/healthz
+```
+
+### NGINX (Port 8080, HTTP) - API Gateway Layer
+
+**Purpose**: Routing and rate limiting for backend services
+
+**Responsibilities**:
 - Routes requests to appropriate microservices
 - Resource-based routing with path transformation
 - Rate limiting per user/IP
 - Load balancing and circuit breaking
 
-**Key Benefit**: Centralized JWT validation and routing logic
+**Key Benefit**: Clean routing logic, decoupled from authentication concerns
 
 **Discovery**:
 ```bash
@@ -68,13 +94,13 @@ kubectl get gateway budget-analyzer-gateway -n budget-analyzer -o yaml
 cat nginx/nginx.k8s.conf
 
 # Check NGINX status
-kubectl get pods -n budget-analyzer -l app=nginx-gateway
+kubectl get pods -l app=nginx-gateway
 
 # Test NGINX configuration validity
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec deployment/nginx-gateway -- nginx -t
 
 # View NGINX logs
-kubectl logs -n budget-analyzer deployment/nginx-gateway
+kubectl logs deployment/nginx-gateway
 ```
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
@@ -85,22 +111,22 @@ kubectl logs -n budget-analyzer deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Stores Auth0 tokens in Redis for refresh; mints internal JWTs for downstream services
+- Stores Auth0 tokens in Redis for refresh
+- Dual-writes session data (userId, roles, permissions) to ext_authz Redis schema
 - Issues HttpOnly, Secure session cookies to browsers
-- Proactive token refresh before expiration
-- Mints and injects internal JWT into proxied requests to NGINX
-- Calls permission-service to enrich user JWT with roles/permissions (email and displayName passed as query params)
-- Authenticates to permission-service using a short-lived service JWT signed with the gateway's own RSA key pair — no Auth0 client credentials needed for internal traffic
+- Proactive token refresh before expiration (includes permission re-fetch and ext_authz session update)
+- Calls permission-service to enrich session with roles/permissions (email and displayName passed as query params)
+- Provides token exchange endpoint for native/M2M clients (`POST /auth/token/exchange`)
 
-**Key Benefit**: Maximum security for browser-based financial application (JWTs never exposed to XSS)
+**Key Benefit**: Maximum security for browser-based financial application (tokens never exposed to XSS)
 
 **Discovery**:
 ```bash
 # Check Session Gateway status
-kubectl get pods -n budget-analyzer -l app=session-gateway
+kubectl get pods -l app=session-gateway
 
 # View Session Gateway logs
-kubectl logs -n budget-analyzer deployment/session-gateway
+kubectl logs deployment/session-gateway
 
 # Test Session Gateway health
 curl -v https://app.budgetanalyzer.localhost/actuator/health
@@ -111,36 +137,11 @@ kubectl exec -n infrastructure deployment/redis -- redis-cli PING
 
 **Repository**: https://github.com/budgetanalyzer/session-gateway
 
-### Token Validation Service (Port 8088)
-
-**Purpose**: JWT signature verification for NGINX
-
-**Responsibilities**:
-- Verifies JWT signatures using session-gateway JWKS
-- Validates signatures and expiration (trusted internal tokens)
-- Called by NGINX via auth_request for every protected endpoint
-
-**Key Benefit**: Centralized JWT validation logic, defense in depth
-
-**Discovery**:
-```bash
-# Check Token Validation Service status
-kubectl get pods -n budget-analyzer -l app=token-validation-service
-
-# View Token Validation Service logs
-kubectl logs -n budget-analyzer deployment/token-validation-service
-
-# Test validation endpoint (requires valid JWT)
-curl -H "Authorization: Bearer <JWT>" http://localhost:8088/validate
-```
-
-**Repository**: https://github.com/budgetanalyzer/token-validation-service
-
 ## Why This Pattern?
 
 ### No CORS Needed
 
-**Same-Origin Architecture**: All browser requests go through Session Gateway (app.budgetanalyzer.localhost), which proxies to NGINX, which routes to backends. Browser sees single origin = no CORS issues!
+**Same-Origin Architecture**: All browser requests go through a single entry point (app.budgetanalyzer.localhost). Envoy routes to Session Gateway or NGINX internally. Browser sees single origin = no CORS issues!
 
 **Traditional architecture (CORS required)**:
 ```
@@ -149,25 +150,25 @@ Browser → Frontend (3000) → Backend Services (8082+)  ❌ Different origins
 
 **Current architecture (No CORS)**:
 ```
-Browser → Session Gateway (app.budgetanalyzer.localhost) → NGINX (api.budgetanalyzer.localhost) → Backend Services  ✅ Same origin
+Browser → Envoy (app.budgetanalyzer.localhost) → ext_authz → NGINX → Backend Services  ✅ Same origin
 ```
 
 ### Security Benefits - Defense in Depth
 
 **Multiple security layers**:
 1. **Envoy Gateway**: SSL termination for all traffic
-2. **Session Gateway**: Prevents JWT exposure to browser (XSS protection)
-3. **NGINX auth_request**: Validates every API request before routing
-4. **Token Validation Service**: Cryptographic JWT verification
-5. **Backend Services**: Data-level authorization (user owns resource)
+2. **Session Gateway**: Prevents token exposure to browser (XSS protection)
+3. **ext_authz**: Validates every API request via Redis session lookup
+4. **Backend Services**: Data-level authorization (user owns resource)
 
-**JWT never reaches browser**:
+**Tokens never reach browser**:
 - Traditional approach: Store JWT in localStorage/sessionStorage → Vulnerable to XSS attacks
-- BFF approach: Store JWT in Redis, issue secure session cookie → XSS cannot steal JWT
+- BFF approach: Store session data in Redis, issue secure session cookie → XSS cannot steal tokens
 - Financial application: Protecting access tokens is critical for user financial data
 
-**Internal M2M as an emergent BFF benefit:**
-Because Session Gateway already holds an RSA key pair for user JWT minting, it can also issue service-identity JWTs to authenticate itself to internal services (e.g., permission-service). This eliminates the need for OAuth2 client credentials between internal services, keeping internal traffic free of Auth0 dependency. See [Internal Service-to-Service Authentication](security-architecture.md#internal-service-to-service-authentication-gateway-service-jwts) for details.
+**Instant session revocation**:
+- Delete Redis session key → next request immediately fails at ext_authz
+- No token expiry window to wait out (unlike JWTs)
 
 **For comprehensive security architecture**: See [security-architecture.md](security-architecture.md)
 
@@ -175,11 +176,12 @@ Because Session Gateway already holds an RSA key pair for user JWT minting, it c
 
 | Port | Service | Purpose | Access |
 |------|---------|---------|--------|
-| 443 | Envoy Gateway | SSL termination, ingress (HTTPS) | Public (browsers via app. and api.budgetanalyzer.localhost) |
-| 8080 | NGINX Gateway | JWT validation, routing | Internal (Envoy only) |
+| 443 | Envoy Gateway | SSL termination, ext_authz enforcement (HTTPS) | Public (browsers via app.budgetanalyzer.localhost) |
+| 9002 | ext_authz | Session validation (HTTP) | Internal (Envoy only) |
+| 8090 | ext_authz | Health endpoint (HTTP) | Internal (probes only) |
+| 8080 | NGINX Gateway | Routing, rate limiting | Internal (Envoy only) |
 | 8081 | Session Gateway | Browser authentication, session management | Internal (Envoy only) |
-| 8086 | Permission Service | Internal roles/permissions (authenticated via gateway service JWT) | Internal (Session Gateway only) |
-| 8088 | Token Validation | JWT signature verification | Internal (NGINX only) |
+| 8086 | Permission Service | Internal roles/permissions (network isolation) | Internal (Session Gateway only) |
 | 8082 | Transaction Service | Business logic | Internal (NGINX only) |
 | 8084 | Currency Service | Business logic | Internal (NGINX only) |
 | 3000 | React Dev Server | Frontend (dev only) | Internal (NGINX only) |
@@ -187,17 +189,17 @@ Because Session Gateway already holds an RSA key pair for user JWT minting, it c
 **Discovery**:
 ```bash
 # List all services and ports
-kubectl get svc -n budget-analyzer
+kubectl get svc
 
 # Check specific service port mappings
-kubectl describe svc nginx-gateway -n budget-analyzer
+kubectl describe svc nginx-gateway
 ```
 
 ## When to Use This Pattern
 
 **Best for**:
 - Browser-based applications requiring maximum security (financial, healthcare, etc.)
-- Applications where JWT exposure to XSS is unacceptable
+- Applications where token exposure to XSS is unacceptable
 - Microservices architectures needing centralized authentication
 - Systems requiring same-origin policy (no CORS complexity)
 
@@ -212,8 +214,7 @@ kubectl describe svc nginx-gateway -n budget-analyzer
 
 1. **Add Kubernetes manifests**: `kubernetes/services/{service-name}/`
 2. **Register with Tilt**: Add to `Tiltfile` using `spring_boot_service()` pattern
-3. **Add NGINX routes**: Update `nginx/nginx.k8s.conf` with new location blocks
-4. **Add upstream**: Define service endpoint in NGINX upstreams section
+3. **Add NGINX routes**: Update `nginx/nginx.k8s.conf` with new location blocks using variable-based `proxy_pass` (e.g., `set $backend "http://service.default.svc.cluster.local:port"; proxy_pass $backend;`)
 
 **See [nginx/README.md](../../nginx/README.md) for detailed instructions.**
 
@@ -224,22 +225,22 @@ kubectl describe svc nginx-gateway -n budget-analyzer
 **502 Bad Gateway**:
 ```bash
 # Check if service is running
-kubectl get pods -n budget-analyzer
+kubectl get pods
 
 # Check NGINX can reach service
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- curl http://{service-name}:8082/actuator/health
+kubectl exec deployment/nginx-gateway -- curl http://{service-name}:8082/actuator/health
 
 # Check NGINX configuration
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec deployment/nginx-gateway -- nginx -t
 ```
 
 **401 Unauthorized**:
 ```bash
-# Check Token Validation Service
-kubectl logs -n budget-analyzer deployment/token-validation-service
+# Check ext_authz service
+kubectl logs deployment/ext-authz
 
-# Verify JWT is being passed
-kubectl logs -n budget-analyzer deployment/nginx-gateway | grep Authorization
+# Verify ext_authz session exists in Redis
+kubectl exec -n infrastructure deployment/redis -- redis-cli HGETALL "extauthz:session:{session-id}"
 
 # Check Session Gateway session storage
 kubectl exec -n infrastructure deployment/redis -- redis-cli KEYS "spring:session:*"
@@ -251,7 +252,7 @@ kubectl exec -n infrastructure deployment/redis -- redis-cli KEYS "spring:sessio
 kubectl get pods -n infrastructure -l app=redis
 
 # Check Session Gateway Redis connection
-kubectl logs -n budget-analyzer deployment/session-gateway | grep -i redis
+kubectl logs deployment/session-gateway | grep -i redis
 
 # Verify session cookie is set
 curl -v https://app.budgetanalyzer.localhost (check Set-Cookie header)
@@ -264,4 +265,3 @@ curl -v https://app.budgetanalyzer.localhost (check Set-Cookie header)
 - **NGINX Configuration**: [nginx/README.md](../../nginx/README.md)
 - **Security Architecture**: [security-architecture.md](security-architecture.md)
 - **Session Gateway Repository**: https://github.com/budgetanalyzer/session-gateway
-- **Token Validation Repository**: https://github.com/budgetanalyzer/token-validation-service

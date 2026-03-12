@@ -7,8 +7,12 @@ spec:
   parentRefs:
   - name: ingress-gateway
   hostnames:
-  - "api.budgetanalyzer.localhost"
+  - "app.budgetanalyzer.localhost"
   rules:
-  - backendRefs:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
     - name: nginx-gateway
       port: 8080

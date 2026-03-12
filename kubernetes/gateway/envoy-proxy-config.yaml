@@ -7,6 +7,12 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      envoyDeployment:
+        pod:
+          labels:
+            sidecar.istio.io/inject: "false"
+          annotations:
+            sidecar.istio.io/inject: "false"
       envoyService:
         type: NodePort
         patch:

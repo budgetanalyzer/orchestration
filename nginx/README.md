@@ -1,6 +1,6 @@
 # NGINX API Gateway for Kubernetes
 
-NGINX handles JWT validation and routes requests to backend microservices.
+NGINX handles routing and rate limiting for backend microservices. Authentication is handled by Envoy ext_authz before requests reach NGINX.
 
 ## Request Flow
 
@@ -10,13 +10,12 @@ NGINX handles JWT validation and routes requests to backend microservices.
 Browser (https://app.budgetanalyzer.localhost)
     │
     ▼
-Envoy (:443) ─── SSL termination
+Envoy (:443) ─── SSL termination + ext_authz session validation
     │
-    ▼
-Session Gateway (:8081) ─── JWT from Redis → inject header
+    ├─→ /auth/*, /oauth2/*, /login/*, /logout → Session Gateway (:8081)
     │
     ▼ (K8s internal: nginx-gateway:8080)
-NGINX (:8080) ─── JWT validation, route to service
+NGINX (:8080) ─── rate limiting, route to service
     │
     ├─→ /           → React App (:3000)
     ├─→ /api/transactions → Transaction Service (:8082)
@@ -26,26 +25,25 @@ NGINX (:8080) ─── JWT validation, route to service
 
 **Why this works:**
 - Single origin = no CORS
-- JWT never in browser = XSS protection
+- Opaque session tokens = no JWTs exposed to browser (XSS protection)
 - Resource-based routing = frontend decoupled from services
-- Defense in depth = Session Gateway → NGINX → Backend
+- ext_authz at Envoy layer validates sessions before reaching NGINX
 
 ## Service Configuration
 
-### Upstream Services (in nginx.k8s.conf)
+### Service Resolution (in nginx.k8s.conf)
+
+NGINX uses variable-based `proxy_pass` with Kubernetes FQDN for dynamic DNS resolution. This allows NGINX to start before backend services are available:
 
 ```nginx
-upstream transaction_service {
-    server transaction-service:8082;
-}
+set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
+proxy_pass $transaction_backend;
 
-upstream currency_service {
-    server currency-service:8084;
-}
+set $currency_backend "http://currency-service.default.svc.cluster.local:8084";
+proxy_pass $currency_backend;
 
-upstream react_app {
-    server budget-analyzer-web:3000;
-}
+set $frontend_backend "http://budget-analyzer-web.default.svc.cluster.local:3000";
+proxy_pass $frontend_backend;
 ```
 
 ### Resource-Based Routing
@@ -71,18 +69,16 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
-All requests go through Envoy Gateway (443) → Session Gateway (8081) → NGINX (8080).
+API requests go through Envoy Gateway (443) → ext_authz → NGINX (8080).
+Auth requests go through Envoy Gateway (443) → Session Gateway (8081).
 
 ### 3. Verify it's working
 
 ```bash
-# NGINX Gateway health check
-curl https://api.budgetanalyzer.localhost/health
+# NGINX Gateway health check (via Envoy)
+curl https://app.budgetanalyzer.localhost/health
 
-# Session Gateway health check
-curl https://app.budgetanalyzer.localhost/actuator/health
-
-# React app loads (through Session Gateway)
+# React app loads
 curl https://app.budgetanalyzer.localhost/
 ```
 
@@ -109,13 +105,13 @@ NGINX handles routing to the correct backend service.
 
 ```bash
 # View NGINX logs
-kubectl logs -n budget-analyzer deployment/nginx-gateway
+kubectl logs deployment/nginx-gateway
 
 # Check NGINX config syntax
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec deployment/nginx-gateway -- nginx -t
 
 # Reload NGINX config (Tilt does this automatically)
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -s reload
+kubectl exec deployment/nginx-gateway -- nginx -s reload
 
 # Trigger config reload via Tilt
 tilt trigger nginx-gateway-config
@@ -130,10 +126,11 @@ tilt trigger nginx-gateway-config
 1. Add location block in `nginx.k8s.conf`:
 ```nginx
 location /api/accounts {
-    include /etc/nginx/includes/api-protection.conf;
-
-    rewrite ^/api/(.*)$ /v1/$1 break;
-    proxy_pass http://transaction_service;
+    set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
+    rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
+    proxy_pass $transaction_backend;
     include /etc/nginx/includes/backend-headers.conf;
 }
 ```
@@ -149,20 +146,14 @@ apiClient.get('/accounts')
 
 **Scenario:** You're adding a new "Reports Service" on port 8086.
 
-1. Add upstream in `nginx.k8s.conf`:
-```nginx
-upstream reports_service {
-    server reports-service:8086;
-}
-```
-
-2. Add location blocks for its resources:
+1. Add location blocks for its resources in `nginx.k8s.conf`:
 ```nginx
 location /api/reports {
-    include /etc/nginx/includes/api-protection.conf;
-
-    rewrite ^/api/(.*)$ /v1/$1 break;
-    proxy_pass http://reports_service;
+    set $reports_backend "http://reports-service.default.svc.cluster.local:8086";
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
+    rewrite ^/api/v1/(.*)$ /reports-service/v1/$1 break;
+    proxy_pass $reports_backend;
     include /etc/nginx/includes/backend-headers.conf;
 }
 ```
@@ -178,11 +169,12 @@ location /api/reports {
 **NGINX config:** Just update the location block:
 
 ```nginx
-location /api/transactions {
-    include /etc/nginx/includes/api-protection.conf;
-
-    rewrite ^/api/(.*)$ /v1/$1 break;
-    proxy_pass http://new_transaction_service;  # Changed upstream
+location /api/v1/transactions {
+    set $transaction_backend "http://new-transaction-service.default.svc.cluster.local:8082";
+    limit_req zone=per_ip burst=20 nodelay;
+    limit_req_status 429;
+    rewrite ^/api/v1/(.*)$ /new-transaction-service/v1/$1 break;
+    proxy_pass $transaction_backend;
     include /etc/nginx/includes/backend-headers.conf;
 }
 ```
@@ -196,36 +188,35 @@ This is the power of resource-based routing!
 **Cause:** NGINX can't reach the frontend service.
 
 **Fix:**
-1. Check if frontend pod is running: `kubectl get pods -n budget-analyzer | grep budget-analyzer-web`
-2. Check frontend service exists: `kubectl get svc -n budget-analyzer budget-analyzer-web`
-3. View NGINX logs for errors: `kubectl logs -n budget-analyzer deployment/nginx-gateway`
+1. Check if frontend pod is running: `kubectl get pods | grep budget-analyzer-web`
+2. Check frontend service exists: `kubectl get svc budget-analyzer-web`
+3. View NGINX logs for errors: `kubectl logs deployment/nginx-gateway`
 
 ### API requests fail (404 or 502)
 
 **Cause:** Backend service not running or NGINX can't reach it.
 
 **Fix:**
-1. Verify service is running: `kubectl get pods -n budget-analyzer | grep transaction-service`
-2. Check NGINX logs: `kubectl logs -n budget-analyzer deployment/nginx-gateway`
-3. Verify service DNS resolution: `kubectl exec -n budget-analyzer deployment/nginx-gateway -- nslookup transaction-service`
+1. Verify service is running: `kubectl get pods | grep transaction-service`
+2. Check NGINX logs: `kubectl logs deployment/nginx-gateway`
+3. Verify service DNS resolution: `kubectl exec deployment/nginx-gateway -- nslookup transaction-service`
 
 ### Getting 401 Unauthorized
 
-**Cause:** JWT validation failed.
+**Cause:** ext_authz session validation failed.
 
 **Fix:**
-1. Check Token Validation Service is running: `kubectl get pods -n budget-analyzer | grep token-validation`
-2. Check Token Validation logs: `kubectl logs -n budget-analyzer deployment/token-validation-service`
-3. Verify JWT is being passed correctly from Session Gateway
+1. Check ext-authz is running: `kubectl get pods | grep ext-authz`
+2. Check ext-authz logs: `kubectl logs deployment/ext-authz`
+3. Verify session cookie is being sent and Redis has session data
 
 ### CORS issues
 
-**You shouldn't have CORS issues!** Everything is same-origin (`app.budgetanalyzer.localhost` via Session Gateway).
+**You shouldn't have CORS issues!** Everything is same-origin (`app.budgetanalyzer.localhost` via Envoy Gateway).
 
 The BFF (Backend for Frontend) pattern eliminates CORS:
 - Browser sees single origin: `app.budgetanalyzer.localhost`
-- Envoy routes to Session Gateway
-- Session Gateway proxies to NGINX
+- Envoy routes to NGINX or Session Gateway
 - NGINX routes to backend services
 - No cross-origin requests = no CORS
 
@@ -240,7 +231,7 @@ If you see CORS errors:
 
 **Fix:**
 1. Manually trigger reload: `tilt trigger nginx-gateway-config`
-2. Check ConfigMap content: `kubectl get configmap -n budget-analyzer nginx-gateway-config -o yaml`
+2. Check ConfigMap content: `kubectl get configmap nginx-gateway-config -o yaml`
 
 ## Configuration Files
 
@@ -251,8 +242,7 @@ Main NGINX configuration for Kubernetes deployment. Uses Kubernetes DNS names fo
 ### includes/
 
 Shared configuration snippets:
-- `api-protection.conf` - JWT validation via auth_request
-- `backend-headers.conf` - Standard proxy headers
+- `backend-headers.conf` - Standard proxy headers and identity header forwarding
 
 ## Production Considerations
 

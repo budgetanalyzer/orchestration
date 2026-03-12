@@ -5,7 +5,4 @@ metadata:
   namespace: default
   labels:
     app: session-gateway
-data:
-  # Kubernetes-specific routing configuration
-  BACKEND_URI: "http://nginx-gateway:8080"
-  FRONTEND_URI: "http://nginx-gateway:8080"
+data: {}

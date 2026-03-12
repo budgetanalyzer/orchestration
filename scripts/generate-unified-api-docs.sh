@@ -68,8 +68,8 @@ if command -v yq &> /dev/null; then
 fi
 
 # Fetch JSON for merging (use gateway endpoints)
-TRANSACTION_SERVICE="https://api.budgetanalyzer.localhost/api/transaction-service/v3/api-docs"
-CURRENCY_SERVICE="https://api.budgetanalyzer.localhost/api/currency-service/v3/api-docs"
+TRANSACTION_SERVICE="https://app.budgetanalyzer.localhost/api/transaction-service/v3/api-docs"
+CURRENCY_SERVICE="https://app.budgetanalyzer.localhost/api/currency-service/v3/api-docs"
 SESSION_GATEWAY="https://app.budgetanalyzer.localhost/v3/api-docs"
 print_info "Fetching specs for merging..."
 
@@ -97,8 +97,8 @@ print_success "✓ Fetched Session Gateway spec"
 print_info "Merging OpenAPI specifications..."
 
 # Create unified spec using jq
-# Session-gateway paths need a server override since they're served from app.budgetanalyzer.localhost
-# (the BFF entry point), not api.budgetanalyzer.localhost like the other services.
+# Session-gateway paths need a server override since they're served from the BFF origin (app.*)
+# at the root path, not under /api like the other services.
 UNIFIED_SPEC=$(jq -n \
     --argjson budget "$BUDGET_SPEC" \
     --argjson currency "$CURRENCY_SPEC" \
@@ -130,7 +130,7 @@ def with_session_servers:
     },
     "servers": [
         {
-            "url": "https://api.budgetanalyzer.localhost/api",
+            "url": "https://app.budgetanalyzer.localhost/api",
             "description": "Local environment (via gateway)"
         },
         {
@@ -205,9 +205,9 @@ fi
 echo "  Generate client: openapi-generator-cli generate -i $OUTPUT_JSON -g <generator-name>"
 echo
 print_info "Available via NGINX at:"
-echo "  JSON: https://api.budgetanalyzer.localhost/api/docs/openapi.json"
+echo "  JSON: https://app.budgetanalyzer.localhost/api/docs/openapi.json"
 if [ "$HAS_YQ" = true ]; then
-    echo "  YAML: https://api.budgetanalyzer.localhost/api/docs/openapi.yaml"
+    echo "  YAML: https://app.budgetanalyzer.localhost/api/docs/openapi.yaml"
 fi
 echo
 print_info "To regenerate after service updates, run this script again"

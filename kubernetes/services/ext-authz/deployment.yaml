@@ -21,15 +21,13 @@ spec:
         image: ext-authz:latest
         imagePullPolicy: Never  # Use local Kind image
         ports:
-        - containerPort: 9001
-          name: grpc
+        - containerPort: 9002
+          name: http-auth
         - containerPort: 8090
           name: health
         env:
         - name: REDIS_ADDR
           value: "redis.infrastructure:6379"
-        - name: ENFORCE_MODE
-          value: "true"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:

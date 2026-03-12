@@ -54,8 +54,8 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
          │                       │                      │
          ▼                       │                      │
 ┌────────────────────────┐       │                      │
-│   ext_authz gRPC       │       │                      │
-│   Port 9001            │       │                      │
+│   ext_authz HTTP       │       │                      │
+│   Port 9002            │       │                      │
 │   • Session lookup     │       │                      │
 │     in Redis           │       │                      │
 │   • Header injection   │       │                      │
@@ -136,7 +136,9 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 - Inject `X-User-Id`, `X-Roles`, `X-Permissions` headers into authorized requests
 - Reject unauthorized requests before they reach NGINX or backend services
 
-**Technology:** Go gRPC service implementing Envoy ext_authz protocol
+**Technology:** Go HTTP service implementing Envoy ext_authz protocol
+
+**Why HTTP mode over gRPC:** Envoy Gateway's HTTP ext_authz mode provides `headersToBackend` — an infrastructure-level allowlist in the SecurityPolicy that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the Envoy layer: even if a client sends `X-User-Id` in the original request, only headers explicitly listed in `headersToBackend` (and returned by ext_authz) reach the backend. The gRPC ext_authz mode lacks this infrastructure-level allowlist, requiring the ext_authz service itself to handle header stripping.
 
 **Integration:** Called by Envoy on every request to `/api/*` paths
 
@@ -230,7 +232,7 @@ Service Logic:
 
 ```
 1. Browser sends request with session cookie → Envoy (:443)
-2. Envoy calls ext_authz gRPC service (:9001)
+2. Envoy calls ext_authz HTTP service (:9002)
 3. ext_authz looks up session in Redis (extauthz:session:{id})
 4. If valid: ext_authz injects X-User-Id, X-Roles, X-Permissions headers
 5. Envoy routes to NGINX (:8080) with injected headers
@@ -318,7 +320,7 @@ Internal services currently rely on network isolation for authentication. Permis
 - No bearer token or cryptographic proof of caller identity
 - Security relies on network isolation (only Session Gateway can reach permission-service)
 
-**Future enhancement:** mTLS via service mesh (Linkerd) will provide cryptographic caller authentication without application-level token management.
+**Implemented:** mTLS via Istio service mesh. STRICT for east-west traffic, PERMISSIVE for ingress-facing services. Provides cryptographic caller authentication without application-level token management.
 
 ---
 
@@ -421,7 +423,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Session Gateway | Spring Cloud Gateway | Team expertise; minimal code; OAuth 2.0 native support |
-| ext_authz | Go gRPC service | Lightweight; Envoy-native protocol; low latency |
+| ext_authz | Go HTTP service | Lightweight; Envoy-native protocol; low latency |
 | API Gateway | NGINX | Industry standard; proven reliability; operational maturity |
 | Session Store | Redis | Fast; distributed; Spring Session integration; ext_authz schema |
 | Identity Provider | Auth0 (abstracted) | Managed service; swappable via Session Gateway |
@@ -533,7 +535,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 ### Phase 1: Infrastructure Setup
 1. Deploy Redis cluster
 2. Deploy Session Gateway (Spring Cloud Gateway)
-3. Deploy ext_authz gRPC service
+3. Deploy ext_authz HTTP service
 4. Configure Envoy Gateway with ext_authz
 5. Set up monitoring and alerting
 
@@ -595,7 +597,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 | Proactive token refresh | Avoid request failures due to expiration |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; Spring integration |
-| Network isolation for internal M2M | Simplicity; mTLS planned for future cryptographic authentication |
+| Network isolation for internal M2M | Simplicity; mTLS implemented via Istio for cryptographic authentication |
 
 ---
 

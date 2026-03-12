@@ -7,11 +7,10 @@ type Config struct {
 	RedisAddr         string
 	RedisPassword     string
 	RedisTLS          bool
-	GRPCPort          string
+	HTTPPort          string
 	HealthPort        string
 	SessionKeyPrefix  string
 	SessionCookieName string
-	EnforceMode       bool
 	LogLevel          string
 	LogFormat         string
 }
@@ -21,11 +20,10 @@ func LoadConfig() Config {
 		RedisAddr:         envOrDefault("REDIS_ADDR", "redis.infrastructure:6379"),
 		RedisPassword:     envOrDefault("REDIS_PASSWORD", ""),
 		RedisTLS:          envOrDefault("REDIS_TLS", "false") == "true",
-		GRPCPort:          envOrDefault("GRPC_PORT", "9001"),
+		HTTPPort:          envOrDefault("HTTP_PORT", "9002"),
 		HealthPort:        envOrDefault("HEALTH_PORT", "8090"),
 		SessionKeyPrefix:  envOrDefault("SESSION_KEY_PREFIX", "extauthz:session:"),
 		SessionCookieName: envOrDefault("SESSION_COOKIE_NAME", "SESSION"),
-		EnforceMode:       envOrDefault("ENFORCE_MODE", "false") == "true",
 		LogLevel:          envOrDefault("LOG_LEVEL", "info"),
 		LogFormat:         envOrDefault("LOG_FORMAT", "json"),
 	}

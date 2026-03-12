@@ -647,7 +647,7 @@ local_resource(
         'kubernetes/gateway/app-httproute.yaml',
         'kubernetes/gateway/ext-authz-security-policy.yaml',
     ],
-    resource_deps=['gateway-class', 'mkcert-tls-secret'],
+    resource_deps=['gateway-class', 'mkcert-tls-secret', 'ext-authz', 'nginx-gateway'],
     labels=['gateway'],
 )
 

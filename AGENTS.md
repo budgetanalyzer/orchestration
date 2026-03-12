@@ -82,7 +82,7 @@ kubectl get svc
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
 - **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
-- **ext-authz**: Go gRPC service (port 9001) - Envoy external authorization, session validation via Redis
+- **ext-authz**: Go HTTP service (port 9002) - Envoy external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
 - **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination, routing, and ext_authz enforcement
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, rate limiting, and load balancing
@@ -107,7 +107,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 ```
 
 **Single entry point**: `app.budgetanalyzer.localhost`
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/*` → NGINX (frontend, no auth required)
 

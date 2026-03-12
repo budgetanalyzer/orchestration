@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -31,6 +32,7 @@ type SessionStore struct {
 }
 
 // NewSessionStore creates a Redis-backed session store and verifies connectivity.
+// Retries the connection with backoff to handle startup ordering.
 func NewSessionStore(cfg Config) (*SessionStore, error) {
 	opts := &redis.Options{
 		Addr:        cfg.RedisAddr,
@@ -45,17 +47,24 @@ func NewSessionStore(cfg Config) (*SessionStore, error) {
 
 	client := redis.NewClient(opts)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis connection failed: %w", err)
+	maxRetries := 10
+	var lastErr error
+	for i := range maxRetries {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		lastErr = client.Ping(ctx).Err()
+		cancel()
+		if lastErr == nil {
+			return &SessionStore{
+				client:    client,
+				keyPrefix: cfg.SessionKeyPrefix,
+			}, nil
+		}
+		backoff := time.Duration(i+1) * 500 * time.Millisecond
+		slog.Warn("redis not ready, retrying", "attempt", i+1, "backoff", backoff, "error", lastErr)
+		time.Sleep(backoff)
 	}
 
-	return &SessionStore{
-		client:    client,
-		keyPrefix: cfg.SessionKeyPrefix,
-	}, nil
+	return nil, fmt.Errorf("redis connection failed after %d attempts: %w", maxRetries, lastErr)
 }
 
 // LookupSession retrieves a session from Redis by ID.

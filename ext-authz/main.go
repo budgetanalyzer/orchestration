@@ -4,14 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-
-	authv3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-	"google.golang.org/grpc"
 )
 
 func main() {
@@ -27,18 +23,13 @@ func main() {
 	}
 	slog.SetDefault(slog.New(handler))
 
-	// Connect to Redis (fail fast)
+	// Connect to Redis (retries with backoff)
 	store, err := NewSessionStore(cfg)
 	if err != nil {
 		slog.Error("failed to connect to redis", "error", err)
 		os.Exit(1)
 	}
 	slog.Info("connected to redis", "addr", cfg.RedisAddr)
-
-	// Create gRPC server and register ext_authz handler
-	grpcServer := grpc.NewServer()
-	authServer := NewAuthServer(store, cfg)
-	authv3.RegisterAuthorizationServer(grpcServer, authServer)
 
 	// Start health HTTP server in background
 	healthMux := http.NewServeMux()
@@ -64,16 +55,15 @@ func main() {
 		}
 	}()
 
-	// Start gRPC server
-	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
-	if err != nil {
-		slog.Error("failed to listen", "port", cfg.GRPCPort, "error", err)
-		os.Exit(1)
+	// Start HTTP ext_authz server (used by Envoy Gateway HTTP ext_authz mode)
+	httpAuthServer := &http.Server{
+		Addr:    ":" + cfg.HTTPPort,
+		Handler: NewHTTPAuthHandler(store, cfg),
 	}
 	go func() {
-		slog.Info("grpc server starting", "port", cfg.GRPCPort, "enforce", cfg.EnforceMode)
-		if err := grpcServer.Serve(lis); err != nil {
-			slog.Error("grpc server failed", "error", err)
+		slog.Info("http ext_authz server starting", "port", cfg.HTTPPort)
+		if err := httpAuthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("http ext_authz server failed", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -84,7 +74,7 @@ func main() {
 	sig := <-sigCh
 	slog.Info("shutting down", "signal", sig.String())
 
-	grpcServer.GracefulStop()
+	httpAuthServer.Shutdown(context.Background())
 	healthServer.Shutdown(context.Background())
 }
 

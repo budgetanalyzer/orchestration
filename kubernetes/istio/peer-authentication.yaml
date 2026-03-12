@@ -1,3 +1,4 @@
+# Default: STRICT mTLS for all east-west (service-to-service) traffic
 apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
@@ -6,3 +7,44 @@ metadata:
 spec:
   mtls:
     mode: STRICT
+---
+# Ingress-facing services: PERMISSIVE mode
+# These receive traffic from Envoy Gateway (outside the mesh).
+# Envoy Gateway is the ingress/edge component and doesn't participate
+# in the Istio mesh, so it can't present mTLS certificates.
+# Internal (east-west) callers still use mTLS via their sidecars.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: nginx-gateway-permissive
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: ext-authz-permissive
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ext-authz
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: session-gateway-permissive
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: session-gateway
+  mtls:
+    mode: PERMISSIVE

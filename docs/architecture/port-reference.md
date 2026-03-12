@@ -7,7 +7,7 @@
 | Port | Service | Protocol | Purpose | Access Level |
 |------|---------|----------|---------|--------------|
 | 443 | Envoy Gateway | HTTPS | SSL termination, ext_authz enforcement, ingress | Public (browsers) |
-| 9001 | ext_authz | gRPC | Per-request session validation | Internal (Envoy only) |
+| 9002 | ext_authz | HTTP | Per-request session validation | Internal (Envoy only) |
 | 8090 | ext_authz | HTTP | Health endpoint | Internal (probes only) |
 | 8080 | NGINX Gateway | HTTP | Routing, rate limiting | Internal (Envoy only) |
 | 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Envoy only) |
@@ -28,7 +28,7 @@
   - ext_authz enforced on `/api/*` paths
 
 ### Gateway Layer (Internal)
-- **9001** - ext_authz gRPC (session validation, header injection)
+- **9002** - ext_authz HTTP (session validation, header injection)
 - **8090** - ext_authz health (HTTP health probes)
 - **8080** - NGINX Gateway (API routing, rate limiting)
 - **8081** - Session Gateway (BFF, session management)
@@ -79,10 +79,10 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 
 **Pattern**: Ports are assigned based on service layer and creation order.
 
-**Gateway Layer (8080-8089, 9001)**:
+**Gateway Layer (8080-8090, 9002)**:
 - 8080: NGINX Gateway (API routing)
 - 8081: Session Gateway (BFF)
-- 9001: ext_authz gRPC (session validation)
+- 9002: ext_authz HTTP (session validation)
 - 8090: ext_authz health
 
 **Business Services (8082+, even numbers)**:

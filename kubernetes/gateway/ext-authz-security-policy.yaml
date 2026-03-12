@@ -10,7 +10,13 @@ spec:
       name: api-route
   extAuth:
     failOpen: false
-    grpc:
+    headersToExtAuth:
+      - Cookie
+    http:
       backendRefs:
         - name: ext-authz
-          port: 9001
+          port: 9002
+      headersToBackend:
+        - X-User-Id
+        - X-Roles
+        - X-Permissions

@@ -22,6 +22,9 @@ spec:
     - path:
         type: PathPrefix
         value: /auth
+    - path:
+        type: Exact
+        value: /user
     filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:

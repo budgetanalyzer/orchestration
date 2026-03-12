@@ -1,3 +1,17 @@
+# ============================================================================
+# Authorization Policies for east-west (service-to-service) traffic
+# ============================================================================
+#
+# Ingress-facing services (nginx-gateway, ext-authz, session-gateway) do NOT
+# have AuthorizationPolicies because they receive traffic from the Envoy Gateway
+# proxy, which is outside the Istio mesh and has no mTLS identity. The Envoy
+# Gateway itself is the security boundary for these services (TLS termination,
+# ext_authz enforcement).
+#
+# Internal services below use STRICT mTLS AuthorizationPolicies to restrict
+# which mesh services can call them.
+# ============================================================================
+
 # Backend services: only accept traffic from nginx-gateway
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
@@ -47,55 +61,6 @@ spec:
             principals:
               - "cluster.local/ns/default/sa/nginx-gateway"
               - "cluster.local/ns/default/sa/session-gateway"
----
-# nginx-gateway: accepts from envoy-gateway proxy only
-apiVersion: security.istio.io/v1
-kind: AuthorizationPolicy
-metadata:
-  name: nginx-gateway-policy
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      app: nginx-gateway
-  action: ALLOW
-  rules:
-    - from:
-        - source:
-            principals:
-              - "cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"
----
-# ext-authz: accepts from envoy-gateway proxy (gRPC ext_authz calls)
-apiVersion: security.istio.io/v1
-kind: AuthorizationPolicy
-metadata:
-  name: ext-authz-policy
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      app: ext-authz
-  action: ALLOW
-  rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"]
----
-# session-gateway: accepts from envoy-gateway proxy (browser traffic via app.budgetanalyzer.localhost)
-apiVersion: security.istio.io/v1
-kind: AuthorizationPolicy
-metadata:
-  name: session-gateway-policy
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      app: session-gateway
-  action: ALLOW
-  rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/envoy-gateway-system/sa/envoy-gateway"]
 ---
 # budget-analyzer-web: accepts from nginx-gateway (proxied by nginx)
 apiVersion: security.istio.io/v1

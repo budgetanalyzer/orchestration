@@ -8,5 +8,5 @@ RUN CGO_ENABLED=0 go build -o ext-authz .
 FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /app/ext-authz /ext-authz
 USER nonroot:nonroot
-EXPOSE 9001 8090
+EXPOSE 9002 8090
 ENTRYPOINT ["/ext-authz"]

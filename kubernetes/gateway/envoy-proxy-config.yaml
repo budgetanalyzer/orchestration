@@ -9,9 +9,10 @@ spec:
     kubernetes:
       envoyDeployment:
         pod:
+          labels:
+            sidecar.istio.io/inject: "false"
           annotations:
-            sidecar.istio.io/inject: "true"
-            traffic.sidecar.istio.io/excludeInboundPorts: "10443"
+            sidecar.istio.io/inject: "false"
       envoyService:
         type: NodePort
         patch:

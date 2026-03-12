@@ -22,7 +22,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/login/*`, `/logout`)
 
 **Routing**:
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/*` → NGINX (frontend, no auth required)
 
@@ -53,7 +53,7 @@ kubectl logs -n envoy-gateway-system deployment/envoy-gateway
 kubectl get gateway budget-analyzer-gateway -n budget-analyzer -o yaml
 ```
 
-### ext_authz Service (Port 9001 gRPC, Port 8090 Health) - Authorization Layer
+### ext_authz Service (Port 9002 HTTP, Port 8090 Health) - Authorization Layer
 
 **Purpose**: Per-request session validation via Redis lookup
 
@@ -73,7 +73,7 @@ kubectl get pods -l app=ext-authz
 kubectl logs deployment/ext-authz
 
 # Check ext_authz health
-curl http://ext-authz:8090/health
+curl http://ext-authz:8090/healthz
 ```
 
 ### NGINX (Port 8080, HTTP) - API Gateway Layer
@@ -177,7 +177,7 @@ Browser → Envoy (app.budgetanalyzer.localhost) → ext_authz → NGINX → Bac
 | Port | Service | Purpose | Access |
 |------|---------|---------|--------|
 | 443 | Envoy Gateway | SSL termination, ext_authz enforcement (HTTPS) | Public (browsers via app.budgetanalyzer.localhost) |
-| 9001 | ext_authz | Session validation (gRPC) | Internal (Envoy only) |
+| 9002 | ext_authz | Session validation (HTTP) | Internal (Envoy only) |
 | 8090 | ext_authz | Health endpoint (HTTP) | Internal (probes only) |
 | 8080 | NGINX Gateway | Routing, rate limiting | Internal (Envoy only) |
 | 8081 | Session Gateway | Browser authentication, session management | Internal (Envoy only) |
@@ -214,8 +214,7 @@ kubectl describe svc nginx-gateway
 
 1. **Add Kubernetes manifests**: `kubernetes/services/{service-name}/`
 2. **Register with Tilt**: Add to `Tiltfile` using `spring_boot_service()` pattern
-3. **Add NGINX routes**: Update `nginx/nginx.k8s.conf` with new location blocks
-4. **Add upstream**: Define service endpoint in NGINX upstreams section
+3. **Add NGINX routes**: Update `nginx/nginx.k8s.conf` with new location blocks using variable-based `proxy_pass` (e.g., `set $backend "http://service.default.svc.cluster.local:port"; proxy_pass $backend;`)
 
 **See [nginx/README.md](../../nginx/README.md) for detailed instructions.**
 

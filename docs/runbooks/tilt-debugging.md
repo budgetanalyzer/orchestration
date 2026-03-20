@@ -25,6 +25,9 @@ tilt trigger <service-name>
 # Check Kind cluster
 kind get clusters
 kubectl cluster-info --context kind-kind
+
+# Validate Phase 0 security prerequisites
+./scripts/dev/verify-security-prereqs.sh
 ```
 
 ### Port Mapping
@@ -443,8 +446,14 @@ kind delete cluster
 # Recreate cluster
 kind create cluster --config kind-cluster-config.yaml
 
+# Install Calico (required for NetworkPolicy enforcement)
+./scripts/dev/install-calico.sh
+
 # Start fresh
 tilt up
+
+# Verify runtime security prerequisites once platform resources are healthy
+./scripts/dev/verify-security-prereqs.sh
 ```
 
 ### Reset Single Service

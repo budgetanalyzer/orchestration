@@ -45,6 +45,8 @@ Target end state:
 
 ## Phase 0: Platform Preconditions
 
+Detailed implementation breakdown: [security-hardening-v2-phase-0-implementation.md](./security-hardening-v2-phase-0-implementation.md)
+
 ### 0a. NetworkPolicy-capable CNI
 
 Kind's default CNI (`kindnet`) does not enforce `NetworkPolicy`. Applying NetworkPolicy resources to a kindnet cluster succeeds silently but has no effect — packets flow unrestricted regardless of policy. This must be fixed before any NetworkPolicy work begins.

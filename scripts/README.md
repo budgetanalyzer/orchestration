@@ -114,6 +114,12 @@ Generates unified API documentation from all services.
 
 Located in `scripts/dev/` directory - for development environment setup and maintenance.
 
+Key scripts:
+
+- `scripts/dev/check-tilt-prerequisites.sh` - Tooling/repo preflight checks and optional runtime security verification.
+- `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
+- `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio, Kyverno smoke policy).
+
 ## Adding New Scripts
 
 When adding a new script:

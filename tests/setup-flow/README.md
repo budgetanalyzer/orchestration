@@ -8,12 +8,14 @@ This test suite creates an isolated environment that simulates a fresh developer
 
 1. Checks required tools
 2. Creates a Kind cluster with proper port mappings
-3. Configures DNS entries
-4. Installs Gateway API CRDs
-5. Installs Envoy Gateway
-6. Generates TLS certificates
-7. Creates Kubernetes TLS secret
-8. Creates `.env` file
+3. Creates a cluster with Kind default CNI disabled
+4. Installs and validates Calico CNI readiness
+5. Configures DNS entries
+6. Installs Gateway API CRDs
+7. Installs Envoy Gateway
+8. Generates TLS certificates
+9. Creates Kubernetes TLS secret
+10. Creates `.env` file
 
 ## Prerequisites
 
@@ -34,8 +36,10 @@ From the orchestration root:
 |------|-------------|
 | Tool verification | All required tools (docker, kind, kubectl, helm, tilt, mkcert, git) are available |
 | Docker daemon | DinD is accessible from test container |
-| Repository validation | All 8 repositories are present |
+| Repository validation | All required repositories are present |
 | Kind cluster | Cluster created successfully with correct port mappings |
+| Kind networking model | `kindnet` is absent (`disableDefaultCNI` cluster) |
+| Calico installation | Calico CNI install script completes and daemonset is ready |
 | DNS configuration | `/etc/hosts` entries configured |
 | Gateway API CRDs | CRDs installed and accessible |
 | Envoy Gateway | Deployment available and ready |
@@ -85,6 +89,17 @@ docker info | grep -E "Memory|CPUs"
 # Check for existing kind clusters
 docker ps -a | grep kind
 ```
+
+### Calico install/readiness failures
+
+If Calico does not become ready:
+
+```bash
+docker compose -f tests/setup-flow/docker-compose.test.yml exec test-runner \
+    kubectl get pods -n kube-system -l k8s-app=calico-node
+```
+
+Verify the cluster config includes `networking.disableDefaultCNI: true`.
 
 ### Envoy Gateway timeout
 

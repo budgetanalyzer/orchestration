@@ -1,0 +1,44 @@
+# Security Preflight Testing
+
+Containerized runtime test harness for Security Hardening v2 Phase 0.
+
+## Purpose
+
+This suite validates runtime platform security prerequisites after minimal control-plane bootstrapping.
+
+It provisions only what the verifier needs:
+
+1. Kind cluster with `disableDefaultCNI`
+2. Calico CNI
+3. Gateway API CRDs + Envoy Gateway namespace
+4. Istio base + `istiod`
+5. Namespace baseline labels (Istio + Pod Security warn/audit)
+6. Kyverno + smoke policy
+7. `scripts/dev/verify-security-prereqs.sh`
+
+## Usage
+
+From the orchestration root:
+
+```bash
+./tests/security-preflight/run-test.sh
+```
+
+## What It Proves
+
+- `NetworkPolicy` enforcement blocks traffic after deny and restores traffic after allow
+- Pod Security Admission rejects non-compliant pods in an `enforce=restricted` namespace
+- Istio is ready, expected policy resources exist, and sidecar injection occurs
+- Kyverno admission is active and smoke policy rejects privileged pods in labeled namespaces
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.test.yml` | DinD + test runner orchestration |
+| `run-test.sh` | Host-side entry point |
+| `test-security-preflight.sh` | In-container bootstrap + verifier run |
+
+## Runtime
+
+Expect approximately 10-20 minutes depending on network speed (Helm pulls dominate runtime).

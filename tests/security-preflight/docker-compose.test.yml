@@ -1,0 +1,40 @@
+# docker-compose.test.yml - Security preflight testing with Docker-in-Docker
+
+services:
+  dind:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-runner:
+    build:
+      context: ../setup-flow
+      dockerfile: Dockerfile.test-env
+    depends_on:
+      dind:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://dind:2375
+    volumes:
+      - test-repos:/repos
+      - test-kubeconfig:/home/testuser/.kube
+    networks:
+      - test-network
+    tty: true
+    stdin_open: true
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  test-repos:
+  test-kubeconfig:

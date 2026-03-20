@@ -159,7 +159,38 @@ if [ -n "$DOCKER_HOST" ]; then
 fi
 
 # =============================================================================
-# Test 5: Verify port mappings
+# Test 5: Validate cluster networking model and Calico
+# =============================================================================
+print_test "Validating Kind networking model..."
+
+if kubectl get daemonset kindnet -n kube-system &>/dev/null; then
+    fail_test "Kind default CNI (kindnet) detected - cluster is incompatible with Phase 0 hardening"
+else
+    pass_test "Kind default CNI is disabled"
+fi
+
+print_test "Installing Calico CNI..."
+
+if "$ORCHESTRATION_DIR/scripts/dev/install-calico.sh"; then
+    pass_test "Calico install script completed"
+else
+    fail_test "Calico install script failed"
+    exit 1
+fi
+
+print_test "Verifying Calico readiness..."
+
+CALICO_READY=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0)
+CALICO_DESIRED=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+
+if [ "$CALICO_DESIRED" -gt 0 ] && [ "$CALICO_READY" -eq "$CALICO_DESIRED" ]; then
+    pass_test "Calico daemonset is ready (${CALICO_READY}/${CALICO_DESIRED})"
+else
+    fail_test "Calico daemonset is not ready (${CALICO_READY}/${CALICO_DESIRED})"
+fi
+
+# =============================================================================
+# Test 6: Verify port mappings
 # =============================================================================
 print_test "Checking port mappings..."
 
@@ -188,7 +219,7 @@ else
 fi
 
 # =============================================================================
-# Test 6: Configure DNS (in container)
+# Test 7: Configure DNS (in container)
 # =============================================================================
 print_test "Configuring DNS in container..."
 
@@ -204,7 +235,7 @@ else
 fi
 
 # =============================================================================
-# Test 7: Install Gateway API CRDs
+# Test 8: Install Gateway API CRDs
 # =============================================================================
 print_test "Installing Gateway API CRDs..."
 
@@ -224,7 +255,7 @@ else
 fi
 
 # =============================================================================
-# Test 8: Install Envoy Gateway
+# Test 9: Install Envoy Gateway
 # =============================================================================
 print_test "Installing Envoy Gateway..."
 
@@ -244,7 +275,7 @@ else
 fi
 
 # =============================================================================
-# Test 9: Generate TLS certificates
+# Test 10: Generate TLS certificates
 # =============================================================================
 print_test "Generating TLS certificates..."
 
@@ -279,7 +310,7 @@ else
 fi
 
 # =============================================================================
-# Test 10: Create Kubernetes TLS secret
+# Test 11: Create Kubernetes TLS secret
 # =============================================================================
 print_test "Creating Kubernetes TLS secret..."
 
@@ -305,7 +336,7 @@ else
 fi
 
 # =============================================================================
-# Test 11: Create .env file
+# Test 12: Create .env file
 # =============================================================================
 print_test "Creating .env file..."
 

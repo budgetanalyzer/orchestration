@@ -127,11 +127,16 @@ cd /path/to/service-common
 
 ### 3. Create Kind Cluster
 
-**Important**: Use the config file to enable port 443 mapping for HTTPS access:
+**Important**: Use the config file. It now does three critical things:
+
+- Enables HTTPS port mapping
+- Pins the Kind node image for reproducibility
+- Disables Kind default CNI (`kindnet`) so `NetworkPolicy` can be enforced with Calico
 
 ```bash
 cd /path/to/orchestration
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
 ```
 
 This creates a cluster with port mappings:
@@ -146,6 +151,10 @@ kubectl cluster-info --context kind-kind
 # Verify port mappings
 docker port kind-control-plane
 # Expected: 30443/tcp -> 0.0.0.0:443
+
+# Verify default CNI is disabled and Calico is active
+kubectl get daemonset kindnet -n kube-system || true   # Expected: NotFound
+kubectl get daemonset calico-node -n kube-system
 ```
 
 ### 4. Configure DNS
@@ -184,6 +193,16 @@ tilt up
 ```
 
 Access the Tilt UI at http://localhost:10350
+
+### 8. Run Security Preflight Verifier
+
+After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
+
+```bash
+./scripts/dev/verify-security-prereqs.sh
+```
+
+This provides deterministic runtime proof for Phase 0 prerequisites.
 
 ## Verification
 
@@ -335,6 +354,7 @@ Delete and recreate with the config file:
 ```bash
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
 ```
 
 Then restart Tilt:
@@ -387,6 +407,7 @@ cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orche
 
 # Then run the setup
 kind create cluster --config kind-cluster-config.yaml && \
+./scripts/dev/install-calico.sh && \
 echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
 ./scripts/dev/setup-k8s-tls.sh && \
 export AUTH0_CLIENT_ID="your-id" AUTH0_CLIENT_SECRET="your-secret" && \
@@ -408,6 +429,7 @@ tilt up
 tilt down
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
 ./scripts/dev/setup-k8s-tls.sh
 tilt up
 ```

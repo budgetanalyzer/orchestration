@@ -145,8 +145,8 @@ kubectl get svc --all-namespaces | grep <port>
 
 **Network Policies**:
 - Public ports (443) are accessible from outside the cluster
-- Internal ports (8080+) are only accessible within the Kubernetes cluster
-- Infrastructure ports (5432, 6379, 5672) are restricted to services namespace
+- Internal ports (8080+) are cluster-internal only by service type
+- Phase 0 provides a `NetworkPolicy`-capable CNI and runtime verifier, but the actual application/infrastructure allowlist policies land in a later hardening phase
 
 **Check network policies**:
 ```bash

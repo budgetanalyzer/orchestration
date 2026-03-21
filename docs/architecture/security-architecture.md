@@ -3,13 +3,18 @@
 
 **Version:** 2.0
 **Date:** March 10, 2026
-**Status:** Implemented
+**Status:** Active
 
 ---
 
 ## Executive Summary
 
 This document outlines the security architecture for a financial data application requiring maximum security to prevent unauthorized data access. The architecture implements defense-in-depth principles with clear separation of concerns across multiple security layers while maintaining identity provider independence.
+
+Current repository state:
+- The ingress/session/routing topology described here is implemented.
+- Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, namespace PSA labels are staged in `warn`/`audit`, and Kyverno plus a smoke policy are installed and verifiable.
+- Application `NetworkPolicy` allowlists, credential hardening, and ingress unification remain later phases.
 
 ---
 

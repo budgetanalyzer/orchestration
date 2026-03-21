@@ -83,6 +83,10 @@ check_file() {
     fi
 }
 
+expected_kind_node_image() {
+    awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$ORCHESTRATION_DIR/kind-cluster-config.yaml"
+}
+
 echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
@@ -155,12 +159,29 @@ echo
 echo "6. Checking Kind cluster..."
 echo "---------------------------------------------"
 
+CLUSTER_CONNECTED=false
+
 if kind get clusters 2>/dev/null | grep -q "kind"; then
     echo -e "${GREEN}✓${NC} Kind cluster 'kind' exists"
+
+    EXPECTED_KIND_IMAGE="$(expected_kind_node_image)"
+    ACTUAL_KIND_IMAGE="$(docker inspect kind-control-plane --format '{{.Config.Image}}' 2>/dev/null || true)"
+    if [ -n "$EXPECTED_KIND_IMAGE" ] && [ -n "$ACTUAL_KIND_IMAGE" ]; then
+        if [ "$ACTUAL_KIND_IMAGE" = "$EXPECTED_KIND_IMAGE" ]; then
+            echo -e "${GREEN}✓${NC} Kind node image matches config (${ACTUAL_KIND_IMAGE})"
+        else
+            echo -e "${RED}✗${NC} Kind node image does not match config"
+            echo "  Expected: $EXPECTED_KIND_IMAGE"
+            echo "  Actual:   $ACTUAL_KIND_IMAGE"
+            echo "  Recreate with: kind delete cluster --name kind && cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
+            ((ERRORS++))
+        fi
+    fi
 
     # Check if kubectl can connect
     if kubectl cluster-info --context kind-kind &> /dev/null; then
         echo -e "${GREEN}✓${NC} kubectl can connect to Kind cluster"
+        CLUSTER_CONNECTED=true
     else
         echo -e "${RED}✗${NC} kubectl cannot connect to Kind cluster"
         echo "  Try: kubectl config use-context kind-kind"
@@ -175,6 +196,36 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
         echo "  Cluster was created without kind-cluster-config.yaml"
         echo "  Recreate with: kind delete cluster && cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
         ((WARNINGS++))
+    fi
+
+    # Check cluster networking model and CNI readiness
+    if [ "$CLUSTER_CONNECTED" = true ]; then
+        if kubectl get daemonset kindnet -n kube-system &> /dev/null; then
+            echo -e "${RED}✗${NC} Cluster uses Kind default CNI (kindnet)"
+            echo "  Security Phase 0 requires disableDefaultCNI + Calico."
+            echo "  Rebuild with:"
+            echo "  kind delete cluster --name kind"
+            echo "  cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
+            ((ERRORS++))
+        else
+            echo -e "${GREEN}✓${NC} Kind default CNI is disabled (kindnet not detected)"
+        fi
+
+        if kubectl get daemonset calico-node -n kube-system &> /dev/null; then
+            CALICO_READY=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0)
+            CALICO_DESIRED=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+            if [ "$CALICO_DESIRED" -gt 0 ] && [ "$CALICO_READY" -eq "$CALICO_DESIRED" ]; then
+                echo -e "${GREEN}✓${NC} Calico daemonset ready (${CALICO_READY}/${CALICO_DESIRED})"
+            else
+                echo -e "${RED}✗${NC} Calico daemonset not ready (${CALICO_READY}/${CALICO_DESIRED})"
+                echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/dev/install-calico.sh"
+                ((ERRORS++))
+            fi
+        else
+            echo -e "${RED}✗${NC} Calico is not installed"
+            echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/dev/install-calico.sh"
+            ((ERRORS++))
+        fi
     fi
 else
     echo -e "${YELLOW}!${NC} Kind cluster 'kind' does not exist"
@@ -260,6 +311,37 @@ if [ -d "$ORCHESTRATION_DIR/kubernetes/services" ]; then
 else
     echo -e "${RED}✗${NC} kubernetes/services directory NOT found"
     ((ERRORS++))
+fi
+
+echo
+
+echo "10. Verifying runtime security prerequisites..."
+echo "---------------------------------------------"
+
+VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/dev/verify-security-prereqs.sh"
+
+if [ "$CLUSTER_CONNECTED" = true ]; then
+    if [ ! -x "$VERIFY_SCRIPT" ]; then
+        echo -e "${RED}✗${NC} Runtime verifier missing or not executable: $VERIFY_SCRIPT"
+        ((ERRORS++))
+    elif kubectl get deployment -n istio-system istiod &> /dev/null \
+        && kubectl get deployment -n kyverno kyverno-admission-controller &> /dev/null \
+        && kubectl get clusterpolicy smoke-disallow-privileged &> /dev/null; then
+        if "$VERIFY_SCRIPT"; then
+            echo -e "${GREEN}✓${NC} Runtime security verifier passed"
+        else
+            echo -e "${RED}✗${NC} Runtime security verifier failed"
+            ((ERRORS++))
+        fi
+    else
+        echo -e "${YELLOW}!${NC} Skipping runtime verifier (required platform components not fully installed yet)"
+        echo "  Required: istiod deployment, kyverno-admission-controller deployment, and smoke-disallow-privileged ClusterPolicy"
+        echo "  Run: tilt up"
+        ((WARNINGS++))
+    fi
+else
+    echo -e "${YELLOW}!${NC} Skipping runtime verifier (cluster not connected)"
+    ((WARNINGS++))
 fi
 
 echo

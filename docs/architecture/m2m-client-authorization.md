@@ -43,7 +43,7 @@ M2M Client → POST /auth/token/exchange (via Session Gateway)
     ↓ (IDP access token → opaque session bearer token)
 M2M Client → Envoy (:443) with Bearer token
     ↓
-ext_authz (:9001) validates session from Redis
+ext_authz (:9002) validates session from Redis
     ↓ (X-User-Id, X-Roles, X-Permissions headers injected)
 NGINX → Backend Services
 ```
@@ -109,14 +109,14 @@ Content-Type: application/json
 ### Step 4: API Access
 
 ```http
-GET /api/transactions
+GET /api/v1/transactions
 Host: app.budgetanalyzer.localhost
 Authorization: Bearer <opaque-session-id>
 ```
 
 **Flow through infrastructure:**
 1. Request arrives at Envoy (:443)
-2. Envoy calls ext_authz (:9001)
+2. Envoy calls ext_authz (:9002)
 3. ext_authz looks up session in Redis (`extauthz:session:{token}`)
 4. ext_authz validates session (checks expiry, reads permissions)
 5. ext_authz injects `X-User-Id`, `X-Roles`, `X-Permissions` headers
@@ -132,10 +132,10 @@ M2M clients use scopes resolved from permission-service:
 
 | Scope | Description | Resources |
 |-------|-------------|-----------|
-| `transactions:read` | Read transaction data | GET /api/transactions |
-| `transactions:write` | Create/update transactions | POST/PUT /api/transactions |
-| `currency:read` | Read currency/exchange rates | GET /api/currencies |
-| `currency:write` | Update exchange rates | POST/PUT /api/currencies |
+| `transactions:read` | Read transaction data | GET /api/v1/transactions |
+| `transactions:write` | Create/update transactions | POST/PUT /api/v1/transactions |
+| `currency:read` | Read currency/exchange rates | GET /api/v1/currencies |
+| `currency:write` | Update exchange rates | POST/PUT /api/v1/currencies |
 
 ### Scope Enforcement
 
@@ -281,7 +281,7 @@ M2M clients have separate rate limits:
   "event": "api_access",
   "client_id": "abc123",
   "client_type": "m2m",
-  "endpoint": "/api/transactions",
+  "endpoint": "/api/v1/transactions",
   "method": "GET",
   "response_code": 200,
   "scopes": ["transactions:read"],
@@ -331,7 +331,7 @@ M2M clients have separate rate limits:
 
 ## Future Enhancements
 
-See [Security Enhancements Roadmap](../plans/security-enhancements-roadmap.md) for planned improvements including:
+See [Security Hardening Plan v2](../plans/security-hardening-v2.md) for planned improvements including:
 - Per-client rate limiting
 - Mutual TLS (mTLS) for high-security integrations
 - Short-lived M2M tokens

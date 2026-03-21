@@ -92,6 +92,7 @@ git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/session-gateway.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
+git clone https://github.com/budgetanalyzer/permission-service.git
 ```
 
 Your directory structure should look like:
@@ -102,10 +103,13 @@ parent-directory/
 ├── transaction-service/
 ├── currency-service/
 ├── session-gateway/
+├── permission-service/
 └── budget-analyzer-web/
 ```
 
 ## Setup Steps
+
+If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. The steps below spell out the same flow manually for debugging and learning.
 
 ### 1. Run Pre-flight Check
 
@@ -127,15 +131,20 @@ cd /path/to/service-common
 
 ### 3. Create Kind Cluster
 
-**Important**: Use the config file to enable port 443 mapping for HTTPS access:
+**Important**: Use the config file. It now does three critical things:
+
+- Enables HTTPS port mapping
+- Pins the Kind node image for reproducibility
+- Disables Kind default CNI (`kindnet`) so `NetworkPolicy` can be enforced with Calico
 
 ```bash
 cd /path/to/orchestration
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
 ```
 
 This creates a cluster with port mappings:
-- Port 80 → HTTP redirect
+- Port 80 → reserved host mapping
 - Port 443 → HTTPS (via NodePort 30443)
 
 Verify the cluster:
@@ -143,9 +152,16 @@ Verify the cluster:
 kind get clusters
 kubectl cluster-info --context kind-kind
 
+# Verify the Kind node image matches kind-cluster-config.yaml
+docker inspect kind-control-plane --format '{{.Config.Image}}'
+
 # Verify port mappings
 docker port kind-control-plane
 # Expected: 30443/tcp -> 0.0.0.0:443
+
+# Verify default CNI is disabled and Calico is active
+kubectl get daemonset kindnet -n kube-system || true   # Expected: NotFound
+kubectl get daemonset calico-node -n kube-system
 ```
 
 ### 4. Configure DNS
@@ -153,7 +169,7 @@ docker port kind-control-plane
 Add entries to `/etc/hosts`:
 
 ```bash
-echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
+echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
 ### 5. Generate TLS Certificates
@@ -164,16 +180,15 @@ echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | su
 
 This creates:
 - Trusted certificates for `*.budgetanalyzer.localhost`
-- Kubernetes TLS secret `budgetanalyzer-local-wildcard-tls`
+- Kubernetes TLS secret `budgetanalyzer-localhost-wildcard-tls`
 
 ### 6. Configure Auth0 Credentials
 
-Set environment variables before running Tilt:
+Create `.env` from `.env.example`, then set the required values before running Tilt.
 
 ```bash
-export AUTH0_CLIENT_ID="your-actual-client-id"
-export AUTH0_CLIENT_SECRET="your-actual-client-secret"
-export AUTH0_ISSUER_URI="https://your-tenant.auth0.com/"
+[ -f .env ] || cp .env.example .env
+vim .env
 ```
 
 ### 7. Start Tilt
@@ -184,6 +199,16 @@ tilt up
 ```
 
 Access the Tilt UI at http://localhost:10350
+
+### 8. Run Security Preflight Verifier
+
+After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
+
+```bash
+./scripts/dev/verify-security-prereqs.sh
+```
+
+This provides deterministic runtime proof for Phase 0 prerequisites.
 
 ## Verification
 
@@ -199,6 +224,8 @@ kubectl get pods -n default
 
 # Expected output:
 # NAME                                    READY   STATUS    RESTARTS   AGE
+# ext-authz-xxxxx                         1/1     Running   0          2m
+# permission-service-xxxxx                1/1     Running   0          2m
 # transaction-service-xxxxx               1/1     Running   0          2m
 # currency-service-xxxxx                  1/1     Running   0          2m
 # session-gateway-xxxxx                   1/1     Running   0          2m
@@ -252,7 +279,7 @@ curl http://localhost:8081/actuator/health
 After all services are healthy:
 
 - **Application**: https://app.budgetanalyzer.localhost
-- **API Gateway**: https://api.budgetanalyzer.localhost
+- **API Docs**: https://app.budgetanalyzer.localhost/api/docs
 - **Tilt UI**: http://localhost:10350
 - **RabbitMQ Management**: http://localhost:15672 (user/password)
 
@@ -261,7 +288,7 @@ After all services are healthy:
 | Port | Service | Purpose |
 |------|---------|---------|
 | 443 | Envoy Gateway | HTTPS entry point (via NodePort 30443) |
-| 80 | Envoy Gateway | HTTP redirect to HTTPS |
+| 80 | Kind host mapping | Reserved host mapping in the Kind config |
 | 3000 | budget-analyzer-web | Vite Dev Server |
 | 5432 | PostgreSQL | Database |
 | 6379 | Redis | Cache |
@@ -335,6 +362,8 @@ Delete and recreate with the config file:
 ```bash
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
+docker inspect kind-control-plane --format '{{.Config.Image}}'
 ```
 
 Then restart Tilt:
@@ -387,9 +416,11 @@ cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orche
 
 # Then run the setup
 kind create cluster --config kind-cluster-config.yaml && \
-echo '127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
+./scripts/dev/install-calico.sh && \
+echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
 ./scripts/dev/setup-k8s-tls.sh && \
-export AUTH0_CLIENT_ID="your-id" AUTH0_CLIENT_SECRET="your-secret" && \
+cp .env.example .env && \
+vim .env && \
 tilt up
 ```
 
@@ -408,6 +439,8 @@ tilt up
 tilt down
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
+./scripts/dev/install-calico.sh
 ./scripts/dev/setup-k8s-tls.sh
+[ -f .env ] || cp .env.example .env
 tilt up
 ```

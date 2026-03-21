@@ -45,7 +45,7 @@ The Currency Service caches responses to minimize API calls.
 
 ### Exchange rate data not updating
 
-- Check Currency Service logs: `kubectl logs -n budget-analyzer deployment/currency-service`
+- Check Currency Service logs: `kubectl logs -n default deployment/currency-service`
 - Verify network connectivity to `api.stlouisfed.org`
 
 ## Alternative: Skip FRED API

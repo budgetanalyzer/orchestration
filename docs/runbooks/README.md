@@ -20,7 +20,7 @@ These runbooks follow a **decision tree approach**:
 ### Tilt Development
 - **Tilt UI**: http://localhost:10350
 - **App URL**: https://app.budgetanalyzer.localhost
-- **API URL**: https://api.budgetanalyzer.localhost
+- **API Base**: https://app.budgetanalyzer.localhost/api
 
 ### Related Documentation
 - [Tilt Kind Setup Guide](../tilt-kind-setup-guide.md) - Initial setup instructions

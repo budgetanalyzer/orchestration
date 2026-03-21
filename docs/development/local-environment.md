@@ -14,6 +14,7 @@
 - Helm 3.12+
 - Tilt 0.33+
 - Git 2.40+
+- mkcert 1.4+
 
 **For Backend Development (Optional):**
 - JDK 24 (for running services outside Docker)
@@ -36,6 +37,7 @@ kubectl version --client
 helm version
 tilt version
 git --version
+mkcert --version
 ```
 
 ## Quick Start
@@ -56,6 +58,7 @@ git clone https://github.com/budgetanalyzer/transaction-service.git
 git clone https://github.com/budgetanalyzer/currency-service.git
 git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
 git clone https://github.com/budgetanalyzer/session-gateway.git
+git clone https://github.com/budgetanalyzer/permission-service.git
 ```
 
 **Repository structure:**
@@ -66,40 +69,40 @@ git clone https://github.com/budgetanalyzer/session-gateway.git
 ├── transaction-service/     # Transaction microservice
 ├── currency-service/        # Currency microservice
 ├── session-gateway/         # Unified session gateway
+├── permission-service/      # Internal roles/permissions
 └── budget-analyzer-web/     # React frontend
 ```
 
 **Important:** This side-by-side layout is **required** for cross-repository documentation links to work correctly.
 
-### 2. Set Up Local HTTPS
+### 2. Bootstrap the Local Platform
 
-The application uses HTTPS for local development with clean subdomain URLs. Run the setup script on your **host machine** (not in containers):
+Run the setup script on your **host machine**:
 
 ```bash
 cd orchestration/
-
-# Install mkcert first (if not installed)
-# macOS:   brew install mkcert nss
-# Linux:   sudo apt install libnss3-tools && see mkcert docs
-# Windows: choco install mkcert
-
-# Run the setup script
-./scripts/dev/setup-k8s-tls.sh
+./setup.sh
 ```
 
-**What this script does:**
-1. Creates a Kind cluster if it doesn't exist
-2. Installs a local CA in your system's trust store
-3. Generates wildcard certificate for `*.budgetanalyzer.localhost`
-4. Creates Kubernetes TLS secret for Envoy Gateway
+**What `setup.sh` does in the current Phase 0 baseline:**
+1. Creates or validates the Kind cluster
+2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
+3. Installs pinned Calico and waits for CoreDNS readiness
+4. Configures local DNS and TLS certificates
+5. Installs Gateway API CRDs and prepares `.env`
 
-**Important:** Restart your browser after running this script.
+If setup fails because you already have an older local Kind cluster:
+
+```bash
+kind delete cluster --name kind
+./setup.sh
+```
 
 ### 3. Configure Environment Variables
 
 ```bash
-# Copy the example file
-cp .env.example .env
+# Create the file if setup.sh did not already create it
+[ -f .env ] || cp .env.example .env
 
 # Edit .env with your Auth0 credentials
 ```
@@ -115,14 +118,17 @@ tilt up
 
 ```bash
 # Check all pods are running
-kubectl get pods -n budget-analyzer
+kubectl get pods -n default
 kubectl get pods -n infrastructure
 
 # Test gateway
-curl https://api.budgetanalyzer.localhost/health
+curl https://app.budgetanalyzer.localhost/health
 
 # Open frontend
 open https://app.budgetanalyzer.localhost
+
+# Optional but recommended: prove the Phase 0 platform prerequisites
+./scripts/dev/verify-security-prereqs.sh
 ```
 
 ## Tilt Resources
@@ -168,7 +174,7 @@ tilt up
 tilt up
 
 # Scale down the service you want to debug
-kubectl scale deployment transaction-service -n budget-analyzer --replicas=0
+kubectl scale deployment transaction-service -n default --replicas=0
 
 # Run locally with debugger
 cd transaction-service/
@@ -189,7 +195,7 @@ cd transaction-service/
 tilt up
 
 # Scale down frontend
-kubectl scale deployment budget-analyzer-web -n budget-analyzer --replicas=0
+kubectl scale deployment budget-analyzer-web -n default --replicas=0
 
 # Run frontend locally
 cd budget-analyzer-web/
@@ -224,7 +230,7 @@ postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
 | Service | Port | URL | Notes |
 |---------|------|-----|-------|
 | Envoy Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
-| Envoy Gateway | 443 | https://api.budgetanalyzer.localhost | API gateway |
+| Envoy Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
 | NGINX Gateway | 8080 | - | Internal (routing) |
 | Session Gateway | 8081 | - | Internal (behind Envoy) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
@@ -312,10 +318,10 @@ Then restart VS Code. See the [Sandboxed Container Configuration](#sandboxed-con
 
 ```bash
 # Check pod status and events
-kubectl describe pod -n budget-analyzer <pod-name>
+kubectl describe pod -n default <pod-name>
 
 # Check logs
-kubectl logs -n budget-analyzer <pod-name>
+kubectl logs -n default <pod-name>
 
 # Check Tilt UI for compile errors
 # http://localhost:10350
@@ -338,10 +344,10 @@ kubectl port-forward -n infrastructure svc/postgresql 5432:5432
 
 ```bash
 # Check service endpoints
-kubectl get endpoints -n budget-analyzer <service-name>
+kubectl get endpoints -n default <service-name>
 
 # Check service logs
-kubectl logs -n budget-analyzer deployment/<service-name>
+kubectl logs -n default deployment/<service-name>
 
 # Check if service is healthy
 curl http://localhost:<port>/actuator/health
@@ -351,10 +357,10 @@ curl http://localhost:<port>/actuator/health
 
 ```bash
 # Check NGINX config syntax
-kubectl exec -n budget-analyzer deployment/nginx-gateway -- nginx -t
+kubectl exec -n default deployment/nginx-gateway -- nginx -t
 
 # View NGINX logs
-kubectl logs -n budget-analyzer deployment/nginx-gateway
+kubectl logs -n default deployment/nginx-gateway
 
 # Trigger config reload
 tilt trigger nginx-gateway-config
@@ -367,10 +373,10 @@ tilt trigger nginx-gateway-config
 kubectl logs -n envoy-gateway-system deployment/envoy-gateway
 
 # Check Gateway status
-kubectl get gateway -n budget-analyzer
+kubectl get gateway -n default
 
 # Check HTTPRoute status
-kubectl get httproute -n budget-analyzer
+kubectl get httproute -n default
 ```
 
 ### SSL Certificate Errors
@@ -380,7 +386,7 @@ kubectl get httproute -n budget-analyzer
 ./scripts/dev/setup-k8s-tls.sh
 
 # Verify secret exists
-kubectl get secret -n budget-analyzer wildcard-tls
+kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 
 # Restart browser to clear certificate cache
 ```
@@ -406,6 +412,8 @@ kubectl get secret -n budget-analyzer wildcard-tls
     {"path": "service-common"},
     {"path": "transaction-service"},
     {"path": "currency-service"},
+    {"path": "session-gateway"},
+    {"path": "permission-service"},
     {"path": "budget-analyzer-web"}
   ]
 }

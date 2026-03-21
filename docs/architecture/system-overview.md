@@ -18,7 +18,7 @@ Envoy Gateway (:443) ─── SSL termination, ext_authz on /api/* paths
     │
     ├─ /auth/*, /login/*, /logout → Session Gateway (:8081) ─── auth lifecycle
     │
-    ├─ /api/* → ext_authz (:9001) validates session from Redis
+    ├─ /api/* → ext_authz (:9002) validates session from Redis
     │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
     │           └─ NGINX Gateway (:8080) ─── routes to backend service
     │
@@ -51,7 +51,7 @@ Backend Services ─── business logic, data authorization
           │ auth paths               │ /api/*, /*
           ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────┐
-│   Session Gateway    │   │   ext_authz (:9001)  │
+│   Session Gateway    │   │   ext_authz (:9002)  │
 │   (BFF, OAuth2)      │   │   session validation │
 │   :8081              │   └──────────┬───────────┘
 └───────┬──────────────┘              │ headers injected
@@ -96,10 +96,10 @@ Backend Services ─── business logic, data authorization
 - Ingress routing based on path
 - Kubernetes Gateway API compliant
 
-**ext_authz Service** (Port 9001 gRPC, Port 8090 Health)
+**ext_authz Service** (Port 9002 HTTP, Port 8090 Health)
 - Per-request session validation via Redis lookup
 - Header injection (X-User-Id, X-Roles, X-Permissions)
-- Go gRPC service implementing Envoy ext_authz protocol
+- Go HTTP service implementing Envoy ext_authz protocol
 
 **Session Gateway (BFF)** (Port 8081)
 - OAuth2 authentication with Auth0
@@ -258,6 +258,11 @@ This reference architecture deliberately stops before solving data ownership. Un
 - BFF pattern (browser never sees tokens)
 - Redis-backed session management
 - Token refresh and lifecycle
+
+**Platform Security Baseline (Phase 0):**
+- Kind uses `disableDefaultCNI` with pinned Calico in local development so `NetworkPolicy` is enforceable
+- Namespace Pod Security Admission labels are applied in `warn`/`audit` mode
+- Kyverno is installed with a smoke policy and verified by `scripts/dev/verify-security-prereqs.sh`
 - ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**

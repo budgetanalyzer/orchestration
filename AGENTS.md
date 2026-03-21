@@ -24,6 +24,17 @@ ls -d /workspace/*-service /workspace/session-gateway /workspace/budget-analyzer
 
 NEVER use Agent/subagent tools for code exploration. Use Grep, Glob, and Read directly.
 
+## Documentation Discipline
+
+Always keep documentation up to date after any configuration or code change.
+
+Update the nearest affected documentation in the same work:
+- `AGENTS.md` when instructions, guardrails, discovery commands, or repository-specific workflow changes
+- `README.md` when setup, usage, or repository purpose changes
+- `docs/` when architecture, configuration, APIs, behaviors, or operational workflows change
+
+Do not leave documentation updates as follow-up work.
+
 ## Project Overview
 
 This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
@@ -176,7 +187,7 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-./setup.sh        # Creates cluster, certs, DNS, .env
+./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
 # Edit .env with your Auth0 and FRED API credentials
 ```
 
@@ -184,6 +195,9 @@ Check prerequisites:
 ```bash
 # Start all services with Tilt
 tilt up
+
+# Optional but recommended after core platform resources are healthy
+./scripts/dev/verify-security-prereqs.sh
 
 # Access Tilt UI for logs and status
 # Browser: http://localhost:10350
@@ -201,6 +215,9 @@ tilt down
 ```bash
 # Check pod status (services run in default namespace)
 kubectl get pods
+
+# Validate the Phase 0 platform baseline
+./scripts/dev/verify-security-prereqs.sh
 
 # View logs for a service
 kubectl logs deployment/nginx-gateway

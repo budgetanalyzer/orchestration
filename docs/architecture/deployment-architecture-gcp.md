@@ -108,7 +108,7 @@ This document defines the deployment architecture for Budget Analyzer on Google 
 │                      │            [Session in Redis]                  │
 │                      │                    │                           │
 │                      │                    ↓                           │
-│                      └──→ ext_authz (GKE, port 9001 gRPC)            │
+│                      └──→ ext_authz (GKE, port 9002 HTTP)            │
 │                                  │ session validation from Redis      │
 │                                  ↓ inject X-User-Id, X-Roles headers │
 │                           NGINX Gateway (GKE, port 8080)             │
@@ -129,7 +129,7 @@ This document defines the deployment architecture for Budget Analyzer on Google 
 
 ### Service Topology
 
-Based on [docker-compose.yml](../../docker-compose.yml):
+Based on the current local orchestration topology in [Tiltfile](../../Tiltfile):
 
 **Frontend:**
 - `budget-analyzer-web`: React 19 + TypeScript SPA
@@ -137,7 +137,7 @@ Based on [docker-compose.yml](../../docker-compose.yml):
 **Backend Microservices:**
 - `transaction-service`: Spring Boot - transactions, budgets, CSV import (port 8082)
 - `currency-service`: Spring Boot - exchange rates, FRED API integration (port 8084)
-- `session-gateway`: Spring Cloud Gateway - OAuth2/session management (port 8081, **not yet implemented**)
+- `session-gateway`: Spring Cloud Gateway - OAuth2/session management (port 8081, implemented)
 
 **Infrastructure:**
 - PostgreSQL: Per-service schemas (transaction_service, currency_service)
@@ -146,7 +146,7 @@ Based on [docker-compose.yml](../../docker-compose.yml):
 
 **Gateway Layer:**
 - NGINX Gateway: Resource-based routing (`/api/v1/transactions` → transaction-service)
-- ext_authz: Per-request session validation (port 9001 gRPC, implemented)
+- ext_authz: Per-request session validation (port 9002 HTTP, implemented)
 
 ---
 
@@ -589,7 +589,7 @@ management:
 - 5+ microservices (complexity justifies mesh)
 - Need service-to-service authentication (mTLS)
 - Need advanced traffic management (canary deployments, circuit breakers)
-- Documented in [authentication-implementation-plan.md](authentication-implementation-plan.md) as future migration
+- Documented in [../plans/security-hardening-v2.md](../plans/security-hardening-v2.md) as future migration
 
 **Alternative Considered:**
 
@@ -719,81 +719,45 @@ management:
 
 ## Critical Risks & Challenges
 
-### 1. 🚨 CRITICAL: Deploying Before Session Gateway Exists
+### 1. 🚨 CRITICAL: Local Authentication Exists, Production Hardening Is Still Incomplete
 
-**Risk Level:** CRITICAL - **Cannot deploy to production**
+**Risk Level:** CRITICAL - **Do not treat the current local architecture as production-ready**
 
-**Problem:**
-- Session Gateway (BFF pattern) not yet implemented
-- No authentication or authorization layer exists
-- All API endpoints are publicly accessible without session validation
-- Financial data (transactions, budgets) completely unprotected
-
-**Architecture Gap:**
-
-Current state (local dev):
-```
-Browser → NGINX Gateway → Backend Services (no auth)
-```
-
-Required for production:
+**Current state (local dev):**
 ```
 Browser → Envoy → ext_authz (session validation) → NGINX → Backend Services
-         [Session Cookie]  [X-User-Id, X-Roles headers]
+         [Session Cookie]  [X-User-Id, X-Roles, X-Permissions headers]
 ```
 
-**Components Not Yet Built:**
-1. Session Gateway (Spring Cloud Gateway with OAuth2)
-2. ext_authz service (gRPC, port 9001)
-3. Auth0 tenant configuration
-4. Envoy ext_authz integration
-5. Redis session storage integration
+**What now exists locally:**
+1. Session Gateway (BFF pattern)
+2. ext_authz service (HTTP, port 9002)
+3. Envoy ext_authz integration
+4. Redis-backed session storage and header injection
+5. Phase 0 platform baseline for later hardening work:
+   - Calico-backed Kind clusters
+   - Pod Security Admission labels in `warn`/`audit`
+   - Kyverno smoke-policy verification
+
+**What is still missing before public production deployment:**
+1. Application and infrastructure `NetworkPolicy` allowlists
+2. Per-service credential hardening (PostgreSQL, RabbitMQ, Redis ACLs)
+3. Production secret-source integration
+4. Runtime pod hardening and admission policy expansion
+5. Remaining security-hardening plan phases and production validation
 
 **Impact:**
-- **Cannot deploy with real user data**
-- **Cannot allow public internet access**
-- Suitable only for internal testing with mock data
-- Estimated 8 weeks to implement full authentication (see [authentication-implementation-plan.md](authentication-implementation-plan.md))
+- The auth topology is no longer the blocker.
+- The blocker is the remaining hardening work needed to close in-cluster bypass paths and remove shared credentials.
+- A GCP deployment can still make sense for infrastructure validation, but it should not be treated as the finished production security posture.
 
-**Mitigation Options:**
-
-**Option A: Phased Deployment (Recommended)**
-
-**Phase 1 (Immediate):** Deploy to GCP with **private network only**
-- VPC with no public internet gateway
-- Access via Cloud VPN or Identity-Aware Proxy for developers
-- Load only test/mock data (no real financial information)
-- Purpose: Validate infrastructure, test deployment procedures
-- **Critical:** No public access whatsoever
-
-**Phase 2 (8 weeks):** Implement authentication architecture
-1. Week 1-2: Session Gateway + ext_authz service
-2. Week 3-4: Auth0 integration + Envoy ext_authz configuration
-3. Week 5-6: End-to-end session validation and header injection
-4. Week 7-8: Testing, security audit, penetration testing
-
-**Phase 3 (Production):** Public deployment
-- Enable public internet access
-- Real user data
-- Production monitoring and alerting
-- Incident response procedures
-
-**Option B: Delay GCP Deployment**
-- Wait until Session Gateway is implemented
-- Continue local development only
-- Deploy entire stack at once when auth is ready
-- **Pros:** Lower risk, no premature cloud costs
-- **Cons:** Delays learning GCP, no infrastructure validation
-
-**Recommendation:** **Phased Deployment** - Deploy to private network now to validate infrastructure, implement auth in parallel.
+**Recommendation:** Use the current stack for infrastructure learning and controlled environments, and gate any public production deployment on the remaining hardening phases.
 
 **Acceptance Criteria for Production:**
-- [ ] Session Gateway deployed and tested
-- [ ] ext_authz service operational (gRPC + health)
-- [ ] Auth0 tenant configured with production settings
-- [ ] Envoy Gateway configured with ext_authz enforcement
-- [ ] Redis cluster for session storage with HA (Spring Session + ext_authz schema)
-- [ ] End-to-end authentication flow tested
+- [ ] Session Gateway and ext_authz tested in the target environment
+- [ ] Application and infrastructure `NetworkPolicy` allowlists enforced
+- [ ] Per-service credentials and Redis ACLs in place
+- [ ] Production secret sourcing implemented
 - [ ] Security audit completed
 - [ ] Penetration testing passed
 
@@ -807,7 +771,7 @@ Browser → Envoy → ext_authz (session validation) → NGINX → Backend Servi
 - NGINX Ingress Controller stops receiving updates **March 2026**
 - Current local dev architecture uses NGINX heavily (resource-based routing)
 - No security patches, bug fixes, or Kubernetes compatibility updates after retirement
-- Current NGINX config in [nginx/nginx.dev.conf](../../nginx/nginx.dev.conf) cannot be directly used in production
+- Current NGINX config in [nginx/nginx.k8s.conf](../../nginx/nginx.k8s.conf) cannot be directly used in production
 
 **Impact:**
 - Must migrate to Gateway API before March 2026
@@ -1929,7 +1893,7 @@ export const config = configs[env as keyof typeof configs];
 #### Week 2: Application Deployment
 
 5. **Migrate NGINX Config to Gateway API**
-   - Convert [nginx/nginx.dev.conf](../../nginx/nginx.dev.conf) to Gateway API HTTPRoutes
+   - Convert [nginx/nginx.k8s.conf](../../nginx/nginx.k8s.conf) to Gateway API HTTPRoutes
    - See [Migration Guide](#migration-guide-nginx-to-gateway-api)
    - Deploy Gateway and HTTPRoutes to GKE
 
@@ -2002,22 +1966,22 @@ export const config = configs[env as keyof typeof configs];
 
 ---
 
-### Phase 2: Authentication Implementation (Required for Production)
+### Phase 2: Security Hardening and Productionization (Required for Production)
 
 **Timeline:** 8 weeks
-**Purpose:** Implement full OAuth2 + BFF security architecture
+**Purpose:** Complete the remaining hardening work beyond the already-implemented local auth topology
 **Blocker:** Cannot deploy to public internet until complete
 
-**Reference:** See detailed timeline in [authentication-implementation-plan.md](authentication-implementation-plan.md)
+**Reference:** See detailed timeline in [../plans/security-hardening-v2.md](../plans/security-hardening-v2.md)
 
 **Summary Tasks:**
 
-#### Weeks 1-2: Session Gateway + ext_authz Service
-- Implement Spring Cloud Gateway with Spring Security OAuth2
-- Configure OAuth2 Client for Auth0 integration
-- Deploy ext_authz gRPC service (port 9001)
+#### Weeks 1-2: Credential and Session Hardening
+- Validate Session Gateway and ext_authz behavior in the target environment
+- Deploy ext_authz HTTP service (port 9002)
 - Store sessions in Redis (Spring Session + ext_authz schema), issue HTTP-only session cookies
 - Proactive token refresh (5 min before expiration)
+- Begin per-service credential separation
 
 #### Weeks 3-4: Auth0 Integration + Envoy ext_authz Configuration
 - Configure Auth0 tenant (production settings)
@@ -2040,7 +2004,7 @@ export const config = configs[env as keyof typeof configs];
 
 **Deliverables:**
 - [ ] Session Gateway deployed to GKE
-- [ ] ext_authz service deployed to GKE (gRPC + health)
+- [ ] ext_authz service deployed to GKE (HTTP + health)
 - [ ] Auth0 tenant configured (production)
 - [ ] Envoy Gateway configured with ext_authz enforcement
 - [ ] Redis cluster for session storage (Spring Session + ext_authz schema, HA)
@@ -2344,25 +2308,25 @@ spec:
 
 #### Step 3: Migrate NGINX Routes to HTTPRoutes
 
-**Current NGINX Config** ([nginx/nginx.dev.conf](../../nginx/nginx.dev.conf)):
+**Current NGINX Config** ([nginx/nginx.k8s.conf](../../nginx/nginx.k8s.conf)):
 
 ```nginx
 # Transaction service routing
 location /api/v1/transactions {
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
-    proxy_pass http://transaction_service:8082;
+    proxy_pass http://transaction-service.default.svc.cluster.local:8082;
 }
 
 # Currency service routing
 location /api/v1/currencies {
     rewrite ^/api/v1/(.*)$ /currency-service/v1/$1 break;
-    proxy_pass http://currency_service:8084;
+    proxy_pass http://currency-service.default.svc.cluster.local:8084;
 }
 
 # Exchange rates routing
 location /api/v1/exchange-rates {
     rewrite ^/api/v1/(.*)$ /currency-service/v1/$1 break;
-    proxy_pass http://currency_service:8084;
+    proxy_pass http://currency-service.default.svc.cluster.local:8084;
 }
 ```
 
@@ -2478,10 +2442,10 @@ spec:
     kind: HTTPRoute
     name: api-route
   extAuth:
-    grpc:
-      backendRef:
-        name: ext-authz
-        port: 9001
+    http:
+      backendRefs:
+        - name: ext-authz
+          port: 9002
 ```
 
 This is the same pattern used in local development — Envoy ext_authz is Envoy-native and works identically in GKE.

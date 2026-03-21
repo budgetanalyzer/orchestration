@@ -29,7 +29,9 @@ The data ownership boundary is intentional - see [system-overview.md](docs/archi
 1. Clone all repositories side-by-side in a common parent directory
 2. Open in VS Code—the devcontainer auto-configures your environment
 3. Follow the setup in the [orchestration README](README.md)
-4. Run `tilt up` and you're coding
+4. Run `./setup.sh` on the host, then `tilt up`
+
+If you already have an older local Kind cluster, delete it first. Phase 0 hardening requires a rebuilt cluster with `disableDefaultCNI` plus Calico.
 
 > **Note**: VS Code is required. We use open source tools only—Cursor is closed source.
 

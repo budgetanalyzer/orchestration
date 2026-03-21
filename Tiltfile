@@ -573,14 +573,27 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Namespace labeling for sidecar injection
+# Namespace labeling for sidecar injection and Pod Security Admission
 local_resource(
     'istio-injection',
     cmd='''
         kubectl label namespace default istio-injection=enabled --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/warn=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/audit=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/audit-version=v1.32 --overwrite
         kubectl label namespace infrastructure istio-injection=disabled --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/warn=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/audit-version=v1.32 --overwrite
+        kubectl label namespace envoy-gateway-system istio-injection=disabled --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn=baseline --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit=baseline --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
-    resource_deps=['istiod'],
+    resource_deps=['istiod', 'envoy-gateway'],
     labels=['infrastructure'],
 )
 
@@ -596,6 +609,45 @@ local_resource(
         'kubernetes/istio/authorization-policies.yaml',
     ],
     resource_deps=['istiod', 'istio-injection'],
+    labels=['infrastructure'],
+)
+
+# Kyverno admission controller (Phase 0 scaffold)
+local_resource(
+    'kyverno',
+    cmd='''
+        helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
+        helm repo update kyverno >/dev/null
+        helm upgrade --install kyverno kyverno/kyverno \
+            --namespace kyverno \
+            --create-namespace \
+            --version 3.7.1 \
+            --set admissionController.replicas=1 \
+            --set backgroundController.replicas=1 \
+            --set cleanupController.replicas=1 \
+            --set reportsController.replicas=1 \
+            --wait
+    ''',
+    resource_deps=['istio-security-policies'],
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'kyverno-ready',
+    cmd='''
+        kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=5m
+    ''',
+    resource_deps=['kyverno'],
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'kyverno-smoke-policy',
+    cmd='kubectl apply -f kubernetes/kyverno/smoke-policy.yaml',
+    deps=[
+        'kubernetes/kyverno/smoke-policy.yaml',
+    ],
+    resource_deps=['kyverno-ready'],
     labels=['infrastructure'],
 )
 
@@ -673,5 +725,3 @@ cmd_button(
     text='Run Tests',
     location=location.RESOURCE
 )
-
-

@@ -31,17 +31,22 @@ spec:
         - name: SPRING_DATA_REDIS_HOST
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: host
         - name: SPRING_DATA_REDIS_PORT
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: port
+        - name: SPRING_DATA_REDIS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: session-gateway-redis-credentials
+              key: username
         - name: SPRING_DATA_REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: password
         # Permission service URL
         - name: PERMISSION_SERVICE_URL

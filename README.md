@@ -27,6 +27,7 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 Current local platform baseline:
 - `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
 - Existing pre-Phase-0 Kind clusters must be deleted and recreated before setup will succeed.
+- Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
 - After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform prerequisites are active.
 
 ## Documentation

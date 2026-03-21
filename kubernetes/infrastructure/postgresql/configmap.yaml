@@ -6,19 +6,61 @@ metadata:
   labels:
     app: postgresql
 data:
-  01-init-databases.sql: |
-    -- Create separate databases for each microservice
-    -- This script runs automatically when PostgreSQL is first initialized
+  01-init-databases.sh: |
+    #!/bin/sh
+    set -eu
 
-    -- Database for budget analyzer (transactions, categories, budgets, etc.)
-    CREATE DATABASE budget_analyzer;
-    GRANT ALL PRIVILEGES ON DATABASE budget_analyzer TO budget_analyzer;
+    psql_exec() {
+      database_name="$1"
+      shift
 
-    -- Database for currency service (exchange rates, currency data)
-    CREATE DATABASE currency;
-    GRANT ALL PRIVILEGES ON DATABASE currency TO budget_analyzer;
+      PGPASSWORD="$POSTGRES_PASSWORD" \
+      psql -X -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$database_name" "$@"
+    }
 
-    -- Database for permission service (roles, permissions)
-    CREATE DATABASE permission;
-    GRANT ALL PRIVILEGES ON DATABASE permission TO budget_analyzer;
+    psql_query() {
+      database_name="$1"
+      shift
 
+      PGPASSWORD="$POSTGRES_PASSWORD" \
+      psql -X -tA --username "$POSTGRES_USER" --dbname "$database_name" "$@"
+    }
+
+    ensure_service_role() {
+      role_name="$1"
+      role_password="$2"
+
+      if [ "$(psql_query "$POSTGRES_DB" -c "SELECT 1 FROM pg_roles WHERE rolname = '$role_name';")" != "1" ]; then
+        psql_exec "$POSTGRES_DB" -c "CREATE ROLE $role_name LOGIN;"
+      fi
+
+      psql_exec "$POSTGRES_DB" --set=role_password="$role_password" \
+        -c "ALTER ROLE $role_name WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'role_password';"
+    }
+
+    ensure_service_database() {
+      database_name="$1"
+      owner_name="$2"
+
+      if [ "$(psql_query "$POSTGRES_DB" -c "SELECT 1 FROM pg_database WHERE datname = '$database_name';")" != "1" ]; then
+        psql_exec "$POSTGRES_DB" -c "CREATE DATABASE $database_name OWNER $owner_name;"
+      fi
+
+      psql_exec "$POSTGRES_DB" \
+        -c "ALTER DATABASE $database_name OWNER TO $owner_name; REVOKE CONNECT ON DATABASE $database_name FROM PUBLIC; GRANT CONNECT ON DATABASE $database_name TO $owner_name;"
+      psql_exec "$database_name" \
+        -c "REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT CREATE ON SCHEMA public TO $owner_name;"
+    }
+
+    # Re-apply the bootstrap password after the SCRAM config is active so the
+    # break-glass admin account is stored with the same password policy.
+    psql_exec "$POSTGRES_DB" --set=admin_password="$POSTGRES_PASSWORD" \
+      -c "ALTER ROLE $POSTGRES_USER WITH PASSWORD :'admin_password';"
+
+    ensure_service_role "transaction_service" "$POSTGRES_TRANSACTION_SERVICE_PASSWORD"
+    ensure_service_role "currency_service" "$POSTGRES_CURRENCY_SERVICE_PASSWORD"
+    ensure_service_role "permission_service" "$POSTGRES_PERMISSION_SERVICE_PASSWORD"
+
+    ensure_service_database "budget_analyzer" "transaction_service"
+    ensure_service_database "currency" "currency_service"
+    ensure_service_database "permission" "permission_service"

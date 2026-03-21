@@ -39,11 +39,13 @@ fi
 echo -e "${YELLOW}Using Redis pod: $REDIS_POD${NC}"
 echo ""
 
-# Read password from K8s secret
-REDIS_PASSWORD=$(kubectl get secret redis-credentials -n infrastructure -o jsonpath='{.data.password}' | base64 -d)
+# Read ops password from the Redis bootstrap secret.
+# flush-redis uses FLUSHALL which requires admin-level access (redis-ops in Step 4).
+REDIS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
 # Flush all Redis data
-kubectl exec -n infrastructure "$REDIS_POD" -- redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL > /dev/null 2>&1
+kubectl exec -n infrastructure "$REDIS_POD" -- redis-cli --user "$REDIS_USERNAME" --pass "$REDIS_PASSWORD" --no-auth-warning FLUSHALL > /dev/null 2>&1
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}SUCCESS! Redis has been flushed${NC}"

@@ -7,9 +7,9 @@ metadata:
     app: rabbitmq
 data:
   rabbitmq.conf: |
-    # Default user configuration
-    default_user = guest
-    default_pass = guest
+    definitions.import_backend = local_filesystem
+    definitions.local.path = /etc/rabbitmq/definitions/definitions.json
+    definitions.skip_if_unchanged = true
 
     # Logging
     log.console = true

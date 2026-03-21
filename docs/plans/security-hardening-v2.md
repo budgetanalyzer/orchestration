@@ -246,7 +246,7 @@ Allow rules in the current topology:
 - `nginx-gateway` -> backend services, budget-analyzer-web
 - `session-gateway` -> Redis, permission-service
 - `ext-authz` -> Redis
-- `transaction-service` -> PostgreSQL, RabbitMQ
+- `transaction-service` -> PostgreSQL
 - `currency-service` -> PostgreSQL, RabbitMQ, Redis
 - `permission-service` -> PostgreSQL
 - all pods -> DNS only, plus any explicitly approved dependency
@@ -267,7 +267,7 @@ Allow rules:
 
 - `redis` <- `session-gateway`, `ext-authz`, `currency-service`
 - `postgresql` <- `transaction-service`, `currency-service`, `permission-service`
-- `rabbitmq` <- `transaction-service`, `currency-service`
+- `rabbitmq` <- `currency-service`
 
 ### 2c. Egress posture before Istio egress cutover
 

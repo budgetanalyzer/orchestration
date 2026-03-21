@@ -26,12 +26,27 @@ spec:
         - containerPort: 8090
           name: health
         env:
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
+              key: host
+        - name: REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
+              key: port
         - name: REDIS_ADDR
-          value: "redis.infrastructure:6379"
+          value: "$(REDIS_HOST):$(REDIS_PORT)"
+        - name: REDIS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
+              key: username
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: ext-authz-redis-credentials
               key: password
         - name: REDIS_TLS
           value: "false"

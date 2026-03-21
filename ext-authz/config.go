@@ -5,6 +5,7 @@ import "os"
 // Config holds all ext-authz service configuration, loaded from environment variables.
 type Config struct {
 	RedisAddr         string
+	RedisUsername     string
 	RedisPassword     string
 	RedisTLS          bool
 	HTTPPort          string
@@ -18,6 +19,7 @@ type Config struct {
 func LoadConfig() Config {
 	return Config{
 		RedisAddr:         envOrDefault("REDIS_ADDR", "redis.infrastructure:6379"),
+		RedisUsername:     envOrDefault("REDIS_USERNAME", ""),
 		RedisPassword:     envOrDefault("REDIS_PASSWORD", ""),
 		RedisTLS:          envOrDefault("REDIS_TLS", "false") == "true",
 		HTTPPort:          envOrDefault("HTTP_PORT", "9002"),

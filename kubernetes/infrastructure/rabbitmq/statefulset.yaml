@@ -31,12 +31,26 @@ spec:
             limits:
               memory: 512Mi
               cpu: 500m
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-bootstrap-credentials
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-bootstrap-credentials
+                  key: password
           volumeMounts:
             - name: rabbitmq-data
               mountPath: /var/lib/rabbitmq
             - name: rabbitmq-config
               mountPath: /etc/rabbitmq/rabbitmq.conf
               subPath: rabbitmq.conf
+              readOnly: true
+            - name: rabbitmq-bootstrap
+              mountPath: /etc/rabbitmq/definitions
               readOnly: true
           livenessProbe:
             exec:
@@ -60,6 +74,12 @@ spec:
         - name: rabbitmq-config
           configMap:
             name: rabbitmq-config
+        - name: rabbitmq-bootstrap
+          secret:
+            secretName: rabbitmq-bootstrap-credentials
+            items:
+              - key: definitions.json
+                path: definitions.json
   volumeClaimTemplates:
     - metadata:
         name: rabbitmq-data

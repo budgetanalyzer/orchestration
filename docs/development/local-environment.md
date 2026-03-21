@@ -104,8 +104,13 @@ kind delete cluster --name kind
 # Create the file if setup.sh did not already create it
 [ -f .env ] || cp .env.example .env
 
-# Edit .env with your Auth0 credentials
+# Review the local PostgreSQL, RabbitMQ, and Redis password defaults, then add
+# your Auth0 and FRED credentials.
 ```
+
+Tilt is the local secret producer for infrastructure credentials. The Kubernetes
+manifests now consume named secrets only, which is the seam production can later
+replace with another secret source.
 
 ### 4. Start All Services
 
@@ -213,15 +218,19 @@ See: [database-setup.md](database-setup.md) for detailed database configuration.
 
 **Quick reference:**
 ```bash
-# PostgreSQL connection (via port forward)
+# transaction-service database connection (via port forward)
 Host: localhost
 Port: 5432
 Database: budget_analyzer
-User: budget_analyzer
-Password: budget_analyzer
+User: transaction_service
+Password: value from POSTGRES_TRANSACTION_SERVICE_PASSWORD (default: budget-analyzer-transaction-service)
+
+# Break-glass admin connection
+User: postgres_admin
+Password: value from POSTGRES_BOOTSTRAP_PASSWORD (default: budget-analyzer-postgres-admin)
 
 # Connection string
-postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
+postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer
 ```
 
 
@@ -245,27 +254,82 @@ postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
 
 ### Backend Services (Spring Boot)
 
-Environment variables are injected via Kubernetes secrets. For local development outside Tilt, create `application-local.yml`:
+Environment variables are injected via Kubernetes secrets. PostgreSQL Step 2
+uses a `postgres_admin` bootstrap user plus dedicated service users. RabbitMQ
+Step 3 now bootstraps `rabbitmq-admin` and `currency-service` from a
+definitions file. Redis Step 4 now uses ACL users: a restricted `default` user
+for probes plus dedicated `session-gateway`, `ext-authz`, `currency-service`,
+and `redis-ops` identities.
+
+Current local secret names:
+
+| Secret | Namespace | Purpose |
+|--------|-----------|---------|
+| `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap admin + init inputs |
+| `transaction-service-postgresql-credentials` | `default` | transaction-service database connection |
+| `currency-service-postgresql-credentials` | `default` | currency-service database connection |
+| `permission-service-postgresql-credentials` | `default` | permission-service database connection |
+| `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin access + boot-time definitions |
+| `currency-service-rabbitmq-credentials` | `default` | currency-service AMQP connection |
+| `redis-bootstrap-credentials` | `infrastructure` | Redis ACL bootstrap + probe credentials |
+| `session-gateway-redis-credentials` | `default` | session-gateway Redis connection |
+| `ext-authz-redis-credentials` | `default` | ext-authz Redis connection |
+| `currency-service-redis-credentials` | `default` | currency-service Redis connection |
+
+For local development outside Tilt, create `application-local.yml`:
 
 ```yaml
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/budget_analyzer
-    username: budget_analyzer
-    password: budget_analyzer
+    username: transaction_service
+    password: ${POSTGRES_TRANSACTION_SERVICE_PASSWORD:budget-analyzer-transaction-service}
 
-  redis:
-    host: localhost
-    port: 6379
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      username: ${SPRING_DATA_REDIS_USERNAME:session-gateway}
+      password: ${SPRING_DATA_REDIS_PASSWORD:budget-analyzer-session-gateway-redis}
 
+  # Only currency-service needs RabbitMQ locally.
   rabbitmq:
     host: localhost
     port: 5672
-    username: guest
-    password: guest
+    username: currency-service
+    password: ${RABBITMQ_CURRENCY_SERVICE_PASSWORD:budget-analyzer-currency-service-rabbitmq}
 
 server:
   port: 8082  # Change per service
+```
+
+For `currency-service`, swap in `currency`, `currency_service`, and
+`POSTGRES_CURRENCY_SERVICE_PASSWORD`. For `permission-service`, use
+`permission`, `permission_service`, and `POSTGRES_PERMISSION_SERVICE_PASSWORD`.
+`transaction-service` no longer needs any RabbitMQ env vars.
+
+Redis local access:
+- `session-gateway` uses username `session-gateway` and `REDIS_SESSION_GATEWAY_PASSWORD`
+- `currency-service` uses username `currency-service` and `REDIS_CURRENCY_SERVICE_PASSWORD`
+- `ext-authz` uses `REDIS_USERNAME=ext-authz` and `REDIS_PASSWORD=$REDIS_EXT_AUTHZ_PASSWORD`
+- `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`
+- `default` is probe-only and should not be used by application code
+
+RabbitMQ local access:
+- Management UI: `http://localhost:15672`
+- Management username: `rabbitmq-admin`
+- Management password: value from `RABBITMQ_BOOTSTRAP_PASSWORD`
+- AMQP username for `currency-service`: `currency-service`
+- AMQP password for `currency-service`: value from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
+- Virtual host: `/`
+
+If you change RabbitMQ users, permissions, or passwords in the boot-time
+definitions, delete the RabbitMQ PVC before restarting it. RabbitMQ will not
+overwrite existing broker state from a changed definitions file:
+
+```bash
+kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
+tilt trigger rabbitmq
 ```
 
 Activate with:

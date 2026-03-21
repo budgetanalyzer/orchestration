@@ -30,38 +30,17 @@ spec:
         - name: SPRING_DATASOURCE_URL
           valueFrom:
             secretKeyRef:
-              name: postgresql-credentials
-              key: budget-analyzer-url
+              name: transaction-service-postgresql-credentials
+              key: url
         - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
-              name: postgresql-credentials
+              name: transaction-service-postgresql-credentials
               key: username
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgresql-credentials
-              key: password
-        # RabbitMQ connection
-        - name: SPRING_RABBITMQ_HOST
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: host
-        - name: SPRING_RABBITMQ_PORT
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: amqp-port
-        - name: SPRING_RABBITMQ_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: username
-        - name: SPRING_RABBITMQ_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
+              name: transaction-service-postgresql-credentials
               key: password
         resources:
           requests:

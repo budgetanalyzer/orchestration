@@ -2,26 +2,70 @@
 
 ## Overview
 
-For local development, PostgreSQL runs as a StatefulSet in the Kind cluster's `infrastructure` namespace. Each microservice has its own database within the shared PostgreSQL instance.
+For local development, PostgreSQL runs as a StatefulSet in the Kind cluster's
+`infrastructure` namespace. Each backend service gets its own database and its
+own login inside the shared PostgreSQL instance.
 
-## Configuration
+Phase 1 Step 2 hardens that local PostgreSQL path:
+
+- PostgreSQL bootstrap credentials come from `postgresql-bootstrap-credentials`
+  instead of inline manifest values.
+- The bootstrap superuser is now `postgres_admin`.
+- Each consuming service gets its own PostgreSQL connection secret and its own
+  database user.
+- First-time bootstrap uses a shell init script that reads per-service
+  passwords from Kubernetes Secrets and stores them with SCRAM-SHA-256.
+
+This step changes first-init behavior. If your PostgreSQL PVC predates Step 2,
+recreate PostgreSQL state before expecting the new users or auth rules:
+
+```bash
+kubectl delete pvc -n infrastructure postgresql-data-postgresql-0
+kubectl delete pod -n infrastructure postgresql-0
+```
+
+Recreating the Kind cluster is also valid if you want a clean local reset.
+
+## Secret Contract
+
+| Secret | Namespace | Purpose |
+|--------|-----------|---------|
+| `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap admin and per-service init passwords |
+| `transaction-service-postgresql-credentials` | `default` | transaction-service connection |
+| `currency-service-postgresql-credentials` | `default` | currency-service connection |
+| `permission-service-postgresql-credentials` | `default` | permission-service connection |
+
+Each service secret uses the same keys:
+
+- `username`
+- `password`
+- `url`
+
+## Current Local Access
 
 **Access via port forward (Tilt manages this automatically):**
+
 - **Host**: `localhost`
 - **Port**: `5432`
-- **User**: `budget_analyzer`
-- **Password**: `budget_analyzer`
+- **Bootstrap user**: `postgres_admin`
+- **Bootstrap password**: `POSTGRES_BOOTSTRAP_PASSWORD` from `.env`
+  - Default: `budget-analyzer-postgres-admin`
 
 **Access within cluster:**
+
 - **Host**: `postgresql.infrastructure`
 - **Port**: `5432`
 
 ## Databases
 
-| Service | Database Name | Connection String |
-|---------|--------------|-------------------|
-| transaction-service | `budget_analyzer` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer` |
-| currency-service | `currency` | `postgresql://budget_analyzer:budget_analyzer@localhost:5432/currency` |
+| Service | Database Name | Database User | Secret | Local Connection String |
+|---------|---------------|---------------|--------|-------------------------|
+| transaction-service | `budget_analyzer` | `transaction_service` | `transaction-service-postgresql-credentials` | `postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer` |
+| currency-service | `currency` | `currency_service` | `currency-service-postgresql-credentials` | `postgresql://currency_service:${POSTGRES_CURRENCY_SERVICE_PASSWORD:-budget-analyzer-currency-service}@localhost:5432/currency` |
+| permission-service | `permission` | `permission_service` | `permission-service-postgresql-credentials` | `postgresql://permission_service:${POSTGRES_PERMISSION_SERVICE_PASSWORD:-budget-analyzer-permission-service}@localhost:5432/permission` |
+
+Only the owning service user is granted `CONNECT` on its database. The
+`postgres_admin` superuser remains the break-glass path across all databases.
 
 ## Starting the Database
 
@@ -32,109 +76,123 @@ tilt up
 ```
 
 Tilt will:
-1. Deploy PostgreSQL StatefulSet to the `infrastructure` namespace
-2. Create databases via init scripts in `postgres-init/`
-3. Set up port forward to `localhost:5432`
+
+1. Deploy the PostgreSQL StatefulSet to the `infrastructure` namespace.
+2. Generate `postgresql-bootstrap-credentials`.
+3. Generate one PostgreSQL connection secret per consuming service.
+4. Start PostgreSQL with SCRAM-SHA-256 auth enabled.
+5. On first init, create the service users, databases, and ownership/grants.
+6. Set up port forwarding to `localhost:5432`.
 
 ## Connecting from Your Application
 
-### From Host Machine (via port forward)
+### From Host Machine
 
-Tilt automatically sets up port forwarding. Connect to:
+Service-owned connection:
+
+```bash
+psql -h localhost -U transaction_service -d budget_analyzer
 ```
-postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
+
+Break-glass admin connection:
+
+```bash
+psql -h localhost -U postgres_admin -d postgres
+```
+
+Connection string examples:
+
+```bash
+postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer
+postgresql://postgres_admin:${POSTGRES_BOOTSTRAP_PASSWORD:-budget-analyzer-postgres-admin}@localhost:5432/postgres
 ```
 
 ### From Pods in Kubernetes
 
 Services running in the cluster use the Kubernetes DNS name:
-```
-postgresql://budget_analyzer:budget_analyzer@postgresql.infrastructure:5432/budget_analyzer
+
+```text
+jdbc:postgresql://postgresql.infrastructure:5432/<database>
 ```
 
-## Adding New Databases
+The corresponding service deployment reads the exact URL, username, and password
+from its own `*-postgresql-credentials` secret.
+
+## Adding a New Database
 
 When adding a new microservice that needs its own database:
 
-1. Edit `postgres-init/01-init-databases.sql` and add:
-   ```sql
-   CREATE DATABASE your_database_name;
-   GRANT ALL PRIVILEGES ON DATABASE your_database_name TO budget_analyzer;
-   ```
+1. Add a new password entry to `.env.example` and secret generation to
+   `Tiltfile`.
+2. Extend `kubernetes/infrastructure/postgresql/configmap.yaml` with the new
+   service role and database mapping.
+3. Add a dedicated secret in `Tiltfile` with the pattern
+   `your-service-postgresql-credentials`.
+4. Populate that service secret with `username`, `password`, and `url`.
+5. Update the consuming deployment to read from that service-specific secret.
 
-2. Create the database manually:
-   ```bash
-   kubectl exec -n infrastructure postgresql-0 -- psql -U budget_analyzer -c "CREATE DATABASE your_db;"
-   ```
-
-3. Update the PostgreSQL credentials secret in `Tiltfile`:
-   ```starlark
-   pg_data = encode_secret_data({
-       # ... existing databases ...
-       'your-service-url': 'jdbc:postgresql://postgresql.' + INFRA_NAMESPACE + ':5432/your_database_name',
-   })
-   ```
+Do not recreate the old shared `postgresql-credentials` secret shape. The local
+contract is one secret per consuming service.
 
 ## Direct Database Access
 
-### Using psql
+### Using psql in the Pod
 
 ```bash
-# Connect via kubectl exec
-kubectl exec -it -n infrastructure postgresql-0 -- psql -U budget_analyzer -d budget_analyzer
-
-# Or use local psql with port forward (Tilt manages this)
-psql -h localhost -U budget_analyzer -d budget_analyzer
+kubectl exec -it -n infrastructure postgresql-0 -- /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d postgres'
 ```
 
 ### Using a GUI Client
 
-Connect your favorite database client (DBeaver, DataGrip, etc.) to:
+Connect your database client (DBeaver, DataGrip, etc.) to:
+
 - Host: `localhost`
 - Port: `5432`
-- User: `budget_analyzer`
-- Password: `budget_analyzer`
+- User: `transaction_service` for the application database, or `postgres_admin`
+  for admin access
+- Password: the corresponding value from `.env`
 
 ## Troubleshooting
 
 ### Port Already in Use
 
-If you see port 5432 already in use, check for other PostgreSQL instances:
+```bash
+lsof -i :5432
+ps aux | grep "kubectl.*port-forward.*5432"
+```
+
+### Existing PVC Still Has Pre-Step-2 State
+
+Symptoms include probes failing because `postgres_admin` does not exist yet or
+service connections failing because `transaction_service` / `currency_service` /
+`permission_service` were never created. Recreate PostgreSQL state:
 
 ```bash
-# Check for local PostgreSQL
-lsof -i :5432
-
-# Check if Tilt port forward is active
-ps aux | grep "kubectl.*port-forward.*5432"
+kubectl delete pvc -n infrastructure postgresql-data-postgresql-0
+kubectl delete pod -n infrastructure postgresql-0
 ```
 
 ### Database Not Found
 
-The initialization scripts only run when the PVC is first created. If you added a new database but it doesn't exist:
+The init script only runs when the PVC is first created. If you changed the
+first-boot database mapping, update the init script and recreate PostgreSQL
+state. For one-off local admin work, use `postgres_admin` and then apply the
+same ownership/grant pattern manually.
 
-Create the database manually:
-```bash
-kubectl exec -n infrastructure postgresql-0 -- psql -U budget_analyzer -c "CREATE DATABASE your_db;"
-```
+### Can't Connect from a Service
 
-### Can't Connect from Service
+Ensure the service:
 
-Ensure your service:
-1. Uses the correct hostname: `postgresql.infrastructure` (not `localhost`)
-2. Has the correct port: `5432`
-3. Uses credentials from the `postgresql-credentials` secret
+1. Uses `postgresql.infrastructure` as the hostname.
+2. Reads from its own `*-postgresql-credentials` secret.
+3. Uses the correct `url`, `username`, and `password` keys.
+4. Is connecting with its own database user, not `postgres_admin`.
 
 ### PostgreSQL Pod Not Starting
 
 ```bash
-# Check pod status
 kubectl get pods -n infrastructure
-
-# Check pod events
 kubectl describe pod -n infrastructure postgresql-0
-
-# Check PVC status
 kubectl get pvc -n infrastructure
 ```
 
@@ -143,16 +201,12 @@ kubectl get pvc -n infrastructure
 ### Backup
 
 ```bash
-# Backup all databases
-kubectl exec -n infrastructure postgresql-0 -- pg_dumpall -U budget_analyzer > backup.sql
-
-# Backup specific database
-kubectl exec -n infrastructure postgresql-0 -- pg_dump -U budget_analyzer budget_analyzer > budget_analyzer.sql
+kubectl exec -n infrastructure postgresql-0 -- /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dumpall -U "$POSTGRES_USER"' > backup.sql
+kubectl exec -n infrastructure postgresql-0 -- /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" budget_analyzer' > budget_analyzer.sql
 ```
 
 ### Restore
 
 ```bash
-# Restore from backup
-kubectl exec -i -n infrastructure postgresql-0 -- psql -U budget_analyzer < backup.sql
+kubectl exec -i -n infrastructure postgresql-0 -- /bin/sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER"' < backup.sql
 ```

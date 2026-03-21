@@ -281,7 +281,7 @@ After all services are healthy:
 - **Application**: https://app.budgetanalyzer.localhost
 - **API Docs**: https://app.budgetanalyzer.localhost/api/docs
 - **Tilt UI**: http://localhost:10350
-- **RabbitMQ Management**: http://localhost:15672 (user/password)
+- **RabbitMQ Management**: http://localhost:15672 (`rabbitmq-admin` / value from `RABBITMQ_BOOTSTRAP_PASSWORD`)
 
 ## Port Reference
 
@@ -323,6 +323,17 @@ Common causes:
 - Missing database (run migrations)
 - Invalid Auth0 credentials
 - Missing environment variables
+
+### RabbitMQ Credentials or Permissions Changed
+
+RabbitMQ boot-time definitions only seed a blank broker. If you changed the
+RabbitMQ users, passwords, or permissions in `.env` or the orchestrated
+definitions, recreate the PVC before restarting RabbitMQ:
+
+```bash
+kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
+tilt trigger rabbitmq
+```
 
 ### Database Connection Refused
 

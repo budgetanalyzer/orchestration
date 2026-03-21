@@ -131,8 +131,10 @@ kubectl logs deployment/session-gateway
 # Test Session Gateway health
 kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
-# Check Redis connection (session storage)
-kubectl exec -n infrastructure deployment/redis -- redis-cli PING
+# Check Redis connection (session storage) with the redis-ops ACL user
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
 
 **Repository**: https://github.com/budgetanalyzer/session-gateway
@@ -239,11 +241,14 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 # Check ext_authz service
 kubectl logs deployment/ext-authz
 
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+
 # Verify ext_authz session exists in Redis
-kubectl exec -n infrastructure deployment/redis -- redis-cli HGETALL "extauthz:session:{session-id}"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "extauthz:session:{session-id}"
 
 # Check Session Gateway session storage
-kubectl exec -n infrastructure deployment/redis -- redis-cli KEYS "spring:session:*"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
 ```
 
 **Session not persisting**:

@@ -37,12 +37,17 @@ From your **host terminal** (not the devcontainer):
 ```bash
 cd path/to/workspace/orchestration
 ./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
-vim .env          # Add Auth0 + FRED credentials (see below)
+vim .env          # Review infra password defaults; add Auth0 + FRED credentials
 tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
+
+Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
+PostgreSQL now uses a `postgres_admin` bootstrap user plus distinct per-service
+database users by default. RabbitMQ and Redis can keep their staged local
+password alignment until Steps 3 and 4 land.
 
 > **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
 >
@@ -50,7 +55,7 @@ Open https://app.budgetanalyzer.localhost when services are green.
 
 ## External Services (~10 min one-time setup)
 
-The app needs two external accounts. Both are free:
+The app needs two external accounts in addition to the local infrastructure password defaults already present in `.env`. Both are free:
 
 ### Auth0 (authentication)
 

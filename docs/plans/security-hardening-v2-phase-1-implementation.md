@@ -80,7 +80,7 @@ Recommended order:
 - No application credential is hardcoded in a manifest or ConfigMap.
 - Secret consumption and local secret production are visibly separate concerns.
 - `.env.example` documents every local Phase 1 credential the developer must supply or accept as a local default.
-- Sibling `application.yml` defaults are fail-closed: missing env vars must cause a connection failure, not a silent fallback to the old superuser identity.
+- Sibling `application.yml` defaults are fail-closed: missing env vars must cause a connection failure, not a silent fallback to the old superuser identity. *(Implemented in Step 5, not Step 1. Listed here because it is part of the overall secret-contract guarantee, but the actual config changes depend on the identities created in Steps 2–4.)*
 
 ## Step 2: PostgreSQL Per-Service Users
 

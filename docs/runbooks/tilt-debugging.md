@@ -180,7 +180,9 @@ Auth failures after login?
 ├── Check ext-authz health
 │   └── curl http://localhost:8090/healthz
 ├── Check Redis for session data
-│   └── kubectl exec -it deploy/redis -n infrastructure -- redis-cli keys "*"
+│   └── REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+│       REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+│       kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
 └── Check Auth0 credentials secret
     └── kubectl get secret auth0-credentials -o yaml
 ```
@@ -192,9 +194,9 @@ Database connection errors?
 ├── Is PostgreSQL running?
 │   └── kubectl get pods -n infrastructure | grep postgres
 ├── Can you connect directly?
-│   └── psql -h localhost -p 5432 -U budget_analyzer -d budget_analyzer
+│   └── psql -h localhost -p 5432 -U postgres_admin -d postgres
 ├── Check credentials secret
-│   └── kubectl get secret db-credentials -o yaml
+│   └── kubectl get secret <service>-postgresql-credentials -o yaml
 └── Check service logs for connection errors
     └── kubectl logs deployment/<service> | grep -i postgres
 ```
@@ -219,18 +221,51 @@ kubectl logs -f deployment/session-gateway
 # Health check
 curl http://localhost:8081/actuator/health
 
-# Check Redis sessions
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli
-> keys *session*
-> keys *token*
+# Check Redis sessions with the redis-ops ACL user
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "extauthz:session:*"
 
 # Flush all Redis data (clears all sessions)
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli FLUSHALL
+./scripts/dev/flush-redis.sh
 ```
 
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
+
+### RabbitMQ
+
+**Role**: Messaging broker for `currency-service`
+
+**Common Issues**:
+- `currency-service` cannot authenticate to AMQP
+- Management UI login fails
+- Boot-time user or permission changes do not appear
+
+**Debug Commands**:
+```bash
+# List broker users and permissions
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_users
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_permissions -p /
+
+# Inspect the boot-time definitions secret
+kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.username}' | base64 -d && echo
+kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.definitions\.json}' | base64 -d
+
+# Inspect the currency-service connection secret
+kubectl get secret currency-service-rabbitmq-credentials -o yaml
+```
+
+If the definitions file changed but the broker still shows the old users or
+permissions, recreate the RabbitMQ PVC and restart the resource:
+
+```bash
+kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
+tilt trigger rabbitmq
+```
+
 ### NGINX Gateway
 
 **Role**: HTTP routing, rate limiting, load balancing
@@ -382,13 +417,18 @@ kubectl logs -f deployment/nginx-gateway | grep -E "(upstream|error)"
 # Auth0 credentials
 kubectl get secret auth0-credentials -o jsonpath='{.data}' | base64 -d
 
-# Database credentials
-kubectl get secret db-credentials -o jsonpath='{.data}' | base64 -d
+# PostgreSQL bootstrap admin credentials
+kubectl get secret postgresql-bootstrap-credentials -n infrastructure -o jsonpath='{.data}' | base64 -d
+
+# Service PostgreSQL credentials
+kubectl get secret transaction-service-postgresql-credentials -o jsonpath='{.data}' | base64 -d
 ```
 
 **8. Check Redis for session data**
 ```bash
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli keys "*"
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
 # Should see session keys after login
 ```
 
@@ -473,5 +513,5 @@ tilt trigger transaction-service
 ### Clear Redis Sessions
 
 ```bash
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli FLUSHALL
+./scripts/dev/flush-redis.sh
 ```

@@ -24,13 +24,39 @@ spec:
               containerPort: 5432
           env:
             - name: POSTGRES_USER
-              value: "budget_analyzer"
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: username
             - name: POSTGRES_PASSWORD
-              value: "budget_analyzer"
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: password
             - name: POSTGRES_DB
               value: "postgres"
+            - name: POSTGRES_INITDB_ARGS
+              value: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
             - name: PGDATA
               value: "/var/lib/postgresql/data/pgdata"
+            - name: POSTGRES_TRANSACTION_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: transaction-service-password
+            - name: POSTGRES_CURRENCY_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: currency-service-password
+            - name: POSTGRES_PERMISSION_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: permission-service-password
+          args:
+            - -c
+            - password_encryption=scram-sha-256
           resources:
             requests:
               memory: 256Mi
@@ -46,9 +72,9 @@ spec:
           livenessProbe:
             exec:
               command:
-                - pg_isready
-                - -U
-                - budget_analyzer
+                - /bin/sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -58,9 +84,10 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  pg_isready -U budget_analyzer &&
-                  psql -U budget_analyzer -d budget_analyzer -c 'SELECT 1' &&
-                  psql -U budget_analyzer -d currency -c 'SELECT 1'
+                  PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d budget_analyzer -c 'SELECT 1' &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d currency -c 'SELECT 1' &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d permission -c 'SELECT 1'
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
@@ -68,6 +95,7 @@ spec:
         - name: init-scripts
           configMap:
             name: postgresql-init
+            defaultMode: 493
   volumeClaimTemplates:
     - metadata:
         name: postgresql-data

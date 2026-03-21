@@ -36,6 +36,7 @@ type SessionStore struct {
 func NewSessionStore(cfg Config) (*SessionStore, error) {
 	opts := &redis.Options{
 		Addr:        cfg.RedisAddr,
+		Username:    cfg.RedisUsername,
 		Password:    cfg.RedisPassword,
 		PoolSize:    10,
 		ReadTimeout: 100 * time.Millisecond,

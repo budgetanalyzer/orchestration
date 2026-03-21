@@ -57,20 +57,20 @@ Recommended order:
 **Target secret shape**
 
 - PostgreSQL bootstrap secret:
-  - superuser/admin username
-  - superuser/admin password
+  - superuser username (`postgres_admin` — renamed from `budget_analyzer` to eliminate identity collision)
+  - superuser password
   - per-service passwords needed by init logic
 - PostgreSQL service secrets:
   - one secret each for transaction-service, currency-service, permission-service
   - keys: `username`, `password`, `url`
-- RabbitMQ bootstrap secret:
-  - admin username/password
+- RabbitMQ bootstrap/admin secret:
+  - admin username/password (with `administrator` tag for Management UI access)
   - per-service passwords or a generated definitions payload
 - RabbitMQ service secrets:
-  - one secret each for transaction-service and currency-service
+  - one secret for currency-service (the only service with active RabbitMQ usage)
   - keys: `host`, `amqp-port`, `username`, `password`, optionally `virtual-host`
 - Redis bootstrap/ops secret:
-  - local-only admin or ops username/password for probes and maintenance scripts
+  - local-only admin or ops username/password for developer maintenance scripts and break-glass operations
 - Redis service secrets:
   - one secret each for session-gateway, ext-authz, currency-service
   - keys: `host`, `port`, `username`, `password`
@@ -80,6 +80,7 @@ Recommended order:
 - No application credential is hardcoded in a manifest or ConfigMap.
 - Secret consumption and local secret production are visibly separate concerns.
 - `.env.example` documents every local Phase 1 credential the developer must supply or accept as a local default.
+- Sibling `application.yml` defaults are fail-closed: missing env vars must cause a connection failure, not a silent fallback to the old superuser identity.
 
 ## Step 2: PostgreSQL Per-Service Users
 
@@ -95,26 +96,31 @@ Recommended order:
 
 **Work**
 
-- Replace the static SQL that grants every database to `budget_analyzer`.
+- Rename the bootstrap superuser from `budget_analyzer` to `postgres_admin`.
+- Replace the static SQL init script with a shell init script (`.sh` in `/docker-entrypoint-initdb.d/`) that reads per-service passwords from environment variables sourced from Kubernetes Secrets. This is the standard pattern for the postgres Docker image and is the hardest technical piece of Step 2.
 - Convert bootstrap logic to create dedicated users and ownership/grants for:
   - `transaction_service` -> `budget_analyzer`
   - `currency_service` -> `currency`
   - `permission_service` -> `permission`
+- Add explicit `REVOKE CONNECT ON DATABASE ... FROM PUBLIC` for all three databases, then `GRANT CONNECT` only to the owning service user. Without this, PostgreSQL's default behavior allows any authenticated user to connect to any database — the verification step ("transaction_service is denied on currency") would silently pass the wrong way (the user can connect, it just won't own objects).
+- Add `REVOKE CREATE ON SCHEMA public FROM PUBLIC` in each database, then grant `CREATE` only to the owning service user.
+- Set `password_encryption = scram-sha-256` in PostgreSQL config and use `scram-sha-256` in `pg_hba.conf` for stronger credential storage.
 - Remove hardcoded PostgreSQL bootstrap credentials from the StatefulSet and source them from the bootstrap secret defined in Step 1.
 - Change service deployments to consume service-specific PostgreSQL secrets.
+- Update the PostgreSQL readiness probe to use the admin user (`postgres_admin`) from the bootstrap secret.
 - Update `reset-databases.sh` so recreated databases are owned by the correct service user instead of `budget_analyzer`.
 
 **Implementation notes**
 
-- Expect to replace the current single SQL blob with a shell-driven init script or templated SQL so passwords can come from secrets.
 - Do not preserve the current shared `postgresql-credentials` secret shape if it keeps all services on one identity.
 - Keep the existing database names. Phase 1 is about identity separation, not schema redesign.
 
 **Verification**
 
-- `transaction_service` can connect to `budget_analyzer` and is denied on `currency` and `permission`.
-- `currency_service` can connect to `currency` and is denied on the others.
-- `permission_service` can connect to `permission` and is denied on the others.
+- `transaction_service` can connect to `budget_analyzer` and is denied connection (not just denied object access) on `currency` and `permission`.
+- `currency_service` can connect to `currency` and is denied connection on the others.
+- `permission_service` can connect to `permission` and is denied connection on the others.
+- `psql -U postgres_admin` can still connect to all databases (break-glass path).
 - `scripts/dev/reset-databases.sh` still works after the credential split.
 
 ## Step 3: RabbitMQ Per-Service Users and Permissions
@@ -124,29 +130,41 @@ Recommended order:
 - `kubernetes/infrastructure/rabbitmq/configmap.yaml`
 - `kubernetes/infrastructure/rabbitmq/statefulset.yaml`
 - `Tiltfile`
-- `kubernetes/services/transaction-service/deployment.yaml`
 - `kubernetes/services/currency-service/deployment.yaml`
+- `kubernetes/services/transaction-service/deployment.yaml` (remove dead RabbitMQ wiring only)
 
 **Work**
 
 - Remove `guest/guest`.
 - Bootstrap RabbitMQ users through a definitions file or equivalent secret-driven startup path rather than hardcoded config values.
-- Create one user for `transaction-service` and one for `currency-service`.
+- Create one user for `currency-service` (the only service with active RabbitMQ usage).
+- Create one admin/ops user (`rabbitmq-admin`) with `administrator` tag for Management UI access.
+- Do **not** create a RabbitMQ user for transaction-service — it has zero RabbitMQ code. Remove the dead wiring: RabbitMQ env vars from `transaction-service/deployment.yaml` and the Tilt dependency on RabbitMQ.
 - Scope permissions by vhost and regex permissions where possible.
-- Update service deployment manifests to consume service-specific RabbitMQ secrets.
+- Update currency-service deployment manifest to consume its RabbitMQ secret.
 
 **Important constraint**
 
-- Do not invent a multi-vhost topology unless the current event flows allow it.
-- The source tree currently shows real RabbitMQ usage in `currency-service`, but not active bindings in `transaction-service`.
-- If the shared vhost must remain for current messaging patterns, keep it and enforce least privilege with distinct users plus scoped `configure`/`write`/`read` regexes.
+- Do not invent a multi-vhost topology unless the current event flows require it. Currency-service is the only RabbitMQ consumer — it publishes to `currency.created` and consumes from the same exchange (internal feedback loop).
+- If the shared vhost must remain, enforce least privilege with a distinct user plus scoped `configure`/`write`/`read` regexes.
+
+**Developer workflow note**
+
+RabbitMQ's definitions file is imported only at first startup. If definitions change (adding/removing users, changing permissions), the RabbitMQ PVC must be deleted and recreated. Document this:
+```bash
+kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
+# then restart RabbitMQ via tilt
+```
 
 **Verification**
 
 - `guest` access is gone.
-- Each service can authenticate with its own credentials.
-- Unauthorized exchanges/queues cannot be configured or consumed by the wrong user.
+- `currency-service` can authenticate with its own credentials and access its exchanges/queues.
+- `rabbitmq-admin` can access the Management UI.
+- The admin user can verify permission scoping via `rabbitmqctl list_permissions` or the management API.
+- Unauthorized exchanges/queues cannot be configured or consumed by the wrong user (verify with `rabbitmqctl` or the management API — unlike PostgreSQL/Redis, RabbitMQ permission denial requires explicit tooling to test).
 - RabbitMQ still starts cleanly with persisted storage after the definitions-based bootstrap.
+- transaction-service starts without RabbitMQ wiring and functions normally.
 
 ## Step 4: Redis ACL Users and ext-authz Username Support
 
@@ -166,32 +184,56 @@ Recommended order:
 **Work**
 
 - Replace `requirepass` with ACL-based auth.
-- Create the required Redis users:
-  - `session-gateway`
-  - `ext-authz`
-  - `currency-service`
-- Add one local-only `redis-ops` or equivalent admin user for probes and developer maintenance scripts. Do not reuse an application identity for admin operations.
-- Wire session-gateway and currency-service deployments to pass `SPRING_DATA_REDIS_USERNAME` and `SPRING_DATA_REDIS_PASSWORD`.
-- Add `REDIS_USERNAME` support to ext-authz and use it in the Go Redis client options.
-- Update Redis liveness/readiness probes and helper scripts so they authenticate with the ops/admin user.
+- Create the required Redis users with concrete ACL rules. The `ext-authz` rules are confirmed from source; `session-gateway` intentionally uses broad command access with key isolation; `currency-service` starts with a cache-focused allow-list that must be validated with runtime tests because Spring Cache/Lettuce hides some concrete Redis commands behind framework abstractions.
 
-**Required ACL scope**
+```
+# session-gateway: Spring Session uses a wide range of internal commands (hash ops,
+# set ops, key ops, pub/sub for session events). Restricting to specific commands
+# risks breakage on Spring Session upgrades. Use +@all with key-pattern isolation.
+user session-gateway on >PASSWORD ~spring:session:* ~extauthz:session:* +@all
 
-- `session-gateway`: read/write only for Spring Session keys and ext-authz session keys
-- `ext-authz`: read-only on ext-authz session keys and only the commands it needs
-- `currency-service`: only its cache key namespace and only the cache commands it needs
+# ext-authz: read-only on ext-authz sessions + health check
+user ext-authz on >PASSWORD ~extauthz:session:* +hgetall +ping +auth +hello +info
+
+# currency-service: initial cache-focused allow-list on its namespace only.
+# This must be validated in runtime tests and expanded only if Spring Cache/Lettuce
+# requires an additional command that is not obvious from application code.
+user currency-service on >PASSWORD ~currency-service:* +get +set +del +keys +scan +ping +auth +hello +ttl +pttl +expire +exists +type +object
+
+# redis-ops: admin for maintenance scripts and break-glass operations
+user redis-ops on >PASSWORD ~* +@all
+
+# default: restricted to PING and AUTH only (do not disable)
+user default on >PASSWORD ~* +ping +auth
+```
+
+- Wire session-gateway and currency-service deployments to pass `SPRING_DATA_REDIS_USERNAME` and `SPRING_DATA_REDIS_PASSWORD`. Spring Boot 3.x auto-configures `spring.data.redis.username` natively — no Java code changes needed.
+- Add `REDIS_USERNAME` support to ext-authz and use it in the Go Redis client `Options.Username`. This is the only code change required for Redis username support.
+- Keep Redis liveness/readiness probes on the restricted `default` user path for Phase 1, and update helper scripts to authenticate with the `redis-ops` user.
+
+**Probe authentication mechanism**
+
+Disabling the `default` user entirely breaks probes: `REDISCLI_AUTH` only provides a password, but Redis ACL requires `AUTH <username> <password>`. Kubernetes exec probes do not support env var expansion in command arrays.
+
+Recommended approach for Phase 1: keep `default` user enabled but restricted to `+ping +auth` only. This allows existing probe commands (`redis-cli ping`) to continue working while preventing the default user from accessing any data. Use `redis-ops` for explicit maintenance actions and scripts, not the health probes.
+
+**Key design decision for session-gateway**
+
+Spring Session uses a wide range of Redis commands internally. The value of ACLs for session-gateway is in **key-pattern isolation** (`~spring:session:* ~extauthz:session:*`), not command restriction. Using `+@all` with key patterns is the right tradeoff — it prevents session-gateway from touching currency cache keys while avoiding breakage from Spring Session internal changes.
 
 **Implementation notes**
 
 - Phase 1 should disable the open-ended shared password model, not layer ACLs on top of it.
 - Expect docs and scripts that use `redis-cli` without auth or with `-a <password>` only to break until updated.
+- Treat the `currency-service` ACL command list as an initial least-privilege baseline, not a source-proven final set. Runtime verification is required before calling it complete.
 
 **Verification**
 
 - Session Gateway can create/update session data.
 - ext-authz can read session hashes but cannot write them.
 - currency-service can use its cache namespace but cannot read or mutate session keys.
-- Redis probes and maintenance scripts still work with the ops/admin user.
+- Redis probes still work via the restricted `default` user, and maintenance scripts authenticate with `redis-ops`.
+- Break-glass: `redis-ops` user can run `FLUSHALL` and other admin commands.
 
 ## Step 5: Align Sibling Local Configuration Defaults
 
@@ -206,21 +248,27 @@ Phase 1 is not finished if local `bootRun` paths still assume shared credentials
 
 **Work**
 
-- Replace shared local defaults where they would now fail against the hardened local infrastructure.
-- Prefer environment-backed placeholders over hardcoded shared credentials.
-- Add Redis username support to sibling config where the service may run directly against the hardened Redis instance.
+- Replace shared local defaults with fail-closed placeholders. The pattern is `${ENV_VAR:}` (empty default) for passwords — a developer who doesn't set env vars should get a connection failure, not a silent fallback to the old superuser identity.
+- For usernames, default to the per-service identity: `${SPRING_DATASOURCE_USERNAME:transaction_service}`.
+- Add Redis username support to sibling config where the service may run directly against the hardened Redis instance (`spring.data.redis.username` placeholder).
+- Add RabbitMQ username/password placeholders to currency-service config.
 - Keep these changes configuration-only. If any service would require Java code changes to honor the new credentials, stop and hand that repo back to the user explicitly.
 
 **What to change**
 
-- `transaction-service`: PostgreSQL username/password defaults
-- `currency-service`: PostgreSQL username/password defaults, RabbitMQ username/password defaults, Redis username/password support
-- `permission-service`: PostgreSQL username/password defaults
-- `session-gateway`: Redis username/password support for direct local runs
+- `transaction-service`: PostgreSQL username default -> `transaction_service`, password default -> empty (fail-closed)
+- `currency-service`: PostgreSQL defaults (per-service, fail-closed), RabbitMQ username/password placeholders, Redis username placeholder
+- `permission-service`: PostgreSQL username default -> `permission_service`, password default -> empty (fail-closed)
+- `session-gateway`: Redis username placeholder for direct local runs
+
+**What NOT to change**
+
+- transaction-service RabbitMQ config — there is none (no RabbitMQ code exists in this service)
 
 **Verification**
 
 - Each service can still run locally when pointed at the Tilt-managed infrastructure with the documented env vars.
+- Running `./gradlew bootRun` without env vars fails with a connection error, not a successful superuser connection.
 - No sibling repo needs a code change just to consume the new credentials.
 
 ## Step 6: Add Focused Phase 1 Verification Scripts
@@ -236,10 +284,22 @@ Phase 1 is not finished if local `bootRun` paths still assume shared credentials
 
 - Keep helper scripts usable after the credential split.
 - Add one focused verifier script for Phase 1 runtime checks:
-  - PostgreSQL user cannot access another service database
-  - RabbitMQ user cannot access unauthorized resources
-  - Redis ACL users are denied outside their command/key scope
+
+  **Positive tests (authorized access works):**
+  - Each PostgreSQL service user can connect to its own database
+  - currency-service RabbitMQ user can access its exchanges/queues
+  - Each Redis ACL user can perform its authorized operations
   - ext-authz can start and query Redis with username/password auth
+
+  **Negative tests (unauthorized access is denied):**
+  - PostgreSQL: `transaction_service` is denied `CONNECT` to `currency` and `permission` databases (use `psql -U transaction_service -d currency` and verify connection refused, not just object access denied)
+  - RabbitMQ: currency-service user cannot configure/write unauthorized exchanges (use `rabbitmqctl` or the management API to verify — unlike PostgreSQL/Redis, RabbitMQ permission denial requires explicit tooling)
+  - Redis: each ACL user is denied outside their key pattern and command scope (use `redis-cli --user <user> --pass <pass>`)
+
+  **Break-glass tests (admin/ops users still work):**
+  - `postgres_admin` can connect to all databases
+  - `redis-ops` can run `FLUSHALL` and admin commands
+  - `rabbitmq-admin` can access the Management UI and run `rabbitmqctl list_permissions`
 
 **Scope guardrail**
 
@@ -275,11 +335,14 @@ Documentation updates are part of the implementation, not follow-up work.
 **What the docs must cover**
 
 - New local `.env` variables and secret names
+- PostgreSQL superuser rename from `budget_analyzer` to `postgres_admin`
 - Service-specific PostgreSQL users instead of `budget_analyzer` everywhere
-- Removal of `guest/guest`
+- Removal of `guest/guest` and the new RabbitMQ admin user
 - Redis ACL auth examples using username plus password
 - Updated troubleshooting commands for `psql`, `rabbitmqctl`, and `redis-cli`
 - Any direct local run instructions that now require explicit env vars
+- RabbitMQ PVC deletion workflow when definitions change
+- Removal of transaction-service RabbitMQ references (dead wiring cleanup)
 
 **Guardrails**
 

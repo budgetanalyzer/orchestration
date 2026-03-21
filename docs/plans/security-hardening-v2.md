@@ -88,15 +88,43 @@ Detailed implementation breakdown: [security-hardening-v2-phase-1-implementation
 
 ### 1a. Per-service PostgreSQL users
 
+Rename the bootstrap superuser from `budget_analyzer` to `postgres_admin` to eliminate the identity collision between the superuser and the application database/user name. The superuser password must come from the bootstrap secret, not be hardcoded in the StatefulSet.
+
 Create dedicated DB users with grants scoped to their own database only:
 
 - `transaction_service` -> `budget_analyzer`
 - `currency_service` -> `currency`
 - `permission_service` -> `permission`
 
+Isolation requires explicit privilege revocation — PostgreSQL's default allows any authenticated user to connect to any database:
+
+```sql
+REVOKE CONNECT ON DATABASE budget_analyzer FROM PUBLIC;
+REVOKE CONNECT ON DATABASE currency FROM PUBLIC;
+REVOKE CONNECT ON DATABASE permission FROM PUBLIC;
+GRANT CONNECT ON DATABASE budget_analyzer TO transaction_service;
+GRANT CONNECT ON DATABASE currency TO currency_service;
+GRANT CONNECT ON DATABASE permission TO permission_service;
+```
+
+Also revoke default schema creation rights in each database:
+
+```sql
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+```
+
+Then grant `CREATE ON SCHEMA public` only to the owning service user in each database.
+
+Use SCRAM-SHA-256 for password authentication instead of the weaker default `md5`. Set `password_encryption = scram-sha-256` in PostgreSQL config and use `scram-sha-256` in `pg_hba.conf`.
+
+The init script must be a shell script (`.sh` in `/docker-entrypoint-initdb.d/`) rather than plain SQL, so it can read per-service passwords from environment variables sourced from Kubernetes Secrets.
+
+Update the PostgreSQL readiness probe to use the admin user from the bootstrap secret instead of the old `budget_analyzer` superuser identity.
+
 Files to modify:
 
 - `kubernetes/infrastructure/postgresql/configmap.yaml`
+- `kubernetes/infrastructure/postgresql/statefulset.yaml`
 - `Tiltfile`
 - `kubernetes/services/transaction-service/deployment.yaml`
 - `kubernetes/services/currency-service/deployment.yaml`
@@ -106,21 +134,26 @@ Files to modify:
 
 Remove `guest/guest`.
 
-Create one RabbitMQ user per service:
+Create RabbitMQ users:
 
-- `transaction-service`
-- `currency-service`
+- `currency-service` — the only service with active RabbitMQ usage (Spring Cloud Stream: publishes to `currency.created`, consumes from `currency.created.exchange-rate-import-service`)
+- `rabbitmq-admin` — admin/ops user with `administrator` tag for Management UI access (port 15672)
+
+**Note**: transaction-service has zero RabbitMQ code — no Spring Cloud Stream config, no `@RabbitListener`, no messaging classes. The current orchestration layer gives it RabbitMQ credentials and a Tilt dependency, but these are dead wiring. Clean up the dead wiring (deployment env vars, Tilt dependency) rather than creating a phantom user for a service that doesn't connect.
 
 Scope permissions by vhost and by `configure` / `write` / `read` rights.
 
 If a shared vhost remains necessary, do not collapse back to a shared credential.
+
+When definitions change (e.g., adding or removing users), the RabbitMQ PVC must be recreated for changes to take effect — the definitions file is only imported at first startup. Document this in the developer workflow.
 
 Files to modify:
 
 - `kubernetes/infrastructure/rabbitmq/configmap.yaml`
 - `kubernetes/infrastructure/rabbitmq/statefulset.yaml`
 - `Tiltfile`
-- service deployment manifests for transaction-service and currency-service
+- `kubernetes/services/currency-service/deployment.yaml`
+- `kubernetes/services/transaction-service/deployment.yaml` (remove dead RabbitMQ wiring)
 
 ### 1c. Redis ACL users
 
@@ -131,12 +164,41 @@ Required Redis users:
 - `session-gateway`
 - `ext-authz`
 - `currency-service`
+- `redis-ops` — admin user for maintenance scripts and break-glass operations
 
-Required scope:
+Proposed ACL rules for Phase 1:
 
-- `session-gateway`: read/write Spring Session keys and ext_authz session keys
-- `ext-authz`: read-only access to ext_authz session keys and only the commands it needs
-- `currency-service`: access only its cache namespace and required cache commands
+- `ext-authz` command scope is confirmed from source (`PING` plus `HGETALL` on `extauthz:session:*`)
+- `session-gateway` should use broad command access with key-pattern isolation because Spring Session relies on framework-managed Redis operations
+- `currency-service` should start with a cache-focused allow-list and be validated in runtime tests because Spring Cache/Lettuce hides the exact Redis command set behind abstractions
+
+```
+# session-gateway: Spring Session uses a wide range of internal commands (hash ops,
+# set ops, key ops, pub/sub for session events). Restricting to specific commands
+# risks breakage on Spring Session upgrades. Use +@all with key-pattern isolation.
+user session-gateway on >PASSWORD ~spring:session:* ~extauthz:session:* +@all
+
+# ext-authz: read-only on ext-authz sessions + health check
+user ext-authz on >PASSWORD ~extauthz:session:* +hgetall +ping +auth +hello +info
+
+# currency-service: initial cache-focused allow-list on its namespace only.
+# Validate this in runtime tests and expand only if framework behavior proves
+# an additional command is required.
+user currency-service on >PASSWORD ~currency-service:* +get +set +del +keys +scan +ping +auth +hello +ttl +pttl +expire +exists +type +object
+
+# redis-ops: admin for maintenance scripts and break-glass operations
+user redis-ops on >PASSWORD ~* +@all
+
+# default: restricted to PING and AUTH only (do not disable — probes need it as fallback)
+user default on >PASSWORD ~* +ping +auth
+```
+
+**Probe authentication**: Disabling the `default` user entirely breaks Redis probes because `REDISCLI_AUTH` only provides a password — Redis ACL requires `AUTH <username> <password>`. Kubernetes exec probes do not support env var expansion in command arrays. Two viable options:
+
+1. Keep `default` user enabled but restricted to only `+ping +auth` (simplest)
+2. Use a wrapper shell script mounted into the container that calls `redis-cli --user $REDIS_OPS_USERNAME --pass $REDIS_OPS_PASSWORD ping`
+
+Option 1 is recommended for Phase 1.
 
 Files to modify:
 

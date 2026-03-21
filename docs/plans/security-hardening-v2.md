@@ -43,9 +43,7 @@ Target end state:
 
 ---
 
-## Phase 0: Platform Preconditions
-
-Detailed implementation breakdown: [security-hardening-v2-phase-0-implementation.md](./security-hardening-v2-phase-0-implementation.md)
+## Phase 0: Platform Preconditions (Implemented)
 
 ### 0a. NetworkPolicy-capable CNI
 
@@ -85,6 +83,8 @@ Target namespace posture:
 ---
 
 ## Phase 1: Credential and Secret Hardening
+
+Detailed implementation breakdown: [security-hardening-v2-phase-1-implementation.md](./security-hardening-v2-phase-1-implementation.md)
 
 ### 1a. Per-service PostgreSQL users
 

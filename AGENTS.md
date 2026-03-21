@@ -7,12 +7,12 @@
 **Role**: System orchestrator; coordinates cross-cutting concerns and deployment
 
 ### Relationships
-- **Coordinates**: All service repos (via patterns, not direct writes)
+- **Coordinates**: All service repos (via patterns and selective documentation/configuration updates, not sibling code changes)
 - **Observed by**: architecture-conversations
 
 ### Permissions
 - **Read**: All siblings via `../`
-- **Write**: This repository; capture conversations to `../architecture-conversations/`
+- **Write**: This repository; capture conversations to `../architecture-conversations/`; documentation and configuration in sibling repos (no sibling code)
 
 ### Discovery
 ```bash
@@ -303,9 +303,10 @@ Each microservice is maintained in its own repository:
 
 ### Cross-Repo Boundaries
 
-**Do NOT write code (Java, TypeScript, etc.) in sibling repositories.** This repo is the orchestrator — it coordinates, it doesn't implement. When debugging cross-service issues, read sibling repos freely but only write to:
+**Do NOT write code (Java, TypeScript, etc.) in sibling repositories.** This repo is the orchestrator — it coordinates, it doesn't implement service logic. When debugging cross-service issues, read sibling repos freely and only write to:
 - This repository (orchestration)
-- Configuration files (e.g., `application.yml`) in sibling repos when fixing deployment/config issues
+- Documentation in sibling repos
+- Configuration files (e.g., `application.yml`, manifests, env/config wiring) in sibling repos when fixing deployment/config issues
 
 If a fix requires code changes in a service repo, describe the needed changes and let the user handle it (or switch to that repo's context).
 

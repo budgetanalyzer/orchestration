@@ -29,6 +29,12 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 0 security prerequisites
 ./scripts/dev/verify-security-prereqs.sh
+
+# Validate Phase 1 credential isolation
+./scripts/dev/verify-phase-1-credentials.sh
+
+# Optional: include destructive redis-ops FLUSHALL proof
+./scripts/dev/verify-phase-1-credentials.sh --destructive-redis-flushall
 ```
 
 ### Port Mapping
@@ -43,6 +49,7 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 | 8081 | session-gateway | HTTP | Browser auth/session management |
 | 8082 | transaction-service | HTTP | Transaction API |
 | 8084 | currency-service | HTTP | Currency API |
+| 8086 | permission-service | HTTP | Roles/permissions API |
 | 9002 | ext-authz | HTTP | Session validation |
 | 8090 | ext-authz | HTTP | Health check |
 | 3000 | budget-analyzer-web | HTTP | React dev server |
@@ -63,6 +70,7 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 curl http://localhost:8081/actuator/health  # session-gateway
 curl http://localhost:8082/actuator/health  # transaction-service
 curl http://localhost:8084/actuator/health  # currency-service
+curl http://localhost:8086/actuator/health  # permission-service
 
 # NGINX Gateway
 curl http://localhost:8080/health
@@ -249,6 +257,10 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_
 # List broker users and permissions
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_users
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_permissions -p /
+
+# Authenticate the break-glass admin user from the bootstrap secret
+RABBITMQ_ADMIN_PASSWORD=$(kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.password}' | base64 -d)
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl authenticate_user rabbitmq-admin "$RABBITMQ_ADMIN_PASSWORD"
 
 # Inspect the boot-time definitions secret
 kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.username}' | base64 -d && echo

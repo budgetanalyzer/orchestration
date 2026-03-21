@@ -309,7 +309,7 @@ docker exec rabbitmq rabbitmqctl list_queues
 docker logs rabbitmq | grep "delivering"
 
 # Check outbox table (per service)
-docker exec postgres psql -U budget_analyzer -c \
+PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql -h localhost -U transaction_service -d budget_analyzer -c \
   "SELECT * FROM event_publication WHERE completion_date IS NULL;"
 ```
 

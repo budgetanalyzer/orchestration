@@ -520,7 +520,7 @@ k8s_resource(
 )
 
 # ============================================================================
-# EXT-AUTHZ SERVICE (Go, gRPC external authorization)
+# EXT-AUTHZ SERVICE (Go, HTTP external authorization)
 # ============================================================================
 
 docker_build(
@@ -538,7 +538,7 @@ k8s_yaml([
 k8s_resource(
     'ext-authz',
     port_forwards=[
-        port_forward(9001, 9001, name='gRPC'),
+        port_forward(9002, 9002, name='HTTP'),
         port_forward(8090, 8090, name='Health'),
     ],
     labels=['gateway'],

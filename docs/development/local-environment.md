@@ -134,6 +134,9 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 0 platform prerequisites
 ./scripts/dev/verify-security-prereqs.sh
+
+# Optional but recommended: prove the Phase 1 credential split
+./scripts/dev/verify-phase-1-credentials.sh
 ```
 
 ## Tilt Resources
@@ -244,6 +247,9 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | Session Gateway | 8081 | - | Internal (behind Envoy) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
 | currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
+| permission-service | 8086 | http://localhost:8086 | Direct access via port forward |
+| ext-authz | 9002 | http://localhost:9002/check | Direct access via port forward |
+| ext-authz | 8090 | http://localhost:8090/healthz | Health endpoint |
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
 | PostgreSQL | 5432 | localhost:5432 | Database access |
 | Redis | 6379 | localhost:6379 | Cache access |
@@ -282,36 +288,43 @@ For local development outside Tilt, create `application-local.yml`:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/budget_analyzer
-    username: transaction_service
-    password: ${POSTGRES_TRANSACTION_SERVICE_PASSWORD:budget-analyzer-transaction-service}
+    username: ${SPRING_DATASOURCE_USERNAME:transaction_service}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
       username: ${SPRING_DATA_REDIS_USERNAME:session-gateway}
-      password: ${SPRING_DATA_REDIS_PASSWORD:budget-analyzer-session-gateway-redis}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
 
   # Only currency-service needs RabbitMQ locally.
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: currency-service
-    password: ${RABBITMQ_CURRENCY_SERVICE_PASSWORD:budget-analyzer-currency-service-rabbitmq}
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:currency-service}
+    password: ${SPRING_RABBITMQ_PASSWORD:}
 
 server:
   port: 8082  # Change per service
 ```
 
-For `currency-service`, swap in `currency`, `currency_service`, and
-`POSTGRES_CURRENCY_SERVICE_PASSWORD`. For `permission-service`, use
-`permission`, `permission_service`, and `POSTGRES_PERMISSION_SERVICE_PASSWORD`.
-`transaction-service` no longer needs any RabbitMQ env vars.
+Password placeholders intentionally default to empty. A direct `bootRun`
+without env vars should fail with a connection error instead of silently
+reusing the old shared infrastructure credentials.
+
+For `currency-service`, swap in `currency`, `currency_service`, and set
+`SPRING_DATASOURCE_PASSWORD` from `POSTGRES_CURRENCY_SERVICE_PASSWORD`.
+For `permission-service`, use `permission`, `permission_service`, and set
+`SPRING_DATASOURCE_PASSWORD` from `POSTGRES_PERMISSION_SERVICE_PASSWORD`.
+`transaction-service` no longer needs any RabbitMQ env vars. `session-gateway`
+only needs `SPRING_DATA_REDIS_PASSWORD`; its Redis username defaults to
+`session-gateway`.
 
 Redis local access:
-- `session-gateway` uses username `session-gateway` and `REDIS_SESSION_GATEWAY_PASSWORD`
-- `currency-service` uses username `currency-service` and `REDIS_CURRENCY_SERVICE_PASSWORD`
-- `ext-authz` uses `REDIS_USERNAME=ext-authz` and `REDIS_PASSWORD=$REDIS_EXT_AUTHZ_PASSWORD`
+- `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`
+- `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`
+- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, and `REDIS_PASSWORD=$REDIS_EXT_AUTHZ_PASSWORD`
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`
 - `default` is probe-only and should not be used by application code
 
@@ -319,8 +332,8 @@ RabbitMQ local access:
 - Management UI: `http://localhost:15672`
 - Management username: `rabbitmq-admin`
 - Management password: value from `RABBITMQ_BOOTSTRAP_PASSWORD`
-- AMQP username for `currency-service`: `currency-service`
-- AMQP password for `currency-service`: value from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
+- AMQP username for `currency-service`: `currency-service` (or override with `SPRING_RABBITMQ_USERNAME`)
+- AMQP password for `currency-service`: set `SPRING_RABBITMQ_PASSWORD` from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
 - Virtual host: `/`
 
 If you change RabbitMQ users, permissions, or passwords in the boot-time

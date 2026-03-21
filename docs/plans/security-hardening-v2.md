@@ -86,6 +86,11 @@ Target namespace posture:
 
 Detailed implementation breakdown: [security-hardening-v2-phase-1-implementation.md](./security-hardening-v2-phase-1-implementation.md)
 
+Current local Phase 1 baseline:
+
+- Tilt generates `postgresql-bootstrap-credentials`, per-service PostgreSQL secrets, `rabbitmq-bootstrap-credentials`, `currency-service-rabbitmq-credentials`, `redis-bootstrap-credentials`, and per-service Redis secrets from `.env` for local Kind only.
+- `./scripts/dev/verify-phase-1-credentials.sh` is the runtime proof for PostgreSQL, RabbitMQ, Redis ACL isolation, and the ext-authz Redis username/password path.
+
 ### 1a. Per-service PostgreSQL users
 
 Rename the bootstrap superuser from `budget_analyzer` to `postgres_admin` to eliminate the identity collision between the superuser and the application database/user name. The superuser password must come from the bootstrap secret, not be hardcoded in the StatefulSet.

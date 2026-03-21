@@ -41,6 +41,19 @@ Each service secret uses the same keys:
 - `password`
 - `url`
 
+## Relevant .env Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `POSTGRES_BOOTSTRAP_PASSWORD` | `postgres_admin` break-glass password |
+| `POSTGRES_TRANSACTION_SERVICE_PASSWORD` | `transaction_service` database user password |
+| `POSTGRES_CURRENCY_SERVICE_PASSWORD` | `currency_service` database user password |
+| `POSTGRES_PERMISSION_SERVICE_PASSWORD` | `permission_service` database user password |
+
+Direct `bootRun` paths should map the matching `POSTGRES_*_PASSWORD` value to
+`SPRING_DATASOURCE_PASSWORD`. The service usernames now default to the
+service-owned identities, so the password must be explicit.
+
 ## Current Local Access
 
 **Access via port forward (Tilt manages this automatically):**
@@ -84,6 +97,24 @@ Tilt will:
 5. On first init, create the service users, databases, and ownership/grants.
 6. Set up port forwarding to `localhost:5432`.
 
+## Verification
+
+Run the Phase 1 verifier after `tilt up`:
+
+```bash
+./scripts/dev/verify-phase-1-credentials.sh
+```
+
+For targeted PostgreSQL checks:
+
+```bash
+PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql -h localhost -U transaction_service -d budget_analyzer -c 'SELECT current_user;'
+PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql -h localhost -U transaction_service -d currency -c 'SELECT 1;'
+```
+
+The first command should succeed as `transaction_service`. The second should be
+rejected because cross-database `CONNECT` is revoked.
+
 ## Connecting from Your Application
 
 ### From Host Machine
@@ -106,6 +137,9 @@ Connection string examples:
 postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer
 postgresql://postgres_admin:${POSTGRES_BOOTSTRAP_PASSWORD:-budget-analyzer-postgres-admin}@localhost:5432/postgres
 ```
+
+For direct service runs, export `SPRING_DATASOURCE_PASSWORD` from the matching
+`POSTGRES_*_PASSWORD` value rather than relying on an old shared fallback.
 
 ### From Pods in Kubernetes
 

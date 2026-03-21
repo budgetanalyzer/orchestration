@@ -4,81 +4,220 @@
 #
 # Runtime verification for Security Hardening v2 Phase 1 credential isolation.
 # Tests that per-service identities are enforced across PostgreSQL, RabbitMQ,
-# and Redis.
+# Redis, and ext-authz.
 #
 # Prerequisites: Tilt running with all infrastructure pods healthy.
 #
 # Usage:
 #   ./scripts/dev/verify-phase-1-credentials.sh
+#   ./scripts/dev/verify-phase-1-credentials.sh --destructive-redis-flushall
 
 set -euo pipefail
 
 PASSED=0
 FAILED=0
+SKIPPED=0
+DESTRUCTIVE_REDIS_FLUSHALL=false
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# ── Output helpers ─────────────────────────────────────────────────────────
+PORT_FORWARD_PIDS=()
+PORT_FORWARD_LOGS=()
+TMP_FILES=()
 
-section() { printf '\n━━━ %s ━━━\n' "$1"; }
-pass()    { printf '  ✓ %s\n' "$1"; PASSED=$((PASSED + 1)); }
-fail()    { printf '  ✗ %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
+usage() {
+    cat <<'EOF'
+Usage: ./scripts/dev/verify-phase-1-credentials.sh [--destructive-redis-flushall]
 
-# ── Secret reader ──────────────────────────────────────────────────────────
-
-read_secret() {
-    local ns="$1" name="$2" key="$3"
-    kubectl get secret "$name" -n "$ns" -o "jsonpath={.data['${key}']}" | base64 -d
+Options:
+  --destructive-redis-flushall  Exercise redis-ops FLUSHALL. This wipes Redis.
+  -h, --help                    Show this help text.
+EOF
 }
 
-# ── Pod discovery ──────────────────────────────────────────────────────────
-
-echo "=============================================="
-echo "  Phase 1 Credential Verification"
-echo "=============================================="
-
-POSTGRES_POD=$(kubectl get pods -n infrastructure -l app=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-RABBITMQ_POD=$(kubectl get pods -n infrastructure -l app=rabbitmq -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
-for var in POSTGRES_POD RABBITMQ_POD REDIS_POD; do
-    if [ -z "${!var}" ]; then
-        printf 'ERROR: %s not found. Is Tilt running?\n' "$var" >&2
-        exit 1
-    fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --destructive-redis-flushall)
+            DESTRUCTIVE_REDIS_FLUSHALL=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
 done
 
-# ── Read credentials from Kubernetes Secrets ───────────────────────────────
+section() { printf '\n=== %s ===\n' "$1"; }
+pass()    { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
+fail()    { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
+skip()    { printf '  [SKIP] %s\n' "$1"; SKIPPED=$((SKIPPED + 1)); }
 
-PG_ADMIN_USER=$(read_secret infrastructure postgresql-bootstrap-credentials username)
-PG_ADMIN_PASS=$(read_secret infrastructure postgresql-bootstrap-credentials password)
-PG_TXN_PASS=$(read_secret infrastructure postgresql-bootstrap-credentials transaction-service-password)
-PG_CUR_PASS=$(read_secret infrastructure postgresql-bootstrap-credentials currency-service-password)
-PG_PER_PASS=$(read_secret infrastructure postgresql-bootstrap-credentials permission-service-password)
+cleanup() {
+    set +e
+    for pid in "${PORT_FORWARD_PIDS[@]:-}"; do
+        kill "$pid" >/dev/null 2>&1 || true
+        wait "$pid" >/dev/null 2>&1 || true
+    done
+    for file in "${PORT_FORWARD_LOGS[@]:-}"; do
+        [ -n "${file:-}" ] && rm -f "$file"
+    done
+    for file in "${TMP_FILES[@]:-}"; do
+        [ -n "${file:-}" ] && rm -f "$file"
+    done
+}
 
-RMQ_ADMIN_USER=$(read_secret infrastructure rabbitmq-bootstrap-credentials username)
-RMQ_CS_USER=$(read_secret infrastructure rabbitmq-bootstrap-credentials currency-service-username)
+trap cleanup EXIT
 
-REDIS_OPS_USER=$(read_secret infrastructure redis-bootstrap-credentials ops-username)
-REDIS_OPS_PASS=$(read_secret infrastructure redis-bootstrap-credentials ops-password)
-REDIS_SG_USER=$(read_secret infrastructure redis-bootstrap-credentials session-gateway-username)
-REDIS_SG_PASS=$(read_secret infrastructure redis-bootstrap-credentials session-gateway-password)
-REDIS_EA_USER=$(read_secret infrastructure redis-bootstrap-credentials ext-authz-username)
-REDIS_EA_PASS=$(read_secret infrastructure redis-bootstrap-credentials ext-authz-password)
-REDIS_CS_USER=$(read_secret infrastructure redis-bootstrap-credentials currency-service-username)
-REDIS_CS_PASS=$(read_secret infrastructure redis-bootstrap-credentials currency-service-password)
+require_host_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        printf 'ERROR: required command not found: %s\n' "$1" >&2
+        exit 1
+    fi
+}
 
-# ── Infrastructure test helpers ────────────────────────────────────────────
+find_pod() {
+    local namespace="$1"
+    local selector="$2"
+
+    kubectl get pods -n "$namespace" -l "$selector" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
+}
+
+require_pod() {
+    local namespace="$1"
+    local selector="$2"
+    local label="$3"
+    local pod
+
+    pod=$(find_pod "$namespace" "$selector")
+    if [ -z "$pod" ]; then
+        printf 'ERROR: %s pod not found in namespace %s. Is Tilt running?\n' "$label" "$namespace" >&2
+        exit 1
+    fi
+
+    printf '%s' "$pod"
+}
+
+read_secret() {
+    local namespace="$1"
+    local secret_name="$2"
+    local key="$3"
+    local encoded
+
+    encoded=$(kubectl get secret "$secret_name" -n "$namespace" -o "jsonpath={.data['${key}']}" 2>/dev/null || true)
+    if [ -z "$encoded" ]; then
+        return 1
+    fi
+
+    printf '%s' "$encoded" | base64 -d
+}
+
+require_secret_value() {
+    local namespace="$1"
+    local secret_name="$2"
+    local key="$3"
+    local value
+
+    value=$(read_secret "$namespace" "$secret_name" "$key" || true)
+    if [ -z "$value" ]; then
+        printf 'ERROR: missing secret value %s/%s[%s]\n' "$namespace" "$secret_name" "$key" >&2
+        exit 1
+    fi
+
+    printf '%s' "$value"
+}
+
+start_port_forward() {
+    local namespace="$1"
+    local resource="$2"
+    local remote_port="$3"
+    local log_file
+    local pid
+    local forwarded_port
+
+    log_file=$(mktemp)
+    TMP_FILES+=("$log_file")
+
+    kubectl port-forward -n "$namespace" "$resource" ":${remote_port}" >"$log_file" 2>&1 &
+    pid=$!
+
+    PORT_FORWARD_PIDS+=("$pid")
+    PORT_FORWARD_LOGS+=("$log_file")
+
+    for _ in $(seq 1 50); do
+        if grep -q 'Forwarding from 127\.0\.0\.1:' "$log_file"; then
+            forwarded_port=$(sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' "$log_file" | head -n1)
+            if [ -n "$forwarded_port" ]; then
+                printf '%s' "$forwarded_port"
+                return 0
+            fi
+        fi
+
+        if ! kill -0 "$pid" >/dev/null 2>&1; then
+            break
+        fi
+
+        sleep 0.2
+    done
+
+    printf 'ERROR: failed to port-forward %s in namespace %s on remote port %s\n' "$resource" "$namespace" "$remote_port" >&2
+    cat "$log_file" >&2
+    exit 1
+}
+
+HTTP_STATUS=""
+HTTP_HEADERS=""
+HTTP_BODY=""
+
+http_request() {
+    local method="$1"
+    local url="$2"
+    local user="${3:-}"
+    local password="${4:-}"
+    local body="${5:-}"
+
+    HTTP_HEADERS=$(mktemp)
+    HTTP_BODY=$(mktemp)
+    TMP_FILES+=("$HTTP_HEADERS" "$HTTP_BODY")
+
+    local -a curl_args
+    curl_args=(curl -sS -D "$HTTP_HEADERS" -o "$HTTP_BODY" -w '%{http_code}' -X "$method")
+
+    if [ -n "$user" ]; then
+        curl_args+=(-u "${user}:${password}")
+    fi
+
+    if [ -n "$body" ]; then
+        curl_args+=(-H 'content-type: application/json' -d "$body")
+    fi
+
+    curl_args+=("$url")
+
+    HTTP_STATUS="$("${curl_args[@]}")"
+}
 
 pg_query() {
-    local user="$1" pass="$2" db="$3" sql="${4:-SELECT 1;}"
+    local user="$1"
+    local password="$2"
+    local database="$3"
+    local sql="${4:-SELECT 1;}"
+
     kubectl exec -n infrastructure "$POSTGRES_POD" -- \
         /bin/sh -ceu 'PGPASSWORD="$1" psql -X -tA -U "$2" -d "$3" -c "$4"' \
-        sh "$pass" "$user" "$db" "$sql" 2>&1 || true
+        sh "$password" "$user" "$database" "$sql" 2>&1 || true
 }
 
 redis_cmd() {
-    local user="$1" pass="$2"; shift 2
+    local user="$1"
+    local password="$2"
+    shift 2
+
     kubectl exec -n infrastructure "$REDIS_POD" -- \
-        redis-cli --user "$user" --pass "$pass" --no-auth-warning "$@" 2>&1 || true
+        redis-cli --user "$user" --pass "$password" --no-auth-warning "$@" 2>&1 || true
 }
 
 rmq_ctl() {
@@ -86,46 +225,85 @@ rmq_ctl() {
         rabbitmqctl --quiet "$@" 2>&1 || true
 }
 
-# ════════════════════════════════════════════════════════════════════════════
-# PostgreSQL
-# ════════════════════════════════════════════════════════════════════════════
+rmq_authenticate() {
+    kubectl exec -n infrastructure "$RABBITMQ_POD" -- \
+        rabbitmqctl authenticate_user "$1" "$2" >/dev/null 2>&1
+}
 
 pg_expect_ok() {
-    local user="$1" pass="$2" db="$3"
+    local user="$1"
+    local password="$2"
+    local database="$3"
     local out
-    out=$(pg_query "$user" "$pass" "$db")
+
+    out=$(pg_query "$user" "$password" "$database")
     if echo "$out" | grep -q '^1$'; then
-        pass "$user -> $db"
+        pass "$user -> $database"
     else
-        fail "$user -> $db (got: ${out:0:80})"
+        fail "$user -> $database (got: ${out:0:120})"
     fi
 }
 
 pg_expect_denied() {
-    local user="$1" pass="$2" db="$3"
+    local user="$1"
+    local password="$2"
+    local database="$3"
     local out
-    out=$(pg_query "$user" "$pass" "$db")
-    if echo "$out" | grep -qi 'denied\|FATAL'; then
-        pass "$user denied on $db"
+
+    out=$(pg_query "$user" "$password" "$database")
+    if echo "$out" | grep -qi 'permission denied\|FATAL'; then
+        pass "$user denied on $database"
     else
-        fail "$user NOT denied on $db (got: ${out:0:80})"
+        fail "$user NOT denied on $database (got: ${out:0:120})"
     fi
 }
+
+echo "=============================================="
+echo "  Phase 1 Credential Verification"
+echo "=============================================="
+
+require_host_command kubectl
+require_host_command curl
+
+POSTGRES_POD=$(require_pod infrastructure app=postgresql PostgreSQL)
+RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
+REDIS_POD=$(require_pod infrastructure app=redis Redis)
+EXT_AUTHZ_POD=$(require_pod default app=ext-authz ext-authz)
+
+PG_ADMIN_USER=$(require_secret_value infrastructure postgresql-bootstrap-credentials username)
+PG_ADMIN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials password)
+PG_TXN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials transaction-service-password)
+PG_CUR_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials currency-service-password)
+PG_PER_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials permission-service-password)
+
+RMQ_ADMIN_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials username)
+RMQ_ADMIN_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials password)
+RMQ_CS_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-username)
+RMQ_CS_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-password)
+
+REDIS_OPS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ops-username)
+REDIS_OPS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ops-password)
+REDIS_SG_USER=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-username)
+REDIS_SG_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
+REDIS_EA_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-username)
+REDIS_EA_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-password)
+REDIS_CS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-username)
+REDIS_CS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-password)
 
 section "PostgreSQL: Positive (service user -> own database)"
 
 pg_expect_ok "transaction_service" "$PG_TXN_PASS" "budget_analyzer"
-pg_expect_ok "currency_service"    "$PG_CUR_PASS" "currency"
-pg_expect_ok "permission_service"  "$PG_PER_PASS" "permission"
+pg_expect_ok "currency_service" "$PG_CUR_PASS" "currency"
+pg_expect_ok "permission_service" "$PG_PER_PASS" "permission"
 
 section "PostgreSQL: Negative (service user denied on other databases)"
 
 pg_expect_denied "transaction_service" "$PG_TXN_PASS" "currency"
 pg_expect_denied "transaction_service" "$PG_TXN_PASS" "permission"
-pg_expect_denied "currency_service"    "$PG_CUR_PASS" "budget_analyzer"
-pg_expect_denied "currency_service"    "$PG_CUR_PASS" "permission"
-pg_expect_denied "permission_service"  "$PG_PER_PASS" "budget_analyzer"
-pg_expect_denied "permission_service"  "$PG_PER_PASS" "currency"
+pg_expect_denied "currency_service" "$PG_CUR_PASS" "budget_analyzer"
+pg_expect_denied "currency_service" "$PG_CUR_PASS" "permission"
+pg_expect_denied "permission_service" "$PG_PER_PASS" "budget_analyzer"
+pg_expect_denied "permission_service" "$PG_PER_PASS" "currency"
 
 section "PostgreSQL: Break-glass (${PG_ADMIN_USER} -> all databases)"
 
@@ -133,96 +311,157 @@ pg_expect_ok "$PG_ADMIN_USER" "$PG_ADMIN_PASS" "budget_analyzer"
 pg_expect_ok "$PG_ADMIN_USER" "$PG_ADMIN_PASS" "currency"
 pg_expect_ok "$PG_ADMIN_USER" "$PG_ADMIN_PASS" "permission"
 
-# ════════════════════════════════════════════════════════════════════════════
-# RabbitMQ
-# ════════════════════════════════════════════════════════════════════════════
+section "RabbitMQ: Live credential and permission checks"
 
-section "RabbitMQ: User and permission verification"
+if rmq_authenticate "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"; then
+    pass "${RMQ_ADMIN_USER} credentials authenticate"
+else
+    fail "${RMQ_ADMIN_USER} credentials authenticate"
+fi
+
+if rmq_authenticate "$RMQ_CS_USER" "$RMQ_CS_PASS"; then
+    pass "${RMQ_CS_USER} credentials authenticate"
+else
+    fail "${RMQ_CS_USER} credentials authenticate"
+fi
 
 RMQ_USERS=$(rmq_ctl list_users)
-
-# Positive: admin user with administrator tag
 if echo "$RMQ_USERS" | grep "^${RMQ_ADMIN_USER}" | grep -q 'administrator'; then
     pass "${RMQ_ADMIN_USER} exists with administrator tag"
 else
     fail "${RMQ_ADMIN_USER} missing or lacks administrator tag"
 fi
 
-# Positive: currency-service user exists
-if echo "$RMQ_USERS" | grep -q "^${RMQ_CS_USER}"; then
-    pass "${RMQ_CS_USER} user exists"
-else
-    fail "${RMQ_CS_USER} user missing"
-fi
-
-# Negative: guest user removed
 if echo "$RMQ_USERS" | grep -q '^guest'; then
     fail "guest user still exists"
 else
     pass "guest user removed"
 fi
 
-# Negative: currency-service configure permission is scoped (not ".*")
-CS_PERMS=$(rmq_ctl list_user_permissions "$RMQ_CS_USER")
-CS_CONFIGURE=$(echo "$CS_PERMS" | awk -F'\t' '/^\// { print $2 }')
-
-if [ -n "$CS_CONFIGURE" ] && [ "$CS_CONFIGURE" != ".*" ]; then
-    pass "${RMQ_CS_USER} configure permission scoped"
+RMQ_API_PORT=$(start_port_forward infrastructure service/rabbitmq 15672)
+http_request GET "http://127.0.0.1:${RMQ_API_PORT}/api/whoami" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
+if [ "$HTTP_STATUS" = "200" ] \
+    && grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${RMQ_ADMIN_USER}\"" "$HTTP_BODY" \
+    && grep -q 'administrator' "$HTTP_BODY"; then
+    pass "${RMQ_ADMIN_USER} can access Management API"
 else
-    fail "${RMQ_CS_USER} configure permission unrestricted or missing"
+    fail "${RMQ_ADMIN_USER} cannot access Management API (status=${HTTP_STATUS})"
 fi
 
-# Break-glass: admin has full permissions
-ADMIN_PERMS=$(rmq_ctl list_user_permissions "$RMQ_ADMIN_USER")
-ADMIN_CONFIGURE=$(echo "$ADMIN_PERMS" | awk -F'\t' '/^\// { print $2 }')
-
-if [ "$ADMIN_CONFIGURE" = ".*" ]; then
-    pass "${RMQ_ADMIN_USER} has full permissions"
+http_request GET "http://127.0.0.1:${RMQ_API_PORT}/api/permissions/%2F" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
+if [ "$HTTP_STATUS" = "200" ] \
+    && grep -Eq "\"user\"[[:space:]]*:[[:space:]]*\"${RMQ_CS_USER}\"" "$HTTP_BODY" \
+    && grep -q '"configure"' "$HTTP_BODY" \
+    && grep -q '"write"' "$HTTP_BODY" \
+    && grep -q '"read"' "$HTTP_BODY"; then
+    pass "${RMQ_ADMIN_USER} can inspect broker permissions via Management API"
 else
-    fail "${RMQ_ADMIN_USER} configure permission restricted: ${ADMIN_CONFIGURE}"
+    fail "${RMQ_ADMIN_USER} cannot inspect broker permissions via Management API (status=${HTTP_STATUS})"
 fi
 
-# ════════════════════════════════════════════════════════════════════════════
-# Redis
-# ════════════════════════════════════════════════════════════════════════════
+RMQ_PERMISSIONS=$(rmq_ctl list_permissions -p /)
+if echo "$RMQ_PERMISSIONS" | grep -Eq "^${RMQ_ADMIN_USER}[[:space:]]" \
+    && echo "$RMQ_PERMISSIONS" | grep -Eq "^${RMQ_CS_USER}[[:space:]]"; then
+    pass "rabbitmqctl list_permissions returns broker permissions for /"
+else
+    fail "rabbitmqctl list_permissions missing expected entries (got: ${RMQ_PERMISSIONS:0:200})"
+fi
 
-VKEY="__phase1_verify__"
+RMQ_ALLOWED_EXCHANGE="amq.gen.phase1.verify.$RANDOM.$RANDOM"
+http_request \
+    PUT \
+    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_ALLOWED_EXCHANGE}" \
+    "$RMQ_CS_USER" \
+    "$RMQ_CS_PASS" \
+    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
+if [ "$HTTP_STATUS" = "201" ] || [ "$HTTP_STATUS" = "204" ]; then
+    pass "${RMQ_CS_USER} can configure allowed exchange ${RMQ_ALLOWED_EXCHANGE}"
+else
+    fail "${RMQ_CS_USER} cannot configure allowed exchange ${RMQ_ALLOWED_EXCHANGE} (status=${HTTP_STATUS})"
+fi
+
+http_request \
+    POST \
+    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/amq.default/publish" \
+    "$RMQ_CS_USER" \
+    "$RMQ_CS_PASS" \
+    '{"properties":{},"routing_key":"phase1.verify.noqueue","payload":"phase1","payload_encoding":"string"}'
+if [ "$HTTP_STATUS" = "200" ]; then
+    pass "${RMQ_CS_USER} can write to allowed exchange amq.default"
+else
+    fail "${RMQ_CS_USER} cannot write to allowed exchange amq.default (status=${HTTP_STATUS})"
+fi
+
+RMQ_FORBIDDEN_EXCHANGE="phase1.forbidden.verify.$RANDOM.$RANDOM"
+http_request \
+    PUT \
+    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" \
+    "$RMQ_ADMIN_USER" \
+    "$RMQ_ADMIN_PASS" \
+    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
+if [ "$HTTP_STATUS" = "201" ] || [ "$HTTP_STATUS" = "204" ]; then
+    pass "${RMQ_ADMIN_USER} can configure break-glass exchange ${RMQ_FORBIDDEN_EXCHANGE}"
+else
+    fail "${RMQ_ADMIN_USER} cannot configure break-glass exchange ${RMQ_FORBIDDEN_EXCHANGE} (status=${HTTP_STATUS})"
+fi
+
+http_request \
+    PUT \
+    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" \
+    "$RMQ_CS_USER" \
+    "$RMQ_CS_PASS" \
+    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
+if [ "$HTTP_STATUS" = "403" ]; then
+    pass "${RMQ_CS_USER} denied configure on forbidden exchange"
+else
+    fail "${RMQ_CS_USER} NOT denied configure on forbidden exchange (status=${HTTP_STATUS})"
+fi
+
+http_request \
+    POST \
+    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}/publish" \
+    "$RMQ_CS_USER" \
+    "$RMQ_CS_PASS" \
+    '{"properties":{},"routing_key":"phase1.verify","payload":"phase1","payload_encoding":"string"}'
+if [ "$HTTP_STATUS" = "403" ]; then
+    pass "${RMQ_CS_USER} denied write on forbidden exchange"
+else
+    fail "${RMQ_CS_USER} NOT denied write on forbidden exchange (status=${HTTP_STATUS})"
+fi
+
+http_request DELETE "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_ALLOWED_EXCHANGE}" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
+http_request DELETE "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
 
 section "Redis: Positive (authorized operations)"
 
-# session-gateway: SET/GET on spring:session:*
-SG_SET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" SET "spring:session:${VKEY}" "ok")
-SG_GET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "spring:session:${VKEY}")
-redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "spring:session:${VKEY}" >/dev/null 2>&1 || true
+VERIFY_KEY="__phase1_verify__"
 
+SG_SET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" SET "spring:session:${VERIFY_KEY}" "ok")
+SG_GET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "spring:session:${VERIFY_KEY}")
+redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "spring:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if [ "$SG_SET" = "OK" ] && [ "$SG_GET" = "ok" ]; then
     pass "session-gateway SET/GET on spring:session:*"
 else
     fail "session-gateway SET/GET on spring:session:* (SET=${SG_SET}, GET=${SG_GET})"
 fi
 
-# session-gateway: write to extauthz:session:* (dual namespace access)
-EA_SG_HSET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HSET "extauthz:session:${VKEY}" "field" "value")
-redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "extauthz:session:${VKEY}" >/dev/null 2>&1 || true
-
+EA_SG_HSET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HSET "extauthz:session:${VERIFY_KEY}" "field" "value")
+redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "extauthz:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if echo "$EA_SG_HSET" | grep -qE '^[0-9]+$'; then
     pass "session-gateway HSET on extauthz:session:*"
 else
     fail "session-gateway HSET on extauthz:session:* (${EA_SG_HSET})"
 fi
 
-# ext-authz: read extauthz session hashes
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "extauthz:session:${VKEY}" "field" "value" >/dev/null 2>&1
-EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "extauthz:session:${VKEY}")
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${VKEY}" >/dev/null 2>&1 || true
-
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "extauthz:session:${VERIFY_KEY}" "field" "value" >/dev/null 2>&1
+EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "extauthz:session:${VERIFY_KEY}")
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if echo "$EA_READ" | grep -q 'value'; then
     pass "ext-authz HGETALL on extauthz:session:*"
 else
     fail "ext-authz HGETALL on extauthz:session:* (${EA_READ})"
 fi
 
-# ext-authz: PING
 EA_PING=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" PING)
 if [ "$EA_PING" = "PONG" ]; then
     pass "ext-authz PING"
@@ -230,11 +469,9 @@ else
     fail "ext-authz PING (${EA_PING})"
 fi
 
-# currency-service: SET/GET on currency-service:*
-CS_SET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" SET "currency-service:${VKEY}" "ok")
-CS_GET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "currency-service:${VKEY}")
-redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" DEL "currency-service:${VKEY}" >/dev/null 2>&1 || true
-
+CS_SET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" SET "currency-service:${VERIFY_KEY}" "ok")
+CS_GET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "currency-service:${VERIFY_KEY}")
+redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" DEL "currency-service:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if [ "$CS_SET" = "OK" ] && [ "$CS_GET" = "ok" ]; then
     pass "currency-service SET/GET on currency-service:*"
 else
@@ -243,15 +480,13 @@ fi
 
 section "Redis: Negative (unauthorized operations denied)"
 
-# ext-authz: SET denied (command not in allow-list)
-EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "extauthz:session:${VKEY}" "nope")
+EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "extauthz:session:${VERIFY_KEY}" "nope")
 if echo "$EA_SET" | grep -qi 'NOPERM'; then
     pass "ext-authz denied SET command"
 else
     fail "ext-authz NOT denied SET (${EA_SET})"
 fi
 
-# ext-authz: wrong key pattern
 EA_CROSS=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "spring:session:anything")
 if echo "$EA_CROSS" | grep -qi 'NOPERM'; then
     pass "ext-authz denied on spring:session:* keys"
@@ -259,7 +494,6 @@ else
     fail "ext-authz NOT denied on spring:session:* (${EA_CROSS})"
 fi
 
-# currency-service: wrong key pattern
 CS_CROSS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "spring:session:anything")
 if echo "$CS_CROSS" | grep -qi 'NOPERM'; then
     pass "currency-service denied on spring:session:* keys"
@@ -267,7 +501,6 @@ else
     fail "currency-service NOT denied on spring:session:* (${CS_CROSS})"
 fi
 
-# session-gateway: wrong key pattern
 SG_CROSS=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "currency-service:anything")
 if echo "$SG_CROSS" | grep -qi 'NOPERM'; then
     pass "session-gateway denied on currency-service:* keys"
@@ -277,31 +510,91 @@ fi
 
 section "Redis: Break-glass (${REDIS_OPS_USER})"
 
-OPS_DBSIZE=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DBSIZE)
-if echo "$OPS_DBSIZE" | grep -qi 'keys'; then
-    pass "${REDIS_OPS_USER} DBSIZE"
+OPS_WHOAMI=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL WHOAMI)
+if [ "$OPS_WHOAMI" = "$REDIS_OPS_USER" ]; then
+    pass "${REDIS_OPS_USER} ACL WHOAMI"
 else
-    fail "${REDIS_OPS_USER} DBSIZE (${OPS_DBSIZE})"
+    fail "${REDIS_OPS_USER} ACL WHOAMI (${OPS_WHOAMI})"
 fi
 
 OPS_CONFIG=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" CONFIG GET maxmemory)
 if echo "$OPS_CONFIG" | grep -q 'maxmemory'; then
-    pass "${REDIS_OPS_USER} CONFIG GET (admin command)"
+    pass "${REDIS_OPS_USER} CONFIG GET"
 else
     fail "${REDIS_OPS_USER} CONFIG GET (${OPS_CONFIG})"
 fi
 
-# ════════════════════════════════════════════════════════════════════════════
-# Summary
-# ════════════════════════════════════════════════════════════════════════════
+OPS_DB15_SET=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 SET "__phase1_flushdb__" "ok")
+OPS_DB15_FLUSH=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 FLUSHDB ASYNC)
+sleep 1
+OPS_DB15_EXISTS=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 EXISTS "__phase1_flushdb__")
+if [ "$OPS_DB15_SET" = "OK" ] && [ "$OPS_DB15_FLUSH" = "OK" ] && [ "$OPS_DB15_EXISTS" = "0" ]; then
+    pass "${REDIS_OPS_USER} FLUSHDB on isolated DB"
+else
+    fail "${REDIS_OPS_USER} FLUSHDB on isolated DB (SET=${OPS_DB15_SET}, FLUSH=${OPS_DB15_FLUSH}, EXISTS=${OPS_DB15_EXISTS})"
+fi
+
+if [ "$DESTRUCTIVE_REDIS_FLUSHALL" = true ]; then
+    OPS_FLUSHALL_KEY="__phase1_flushall__"
+    redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" SET "$OPS_FLUSHALL_KEY" "ok" >/dev/null 2>&1
+    OPS_FLUSHALL=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" FLUSHALL ASYNC)
+    sleep 1
+    OPS_FLUSHALL_EXISTS=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" EXISTS "$OPS_FLUSHALL_KEY")
+    if [ "$OPS_FLUSHALL" = "OK" ] && [ "$OPS_FLUSHALL_EXISTS" = "0" ]; then
+        pass "${REDIS_OPS_USER} FLUSHALL ASYNC"
+    else
+        fail "${REDIS_OPS_USER} FLUSHALL ASYNC (FLUSH=${OPS_FLUSHALL}, EXISTS=${OPS_FLUSHALL_EXISTS})"
+    fi
+else
+    skip "${REDIS_OPS_USER} FLUSHALL not run (pass --destructive-redis-flushall to exercise it)"
+fi
+
+section "ext-authz: Live Redis username/password validation"
+
+if kubectl get pod -n default "$EXT_AUTHZ_POD" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep -q '^true$'; then
+    pass "ext-authz pod is Ready"
+else
+    fail "ext-authz pod is not Ready"
+fi
+
+EXT_AUTHZ_HEALTH_PORT=$(start_port_forward default deployment/ext-authz 8090)
+EXT_AUTHZ_HTTP_PORT=$(start_port_forward default deployment/ext-authz 9002)
+
+http_request GET "http://127.0.0.1:${EXT_AUTHZ_HEALTH_PORT}/healthz"
+if [ "$HTTP_STATUS" = "200" ] && grep -qi '^ok$' "$HTTP_BODY"; then
+    pass "ext-authz /healthz returns 200"
+else
+    fail "ext-authz /healthz failed (status=${HTTP_STATUS})"
+fi
+
+EXT_AUTHZ_SESSION_ID="phase1-verify-$RANDOM-$RANDOM"
+"${SCRIPT_DIR}/seed-ext-authz-session.sh" "$EXT_AUTHZ_SESSION_ID" >/dev/null
+
+AUTH_HEADERS=$(mktemp)
+TMP_FILES+=("$AUTH_HEADERS")
+AUTH_STATUS=$(curl -sS -D "$AUTH_HEADERS" -o /dev/null -w '%{http_code}' \
+    -H "Cookie: SESSION=${EXT_AUTHZ_SESSION_ID}" \
+    -H 'X-Envoy-Original-Path: /api/v1/currencies' \
+    "http://127.0.0.1:${EXT_AUTHZ_HTTP_PORT}/check")
+
+if [ "$AUTH_STATUS" = "200" ] \
+    && grep -qi '^X-User-Id: test-user-001' "$AUTH_HEADERS" \
+    && grep -qi '^X-Roles: ROLE_USER,ROLE_ADMIN' "$AUTH_HEADERS" \
+    && grep -qi '^X-Permissions: transactions:read,transactions:write,currencies:read' "$AUTH_HEADERS"; then
+    pass "ext-authz resolves a seeded session via Redis username/password auth"
+else
+    fail "ext-authz session lookup failed (status=${AUTH_STATUS})"
+fi
+
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${EXT_AUTHZ_SESSION_ID}" >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="
-TOTAL=$((PASSED + FAILED))
+TOTAL=$((PASSED + FAILED + SKIPPED))
 if [ "$FAILED" -eq 0 ]; then
-    echo "  All ${TOTAL} Phase 1 credential checks passed"
+    echo "  ${PASSED} passed, ${SKIPPED} skipped (out of ${TOTAL})"
 else
-    echo "  ${PASSED} passed, ${FAILED} FAILED (out of ${TOTAL})"
+    echo "  ${PASSED} passed, ${FAILED} failed, ${SKIPPED} skipped (out of ${TOTAL})"
 fi
 echo "=============================================="
 

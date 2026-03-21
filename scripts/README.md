@@ -119,6 +119,11 @@ Key scripts:
 - `scripts/dev/check-tilt-prerequisites.sh` - Tooling/repo preflight checks and optional runtime security verification.
 - `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
 - `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio, Kyverno smoke policy).
+- `scripts/dev/verify-phase-1-credentials.sh` - Phase 1 runtime proof for PostgreSQL, RabbitMQ, Redis ACLs, and ext-authz.
+
+`verify-phase-1-credentials.sh` defaults to non-destructive checks. Pass
+`--destructive-redis-flushall` only when you intentionally want the verifier to
+wipe Redis and prove the `redis-ops` `FLUSHALL` path.
 
 ## Adding New Scripts
 

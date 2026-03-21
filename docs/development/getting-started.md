@@ -40,14 +40,18 @@ cd path/to/workspace/orchestration
 vim .env          # Review infra password defaults; add Auth0 + FRED credentials
 tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
+./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
 
 Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
-PostgreSQL now uses a `postgres_admin` bootstrap user plus distinct per-service
-database users by default. RabbitMQ and Redis can keep their staged local
-password alignment until Steps 3 and 4 land.
+PostgreSQL uses a `postgres_admin` bootstrap user plus distinct per-service
+database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
+broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
+`currency-service`, `redis-ops`) plus a restricted probe-only `default` user.
+If your PostgreSQL, RabbitMQ, or Redis state predates this hardening, recreate
+the relevant PVC before trusting old credentials or broker definitions.
 
 > **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
 >

@@ -58,6 +58,7 @@ kubectl get gateway ingress-gateway -n default -o yaml
 **Purpose**: Per-request session validation via Redis lookup
 
 **Responsibilities**:
+- Authenticates to Redis with the dedicated `ext-authz` ACL user
 - Validates session tokens by looking up `extauthz:session:{id}` in Redis
 - Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
 - Returns 401 for invalid/expired sessions (request rejected by Envoy)
@@ -111,7 +112,7 @@ kubectl logs deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Stores Auth0 tokens in Redis for refresh
+- Stores Auth0 tokens in Redis for refresh using the dedicated `session-gateway` ACL user
 - Dual-writes session data (userId, roles, permissions) to ext_authz Redis schema
 - Issues HttpOnly, Secure session cookies to browsers
 - Proactive token refresh before expiration (includes permission re-fetch and ext_authz session update)
@@ -136,6 +137,9 @@ REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastru
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
+
+`redis-ops` is a maintenance identity only. Application paths use the
+service-specific Redis ACL users, not a shared password.
 
 **Repository**: https://github.com/budgetanalyzer/session-gateway
 

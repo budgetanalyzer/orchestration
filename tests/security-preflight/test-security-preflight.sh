@@ -52,10 +52,13 @@ fi
 kind create cluster --config "$KIND_CONFIG" >/dev/null
 kubectl config use-context kind-kind >/dev/null
 
-# DinD needs kubeconfig endpoint rewrite from localhost to dind service.
+# DinD needs kubeconfig endpoint rewrite away from the host-only localhost
+# address emitted by Kind.
 if [ -n "${DOCKER_HOST:-}" ]; then
     API_PORT=$(kubectl config view -o jsonpath='{.clusters[?(@.name=="kind-kind")].cluster.server}' | sed 's/.*://')
-    kubectl config set-cluster kind-kind --server="https://dind:${API_PORT}" --insecure-skip-tls-verify=true >/dev/null
+    DOCKER_ENDPOINT="${DOCKER_HOST#tcp://}"
+    DOCKER_ENDPOINT_HOST="${DOCKER_ENDPOINT%%:*}"
+    kubectl config set-cluster kind-kind --server="https://${DOCKER_ENDPOINT_HOST}:${API_PORT}" --insecure-skip-tls-verify=true >/dev/null
 fi
 
 kubectl get nodes >/dev/null

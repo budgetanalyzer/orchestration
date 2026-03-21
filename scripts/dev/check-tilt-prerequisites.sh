@@ -83,6 +83,10 @@ check_file() {
     fi
 }
 
+expected_kind_node_image() {
+    awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$ORCHESTRATION_DIR/kind-cluster-config.yaml"
+}
+
 echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
@@ -159,6 +163,20 @@ CLUSTER_CONNECTED=false
 
 if kind get clusters 2>/dev/null | grep -q "kind"; then
     echo -e "${GREEN}✓${NC} Kind cluster 'kind' exists"
+
+    EXPECTED_KIND_IMAGE="$(expected_kind_node_image)"
+    ACTUAL_KIND_IMAGE="$(docker inspect kind-control-plane --format '{{.Config.Image}}' 2>/dev/null || true)"
+    if [ -n "$EXPECTED_KIND_IMAGE" ] && [ -n "$ACTUAL_KIND_IMAGE" ]; then
+        if [ "$ACTUAL_KIND_IMAGE" = "$EXPECTED_KIND_IMAGE" ]; then
+            echo -e "${GREEN}✓${NC} Kind node image matches config (${ACTUAL_KIND_IMAGE})"
+        else
+            echo -e "${RED}✗${NC} Kind node image does not match config"
+            echo "  Expected: $EXPECTED_KIND_IMAGE"
+            echo "  Actual:   $ACTUAL_KIND_IMAGE"
+            echo "  Recreate with: kind delete cluster --name kind && cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
+            ((ERRORS++))
+        fi
+    fi
 
     # Check if kubectl can connect
     if kubectl cluster-info --context kind-kind &> /dev/null; then

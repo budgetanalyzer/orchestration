@@ -573,19 +573,25 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Namespace labeling for sidecar injection
+# Namespace labeling for sidecar injection and Pod Security Admission
 local_resource(
     'istio-injection',
     cmd='''
         kubectl label namespace default istio-injection=enabled --overwrite
         kubectl label namespace default pod-security.kubernetes.io/warn=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace default pod-security.kubernetes.io/audit=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/audit-version=v1.32 --overwrite
         kubectl label namespace infrastructure istio-injection=disabled --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/warn=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/audit-version=v1.32 --overwrite
         kubectl label namespace envoy-gateway-system istio-injection=disabled --overwrite
         kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn=baseline --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit=baseline --overwrite
+        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
     resource_deps=['istiod', 'envoy-gateway'],
     labels=['infrastructure'],
@@ -610,12 +616,16 @@ local_resource(
 local_resource(
     'kyverno',
     cmd='''
-        helm repo add kyverno https://kyverno.github.io/kyverno >/dev/null 2>&1 || true
+        helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
         helm repo update kyverno >/dev/null
         helm upgrade --install kyverno kyverno/kyverno \
             --namespace kyverno \
             --create-namespace \
             --version 3.7.1 \
+            --set admissionController.replicas=1 \
+            --set backgroundController.replicas=1 \
+            --set cleanupController.replicas=1 \
+            --set reportsController.replicas=1 \
             --wait
     ''',
     resource_deps=['istio-security-policies'],
@@ -715,4 +725,3 @@ cmd_button(
     text='Run Tests',
     location=location.RESOURCE
 )
-

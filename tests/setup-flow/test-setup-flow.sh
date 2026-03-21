@@ -142,12 +142,16 @@ fi
 # Set kubectl context
 kubectl config use-context kind-kind &>/dev/null || true
 
-# For DinD: Update kubeconfig to use dind hostname instead of localhost
+# For DinD: Update kubeconfig to use the Docker endpoint host instead of the
+# host-only localhost address emitted by Kind.
 if [ -n "$DOCKER_HOST" ]; then
     print_test "Updating kubeconfig for DinD environment..."
     API_PORT=$(kubectl config view -o jsonpath='{.clusters[?(@.name=="kind-kind")].cluster.server}' | sed 's/.*://')
-    # Set server and skip TLS verification (cert was issued for 0.0.0.0, not dind)
-    kubectl config set-cluster kind-kind --server="https://dind:${API_PORT}" --insecure-skip-tls-verify=true
+    DOCKER_ENDPOINT="${DOCKER_HOST#tcp://}"
+    DOCKER_ENDPOINT_HOST="${DOCKER_ENDPOINT%%:*}"
+    # Set server and skip TLS verification (cert is issued for the inner node's
+    # forwarded address, not the DinD-facing host alias).
+    kubectl config set-cluster kind-kind --server="https://${DOCKER_ENDPOINT_HOST}:${API_PORT}" --insecure-skip-tls-verify=true
 
     # Verify connectivity
     if kubectl get nodes &>/dev/null; then
@@ -187,6 +191,14 @@ if [ "$CALICO_DESIRED" -gt 0 ] && [ "$CALICO_READY" -eq "$CALICO_DESIRED" ]; the
     pass_test "Calico daemonset is ready (${CALICO_READY}/${CALICO_DESIRED})"
 else
     fail_test "Calico daemonset is not ready (${CALICO_READY}/${CALICO_DESIRED})"
+fi
+
+print_test "Verifying CoreDNS readiness..."
+
+if kubectl rollout status deployment/coredns -n kube-system --timeout=180s >/dev/null; then
+    pass_test "CoreDNS is ready"
+else
+    fail_test "CoreDNS is not ready after Calico installation"
 fi
 
 # =============================================================================

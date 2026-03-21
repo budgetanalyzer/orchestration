@@ -1,8 +1,10 @@
 # Phase 1: ext_authz Service + Redis Session Schema
 
+> Status: Historical plan, superseded by the current ext_authz HTTP implementation and the active [Security Hardening Plan v2](./security-hardening-v2.md). This document is retained for context and does not describe the current Phase 0 baseline.
+
 ## Context
 
-This is Phase 1 of the [unified-session-gateway migration](../../../architecture-conversations-private/docs/plans/unified-session-gateway.md) — replacing JWTs with opaque Redis-backed tokens and Envoy ext_authz for per-request validation.
+This was Phase 1 of an earlier session hardening migration concept for replacing JWTs with opaque Redis-backed tokens and Envoy ext_authz for per-request validation.
 
 Phase 1 builds the ext_authz gRPC service and defines the Redis session schema. It deploys to the Kind cluster via Tilt alongside existing services. **No changes to session-gateway or other service repos** — everything lives in the orchestration repo.
 

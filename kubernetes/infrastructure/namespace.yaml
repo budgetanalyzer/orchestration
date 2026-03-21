@@ -5,4 +5,6 @@ metadata:
   labels:
     app.kubernetes.io/component: infrastructure
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: v1.32
     pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: v1.32

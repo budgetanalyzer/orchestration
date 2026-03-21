@@ -40,12 +40,40 @@ print_warning() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
+expected_kind_node_image() {
+    awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$SCRIPT_DIR/kind-cluster-config.yaml"
+}
+
+check_kind_cluster_node_image() {
+    local expected_image
+    local actual_image
+
+    expected_image="$(expected_kind_node_image)"
+    actual_image="$(docker inspect kind-control-plane --format '{{.Config.Image}}' 2>/dev/null || true)"
+
+    if [[ -z "$expected_image" || -z "$actual_image" ]]; then
+        return 0
+    fi
+
+    if [[ "$actual_image" != "$expected_image" ]]; then
+        print_error "Detected existing Kind cluster with node image '$actual_image'"
+        echo "  This branch expects '$expected_image' from kind-cluster-config.yaml."
+        echo "  Rebuild with:"
+        echo "    kind delete cluster --name kind"
+        echo "    kind create cluster --config \"$SCRIPT_DIR/kind-cluster-config.yaml\""
+        echo "  Then rerun ./setup.sh"
+        exit 1
+    fi
+}
+
 check_kind_cluster_network_model() {
     if ! kubectl cluster-info --context kind-kind >/dev/null 2>&1; then
         print_error "Cannot connect to Kind cluster context (kind-kind)"
         echo "  Try: kubectl config use-context kind-kind"
         exit 1
     fi
+
+    check_kind_cluster_node_image
 
     if kubectl get daemonset kindnet -n kube-system >/dev/null 2>&1; then
         print_error "Detected existing Kind cluster created with default CNI (kindnet)"
@@ -130,7 +158,7 @@ check_kind_cluster_network_model
 # =============================================================================
 print_step "Installing/validating Calico CNI..."
 "$SCRIPT_DIR/scripts/dev/install-calico.sh"
-print_success "Calico is installed and ready"
+print_success "Calico and CoreDNS are ready"
 
 # =============================================================================
 # Step 4: Configure DNS

@@ -7,6 +7,8 @@ set -euo pipefail
 CALICO_VERSION="v3.29.3"
 CALICO_MANIFEST_URL="https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
 CALICO_NAMESPACE="kube-system"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+MIN_INOTIFY_INSTANCES="${MIN_INOTIFY_INSTANCES:-1024}"
 
 print_step() {
     echo "▶ $1"
@@ -59,31 +61,89 @@ ensure_cluster_uses_disable_default_cni_model() {
     fi
 }
 
-main() {
-    require_cluster_access
-    ensure_cluster_uses_disable_default_cni_model
-
-    if is_calico_ready; then
-        print_success "Calico already installed and ready (${CALICO_VERSION})"
-        exit 0
+ensure_kind_node_inotify_budget() {
+    if ! command -v kind >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+        return 0
     fi
 
-    print_step "Installing Calico (${CALICO_VERSION})..."
-    kubectl apply -f "${CALICO_MANIFEST_URL}" >/dev/null
+    local nodes=()
+    local node
+    local current_limit
+    local updated_nodes=0
 
-    print_step "Waiting for calico-node daemonset rollout..."
-    kubectl rollout status daemonset/calico-node -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+    mapfile -t nodes < <(kind get nodes --name "${KIND_CLUSTER_NAME}" 2>/dev/null || true)
 
-    print_step "Waiting for calico-kube-controllers deployment..."
-    kubectl wait --for=condition=Available deployment/calico-kube-controllers -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+    if [[ ${#nodes[@]} -eq 0 ]]; then
+        return 0
+    fi
 
-    if ! is_calico_ready; then
-        print_error "Calico resources exist but are not ready"
-        kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=calico-node || true
+    for node in "${nodes[@]}"; do
+        current_limit="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)"
+
+        if ! [[ "${current_limit}" =~ ^[0-9]+$ ]]; then
+            print_error "Could not read fs.inotify.max_user_instances from Kind node ${node}"
+            exit 1
+        fi
+
+        if (( current_limit < MIN_INOTIFY_INSTANCES )); then
+            docker exec "${node}" sysctl -w "fs.inotify.max_user_instances=${MIN_INOTIFY_INSTANCES}" >/dev/null
+            updated_nodes=$((updated_nodes + 1))
+        fi
+    done
+
+    if (( updated_nodes > 0 )); then
+        print_step "Raised fs.inotify.max_user_instances to ${MIN_INOTIFY_INSTANCES} on ${updated_nodes} Kind node(s)"
+    fi
+}
+
+ensure_kube_proxy_ready() {
+    if ! kubectl get daemonset kube-proxy -n "${CALICO_NAMESPACE}" >/dev/null 2>&1; then
+        print_error "kube-proxy daemonset not found in ${CALICO_NAMESPACE}"
         exit 1
     fi
 
-    print_success "Calico installed and ready (${CALICO_VERSION})"
+    print_step "Waiting for kube-proxy daemonset rollout..."
+    if ! kubectl rollout status daemonset/kube-proxy -n "${CALICO_NAMESPACE}" --timeout=2m >/dev/null; then
+        print_error "kube-proxy did not become ready"
+        kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=kube-proxy || true
+        kubectl logs -n "${CALICO_NAMESPACE}" -l k8s-app=kube-proxy --tail=50 || true
+        exit 1
+    fi
+}
+
+main() {
+    require_cluster_access
+    ensure_cluster_uses_disable_default_cni_model
+    ensure_kind_node_inotify_budget
+    ensure_kube_proxy_ready
+
+    if is_calico_ready; then
+        print_step "Calico already ready (${CALICO_VERSION})"
+    else
+        print_step "Installing Calico (${CALICO_VERSION})..."
+        kubectl apply -f "${CALICO_MANIFEST_URL}" >/dev/null
+
+        print_step "Waiting for calico-node daemonset rollout..."
+        kubectl rollout status daemonset/calico-node -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+
+        print_step "Waiting for calico-kube-controllers deployment..."
+        kubectl wait --for=condition=Available deployment/calico-kube-controllers -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+
+        if ! is_calico_ready; then
+            print_error "Calico resources exist but are not ready"
+            kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=calico-node || true
+            exit 1
+        fi
+    fi
+
+    print_step "Waiting for CoreDNS deployment (confirms CNI is functional)..."
+    if ! kubectl rollout status deployment/coredns -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null; then
+        print_error "CoreDNS did not become ready after Calico setup"
+        kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=kube-dns || true
+        exit 1
+    fi
+
+    print_success "Calico and CoreDNS are ready (${CALICO_VERSION})"
 }
 
 main "$@"

@@ -55,11 +55,13 @@ From the orchestration root:
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile.test-env` | Test image with all prerequisites |
 | `docker-compose.test.yml` | Orchestrates DinD and test runner |
 | `run-test.sh` | Entry point script (run on host) |
 | `test-setup-flow.sh` | Test script (runs in container) |
 | `setup-test-wrapper.sh` | Modified setup for testing |
+
+Shared test environment:
+- `tests/shared/Dockerfile.test-env` (single source of truth used by setup-flow and security-preflight suites)
 
 ## Test Output
 
@@ -67,6 +69,21 @@ From the orchestration root:
 - **Exit code 1**: One or more tests failed
 
 The test outputs detailed logs for each step and a summary showing passed/failed counts.
+
+## Shared Test-Env Contract
+
+This suite depends on the shared test image contract. The test runner image must include:
+
+- `docker`
+- `kubectl`
+- `kind`
+- `helm`
+- `tilt`
+- `mkcert`
+- `git`
+- `certutil`
+
+`run-test.sh` validates this contract before starting DinD.
 
 ## Troubleshooting
 

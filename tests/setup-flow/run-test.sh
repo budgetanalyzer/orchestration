@@ -147,6 +147,23 @@ fi
 print_success "Docker daemon is ready"
 
 # =============================================================================
+# Step 4b: Verify shared test environment contract
+# =============================================================================
+print_step "Verifying shared test environment contract..."
+
+docker compose -f docker-compose.test.yml exec -T test-runner bash -lc '
+    set -e
+    for cmd in docker kubectl kind helm tilt mkcert git certutil; do
+        command -v "$cmd" >/dev/null || {
+            echo "Missing required tool in test image: $cmd" >&2
+            exit 1
+        }
+    done
+'
+
+print_success "Shared test environment contract verified"
+
+# =============================================================================
 # Step 5: Copy repos into container
 # =============================================================================
 print_step "Copying repositories into container..."
@@ -156,9 +173,6 @@ CONTAINER_ID=$(docker compose -f docker-compose.test.yml ps -q test-runner)
 for repo in "${REPOS[@]}"; do
     docker cp "$TEMP_REPOS_DIR/$repo" "$CONTAINER_ID:/repos/$repo"
 done
-
-# Fix permissions
-docker compose -f docker-compose.test.yml exec -T test-runner sudo chown -R testuser:testuser /repos
 
 print_success "Repositories copied into container"
 
@@ -170,6 +184,11 @@ print_step "Running setup flow test..."
 # Copy test scripts into container
 docker cp "$SCRIPT_DIR/test-setup-flow.sh" "$CONTAINER_ID:/repos/test-setup-flow.sh"
 docker cp "$SCRIPT_DIR/setup-test-wrapper.sh" "$CONTAINER_ID:/repos/setup-test-wrapper.sh"
+
+# docker cp can assign container-local numeric ownership on the named volume,
+# so normalize /repos after all copies complete.
+docker compose -f docker-compose.test.yml exec -T test-runner sudo chown -R testuser:testuser /repos
+
 docker compose -f docker-compose.test.yml exec -T test-runner chmod +x /repos/test-setup-flow.sh /repos/setup-test-wrapper.sh
 
 # Run the test

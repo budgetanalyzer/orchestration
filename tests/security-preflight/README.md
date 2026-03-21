@@ -39,6 +39,22 @@ From the orchestration root:
 | `run-test.sh` | Host-side entry point |
 | `test-security-preflight.sh` | In-container bootstrap + verifier run |
 
+Shared test environment:
+- `tests/shared/Dockerfile.test-env` (single source of truth used by setup-flow and security-preflight suites)
+
 ## Runtime
 
 Expect approximately 10-20 minutes depending on network speed (Helm pulls dominate runtime).
+
+## Shared Test-Env Contract
+
+This suite validates the shared test image contract before DinD startup. The image must include:
+
+- `docker`
+- `kubectl`
+- `kind`
+- `helm`
+- `tilt`
+- `mkcert`
+- `git`
+- `certutil`

@@ -4,10 +4,17 @@ services:
   dind:
     image: docker:27-dind
     privileged: true
+    command:
+      - --default-ulimit=nofile=1048576:1048576
     environment:
       - DOCKER_TLS_CERTDIR=
-    networks:
-      - test-network
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    # Default bridge egress works in our CI/dev Docker hosts; user-defined
+    # bridge networks can blackhole outbound HTTPS from runtime containers.
+    network_mode: bridge
     healthcheck:
       test: ["CMD", "docker", "info"]
       interval: 5s
@@ -16,24 +23,21 @@ services:
 
   test-runner:
     build:
-      context: ../setup-flow
+      context: ../shared
       dockerfile: Dockerfile.test-env
     depends_on:
       dind:
         condition: service_healthy
     environment:
-      - DOCKER_HOST=tcp://dind:2375
+      - DOCKER_HOST=tcp://127.0.0.1:2375
     volumes:
       - test-repos:/repos
       - test-kubeconfig:/home/testuser/.kube
-    networks:
-      - test-network
+    # Share DinD's working network namespace instead of relying on a separate
+    # user-defined bridge and container-name DNS.
+    network_mode: service:dind
     tty: true
     stdin_open: true
-
-networks:
-  test-network:
-    driver: bridge
 
 volumes:
   test-repos:

@@ -89,6 +89,18 @@ if [ $timeout -le 0 ]; then
 fi
 print_success "Docker daemon is ready"
 
+print_step "Verifying shared test environment contract"
+docker compose -f docker-compose.test.yml exec -T test-runner bash -lc '
+    set -e
+    for cmd in docker kubectl kind helm tilt mkcert git certutil; do
+        command -v "$cmd" >/dev/null || {
+            echo "Missing required tool in test image: $cmd" >&2
+            exit 1
+        }
+    done
+'
+print_success "Shared test environment contract verified"
+
 CONTAINER_ID=$(docker compose -f docker-compose.test.yml ps -q test-runner)
 
 print_step "Copying test inputs into container"

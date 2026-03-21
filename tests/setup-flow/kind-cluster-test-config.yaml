@@ -7,9 +7,10 @@ networking:
   # Bind API server to all interfaces so test-runner container can reach it
   apiServerAddress: "0.0.0.0"
   disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
 nodes:
 - role: control-plane
-  image: kindest/node:v1.30.8
+  image: kindest/node:v1.32.2
   kubeadmConfigPatches:
   - |
     kind: InitConfiguration

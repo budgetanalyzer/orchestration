@@ -23,7 +23,7 @@ cd scripts && ./validate-claude-context.sh
 **Note:** The script automatically changes to the repository root directory, so it works correctly regardless of where you call it from.
 
 **What it checks:**
-- `@references` point to existing files (e.g., `@nginx/nginx.dev.conf`)
+- `@references` point to existing files (e.g., `@nginx/nginx.k8s.conf`)
 - AGENTS.md files are not too large (< 200 lines recommended for pattern-based docs)
 - Common commands referenced (docker compose, mvnw) are available
 

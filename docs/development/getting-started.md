@@ -36,14 +36,17 @@ From your **host terminal** (not the devcontainer):
 
 ```bash
 cd path/to/workspace/orchestration
-./setup.sh        # Creates cluster, certs, DNS, .env
+./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
 vim .env          # Add Auth0 + FRED credentials (see below)
 tilt up           # Start everything
+./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
 
 > **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
+>
+> **Existing Kind cluster?** If it predates Phase 0 hardening, delete it first with `kind delete cluster --name kind`.
 
 ## External Services (~10 min one-time setup)
 

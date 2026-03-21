@@ -25,6 +25,7 @@ tilt trigger <service-name>
 # Check Kind cluster
 kind get clusters
 kubectl cluster-info --context kind-kind
+docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 0 security prerequisites
 ./scripts/dev/verify-security-prereqs.sh
@@ -36,13 +37,13 @@ kubectl cluster-info --context kind-kind
 |------|---------|----------|---------|
 | **Application Access** |
 | 443 (30443) | Envoy Gateway | HTTPS | Browser entry point |
-| 80 (30080) | Envoy Gateway | HTTP | Redirects to HTTPS |
+| 80 | Kind host mapping | TCP | Reserved host mapping in the Kind config |
 | **Internal Services** |
 | 8080 | nginx-gateway | HTTP | API routing (behind Envoy) |
 | 8081 | session-gateway | HTTP | Browser auth/session management |
 | 8082 | transaction-service | HTTP | Transaction API |
 | 8084 | currency-service | HTTP | Currency API |
-| 9001 | ext-authz | gRPC | Session validation |
+| 9002 | ext-authz | HTTP | Session validation |
 | 8090 | ext-authz | HTTP | Health check |
 | 3000 | budget-analyzer-web | HTTP | React dev server |
 | **Infrastructure** |
@@ -115,8 +116,8 @@ Use port-forwards to bypass the gateway and test services directly:
 curl http://localhost:8082/actuator/health
 curl http://localhost:8082/actuator/info
 
-# Test with a JWT (if you have one)
-curl -H "Authorization: Bearer <jwt>" http://localhost:8082/api/transactions
+# Test with a bearer token (for example, an exchanged opaque session token)
+curl -H "Authorization: Bearer <token>" http://localhost:8082/api/v1/transactions
 ```
 
 ### 4. Remote Debugging (IDE)
@@ -281,11 +282,11 @@ curl http://localhost:8084/actuator/health
 ### Complete Request Flow
 
 ```
-Browser (https://app.budgetanalyzer.localhost/api/transactions)
+Browser (https://app.budgetanalyzer.localhost/api/v1/transactions)
     ↓
 Envoy Gateway (30443) - TLS termination
     ↓
-ext-authz (9001) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
+ext-authz (9002) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
     ↓ (if valid)
 NGINX Gateway (8080) - Rate limiting, route to backend
     ↓
@@ -331,7 +332,7 @@ curl http://localhost:8080/health
 
 # 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
-curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/api/transactions
+curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 ```
 
 ---
@@ -448,6 +449,9 @@ kind create cluster --config kind-cluster-config.yaml
 
 # Install Calico (required for NetworkPolicy enforcement)
 ./scripts/dev/install-calico.sh
+
+# Confirm the recreated cluster matches kind-cluster-config.yaml
+docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Start fresh
 tilt up

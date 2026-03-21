@@ -184,16 +184,22 @@ The Docker socket acts like a wormhole - commands issued inside the container "t
 
 ### Pattern 2: True Docker-in-Docker (CI Testing)
 
-**Implemented in**: `tests/setup-flow/`
-**Use case**: Testing the complete developer onboarding flow in CI
+**Implemented in**: `tests/setup-flow/` and `tests/security-preflight/`
+**Use case**: Testing the complete developer onboarding flow and the isolated Phase 0 runtime baseline
 
 #### The Problem
 
 We need to test that a brand new developer can:
 1. Clone the repo
-2. Run `./scripts/dev/setup-k8s-tls.sh`
+2. Run `./setup.sh`
 3. Run `tilt up`
 4. Access the application at `https://app.budgetanalyzer.localhost`
+
+We also need a second isolated suite that proves the Phase 0 runtime baseline:
+- Calico-backed `NetworkPolicy` enforcement
+- Pod Security Admission behavior
+- Istio readiness and sidecar injection
+- Kyverno smoke-policy rejection
 
 But we can't use the wormhole pattern here - that would pollute the CI host's Docker daemon with Kind clusters, test containers, and other artifacts.
 
@@ -205,27 +211,27 @@ Run a Docker daemon **inside** a container, completely isolated from the host:
 # tests/setup-flow/docker-compose.test.yml
 services:
   dind:
-    image: docker:28.5.2-dind
-    privileged: true  # Required for Docker daemon
+    image: docker:27-dind
+    privileged: true
+    command:
+      - --default-ulimit=nofile=1048576:1048576
     environment:
-      - DOCKER_TLS_CERTDIR=/certs
-    volumes:
-      - docker-certs:/certs/client
-      - docker-data:/var/lib/docker
+      - DOCKER_TLS_CERTDIR=
+    network_mode: bridge
 
   test-runner:
     build:
-      context: .
+      context: ../shared
       dockerfile: Dockerfile.test-env
     depends_on:
-      - dind
+      dind:
+        condition: service_healthy
     environment:
-      - DOCKER_HOST=tcp://dind:2376
-      - DOCKER_CERT_PATH=/certs/client
-      - DOCKER_TLS_VERIFY=1
+      - DOCKER_HOST=tcp://127.0.0.1:2375
     volumes:
-      - docker-certs:/certs/client:ro
-      - ../../:/workspace/orchestration:ro
+      - test-repos:/repos
+      - test-kubeconfig:/home/testuser/.kube
+    network_mode: service:dind
 ```
 
 #### How It Works
@@ -238,8 +244,8 @@ services:
 │  │  ┌─────────────┐    ┌──────────────────────┐  │ │
 │  │  │ dind        │    │ test-runner          │  │ │
 │  │  │ (docker:dind)│◄───│ (test-env image)     │  │ │
-│  │  │             │TLS │                      │  │ │
-│  │  │ Docker      │2376│ - kind               │  │ │
+│  │  │             │2375│                      │  │ │
+│  │  │ Docker      │    │ - kind               │  │ │
 │  │  │ daemon      │    │ - kubectl            │  │ │
 │  │  │             │    │ - mkcert             │  │ │
 │  │  └─────────────┘    │ - run tests          │  │ │
@@ -249,7 +255,7 @@ services:
 ```
 
 When the test-runner executes Docker commands:
-1. Commands go to `DOCKER_HOST=tcp://dind:2376`
+1. Commands go to `DOCKER_HOST=tcp://127.0.0.1:2375`
 2. The dind container's Docker daemon handles them
 3. Containers run **inside** the dind container's environment
 4. Completely isolated from the CI host's Docker
@@ -264,20 +270,22 @@ When the test-runner executes Docker commands:
 #### Running the Test
 
 ```bash
-cd tests/setup-flow
-docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+./tests/setup-flow/run-test.sh
+./tests/security-preflight/run-test.sh
 ```
 
-Expected: Exit code 0, runtime ~5-10 minutes.
+Expected:
+- `setup-flow`: exit code 0, runtime ~5-10 minutes
+- `security-preflight`: exit code 0, runtime ~10-20 minutes
 
 ### When to Use Which Pattern
 
 | Pattern | Use Case | Tradeoff |
 |---------|----------|----------|
 | **Wormhole (DooD)** | Development, TestContainers tests | Faster, simpler, but shares host Docker |
-| **True DinD** | CI, isolated testing, validating setup flows | Slower, more complex, but fully isolated |
+| **True DinD** | CI, isolated testing, validating bootstrap and runtime platform behavior | Slower, more complex, but fully isolated |
 
-The Budget Analyzer project uses **wormhole for development** (Claude's devcontainer) and **true DinD for CI validation** (setup flow tests).
+The Budget Analyzer project uses **wormhole for development** (Claude's devcontainer) and **true DinD for CI validation** (setup-flow and security-preflight tests).
 
 ## Why This Architecture Matters
 
@@ -318,17 +326,16 @@ This project is designed as a **learning resource for AI-assisted development**.
 
 To make autonomous execution effective, define **clear, testable success criteria** before running the agent.
 
-### Example: From Authentication Testing Plan
+### Example: From the Security Hardening Plan
 
 ```markdown
 ## Success Criteria
 
-### Phase 6 (Testing)
-- [ ] Token refresh happens automatically before expiration
-- [ ] Users cannot access other users' data (403)
-- [ ] Rate limiting triggers 429 on abuse
-- [ ] Session timeout works correctly
-- [ ] M2M client flow works
+### Phase 0: Platform Preconditions
+- [ ] Local Kind clusters enforce `NetworkPolicy`
+- [ ] Pod Security Admission labels are applied without breaking current workloads
+- [ ] Kyverno is installed with a scoped smoke policy
+- [ ] Deterministic verification proves the platform preconditions work
 ```
 
 ### Pattern Characteristics
@@ -342,7 +349,7 @@ To make autonomous execution effective, define **clear, testable success criteri
 
 ```bash
 # 1. Human reviews plan and success criteria
-cat docs/plans/authentication-testing-plan.md
+cat docs/plans/security-hardening-v2-phase-0-implementation.md
 
 # 2. Human starts agent in autonomous mode
 claude --dangerously-skip-permissions
@@ -350,9 +357,8 @@ claude --dangerously-skip-permissions
 # 3. Agent executes plan (human monitors but doesn't interrupt)
 
 # 4. Human verifies success criteria
-kubectl logs -n budget-analyzer deployment/session-gateway | grep "token refresh"
-curl -H "Authorization: Bearer $TOKEN" https://api.budgetanalyzer.localhost/api/transactions/other-user-id
-# Should return 403
+./scripts/dev/verify-security-prereqs.sh
+# Should prove NetworkPolicy, PSA, Istio, and Kyverno prerequisites
 ```
 
 ## Security Constraints
@@ -361,7 +367,7 @@ Even in a sandbox, some operations are forbidden because they would cause issues
 
 ### SSL/TLS Certificates (CRITICAL)
 
-**NEVER generate certificates inside the container.**
+**Do not generate browser-facing certificates inside the devcontainer.**
 
 #### Why
 
@@ -369,6 +375,8 @@ Even in a sandbox, some operations are forbidden because they would cause issues
 - User's browser trusts their **host machine's** `mkcert` CA
 - These are **different CAs** (different root certificates)
 - Certificates generated in container → browser shows SSL warnings
+
+This constraint applies to the developer container and the real local setup flow. It does **not** block the isolated DinD test suites, because those tests only validate certificate generation and secret creation inside disposable containers. They are not trying to produce host-trusted browser certificates.
 
 #### Forbidden Operations
 
@@ -384,9 +392,9 @@ openssl req -new -key server.key -out server.csr
 
 ```bash
 # These are fine (inspection only):
-openssl x509 -text -noout -in /workspace/orchestration/certs/budgetanalyzer.crt
-kubectl get secret -n budget-analyzer tls-secret -o yaml
-openssl verify -CAfile ~/.local/share/mkcert/rootCA.pem budgetanalyzer.crt
+openssl x509 -text -noout -in /workspace/orchestration/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
+kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls -o yaml
+openssl verify -CAfile ~/.local/share/mkcert/rootCA.pem /workspace/orchestration/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
 ```
 
 #### Resolution
@@ -528,10 +536,10 @@ Even though execution is autonomous, monitoring is valuable:
 dangerous -p "implement feature X"
 
 # Terminal 2: Monitor test output
-watch -n 2 'kubectl get pods -n budget-analyzer'
+watch -n 2 'kubectl get pods -n default'
 
 # Terminal 3: Check application logs
-kubectl logs -f -n budget-analyzer deployment/session-gateway
+kubectl logs -f -n default deployment/session-gateway
 ```
 
 ### 5. Verify Results Against Criteria
@@ -542,7 +550,8 @@ After execution, systematically verify each success criterion:
 # Automated verification
 ./gradlew test
 ./gradlew build
-kubectl get pods -n budget-analyzer  # All should be Running
+kubectl get pods -n default  # App pods should be Running
+kubectl get pods -n infrastructure  # Infra pods should be Running
 
 # Manual verification
 open https://app.budgetanalyzer.localhost
@@ -628,8 +637,9 @@ on my host machine (outside the container).
 
 - [BFF + API Gateway Pattern](bff-api-gateway-pattern.md) - Request flow and routing architecture
 - [Security Architecture](security-architecture.md) - Defense-in-depth security model
-- [Claude Code Sandbox README](../../claude-code-sandbox/README.md) - Detailed container setup guide
-- [Setup Flow Testing](../../tests/setup-flow/README.md) - Docker-in-Docker CI testing
+- [Workspace README](../../../workspace/README.md) - Devcontainer and sandbox entry point
+- [Setup Flow Testing](../../tests/setup-flow/README.md) - Docker-in-Docker bootstrap validation
+- [Security Preflight Testing](../../tests/security-preflight/README.md) - Docker-in-Docker Phase 0 runtime validation
 
 ## References
 

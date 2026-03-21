@@ -44,13 +44,13 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 **Discovery**:
 ```bash
 # Check Envoy Gateway status
-kubectl get gateway -n budget-analyzer
+kubectl get gateway -n default
 
 # View Envoy Gateway logs
 kubectl logs -n envoy-gateway-system deployment/envoy-gateway
 
 # Inspect Gateway configuration
-kubectl get gateway budget-analyzer-gateway -n budget-analyzer -o yaml
+kubectl get gateway ingress-gateway -n default -o yaml
 ```
 
 ### ext_authz Service (Port 9002 HTTP, Port 8090 Health) - Authorization Layer
@@ -73,7 +73,7 @@ kubectl get pods -l app=ext-authz
 kubectl logs deployment/ext-authz
 
 # Check ext_authz health
-curl http://ext-authz:8090/healthz
+kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 ```
 
 ### NGINX (Port 8080, HTTP) - API Gateway Layer
@@ -129,7 +129,7 @@ kubectl get pods -l app=session-gateway
 kubectl logs deployment/session-gateway
 
 # Test Session Gateway health
-curl -v https://app.budgetanalyzer.localhost/actuator/health
+kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
 # Check Redis connection (session storage)
 kubectl exec -n infrastructure deployment/redis -- redis-cli PING

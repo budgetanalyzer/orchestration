@@ -46,8 +46,16 @@ jobs:
         run: |
           # Check that DinD test files exist
           test -f tests/setup-flow/docker-compose.test.yml
-          test -f tests/setup-flow/Dockerfile.test-env
+          test -f tests/security-preflight/docker-compose.test.yml
+          test -f tests/shared/Dockerfile.test-env
           test -f tests/setup-flow/test-setup-flow.sh
+
+          # Shared test environment contract:
+          # both suites must build from tests/shared/Dockerfile.test-env
+          grep -q "context: ../shared" tests/setup-flow/docker-compose.test.yml
+          grep -q "dockerfile: Dockerfile.test-env" tests/setup-flow/docker-compose.test.yml
+          grep -q "context: ../shared" tests/security-preflight/docker-compose.test.yml
+          grep -q "dockerfile: Dockerfile.test-env" tests/security-preflight/docker-compose.test.yml
 
   test-summary:
     needs: test-setup

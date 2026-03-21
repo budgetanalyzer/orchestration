@@ -4,7 +4,7 @@ NGINX handles routing and rate limiting for backend microservices. Authenticatio
 
 ## Request Flow
 
-**All browser traffic goes through Session Gateway first.**
+**Single browser entry point:** `https://app.budgetanalyzer.localhost`
 
 ```
 Browser (https://app.budgetanalyzer.localhost)
@@ -14,12 +14,14 @@ Envoy (:443) ─── SSL termination + ext_authz session validation
     │
     ├─→ /auth/*, /oauth2/*, /login/*, /logout → Session Gateway (:8081)
     │
+    ├─→ /api/* → NGINX (:8080)
+    │
     ▼ (K8s internal: nginx-gateway:8080)
 NGINX (:8080) ─── rate limiting, route to service
     │
     ├─→ /           → React App (:3000)
-    ├─→ /api/transactions → Transaction Service (:8082)
-    ├─→ /api/currencies   → Currency Service (:8084)
+    ├─→ /api/v1/transactions → Transaction Service (:8082)
+    ├─→ /api/v1/currencies   → Currency Service (:8084)
     └─→ /health     → Health check
 ```
 
@@ -49,8 +51,8 @@ proxy_pass $frontend_backend;
 ### Resource-Based Routing
 
 The frontend sees clean resource paths:
-- `GET /api/transactions` → Transaction Service
-- `GET /api/currencies` → Currency Service
+- `GET /api/v1/transactions` → Transaction Service
+- `GET /api/v1/currencies` → Currency Service
 
 NGINX handles the routing and path transformation to backend services.
 

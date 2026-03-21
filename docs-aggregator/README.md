@@ -10,21 +10,21 @@ The docs aggregator consolidates OpenAPI documentation from all microservices in
 
 - **Unified View**: All API documentation in one place
 - **Service Selector**: Dropdown to switch between different microservices
-- **Try It Out**: Full interactive API testing functionality
-- **Real Requests**: All requests go through the NGINX gateway with proper routing
+- **Gateway-Backed Specs**: OpenAPI specs are loaded through the same public origin and gateway stack as the rest of the app
+- **Current UI Mode**: "Try it out" is intentionally disabled in the shared docs page
 
 ## Architecture
 
 ```
 User Browser
     ↓
-https://api.budgetanalyzer.localhost/api/docs (Swagger UI HTML)
+https://app.budgetanalyzer.localhost/api/docs (Swagger UI HTML)
     ↓
 Loads OpenAPI specs from:
-    - https://api.budgetanalyzer.localhost/api/transaction-service/v3/api-docs
-    - https://api.budgetanalyzer.localhost/api/currency-service/v3/api-docs
+    - https://app.budgetanalyzer.localhost/api/transaction-service/v3/api-docs
+    - https://app.budgetanalyzer.localhost/api/currency-service/v3/api-docs
     ↓
-"Try it out" requests → NGINX Gateway → Appropriate Microservice
+Displayed through the same public origin and gateway stack as the rest of the app
 ```
 
 ## Configuration
@@ -51,8 +51,8 @@ urls: [
 To add documentation for a new microservice:
 
 1. Update `docs-aggregator/index.html` - add new URL to the array
-2. Update `nginx/nginx.dev.conf` to proxy the new service's api-docs endpoint
-3. Restart services: `docker compose restart nginx-gateway`
+2. Update `nginx/nginx.k8s.conf` to proxy the new service's api-docs endpoint
+3. Let Tilt apply the config change or run `tilt trigger nginx-gateway-config`
 
 ## Dependencies
 

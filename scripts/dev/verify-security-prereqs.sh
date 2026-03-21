@@ -189,7 +189,7 @@ prove_pod_security_admission() {
     ns="$(new_temp_namespace "ba-psa")"
 
     kubectl label namespace "$ns" pod-security.kubernetes.io/enforce=restricted --overwrite >/dev/null
-    kubectl label namespace "$ns" pod-security.kubernetes.io/enforce-version=latest --overwrite >/dev/null
+    kubectl label namespace "$ns" pod-security.kubernetes.io/enforce-version=v1.32 --overwrite >/dev/null
 
     set +e
     local output

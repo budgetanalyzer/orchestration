@@ -143,15 +143,36 @@ kubectl get svc --all-namespaces | grep <port>
 
 ## Security Considerations
 
-**Network Policies**:
-- Public ports (443) are accessible from outside the cluster
-- Internal ports (8080+) are cluster-internal only by service type
-- Phase 0 provides a `NetworkPolicy`-capable CNI and runtime verifier, but the actual application/infrastructure allowlist policies land in a later hardening phase
+**Network Policies (Phase 2 enforced)**:
+- Both `default` and `infrastructure` namespaces have deny-by-default ingress and egress NetworkPolicy
+- The caller matrix below applies to pod-to-pod traffic only and is enforced by pod-label-scoped allowlists
+- Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this Phase 2 allowlist boundary
+- `session-gateway` and `currency-service` have temporary workload-scoped TCP 443 egress for external IdP and FRED API access; hostname-level restriction deferred to Phase 3 (Istio egress)
+
+**Approved pod-to-pod callers per protected port**:
+
+| Port | Service | Approved Callers |
+|------|---------|-----------------|
+| 8080 | NGINX Gateway | Envoy Gateway proxy pods only |
+| 9002 | ext_authz | Envoy Gateway proxy pods only |
+| 8090 | ext_authz health | No pod callers; kubelet/host traffic only |
+| 8081 | Session Gateway | Envoy Gateway proxy pods only |
+| 8082 | Transaction Service | nginx-gateway only |
+| 8084 | Currency Service | nginx-gateway only |
+| 3000 | React Dev Server | nginx-gateway only |
+| 8086 | Permission Service | session-gateway only |
+| 5432 | PostgreSQL | transaction-service, currency-service, permission-service only |
+| 6379 | Redis | session-gateway, ext-authz, currency-service only |
+| 5672 | RabbitMQ | currency-service only |
+| 15672 | RabbitMQ Management | No in-cluster callers (blocked by NetworkPolicy) |
 
 **Check network policies**:
 ```bash
 kubectl get networkpolicies
 kubectl get networkpolicies -n infrastructure
+
+# Run the Phase 2 verifier for runtime proof
+./scripts/dev/verify-phase-2-network-policies.sh
 ```
 
 **Verify service is not exposed publicly**:

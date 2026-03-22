@@ -137,6 +137,9 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 1 credential split
 ./scripts/dev/verify-phase-1-credentials.sh
+
+# Optional but recommended: prove the Phase 2 network policy enforcement
+./scripts/dev/verify-phase-2-network-policies.sh
 ```
 
 ## Tilt Resources

@@ -32,6 +32,9 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 1 credential isolation
 ./scripts/dev/verify-phase-1-credentials.sh
+
+# Validate Phase 2 network policy enforcement
+./scripts/dev/verify-phase-2-network-policies.sh
 ```
 
 ### Port Mapping
@@ -450,6 +453,87 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --user "$REDIS_OPS_
 | 502 Bad Gateway | Backend service not running | Check pod status, restart service |
 | 504 Gateway Timeout | Backend service slow or hung | Check service logs, database connections |
 | Network Error | Envoy/NGINX misconfiguration | Check gateway logs, verify routes |
+
+---
+
+## NetworkPolicy Troubleshooting (Phase 2)
+
+Phase 2 enforces deny-by-default ingress and egress in `default` and `infrastructure` namespaces for pod-to-pod traffic. Kubelet probes and Tilt port-forwards are host-to-pod traffic, so under Calico's default `defaultEndpointToHostAction=Accept` they do not rely on these allowlists. When services break after policy changes, these are the most common causes.
+
+### Missing DNS Egress
+
+**Symptom**: Random service outages; services fail to resolve internal Kubernetes DNS names.
+
+```bash
+# Check if a pod can resolve DNS
+kubectl exec -n default deployment/transaction-service -- nslookup postgresql.infrastructure.svc.cluster.local
+
+# Verify the DNS egress policy exists
+kubectl get networkpolicy allow-default-dns-egress -n default -o yaml
+```
+
+**Cause**: The shared DNS egress policy (`allow-default-dns-egress` in `default-allow.yaml`) is missing or was not applied. Without it, pods in `default` cannot reach `kube-dns` in `kube-system`.
+
+**Fix**: Re-apply the network policies through Tilt (`tilt trigger network-policies`) or verify the `default-allow.yaml` manifest includes the DNS egress rule targeting `kube-system` pods with label `k8s-app=kube-dns` on TCP/UDP port 53.
+
+### Missing Envoy Proxy Selector Match
+
+**Symptom**: All ingress returns 503; Envoy Gateway proxy pods cannot reach `nginx-gateway`, `ext-authz`, or `session-gateway`.
+
+```bash
+# Check the actual proxy pod labels
+kubectl get pods -n envoy-gateway-system --show-labels
+
+# Compare against what the nginx ingress allowlist expects
+kubectl get networkpolicy allow-nginx-gateway-ingress-from-envoy -n default -o yaml
+```
+
+**Cause**: The Envoy Gateway proxy pod labels changed (e.g., after a Helm chart upgrade) and no longer match the `podSelector` in the ingress allowlists. The policies use `app.kubernetes.io/component=proxy` plus `gateway.envoyproxy.io/owning-gateway-name=ingress-gateway`.
+
+**Fix**: Update the pod selectors in `kubernetes/network-policies/default-allow.yaml` to match the current proxy pod labels, then re-apply.
+
+### Missing Istiod Egress
+
+**Symptom**: Services work initially after pod creation, but mTLS certificate rotation fails after ~24 hours. Sidecar proxies lose connectivity to istiod.
+
+```bash
+# Check sidecar-to-istiod connectivity
+kubectl exec -n default deployment/ext-authz -c istio-proxy -- pilot-agent request GET /clusters | head -5
+
+# Check istiod egress policy
+kubectl get networkpolicy allow-default-istiod-egress -n default -o yaml
+```
+
+**Cause**: The istiod egress policy (`allow-default-istiod-egress`) is missing or not applied. Istio sidecars bootstrap successfully at pod creation (using cached certs), but certificates expire with default settings after ~24 hours. Without egress to `istiod.istio-system:15012`, sidecars cannot rotate certificates and mesh communication breaks.
+
+**Fix**: Verify `default-allow.yaml` includes the istiod egress rule targeting `istio-system` pods with label `app=istiod` on TCP port 15012, then re-apply.
+
+### Calico defaultEndpointToHostAction Changed
+
+**Symptom**: All Kubernetes probes (startup, readiness, liveness) fail. All Tilt port-forwards break. Every pod shows as unhealthy.
+
+```bash
+# Check Calico configuration
+kubectl get felixconfiguration default -o jsonpath='{.spec.defaultEndpointToHostAction}{"\n"}'
+```
+
+If that command prints nothing, the field is unset and Calico is using its default value (`Accept`).
+
+**Cause**: Calico's `defaultEndpointToHostAction` was changed from its default value (`Accept`) to `Drop`. Kubernetes probes and Tilt port-forwards are host-to-pod traffic originating from the node IP, not from another pod. NetworkPolicy cannot allow this traffic — it depends on Calico's host endpoint handling.
+
+**Fix**: This is a platform-level invariant, not something the policy manifests can control. Restore the Calico default:
+```bash
+kubectl patch felixconfiguration default --type=merge -p '{"spec":{"defaultEndpointToHostAction":"Accept"}}'
+```
+
+### Runtime Verification
+
+Run the Phase 2 verifier to confirm policies are enforced (not just present):
+```bash
+./scripts/dev/verify-phase-2-network-policies.sh
+```
+
+This script uses disposable probe pods to test both positive (allowed) and negative (blocked) connectivity paths. Allowed paths pass within a bounded retry window; blocked paths must fail consistently across repeated attempts.
 
 ---
 

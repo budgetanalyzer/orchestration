@@ -41,6 +41,7 @@ vim .env          # Review infra password defaults; add Auth0 + FRED credentials
 tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
+./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.

@@ -384,6 +384,16 @@ Done when:
 
 - The policy resource is managed by Tilt and the full stack remains healthy after rollout.
 
+Status for March 22, 2026:
+
+- Session 4 Tilt wiring is complete.
+- Added `network-policies` as a `local_resource` in the Tiltfile that applies the entire `kubernetes/network-policies/` directory in a single `kubectl apply` call. This prevents a deny-only intermediate state.
+- The resource depends on `istio-injection`, which transitively covers `envoy-gateway` and `istiod`.
+- File watches are set on all four policy manifests so Tilt re-applies on change.
+- The resource is visible in the Tilt UI under the `infrastructure` label.
+- Dry-run validation passed for all 20 network policies (4 deny/allow base policies + 16 targeted allow policies).
+- Live rollout verification (task 6: deployment health checks, Istio sidecar connectivity) is deferred to the next `tilt up` cycle when the full stack is running.
+
 ### Session 5: Add Runtime Proof For Phase 2
 
 Goal:
@@ -440,6 +450,27 @@ Done when:
 
 - The script fails on unauthorized paths and passes on authorized paths in a repeatable way.
 
+Status for March 22, 2026:
+
+- Session 5 is complete after review fixes and live validation.
+- Created `scripts/dev/verify-phase-2-network-policies.sh` with:
+  - 8 disposable probe pods: 1 Envoy-labeled in `envoy-gateway-system`, 6 workload-labeled in `default`, 1 unlabeled in `default`
+  - All probes use `busybox:1.36.1` with `sidecar.istio.io/inject: "false"` and restricted security context
+  - Allowed-path assertions now use a bounded retry window after a probe stabilization delay; blocked-path assertions must fail consistently across repeated attempts
+  - 15 positive tests: Envoy ingress (3), east-west routing (4), infrastructure egress (7), istiod egress (1)
+  - 19 negative tests: unlabeled pod isolation (10), cross-identity restrictions (6), explicit Phase 2 non-edges (3)
+  - Conditional external egress section: tests TCP 443 only when cluster has external connectivity, skips cleanly otherwise
+  - No hostname-specific assertions for session-gateway or currency-service external egress
+  - Added explicit negative coverage for the two Phase 2 contract non-edges that the initial authoring pass missed: `session-gateway` -> `nginx-gateway:8080` and Envoy-labeled probe -> `ext-authz:8090`
+- Review follow-up on March 22, 2026:
+  - The original single-shot verifier produced false negatives on a healthy cluster
+  - The original runbook referenced nonexistent Phase 2 policy objects
+  - The original verifier missed the two explicit blocked edges above
+- Live verification completed on March 22, 2026:
+  - `bash -n scripts/dev/verify-phase-2-network-policies.sh` passed
+  - `./scripts/dev/verify-phase-2-network-policies.sh` passed three consecutive runs against the active cluster (`38/38` each run)
+- Updated `scripts/README.md` with Phase 2 verifier entry.
+
 ### Session 6: Update Architecture And Operator Docs
 
 Goal:
@@ -470,6 +501,15 @@ Tasks:
 Done when:
 
 - The docs describe the deployed policy model, not the pre-Phase-2 model.
+
+Status for March 22, 2026:
+
+- Session 6 is complete.
+- Updated `docs/development/getting-started.md`: added Phase 2 verifier command to the setup sequence.
+- Updated `docs/development/local-environment.md`: added Phase 2 verifier to the "Verify Services" section.
+- Updated `docs/runbooks/tilt-debugging.md`: added Phase 2 verifier to essential commands, corrected the troubleshooting commands to use the live policy object names (`allow-default-dns-egress`, `allow-default-istiod-egress`), and replaced the Calico diagnostic command with one that succeeds even when the field is unset and Calico is using its default.
+- Updated `docs/architecture/security-architecture.md`: replaced stale "application NetworkPolicy allowlists remain later phases" wording with current Phase 2 enforcement status; clarified that the caller allowlists are a pod-to-pod boundary and that kubelet probes/Tilt port-forwards remain Calico host-to-pod exceptions.
+- Updated `docs/architecture/port-reference.md`: replaced generic security considerations with Phase 2 enforcement details and an approved pod-to-pod callers-per-port table; documented that `ext-authz:8090` is probe/host traffic rather than a pod-to-pod dependency and noted RabbitMQ management port (15672) is blocked by NetworkPolicy.
 
 ## Policy Shape
 
@@ -512,5 +552,5 @@ Phase 2 is done when all of the following are true:
 5. Infrastructure services only accept traffic from their documented application callers.
 6. Only `session-gateway` and `currency-service` retain temporary external TCP `443` egress.
 7. Tilt manages the policy set as a first-class resource.
-8. `./scripts/dev/verify-phase-2-network-policies.sh` passes.
+8. `./scripts/dev/verify-phase-2-network-policies.sh` passes repeatedly on a healthy cluster.
 9. Updated docs reflect the new policy posture and the remaining Phase 3 egress limitation.

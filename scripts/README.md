@@ -120,6 +120,7 @@ Key scripts:
 - `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
 - `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio, Kyverno smoke policy).
 - `scripts/dev/verify-phase-1-credentials.sh` - Phase 1 runtime proof for PostgreSQL, RabbitMQ, Redis ACLs, and ext-authz.
+- `scripts/dev/verify-phase-2-network-policies.sh` - Phase 2 runtime proof for NetworkPolicy allowlists (disposable probe pods, bounded retries for allowed paths, and repeated assertions for blocked paths).
 
 ## Adding New Scripts
 

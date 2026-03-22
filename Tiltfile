@@ -771,6 +771,25 @@ local_resource(
 )
 
 # ============================================================================
+# NETWORK POLICIES (Phase 2 Security Hardening)
+# ============================================================================
+
+# Apply deny and allow manifests together — never apply deny without matching allows.
+# Directory apply sends all policies in one API call to avoid a deny-only intermediate state.
+local_resource(
+    'network-policies',
+    cmd='kubectl apply -f kubernetes/network-policies/',
+    deps=[
+        'kubernetes/network-policies/default-deny.yaml',
+        'kubernetes/network-policies/default-allow.yaml',
+        'kubernetes/network-policies/infrastructure-deny.yaml',
+        'kubernetes/network-policies/infrastructure-allow.yaml',
+    ],
+    resource_deps=['istio-injection'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
 # GATEWAY API RESOURCES
 # ============================================================================
 

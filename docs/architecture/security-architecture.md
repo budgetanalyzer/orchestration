@@ -14,7 +14,8 @@ This document outlines the security architecture for a financial data applicatio
 Current repository state:
 - The ingress/session/routing topology described here is implemented.
 - Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, namespace PSA labels are staged in `warn`/`audit`, and Kyverno plus a smoke policy are installed and verifiable.
-- Application `NetworkPolicy` allowlists, credential hardening, and ingress unification remain later phases.
+- Phase 1 credential isolation is implemented: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
+- Phase 2 network policies are enforced: `default` and `infrastructure` namespaces have deny-by-default ingress and egress with explicit allowlists. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists. The remaining egress gap is hostname-level awareness (workload-scoped TCP 443 egress for `session-gateway` and `currency-service` is allowed but not restricted to specific hosts), which Phase 3 will address with Istio egress controls.
 
 ---
 
@@ -318,12 +319,14 @@ The mobile authentication approach will be finalized during mobile application d
 
 ### Internal Service-to-Service Authentication
 
-Internal services currently rely on network isolation for authentication. Permission-service is called directly by Session Gateway without bearer authentication — Kubernetes network policies restrict access.
+Internal services rely on network isolation enforced by Kubernetes NetworkPolicy. Permission-service is called directly by Session Gateway without bearer authentication — NetworkPolicy allowlists restrict which pods can reach it.
 
 **Current approach:**
 - Session Gateway calls permission-service via internal Kubernetes DNS
 - No bearer token or cryptographic proof of caller identity
-- Security relies on network isolation (only Session Gateway can reach permission-service)
+- NetworkPolicy enforces that only Session Gateway pods can reach permission-service (Phase 2)
+- Backend services only accept traffic from their documented pod callers (NGINX for transaction/currency/web, Session Gateway for permission-service)
+- Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
 
 **Implemented:** mTLS via Istio service mesh. STRICT for east-west traffic, PERMISSIVE for ingress-facing services. Provides cryptographic caller authentication without application-level token management.
 

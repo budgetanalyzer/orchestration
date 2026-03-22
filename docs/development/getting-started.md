@@ -50,12 +50,8 @@ PostgreSQL uses a `postgres_admin` bootstrap user plus distinct per-service
 database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
 broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
 `currency-service`, `redis-ops`) plus a restricted probe-only `default` user.
-If your PostgreSQL, RabbitMQ, or Redis state predates this hardening, recreate
-the relevant PVC before trusting old credentials or broker definitions.
 
 > **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
->
-> **Existing Kind cluster?** If it predates Phase 0 hardening, delete it first with `kind delete cluster --name kind`.
 
 ## External Services (~10 min one-time setup)
 

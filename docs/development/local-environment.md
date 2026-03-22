@@ -310,8 +310,8 @@ server:
 ```
 
 Password placeholders intentionally default to empty. A direct `bootRun`
-without env vars should fail with a connection error instead of silently
-reusing the old shared infrastructure credentials.
+without env vars should fail with a connection error so each service uses its
+own explicit password.
 
 For `currency-service`, swap in `currency`, `currency_service`, and set
 `SPRING_DATASOURCE_PASSWORD` from `POSTGRES_CURRENCY_SERVICE_PASSWORD`.
@@ -324,7 +324,7 @@ only needs `SPRING_DATA_REDIS_PASSWORD`; its Redis username defaults to
 Redis local access:
 - `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`
 - `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`
-- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, and `REDIS_PASSWORD=$REDIS_EXT_AUTHZ_PASSWORD`
+- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, and `REDIS_EXT_AUTHZ_PASSWORD` from `.env`
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`
 - `default` is probe-only and should not be used by application code
 
@@ -335,15 +335,6 @@ RabbitMQ local access:
 - AMQP username for `currency-service`: `currency-service` (or override with `SPRING_RABBITMQ_USERNAME`)
 - AMQP password for `currency-service`: set `SPRING_RABBITMQ_PASSWORD` from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
 - Virtual host: `/`
-
-If you change RabbitMQ users, permissions, or passwords in the boot-time
-definitions, delete the RabbitMQ PVC before restarting it. RabbitMQ will not
-overwrite existing broker state from a changed definitions file:
-
-```bash
-kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
-tilt trigger rabbitmq
-```
 
 Activate with:
 ```bash

@@ -11,9 +11,9 @@ if [ -z "$REDIS_POD" ]; then
 fi
 
 REDIS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
-REDIS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_PASSWORD" ]; then
+if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_OPS_PASSWORD" ]; then
     echo "ERROR: redis-bootstrap-credentials is missing redis-ops credentials." >&2
     exit 1
 fi
@@ -22,7 +22,7 @@ SESSION_ID="${1:-test-session-001}"
 EXPIRES_AT=$(date -d '+30 minutes' +%s 2>/dev/null || date -v+30M +%s)
 
 kubectl exec -n infrastructure "$REDIS_POD" -- \
-    redis-cli --user "$REDIS_USERNAME" --pass "$REDIS_PASSWORD" --no-auth-warning HSET \
+    redis-cli --user "$REDIS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HSET \
     "extauthz:session:${SESSION_ID}" \
     user_id "test-user-001" \
     roles "ROLE_USER,ROLE_ADMIN" \
@@ -31,7 +31,7 @@ kubectl exec -n infrastructure "$REDIS_POD" -- \
     expires_at "${EXPIRES_AT}" >/dev/null
 
 kubectl exec -n infrastructure "$REDIS_POD" -- \
-    redis-cli --user "$REDIS_USERNAME" --pass "$REDIS_PASSWORD" --no-auth-warning EXPIRE \
+    redis-cli --user "$REDIS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning EXPIRE \
     "extauthz:session:${SESSION_ID}" 1800 >/dev/null
 
 echo "Seeded session: extauthz:session:${SESSION_ID}"

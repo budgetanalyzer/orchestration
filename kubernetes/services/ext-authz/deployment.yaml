@@ -43,7 +43,7 @@ spec:
             secretKeyRef:
               name: ext-authz-redis-credentials
               key: username
-        - name: REDIS_PASSWORD
+        - name: REDIS_EXT_AUTHZ_PASSWORD
           valueFrom:
             secretKeyRef:
               name: ext-authz-redis-credentials

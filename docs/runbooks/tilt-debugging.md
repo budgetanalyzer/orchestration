@@ -32,9 +32,6 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 1 credential isolation
 ./scripts/dev/verify-phase-1-credentials.sh
-
-# Optional: include destructive redis-ops FLUSHALL proof
-./scripts/dev/verify-phase-1-credentials.sh --destructive-redis-flushall
 ```
 
 ### Port Mapping

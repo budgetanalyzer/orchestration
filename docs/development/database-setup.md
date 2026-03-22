@@ -16,16 +16,6 @@ Phase 1 Step 2 hardens that local PostgreSQL path:
 - First-time bootstrap uses a shell init script that reads per-service
   passwords from Kubernetes Secrets and stores them with SCRAM-SHA-256.
 
-This step changes first-init behavior. If your PostgreSQL PVC predates Step 2,
-recreate PostgreSQL state before expecting the new users or auth rules:
-
-```bash
-kubectl delete pvc -n infrastructure postgresql-data-postgresql-0
-kubectl delete pod -n infrastructure postgresql-0
-```
-
-Recreating the Kind cluster is also valid if you want a clean local reset.
-
 ## Secret Contract
 
 | Secret | Namespace | Purpose |
@@ -73,9 +63,9 @@ service-owned identities, so the password must be explicit.
 
 | Service | Database Name | Database User | Secret | Local Connection String |
 |---------|---------------|---------------|--------|-------------------------|
-| transaction-service | `budget_analyzer` | `transaction_service` | `transaction-service-postgresql-credentials` | `postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer` |
-| currency-service | `currency` | `currency_service` | `currency-service-postgresql-credentials` | `postgresql://currency_service:${POSTGRES_CURRENCY_SERVICE_PASSWORD:-budget-analyzer-currency-service}@localhost:5432/currency` |
-| permission-service | `permission` | `permission_service` | `permission-service-postgresql-credentials` | `postgresql://permission_service:${POSTGRES_PERMISSION_SERVICE_PASSWORD:-budget-analyzer-permission-service}@localhost:5432/permission` |
+| transaction-service | `budget_analyzer` | `transaction_service` | `transaction-service-postgresql-credentials` | `postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD}@localhost:5432/budget_analyzer` |
+| currency-service | `currency` | `currency_service` | `currency-service-postgresql-credentials` | `postgresql://currency_service:${POSTGRES_CURRENCY_SERVICE_PASSWORD}@localhost:5432/currency` |
+| permission-service | `permission` | `permission_service` | `permission-service-postgresql-credentials` | `postgresql://permission_service:${POSTGRES_PERMISSION_SERVICE_PASSWORD}@localhost:5432/permission` |
 
 Only the owning service user is granted `CONNECT` on its database. The
 `postgres_admin` superuser remains the break-glass path across all databases.
@@ -134,12 +124,12 @@ psql -h localhost -U postgres_admin -d postgres
 Connection string examples:
 
 ```bash
-postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer
-postgresql://postgres_admin:${POSTGRES_BOOTSTRAP_PASSWORD:-budget-analyzer-postgres-admin}@localhost:5432/postgres
+postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD}@localhost:5432/budget_analyzer
+postgresql://postgres_admin:${POSTGRES_BOOTSTRAP_PASSWORD}@localhost:5432/postgres
 ```
 
 For direct service runs, export `SPRING_DATASOURCE_PASSWORD` from the matching
-`POSTGRES_*_PASSWORD` value rather than relying on an old shared fallback.
+`POSTGRES_*_PASSWORD` value.
 
 ### From Pods in Kubernetes
 
@@ -165,8 +155,7 @@ When adding a new microservice that needs its own database:
 4. Populate that service secret with `username`, `password`, and `url`.
 5. Update the consuming deployment to read from that service-specific secret.
 
-Do not recreate the old shared `postgresql-credentials` secret shape. The local
-contract is one secret per consuming service.
+Use one connection secret per consuming service.
 
 ## Direct Database Access
 
@@ -195,23 +184,16 @@ lsof -i :5432
 ps aux | grep "kubectl.*port-forward.*5432"
 ```
 
-### Existing PVC Still Has Pre-Step-2 State
+### Database Not Found
 
-Symptoms include probes failing because `postgres_admin` does not exist yet or
-service connections failing because `transaction_service` / `currency_service` /
-`permission_service` were never created. Recreate PostgreSQL state:
+The init script creates the service users and databases during PostgreSQL
+bootstrap. If local PostgreSQL state is out of sync with the current manifests,
+delete the PostgreSQL PVC and pod, then start Tilt again:
 
 ```bash
 kubectl delete pvc -n infrastructure postgresql-data-postgresql-0
 kubectl delete pod -n infrastructure postgresql-0
 ```
-
-### Database Not Found
-
-The init script only runs when the PVC is first created. If you changed the
-first-boot database mapping, update the init script and recreate PostgreSQL
-state. For one-off local admin work, use `postgres_admin` and then apply the
-same ownership/grant pattern manually.
 
 ### Can't Connect from a Service
 

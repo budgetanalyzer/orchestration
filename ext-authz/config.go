@@ -20,7 +20,7 @@ func LoadConfig() Config {
 	return Config{
 		RedisAddr:         envOrDefault("REDIS_ADDR", "redis.infrastructure:6379"),
 		RedisUsername:     envOrDefault("REDIS_USERNAME", ""),
-		RedisPassword:     envOrDefault("REDIS_PASSWORD", ""),
+		RedisPassword:     envOrDefault("REDIS_EXT_AUTHZ_PASSWORD", ""),
 		RedisTLS:          envOrDefault("REDIS_TLS", "false") == "true",
 		HTTPPort:          envOrDefault("HTTP_PORT", "9002"),
 		HealthPort:        envOrDefault("HEALTH_PORT", "8090"),

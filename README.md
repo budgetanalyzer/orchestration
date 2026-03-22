@@ -26,7 +26,6 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 
 Current local platform baseline:
 - `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
-- Existing pre-Phase-0 Kind clusters must be deleted and recreated before setup will succeed.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
 - After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform prerequisites are active, then `./scripts/dev/verify-phase-1-credentials.sh` to prove Phase 1 credential isolation.

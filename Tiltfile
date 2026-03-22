@@ -267,7 +267,7 @@ create_secret('currency-service-rabbitmq-credentials', DEFAULT_NAMESPACE, {
     'virtual-host': rabbitmq_virtual_host,
 })
 
-redis_default_password = os.getenv('REDIS_DEFAULT_PASSWORD', os.getenv('REDIS_PASSWORD', 'budget-analyzer-redis-default'))
+redis_default_password = os.getenv('REDIS_DEFAULT_PASSWORD', 'budget-analyzer-redis-default')
 redis_ops_password = os.getenv('REDIS_OPS_PASSWORD', 'budget-analyzer-redis-ops')
 redis_session_gateway_password = os.getenv('REDIS_SESSION_GATEWAY_PASSWORD', 'budget-analyzer-session-gateway-redis')
 redis_ext_authz_password = os.getenv('REDIS_EXT_AUTHZ_PASSWORD', 'budget-analyzer-ext-authz-redis')

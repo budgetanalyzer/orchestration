@@ -324,17 +324,6 @@ Common causes:
 - Invalid Auth0 credentials
 - Missing environment variables
 
-### RabbitMQ Credentials or Permissions Changed
-
-RabbitMQ boot-time definitions only seed a blank broker. If you changed the
-RabbitMQ users, passwords, or permissions in `.env` or the orchestrated
-definitions, recreate the PVC before restarting RabbitMQ:
-
-```bash
-kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
-tilt trigger rabbitmq
-```
-
 ### Database Connection Refused
 
 1. Check PostgreSQL is running:

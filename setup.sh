@@ -40,13 +40,6 @@ print_warning() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
-env_var_exists() {
-    local env_file="$1"
-    local var_name="$2"
-
-    grep -q "^${var_name}=" "$env_file" 2>/dev/null
-}
-
 expected_kind_node_image() {
     awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$SCRIPT_DIR/kind-cluster-config.yaml"
 }
@@ -236,33 +229,6 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
 else
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
     print_success ".env file created from .env.example"
-fi
-
-PHASE1_SECRET_VARS=(
-    "POSTGRES_BOOTSTRAP_PASSWORD"
-    "POSTGRES_TRANSACTION_SERVICE_PASSWORD"
-    "POSTGRES_CURRENCY_SERVICE_PASSWORD"
-    "POSTGRES_PERMISSION_SERVICE_PASSWORD"
-    "RABBITMQ_BOOTSTRAP_PASSWORD"
-    "RABBITMQ_CURRENCY_SERVICE_PASSWORD"
-    "REDIS_DEFAULT_PASSWORD"
-    "REDIS_OPS_PASSWORD"
-    "REDIS_SESSION_GATEWAY_PASSWORD"
-    "REDIS_EXT_AUTHZ_PASSWORD"
-    "REDIS_CURRENCY_SERVICE_PASSWORD"
-)
-
-MISSING_PHASE1_SECRET_VARS=()
-for var_name in "${PHASE1_SECRET_VARS[@]}"; do
-    if ! env_var_exists "$SCRIPT_DIR/.env" "$var_name"; then
-        MISSING_PHASE1_SECRET_VARS+=("$var_name")
-    fi
-done
-
-if [ ${#MISSING_PHASE1_SECRET_VARS[@]} -gt 0 ]; then
-    print_warning ".env is missing new Phase 1 secret-contract variables"
-    echo "  Sync these entries from .env.example before running tilt up:"
-    echo "    ${MISSING_PHASE1_SECRET_VARS[*]}"
 fi
 
 # =============================================================================

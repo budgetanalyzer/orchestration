@@ -10,14 +10,11 @@
 #
 # Usage:
 #   ./scripts/dev/verify-phase-1-credentials.sh
-#   ./scripts/dev/verify-phase-1-credentials.sh --destructive-redis-flushall
 
 set -euo pipefail
 
 PASSED=0
 FAILED=0
-SKIPPED=0
-DESTRUCTIVE_REDIS_FLUSHALL=false
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 PORT_FORWARD_PIDS=()
@@ -26,20 +23,15 @@ TMP_FILES=()
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-1-credentials.sh [--destructive-redis-flushall]
+Usage: ./scripts/dev/verify-phase-1-credentials.sh
 
 Options:
-  --destructive-redis-flushall  Exercise redis-ops FLUSHALL. This wipes Redis.
   -h, --help                    Show this help text.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --destructive-redis-flushall)
-            DESTRUCTIVE_REDIS_FLUSHALL=true
-            shift
-            ;;
         -h|--help)
             usage
             exit 0
@@ -55,7 +47,6 @@ done
 section() { printf '\n=== %s ===\n' "$1"; }
 pass()    { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
 fail()    { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
-skip()    { printf '  [SKIP] %s\n' "$1"; SKIPPED=$((SKIPPED + 1)); }
 
 cleanup() {
     set +e
@@ -534,21 +525,6 @@ else
     fail "${REDIS_OPS_USER} FLUSHDB on isolated DB (SET=${OPS_DB15_SET}, FLUSH=${OPS_DB15_FLUSH}, EXISTS=${OPS_DB15_EXISTS})"
 fi
 
-if [ "$DESTRUCTIVE_REDIS_FLUSHALL" = true ]; then
-    OPS_FLUSHALL_KEY="__phase1_flushall__"
-    redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" SET "$OPS_FLUSHALL_KEY" "ok" >/dev/null 2>&1
-    OPS_FLUSHALL=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" FLUSHALL ASYNC)
-    sleep 1
-    OPS_FLUSHALL_EXISTS=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" EXISTS "$OPS_FLUSHALL_KEY")
-    if [ "$OPS_FLUSHALL" = "OK" ] && [ "$OPS_FLUSHALL_EXISTS" = "0" ]; then
-        pass "${REDIS_OPS_USER} FLUSHALL ASYNC"
-    else
-        fail "${REDIS_OPS_USER} FLUSHALL ASYNC (FLUSH=${OPS_FLUSHALL}, EXISTS=${OPS_FLUSHALL_EXISTS})"
-    fi
-else
-    skip "${REDIS_OPS_USER} FLUSHALL not run (pass --destructive-redis-flushall to exercise it)"
-fi
-
 section "ext-authz: Live Redis username/password validation"
 
 if kubectl get pod -n default "$EXT_AUTHZ_POD" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep -q '^true$'; then
@@ -590,11 +566,11 @@ redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${EXT_AUTHZ_
 
 echo ""
 echo "=============================================="
-TOTAL=$((PASSED + FAILED + SKIPPED))
+TOTAL=$((PASSED + FAILED))
 if [ "$FAILED" -eq 0 ]; then
-    echo "  ${PASSED} passed, ${SKIPPED} skipped (out of ${TOTAL})"
+    echo "  ${PASSED} passed (out of ${TOTAL})"
 else
-    echo "  ${PASSED} passed, ${FAILED} failed, ${SKIPPED} skipped (out of ${TOTAL})"
+    echo "  ${PASSED} passed, ${FAILED} failed (out of ${TOTAL})"
 fi
 echo "=============================================="
 

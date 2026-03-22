@@ -234,6 +234,8 @@ Production seam:
 
 ## Phase 2: Immediate Network Isolation
 
+Detailed implementation breakdown: [security-hardening-v2-phase-2-implementation.md](./security-hardening-v2-phase-2-implementation.md)
+
 Add Kubernetes `NetworkPolicy` now, before the ingress migration, to close the current bypass path.
 
 ### 2a. Default namespace policies
@@ -242,6 +244,12 @@ New files:
 
 - `kubernetes/network-policies/default-deny.yaml`
 - `kubernetes/network-policies/default-allow.yaml`
+
+Current authoring status for March 21, 2026:
+
+- Session 2 is implemented in-repo: the `default` namespace deny and allow manifests are authored.
+- `kubectl apply --dry-run=server` succeeded for both manifests against the active `kind-kind` cluster.
+- Tilt rollout wiring is still intentionally deferred; Session 2 stops at authoring and validation so Session 3 can land the matching `infrastructure` namespace policies before live enforcement.
 
 Allow rules in the current topology:
 
@@ -260,6 +268,8 @@ Implementation notes:
 
 - Match both namespace and pod labels for ingress callers
 - Do not implicitly trust an entire namespace when a narrower pod selector is possible
+- Session 1 froze the active topology without a `session-gateway` -> `nginx-gateway:8080` edge; Envoy already routes `/api/*` and `/*` directly to `nginx-gateway`
+- Do not add pod-to-pod allow rules for `ext-authz:8090`, `rabbitmq:15672`, or `nginx-gateway:/health`; those are probe/debug or local management paths, not application dependencies
 
 ### 2b. Infrastructure namespace policies
 
@@ -267,6 +277,12 @@ New files:
 
 - `kubernetes/network-policies/infrastructure-deny.yaml`
 - `kubernetes/network-policies/infrastructure-allow.yaml`
+
+Current authoring status for March 21, 2026:
+
+- Session 3 is implemented in-repo: the `infrastructure` namespace deny and allow manifests are authored.
+- `kubectl apply --dry-run=server` succeeded for both infrastructure manifests against the active `kind-kind` cluster.
+- Tilt rollout is still intentionally deferred until Session 4 applies the `default` and `infrastructure` policy sets together.
 
 Allow rules:
 
@@ -282,6 +298,7 @@ Interim goal:
 
 - `session-gateway` only needs outbound HTTPS to the configured IdP host
 - `currency-service` only needs outbound HTTPS to `api.stlouisfed.org`
+- Session 1 re-check across the checked-in topology and sibling repo configs found no other workload with a required external HTTPS dependency
 
 Important limitation:
 

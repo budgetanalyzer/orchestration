@@ -11,7 +11,7 @@ data:
     set -eu
 
     psql_exec() {
-      database_name="$1"
+      local database_name="$1"
       shift
 
       PGPASSWORD="$POSTGRES_PASSWORD" \
@@ -19,7 +19,7 @@ data:
     }
 
     psql_query() {
-      database_name="$1"
+      local database_name="$1"
       shift
 
       PGPASSWORD="$POSTGRES_PASSWORD" \
@@ -27,20 +27,20 @@ data:
     }
 
     ensure_service_role() {
-      role_name="$1"
-      role_password="$2"
+      local role_name="$1"
+      local role_password="$2"
 
       if [ "$(psql_query "$POSTGRES_DB" -c "SELECT 1 FROM pg_roles WHERE rolname = '$role_name';")" != "1" ]; then
         psql_exec "$POSTGRES_DB" -c "CREATE ROLE $role_name LOGIN;"
       fi
 
-      psql_exec "$POSTGRES_DB" --set=role_password="$role_password" \
-        -c "ALTER ROLE $role_name WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'role_password';"
+      printf '%s\n' "ALTER ROLE $role_name WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'role_password';" | \
+        psql_exec "$POSTGRES_DB" -v role_password="$role_password"
     }
 
     ensure_service_database() {
-      database_name="$1"
-      owner_name="$2"
+      local database_name="$1"
+      local owner_name="$2"
 
       if [ "$(psql_query "$POSTGRES_DB" -c "SELECT 1 FROM pg_database WHERE datname = '$database_name';")" != "1" ]; then
         psql_exec "$POSTGRES_DB" -c "CREATE DATABASE $database_name OWNER $owner_name;"
@@ -54,8 +54,8 @@ data:
 
     # Re-apply the bootstrap password after the SCRAM config is active so the
     # break-glass admin account is stored with the same password policy.
-    psql_exec "$POSTGRES_DB" --set=admin_password="$POSTGRES_PASSWORD" \
-      -c "ALTER ROLE $POSTGRES_USER WITH PASSWORD :'admin_password';"
+    printf '%s\n' "ALTER ROLE $POSTGRES_USER WITH PASSWORD :'admin_password';" | \
+      psql_exec "$POSTGRES_DB" -v admin_password="$POSTGRES_PASSWORD"
 
     ensure_service_role "transaction_service" "$POSTGRES_TRANSACTION_SERVICE_PASSWORD"
     ensure_service_role "currency_service" "$POSTGRES_CURRENCY_SERVICE_PASSWORD"

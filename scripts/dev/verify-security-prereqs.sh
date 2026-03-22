@@ -252,6 +252,9 @@ prove_istio_readiness_and_injection() {
     local pod_name="istio-sidecar-smoke"
     kubectl delete pod "$pod_name" -n default --ignore-not-found >/dev/null 2>&1 || true
 
+    # PodSecurity warning expected: Istio's injected istio-init container needs
+    # NET_ADMIN/NET_RAW and runs as root. Fixed properly in Phase 5 (manifest
+    # hardening + Istio CNI or ambient mode to eliminate istio-init).
     cat <<MANIFEST | kubectl apply -n default -f - >/dev/null
 apiVersion: v1
 kind: Pod
@@ -264,6 +267,14 @@ spec:
     - name: app
       image: ${BUSYBOX_IMAGE}
       command: ["sh", "-c", "sleep 300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
 MANIFEST
 
     TEMP_PODS+=("default/${pod_name}")

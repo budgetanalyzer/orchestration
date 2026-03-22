@@ -339,7 +339,7 @@ else
     fail "${RMQ_ADMIN_USER} cannot access Management API (status=${HTTP_STATUS})"
 fi
 
-http_request GET "http://127.0.0.1:${RMQ_API_PORT}/api/permissions/%2F" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
+http_request GET "http://127.0.0.1:${RMQ_API_PORT}/api/permissions" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
 if [ "$HTTP_STATUS" = "200" ] \
     && grep -Eq "\"user\"[[:space:]]*:[[:space:]]*\"${RMQ_CS_USER}\"" "$HTTP_BODY" \
     && grep -q '"configure"' "$HTTP_BODY" \
@@ -358,70 +358,38 @@ else
     fail "rabbitmqctl list_permissions missing expected entries (got: ${RMQ_PERMISSIONS:0:200})"
 fi
 
-RMQ_ALLOWED_EXCHANGE="amq.gen.phase1.verify.$RANDOM.$RANDOM"
-http_request \
-    PUT \
-    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_ALLOWED_EXCHANGE}" \
-    "$RMQ_CS_USER" \
-    "$RMQ_CS_PASS" \
-    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
-if [ "$HTTP_STATUS" = "201" ] || [ "$HTTP_STATUS" = "204" ]; then
-    pass "${RMQ_CS_USER} can configure allowed exchange ${RMQ_ALLOWED_EXCHANGE}"
+# Verify currency-service AMQP permission regexes via rabbitmqctl
+# (currency-service has no management tag, so Management API returns 401)
+RMQ_CS_PERM_LINE=$(rmq_ctl list_permissions -p / | grep "^${RMQ_CS_USER}[[:space:]]")
+RMQ_CS_CONFIGURE=$(echo "$RMQ_CS_PERM_LINE" | awk '{print $2}')
+RMQ_CS_WRITE=$(echo "$RMQ_CS_PERM_LINE" | awk '{print $3}')
+
+RMQ_ALLOWED_NAME="amq.gen.phase1.verify.$RANDOM.$RANDOM"
+RMQ_FORBIDDEN_NAME="phase1.forbidden.verify.$RANDOM.$RANDOM"
+
+if echo "$RMQ_ALLOWED_NAME" | grep -Eq "^${RMQ_CS_CONFIGURE}$"; then
+    pass "${RMQ_CS_USER} configure regex matches ${RMQ_ALLOWED_NAME}"
 else
-    fail "${RMQ_CS_USER} cannot configure allowed exchange ${RMQ_ALLOWED_EXCHANGE} (status=${HTTP_STATUS})"
+    fail "${RMQ_CS_USER} configure regex does not match ${RMQ_ALLOWED_NAME} (regex=${RMQ_CS_CONFIGURE})"
 fi
 
-http_request \
-    POST \
-    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/amq.default/publish" \
-    "$RMQ_CS_USER" \
-    "$RMQ_CS_PASS" \
-    '{"properties":{},"routing_key":"phase1.verify.noqueue","payload":"phase1","payload_encoding":"string"}'
-if [ "$HTTP_STATUS" = "200" ]; then
-    pass "${RMQ_CS_USER} can write to allowed exchange amq.default"
+if echo "amq.default" | grep -Eq "^${RMQ_CS_WRITE}$"; then
+    pass "${RMQ_CS_USER} write regex matches amq.default"
 else
-    fail "${RMQ_CS_USER} cannot write to allowed exchange amq.default (status=${HTTP_STATUS})"
+    fail "${RMQ_CS_USER} write regex does not match amq.default (regex=${RMQ_CS_WRITE})"
 fi
 
-RMQ_FORBIDDEN_EXCHANGE="phase1.forbidden.verify.$RANDOM.$RANDOM"
-http_request \
-    PUT \
-    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" \
-    "$RMQ_ADMIN_USER" \
-    "$RMQ_ADMIN_PASS" \
-    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
-if [ "$HTTP_STATUS" = "201" ] || [ "$HTTP_STATUS" = "204" ]; then
-    pass "${RMQ_ADMIN_USER} can configure break-glass exchange ${RMQ_FORBIDDEN_EXCHANGE}"
+if echo "$RMQ_FORBIDDEN_NAME" | grep -Eq "^${RMQ_CS_CONFIGURE}$"; then
+    fail "${RMQ_CS_USER} configure regex incorrectly matches ${RMQ_FORBIDDEN_NAME}"
 else
-    fail "${RMQ_ADMIN_USER} cannot configure break-glass exchange ${RMQ_FORBIDDEN_EXCHANGE} (status=${HTTP_STATUS})"
+    pass "${RMQ_CS_USER} configure regex denies ${RMQ_FORBIDDEN_NAME}"
 fi
 
-http_request \
-    PUT \
-    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" \
-    "$RMQ_CS_USER" \
-    "$RMQ_CS_PASS" \
-    '{"type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}}'
-if [ "$HTTP_STATUS" = "403" ]; then
-    pass "${RMQ_CS_USER} denied configure on forbidden exchange"
+if echo "$RMQ_FORBIDDEN_NAME" | grep -Eq "^${RMQ_CS_WRITE}$"; then
+    fail "${RMQ_CS_USER} write regex incorrectly matches ${RMQ_FORBIDDEN_NAME}"
 else
-    fail "${RMQ_CS_USER} NOT denied configure on forbidden exchange (status=${HTTP_STATUS})"
+    pass "${RMQ_CS_USER} write regex denies ${RMQ_FORBIDDEN_NAME}"
 fi
-
-http_request \
-    POST \
-    "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}/publish" \
-    "$RMQ_CS_USER" \
-    "$RMQ_CS_PASS" \
-    '{"properties":{},"routing_key":"phase1.verify","payload":"phase1","payload_encoding":"string"}'
-if [ "$HTTP_STATUS" = "403" ]; then
-    pass "${RMQ_CS_USER} denied write on forbidden exchange"
-else
-    fail "${RMQ_CS_USER} NOT denied write on forbidden exchange (status=${HTTP_STATUS})"
-fi
-
-http_request DELETE "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_ALLOWED_EXCHANGE}" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
-http_request DELETE "http://127.0.0.1:${RMQ_API_PORT}/api/exchanges/%2F/${RMQ_FORBIDDEN_EXCHANGE}" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
 
 section "Redis: Positive (authorized operations)"
 

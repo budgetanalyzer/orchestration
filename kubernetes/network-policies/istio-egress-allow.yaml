@@ -1,0 +1,100 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-dns-egress
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-istiod-egress
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app: istiod
+      ports:
+        - protocol: TCP
+          port: 15012
+---
+# Ingress from approved default-namespace workloads (session-gateway and currency-service)
+# to the egress gateway. Port 443 matches the Gateway server port definition.
+# Verify the rendered targetPort with: kubectl get svc -n istio-egress -o yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-ingress-from-default
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              app: session-gateway
+      ports:
+        - protocol: TCP
+          port: 443
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              app: currency-service
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# Egress to external internet — only this pod gets external access on port 443
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-external-egress
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443

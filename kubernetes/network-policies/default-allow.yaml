@@ -57,7 +57,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-nginx-gateway-ingress-from-envoy
+  name: allow-nginx-gateway-ingress-from-istio-ingress
   namespace: default
 spec:
   podSelector:
@@ -69,12 +69,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: envoy-gateway-system
+              kubernetes.io/metadata.name: istio-ingress
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: proxy
-              gateway.envoyproxy.io/owning-gateway-name: ingress-gateway
-              gateway.envoyproxy.io/owning-gateway-namespace: default
+              gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
       ports:
         - protocol: TCP
           port: 8080
@@ -82,7 +80,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-ext-authz-ingress-from-envoy
+  name: allow-ext-authz-ingress-from-istio-ingress
   namespace: default
 spec:
   podSelector:
@@ -94,12 +92,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: envoy-gateway-system
+              kubernetes.io/metadata.name: istio-ingress
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: proxy
-              gateway.envoyproxy.io/owning-gateway-name: ingress-gateway
-              gateway.envoyproxy.io/owning-gateway-namespace: default
+              gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
       ports:
         - protocol: TCP
           port: 9002
@@ -107,7 +103,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-session-gateway-ingress-from-envoy
+  name: allow-session-gateway-ingress-from-istio-ingress
   namespace: default
 spec:
   podSelector:
@@ -119,12 +115,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: envoy-gateway-system
+              kubernetes.io/metadata.name: istio-ingress
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: proxy
-              gateway.envoyproxy.io/owning-gateway-name: ingress-gateway
-              gateway.envoyproxy.io/owning-gateway-namespace: default
+              gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
       ports:
         - protocol: TCP
           port: 8081
@@ -296,7 +290,15 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
-    - ports:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-egress
+          podSelector:
+            matchLabels:
+              app: istio-egress-gateway
+              istio: egress-gateway
+      ports:
         - protocol: TCP
           port: 443
 ---
@@ -388,7 +390,15 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
-    - ports:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-egress
+          podSelector:
+            matchLabels:
+              app: istio-egress-gateway
+              istio: egress-gateway
+      ports:
         - protocol: TCP
           port: 443
 ---

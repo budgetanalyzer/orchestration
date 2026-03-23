@@ -188,7 +188,7 @@ fi
 # =============================================================================
 print_step "Setting up Gateway API CRDs..."
 
-# Gateway API CRDs (required before Envoy Gateway, which Tilt installs via Helm)
+# Gateway API CRDs (required before Istio ingress gateway, which Tilt installs)
 if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
     print_success "Gateway API CRDs already installed"
 else
@@ -197,7 +197,7 @@ else
     print_success "Gateway API CRDs installed"
 fi
 
-# Note: Envoy Gateway is installed by Tilt via Helm (see Tiltfile)
+# Note: Istio and the ingress gateway are installed by Tilt via Helm (see Tiltfile)
 
 # =============================================================================
 # Step 6: Install Istio Helm repository

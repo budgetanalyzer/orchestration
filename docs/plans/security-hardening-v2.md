@@ -1,5 +1,7 @@
 # Security Hardening Plan v2
 
+> **No backward compatibility required.** This is a reference architecture with no live users, no forks, and no existing deployments to preserve. Implementation sessions should do clean replacements — no dual-parent cutover strategies, temporary ports, staged migrations, or legacy coexistence scaffolding. Rip and replace.
+
 ## Context
 
 This is the production-grade security hardening plan for the orchestration repository.
@@ -8,7 +10,7 @@ It replaces the earlier split between "implement now" and "future work." Materia
 
 Key corrections carried forward from the earlier review:
 
-- External header spoofing through the public ingress path is already mitigated by ext_authz `headersToBackend` allowlisting.
+- External header spoofing through the public ingress path is already mitigated by ext_authz `headersToUpstreamOnAllow` allowlisting.
 - Istio `AuthorizationPolicy` cannot protect ingress-facing services in the current topology because Envoy Gateway is outside the mesh and has no SPIFFE identity.
 - The real current gap is the in-cluster bypass path:
 
@@ -355,12 +357,24 @@ Final goal:
 - application workloads egress only to the Istio egress gateway at the Kubernetes network layer
 - the egress gateway is the only workload allowed to talk to approved external hosts
 
+Current topology detail:
+
+- the egress gateway listeners use TLS `PASSTHROUGH`
+- the workload-to-egress `DestinationRule` therefore uses `tls.mode: DISABLE` so the original external TLS/SNI reaches the gateway unchanged
+- external TLS remains end-to-end; the sidecar-to-egress-gateway hop is not additionally wrapped in mesh mTLS
+
 ### 3d. NetworkPolicy alignment after cutover
 
 After Istio ingress and egress gateways are live:
 
 - update application namespace `NetworkPolicy` so workloads only talk to the ingress/egress gateways and their approved in-cluster dependencies
 - remove Envoy Gateway-specific allowances
+
+Runtime completion gate:
+
+- `./scripts/dev/verify-phase-3-istio-ingress.sh` must pass after `tilt up`
+- the verifier proves auth-path throttling at Istio ingress, end-to-end header sanitization with a seeded ext_authz session and temporary echo backend, HTTP-level mTLS and ingress-identity denials, and NGINX forwarded-chain logging
+- do not describe Phase 3 as complete until that verifier and the live validation checklist pass
 
 ---
 
@@ -468,11 +482,14 @@ Do not keep `Access-Control-Allow-Origin: *` unless a concrete cross-origin use 
 
 Rate limiting for `/auth/*`, `/login/*`, `/oauth2/*`, `/logout`, and `/user` belongs at the ingress gateway.
 
-Target:
+Current implementation:
 
-- rate limit auth-sensitive paths at Istio ingress
-- prefer local rate limiting first if the deployment stays single-replica
-- move to distributed/global rate limiting if ingress scales horizontally
+- auth-sensitive paths are locally rate limited at Istio ingress
+- the Phase 3 verifier treats missing auth-path throttling as a failure
+
+Follow-up:
+
+- revisit distributed/global rate limiting if ingress scales horizontally
 
 ### 6d. API rate-limiting identity correctness
 

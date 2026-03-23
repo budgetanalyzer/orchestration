@@ -12,29 +12,35 @@ Phase 3 eliminates this seam by replacing Envoy Gateway with Istio-managed ingre
 
 **Prerequisite status:** Phase 1 (credentials) and Phase 2 (NetworkPolicy authoring) are implemented. NetworkPolicy manifests are authored but Tilt rollout is deferred to this phase.
 
+**Simplification note:** This is a reference architecture with no live users or forks. There is no need for dual-parent cutover strategies, temporary standby NodePorts, or staged migrations. Existing local cluster state still needs a clean replacement step: remove Envoy Gateway completely, then install Istio ingress on the real NodePort (`30443`).
+
 ---
 
 ## Key Architectural Decisions
 
 **1. Gateway API (not VirtualService) for ingress.** Istio v1.24 natively implements the Gateway API specification. The existing HTTPRoute resources (`api-httproute.yaml`, `auth-httproute.yaml`, `app-httproute.yaml`) are controller-agnostic — they reference a parent Gateway by name, not by controller. They can be reused by updating `parentRefs` to point at an Istio-backed Gateway. No VirtualService resources are needed for ingress.
 
-**2. Istio auto-provisioned ingress gateway.** Rather than deploying the `istio/gateway` Helm chart separately, let Istio auto-create the gateway Deployment and Service from the Gateway API resource. This is the standard Istio Gateway API pattern. A `kubectl patch` sets the specific NodePort (30443) to match the existing Kind cluster port mapping (`kind-cluster-config.yaml` line 19-21: `containerPort: 30443` → `hostPort: 443`).
+**2. Istio auto-provisioned ingress gateway.** Rather than deploying the `istio/gateway` Helm chart separately, let Istio auto-create the gateway Deployment and Service from the Gateway API resource. This is the standard Istio Gateway API pattern. A `kubectl patch` sets the specific NodePort (30443) to match the existing Kind cluster port mapping (`kind-cluster-config.yaml` line 19-21: `containerPort: 30443` → `hostPort: 443`) after the old Envoy Gateway resources are removed.
 
-**3. `istio-ingress` namespace.** The ingress gateway deploys in its own namespace with sidecar injection enabled, giving it a SPIFFE identity in that namespace. Session 1 explicitly verifies the rendered ServiceAccount name before Session 3 writes principal-based `AuthorizationPolicy` rules.
+**3. `istio-ingress` namespace.** The ingress gateway deploys in its own namespace with sidecar injection enabled, giving it a SPIFFE identity in that namespace.
 
 **4. ext_authz via meshConfig extensionProviders.** Istio supports external authorization through `meshConfig.extensionProviders` + `AuthorizationPolicy` with `action: CUSTOM`. The ext-authz Go service already speaks the HTTP ext_authz protocol — no code changes required. This replaces the Envoy Gateway `SecurityPolicy`.
 
 **5. Istio networking API for egress routing.** Egress gateway routing uses `ServiceEntry` + Istio networking `Gateway` + `VirtualService` + `DestinationRule` (the mature pattern), not Gateway API.
 
-**6. Egress gateway via Helm.** The egress gateway is deployed via the `istio/gateway` Helm chart in `istio-egress` namespace (ClusterIP, no external exposure).
+**6. Egress gateway via checked-in manifest.** The egress gateway is deployed in `istio-egress` namespace from a checked-in manifest rendered from the upstream `istio/gateway` chart `1.24.3` (ClusterIP, no external exposure). The rendered resource names stay `istio-egress-gateway` so the Service DNS name remains `istio-egress-gateway.istio-egress.svc.cluster.local` — the `DestinationRule` and `VirtualService` resources depend on this exact name.
 
-**7. No explicit `ALLOW_ANY` in the base Istiod values.** Session 1 only moves Istiod configuration into a values file; it does not pin outbound policy. Session 4 updates that same canonical values file to `REGISTRY_ONLY` only after the required `ServiceEntry` and egress-routing resources exist. This avoids a steady-state drift where re-running `istiod` silently reopens outbound internet access.
+**7. Canonical outbound policy in istiod values.** The `istiod-values.yaml` file is the single source of truth for mesh configuration. `outboundTrafficPolicy` is left unset until Session 3, which adds `REGISTRY_ONLY` only after ServiceEntries and egress routing are verified. This prevents a later `istiod` re-apply from silently reopening internet egress.
+
+**8. GatewayClass.** Istio 1.24 auto-creates the `istio` GatewayClass when istiod starts. A manual `istio-gatewayclass.yaml` is not needed — the Tilt resource just depends on `istiod` directly.
 
 ---
 
-## Session 1: Istio Ingress Gateway Installation and ext_authz Provider Registration
+## Session 1: Replace Envoy Gateway with Istio Ingress
 
-**Goal:** Install the Istio ingress gateway, register ext-authz as an Istio extension provider, and create the Istio Gateway with TLS termination. Both gateways coexist; no traffic cuts over yet, and outbound policy remains unchanged through Session 3.
+**Goal:** Remove Envoy Gateway entirely, including any existing local-cluster Helm state, install the Istio ingress gateway with ext_authz, update HTTPRoutes, and replace ingress-side NetworkPolicies. At the end of this session, all ingress traffic flows through Istio.
+
+**Cluster-state assumption:** This session must succeed both from a fresh Kind cluster and from an already-bootstrapped local dev cluster. There is no coexistence period, but there is an explicit cleanup step so `30443` is actually free before the Istio Gateway is patched onto it.
 
 ### Files to Create
 
@@ -60,8 +66,7 @@ pilot:
       memory: 256Mi
       cpu: 100m
 meshConfig:
-  # Leave outboundTrafficPolicy unset in Sessions 1-3.
-  # Session 4 makes REGISTRY_ONLY the canonical value in this same file.
+  # outboundTrafficPolicy left unset until Session 3 adds REGISTRY_ONLY
   extensionProviders:
     - name: ext-authz-http
       envoyExtAuthzHttp:
@@ -74,16 +79,6 @@ meshConfig:
         includeRequestHeadersInCheck:
           - cookie
         failOpen: false
-```
-
-**`kubernetes/istio/istio-gatewayclass.yaml`**
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: istio
-spec:
-  controllerName: istio.io/gateway-controller
 ```
 
 **`kubernetes/istio/istio-gateway.yaml`** — Istio auto-provisions the Deployment/Service from this:
@@ -117,7 +112,7 @@ spec:
 
 **`kubernetes/istio/tls-reference-grant.yaml`** — Required because the TLS secret is in `default` but the Gateway is in `istio-ingress`:
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
   name: allow-istio-ingress-tls-secret
@@ -133,31 +128,6 @@ spec:
       name: budgetanalyzer-localhost-wildcard-tls
 ```
 
-### Files to Modify
-
-**`Tiltfile`** — Restructure the Istio and Gateway sections:
-
-1. Modify the `istiod` resource to use `--values kubernetes/istio/istiod-values.yaml` instead of inline `--set` flags
-2. Add new resources (after `istiod`):
-   - `istio-gateway-class` — applies `istio-gatewayclass.yaml` (depends: `istiod`, `gateway-api-crds`)
-   - `istio-ingress-config` — applies namespace, ReferenceGrant, Gateway, then patches NodePort to 30444 (temporary, avoids conflict with Envoy on 30443). Depends: `istio-gateway-class`, `mkcert-tls-secret`
-
-### Verification
-
-1. `kubectl get pods -n istio-ingress` — gateway pod Running
-2. `kubectl get gateway -n istio-ingress istio-ingress-gateway` — `Programmed=True`
-3. `kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http` — extension provider registered
-4. `kubectl get deploy,pods,sa -n istio-ingress --show-labels` — note the exact gateway ServiceAccount name and rendered pod labels (needed in Sessions 2 and 3)
-5. Envoy Gateway still serves traffic at `https://app.budgetanalyzer.localhost` — no disruption
-
----
-
-## Session 2: Ingress Cutover — HTTPRoutes, ext_authz Policy, and Envoy Gateway Removal
-
-**Goal:** Create the Istio ext_authz `AuthorizationPolicy`, stage Istio routes and ingress-side `NetworkPolicy` changes, then cut over NodePort 30443 only after Envoy Gateway is removed.
-
-### Files to Create
-
 **`kubernetes/istio/ext-authz-policy.yaml`** — CUSTOM action AuthorizationPolicy targeting the Istio ingress gateway for `/api/*` paths:
 ```yaml
 apiVersion: security.istio.io/v1
@@ -168,7 +138,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      istio.io/gateway-name: istio-ingress-gateway  # Verify against Session 1 labels before apply
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway  # Verified against the auto-provisioned Istio gateway labels
   action: CUSTOM
   provider:
     name: ext-authz-http
@@ -183,25 +153,22 @@ spec:
 **`kubernetes/network-policies/istio-ingress-allow.yaml`** — allows for the ingress gateway pod:
 - DNS egress → kube-dns
 - istiod egress → port 15012
-- External ingress → ingress gateway pod TLS target port (verify the rendered target port; for Istio this is typically 8443)
+- External ingress → ingress gateway pod TLS target port (`443` on the live auto-provisioned Istio Service)
 - Egress to default namespace services: `nginx-gateway:8080`, `ext-authz:9002`, `session-gateway:8081`
-- Pod selectors must use the actual rendered ingress-gateway labels captured in Session 1; do not guess
+- Pod selectors must use the actual rendered ingress-gateway labels; verify with `kubectl get pods -n istio-ingress --show-labels` before writing selectors
 
 ### Files to Modify
 
-**`kubernetes/gateway/api-httproute.yaml`** — use a temporary dual-parent cutover, then finalize to Istio-only:
+**`kubernetes/gateway/api-httproute.yaml`** — change parentRef to Istio:
 ```yaml
   parentRefs:
-  - name: ingress-gateway
   - name: istio-ingress-gateway
     namespace: istio-ingress
 ```
 
-After `istio-ingress-cutover` succeeds, remove the legacy `ingress-gateway` parentRef so the final file points only at `istio-ingress-gateway`.
+**`kubernetes/gateway/auth-httproute.yaml`** — same parentRef change
 
-**`kubernetes/gateway/auth-httproute.yaml`** — same temporary dual-parent cutover, then final Istio-only parentRef
-
-**`kubernetes/gateway/app-httproute.yaml`** — same temporary dual-parent cutover, then final Istio-only parentRef
+**`kubernetes/gateway/app-httproute.yaml`** — same parentRef change
 
 **`kubernetes/network-policies/default-allow.yaml`**:
 1. Delete three policies referencing `envoy-gateway-system`:
@@ -214,17 +181,24 @@ After `istio-ingress-cutover` succeeds, remove the legacy `ingress-gateway` pare
    - `allow-session-gateway-ingress-from-istio-ingress` — port 8081
 
 **`Tiltfile`:**
-1. Keep `istio-ingress-config` on temporary NodePort `30444` until cutover is ready. Do not patch `30443` while Envoy still owns it.
-2. Split the existing `network-policies` resource into:
-   - `network-policies-core` — applies `default` + `infrastructure` namespace policies
-   - `istio-ingress-network-policies` — applies `istio-ingress` namespace policies and depends on `istio-ingress-config`
-   - `istio-egress-network-policies` — reserved for Session 5 and depends on `istio-egress-gateway`
-3. Replace the old `ingress-gateway` resource with `istio-ingress-routes` (applies temporary dual-parent HTTPRoutes + `ext-authz-policy`, depends: `istio-ingress-config`, `istio-ingress-network-policies`, `ext-authz`, `nginx-gateway`)
-4. Add required `envoy-gateway-cleanup` resource that uninstalls Envoy Gateway Helm state and deletes stale Envoy-specific CRs/resources
-5. Add `istio-ingress-cutover` resource that depends on `envoy-gateway-cleanup`, patches the Istio ingress Service to NodePort `30443`, and reapplies the HTTPRoutes in their final Istio-only form
-6. Remove: `envoy-gateway` Helm resource, `envoy-proxy-config`, `gateway-class` (Envoy's), old `ingress-gateway`
-7. Remove `envoy-gateway` from `istio-injection` resource_deps
-8. Remove `envoy-gateway-system` namespace labeling from `istio-injection`
+1. Modify the `istiod` resource to use `--values kubernetes/istio/istiod-values.yaml` instead of inline `--set` flags
+2. Remove entirely from the steady-state graph: `envoy-gateway` Helm resource, `envoy-proxy-config`, `gateway-class` (Envoy's), old `ingress-gateway`
+3. Remove `envoy-gateway` from `istio-injection` resource_deps
+4. Remove `envoy-gateway-system` namespace labeling from `istio-injection`
+5. Do **not** add `istio-ingress` namespace labeling to `istio-injection`; `ingress-namespace.yaml` is the source of truth and must create the namespace with labels before the gateway exists
+6. Add a one-time `envoy-gateway-cleanup` resource that:
+   - Runs before `istio-ingress-config` when upgrading an existing local cluster, and is a no-op on a fresh cluster
+   - Uninstalls the existing Helm release: `helm uninstall envoy-gateway -n envoy-gateway-system --ignore-not-found || true`
+   - Explicitly deletes the old Envoy-specific resources (`gateway.yaml`, `client-traffic-policy.yaml`, `ext-authz-security-policy.yaml`, `envoy-proxy-gatewayclass.yaml`, `envoy-proxy-config.yaml`) so removing Tilt resources does not leave old objects behind
+7. Add `istio-ingress-config` resource that:
+   - Applies `ingress-namespace.yaml`, `tls-reference-grant.yaml`, `istio-gateway.yaml`
+   - Waits for the auto-provisioned Service: `kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=120s`
+   - Patches NodePort to 30443: `kubectl patch svc -n istio-ingress istio-ingress-gateway-istio --type=json -p='[{"op":"replace","path":"/spec/ports/1/nodePort","value":30443}]'` (Note: Istio auto-provisions the Service as `<gateway-name>-istio`, and the HTTPS port is at index 1 — index 0 is status-port/15021)
+   - Depends: `envoy-gateway-cleanup`, `istiod`, `gateway-api-crds`, `mkcert-tls-secret`
+8. Replace old `ingress-gateway` resource with `istio-ingress-routes` that applies HTTPRoutes + `ext-authz-policy.yaml` (depends: `istio-ingress-config`, `istio-ingress-network-policies`, `ext-authz`, `nginx-gateway`)
+9. Split the existing `network-policies` resource into:
+   - `network-policies-core` — applies `default-deny.yaml`, `default-allow.yaml`, `infrastructure-deny.yaml`, `infrastructure-allow.yaml`
+   - `istio-ingress-network-policies` — applies `istio-ingress-deny.yaml`, `istio-ingress-allow.yaml` (depends: `istio-ingress-config`)
 
 ### Files to Delete
 
@@ -240,23 +214,26 @@ The three HTTPRoute files stay in `kubernetes/gateway/` — they are controller-
 
 ### Verification
 
-1. `curl -k https://app.budgetanalyzer.localhost/` — returns React app (catch-all via nginx-gateway)
-2. `curl -k https://app.budgetanalyzer.localhost/api/v1/transactions` — returns 401/403 (ext-authz denies unauthenticated)
-3. `curl -k https://app.budgetanalyzer.localhost/login` — returns 302 redirect to Auth0
-4. `kubectl get networkpolicy -n istio-ingress` — deny-all + allow policies exist
-5. `kubectl get httproute -n default -o wide` — all routes show `istio-ingress-gateway` as an accepted parent during staging, and only `istio-ingress-gateway` after `istio-ingress-cutover`
-6. `kubectl get pods -n envoy-gateway-system` — empty (after cleanup)
-7. Full login flow works end-to-end
+1. `kubectl get pods -n istio-ingress` — gateway pod Running
+2. `kubectl get gateway -n istio-ingress istio-ingress-gateway` — `Programmed=True`
+3. `kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http` — extension provider registered
+4. `kubectl get deploy,pods,sa -n istio-ingress --show-labels` — note the exact ServiceAccount name and rendered pod labels (needed in Session 2)
+5. `curl -k https://app.budgetanalyzer.localhost/` — returns React app
+6. `curl -k https://app.budgetanalyzer.localhost/api/v1/transactions` — returns 401/403 (ext-authz denies unauthenticated)
+7. `curl -k https://app.budgetanalyzer.localhost/login` — returns 302 redirect to Auth0
+8. `kubectl get networkpolicy -n istio-ingress` — deny-all + allow policies exist
+9. `kubectl get ns envoy-gateway-system` — NotFound or present but empty
+10. Full login flow works end-to-end
 
 ---
 
-## Session 3: STRICT mTLS and Ingress-Facing AuthorizationPolicies (Phase 3b)
+## Session 2: STRICT mTLS and Ingress-Facing AuthorizationPolicies
 
 **Goal:** Remove PERMISSIVE PeerAuthentication exceptions. Add AuthorizationPolicies for ingress-facing services restricting them to the Istio ingress gateway identity only.
 
 ### Files to Modify
 
-**`kubernetes/istio/peer-authentication.yaml`** — delete the three PERMISSIVE resources (`nginx-gateway-permissive`, `ext-authz-permissive`, `session-gateway-permissive`). Only `default-strict` remains:
+**`kubernetes/istio/peer-authentication.yaml`** — remove the three PERMISSIVE resources (`nginx-gateway-permissive`, `ext-authz-permissive`, `session-gateway-permissive`). Only `default-strict` remains:
 ```yaml
 apiVersion: security.istio.io/v1
 kind: PeerAuthentication
@@ -285,7 +262,7 @@ spec:
   rules:
     - from:
         - source:
-            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway"]
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
 ---
 # ext-authz: accepts from istio ingress gateway only
 apiVersion: security.istio.io/v1
@@ -301,7 +278,7 @@ spec:
   rules:
     - from:
         - source:
-            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway"]
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
 ---
 # session-gateway: accepts from istio ingress gateway only
 apiVersion: security.istio.io/v1
@@ -317,24 +294,32 @@ spec:
   rules:
     - from:
         - source:
-            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway"]
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
 ```
 
-**Important:** The principal `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway` must match the actual ServiceAccount name verified in Session 1. If Istio names it differently, adjust before applying.
+**Important:** The principal must match the actual ingress gateway ServiceAccount. In the current auto-provisioned deployment that identity is `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`; verify with `kubectl get deploy,sa -n istio-ingress -o yaml` before applying after Istio upgrades.
+
+**`Tiltfile`** — update the `istio-security-policies` resource to explicitly delete the removed PERMISSIVE resources before applying:
+```
+kubectl delete peerauthentication nginx-gateway-permissive ext-authz-permissive session-gateway-permissive -n default --ignore-not-found
+kubectl apply -f kubernetes/istio/peer-authentication.yaml
+kubectl apply -f kubernetes/istio/authorization-policies.yaml
+```
+
+This is necessary because `kubectl apply` does not delete resources removed from a multi-document YAML file.
 
 ### Verification
 
 1. `kubectl get peerauthentication -n default` — only `default-strict`
 2. `kubectl get authorizationpolicy -n default` — now 7 policies (4 existing backend + 3 new ingress-facing)
 3. `curl -k https://app.budgetanalyzer.localhost/` — still works
-4. Probe test: a pod in `istio-ingress` with the ingress-gateway pod labels but a non-gateway ServiceAccount cannot reach `nginx-gateway:8080` — `AuthorizationPolicy` denied
-5. Login flow works end-to-end
+4. Login flow works end-to-end
 
 ---
 
-## Session 4: Egress Gateway and REGISTRY_ONLY (Phase 3c)
+## Session 3: Egress Gateway and REGISTRY_ONLY — IMPLEMENTED
 
-**Goal:** Deploy an Istio egress gateway, create ServiceEntries for Auth0 and FRED API, route outbound through the egress gateway, then flip mesh outbound to `REGISTRY_ONLY`.
+**Goal:** Deploy an Istio egress gateway, create ServiceEntries for Auth0 and FRED API, route outbound through the egress gateway, add egress NetworkPolicies, then flip mesh outbound to `REGISTRY_ONLY`.
 
 ### Files to Create
 
@@ -351,6 +336,10 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/audit-version: v1.32
 ```
+
+**`kubernetes/istio/egress-gateway.yaml`** — checked-in render of the upstream `istio/gateway` chart `1.24.3` for the `istio-egress-gateway` `ServiceAccount`, RBAC, `Service`, `Deployment`, and `HorizontalPodAutoscaler`. Keep the resource name `istio-egress-gateway` and the workload labels `app: istio-egress-gateway` / `istio: egress-gateway`.
+
+**`kubernetes/istio/egress-gateway.provenance.md`** — the render command and rationale for vendoring the manifest instead of using `helm upgrade --install` at runtime.
 
 **`kubernetes/istio/egress-service-entries.yaml`**
 ```yaml
@@ -397,7 +386,7 @@ metadata:
   namespace: default
 spec:
   selector:
-    istio: istio-egress-gateway  # Must match egress pod labels
+    istio: egress-gateway  # Must match the vendored egress-gateway workload labels
   servers:
     - port:
         number: 443
@@ -416,7 +405,11 @@ spec:
       tls:
         mode: PASSTHROUGH
 ---
-# DestinationRule: mTLS to egress gateway
+# DestinationRule: disable auto-mTLS so the original TLS passes through to the
+# egress gateway's PASSTHROUGH listener, which needs to see the external-host SNI.
+# ISTIO_MUTUAL wraps the connection in mesh TLS, hiding the original SNI and causing
+# connection resets. The original TLS (e.g., Auth0's certificate) still provides
+# end-to-end encryption; only the intra-cluster hop is not double-encrypted.
 apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
@@ -426,7 +419,7 @@ spec:
   host: istio-egress-gateway.istio-egress.svc.cluster.local
   trafficPolicy:
     tls:
-      mode: ISTIO_MUTUAL
+      mode: DISABLE
 ---
 # VirtualService: Auth0 via egress gateway
 apiVersion: networking.istio.io/v1
@@ -493,44 +486,6 @@ spec:
               number: 443
 ```
 
-### Files to Modify
-
-**`Tiltfile`:**
-1. Add `istio-egress-gateway` Helm resource (ClusterIP, depends: `istiod`)
-2. Add `istio-egress-config` resource to apply ServiceEntries + egress routing (depends: `istio-egress-gateway`, `istiod`)
-3. Do **not** add a persistent `istio-registry-only` override resource. After `istio-egress-config` is ready, update the canonical `istiod` values file to `REGISTRY_ONLY` and re-run the existing `istiod` resource.
-4. Add `istio-ingress` and `istio-egress` namespace labeling to `istio-injection` resource
-
-**`kubernetes/istio/istiod-values.yaml`** — in Session 4, add the canonical outbound policy:
-```yaml
-meshConfig:
-  outboundTrafficPolicy:
-    mode: REGISTRY_ONLY
-```
-
-This change happens only after the `ServiceEntry` and egress-routing resources are applied and verified.
-
-### Verification
-
-1. `kubectl get pods -n istio-egress` — egress gateway Running
-2. `kubectl get serviceentry -n default` — `auth0-idp` and `fred-api`
-3. Login flow works (session-gateway reaches Auth0 through egress gateway)
-4. From a `currency-service` pod: `curl -I -sS https://api.stlouisfed.org` — succeeds (200/301/404 acceptable; connectivity is the proof)
-5. From the same `currency-service` pod: `curl -I -sS https://example.com` — fails (not registered, `REGISTRY_ONLY`)
-6. `kubectl logs -n istio-egress -l istio=istio-egress-gateway -c istio-proxy --tail=20` — shows TLS passthrough traffic for approved hosts only
-
-### Note on Auth0 hostname
-
-The Auth0 hostname (`dev-gcz1r8453xzz0317.us.auth0.com`) is derived from `AUTH0_ISSUER_URI` in `.env`. If the tenant changes, the ServiceEntry, Gateway servers, and VirtualService hosts must all be updated. Consider a future improvement to template this from the environment.
-
----
-
-## Session 5: Egress NetworkPolicy Alignment (Phase 3d)
-
-**Goal:** Add deny-all + allow policies for the `istio-egress` namespace and constrain approved application egress to the egress gateway only. Ingress-side policy alignment already happened in Session 2 so the cutover can work.
-
-### Files to Create
-
 **`kubernetes/network-policies/istio-egress-deny.yaml`** — deny-all for `istio-egress` namespace
 
 **`kubernetes/network-policies/istio-egress-allow.yaml`** — allows for the egress gateway pod:
@@ -542,58 +497,75 @@ The Auth0 hostname (`dev-gcz1r8453xzz0317.us.auth0.com`) is derived from `AUTH0_
 ### Files to Modify
 
 **`kubernetes/network-policies/default-allow.yaml`:**
-1. **Modify** `allow-session-gateway-egress` — replace open `port: 443` with egress to `istio-egress` namespace only
-2. **Modify** `allow-currency-service-egress` — replace open `port: 443` with egress to `istio-egress` namespace only
+1. **Modify** `allow-session-gateway-egress` — replace open `port: 443` with egress to the rendered `istio-egress-gateway` pods in the `istio-egress` namespace (`app: istio-egress-gateway`, `istio: egress-gateway`). The sidecar intercepts the original `auth0:443` connection and redirects it to the egress gateway pod, so the policy should target that workload directly instead of trusting the whole namespace.
+2. **Modify** `allow-currency-service-egress` — replace open `port: 443` with egress to the rendered `istio-egress-gateway` pods in the `istio-egress` namespace
+
+**`kubernetes/istio/istiod-values.yaml`** — add the canonical outbound policy:
+```yaml
+meshConfig:
+  outboundTrafficPolicy:
+    mode: REGISTRY_ONLY
+```
 
 **`Tiltfile`:**
-- Extend `istio-egress-network-policies` to apply the new `istio-egress` namespace files and depend on `istio-egress-gateway`
-- Keep `network-policies-core` focused on `default` + `infrastructure` namespace files only; do not rely on one directory-wide apply for namespace-scoped resources that may not exist yet
+1. Add `istio-egress-namespace` resource that applies `egress-namespace.yaml` (depends: `istiod`)
+2. Add `istio-egress-gateway` resource that uninstalls any old Helm release with `--wait`, applies `kubernetes/istio/egress-gateway.yaml`, and waits for `deployment/istio-egress-gateway` rollout (depends: `istio-egress-namespace`). The checked-in manifest is rendered from `istio/gateway` `1.24.3` because Helm `v3.20.1` reproduces a chart-schema failure for the required `service.type=ClusterIP` override.
+3. Do **not** add `istio-egress` namespace labeling to `istio-injection`; `egress-namespace.yaml` is the canonical source of labels
+4. Add `istio-egress-config` resource to apply ServiceEntries and egress routing (depends: `istio-egress-gateway`, `istiod`)
+5. Add `istio-egress-network-policies` resource to apply `istio-egress-deny.yaml` and `istio-egress-allow.yaml` (depends: `istio-egress-config`)
+6. After `istio-egress-config` is verified, the updated `istiod-values.yaml` (with `REGISTRY_ONLY`) takes effect on the next `istiod` resource run
+
+### Note on Auth0 hostname
+
+The Auth0 hostname (`dev-gcz1r8453xzz0317.us.auth0.com`) is derived from `AUTH0_ISSUER_URI` in `.env`. It appears in 6 places across 3 files (ServiceEntry, Gateway servers, two VirtualServices). If the tenant changes, all must be updated. Consider templating via a Tilt `local()` that reads from `.env` and generates the YAML.
 
 ### Verification
 
-1. `kubectl get networkpolicy -n istio-egress` — deny-all + allows exist
-2. `kubectl get networkpolicy -n default` — `session-gateway` and `currency-service` no longer have open `port: 443` egress
-3. Full app flow works (login, API calls, logout)
-4. From a transaction-service pod: `curl https://example.com` — fails (no egress path)
-5. From a session-gateway pod: Auth0 reachable (routed through egress gateway)
+1. `kubectl get pods -n istio-egress` — egress gateway Running
+2. `kubectl get serviceentry -n default` — `auth0-idp` and `fred-api`
+3. Login flow works (session-gateway reaches Auth0 through egress gateway)
+4. From a `currency-service` pod: `curl -I -sS https://api.stlouisfed.org` — succeeds (200/301/404 acceptable; connectivity is the proof)
+5. From the same `currency-service` pod: `curl -I -sS https://example.com` — fails (not registered, `REGISTRY_ONLY`)
+6. `kubectl logs -n istio-egress -l istio=egress-gateway -c istio-proxy --tail=20` — shows TLS passthrough traffic for approved hosts only
+7. `kubectl get networkpolicy -n istio-egress` — deny-all + allows exist
+8. `kubectl get networkpolicy -n default` — `session-gateway` and `currency-service` no longer have open `port: 443` egress
 
 ---
 
-## Session 6: Verification Script and Final Cleanup
+## Session 4: Verification Script and Documentation
 
-**Goal:** Create a comprehensive verification script, remove any remaining Envoy Gateway artifacts, update documentation references.
+**Goal:** Create a comprehensive verification script and update all documentation references from Envoy Gateway to Istio, including runtime proof for header sanitization, auth-path rate limiting, and forwarded-header preservation.
 
 ### Files to Create
 
 **`scripts/dev/verify-phase-3-istio-ingress.sh`** — runtime verification script covering:
 1. Ingress path: `curl` returns 200 for app, 401 for unauthenticated API, 302 for login
 2. Header sanitization: with a valid seeded session plus forged `X-User-Id` / `X-Roles` / `X-Permissions`, a temporary echo backend sees only the ext-authz-issued identity headers
-3. mTLS enforcement: direct pod-to-service calls from unlabeled pods fail
-4. AuthorizationPolicy: a pod in `istio-ingress` with ingress-gateway labels but the wrong ServiceAccount cannot reach `nginx-gateway`
+3. mTLS enforcement: a temporary in-mesh echo service returns 200 from a sidecar-injected probe and fails from a no-sidecar probe (`sidecar.istio.io/inject: "false"`)
+4. AuthorizationPolicy: a pod in `istio-ingress` with a non-gateway ServiceAccount cannot reach `nginx-gateway:8080`
 5. Egress control: an approved host is reachable from `session-gateway` / `currency-service`, and an unapproved host is blocked from the same workloads
-6. Edge behavior after Envoy removal: auth endpoints still rate limit correctly and NGINX still sees the expected client IP / forwarded chain
-7. Envoy Gateway absent: no pods in `envoy-gateway-system`
-8. Gateway inventory: only the expected Istio Gateway API and Istio networking resources exist
+6. Auth endpoint rate limiting: repeated requests to `/login`, `/auth/*`, `/oauth2/*`, `/logout`, and `/user` hit the ingress-layer throttle as designed; do not silently drop this check just because the ingress controller changed
+7. Client IP: NGINX still sees the expected X-Forwarded-For chain for both frontend and authenticated API requests after Envoy Gateway removal
+8. Envoy Gateway absent: no pods in `envoy-gateway-system`
+9. Gateway inventory: required Istio Gateway API and Istio networking resources exist, and Envoy-era gateway resources are absent
 
 ### Files to Modify
 
-**`Tiltfile`:**
-- Remove the one-time `envoy-gateway-cleanup` resource (cleanup already ran in Session 2)
-- Verify final dependency graph is clean:
-  ```
-  gateway-api-crds
-  istio-base → istiod
-    ├── istio-injection (namespace labeling)
-    │   ├── [all workloads]
-    │   ├── network-policies-core
-    │   └── istio-security-policies
-    ├── istio-gateway-class → istio-ingress-config
-    │                           ├── istio-ingress-network-policies
-    │                           └── istio-ingress-routes → istio-ingress-cutover
-    └── istio-egress-gateway → istio-egress-config
-                                └── istio-egress-network-policies
-  mkcert-tls-secret → istio-ingress-config
-  ```
+**`Tiltfile`** — verify final dependency graph is clean:
+```
+gateway-api-crds
+istio-base → istiod
+  ├── istio-injection (namespace labeling for default, infrastructure)
+  │   ├── [all workloads]
+  │   ├── network-policies-core
+  │   └── istio-security-policies
+  ├── envoy-gateway-cleanup → istio-ingress-config
+  │                           ├── istio-ingress-network-policies
+  │                           └── istio-ingress-routes
+  └── istio-egress-namespace → istio-egress-gateway → istio-egress-config
+                                                          └── istio-egress-network-policies
+mkcert-tls-secret → istio-ingress-config
+```
 
 **Documentation updates required in the same implementation work:**
 - `nginx/README.md` — replace Envoy Gateway references with Istio ingress terminology and troubleshooting
@@ -603,77 +575,92 @@ The Auth0 hostname (`dev-gcz1r8453xzz0317.us.auth0.com`) is derived from `AUTH0_
 - `docs/architecture/port-reference.md` — update ingress and egress gateway port ownership
 - `docs/architecture/bff-api-gateway-pattern.md` — update the browser request flow from Envoy Gateway to Istio ingress
 
+### Verification
+
+Run `scripts/dev/verify-phase-3-istio-ingress.sh` after Phase 3 resources are deployed. Treat it as the runtime completion gate for Session 4 and the final documentation closure. Do not describe Phase 3 as complete until that verifier and the live validation checklist pass.
+
 ---
 
 ## Complete File Change Inventory
 
-### New Files (14)
+### New Files (16)
 | File | Session |
 |------|---------|
 | `kubernetes/istio/ingress-namespace.yaml` | 1 |
-| `kubernetes/istio/istiod-values.yaml` | 1, 4 |
-| `kubernetes/istio/istio-gatewayclass.yaml` | 1 |
+| `kubernetes/istio/istiod-values.yaml` | 1, 3 |
 | `kubernetes/istio/istio-gateway.yaml` | 1 |
 | `kubernetes/istio/tls-reference-grant.yaml` | 1 |
-| `kubernetes/istio/ext-authz-policy.yaml` | 2 |
-| `kubernetes/network-policies/istio-ingress-deny.yaml` | 2 |
-| `kubernetes/network-policies/istio-ingress-allow.yaml` | 2 |
-| `kubernetes/istio/egress-namespace.yaml` | 4 |
-| `kubernetes/istio/egress-service-entries.yaml` | 4 |
-| `kubernetes/istio/egress-routing.yaml` | 4 |
-| `kubernetes/network-policies/istio-egress-deny.yaml` | 5 |
-| `kubernetes/network-policies/istio-egress-allow.yaml` | 5 |
-| `scripts/dev/verify-phase-3-istio-ingress.sh` | 6 |
+| `kubernetes/istio/ext-authz-policy.yaml` | 1 |
+| `kubernetes/istio/ingress-rate-limit.yaml` | 4 |
+| `kubernetes/network-policies/istio-ingress-deny.yaml` | 1 |
+| `kubernetes/network-policies/istio-ingress-allow.yaml` | 1 |
+| `kubernetes/istio/egress-namespace.yaml` | 3 |
+| `kubernetes/istio/egress-gateway.yaml` | 3 |
+| `kubernetes/istio/egress-gateway.provenance.md` | 3 |
+| `kubernetes/istio/egress-service-entries.yaml` | 3 |
+| `kubernetes/istio/egress-routing.yaml` | 3 |
+| `kubernetes/network-policies/istio-egress-deny.yaml` | 3 |
+| `kubernetes/network-policies/istio-egress-allow.yaml` | 3 |
+| `scripts/dev/verify-phase-3-istio-ingress.sh` | 4 |
 
-### Modified Files (12)
+### Modified Files (21)
 | File | Session | Change |
 |------|---------|--------|
-| `kubernetes/gateway/api-httproute.yaml` | 2 | Temporary dual parentRefs during cutover, final state → `istio-ingress-gateway` only |
-| `kubernetes/gateway/auth-httproute.yaml` | 2 | Temporary dual parentRefs during cutover, final state → `istio-ingress-gateway` only |
-| `kubernetes/gateway/app-httproute.yaml` | 2 | Temporary dual parentRefs during cutover, final state → `istio-ingress-gateway` only |
-| `kubernetes/istio/peer-authentication.yaml` | 3 | Remove 3 PERMISSIVE exceptions |
-| `kubernetes/istio/authorization-policies.yaml` | 3 | Add 3 ingress-facing policies |
-| `kubernetes/network-policies/default-allow.yaml` | 2, 5 | Replace Envoy ingress refs → Istio ingress; later constrain TCP/443 egress → egress gateway only |
-| `nginx/README.md` | 6 | Replace Envoy Gateway references and troubleshooting guidance |
-| `docs/development/local-environment.md` | 6 | Update entrypoint, topology, and verification commands |
-| `docs/architecture/system-overview.md` | 6 | Update ingress and egress component narrative |
-| `docs/architecture/security-architecture.md` | 6 | Update edge authorization and outbound-control description |
-| `docs/architecture/port-reference.md` | 6 | Update gateway port ownership |
-| `docs/architecture/bff-api-gateway-pattern.md` | 6 | Update request flow to Istio ingress |
+| `AGENTS.md` | 1, 6 | Pin the supported Helm line for this repo and align the ingress/auth-throttling versus NGINX API-throttling story |
+| `README.md` | 6 | Clarify the ingress/NGINX rate-limiting split and the Phase 3 runtime completion gate |
+| `Tiltfile` | 1, 2, 3, 4 | Remove 4 Envoy resources, add ~8 Istio/policy resources, restructure dependency graph, switch istiod to values file |
+| `scripts/dev/check-tilt-prerequisites.sh` | 1 | Reject unsupported Helm versions and point users at the tested Helm install path |
+| `kubernetes/gateway/api-httproute.yaml` | 1 | parentRef → `istio-ingress-gateway` |
+| `kubernetes/gateway/auth-httproute.yaml` | 1 | parentRef → `istio-ingress-gateway` |
+| `kubernetes/gateway/app-httproute.yaml` | 1 | parentRef → `istio-ingress-gateway` |
+| `kubernetes/network-policies/default-allow.yaml` | 1, 3 | Replace Envoy ingress refs → Istio ingress; constrain TCP/443 egress → egress gateway only |
+| `kubernetes/istio/peer-authentication.yaml` | 2 | Remove 3 PERMISSIVE exceptions |
+| `kubernetes/istio/authorization-policies.yaml` | 2 | Add 3 ingress-facing policies |
+| `docs/development/devcontainer-installed-software.md` | 1 | Correct the installed/tested Helm version and document the vendored egress-gateway manifest |
+| `docs/development/local-environment.md` | 1, 4 | Update the supported Helm version, egress-gateway install path, topology, and verification commands |
+| `docs/tilt-kind-setup-guide.md` | 1 | Pin the tested Helm install path and explain the vendored egress-gateway path |
+| `nginx/nginx.k8s.conf` | 4 | Emit forwarded-header details in the access log for Phase 3 verification |
+| `nginx/README.md` | 4 | Replace Envoy Gateway references and troubleshooting |
+| `docs/architecture/system-overview.md` | 4 | Update ingress/egress component narrative |
+| `docs/architecture/security-architecture.md` | 4 | Update edge authorization and outbound-control |
+| `docs/architecture/port-reference.md` | 4 | Update gateway port ownership |
+| `docs/architecture/bff-api-gateway-pattern.md` | 4 | Update request flow to Istio ingress |
+| `docs/plans/security-hardening-v2.md` | 6 | Record the final Phase 3 runtime gate and the PASSTHROUGH/DISABLE egress TLS rationale |
+| `docs/plans/security-hardening-v2-phase-3-implementation.md` | 1, 6 | Record the vendored egress-gateway install path and final Phase 3 completion-gate wording |
+| `docs/plans/security-hardening-v2-phase-3-remediation.md` | 1, 6 | Record the reproduced Helm v3.20.1 schema failure and the documentation-closure status note |
 
 ### Deleted Files (5)
 | File | Session |
 |------|---------|
-| `kubernetes/gateway/envoy-proxy-config.yaml` | 2 |
-| `kubernetes/gateway/envoy-proxy-gatewayclass.yaml` | 2 |
-| `kubernetes/gateway/client-traffic-policy.yaml` | 2 |
-| `kubernetes/gateway/ext-authz-security-policy.yaml` | 2 |
-| `kubernetes/gateway/gateway.yaml` | 2 |
-
-### Tiltfile (modified across all sessions)
-Major changes: remove 4 Envoy Gateway resources, add ~9 Istio and policy resources, restructure the dependency graph, and switch `istiod` to a canonical values file.
+| `kubernetes/gateway/envoy-proxy-config.yaml` | 1 |
+| `kubernetes/gateway/envoy-proxy-gatewayclass.yaml` | 1 |
+| `kubernetes/gateway/client-traffic-policy.yaml` | 1 |
+| `kubernetes/gateway/ext-authz-security-policy.yaml` | 1 |
+| `kubernetes/gateway/gateway.yaml` | 1 |
 
 ---
 
 ## Risk Mitigations
 
-1. **ServiceAccount naming** — Verify the exact SA name with `kubectl get sa -n istio-ingress` in Session 1 before writing AuthorizationPolicy principals in Session 3. If Istio names it differently than `istio-ingress-gateway`, adjust all principals.
+1. **ServiceAccount naming** — Verify the exact SA name with `kubectl get sa -n istio-ingress` after the gateway auto-provisions in Session 1. If Istio names it differently than `istio-ingress-gateway-istio`, adjust all AuthorizationPolicy principals in Session 2.
 
-2. **NodePort conflict** — Keep the standby Istio ingress Service on NodePort `30444` until `envoy-gateway-cleanup` completes. Only then patch to `30443`. The Kind port mapping (`kind-cluster-config.yaml:19-21`) already maps `30443` → host `443`.
+2. **Canonical outbound policy state** — Do not keep `ALLOW_ANY` in the base values file. ServiceEntries and egress routing are applied first; then Session 3 updates `istiod-values.yaml` to `REGISTRY_ONLY` and re-runs `istiod`. This prevents a later re-apply from silently reopening internet egress.
 
-3. **Canonical outbound policy state** — Do not keep `ALLOW_ANY` in the base values file. ServiceEntries and egress routing are applied first; then Session 4 updates the canonical `istiod-values.yaml` to `REGISTRY_ONLY` and re-runs `istiod`. This prevents a later `istiod` re-apply from silently reopening internet egress.
+3. **Auth0 hostname** — The ServiceEntry hostname must match the `AUTH0_ISSUER_URI` environment variable. Hardcoded in 6 places across 3 files for the current dev tenant.
 
-4. **Auth0 hostname** — The ServiceEntry hostname must match the `AUTH0_ISSUER_URI` environment variable. Hardcoded for the current dev tenant; document the need to update if the tenant changes.
+4. **Gateway label selectors** — Both the ingress `AuthorizationPolicy` selector and the ingress/egress `NetworkPolicy` pod selectors must use rendered labels from the actual gateway pods. Verify with `kubectl get pods -n istio-ingress --show-labels` and `kubectl get pods -n istio-egress --show-labels` before writing selectors.
 
-5. **Gateway label selectors** — Both the ingress `AuthorizationPolicy` selector and the ingress/egress `NetworkPolicy` pod selectors must use rendered labels from the actual gateway pods. Verify with `kubectl get deploy,pods -n istio-ingress --show-labels` and `kubectl get pods -n istio-egress --show-labels` before writing selectors.
+5. **Deleted PERMISSIVE resources** — The three PERMISSIVE PeerAuthentication resources must be explicitly deleted from the cluster via `kubectl delete`, not just removed from the YAML file. This is handled in Session 2's Tiltfile changes.
 
-6. **Deleted PERMISSIVE resources** — The three PERMISSIVE PeerAuthentication resources must be explicitly deleted from the cluster (not just removed from the YAML file) since `kubectl apply` doesn't delete removed documents. Add `kubectl delete peerauthentication nginx-gateway-permissive ext-authz-permissive session-gateway-permissive -n default --ignore-not-found` to the istio-security-policies resource command.
+6. **Gateway route attachment scope** — The Istio Gateway restricts `allowedRoutes` to the `default` namespace only via label selector.
 
-7. **Gateway route attachment scope** — The Istio Gateway should not allow routes from arbitrary namespaces. Restrict `allowedRoutes` to the `default` namespace only.
+7. **Client IP and auth rate limiting after Envoy removal** — Removing Envoy's `ClientTrafficPolicy` removes the only explicit X-Forwarded-For handling, and switching ingress controllers does not remove the parent plan's auth-throttling requirement. Session 4's verification script must confirm NGINX still sees the expected client IP / forwarded chain for app and API traffic, and auth-sensitive paths are still rate limited at the ingress layer.
 
-8. **Client IP and rate limiting after Envoy removal** — Removing Envoy's `ClientTrafficPolicy` also removes the only explicit client IP handling configuration. Session 6 must prove that NGINX still sees the expected client IP / forwarded chain and that auth endpoints still rate limit as intended.
+8. **Egress gateway target port** — `NetworkPolicy` must match the egress gateway pod's rendered TLS target port, not an assumed Service port. Verify the generated Service/Deployment before writing the allowlist.
 
-9. **Egress gateway target port** — `NetworkPolicy` must match the egress gateway pod's rendered TLS target port, not an assumed Service port. Verify the generated Service/Deployment before writing the allowlist.
+9. **NodePort patch timing** — The Istio ingress auto-provisioned Service is created asynchronously. The `istio-ingress-config` resource must `kubectl wait --for=condition=Programmed` on the Gateway before patching the NodePort.
+
+10. **Egress gateway naming** — The checked-in egress gateway manifest must keep the resource name `istio-egress-gateway` so the Service DNS name matches the `DestinationRule` host (`istio-egress-gateway.istio-egress.svc.cluster.local`).
 
 ---
 
@@ -681,15 +668,17 @@ Major changes: remove 4 Envoy Gateway resources, add ~9 Istio and policy resourc
 
 After all sessions, verify:
 
-1. `kubectl get ns envoy-gateway-system` — NotFound
-2. `kubectl get gatewayclasses.gateway.networking.k8s.io` — only `istio`
-3. `kubectl get gateways.gateway.networking.k8s.io -A` — only `istio-ingress-gateway` in `istio-ingress`
-4. `kubectl get gateways.networking.istio.io -A` — only `istio-egress-gateway` in `default`
-5. `kubectl get peerauthentication -n default` — only `default-strict`
-6. `kubectl get authorizationpolicy -n default` — 7 policies (4 backend + 3 ingress-facing)
-7. `kubectl get authorizationpolicy -n istio-ingress` — `ext-authz-at-ingress`
-8. `kubectl get serviceentry -n default` — `auth0-idp`, `fred-api`
-9. `tilt up` succeeds from clean rebuild
-10. Full browser flow: login → API calls → logout
-11. Spoofed identity headers do not survive the trusted ingress path
-12. Run `scripts/dev/verify-phase-3-istio-ingress.sh` — all checks pass
+1. `kubectl get ns envoy-gateway-system` — NotFound (or empty)
+2. `kubectl get gatewayclass istio -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'` — `True`
+3. `kubectl get gatewayclass envoy-proxy` — NotFound
+4. `kubectl get gateway.gateway.networking.k8s.io istio-ingress-gateway -n istio-ingress` — present and `Programmed=True`
+5. `kubectl get gateway.networking.istio.io istio-egress-gateway -n default` — present
+6. `kubectl get peerauthentication -n default` — only `default-strict`
+7. `kubectl get authorizationpolicy -n default` — named backend and ingress-facing policies exist
+8. `kubectl get authorizationpolicy -n istio-ingress` — `ext-authz-at-ingress`
+9. `kubectl get serviceentry -n default` — `auth0-idp`, `fred-api`
+10. `tilt up` succeeds from clean rebuild
+11. Full browser flow: login → API calls → logout
+12. Spoofed identity headers do not survive the trusted ingress path
+13. Auth-sensitive ingress paths return throttled responses under repeated requests
+14. Run `scripts/dev/verify-phase-3-istio-ingress.sh` — all checks pass

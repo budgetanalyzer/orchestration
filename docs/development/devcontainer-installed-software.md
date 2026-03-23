@@ -8,7 +8,7 @@ This document tracks all software that has been manually installed within the de
 |---|---|---|
 | Kind | `v0.30.0` | Downloaded binary from GitHub releases |
 | kubectl | latest stable | Downloaded binary from Kubernetes release artifacts|
-| Helm | `v4.0.0` | Downloaded binary from get.helm.sh |
+| Helm | `v3.20.1` | Installed with `get-helm-3` pinned via `DESIRED_VERSION=v3.20.1` |
 | iputils-ping| latest from apt| `apt-get install iputils-ping` |
 
 ## Kubernetes Components (via Helm)
@@ -16,4 +16,11 @@ This document tracks all software that has been manually installed within the de
 | Component | Chart Version | Namespace |
 |---|---|---|
 | cert-manager | `v1.13.2` | `cert-manager` |
-| Envoy Gateway | `v1.0.0` | `envoy-gateway-system`|
+| Istio Base | `1.24.3` | `istio-system` |
+| istiod | `1.24.3` | `istio-system` |
+
+`istio/gateway` `1.24.3` is not installed directly from Helm in this repo's
+steady state. The checked-in
+[`kubernetes/istio/egress-gateway.yaml`](../../kubernetes/istio/egress-gateway.yaml)
+manifest was rendered from that chart because Helm `v3.20.1` reproduces the
+chart's schema-validation failure for `service.type=ClusterIP`.

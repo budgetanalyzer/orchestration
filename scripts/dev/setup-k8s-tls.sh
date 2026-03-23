@@ -198,7 +198,7 @@ kubectl get secret "$SECRET_NAME" -n "$NAMESPACE"
 echo
 echo "=== Setup Complete! ==="
 echo
-echo "The TLS secret '$SECRET_NAME' is now available for the Envoy Gateway."
+echo "The TLS secret '$SECRET_NAME' is now available for the Istio ingress gateway."
 echo
 echo "=== Next Steps ==="
 echo
@@ -209,5 +209,5 @@ echo "2. Run Tilt:"
 echo "   tilt up"
 echo
 echo "3. Access application:"
-echo "   https://app.budgetanalyzer.localhost (via port forward or Envoy Gateway)"
+echo "   https://app.budgetanalyzer.localhost (via Istio ingress gateway)"
 echo

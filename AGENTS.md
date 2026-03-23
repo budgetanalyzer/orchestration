@@ -47,7 +47,7 @@ This project has reached its intended scope. We are no longer actively developin
 
 **What's implemented:**
 - Authentication: OAuth2/OIDC with Auth0, BFF pattern, opaque session tokens + ext_authz
-- API Gateway: Envoy ext_authz for session validation, NGINX for routing and rate limiting
+- API Gateway: Istio ext_authz for session validation and auth-path throttling, NGINX for API routing and backend/API rate limiting
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
 **What's intentionally left unsolved:**
@@ -68,9 +68,9 @@ For containerized development environment setup, see the [workspace](https://git
 - **Production Parity**: Development environment faithfully recreates production
 - **Microservices**: Independently deployable services with clear boundaries
 - **BFF Pattern**: Session Gateway provides browser security and authentication management
-- **API Gateway Pattern**: NGINX provides unified routing, rate limiting, and load balancing
+- **Gateway Pattern**: Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
 - **Resource-Based Routing**: Frontend remains decoupled from service topology
-- **Defense in Depth**: Multiple security layers (Session Gateway → NGINX → Services)
+- **Defense in Depth**: Multiple security layers (Istio ingress/ext_authz → Session Gateway or NGINX → Services)
 - **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development
 
 ## Service Architecture
@@ -93,10 +93,11 @@ kubectl get svc
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
 - **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
-- **ext-authz**: Go HTTP service (port 9002) - Envoy external authorization, session validation via Redis
+- **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
-- **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination, routing, and ext_authz enforcement
-- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, rate limiting, and load balancing
+- **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
+- **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
+- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
 
 **Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
 
@@ -113,8 +114,8 @@ This prevents "connection refused" errors during deployments when services are s
 
 **Request Flow**:
 ```
-Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
+Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
 ```
 
 **Single entry point**: `app.budgetanalyzer.localhost`
@@ -128,7 +129,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 **Key Benefits**:
 - Same-origin architecture = no CORS issues
 - Opaque session tokens = no JWTs exposed to browser (XSS protection)
-- Centralized session validation via ext_authz at the Envoy layer
+- Centralized session validation and auth-path throttling at Istio ingress, with backend/API rate limiting remaining at NGINX
 
 **Discovery**:
 ```bash
@@ -168,7 +169,7 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 - **Backend**: Spring Boot + Java (version managed in service-common)
 - **Build System**: Gradle (all backend services use Gradle with wrapper)
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (Kubernetes manifests in `kubernetes/infrastructure/`)
-- **Ingress**: Envoy Gateway (Kubernetes Gateway API)
+- **Ingress**: Istio Ingress Gateway (Kubernetes Gateway API)
 - **API Gateway**: NGINX (Alpine-based)
 - **Development**: Tilt + Kind (local Kubernetes)
 
@@ -179,6 +180,12 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 ### Prerequisites & Setup
 
 **Required tools**: Docker, Kind, kubectl, Helm, Tilt, Git, mkcert
+
+**Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo. The
+Istio egress gateway is applied from the checked-in
+`kubernetes/istio/egress-gateway.yaml` manifest because the upstream
+`istio/gateway` `1.24.3` chart fails schema validation for the required
+`service.type=ClusterIP` override under the tested Helm `v3.20.1` toolchain.
 
 Check prerequisites:
 ```bash
@@ -198,6 +205,7 @@ tilt up
 
 # Optional but recommended after core platform resources are healthy
 ./scripts/dev/verify-security-prereqs.sh
+./scripts/dev/verify-phase-3-istio-ingress.sh
 
 # Access Tilt UI for logs and status
 # Browser: http://localhost:10350
@@ -225,8 +233,8 @@ kubectl logs deployment/nginx-gateway
 # Check NGINX configuration validity
 kubectl exec deployment/nginx-gateway -- nginx -t
 
-# View Envoy Gateway logs
-kubectl logs -n envoy-gateway-system deployment/envoy-gateway
+# View Istio ingress gateway logs
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
 
 ```
 

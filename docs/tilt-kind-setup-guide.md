@@ -50,8 +50,14 @@ sudo mv kubectl /usr/local/bin/kubectl
 ### Helm
 
 ```bash
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.20.1 bash
 ```
+
+Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo still uses
+Helm for `istio-base`, `istiod`, and `kyverno`, but the Istio egress gateway is
+applied from a checked-in manifest because the upstream `istio/gateway` `1.24.3`
+chart rejects the required `service.type=ClusterIP` override under Helm
+`v3.20.1` schema validation.
 
 ### Tilt
 
@@ -73,7 +79,7 @@ sudo mv mkcert-* /usr/local/bin/mkcert
 docker --version        # Expected: Docker 20.10+
 kind --version          # Expected: kind v0.20+
 kubectl version --client # Expected: v1.28+
-helm version            # Expected: v3.13+
+helm version            # Expected: v3.20.x
 tilt version            # Expected: v0.33+
 mkcert --version        # Expected: v1.4+
 ```
@@ -287,7 +293,7 @@ After all services are healthy:
 
 | Port | Service | Purpose |
 |------|---------|---------|
-| 443 | Envoy Gateway | HTTPS entry point (via NodePort 30443) |
+| 443 | Istio Ingress Gateway | HTTPS entry point (via NodePort 30443) |
 | 80 | Kind host mapping | Reserved host mapping in the Kind config |
 | 3000 | budget-analyzer-web | Vite Dev Server |
 | 5432 | PostgreSQL | Database |

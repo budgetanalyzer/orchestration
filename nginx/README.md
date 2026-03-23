@@ -1,6 +1,6 @@
 # NGINX API Gateway for Kubernetes
 
-NGINX handles routing and rate limiting for backend microservices. Authentication is handled by Envoy ext_authz before requests reach NGINX.
+NGINX handles backend routing and API-path rate limiting for backend microservices. Authentication and auth-sensitive path throttling are handled at the Istio ingress gateway before requests reach NGINX.
 
 ## Request Flow
 
@@ -10,14 +10,14 @@ NGINX handles routing and rate limiting for backend microservices. Authenticatio
 Browser (https://app.budgetanalyzer.localhost)
     │
     ▼
-Envoy (:443) ─── SSL termination + ext_authz session validation
+Istio Ingress Gateway (:443) ─── SSL termination + ext_authz session validation
     │
-    ├─→ /auth/*, /oauth2/*, /login/*, /logout → Session Gateway (:8081)
+    ├─→ /auth/*, /oauth2/*, /login/*, /logout, /user → Session Gateway (:8081)
     │
     ├─→ /api/* → NGINX (:8080)
     │
     ▼ (K8s internal: nginx-gateway:8080)
-NGINX (:8080) ─── rate limiting, route to service
+NGINX (:8080) ─── API-path rate limiting, route to service
     │
     ├─→ /           → React App (:3000)
     ├─→ /api/v1/transactions → Transaction Service (:8082)
@@ -29,7 +29,12 @@ NGINX (:8080) ─── rate limiting, route to service
 - Single origin = no CORS
 - Opaque session tokens = no JWTs exposed to browser (XSS protection)
 - Resource-based routing = frontend decoupled from services
-- ext_authz at Envoy layer validates sessions before reaching NGINX
+- ext_authz at Istio ingress layer validates sessions before reaching NGINX
+
+## Rate-Limiting Split
+
+- Istio ingress rate limits auth-sensitive paths: `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, and `/user`
+- NGINX rate limits backend-facing API paths after ingress validation and routing
 
 ## Service Configuration
 
@@ -71,13 +76,13 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
-API requests go through Envoy Gateway (443) → ext_authz → NGINX (8080).
-Auth requests go through Envoy Gateway (443) → Session Gateway (8081).
+API requests go through Istio Ingress Gateway (443) → ext_authz → NGINX (8080).
+Auth requests go through Istio Ingress Gateway (443) → Session Gateway (8081).
 
 ### 3. Verify it's working
 
 ```bash
-# NGINX Gateway health check (via Envoy)
+# NGINX Gateway health check (via Istio ingress)
 curl https://app.budgetanalyzer.localhost/health
 
 # React app loads
@@ -118,6 +123,8 @@ kubectl exec deployment/nginx-gateway -- nginx -s reload
 # Trigger config reload via Tilt
 tilt trigger nginx-gateway-config
 ```
+
+The Kubernetes access log includes `remote_addr`, `X-Forwarded-For`, and `X-Real-IP` so the Phase 3 verifier can prove forwarded-header preservation through Istio ingress for both frontend and API requests.
 
 ## Customization
 
@@ -214,11 +221,11 @@ This is the power of resource-based routing!
 
 ### CORS issues
 
-**You shouldn't have CORS issues!** Everything is same-origin (`app.budgetanalyzer.localhost` via Envoy Gateway).
+**You shouldn't have CORS issues!** Everything is same-origin (`app.budgetanalyzer.localhost` via Istio ingress gateway).
 
 The BFF (Backend for Frontend) pattern eliminates CORS:
 - Browser sees single origin: `app.budgetanalyzer.localhost`
-- Envoy routes to NGINX or Session Gateway
+- Istio ingress gateway routes to NGINX or Session Gateway
 - NGINX routes to backend services
 - No cross-origin requests = no CORS
 
@@ -252,6 +259,6 @@ In production, this setup stays largely the same:
 
 1. **React app**: Same - served from built static files in the container
 2. **Microservices**: Same - Kubernetes DNS names work identically
-3. **SSL/TLS**: Handled by Envoy Gateway (or cloud load balancer)
+3. **SSL/TLS**: Handled by Istio ingress gateway (or cloud load balancer)
 
 The routing logic stays the same - the power of Kubernetes-native architecture!

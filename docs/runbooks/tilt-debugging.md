@@ -35,6 +35,9 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
+
+# Validate Phase 3 ingress/egress hardening
+./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
 ### Port Mapping
@@ -42,10 +45,10 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 | Port | Service | Protocol | Purpose |
 |------|---------|----------|---------|
 | **Application Access** |
-| 443 (30443) | Envoy Gateway | HTTPS | Browser entry point |
+| 443 (30443) | Istio Ingress Gateway | HTTPS | Browser entry point |
 | 80 | Kind host mapping | TCP | Reserved host mapping in the Kind config |
 | **Internal Services** |
-| 8080 | nginx-gateway | HTTP | API routing (behind Envoy) |
+| 8080 | nginx-gateway | HTTP | API routing (behind Istio ingress) |
 | 8081 | session-gateway | HTTP | Browser auth/session management |
 | 8082 | transaction-service | HTTP | Transaction API |
 | 8084 | currency-service | HTTP | Currency API |
@@ -280,7 +283,7 @@ tilt trigger rabbitmq
 
 ### NGINX Gateway
 
-**Role**: HTTP routing, rate limiting, load balancing
+**Role**: HTTP routing, API-path rate limiting, load balancing
 
 **Common Issues**:
 - Upstream connection refused
@@ -331,11 +334,11 @@ curl http://localhost:8084/actuator/health
 ```
 Browser (https://app.budgetanalyzer.localhost/api/v1/transactions)
     ↓
-Envoy Gateway (30443) - TLS termination
+Istio Ingress Gateway (30443) - TLS termination, auth-path rate limiting
     ↓
 ext-authz (9002) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
     ↓ (if valid)
-NGINX Gateway (8080) - Rate limiting, route to backend
+NGINX Gateway (8080) - API-path rate limiting, route to backend
     ↓
 Transaction Service (8082) - Business logic
 ```
@@ -348,9 +351,9 @@ Open DevTools → Network tab → Find failing request
 Note: Status code, response body, request headers
 ```
 
-**Step 2: Check Envoy Gateway**
+**Step 2: Check Istio Ingress Gateway**
 ```bash
-kubectl logs -f deployment/envoy-gateway -n envoy-gateway-system | grep <path>
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway | grep <path>
 ```
 
 **Step 3: Check ext-authz**
@@ -476,21 +479,37 @@ kubectl get networkpolicy allow-default-dns-egress -n default -o yaml
 
 **Fix**: Re-apply the network policies through Tilt (`tilt trigger network-policies`) or verify the `default-allow.yaml` manifest includes the DNS egress rule targeting `kube-system` pods with label `k8s-app=kube-dns` on TCP/UDP port 53.
 
-### Missing Envoy Proxy Selector Match
+### Missing Istio Ingress Selector Match
 
-**Symptom**: All ingress returns 503; Envoy Gateway proxy pods cannot reach `nginx-gateway`, `ext-authz`, or `session-gateway`.
+**Symptom**: All ingress returns 503; Istio ingress gateway pods cannot reach `nginx-gateway`, `ext-authz`, or `session-gateway`.
 
 ```bash
-# Check the actual proxy pod labels
-kubectl get pods -n envoy-gateway-system --show-labels
+# Check the actual ingress gateway pod labels
+kubectl get pods -n istio-ingress --show-labels
 
 # Compare against what the nginx ingress allowlist expects
-kubectl get networkpolicy allow-nginx-gateway-ingress-from-envoy -n default -o yaml
+kubectl get networkpolicy allow-nginx-gateway-ingress-from-istio-ingress -n default -o yaml
 ```
 
-**Cause**: The Envoy Gateway proxy pod labels changed (e.g., after a Helm chart upgrade) and no longer match the `podSelector` in the ingress allowlists. The policies use `app.kubernetes.io/component=proxy` plus `gateway.envoyproxy.io/owning-gateway-name=ingress-gateway`.
+**Cause**: The Istio ingress gateway pod labels no longer match the selectors used in the ingress policies. The current Gateway API controller renders `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`; older manifests using `istio.io/gateway-name=istio-ingress-gateway` will not attach.
 
-**Fix**: Update the pod selectors in `kubernetes/network-policies/default-allow.yaml` to match the current proxy pod labels, then re-apply.
+**Fix**: Update the ingress gateway selectors in `kubernetes/network-policies/default-allow.yaml`, `kubernetes/network-policies/istio-ingress-allow.yaml`, and `kubernetes/istio/ext-authz-policy.yaml` to match the current rendered label, then re-apply.
+
+### Missing Istio Ingress Principal Match
+
+**Symptom**: Login or API requests fail at ingress even though the gateway pod is healthy and the selector-based policies attach. Protected services return `403`, or ingress traffic never reaches `nginx-gateway`, `ext-authz`, or `session-gateway`.
+
+```bash
+# Check the rendered ingress gateway ServiceAccount
+kubectl get deploy,sa -n istio-ingress -o yaml | rg 'istio-ingress-gateway-istio|serviceAccountName'
+
+# Compare against ingress-facing AuthorizationPolicies
+kubectl get authorizationpolicy -n default -o yaml | rg 'cluster.local/ns/istio-ingress/sa/'
+```
+
+**Cause**: The ingress-facing `AuthorizationPolicy` principals no longer match the rendered ingress gateway ServiceAccount. The current auto-provisioned identity is `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`; older manifests that allow `.../sa/istio-ingress-gateway` deny the real ingress workload.
+
+**Fix**: Update the principals in `kubernetes/istio/authorization-policies.yaml` to `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`, then re-apply and rerun `./scripts/dev/verify-phase-3-istio-ingress.sh`.
 
 ### Missing Istiod Egress
 
@@ -591,6 +610,7 @@ tilt up
 
 # Verify runtime security prerequisites once platform resources are healthy
 ./scripts/dev/verify-security-prereqs.sh
+./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
 ### Reset Single Service

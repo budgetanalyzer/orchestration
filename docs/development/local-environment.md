@@ -11,7 +11,7 @@
 - Docker 24.0+
 - Kind 0.20+
 - kubectl 1.28+
-- Helm 3.12+
+- Helm 3.20.x (tested; Helm 4 unsupported)
 - Tilt 0.33+
 - Git 2.40+
 - mkcert 1.4+
@@ -39,6 +39,12 @@ tilt version
 git --version
 mkcert --version
 ```
+
+Phase 3 no longer installs the Istio egress gateway from Helm at runtime. The
+repo still uses Helm for `istio-base`, `istiod`, and `kyverno`, but the egress
+gateway is a checked-in manifest rendered from `istio/gateway` `1.24.3`
+because that chart's schema rejects the required `service.type=ClusterIP`
+override under the tested Helm `v3.20.1` toolchain.
 
 ## Quick Start
 
@@ -140,7 +146,14 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
+
+# Optional but recommended: prove the Phase 3 Istio ingress/egress migration
+./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
+
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login` and `/user`, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+
+The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 
 ## Tilt Resources
 
@@ -157,8 +170,10 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `postgresql` - PostgreSQL StatefulSet
 - `redis` - Redis Deployment
 - `rabbitmq` - RabbitMQ StatefulSet
-- `envoy-gateway` - Envoy Gateway controller
-- `ingress-gateway` - Gateway and HTTPRoute resources
+- `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
+- `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
+- `istio-egress-gateway` - Istio egress gateway (checked-in manifest)
+- `istio-egress-config` - ServiceEntries and egress routing
 
 ## Development Workflows
 
@@ -244,10 +259,10 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 
 | Service | Port | URL | Notes |
 |---------|------|-----|-------|
-| Envoy Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
-| Envoy Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
+| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
+| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
 | NGINX Gateway | 8080 | - | Internal (routing) |
-| Session Gateway | 8081 | - | Internal (behind Envoy) |
+| Session Gateway | 8081 | - | Internal (behind Istio ingress) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
 | currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
 | permission-service | 8086 | http://localhost:8086 | Direct access via port forward |
@@ -437,17 +452,24 @@ kubectl logs -n default deployment/nginx-gateway
 tilt trigger nginx-gateway-config
 ```
 
-### Envoy Gateway Issues
+### Istio Ingress Gateway Issues
 
 ```bash
-# Check Envoy Gateway controller
-kubectl logs -n envoy-gateway-system deployment/envoy-gateway
+# Check Istio ingress gateway pod
+kubectl get pods -n istio-ingress
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+
+# Check the rendered ingress ServiceAccount/principal basis
+kubectl get deploy,sa -n istio-ingress -o yaml | rg 'istio-ingress-gateway-istio|serviceAccountName'
 
 # Check Gateway status
-kubectl get gateway -n default
+kubectl get gateway -n istio-ingress istio-ingress-gateway
 
 # Check HTTPRoute status
 kubectl get httproute -n default
+
+# Verify ext_authz is configured
+kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ```
 
 ### SSL Certificate Errors

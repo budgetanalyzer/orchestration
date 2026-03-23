@@ -6,11 +6,11 @@
 
 | Port | Service | Protocol | Purpose | Access Level |
 |------|---------|----------|---------|--------------|
-| 443 | Envoy Gateway | HTTPS | SSL termination, ext_authz enforcement, ingress | Public (browsers) |
-| 9002 | ext_authz | HTTP | Per-request session validation | Internal (Envoy only) |
+| 443 | Istio Ingress Gateway | HTTPS | SSL termination, ext_authz enforcement, auth-path rate limiting, ingress | Public (browsers) |
+| 9002 | ext_authz | HTTP | Per-request session validation | Internal (Istio ingress only) |
 | 8090 | ext_authz | HTTP | Health endpoint | Internal (probes only) |
-| 8080 | NGINX Gateway | HTTP | Routing, rate limiting | Internal (Envoy only) |
-| 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Envoy only) |
+| 8080 | NGINX Gateway | HTTP | Routing, backend/API rate limiting | Internal (Istio ingress only) |
+| 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Istio ingress only) |
 | 8086 | Permission Service | HTTP | Internal roles/permissions resolution | Internal (Session Gateway only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
@@ -23,14 +23,15 @@
 ## Port Ranges by Layer
 
 ### Public Layer (Browser Accessible)
-- **443** - Envoy Gateway (HTTPS)
+- **443** - Istio Ingress Gateway (HTTPS, `istio-ingress` namespace)
   - `app.budgetanalyzer.localhost` → routes to Session Gateway (auth paths) or NGINX (API/frontend paths)
-  - ext_authz enforced on `/api/*` paths
+  - ext_authz enforced on `/api/*` paths via meshConfig extensionProvider
+  - auth-sensitive paths throttled locally at ingress (`/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`)
 
 ### Gateway Layer (Internal)
 - **9002** - ext_authz HTTP (session validation, header injection)
 - **8090** - ext_authz health (HTTP health probes)
-- **8080** - NGINX Gateway (API routing, rate limiting)
+- **8080** - NGINX Gateway (API routing, backend/API rate limiting)
 - **8081** - Session Gateway (BFF, session management)
 
 ### Business Services Layer (Internal)
@@ -147,16 +148,16 @@ kubectl get svc --all-namespaces | grep <port>
 - Both `default` and `infrastructure` namespaces have deny-by-default ingress and egress NetworkPolicy
 - The caller matrix below applies to pod-to-pod traffic only and is enforced by pod-label-scoped allowlists
 - Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this Phase 2 allowlist boundary
-- `session-gateway` and `currency-service` have temporary workload-scoped TCP 443 egress for external IdP and FRED API access; hostname-level restriction deferred to Phase 3 (Istio egress)
+- `session-gateway` and `currency-service` egress is constrained to the rendered Istio egress gateway pods only (`app: istio-egress-gateway`, `istio: egress-gateway`) in the `istio-egress` namespace; the gateway handles approved external traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts
 
 **Approved pod-to-pod callers per protected port**:
 
 | Port | Service | Approved Callers |
 |------|---------|-----------------|
-| 8080 | NGINX Gateway | Envoy Gateway proxy pods only |
-| 9002 | ext_authz | Envoy Gateway proxy pods only |
+| 8080 | NGINX Gateway | Istio ingress gateway pods only |
+| 9002 | ext_authz | Istio ingress gateway pods only |
 | 8090 | ext_authz health | No pod callers; kubelet/host traffic only |
-| 8081 | Session Gateway | Envoy Gateway proxy pods only |
+| 8081 | Session Gateway | Istio ingress gateway pods only |
 | 8082 | Transaction Service | nginx-gateway only |
 | 8084 | Currency Service | nginx-gateway only |
 | 3000 | React Dev Server | nginx-gateway only |
@@ -177,8 +178,8 @@ kubectl get networkpolicies -n infrastructure
 
 **Verify service is not exposed publicly**:
 ```bash
-# Should only show Envoy Gateway on 443
-kubectl get svc --field-selector spec.type=LoadBalancer
+# Should show only the Istio ingress gateway on NodePort 30443
+kubectl get svc -n istio-ingress
 ```
 
 ## Related Documentation

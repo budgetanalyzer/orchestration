@@ -5,7 +5,7 @@
 
 ## Request Flow
 
-**Single entry point**: `app.budgetanalyzer.localhost`. Envoy handles SSL termination and ext_authz enforcement.
+**Single entry point**: `app.budgetanalyzer.localhost`. Istio ingress gateway handles SSL termination, auth-path throttling, and ext_authz enforcement.
 
 ```
 BROWSER REQUEST FLOW
@@ -14,9 +14,9 @@ BROWSER REQUEST FLOW
 Browser (https://app.budgetanalyzer.localhost)
     │
     ▼ HTTPS
-Envoy Gateway (:443) ─── SSL termination, ext_authz on /api/* paths
+Istio Ingress Gateway (:443) ─── SSL termination, ext_authz on /api/* paths, auth-path rate limiting
     │
-    ├─ /auth/*, /login/*, /logout → Session Gateway (:8081) ─── auth lifecycle
+    ├─ /auth/*, /oauth2/*, /login/*, /logout, /user → Session Gateway (:8081) ─── auth lifecycle
     │
     ├─ /api/* → ext_authz (:9002) validates session from Redis
     │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
@@ -31,9 +31,11 @@ Backend Services ─── business logic, data authorization
 **Why this works:**
 - Browser never sees tokens (XSS protection)
 - Single origin = no CORS
-- Envoy handles all SSL
+- Istio ingress handles all SSL
 - ext_authz validates every API request
 - Session revocation is instant (Redis key delete)
+
+Operational note: treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
 
 ## Architecture Overview
 
@@ -45,8 +47,8 @@ Backend Services ─── business logic, data authorization
                             │ HTTPS
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      Envoy Gateway (:443)                    │
-│       (SSL termination, ext_authz enforcement, routing)      │
+│                Istio Ingress Gateway (:443)                   │
+│   (SSL termination, auth-path throttling, ext_authz, routing)│
 └─────────┬──────────────────────────┬────────────────────────┘
           │ auth paths               │ /api/*, /*
           ▼                          ▼
@@ -58,9 +60,10 @@ Backend Services ─── business logic, data authorization
         │                             ▼
         ▼                   ┌──────────────────────────────────┐
 ┌──────────────────────┐   │         NGINX API Gateway         │
-│  Permission Service  │   │   (routing, rate limiting)        │
-│   :8086              │   │   :8080                           │
-└──────────────────────┘   └─────────┬────────────────────────┘
+│  Permission Service  │   │   (routing, backend/API rate      │
+│   :8086              │   │    limiting)                      │
+└──────────────────────┘   │   :8080                           │
+                           └─────────┬────────────────────────┘
                                      │
                           ┌──────────┴──────────────────────┐
                           ▼                                 ▼
@@ -90,11 +93,19 @@ Backend Services ─── business logic, data authorization
 
 ### Gateway Services
 
-**Envoy Gateway** (Port 443)
+**Istio Ingress Gateway** (Port 443)
 - SSL/TLS termination
-- ext_authz enforcement on `/api/*` paths
-- Ingress routing based on path
+- ext_authz enforcement on `/api/*` paths via meshConfig extensionProvider
+- Auth-path throttling on `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, and `/user`
+- Ingress routing based on path (Gateway API HTTPRoutes)
 - Kubernetes Gateway API compliant
+- Runs inside the Istio service mesh with SPIFFE identity
+
+**Istio Egress Gateway** (ClusterIP, istio-egress namespace)
+- Routes approved outbound traffic (Auth0, FRED API) via ServiceEntry + VirtualService
+- Uses TLS `PASSTHROUGH`; workload-to-egress traffic keeps `tls.mode: DISABLE` so the original external TLS/SNI reaches the gateway unchanged
+- Enforces REGISTRY_ONLY outbound policy — unapproved hosts are blocked
+- Only gateway pod with external internet access (NetworkPolicy enforced)
 
 **ext_authz Service** (Port 9002 HTTP, Port 8090 Health)
 - Per-request session validation via Redis lookup
@@ -110,7 +121,7 @@ Backend Services ─── business logic, data authorization
 
 **NGINX API Gateway** (Port 8080)
 - Resource-based routing
-- Rate limiting
+- Backend/API rate limiting
 - Load balancing
 
 ### Backend Microservices
@@ -210,13 +221,13 @@ tilt get uiresources
 - PostgreSQL 16+
 - Redis 7+
 - RabbitMQ 3.x
-- Envoy Gateway (ingress + ext_authz)
+- Istio Ingress Gateway (ingress + ext_authz) and Egress Gateway (outbound control)
 - NGINX (API gateway)
 
 ## Service Communication Patterns
 
 ### Synchronous (REST)
-- Frontend → Envoy → ext_authz → NGINX → Services
+- Frontend → Istio Ingress → ext_authz → NGINX → Services
 - Used for: User-initiated actions, queries
 
 ### Asynchronous (Events)
@@ -266,10 +277,11 @@ This reference architecture deliberately stops before solving data ownership. Un
 - ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**
-- Envoy: SSL termination, ext_authz enforcement, ingress
+- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`
+- Istio Egress: Outbound traffic control (REGISTRY_ONLY + ServiceEntry allowlist)
 - Session Gateway: Auth lifecycle, session dual-write to ext_authz Redis schema
 - ext_authz: Per-request session validation, header injection
-- NGINX: Resource routing, rate limiting
+- NGINX: Resource routing, backend/API rate limiting
 
 ### What's Left as an Exercise
 
@@ -298,13 +310,13 @@ We demonstrate the infrastructure. You architect the ownership model.
 ### Local Development
 - Tilt + Kind orchestration
 - Live reload for all services
-- HTTPS: https://app.budgetanalyzer.localhost (Envoy Gateway 443)
+- HTTPS: https://app.budgetanalyzer.localhost (Istio Ingress Gateway 443)
 - Port forwards for direct service access
 
 ### Production (Future)
 - Kubernetes deployment
 - Horizontal scaling per service
-- Service mesh (future consideration)
+- Istio service mesh (mTLS, AuthorizationPolicy, egress control implemented)
 - Distributed tracing (future)
 
 ## Discovery Commands

@@ -640,23 +640,10 @@ k8s_resource(
 # GATEWAY API PREREQUISITES
 # ============================================================================
 
-# Gateway API CRDs (must be installed before Envoy Gateway)
+# Gateway API CRDs (must be installed before Istio ingress gateway)
 local_resource(
     'gateway-api-crds',
     cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml',
-    labels=['infrastructure'],
-)
-
-# Envoy Gateway - the Gateway API controller
-local_resource(
-    'envoy-gateway',
-    cmd='''
-        helm upgrade --install envoy-gateway oci://docker.io/envoyproxy/gateway-helm \
-            --namespace envoy-gateway-system \
-            --create-namespace \
-            --version v1.2.1
-    ''',
-    resource_deps=['gateway-api-crds'],
     labels=['infrastructure'],
 )
 
@@ -684,10 +671,10 @@ local_resource(
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
             --version 1.24.3 \
-            --set pilot.resources.requests.memory=256Mi \
-            --set pilot.resources.requests.cpu=100m \
+            --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
+    deps=['kubernetes/istio/istiod-values.yaml'],
     resource_deps=['istio-base'],
     labels=['infrastructure'],
 )
@@ -706,20 +693,18 @@ local_resource(
         kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit-version=v1.32 --overwrite
-        kubectl label namespace envoy-gateway-system istio-injection=disabled --overwrite
-        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn=baseline --overwrite
-        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/warn-version=v1.32 --overwrite
-        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit=baseline --overwrite
-        kubectl label namespace envoy-gateway-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
-    resource_deps=['istiod', 'envoy-gateway'],
+    resource_deps=['istiod'],
     labels=['infrastructure'],
 )
 
 # Istio security policies (PeerAuthentication + AuthorizationPolicy)
+# Explicitly delete PERMISSIVE PeerAuthentication resources removed in Phase 3 Session 2.
+# kubectl apply does not delete resources removed from a multi-document YAML file.
 local_resource(
     'istio-security-policies',
     cmd='''
+        kubectl delete peerauthentication nginx-gateway-permissive ext-authz-permissive session-gateway-permissive -n default --ignore-not-found
         kubectl apply -f kubernetes/istio/peer-authentication.yaml
         kubectl apply -f kubernetes/istio/authorization-policies.yaml
     ''',
@@ -775,10 +760,19 @@ local_resource(
 # ============================================================================
 
 # Apply deny and allow manifests together — never apply deny without matching allows.
-# Directory apply sends all policies in one API call to avoid a deny-only intermediate state.
 local_resource(
-    'network-policies',
-    cmd='kubectl apply -f kubernetes/network-policies/',
+    'network-policies-core',
+    cmd='''
+        kubectl delete networkpolicy \
+            allow-nginx-gateway-ingress-from-envoy \
+            allow-ext-authz-ingress-from-envoy \
+            allow-session-gateway-ingress-from-envoy \
+            -n default --ignore-not-found
+        kubectl apply -f kubernetes/network-policies/default-deny.yaml
+        kubectl apply -f kubernetes/network-policies/default-allow.yaml
+        kubectl apply -f kubernetes/network-policies/infrastructure-deny.yaml
+        kubectl apply -f kubernetes/network-policies/infrastructure-allow.yaml
+    ''',
     deps=[
         'kubernetes/network-policies/default-deny.yaml',
         'kubernetes/network-policies/default-allow.yaml',
@@ -789,26 +783,23 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# ============================================================================
-# GATEWAY API RESOURCES
-# ============================================================================
-
-# EnvoyProxy configuration (needs envoy-gateway-system namespace from helm chart)
-# Depends on istiod so sidecar webhook exists when EG proxy pod is created
 local_resource(
-    'envoy-proxy-config',
-    cmd='kubectl apply -f kubernetes/gateway/envoy-proxy-config.yaml',
-    resource_deps=['envoy-gateway', 'istiod'],
+    'istio-ingress-network-policies',
+    cmd='''
+        kubectl apply -f kubernetes/network-policies/istio-ingress-deny.yaml
+        kubectl apply -f kubernetes/network-policies/istio-ingress-allow.yaml
+    ''',
+    deps=[
+        'kubernetes/network-policies/istio-ingress-deny.yaml',
+        'kubernetes/network-policies/istio-ingress-allow.yaml',
+    ],
+    resource_deps=['istio-ingress-config'],
     labels=['infrastructure'],
 )
 
-# GatewayClass (needs EnvoyProxy config)
-local_resource(
-    'gateway-class',
-    cmd='kubectl apply -f kubernetes/gateway/envoy-proxy-gatewayclass.yaml',
-    resource_deps=['envoy-proxy-config'],
-    labels=['infrastructure'],
-)
+# ============================================================================
+# ISTIO INGRESS GATEWAY
+# ============================================================================
 
 # Wildcard TLS certificate for *.budgetanalyzer.localhost (using mkcert)
 # This runs on the HOST machine to install the CA in browser trust stores
@@ -818,29 +809,121 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Gateway and HTTPRoutes
+# One-time cleanup of Envoy Gateway resources from existing clusters.
+# No-op on fresh clusters. Uses explicit resource names since the Envoy manifest files are deleted.
 local_resource(
-    'ingress-gateway',
+    'envoy-gateway-cleanup',
     cmd='''
-        kubectl apply -f kubernetes/gateway/gateway.yaml
-        kubectl apply -f kubernetes/gateway/client-traffic-policy.yaml
-        kubectl apply -f kubernetes/gateway/auth-httproute.yaml
-        kubectl apply -f kubernetes/gateway/api-httproute.yaml
-        kubectl apply -f kubernetes/gateway/app-httproute.yaml
-        kubectl apply -f kubernetes/gateway/ext-authz-security-policy.yaml
+        helm uninstall envoy-gateway -n envoy-gateway-system --ignore-not-found || true
+        kubectl delete gateway ingress-gateway -n default --ignore-not-found || true
+        kubectl delete clienttrafficpolicy xff-config -n default --ignore-not-found || true
+        kubectl delete securitypolicy ext-authz-policy -n default --ignore-not-found || true
+        kubectl delete gatewayclass envoy-proxy --ignore-not-found || true
+        kubectl delete envoyproxy kind-proxy-config -n envoy-gateway-system --ignore-not-found || true
+    ''',
+    labels=['infrastructure'],
+)
+
+# Istio ingress gateway — auto-provisioned from the Gateway API resource.
+# Applies the namespace, TLS ReferenceGrant, and Gateway, then patches NodePort to 30443.
+local_resource(
+    'istio-ingress-config',
+    cmd='''
+        kubectl apply -f kubernetes/istio/ingress-namespace.yaml
+        kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
+        kubectl apply -f kubernetes/istio/istio-gateway.yaml
+        kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=120s
+        kubectl patch svc -n istio-ingress istio-ingress-gateway-istio --type=json \
+            -p='[{"op":"replace","path":"/spec/ports/1/nodePort","value":30443}]'
     ''',
     deps=[
-        'kubernetes/gateway/gateway.yaml',
-        'kubernetes/gateway/client-traffic-policy.yaml',
-        'kubernetes/gateway/auth-httproute.yaml',
-        'kubernetes/gateway/api-httproute.yaml',
-        'kubernetes/gateway/app-httproute.yaml',
-        'kubernetes/gateway/ext-authz-security-policy.yaml',
+        'kubernetes/istio/ingress-namespace.yaml',
+        'kubernetes/istio/tls-reference-grant.yaml',
+        'kubernetes/istio/istio-gateway.yaml',
     ],
-    resource_deps=['gateway-class', 'mkcert-tls-secret', 'ext-authz', 'nginx-gateway'],
+    resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'mkcert-tls-secret'],
     labels=['gateway'],
 )
 
+# HTTPRoutes and ext-authz AuthorizationPolicy
+local_resource(
+    'istio-ingress-routes',
+    cmd='''
+        kubectl apply -f kubernetes/gateway/auth-httproute.yaml
+        kubectl apply -f kubernetes/gateway/api-httproute.yaml
+        kubectl apply -f kubernetes/gateway/app-httproute.yaml
+        kubectl apply -f kubernetes/istio/ext-authz-policy.yaml
+        kubectl apply -f kubernetes/istio/ingress-rate-limit.yaml
+    ''',
+    deps=[
+        'kubernetes/gateway/auth-httproute.yaml',
+        'kubernetes/gateway/api-httproute.yaml',
+        'kubernetes/gateway/app-httproute.yaml',
+        'kubernetes/istio/ext-authz-policy.yaml',
+        'kubernetes/istio/ingress-rate-limit.yaml',
+    ],
+    resource_deps=['istio-ingress-config', 'istio-ingress-network-policies', 'ext-authz', 'nginx-gateway'],
+    labels=['gateway'],
+)
+
+# ============================================================================
+# ISTIO EGRESS GATEWAY
+# ============================================================================
+
+# Egress namespace (source of truth for labels — not managed by istio-injection)
+local_resource(
+    'istio-egress-namespace',
+    cmd='kubectl apply -f kubernetes/istio/egress-namespace.yaml',
+    deps=['kubernetes/istio/egress-namespace.yaml'],
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
+# Egress gateway rendered from istio/gateway 1.24.3 and checked into the repo.
+# The upstream chart rejects the required service.type input under Helm v3.20.1,
+# so Tilt applies the vendored manifest directly instead of depending on the
+# runtime schema bypass.
+local_resource(
+    'istio-egress-gateway',
+    cmd='''
+        helm uninstall istio-egress-gateway -n istio-egress --ignore-not-found --wait || true
+        kubectl apply -f kubernetes/istio/egress-gateway.yaml
+        kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s
+    ''',
+    deps=['kubernetes/istio/egress-gateway.yaml'],
+    resource_deps=['istio-egress-namespace'],
+    labels=['infrastructure'],
+)
+
+# ServiceEntries and egress routing (Gateway, DestinationRule, VirtualServices)
+local_resource(
+    'istio-egress-config',
+    cmd='''
+        kubectl apply -f kubernetes/istio/egress-service-entries.yaml
+        kubectl apply -f kubernetes/istio/egress-routing.yaml
+    ''',
+    deps=[
+        'kubernetes/istio/egress-service-entries.yaml',
+        'kubernetes/istio/egress-routing.yaml',
+    ],
+    resource_deps=['istio-egress-gateway', 'istiod'],
+    labels=['infrastructure'],
+)
+
+# Egress network policies
+local_resource(
+    'istio-egress-network-policies',
+    cmd='''
+        kubectl apply -f kubernetes/network-policies/istio-egress-deny.yaml
+        kubectl apply -f kubernetes/network-policies/istio-egress-allow.yaml
+    ''',
+    deps=[
+        'kubernetes/network-policies/istio-egress-deny.yaml',
+        'kubernetes/network-policies/istio-egress-allow.yaml',
+    ],
+    resource_deps=['istio-egress-config'],
+    labels=['infrastructure'],
+)
 
 # ============================================================================
 # UI ENHANCEMENTS

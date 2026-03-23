@@ -24,9 +24,9 @@
 
 ### Public Layer (Browser Accessible)
 - **443** - Istio Ingress Gateway (HTTPS, `istio-ingress` namespace)
-  - `app.budgetanalyzer.localhost` → routes to Session Gateway (auth paths) or NGINX (API/frontend paths)
+  - `app.budgetanalyzer.localhost` → routes OAuth2/auth protocol paths to Session Gateway and frontend/API paths to NGINX
   - ext_authz enforced on `/api/*` paths via meshConfig extensionProvider
-  - auth-sensitive paths throttled locally at ingress (`/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`)
+  - auth-sensitive paths throttled locally at ingress (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 
 ### Gateway Layer (Internal)
 - **9002** - ext_authz HTTP (session validation, header injection)

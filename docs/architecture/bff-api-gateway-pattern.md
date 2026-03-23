@@ -19,12 +19,12 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 1. **Istio Ingress**: SSL termination, ext_authz enforcement on `/api/*` paths, and auth-path throttling
 2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
-4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`)
+4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 
 **Routing**:
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
-- `/*` → NGINX (frontend, no auth required)
+- `/login`, `/*` → NGINX (frontend, no auth required)
 
 ## Component Roles
 
@@ -35,7 +35,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
 - Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
-- Applies local rate limiting to auth-sensitive paths (`/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`)
+- Applies local rate limiting to auth-sensitive paths (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
@@ -144,6 +144,8 @@ kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_
 service-specific Redis ACL users, not a shared password.
 
 **Repository**: https://github.com/budgetanalyzer/session-gateway
+
+Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
 ## Why This Pattern?
 

@@ -151,7 +151,9 @@ open https://app.budgetanalyzer.localhost
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
-The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login` and `/user`, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 

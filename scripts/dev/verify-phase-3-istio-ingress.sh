@@ -90,6 +90,11 @@ extract_http_status() {
     printf '%s\n' "$1" | sed -n 's/^[[:space:]]*HTTP\/[^[:space:]]* \([0-9][0-9][0-9]\).*/\1/p' | tail -n 1
 }
 
+extract_header_value() {
+    local header_name="$1" response="$2"
+    printf '%s\n' "$response" | sed -n "s/^[[:space:]]*${header_name}:[[:space:]]*//Ip" | tail -n 1 | tr -d '\r'
+}
+
 resource_exists() {
     kubectl get "$1" "$2" -n "$3" >/dev/null 2>&1
 }
@@ -791,7 +796,8 @@ main() {
 
     section "Ingress Path"
 
-    local app_status api_status login_status health_status
+    local app_status api_status login_headers login_status oauth2_headers oauth2_status oauth2_location
+    local auth_route_matches auth_route_backends health_status
     app_status=$(external_status "/")
     if [[ "$app_status" == "200" ]]; then
         pass "GET / returns 200"
@@ -806,11 +812,50 @@ main() {
         fail "GET /api/v1/transactions returns $api_status (expected 401 or 403)"
     fi
 
-    login_status=$(external_status "/login")
-    if [[ "$login_status" == "302" ]]; then
-        pass "GET /login returns 302"
+    login_headers=$(external_headers_and_status "/login")
+    login_status=$(printf '%s\n' "$login_headers" | sed -n 's/^HTTP_STATUS://p' | tail -n 1)
+    if [[ "$login_status" == "200" ]]; then
+        pass "GET /login returns 200"
     else
-        fail "GET /login returns $login_status (expected 302)"
+        fail "GET /login returns $login_status (expected 200)"
+    fi
+
+    oauth2_headers=$(external_headers_and_status "/oauth2/authorization/idp")
+    oauth2_status=$(printf '%s\n' "$oauth2_headers" | sed -n 's/^HTTP_STATUS://p' | tail -n 1)
+    if [[ "$oauth2_status" == "302" ]]; then
+        pass "GET /oauth2/authorization/idp returns 302"
+    else
+        fail "GET /oauth2/authorization/idp returns $oauth2_status (expected 302)"
+    fi
+
+    oauth2_location=$(extract_header_value "location" "$oauth2_headers")
+    if [[ "$oauth2_location" == *"redirect_uri=https://app.budgetanalyzer.localhost/login/oauth2/code/idp"* ]] ||
+       [[ "$oauth2_location" == *"redirect_uri=https%3A%2F%2Fapp.budgetanalyzer.localhost%2Flogin%2Foauth2%2Fcode%2Fidp"* ]]; then
+        pass "OAuth2 initiation redirect uses the Session Gateway callback path"
+    else
+        fail "OAuth2 initiation redirect does not reference https://app.budgetanalyzer.localhost/login/oauth2/code/idp"
+    fi
+
+    auth_route_matches=$(kubectl get httproute auth-route -n default \
+        -o go-template='{{ range .spec.rules }}{{ range .matches }}{{ if .path }}{{ printf "%s:%s\n" .path.type .path.value }}{{ end }}{{ end }}{{ end }}' 2>/dev/null || true)
+    if printf '%s\n' "$auth_route_matches" | grep -Fxq 'PathPrefix:/login/oauth2'; then
+        pass "HTTPRoute default/auth-route matches the Session Gateway callback prefix"
+    else
+        fail "HTTPRoute default/auth-route is missing PathPrefix /login/oauth2"
+    fi
+
+    if ! printf '%s\n' "$auth_route_matches" | grep -Fxq 'PathPrefix:/login'; then
+        pass "HTTPRoute default/auth-route no longer claims bare /login"
+    else
+        fail "HTTPRoute default/auth-route still claims bare /login"
+    fi
+
+    auth_route_backends=$(kubectl get httproute auth-route -n default \
+        -o go-template='{{ range .spec.rules }}{{ range .backendRefs }}{{ printf "%s:%v\n" .name .port }}{{ end }}{{ end }}' 2>/dev/null || true)
+    if printf '%s\n' "$auth_route_backends" | grep -Fxq 'session-gateway:8081'; then
+        pass "HTTPRoute default/auth-route still targets session-gateway:8081"
+    else
+        fail "HTTPRoute default/auth-route is not targeting session-gateway:8081"
     fi
 
     health_status=$(external_status "/health")
@@ -828,7 +873,7 @@ main() {
         fail "Missing EnvoyFilter istio-ingress/ingress-auth-local-rate-limit"
     fi
 
-    require_ingress_rate_limit "/login" "/login"
+    require_ingress_rate_limit "/oauth2/authorization/idp" "/oauth2/authorization/idp"
     require_ingress_rate_limit "/user" "/user"
 
     section "Header Sanitization"

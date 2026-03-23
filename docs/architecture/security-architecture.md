@@ -18,7 +18,7 @@ Current repository state:
 - Phase 2 network policies are enforced: `default`, `infrastructure`, `istio-ingress`, and `istio-egress` namespaces have deny-by-default ingress and egress with explicit allowlists. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists.
 - Phase 3 manifests now describe the intended Istio ingress/egress topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-only `AuthorizationPolicy` rules. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
 
-Operationally, those ingress-facing policies depend on the rendered gateway label `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` and the rendered principal `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. The egress `DestinationRule` uses `tls.mode: DISABLE` on the workload-to-egress hop so the original external TLS/SNI reaches the egress gateway's `PASSTHROUGH` listener; external TLS remains end-to-end, but that intra-cluster hop is not additionally wrapped in mesh mTLS. Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+Operationally, those ingress-facing policies depend on the rendered gateway label `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` and the rendered principal `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. The egress `DestinationRule` uses `tls.mode: DISABLE` on the workload-to-egress hop so the original external TLS/SNI reaches the egress gateway's `PASSTHROUGH` listener; external TLS remains end-to-end, but that intra-cluster hop is not additionally wrapped in mesh mTLS. `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
 
 ---
 
@@ -56,7 +56,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 │              Istio Ingress Gateway (Port 443, HTTPS)             │
 │                    • SSL Termination (all traffic)               │
 │                    • ext_authz enforcement on /api/* paths       │
-│                    • Routes /auth/*, /oauth2/*, /login/*,        │
+│                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
 │                      /logout, /user → Session Gateway            │
 │                    • Routes /api/*, /* → NGINX                   │
 │                    • Local rate limiting on auth-sensitive paths │
@@ -219,16 +219,17 @@ Service Logic:
 
 ```
 1. User clicks "Login" in React app
-2. React → Session Gateway /login endpoint
-3. Session Gateway redirects to Auth0 authorize endpoint
-4. User authenticates at Auth0 (enters credentials)
-5. Auth0 redirects to Session Gateway /callback with authorization code
-6. Session Gateway exchanges code for tokens (access + refresh)
-7. Session Gateway stores Auth0 tokens in Redis
-8. Session Gateway calls permission-service to resolve roles/permissions
-9. Session Gateway dual-writes session data to ext_authz Redis schema
-10. Session Gateway sets HTTP-only session cookie in browser
-11. Browser redirected to application home page
+2. React routes to the frontend login page at `/login`
+3. Frontend initiates `GET /oauth2/authorization/idp`
+4. Session Gateway redirects to Auth0 authorize endpoint
+5. User authenticates at Auth0 (enters credentials)
+6. Auth0 redirects to Session Gateway `/login/oauth2/code/idp` with authorization code
+7. Session Gateway exchanges code for tokens (access + refresh)
+8. Session Gateway stores Auth0 tokens in Redis
+9. Session Gateway calls permission-service to resolve roles/permissions
+10. Session Gateway dual-writes session data to ext_authz Redis schema
+11. Session Gateway sets HTTP-only session cookie in browser
+12. Browser redirected to application home page
 ```
 
 **Security Benefits:**
@@ -344,13 +345,15 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 
 ### Implementation
 
-**All authentication flows go through Session Gateway:**
+**All authentication protocol endpoints go through Session Gateway:**
 - `/auth/*` - Auth lifecycle endpoints
 - `/oauth2/*` - OAuth2 callback and continuation endpoints
-- `/login/*` - OAuth2 login initiation
+- `/login/oauth2/*` - OAuth2 callback path
 - `/logout` - End session
 - `/user` - Session inspection for the browser client
 - `/auth/token/exchange` - Token exchange for native/M2M clients
+
+The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by calling `/oauth2/authorization/idp`, but it is not itself a Session Gateway route.
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes

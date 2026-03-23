@@ -40,6 +40,8 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
+`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. The browser login page is `/login`; the actual OAuth2 redirect starts at `/oauth2/authorization/idp` and returns to `/login/oauth2/code/idp`.
+
 ### Port Mapping
 
 | Port | Service | Protocol | Purpose |
@@ -608,8 +610,10 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 # Start fresh
 tilt up
 
-# Verify runtime security prerequisites once platform resources are healthy
+# Verify the Phase 0 platform baseline once platform resources are healthy
 ./scripts/dev/verify-security-prereqs.sh
+
+# Verify the Phase 3 completion gate after ingress resources are ready
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 

@@ -28,9 +28,11 @@ Current local platform baseline:
 - `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
-- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform prerequisites are active, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, and `./scripts/dev/verify-phase-3-istio-ingress.sh` for Phase 3 Istio ingress/egress verification.
+- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, and `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate.
 
 Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+
+Auth entrypoints are split intentionally: `/login` is the frontend login page, `/oauth2/authorization/idp` starts OAuth2, and Auth0 returns to `/login/oauth2/code/idp`.
 
 ## Documentation
 

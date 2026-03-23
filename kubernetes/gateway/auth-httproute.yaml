@@ -16,7 +16,7 @@ spec:
         value: /oauth2
     - path:
         type: PathPrefix
-        value: /login
+        value: /login/oauth2
     - path:
         type: PathPrefix
         value: /logout

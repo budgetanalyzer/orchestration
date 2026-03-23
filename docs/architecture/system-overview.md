@@ -16,13 +16,13 @@ Browser (https://app.budgetanalyzer.localhost)
     ▼ HTTPS
 Istio Ingress Gateway (:443) ─── SSL termination, ext_authz on /api/* paths, auth-path rate limiting
     │
-    ├─ /auth/*, /oauth2/*, /login/*, /logout, /user → Session Gateway (:8081) ─── auth lifecycle
+    ├─ /auth/*, /oauth2/*, /login/oauth2/*, /logout, /user → Session Gateway (:8081) ─── auth lifecycle
     │
     ├─ /api/* → ext_authz (:9002) validates session from Redis
     │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
     │           └─ NGINX Gateway (:8080) ─── routes to backend service
     │
-    └─ /* → NGINX Gateway (:8080) ─── serves frontend (no auth required)
+    └─ /login, /* → NGINX Gateway (:8080) ─── serves frontend (no auth required)
     │
     ▼ HTTP
 Backend Services ─── business logic, data authorization
@@ -35,7 +35,7 @@ Backend Services ─── business logic, data authorization
 - ext_authz validates every API request
 - Session revocation is instant (Redis key delete)
 
-Operational note: treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
 
 ## Architecture Overview
 
@@ -96,7 +96,7 @@ Operational note: treat Phase 3 as complete only after `./scripts/dev/verify-pha
 **Istio Ingress Gateway** (Port 443)
 - SSL/TLS termination
 - ext_authz enforcement on `/api/*` paths via meshConfig extensionProvider
-- Auth-path throttling on `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, and `/user`
+- Auth-path throttling on `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
 - Ingress routing based on path (Gateway API HTTPRoutes)
 - Kubernetes Gateway API compliant
 - Runs inside the Istio service mesh with SPIFFE identity
@@ -277,11 +277,11 @@ This reference architecture deliberately stops before solving data ownership. Un
 - ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**
-- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user`
+- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`
 - Istio Egress: Outbound traffic control (REGISTRY_ONLY + ServiceEntry allowlist)
-- Session Gateway: Auth lifecycle, session dual-write to ext_authz Redis schema
+- Session Gateway: Auth lifecycle, OAuth2 callback handling under `/login/oauth2/*`, session dual-write to ext_authz Redis schema
 - ext_authz: Per-request session validation, header injection
-- NGINX: Resource routing, backend/API rate limiting
+- NGINX: Resource routing, backend/API rate limiting, frontend login page at `/login`
 
 ### What's Left as an Exercise
 

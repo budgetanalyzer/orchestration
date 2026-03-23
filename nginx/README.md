@@ -12,9 +12,11 @@ Browser (https://app.budgetanalyzer.localhost)
     ▼
 Istio Ingress Gateway (:443) ─── SSL termination + ext_authz session validation
     │
-    ├─→ /auth/*, /oauth2/*, /login/*, /logout, /user → Session Gateway (:8081)
+    ├─→ /auth/*, /oauth2/*, /login/oauth2/*, /logout, /user → Session Gateway (:8081)
     │
     ├─→ /api/* → NGINX (:8080)
+    │
+    ├─→ /login → NGINX (:8080) → React App (:3000)
     │
     ▼ (K8s internal: nginx-gateway:8080)
 NGINX (:8080) ─── API-path rate limiting, route to service
@@ -33,8 +35,10 @@ NGINX (:8080) ─── API-path rate limiting, route to service
 
 ## Rate-Limiting Split
 
-- Istio ingress rate limits auth-sensitive paths: `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, and `/user`
+- Istio ingress rate limits auth-sensitive paths: `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
 - NGINX rate limits backend-facing API paths after ingress validation and routing
+
+Bare `/login` is a frontend route. It is served through NGINX and initiates OAuth2 with `/oauth2/authorization/idp`; it is not a direct Session Gateway route.
 
 ## Service Configuration
 
@@ -77,7 +81,8 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
 API requests go through Istio Ingress Gateway (443) → ext_authz → NGINX (8080).
-Auth requests go through Istio Ingress Gateway (443) → Session Gateway (8081).
+OAuth2 and auth lifecycle requests go through Istio Ingress Gateway (443) → Session Gateway (8081).
+The frontend login page at `/login` goes through Istio Ingress Gateway (443) → NGINX (8080).
 
 ### 3. Verify it's working
 

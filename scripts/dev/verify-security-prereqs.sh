@@ -222,15 +222,12 @@ MANIFEST
 }
 
 prove_istio_readiness_and_injection() {
-    print_step "Verifying Istio readiness, policy resources, and sidecar injection..."
+    print_step "Verifying Istio readiness, baseline policy resources, and sidecar injection..."
 
     kubectl wait --for=condition=Available deployment/istiod -n istio-system --timeout=180s >/dev/null
 
     local required_peer_auth=(
         "default-strict"
-        "nginx-gateway-permissive"
-        "ext-authz-permissive"
-        "session-gateway-permissive"
     )
 
     local required_authz=(

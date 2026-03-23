@@ -119,9 +119,9 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 ```
 
 **Single entry point**: `app.budgetanalyzer.localhost`
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
-- `/*` → NGINX (frontend, no auth required)
+- `/login`, `/*` → NGINX (frontend, no auth required)
 
 **Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions.
   - `app.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
@@ -204,7 +204,9 @@ Check prerequisites:
 tilt up
 
 # Optional but recommended after core platform resources are healthy
+# Prove the Phase 0 platform baseline
 ./scripts/dev/verify-security-prereqs.sh
+# Close Phase 3 ingress/egress hardening
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 
 # Access Tilt UI for logs and status
@@ -216,6 +218,8 @@ tilt up
 # Stop all services
 tilt down
 ```
+
+`./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
 
 ### Troubleshooting
 

@@ -435,6 +435,13 @@ Security requirement:
 
 ## Phase 5: Runtime Hardening and Pod Security
 
+Detailed implementation breakdown: [security-hardening-v2-phase-5-implementation.md](./security-hardening-v2-phase-5-implementation.md)
+
+Current authoring status for March 24, 2026:
+
+- The detailed Phase 5 session breakdown and completion-gate verifier are now authored in-repo.
+- Phase 5 implementation is not started yet. Do not flip Pod Security `enforce` labels in meshed namespaces until the Istio CNI prerequisite in Session 1 is complete.
+
 ### 5a. Manifest-level workload hardening
 
 Apply a baseline to all compatible workloads:

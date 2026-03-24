@@ -12,7 +12,7 @@
 - Kind 0.20+
 - kubectl 1.28+
 - OpenSSL 3.x+
-- Helm 3.20.x (tested; Helm 4 unsupported)
+- Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
 - Tilt 0.33+
 - Git 2.40+
 - mkcert 1.4+
@@ -93,18 +93,12 @@ cd orchestration/
 ```
 
 **What `setup.sh` does in the current Phase 0 baseline:**
-1. Creates or validates the Kind cluster
+1. Deletes any existing `kind` cluster and recreates it from scratch
 2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
 3. Installs pinned Calico and waits for CoreDNS readiness
-4. Configures local DNS plus browser-facing and internal transport TLS
-5. Installs Gateway API CRDs and prepares `.env`
-
-If setup fails because you already have an older local Kind cluster:
-
-```bash
-kind delete cluster --name kind
-./setup.sh
-```
+4. Ensures a supported Helm `3.20.x` binary is installed before any Helm-backed setup continues
+5. Configures local DNS plus browser-facing and internal transport TLS
+6. Installs Gateway API CRDs and prepares `.env`
 
 ### 3. Configure Environment Variables
 
@@ -164,6 +158,10 @@ transport-TLS completion gate, and
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
 need to regenerate just the internal transport-TLS secrets.
+All verification scripts use the current `kubectl` context. If one reports
+missing pods, secrets, or network policies while Tilt appears healthy, verify
+`kubectl config current-context` and `tilt get uiresources` from the same host
+shell before assuming the script is wrong.
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 

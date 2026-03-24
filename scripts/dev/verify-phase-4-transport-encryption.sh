@@ -83,11 +83,23 @@ require_host_command() {
     fi
 }
 
+current_context() {
+    kubectl config current-context 2>/dev/null || printf 'unknown'
+}
+
 require_cluster_access() {
     if ! kubectl cluster-info >/dev/null 2>&1; then
-        printf 'ERROR: Cannot reach Kubernetes cluster\n' >&2
+        printf 'ERROR: Cannot reach Kubernetes cluster from current kubectl context (%s)\n' "$(current_context)" >&2
         exit 1
     fi
+}
+
+namespace_exists() {
+    kubectl get namespace "$1" >/dev/null 2>&1
+}
+
+pod_count() {
+    kubectl get pods -n "$1" --no-headers 2>/dev/null | wc -l | tr -d ' '
 }
 
 find_pod() {
@@ -103,9 +115,16 @@ require_pod() {
     local label="$3"
     local pod
 
+    if ! namespace_exists "$namespace"; then
+        printf 'ERROR: namespace %s not found in current kubectl context (%s)\n' "$namespace" "$(current_context)" >&2
+        exit 1
+    fi
+
     pod=$(find_pod "$namespace" "$selector")
     if [[ -z "$pod" ]]; then
-        printf 'ERROR: %s pod not found in namespace %s. Is Tilt running?\n' "$label" "$namespace" >&2
+        printf 'ERROR: %s pod not found in namespace %s (context: %s, pods in namespace: %s)\n' \
+            "$label" "$namespace" "$(current_context)" "$(pod_count "$namespace")" >&2
+        printf '       Tilt may be stopped, still reconciling, or running against a different cluster/context than kubectl.\n' >&2
         exit 1
     fi
 
@@ -117,7 +136,8 @@ require_secret_exists() {
     local secret_name="$2"
 
     if ! kubectl get secret "$secret_name" -n "$namespace" >/dev/null 2>&1; then
-        printf 'ERROR: required secret not found: %s/%s\n' "$namespace" "$secret_name" >&2
+        printf 'ERROR: required secret not found: %s/%s (context: %s)\n' \
+            "$namespace" "$secret_name" "$(current_context)" >&2
         exit 1
     fi
 }
@@ -142,9 +162,11 @@ require_secret_value() {
     local key="$3"
     local value
 
+    require_secret_exists "$namespace" "$secret_name"
     value=$(read_secret "$namespace" "$secret_name" "$key" || true)
     if [[ -z "$value" ]]; then
-        printf 'ERROR: missing secret value %s/%s[%s]\n' "$namespace" "$secret_name" "$key" >&2
+        printf 'ERROR: missing secret value %s/%s[%s] (context: %s)\n' \
+            "$namespace" "$secret_name" "$key" "$(current_context)" >&2
         exit 1
     fi
 
@@ -554,8 +576,8 @@ main() {
     require_secret_exists infrastructure infra-tls-postgresql
     require_secret_exists infrastructure infra-tls-rabbitmq
 
-    REDIS_USERNAME=$(require_secret_value default session-gateway-redis-credentials username)
-    REDIS_PASSWORD=$(require_secret_value default session-gateway-redis-credentials password)
+    REDIS_USERNAME=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-username)
+    REDIS_PASSWORD=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
     PG_USERNAME=$(require_secret_value default transaction-service-postgresql-credentials username)
     PG_PASSWORD=$(require_secret_value default transaction-service-postgresql-credentials password)
     RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)

@@ -43,6 +43,9 @@ check_command() {
             tilt)
                 version=$($cmd version 2>&1 | head -n1)
                 ;;
+            openssl)
+                version=$($cmd version 2>&1 | head -n1)
+                ;;
             *)
                 version=$($cmd --version 2>&1 | head -n1)
                 ;;

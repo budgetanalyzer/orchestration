@@ -83,34 +83,54 @@ require_host_command() {
     fi
 }
 
+current_context() {
+    kubectl config current-context 2>/dev/null || printf 'unknown'
+}
+
 require_cluster_access() {
     if ! kubectl cluster-info >/dev/null 2>&1; then
-        printf 'ERROR: Cannot reach Kubernetes cluster\n' >&2
+        printf 'ERROR: Cannot reach Kubernetes cluster from current kubectl context (%s)\n' "$(current_context)" >&2
+        exit 1
+    fi
+}
+
+require_namespace() {
+    if ! kubectl get namespace "$1" >/dev/null 2>&1; then
+        printf 'ERROR: namespace %s not found in current kubectl context (%s)\n' "$1" "$(current_context)" >&2
         exit 1
     fi
 }
 
 require_network_policies() {
     local default_count infra_count ingress_count egress_count
+    require_namespace default
+    require_namespace infrastructure
+    require_namespace istio-ingress
+    require_namespace istio-egress
+
     default_count=$(kubectl get networkpolicy -n default --no-headers 2>/dev/null | wc -l)
     infra_count=$(kubectl get networkpolicy -n infrastructure --no-headers 2>/dev/null | wc -l)
     ingress_count=$(kubectl get networkpolicy -n istio-ingress --no-headers 2>/dev/null | wc -l)
     egress_count=$(kubectl get networkpolicy -n istio-egress --no-headers 2>/dev/null | wc -l)
 
     if [[ "$default_count" -eq 0 ]]; then
-        printf 'ERROR: No network policies in default namespace. Apply policies first.\n' >&2
+        printf 'ERROR: No network policies in default namespace (context: %s).\n' "$(current_context)" >&2
+        printf '       Run Tilt until the network policy resources reconcile, or trigger network-policies-core explicitly.\n' >&2
         exit 1
     fi
     if [[ "$infra_count" -eq 0 ]]; then
-        printf 'ERROR: No network policies in infrastructure namespace. Apply policies first.\n' >&2
+        printf 'ERROR: No network policies in infrastructure namespace (context: %s).\n' "$(current_context)" >&2
+        printf '       Run Tilt until the network policy resources reconcile, or trigger network-policies-core explicitly.\n' >&2
         exit 1
     fi
     if [[ "$ingress_count" -eq 0 ]]; then
-        printf 'ERROR: No network policies in istio-ingress namespace. Apply policies first.\n' >&2
+        printf 'ERROR: No network policies in istio-ingress namespace (context: %s).\n' "$(current_context)" >&2
+        printf '       Run Tilt until the ingress network policies reconcile, or trigger istio-ingress-network-policies explicitly.\n' >&2
         exit 1
     fi
     if [[ "$egress_count" -eq 0 ]]; then
-        printf 'ERROR: No network policies in istio-egress namespace. Apply policies first.\n' >&2
+        printf 'ERROR: No network policies in istio-egress namespace (context: %s).\n' "$(current_context)" >&2
+        printf '       Run Tilt until the egress network policies reconcile, or trigger istio-egress-network-policies explicitly.\n' >&2
         exit 1
     fi
 

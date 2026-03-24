@@ -179,7 +179,9 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 
 ### Prerequisites & Setup
 
-**Required tools**: Docker, Kind, kubectl, OpenSSL, Helm, Tilt, Git, mkcert
+**Required tools**: Docker, Kind, kubectl, OpenSSL, Tilt, Git, mkcert
+Helm `3.20.x` is still the required runtime toolchain, but `./setup.sh` now
+installs the tested `v3.20.1` automatically when Helm is missing or unsupported.
 
 **Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo. The
 Istio egress gateway is applied from the checked-in
@@ -194,7 +196,7 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-./setup.sh        # Creates/validates cluster, installs Calico, configures certs (browser + infra TLS), DNS, and .env
+./setup.sh        # Recreates the kind cluster from scratch, installs Calico, ensures supported Helm, configures certs (browser + infra TLS), DNS, and .env
 # Edit .env with your Auth0 and FRED API credentials
 ```
 

@@ -115,7 +115,7 @@ parent-directory/
 
 ## Setup Steps
 
-If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. The steps below spell out the same flow manually for debugging and learning.
+If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. It now deletes any existing `kind` cluster, recreates it from scratch, and installs Helm `v3.20.1` automatically if your current Helm is missing or unsupported. The steps below spell out the same flow manually for debugging and learning.
 
 ### 1. Run Pre-flight Check
 

@@ -25,7 +25,8 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated -
 See [Getting Started](docs/development/getting-started.md) for complete setup instructions.
 
 Current local platform baseline:
-- `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
+- `setup.sh` now deletes any existing `kind` cluster and recreates it with `disableDefaultCNI` plus pinned Calico so `NetworkPolicy` is actually enforceable.
+- `setup.sh` also ensures a supported Helm `3.20.x` toolchain is installed before continuing.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
 - `setup.sh` now also runs `./scripts/dev/setup-infra-tls.sh` to generate the internal `infra-ca` and `infra-tls-*` TLS secrets for Redis, PostgreSQL, and RabbitMQ. Run that script standalone only when you need to regenerate the transport-TLS material.
 - Redis is now TLS-only in-cluster; verification and session seeding scripts connect through `infra-ca`, and direct service boot runs must enable Redis SSL with that CA bundle.

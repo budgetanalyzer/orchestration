@@ -128,6 +128,10 @@ Key scripts:
 - `scripts/dev/verify-phase-4-transport-encryption.sh` - Phase 4 runtime proof for Redis/PostgreSQL/RabbitMQ client TLS verification, secondary RabbitMQ listener-state checks, and Phase 1/2 regression coverage.
 - `scripts/dev/lib/redis-cli.sh` - Shared shell helper for Redis TLS commands executed inside the Redis pod.
 
+All verification scripts execute against the current `kubectl` context. If they
+report missing pods, secrets, or policies while Tilt appears healthy, confirm
+the active context and Tilt resource state from the same host shell first.
+
 ## Adding New Scripts
 
 When adding a new script:

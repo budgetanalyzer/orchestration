@@ -190,7 +190,7 @@ This creates:
 
 ### 6. Generate Internal Transport TLS Secrets
 
-Run this from your host terminal before `tilt up`:
+`setup.sh` handles this automatically. To regenerate standalone:
 
 ```bash
 ./scripts/dev/setup-infra-tls.sh
@@ -442,13 +442,8 @@ Edit `/etc/hosts` and remove lines containing `budgetanalyzer.localhost`.
 # First, publish service-common (run once)
 cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orchestration
 
-# Then run the setup
-kind create cluster --config kind-cluster-config.yaml && \
-./scripts/dev/install-calico.sh && \
-echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
-./scripts/dev/setup-k8s-tls.sh && \
-./scripts/dev/setup-infra-tls.sh && \
-cp .env.example .env && \
+# Then run the setup (creates cluster, installs Calico, generates all certs, creates .env)
+./setup.sh && \
 vim .env && \
 tilt up
 ```
@@ -467,10 +462,6 @@ tilt up
 ```bash
 tilt down
 kind delete cluster --name kind
-kind create cluster --config kind-cluster-config.yaml
-./scripts/dev/install-calico.sh
-./scripts/dev/setup-k8s-tls.sh
-./scripts/dev/setup-infra-tls.sh
-[ -f .env ] || cp .env.example .env
+./setup.sh    # Recreates cluster, Calico, all certs, .env
 tilt up
 ```

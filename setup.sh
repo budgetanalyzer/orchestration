@@ -220,7 +220,14 @@ print_step "Setting up TLS certificates..."
 "$SCRIPT_DIR/scripts/dev/setup-k8s-tls.sh"
 
 # =============================================================================
-# Step 8: Create .env file
+# Step 8: Generate infrastructure TLS certificates
+# =============================================================================
+print_step "Setting up infrastructure TLS certificates..."
+
+"$SCRIPT_DIR/scripts/dev/setup-infra-tls.sh"
+
+# =============================================================================
+# Step 9: Create .env file
 # =============================================================================
 print_step "Setting up environment file..."
 

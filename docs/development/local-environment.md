@@ -120,28 +120,14 @@ Tilt is the local secret producer for infrastructure credentials. The Kubernetes
 manifests now consume named secrets only, which is the seam production can later
 replace with another secret source.
 
-### 4. Start All Services
-
-Generate the internal infrastructure TLS secrets from your **host machine**
-before starting Tilt:
-
-```bash
-cd orchestration/
-./scripts/dev/setup-infra-tls.sh
-```
-
-This creates `infra-ca` plus the `infra-tls-redis`,
-`infra-tls-postgresql`, and `infra-tls-rabbitmq` secrets. `setup.sh` still
-handles the browser-facing wildcard certificate separately.
-
-### 5. Start Tilt
+### 4. Start Tilt
 
 ```bash
 cd orchestration/
 tilt up
 ```
 
-### 6. Verify Services
+### 5. Verify Services
 
 ```bash
 # Check all pods are running
@@ -174,9 +160,9 @@ open https://app.budgetanalyzer.localhost
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
-`./scripts/dev/check-tilt-prerequisites.sh` now also blocks on the
-infrastructure TLS secrets and tells you to rerun
-`./scripts/dev/setup-infra-tls.sh` on the host when they are missing.
+`./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
+infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
+`./scripts/dev/setup-infra-tls.sh` on the host (or rerun `setup.sh`).
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 

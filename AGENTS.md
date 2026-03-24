@@ -194,16 +194,12 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
+./setup.sh        # Creates/validates cluster, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 # Edit .env with your Auth0 and FRED API credentials
-./scripts/dev/setup-infra-tls.sh   # Host-only: creates infra-ca and infra-tls-* secrets
 ```
 
 ### Quick Start
 ```bash
-# Host-only transport-TLS prerequisite
-./scripts/dev/setup-infra-tls.sh
-
 # Start all services with Tilt
 tilt up
 

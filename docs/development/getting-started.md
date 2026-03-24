@@ -36,9 +36,8 @@ From your **host terminal** (not the devcontainer):
 
 ```bash
 cd path/to/workspace/orchestration
-./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
+./setup.sh        # Creates/validates cluster, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 vim .env          # Review infra password defaults; add Auth0 + FRED credentials
-./scripts/dev/setup-infra-tls.sh   # Host-only: creates infra-ca and infra-tls-* secrets
 tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
@@ -53,9 +52,9 @@ PostgreSQL uses a `postgres_admin` bootstrap user plus distinct per-service
 database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
 broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
 `currency-service`, `redis-ops`) plus a restricted probe-only `default` user.
-The internal transport-TLS secrets are separate: `./scripts/dev/setup-infra-tls.sh`
-must be run from the host before `tilt up`, and
-`./scripts/dev/check-tilt-prerequisites.sh` now fails until `infra-ca` plus the
+`setup.sh` now generates the internal transport-TLS secrets automatically.
+To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the host.
+`./scripts/dev/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
 three `infra-tls-*` secrets exist.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the transport-TLS
 completion gate for Redis, PostgreSQL, and RabbitMQ.

@@ -61,7 +61,7 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 | **Infrastructure** |
 | 5432 | postgresql | TCP | Database |
 | 6379 | redis | TCP | Session storage |
-| 5672 | rabbitmq | AMQP | Message queue |
+| 5671 | rabbitmq | AMQPS | Message queue |
 | 15672 | rabbitmq | HTTP | Management UI |
 | **Debug Ports** |
 | 5006 | transaction-service | JDWP | Remote debugging |
@@ -206,8 +206,8 @@ Auth failures after login?
 Database connection errors?
 ├── Is PostgreSQL running?
 │   └── kubectl get pods -n infrastructure | grep postgres
-├── Can you connect directly?
-│   └── psql -h localhost -p 5432 -U postgres_admin -d postgres
+├── Can you connect directly with TLS verification?
+│   └── PGPASSWORD="$POSTGRES_BOOTSTRAP_PASSWORD" psql "host=localhost port=5432 user=postgres_admin dbname=postgres sslmode=verify-full sslrootcert=./nginx/certs/infra/infra-ca.pem"
 ├── Check credentials secret
 │   └── kubectl get secret <service>-postgresql-credentials -o yaml
 └── Check service logs for connection errors
@@ -263,6 +263,9 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_users
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_permissions -p /
 
+# Confirm the broker only exposes AMQPS on 5671 for the data plane
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl listeners
+
 # Authenticate the break-glass admin user from the bootstrap secret
 RABBITMQ_ADMIN_PASSWORD=$(kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.password}' | base64 -d)
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl authenticate_user rabbitmq-admin "$RABBITMQ_ADMIN_PASSWORD"
@@ -274,6 +277,9 @@ kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath=
 # Inspect the currency-service connection secret
 kubectl get secret currency-service-rabbitmq-credentials -o yaml
 ```
+
+RabbitMQ data-plane traffic is TLS-only on `5671`. Port `15672` stays on HTTP for
+the internal management UI.
 
 If the definitions file changed but the broker still shows the old users or
 permissions, recreate the RabbitMQ PVC and restart the resource:

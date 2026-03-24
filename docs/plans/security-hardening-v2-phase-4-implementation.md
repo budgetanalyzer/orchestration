@@ -360,8 +360,22 @@ spring:
     ssl:
       enabled: ${SPRING_RABBITMQ_SSL_ENABLED:false}
       bundle: ${SPRING_RABBITMQ_SSL_BUNDLE:}
+      validate-server-certificate: ${SPRING_RABBITMQ_SSL_VALIDATE_SERVER_CERTIFICATE:true}
+      verify-hostname: ${SPRING_RABBITMQ_SSL_VERIFY_HOSTNAME:true}
 ```
-(Reuses the `infra-ca` SSL bundle already defined in Session 3.)
+This reuses the `infra-ca` SSL bundle already defined in Session 3, but it no
+longer relies on Spring Boot defaults for the RabbitMQ trust contract.
+`currency-service` now states explicitly that:
+
+- the broker certificate must chain to the configured `infra-ca` trust bundle
+- the broker hostname must match a SAN on the RabbitMQ server certificate
+
+For local direct `bootRun`, `setup-infra-tls.sh` currently generates the
+RabbitMQ certificate with SANs for `localhost`,
+`rabbitmq.infrastructure`, `rabbitmq.infrastructure.svc`, and
+`rabbitmq.infrastructure.svc.cluster.local`, so direct host access should keep
+`SPRING_RABBITMQ_HOST=localhost` unless the certificate is regenerated with an
+additional SAN.
 
 **`kubernetes/services/currency-service/deployment.yaml`**:
 - Add env vars: `SPRING_RABBITMQ_SSL_ENABLED: "true"`, `SPRING_RABBITMQ_SSL_BUNDLE: "infra-ca"`

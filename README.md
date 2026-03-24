@@ -27,7 +27,7 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 Current local platform baseline:
 - `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
-- `setup.sh` now also generates the internal `infra-ca` and `infra-tls-*` TLS secrets for Redis, PostgreSQL, and RabbitMQ (run `./scripts/dev/setup-infra-tls.sh` standalone to regenerate them).
+- `setup.sh` now also runs `./scripts/dev/setup-infra-tls.sh` to generate the internal `infra-ca` and `infra-tls-*` TLS secrets for Redis, PostgreSQL, and RabbitMQ. Run that script standalone only when you need to regenerate the transport-TLS material.
 - Redis is now TLS-only in-cluster; verification and session seeding scripts connect through `infra-ca`, and direct service boot runs must enable Redis SSL with that CA bundle.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
 - After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, and `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate.

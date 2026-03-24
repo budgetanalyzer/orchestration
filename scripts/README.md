@@ -118,14 +118,14 @@ Key scripts:
 
 - `scripts/dev/check-tilt-prerequisites.sh` - Tooling/repo preflight checks and optional runtime security verification.
 - `scripts/dev/setup-k8s-tls.sh` - Host-only bootstrap for the browser-facing wildcard certificate and TLS secret.
-- `scripts/dev/setup-infra-tls.sh` - Host-only bootstrap for the internal `infra-ca` plus the Redis/PostgreSQL/RabbitMQ TLS secrets.
+- `scripts/dev/setup-infra-tls.sh` - Host-only bootstrap for the internal `infra-ca` plus the Redis/PostgreSQL/RabbitMQ TLS secrets. `setup.sh` calls it during the standard local platform bootstrap.
 - `scripts/dev/seed-ext-authz-session.sh` - Seeds a test ext-authz session in Redis using the TLS-only in-cluster Redis listener.
 - `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
 - `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio, Kyverno smoke policy).
 - `scripts/dev/verify-phase-1-credentials.sh` - Phase 1 runtime proof for PostgreSQL, RabbitMQ, Redis ACLs, and ext-authz over Redis TLS.
-- `scripts/dev/verify-phase-2-network-policies.sh` - Phase 2 runtime proof for NetworkPolicy allowlists (disposable probe pods, bounded retries for allowed paths, and repeated assertions for blocked paths).
+- `scripts/dev/verify-phase-2-network-policies.sh` - Phase 2 runtime proof for current NetworkPolicy allowlists across Istio ingress, service-to-service, infrastructure, and Istio egress gateway paths.
 - `scripts/dev/verify-phase-3-istio-ingress.sh` - Phase 3 runtime proof for Istio ingress/egress hardening, ext_authz integration, ingress path ownership, and forwarded-header behavior.
-- `scripts/dev/verify-phase-4-transport-encryption.sh` - Phase 4 runtime proof for Redis/PostgreSQL client TLS verification, RabbitMQ AMQPS-only listeners, and Phase 1/2 regression coverage.
+- `scripts/dev/verify-phase-4-transport-encryption.sh` - Phase 4 runtime proof for Redis/PostgreSQL/RabbitMQ client TLS verification, secondary RabbitMQ listener-state checks, and Phase 1/2 regression coverage.
 - `scripts/dev/lib/redis-cli.sh` - Shared shell helper for Redis TLS commands executed inside the Redis pod.
 
 ## Adding New Scripts

@@ -172,8 +172,11 @@ kubectl get svc --all-namespaces | grep <port>
 ```bash
 kubectl get networkpolicies
 kubectl get networkpolicies -n infrastructure
+kubectl get networkpolicies -n istio-ingress
+kubectl get networkpolicies -n istio-egress
 
-# Run the Phase 2 verifier for runtime proof
+# Run the Phase 2 verifier for runtime proof of the current Istio ingress,
+# service-to-service, infrastructure, and Istio egress gateway allowlists
 ./scripts/dev/verify-phase-2-network-policies.sh
 ```
 

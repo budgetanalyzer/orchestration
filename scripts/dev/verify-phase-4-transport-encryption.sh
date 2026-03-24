@@ -3,9 +3,10 @@
 # verify-phase-4-transport-encryption.sh
 #
 # Runtime verification for Security Hardening v2 Phase 4 transport encryption.
-# Proves client-side TLS validation for Redis and PostgreSQL, RabbitMQ TLS-only
-# listener configuration, regressions for earlier security verifiers, and the
-# readiness of all transport-encrypted client pods.
+# Proves client-side TLS validation for Redis, PostgreSQL, and RabbitMQ,
+# confirms RabbitMQ listener state as secondary broker proof, runs regressions
+# for earlier security verifiers, and checks the readiness of all
+# transport-encrypted client pods.
 #
 # Prerequisites: Tilt running with infrastructure TLS secrets created from the
 # host via ./scripts/dev/setup-infra-tls.sh.
@@ -19,8 +20,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REDIS_PROBE_IMAGE="redis:7-alpine"
 POSTGRES_PROBE_IMAGE="postgres:16-alpine"
+RABBITMQ_PROBE_IMAGE="python:3.12-alpine"
 REDIS_PROBE="phase4-redis-client"
 POSTGRES_PROBE="phase4-postgresql-client"
+RABBITMQ_PROBE="phase4-rabbitmq-client"
 WAIT_TIMEOUT="120s"
 TEMP_LABEL_KEY="verify-phase4-temp"
 TEMP_LABEL_VALUE="true"
@@ -226,6 +229,43 @@ spec:
       secret:
         secretName: infra-ca
 ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${RABBITMQ_PROBE}
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+    verify-phase4-role: rabbitmq-client
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: probe
+      image: ${RABBITMQ_PROBE_IMAGE}
+      command: ["sh", "-c", "sleep 3600"]
+      env:
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: infra-ca
+          mountPath: /tls-ca
+          readOnly: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: infra-ca
+      secret:
+        secretName: infra-ca
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -279,6 +319,31 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-phase4-rabbitmq-probe-egress
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      verify-phase4-role: rabbitmq-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: infrastructure
+          podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5671
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-phase4-redis-probe-ingress
   namespace: infrastructure
   labels:
@@ -325,10 +390,36 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-phase4-rabbitmq-probe-ingress
+  namespace: infrastructure
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              verify-phase4-role: rabbitmq-client
+      ports:
+        - protocol: TCP
+          port: 5671
 MANIFEST
 
     kubectl wait --for=condition=Ready "pod/${REDIS_PROBE}" -n default --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1
     kubectl wait --for=condition=Ready "pod/${POSTGRES_PROBE}" -n default --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1
+    kubectl wait --for=condition=Ready "pod/${RABBITMQ_PROBE}" -n default --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1
 }
 
 find_system_ca_bundle() {
@@ -413,7 +504,30 @@ psql -X -v ON_ERROR_STOP=1 -tA -c "SELECT current_user;"
 }
 
 rabbitmq_listeners() {
-    kubectl exec -n infrastructure "$RABBITMQ_POD" -- rabbitmqctl listeners
+    kubectl exec -n infrastructure "$RABBITMQ_POD" -- rabbitmq-diagnostics -q listeners
+}
+
+run_rabbitmq_tls_probe() {
+    local cacert="$1"
+    local server_hostname="$2"
+
+    kubectl exec -n default "$RABBITMQ_PROBE" -- sh -ceu '
+python - "$1" "$2" <<'"'"'PY'"'"'
+import socket
+import ssl
+import sys
+
+cafile = sys.argv[1]
+server_hostname = sys.argv[2]
+context = ssl.create_default_context(cafile=cafile)
+context.check_hostname = True
+context.verify_mode = ssl.CERT_REQUIRED
+
+with socket.create_connection(("rabbitmq.infrastructure", 5671), timeout=5) as sock:
+    with context.wrap_socket(sock, server_hostname=server_hostname) as tls:
+        print(f"TLS_OK {tls.version()}")
+PY
+' sh "$cacert" "$server_hostname"
 }
 
 assert_pod_ready() {
@@ -451,7 +565,8 @@ main() {
     if create_temp_resources; then
         REDIS_WRONG_CA=$(find_system_ca_bundle "$REDIS_PROBE")
         POSTGRES_WRONG_CA=$(find_system_ca_bundle "$POSTGRES_PROBE")
-        pass "Created disposable Redis and PostgreSQL client probes"
+        RABBITMQ_WRONG_CA=$(find_system_ca_bundle "$RABBITMQ_PROBE")
+        pass "Created disposable Redis, PostgreSQL, and RabbitMQ client probes"
     else
         printf 'ERROR: Failed to create temporary Phase 4 probes\n' >&2
         exit 1
@@ -499,16 +614,40 @@ main() {
         pass "PostgreSQL verify-full rejects clients that do not trust the infra CA"
     fi
 
-    section "RabbitMQ TLS Listener"
+    section "RabbitMQ TLS"
+
+    if out=$(run_rabbitmq_tls_probe "/tls-ca/ca.crt" "rabbitmq.infrastructure" 2>&1); then
+        if printf '%s\n' "$out" | grep -q '^TLS_OK '; then
+            pass "RabbitMQ TLS succeeds with the service hostname and infra CA"
+        else
+            fail "RabbitMQ TLS returned unexpected output: ${out:0:160}"
+        fi
+    else
+        fail "RabbitMQ TLS failed with the service hostname and infra CA: ${out:0:160}"
+    fi
+
+    if out=$(run_rabbitmq_tls_probe "$RABBITMQ_WRONG_CA" "rabbitmq.infrastructure" 2>&1); then
+        fail "RabbitMQ unexpectedly trusted the wrong CA bundle: ${out:0:160}"
+    else
+        pass "RabbitMQ rejects TLS clients that do not trust the infra CA"
+    fi
+
+    if out=$(run_rabbitmq_tls_probe "/tls-ca/ca.crt" "wrong-rabbitmq.infrastructure" 2>&1); then
+        fail "RabbitMQ unexpectedly accepted a hostname mismatch: ${out:0:160}"
+    else
+        pass "RabbitMQ rejects TLS clients with the wrong expected hostname"
+    fi
+
+    section "RabbitMQ Listener State"
 
     if out=$(rabbitmq_listeners 2>&1); then
-        if printf '%s\n' "$out" | grep -q '5671' && printf '%s\n' "$out" | grep -qi 'ssl'; then
+        if printf '%s\n' "$out" | grep -q 'port: 5671' && printf '%s\n' "$out" | grep -q 'protocol: amqp/ssl'; then
             pass "RabbitMQ exposes the AMQPS listener on port 5671"
         else
-            fail "RabbitMQ listeners do not show 5671/ssl: ${out:0:160}"
+            fail "RabbitMQ listeners do not show port 5671 with protocol amqp/ssl: ${out:0:160}"
         fi
 
-        if printf '%s\n' "$out" | grep -q '5672'; then
+        if printf '%s\n' "$out" | grep -q 'port: 5672'; then
             fail "RabbitMQ plaintext AMQP listener 5672 is still enabled"
         else
             pass "RabbitMQ plaintext AMQP listener 5672 is disabled"

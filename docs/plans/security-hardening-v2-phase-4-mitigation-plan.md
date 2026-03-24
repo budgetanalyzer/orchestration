@@ -151,7 +151,7 @@ Defaults are easier to weaken accidentally during framework upgrades or config d
 ### Verification
 
 ```bash
-rg -n '5672|psql -h localhost|REDIS_HOST=localhost|REDIS_PORT=6379' \
+rg -n '\\b5672\\b|psql -h localhost|REDIS_HOST=localhost|REDIS_PORT=6379' \
   README.md docs scripts -g '!docs/archive/**' -g '!docs/decisions/**'
 ```
 

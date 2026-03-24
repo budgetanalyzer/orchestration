@@ -96,7 +96,7 @@ cd orchestration/
 1. Creates or validates the Kind cluster
 2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
 3. Installs pinned Calico and waits for CoreDNS readiness
-4. Configures local DNS and TLS certificates
+4. Configures local DNS plus browser-facing and internal transport TLS
 5. Installs Gateway API CRDs and prepares `.env`
 
 If setup fails because you already have an older local Kind cluster:
@@ -162,7 +162,8 @@ transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
-`./scripts/dev/setup-infra-tls.sh` on the host (or rerun `setup.sh`).
+`./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
+need to regenerate just the internal transport-TLS secrets.
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
@@ -284,7 +285,8 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
 | PostgreSQL | 5432 | localhost:5432 | Database access (`sslmode=verify-full`) |
 | Redis | 6379 | localhost:6379 | TLS-only cache/session access |
-| RabbitMQ | 5671/15672 | localhost:15672 | AMQPS data plane + Management UI |
+| RabbitMQ | 5671 | localhost:5671 | AMQPS data plane |
+| RabbitMQ Management | 15672 | http://localhost:15672 | Internal management UI |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables
@@ -372,7 +374,7 @@ for Spring SSL bundles.
 Redis local access:
 - `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
 - `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
-- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, and must point `REDIS_CA_CERT` at the `infra-ca` PEM
+- `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
 

@@ -3,8 +3,9 @@
 # verify-phase-2-network-policies.sh
 #
 # Runtime verification for Security Hardening v2 Phase 2 network policies.
-# Proves that NetworkPolicy allowlists are enforced by testing both authorized
-# and unauthorized connectivity paths using disposable probe pods.
+# Proves that NetworkPolicy allowlists are enforced in the current Istio
+# ingress/egress topology by testing both authorized and unauthorized
+# connectivity paths using disposable probe pods.
 #
 # Each probe pod uses sidecar.istio.io/inject: "false" so Istio does not
 # contaminate results. Probes carry the same pod labels as the workload they
@@ -90,9 +91,11 @@ require_cluster_access() {
 }
 
 require_network_policies() {
-    local default_count infra_count
+    local default_count infra_count ingress_count egress_count
     default_count=$(kubectl get networkpolicy -n default --no-headers 2>/dev/null | wc -l)
     infra_count=$(kubectl get networkpolicy -n infrastructure --no-headers 2>/dev/null | wc -l)
+    ingress_count=$(kubectl get networkpolicy -n istio-ingress --no-headers 2>/dev/null | wc -l)
+    egress_count=$(kubectl get networkpolicy -n istio-egress --no-headers 2>/dev/null | wc -l)
 
     if [[ "$default_count" -eq 0 ]]; then
         printf 'ERROR: No network policies in default namespace. Apply policies first.\n' >&2
@@ -102,8 +105,17 @@ require_network_policies() {
         printf 'ERROR: No network policies in infrastructure namespace. Apply policies first.\n' >&2
         exit 1
     fi
+    if [[ "$ingress_count" -eq 0 ]]; then
+        printf 'ERROR: No network policies in istio-ingress namespace. Apply policies first.\n' >&2
+        exit 1
+    fi
+    if [[ "$egress_count" -eq 0 ]]; then
+        printf 'ERROR: No network policies in istio-egress namespace. Apply policies first.\n' >&2
+        exit 1
+    fi
 
-    printf '  Found %d policies in default, %d in infrastructure\n' "$default_count" "$infra_count"
+    printf '  Found %d policies in default, %d in infrastructure, %d in istio-ingress, %d in istio-egress\n' \
+        "$default_count" "$infra_count" "$ingress_count" "$egress_count"
 }
 
 # Create a disposable probe pod.
@@ -221,7 +233,7 @@ assert_deny_consistently() {
 # Probe pods
 # ---------------------------------------------------------------------------
 
-PROBE_ENVOY="np2-envoy"
+PROBE_ISTIO_INGRESS="np2-istio-ingress"
 PROBE_NGINX="np2-nginx"
 PROBE_SESSION="np2-session"
 PROBE_EXTAUTHZ="np2-extauthz"
@@ -233,11 +245,9 @@ PROBE_UNLABELED="np2-unlabeled"
 create_all_probes() {
     echo "Creating probe pods..."
 
-    # Envoy Gateway proxy probe in envoy-gateway-system
-    create_probe envoy-gateway-system "$PROBE_ENVOY" \
-        "app.kubernetes.io/component=proxy" \
-        "gateway.envoyproxy.io/owning-gateway-name=ingress-gateway" \
-        "gateway.envoyproxy.io/owning-gateway-namespace=default"
+    # Istio ingress gateway probe in istio-ingress
+    create_probe istio-ingress "$PROBE_ISTIO_INGRESS" \
+        "gateway.networking.k8s.io/gateway-name=istio-ingress-gateway"
 
     # Default namespace probes impersonating each workload
     create_probe default "$PROBE_NGINX"     "app=nginx-gateway"
@@ -252,7 +262,7 @@ create_all_probes() {
 
     # Wait for all probes to be ready
     kubectl wait --for=condition=Ready \
-        "pod/${PROBE_ENVOY}" -n envoy-gateway-system --timeout=60s >/dev/null 2>&1
+        "pod/${PROBE_ISTIO_INGRESS}" -n istio-ingress --timeout=60s >/dev/null 2>&1
     kubectl wait --for=condition=Ready \
         "pod/${PROBE_NGINX}" \
         "pod/${PROBE_SESSION}" \
@@ -267,7 +277,7 @@ create_all_probes() {
     echo "  Waiting ${PROBE_STABILIZATION_SECONDS}s for probe DNS/network stabilization..."
     sleep "$PROBE_STABILIZATION_SECONDS"
 
-    warm_probe_dns envoy-gateway-system "$PROBE_ENVOY"
+    warm_probe_dns istio-ingress "$PROBE_ISTIO_INGRESS"
     warm_probe_dns default "$PROBE_NGINX"
     warm_probe_dns default "$PROBE_SESSION"
     warm_probe_dns default "$PROBE_EXTAUTHZ"
@@ -293,19 +303,20 @@ main() {
     create_all_probes
 
     # ------------------------------------------------------------------
-    section "Positive: Envoy Gateway proxy -> Ingress Services"
+    section "Positive: Istio Ingress Gateway -> Ingress Services"
     # ------------------------------------------------------------------
-    # Envoy proxy pods are the only external entry point into the cluster.
-    # Target services are in the default namespace; probes resolve via FQDN.
+    # Istio ingress gateway pods are the only ingress-facing callers allowed
+    # to reach these default-namespace services. Target services resolve via
+    # cluster DNS.
 
-    assert_allow_eventually "envoy -> nginx-gateway:8080" \
-        envoy-gateway-system "$PROBE_ENVOY" nginx-gateway.default 8080
+    assert_allow_eventually "istio-ingress -> nginx-gateway:8080" \
+        istio-ingress "$PROBE_ISTIO_INGRESS" nginx-gateway.default 8080
 
-    assert_allow_eventually "envoy -> ext-authz:9002" \
-        envoy-gateway-system "$PROBE_ENVOY" ext-authz.default 9002
+    assert_allow_eventually "istio-ingress -> ext-authz:9002" \
+        istio-ingress "$PROBE_ISTIO_INGRESS" ext-authz.default 9002
 
-    assert_allow_eventually "envoy -> session-gateway:8081" \
-        envoy-gateway-system "$PROBE_ENVOY" session-gateway.default 8081
+    assert_allow_eventually "istio-ingress -> session-gateway:8081" \
+        istio-ingress "$PROBE_ISTIO_INGRESS" session-gateway.default 8081
 
     # ------------------------------------------------------------------
     section "Positive: East-West (nginx-gateway -> backends)"
@@ -355,11 +366,14 @@ main() {
     # ------------------------------------------------------------------
     section "Positive: Istiod Egress"
     # ------------------------------------------------------------------
-    # The istiod egress policy allows sidecar-injected workloads to reach
-    # istiod for xDS config and mTLS cert rotation. Test from a labeled probe.
+    # NetworkPolicy allows current workloads and the Istio ingress gateway to
+    # reach istiod for config and certificate distribution.
 
     assert_allow_eventually "nginx-gateway-labeled pod -> istiod:15012" \
         default "$PROBE_NGINX" istiod.istio-system 15012
+
+    assert_allow_eventually "istio-ingress-labeled pod -> istiod:15012" \
+        istio-ingress "$PROBE_ISTIO_INGRESS" istiod.istio-system 15012
 
     # ------------------------------------------------------------------
     section "Negative: Unlabeled Pod Isolation"
@@ -397,6 +411,9 @@ main() {
     assert_deny_consistently "unlabeled -> rabbitmq:5671" \
         default "$PROBE_UNLABELED" rabbitmq.infrastructure 5671
 
+    assert_deny_consistently "unlabeled -> istio-egress-gateway:443" \
+        default "$PROBE_UNLABELED" istio-egress-gateway.istio-egress 443
+
     # ------------------------------------------------------------------
     section "Negative: Cross-Identity Restrictions"
     # ------------------------------------------------------------------
@@ -420,6 +437,9 @@ main() {
     assert_deny_consistently "session-gateway -> currency-service:8084" \
         default "$PROBE_SESSION" currency-service 8084
 
+    assert_deny_consistently "ext-authz -> istio-egress-gateway:443" \
+        default "$PROBE_EXTAUTHZ" istio-egress-gateway.istio-egress 443
+
     # ------------------------------------------------------------------
     section "Negative: Explicit Phase 2 Non-Edges"
     # ------------------------------------------------------------------
@@ -429,37 +449,30 @@ main() {
     assert_deny_consistently "session-gateway -> nginx-gateway:8080" \
         default "$PROBE_SESSION" nginx-gateway 8080
 
-    assert_deny_consistently "envoy -> ext-authz:8090" \
-        envoy-gateway-system "$PROBE_ENVOY" ext-authz.default 8090
+    assert_deny_consistently "istio-ingress -> ext-authz:8090" \
+        istio-ingress "$PROBE_ISTIO_INGRESS" ext-authz.default 8090
 
     assert_deny_consistently "currency-service -> rabbitmq:15672" \
         default "$PROBE_CURRENCY" rabbitmq.infrastructure 15672
 
     # ------------------------------------------------------------------
-    section "Conditional: External Egress (TCP 443)"
+    section "Current Topology: Istio Egress Gateway Access"
     # ------------------------------------------------------------------
-    # session-gateway and currency-service have temporary TCP 443 egress.
-    # Other workloads must not. Test only if the cluster has external
-    # connectivity (verified from a pod that should have 443 egress).
+    # In the Istio topology, only session-gateway and currency-service may
+    # connect to the egress gateway on port 443. Other workloads must stay
+    # blocked before any external routing logic is involved.
 
-    if connect_eventually default "$PROBE_CURRENCY" 1.1.1.1 443 3 1; then
-        if [[ "$LAST_SUCCESS_ATTEMPT" -gt 1 ]]; then
-            pass "currency-service allowed external TCP 443 (attempt ${LAST_SUCCESS_ATTEMPT}/3)"
-        else
-            pass "currency-service allowed external TCP 443"
-        fi
+    assert_allow_eventually "session-gateway -> istio-egress-gateway:443" \
+        default "$PROBE_SESSION" istio-egress-gateway.istio-egress 443
 
-        assert_allow_eventually "session-gateway allowed external TCP 443" \
-            default "$PROBE_SESSION" 1.1.1.1 443
+    assert_allow_eventually "currency-service -> istio-egress-gateway:443" \
+        default "$PROBE_CURRENCY" istio-egress-gateway.istio-egress 443
 
-        assert_deny_consistently "transaction-service denied external TCP 443" \
-            default "$PROBE_TXN" 1.1.1.1 443
+    assert_deny_consistently "transaction-service -> istio-egress-gateway:443" \
+        default "$PROBE_TXN" istio-egress-gateway.istio-egress 443
 
-        assert_deny_consistently "permission-service denied external TCP 443" \
-            default "$PROBE_PERM" 1.1.1.1 443
-    else
-        echo "  [SKIP] No external connectivity from cluster; skipping egress tests"
-    fi
+    assert_deny_consistently "permission-service -> istio-egress-gateway:443" \
+        default "$PROBE_PERM" istio-egress-gateway.istio-egress 443
 
     # ------------------------------------------------------------------
     # Summary

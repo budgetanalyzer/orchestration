@@ -68,6 +68,10 @@ spec:
             secretKeyRef:
               name: currency-service-rabbitmq-credentials
               key: virtual-host
+        - name: SPRING_RABBITMQ_SSL_ENABLED
+          value: "true"
+        - name: SPRING_RABBITMQ_SSL_BUNDLE
+          value: "infra-ca"
         # Redis connection
         - name: SPRING_DATA_REDIS_HOST
           valueFrom:
@@ -89,12 +93,22 @@ spec:
             secretKeyRef:
               name: currency-service-redis-credentials
               key: password
+        - name: SPRING_DATA_REDIS_SSL_ENABLED
+          value: "true"
+        - name: SPRING_DATA_REDIS_SSL_BUNDLE
+          value: "infra-ca"
+        - name: INFRA_CA_CERT_PATH
+          value: "file:/etc/ssl/infra/ca.crt"
         # FRED API Configuration
         - name: FRED_API_KEY
           valueFrom:
             secretKeyRef:
               name: fred-api-credentials
               key: api-key
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -118,3 +132,7 @@ spec:
             path: /currency-service/actuator/health
             port: 8084
           periodSeconds: 20
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca

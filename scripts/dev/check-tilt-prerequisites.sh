@@ -143,6 +143,7 @@ echo "---------------------------------------------"
 check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
 check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
 check_command "kubectl" "kubectl" "curl -LO https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl"
+check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
 if check_command "helm" "Helm" "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.20.1 bash"; then
     check_helm_version
 fi
@@ -346,7 +347,51 @@ fi
 
 echo
 
-echo "10. Verifying runtime security prerequisites..."
+echo "10. Checking Phase 4 infrastructure TLS secrets..."
+echo "---------------------------------------------"
+
+if [ "$CLUSTER_CONNECTED" = true ]; then
+    PHASE4_MISSING=()
+    PHASE4_INFRA_SECRETS=(infra-ca infra-tls-redis infra-tls-postgresql infra-tls-rabbitmq)
+
+    if ! kubectl get namespace infrastructure &> /dev/null; then
+        PHASE4_MISSING+=("namespace/infrastructure")
+    fi
+
+    if ! kubectl get secret infra-ca -n default &> /dev/null; then
+        PHASE4_MISSING+=("secret/default/infra-ca")
+    fi
+
+    if kubectl get namespace infrastructure &> /dev/null; then
+        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
+            if ! kubectl get secret "$secret_name" -n infrastructure &> /dev/null; then
+                PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+            fi
+        done
+    else
+        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
+            PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+        done
+    fi
+
+    if [ ${#PHASE4_MISSING[@]} -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} Phase 4 infrastructure TLS secrets are present"
+    else
+        echo -e "${RED}✗${NC} Phase 4 infrastructure TLS prerequisites are missing"
+        for missing in "${PHASE4_MISSING[@]}"; do
+            echo "  Missing: $missing"
+        done
+        echo "  Run ./scripts/dev/setup-infra-tls.sh on your host, then rerun the prerequisite check."
+        ((ERRORS++))
+    fi
+else
+    echo -e "${YELLOW}!${NC} Skipping Phase 4 TLS secret check (cluster not connected)"
+    ((WARNINGS++))
+fi
+
+echo
+
+echo "11. Verifying runtime security prerequisites..."
 echo "---------------------------------------------"
 
 VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/dev/verify-security-prereqs.sh"

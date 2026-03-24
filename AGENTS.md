@@ -179,7 +179,7 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 
 ### Prerequisites & Setup
 
-**Required tools**: Docker, Kind, kubectl, Helm, Tilt, Git, mkcert
+**Required tools**: Docker, Kind, kubectl, OpenSSL, Helm, Tilt, Git, mkcert
 
 **Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo. The
 Istio egress gateway is applied from the checked-in
@@ -196,10 +196,14 @@ Check prerequisites:
 ```bash
 ./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
 # Edit .env with your Auth0 and FRED API credentials
+./scripts/dev/setup-infra-tls.sh   # Host-only: creates infra-ca and infra-tls-* secrets
 ```
 
 ### Quick Start
 ```bash
+# Host-only transport-TLS prerequisite
+./scripts/dev/setup-infra-tls.sh
+
 # Start all services with Tilt
 tilt up
 
@@ -348,7 +352,7 @@ If a fix requires code changes in a service repo, describe the needed changes an
 **Forbidden operations** (must be run by user on host):
 - `mkcert` (any certificate generation)
 - `openssl genrsa`, `openssl req -new`, `openssl x509 -req` (key/cert generation)
-- Any script that generates certificates (e.g., `setup-k8s-tls.sh`)
+- Any script that generates certificates (e.g., `setup-k8s-tls.sh`, `setup-infra-tls.sh`)
 
 **Allowed operations** (read-only):
 - `openssl x509 -text -noout` (inspect certificates)

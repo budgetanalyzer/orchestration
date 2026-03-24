@@ -379,7 +379,7 @@ spec:
               app: rabbitmq
       ports:
         - protocol: TCP
-          port: 5672
+          port: 5671
     - to:
         - namespaceSelector:
             matchLabels:

@@ -20,8 +20,8 @@ spec:
         - name: rabbitmq
           image: rabbitmq:3.13-management
           ports:
-            - name: amqp
-              containerPort: 5672
+            - name: amqps
+              containerPort: 5671
             - name: management
               containerPort: 15672
           resources:
@@ -52,6 +52,12 @@ spec:
             - name: rabbitmq-bootstrap
               mountPath: /etc/rabbitmq/definitions
               readOnly: true
+            - name: rabbitmq-tls
+              mountPath: /tls
+              readOnly: true
+            - name: rabbitmq-ca
+              mountPath: /tls-ca
+              readOnly: true
           livenessProbe:
             exec:
               command:
@@ -80,6 +86,12 @@ spec:
             items:
               - key: definitions.json
                 path: definitions.json
+        - name: rabbitmq-tls
+          secret:
+            secretName: infra-tls-rabbitmq
+        - name: rabbitmq-ca
+          secret:
+            secretName: infra-ca
   volumeClaimTemplates:
     - metadata:
         name: rabbitmq-data

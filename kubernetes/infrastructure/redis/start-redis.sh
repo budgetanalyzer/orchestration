@@ -12,4 +12,12 @@ user redis-ops reset on >${REDIS_OPS_PASSWORD} ~* &* +@all
 user default reset on >${REDIS_DEFAULT_PASSWORD} ~* +ping +auth
 EOF
 
-exec redis-server --appendonly yes --aclfile "$ACL_FILE"
+exec redis-server \
+  --appendonly yes \
+  --aclfile "$ACL_FILE" \
+  --tls-port 6379 \
+  --port 0 \
+  --tls-cert-file /tls/tls.crt \
+  --tls-key-file /tls/tls.key \
+  --tls-ca-cert-file /tls-ca/ca.crt \
+  --tls-auth-clients no

@@ -16,6 +16,24 @@ spec:
       labels:
         app: postgresql
     spec:
+      initContainers:
+        - name: fix-tls-perms
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cp /tls-source/tls.crt /tls/server.crt
+              cp /tls-source/tls.key /tls/server.key
+              chmod 600 /tls/server.key
+              chown 70:70 /tls/server.crt /tls/server.key
+          volumeMounts:
+            - name: postgresql-tls-source
+              mountPath: /tls-source
+              readOnly: true
+            - name: postgresql-tls
+              mountPath: /tls
       containers:
         - name: postgresql
           image: postgres:16-alpine
@@ -57,6 +75,12 @@ spec:
           args:
             - -c
             - password_encryption=scram-sha-256
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/tls/server.crt
+            - -c
+            - ssl_key_file=/tls/server.key
           resources:
             requests:
               memory: 256Mi
@@ -69,6 +93,11 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+            - name: postgresql-tls
+              mountPath: /tls
+            - name: postgresql-ca
+              mountPath: /tls-ca
+              readOnly: true
           livenessProbe:
             exec:
               command:
@@ -96,6 +125,14 @@ spec:
           configMap:
             name: postgresql-init
             defaultMode: 493
+        - name: postgresql-tls-source
+          secret:
+            secretName: infra-tls-postgresql
+        - name: postgresql-tls
+          emptyDir: {}
+        - name: postgresql-ca
+          secret:
+            secretName: infra-ca
   volumeClaimTemplates:
     - metadata:
         name: postgresql-data

@@ -343,8 +343,8 @@ main() {
     assert_allow_eventually "currency-service -> postgresql:5432" \
         default "$PROBE_CURRENCY" postgresql.infrastructure 5432
 
-    assert_allow_eventually "currency-service -> rabbitmq:5672" \
-        default "$PROBE_CURRENCY" rabbitmq.infrastructure 5672
+    assert_allow_eventually "currency-service -> rabbitmq:5671" \
+        default "$PROBE_CURRENCY" rabbitmq.infrastructure 5671
 
     assert_allow_eventually "currency-service -> redis:6379" \
         default "$PROBE_CURRENCY" redis.infrastructure 6379
@@ -394,8 +394,8 @@ main() {
     assert_deny_consistently "unlabeled -> postgresql:5432" \
         default "$PROBE_UNLABELED" postgresql.infrastructure 5432
 
-    assert_deny_consistently "unlabeled -> rabbitmq:5672" \
-        default "$PROBE_UNLABELED" rabbitmq.infrastructure 5672
+    assert_deny_consistently "unlabeled -> rabbitmq:5671" \
+        default "$PROBE_UNLABELED" rabbitmq.infrastructure 5671
 
     # ------------------------------------------------------------------
     section "Negative: Cross-Identity Restrictions"
@@ -405,14 +405,14 @@ main() {
     assert_deny_consistently "transaction-service -> redis:6379" \
         default "$PROBE_TXN" redis.infrastructure 6379
 
-    assert_deny_consistently "transaction-service -> rabbitmq:5672" \
-        default "$PROBE_TXN" rabbitmq.infrastructure 5672
+    assert_deny_consistently "transaction-service -> rabbitmq:5671" \
+        default "$PROBE_TXN" rabbitmq.infrastructure 5671
 
     assert_deny_consistently "ext-authz -> postgresql:5432" \
         default "$PROBE_EXTAUTHZ" postgresql.infrastructure 5432
 
-    assert_deny_consistently "ext-authz -> rabbitmq:5672" \
-        default "$PROBE_EXTAUTHZ" rabbitmq.infrastructure 5672
+    assert_deny_consistently "ext-authz -> rabbitmq:5671" \
+        default "$PROBE_EXTAUTHZ" rabbitmq.infrastructure 5671
 
     assert_deny_consistently "session-gateway -> transaction-service:8082" \
         default "$PROBE_SESSION" transaction-service 8082

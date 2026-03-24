@@ -137,7 +137,7 @@ kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actua
 # Check Redis connection (session storage) with the redis-ops ACL user
 REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
 
 `redis-ops` is a maintenance identity only. Application paths use the
@@ -253,10 +253,10 @@ REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastru
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
 # Verify ext_authz session exists in Redis
-kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "extauthz:session:{session-id}"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "extauthz:session:{session-id}"
 
 # Check Session Gateway session storage
-kubectl exec -n infrastructure deployment/redis -- redis-cli --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
 ```
 
 **Session not persisting**:

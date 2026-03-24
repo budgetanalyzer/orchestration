@@ -1,0 +1,556 @@
+#!/bin/bash
+
+# verify-phase-4-transport-encryption.sh
+#
+# Runtime verification for Security Hardening v2 Phase 4 transport encryption.
+# Proves client-side TLS validation for Redis and PostgreSQL, RabbitMQ TLS-only
+# listener configuration, regressions for earlier security verifiers, and the
+# readiness of all transport-encrypted client pods.
+#
+# Prerequisites: Tilt running with infrastructure TLS secrets created from the
+# host via ./scripts/dev/setup-infra-tls.sh.
+#
+# Usage:
+#   ./scripts/dev/verify-phase-4-transport-encryption.sh
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+REDIS_PROBE_IMAGE="redis:7-alpine"
+POSTGRES_PROBE_IMAGE="postgres:16-alpine"
+REDIS_PROBE="phase4-redis-client"
+POSTGRES_PROBE="phase4-postgresql-client"
+WAIT_TIMEOUT="120s"
+TEMP_LABEL_KEY="verify-phase4-temp"
+TEMP_LABEL_VALUE="true"
+
+PASSED=0
+FAILED=0
+
+usage() {
+    cat <<'EOF'
+Usage: ./scripts/dev/verify-phase-4-transport-encryption.sh
+
+Options:
+  -h, --help                    Show this help text.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+section() { printf '\n=== %s ===\n' "$1"; }
+pass()    { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
+fail()    { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
+
+cleanup_temp_resources() {
+    kubectl delete pod -n default -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" \
+        --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    kubectl delete networkpolicy -n default -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" \
+        --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    kubectl delete networkpolicy -n infrastructure -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" \
+        --ignore-not-found --wait=false >/dev/null 2>&1 || true
+}
+
+cleanup() {
+    set +e
+    echo ""
+    echo "Cleaning up temporary verification resources..."
+    cleanup_temp_resources
+}
+
+trap cleanup EXIT
+
+require_host_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        printf 'ERROR: required command not found: %s\n' "$1" >&2
+        exit 1
+    fi
+}
+
+require_cluster_access() {
+    if ! kubectl cluster-info >/dev/null 2>&1; then
+        printf 'ERROR: Cannot reach Kubernetes cluster\n' >&2
+        exit 1
+    fi
+}
+
+find_pod() {
+    local namespace="$1"
+    local selector="$2"
+
+    kubectl get pods -n "$namespace" -l "$selector" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
+}
+
+require_pod() {
+    local namespace="$1"
+    local selector="$2"
+    local label="$3"
+    local pod
+
+    pod=$(find_pod "$namespace" "$selector")
+    if [[ -z "$pod" ]]; then
+        printf 'ERROR: %s pod not found in namespace %s. Is Tilt running?\n' "$label" "$namespace" >&2
+        exit 1
+    fi
+
+    printf '%s' "$pod"
+}
+
+require_secret_exists() {
+    local namespace="$1"
+    local secret_name="$2"
+
+    if ! kubectl get secret "$secret_name" -n "$namespace" >/dev/null 2>&1; then
+        printf 'ERROR: required secret not found: %s/%s\n' "$namespace" "$secret_name" >&2
+        exit 1
+    fi
+}
+
+read_secret() {
+    local namespace="$1"
+    local secret_name="$2"
+    local key="$3"
+    local encoded
+
+    encoded=$(kubectl get secret "$secret_name" -n "$namespace" -o "jsonpath={.data['${key}']}" 2>/dev/null || true)
+    if [[ -z "$encoded" ]]; then
+        return 1
+    fi
+
+    printf '%s' "$encoded" | base64 -d
+}
+
+require_secret_value() {
+    local namespace="$1"
+    local secret_name="$2"
+    local key="$3"
+    local value
+
+    value=$(read_secret "$namespace" "$secret_name" "$key" || true)
+    if [[ -z "$value" ]]; then
+        printf 'ERROR: missing secret value %s/%s[%s]\n' "$namespace" "$secret_name" "$key" >&2
+        exit 1
+    fi
+
+    printf '%s' "$value"
+}
+
+create_temp_resources() {
+    cleanup_temp_resources
+
+    kubectl apply -f - >/dev/null <<MANIFEST
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${REDIS_PROBE}
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+    verify-phase4-role: redis-client
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: probe
+      image: ${REDIS_PROBE_IMAGE}
+      command: ["sh", "-c", "sleep 3600"]
+      env:
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: infra-ca
+          mountPath: /tls-ca
+          readOnly: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: infra-ca
+      secret:
+        secretName: infra-ca
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POSTGRES_PROBE}
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+    verify-phase4-role: postgresql-client
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: probe
+      image: ${POSTGRES_PROBE_IMAGE}
+      command: ["sh", "-c", "sleep 3600"]
+      env:
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: infra-ca
+          mountPath: /tls-ca
+          readOnly: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: infra-ca
+      secret:
+        secretName: infra-ca
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-phase4-redis-probe-egress
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      verify-phase4-role: redis-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: infrastructure
+          podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-phase4-postgresql-probe-egress
+  namespace: default
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      verify-phase4-role: postgresql-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: infrastructure
+          podSelector:
+            matchLabels:
+              app: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-phase4-redis-probe-ingress
+  namespace: infrastructure
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              verify-phase4-role: redis-client
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-phase4-postgresql-probe-ingress
+  namespace: infrastructure
+  labels:
+    ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              verify-phase4-role: postgresql-client
+      ports:
+        - protocol: TCP
+          port: 5432
+MANIFEST
+
+    kubectl wait --for=condition=Ready "pod/${REDIS_PROBE}" -n default --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1
+    kubectl wait --for=condition=Ready "pod/${POSTGRES_PROBE}" -n default --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1
+}
+
+find_system_ca_bundle() {
+    local pod="$1"
+
+    kubectl exec -n default "$pod" -- sh -ceu '
+for candidate in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/ssl/certs/ca-bundle.crt; do
+    if [ -f "$candidate" ]; then
+        printf "%s\n" "$candidate"
+        exit 0
+    fi
+done
+
+printf "No system CA bundle found\n" >&2
+exit 1
+' 2>/dev/null
+}
+
+run_redis_tls_ping() {
+    local username="$1"
+    local password="$2"
+    local cacert="${3:-}"
+
+    if [[ -n "$cacert" ]]; then
+        kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
+redis-cli \
+    --tls \
+    --cacert "$1" \
+    -h redis.infrastructure \
+    -p 6379 \
+    --user "$2" \
+    --pass "$3" \
+    --no-auth-warning \
+    ping
+' sh "$cacert" "$username" "$password"
+        return
+    fi
+
+    kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
+redis-cli \
+    --tls \
+    -h redis.infrastructure \
+    -p 6379 \
+    --user "$1" \
+    --pass "$2" \
+    --no-auth-warning \
+    ping
+' sh "$username" "$password"
+}
+
+run_redis_plaintext_ping() {
+    local username="$1"
+    local password="$2"
+
+    kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
+redis-cli \
+    -h redis.infrastructure \
+    -p 6379 \
+    --user "$1" \
+    --pass "$2" \
+    --no-auth-warning \
+    ping
+' sh "$username" "$password"
+}
+
+run_postgresql_verify_full() {
+    local username="$1"
+    local password="$2"
+    local sslrootcert="$3"
+
+    kubectl exec -n default "$POSTGRES_PROBE" -- sh -ceu '
+export PGPASSWORD="$1"
+export PGHOST="postgresql.infrastructure"
+export PGPORT="5432"
+export PGDATABASE="budget_analyzer"
+export PGUSER="$2"
+export PGSSLMODE="verify-full"
+export PGSSLROOTCERT="$3"
+
+psql -X -v ON_ERROR_STOP=1 -tA -c "SELECT current_user;"
+' sh "$password" "$username" "$sslrootcert"
+}
+
+rabbitmq_listeners() {
+    kubectl exec -n infrastructure "$RABBITMQ_POD" -- rabbitmqctl listeners
+}
+
+assert_pod_ready() {
+    local app="$1"
+
+    if kubectl wait --for=condition=Ready pod -n default -l "app=${app}" --timeout="$WAIT_TIMEOUT" >/dev/null 2>&1; then
+        pass "${app} readiness probe is passing"
+    else
+        fail "${app} readiness probe is not passing"
+    fi
+}
+
+main() {
+    echo "=============================================="
+    echo "  Phase 4 Transport Encryption Verification"
+    echo "=============================================="
+
+    require_host_command kubectl
+    require_cluster_access
+
+    require_secret_exists default infra-ca
+    require_secret_exists infrastructure infra-ca
+    require_secret_exists infrastructure infra-tls-redis
+    require_secret_exists infrastructure infra-tls-postgresql
+    require_secret_exists infrastructure infra-tls-rabbitmq
+
+    REDIS_USERNAME=$(require_secret_value default session-gateway-redis-credentials username)
+    REDIS_PASSWORD=$(require_secret_value default session-gateway-redis-credentials password)
+    PG_USERNAME=$(require_secret_value default transaction-service-postgresql-credentials username)
+    PG_PASSWORD=$(require_secret_value default transaction-service-postgresql-credentials password)
+    RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
+
+    section "Temporary Client Probes"
+
+    if create_temp_resources; then
+        REDIS_WRONG_CA=$(find_system_ca_bundle "$REDIS_PROBE")
+        POSTGRES_WRONG_CA=$(find_system_ca_bundle "$POSTGRES_PROBE")
+        pass "Created disposable Redis and PostgreSQL client probes"
+    else
+        printf 'ERROR: Failed to create temporary Phase 4 probes\n' >&2
+        exit 1
+    fi
+
+    section "Redis TLS"
+
+    if out=$(run_redis_tls_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" "/tls-ca/ca.crt" 2>&1); then
+        if printf '%s\n' "$out" | grep -qx 'PONG'; then
+            pass "Redis TLS succeeds with the service hostname and infra CA"
+        else
+            fail "Redis TLS returned unexpected output: ${out:0:160}"
+        fi
+    else
+        fail "Redis TLS failed with the service hostname and infra CA: ${out:0:160}"
+    fi
+
+    if out=$(run_redis_plaintext_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" 2>&1); then
+        fail "Redis plaintext unexpectedly succeeded: ${out:0:160}"
+    else
+        pass "Redis rejects plaintext clients on port 6379"
+    fi
+
+    if out=$(run_redis_tls_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" "$REDIS_WRONG_CA" 2>&1); then
+        fail "Redis unexpectedly trusted the wrong CA bundle: ${out:0:160}"
+    else
+        pass "Redis rejects TLS clients that do not trust the infra CA"
+    fi
+
+    section "PostgreSQL TLS"
+
+    if out=$(run_postgresql_verify_full "$PG_USERNAME" "$PG_PASSWORD" "/tls-ca/ca.crt" 2>&1); then
+        if printf '%s\n' "$out" | grep -qx "$PG_USERNAME"; then
+            pass "PostgreSQL verify-full succeeds with the service hostname and infra CA"
+        else
+            fail "PostgreSQL verify-full returned unexpected output: ${out:0:160}"
+        fi
+    else
+        fail "PostgreSQL verify-full failed with the service hostname and infra CA: ${out:0:160}"
+    fi
+
+    if out=$(run_postgresql_verify_full "$PG_USERNAME" "$PG_PASSWORD" "$POSTGRES_WRONG_CA" 2>&1); then
+        fail "PostgreSQL unexpectedly trusted the wrong CA bundle: ${out:0:160}"
+    else
+        pass "PostgreSQL verify-full rejects clients that do not trust the infra CA"
+    fi
+
+    section "RabbitMQ TLS Listener"
+
+    if out=$(rabbitmq_listeners 2>&1); then
+        if printf '%s\n' "$out" | grep -q '5671' && printf '%s\n' "$out" | grep -qi 'ssl'; then
+            pass "RabbitMQ exposes the AMQPS listener on port 5671"
+        else
+            fail "RabbitMQ listeners do not show 5671/ssl: ${out:0:160}"
+        fi
+
+        if printf '%s\n' "$out" | grep -q '5672'; then
+            fail "RabbitMQ plaintext AMQP listener 5672 is still enabled"
+        else
+            pass "RabbitMQ plaintext AMQP listener 5672 is disabled"
+        fi
+    else
+        fail "Could not inspect RabbitMQ listeners: ${out:0:160}"
+        fail "RabbitMQ plaintext listener state could not be verified"
+    fi
+
+    section "Regression: Earlier Security Phases"
+
+    if "${SCRIPT_DIR}/verify-phase-1-credentials.sh"; then
+        pass "Phase 1 credential verification still passes after transport-TLS cutover"
+    else
+        fail "Phase 1 credential verification failed after transport-TLS cutover"
+    fi
+
+    if "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"; then
+        pass "Phase 2 network-policy verification still passes after RabbitMQ port cutover"
+    else
+        fail "Phase 2 network-policy verification failed after RabbitMQ port cutover"
+    fi
+
+    section "Client Pod Readiness"
+
+    assert_pod_ready ext-authz
+    assert_pod_ready session-gateway
+    assert_pod_ready currency-service
+    assert_pod_ready transaction-service
+    assert_pod_ready permission-service
+
+    echo ""
+    echo "=============================================="
+    total=$((PASSED + FAILED))
+    if [[ "$FAILED" -eq 0 ]]; then
+        echo "  ${PASSED} passed (out of ${total})"
+    else
+        echo "  ${PASSED} passed, ${FAILED} failed (out of ${total})"
+    fi
+    echo "=============================================="
+
+    [[ "$FAILED" -gt 0 ]] && exit 1 || exit 0
+}
+
+main "$@"

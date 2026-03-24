@@ -42,6 +42,10 @@ spec:
             secretKeyRef:
               name: transaction-service-postgresql-credentials
               key: password
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -65,3 +69,7 @@ spec:
             path: /transaction-service/actuator/health
             port: 8082
           periodSeconds: 20
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca

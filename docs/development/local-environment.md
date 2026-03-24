@@ -11,6 +11,7 @@
 - Docker 24.0+
 - Kind 0.20+
 - kubectl 1.28+
+- OpenSSL 3.x+
 - Helm 3.20.x (tested; Helm 4 unsupported)
 - Tilt 0.33+
 - Git 2.40+
@@ -34,6 +35,7 @@
 docker --version
 kind --version
 kubectl version --client
+openssl version
 helm version
 tilt version
 git --version
@@ -120,12 +122,26 @@ replace with another secret source.
 
 ### 4. Start All Services
 
+Generate the internal infrastructure TLS secrets from your **host machine**
+before starting Tilt:
+
+```bash
+cd orchestration/
+./scripts/dev/setup-infra-tls.sh
+```
+
+This creates `infra-ca` plus the `infra-tls-redis`,
+`infra-tls-postgresql`, and `infra-tls-rabbitmq` secrets. `setup.sh` still
+handles the browser-facing wildcard certificate separately.
+
+### 5. Start Tilt
+
 ```bash
 cd orchestration/
 tilt up
 ```
 
-### 5. Verify Services
+### 6. Verify Services
 
 ```bash
 # Check all pods are running
@@ -147,11 +163,20 @@ open https://app.budgetanalyzer.localhost
 # Optional but recommended: prove the Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
 
+# Optional but recommended: prove the Phase 4 transport-TLS cutover
+./scripts/dev/verify-phase-4-transport-encryption.sh
+
 # Optional but recommended: prove the Phase 3 Istio ingress/egress migration
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
-`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
+transport-TLS completion gate, and
+`./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/dev/check-tilt-prerequisites.sh` now also blocks on the
+infrastructure TLS secrets and tells you to rerun
+`./scripts/dev/setup-infra-tls.sh` on the host when they are missing.
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
@@ -253,7 +278,7 @@ User: postgres_admin
 Password: value from POSTGRES_BOOTSTRAP_PASSWORD (default: budget-analyzer-postgres-admin)
 
 # Connection string
-postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer
+postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer?sslmode=verify-full&sslrootcert=./nginx/certs/infra/infra-ca.pem
 ```
 
 
@@ -271,9 +296,9 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | ext-authz | 9002 | http://localhost:9002/check | Direct access via port forward |
 | ext-authz | 8090 | http://localhost:8090/healthz | Health endpoint |
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
-| PostgreSQL | 5432 | localhost:5432 | Database access |
-| Redis | 6379 | localhost:6379 | Cache access |
-| RabbitMQ | 5672/15672 | localhost:15672 | Management UI |
+| PostgreSQL | 5432 | localhost:5432 | Database access (`sslmode=verify-full`) |
+| Redis | 6379 | localhost:6379 | TLS-only cache/session access |
+| RabbitMQ | 5671/15672 | localhost:15672 | AMQPS data plane + Management UI |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables
@@ -306,8 +331,15 @@ For local development outside Tilt, create `application-local.yml`:
 
 ```yaml
 spring:
+  ssl:
+    bundle:
+      pem:
+        infra-ca:
+          truststore:
+            certificate: ${INFRA_CA_CERT_PATH:}
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/budget_analyzer
+    url: jdbc:postgresql://localhost:5432/budget_analyzer?sslmode=verify-full&sslrootcert=${POSTGRES_SSLROOTCERT:../orchestration/nginx/certs/infra/infra-ca.pem}
     username: ${SPRING_DATASOURCE_USERNAME:transaction_service}
     password: ${SPRING_DATASOURCE_PASSWORD:}
 
@@ -317,13 +349,19 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
       username: ${SPRING_DATA_REDIS_USERNAME:session-gateway}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true}
+        bundle: ${SPRING_DATA_REDIS_SSL_BUNDLE:infra-ca}
 
   # Only currency-service needs RabbitMQ locally.
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
-    port: ${SPRING_RABBITMQ_PORT:5672}
+    port: ${SPRING_RABBITMQ_PORT:5671}
     username: ${SPRING_RABBITMQ_USERNAME:currency-service}
     password: ${SPRING_RABBITMQ_PASSWORD:}
+    ssl:
+      enabled: ${SPRING_RABBITMQ_SSL_ENABLED:true}
+      bundle: ${SPRING_RABBITMQ_SSL_BUNDLE:infra-ca}
 
 server:
   port: 8082  # Change per service
@@ -340,12 +378,16 @@ For `permission-service`, use `permission`, `permission_service`, and set
 `transaction-service` no longer needs any RabbitMQ env vars. `session-gateway`
 only needs `SPRING_DATA_REDIS_PASSWORD`; its Redis username defaults to
 `session-gateway`.
+Set `POSTGRES_SSLROOTCERT="$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
+for JDBC `sslrootcert`, and
+`INFRA_CA_CERT_PATH="file:$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
+for Spring SSL bundles.
 
 Redis local access:
-- `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`
-- `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`
-- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, and `REDIS_EXT_AUTHZ_PASSWORD` from `.env`
-- `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`
+- `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `ext-authz` uses `REDIS_HOST=localhost`, `REDIS_PORT=6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, and must point `REDIS_CA_CERT` at the `infra-ca` PEM
+- `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
 
 RabbitMQ local access:
@@ -354,6 +396,8 @@ RabbitMQ local access:
 - Management password: value from `RABBITMQ_BOOTSTRAP_PASSWORD`
 - AMQP username for `currency-service`: `currency-service` (or override with `SPRING_RABBITMQ_USERNAME`)
 - AMQP password for `currency-service`: set `SPRING_RABBITMQ_PASSWORD` from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
+- AMQPS port: `5671`
+- Direct `bootRun` must set `SPRING_RABBITMQ_SSL_ENABLED=true`, `SPRING_RABBITMQ_SSL_BUNDLE=infra-ca`, and `INFRA_CA_CERT_PATH` to the host-side `infra-ca.pem`
 - Virtual host: `/`
 
 Activate with:
@@ -477,11 +521,18 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ### SSL Certificate Errors
 
 ```bash
-# Re-run certificate setup on HOST
+# Re-run browser-facing wildcard certificate setup on HOST
 ./scripts/dev/setup-k8s-tls.sh
 
-# Verify secret exists
+# Verify wildcard secret exists
 kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
+
+# Re-run internal transport-TLS setup on HOST
+./scripts/dev/setup-infra-tls.sh
+
+# Verify infra secrets exist
+kubectl get secret -n default infra-ca
+kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
 
 # Restart browser to clear certificate cache
 ```

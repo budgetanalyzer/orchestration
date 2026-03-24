@@ -89,4 +89,4 @@ spec:
               app: currency-service
       ports:
         - protocol: TCP
-          port: 5672
+          port: 5671

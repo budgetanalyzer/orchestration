@@ -178,7 +178,7 @@ Add entries to `/etc/hosts`:
 echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
-### 5. Generate TLS Certificates
+### 5. Generate Browser TLS Certificates
 
 ```bash
 ./scripts/dev/setup-k8s-tls.sh
@@ -188,7 +188,21 @@ This creates:
 - Trusted certificates for `*.budgetanalyzer.localhost`
 - Kubernetes TLS secret `budgetanalyzer-localhost-wildcard-tls`
 
-### 6. Configure Auth0 Credentials
+### 6. Generate Internal Transport TLS Secrets
+
+Run this from your host terminal before `tilt up`:
+
+```bash
+./scripts/dev/setup-infra-tls.sh
+```
+
+This creates:
+- `infra-ca` in the `default` and `infrastructure` namespaces
+- `infra-tls-redis`
+- `infra-tls-postgresql`
+- `infra-tls-rabbitmq`
+
+### 7. Configure Auth0 Credentials
 
 Create `.env` from `.env.example`, then set the required values before running Tilt.
 
@@ -197,7 +211,7 @@ Create `.env` from `.env.example`, then set the required values before running T
 vim .env
 ```
 
-### 7. Start Tilt
+### 8. Start Tilt
 
 ```bash
 cd /path/to/orchestration
@@ -206,15 +220,17 @@ tilt up
 
 Access the Tilt UI at http://localhost:10350
 
-### 8. Run Security Preflight Verifier
+### 9. Run Security Verifiers
 
 After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
 
 ```bash
 ./scripts/dev/verify-security-prereqs.sh
+./scripts/dev/verify-phase-4-transport-encryption.sh
 ```
 
-This provides deterministic runtime proof for Phase 0 prerequisites.
+These provide deterministic runtime proof for the Phase 0 platform baseline and
+the Phase 4 transport-TLS cutover.
 
 ## Verification
 
@@ -297,8 +313,8 @@ After all services are healthy:
 | 80 | Kind host mapping | Reserved host mapping in the Kind config |
 | 3000 | budget-analyzer-web | Vite Dev Server |
 | 5432 | PostgreSQL | Database |
-| 6379 | Redis | Cache |
-| 5672 | RabbitMQ | AMQP |
+| 6379 | Redis | TLS-only cache/session storage |
+| 5671 | RabbitMQ | AMQPS |
 | 15672 | RabbitMQ | Management UI |
 | 8080 | nginx-gateway | API Gateway (internal) |
 | 8081 | session-gateway | BFF (internal) |
@@ -356,10 +372,16 @@ Common causes:
 
 ### TLS Certificate Errors
 
-Regenerate certificates:
+Regenerate browser-facing wildcard certificates:
 ```bash
 rm -rf nginx/certs/k8s
 ./scripts/dev/setup-k8s-tls.sh
+```
+
+Regenerate internal transport-TLS material:
+```bash
+rm -rf nginx/certs/infra
+./scripts/dev/setup-infra-tls.sh
 ```
 
 ### Kind Cluster Issues
@@ -425,6 +447,7 @@ kind create cluster --config kind-cluster-config.yaml && \
 ./scripts/dev/install-calico.sh && \
 echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
 ./scripts/dev/setup-k8s-tls.sh && \
+./scripts/dev/setup-infra-tls.sh && \
 cp .env.example .env && \
 vim .env && \
 tilt up
@@ -447,6 +470,7 @@ kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
 ./scripts/dev/install-calico.sh
 ./scripts/dev/setup-k8s-tls.sh
+./scripts/dev/setup-infra-tls.sh
 [ -f .env ] || cp .env.example .env
 tilt up
 ```

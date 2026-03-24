@@ -27,10 +27,12 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 Current local platform baseline:
 - `setup.sh` bootstraps a Kind cluster with `disableDefaultCNI` and pinned Calico so `NetworkPolicy` is actually enforceable.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
+- Before `tilt up`, run `./scripts/dev/setup-infra-tls.sh` from your host terminal to create the internal `infra-ca` and `infra-tls-*` secrets for Redis, PostgreSQL, and RabbitMQ.
+- Redis is now TLS-only in-cluster; verification and session seeding scripts connect through `infra-ca`, and direct service boot runs must enable Redis SSL with that CA bundle.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
-- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, and `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate.
+- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, and `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate.
 
-Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass.
 
 Auth entrypoints are split intentionally: `/login` is the frontend login page, `/oauth2/authorization/idp` starts OAuth2, and Auth0 returns to `/login/oauth2/code/idp`.
 

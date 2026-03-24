@@ -16,6 +16,7 @@ set -euo pipefail
 PASSED=0
 FAILED=0
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "${SCRIPT_DIR}/lib/redis-cli.sh"
 
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
@@ -207,8 +208,7 @@ redis_cmd() {
     local password="$2"
     shift 2
 
-    kubectl exec -n infrastructure "$REDIS_POD" -- \
-        redis-cli --user "$user" --pass "$password" --no-auth-warning "$@" 2>&1 || true
+    redis_cli_in_pod infrastructure "$REDIS_POD" "$user" "$password" "$@" 2>&1 || true
 }
 
 rmq_ctl() {

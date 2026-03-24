@@ -59,6 +59,12 @@ spec:
             - name: redis-acl-bootstrap
               mountPath: /opt/redis
               readOnly: true
+            - name: redis-tls
+              mountPath: /tls
+              readOnly: true
+            - name: redis-ca
+              mountPath: /tls-ca
+              readOnly: true
           resources:
             requests:
               memory: 128Mi
@@ -70,6 +76,9 @@ spec:
             exec:
               command:
                 - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
                 - ping
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -78,6 +87,9 @@ spec:
             exec:
               command:
                 - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
                 - ping
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -87,3 +99,9 @@ spec:
           configMap:
             name: redis-acl-bootstrap
             defaultMode: 0555
+        - name: redis-tls
+          secret:
+            secretName: infra-tls-redis
+        - name: redis-ca
+          secret:
+            secretName: infra-ca

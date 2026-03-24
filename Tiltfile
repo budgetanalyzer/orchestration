@@ -95,7 +95,7 @@ k8s_yaml([
 k8s_resource(
     'rabbitmq',
     port_forwards=[
-        port_forward(5672, 5672, name='AMQP'),
+        port_forward(5671, 5671, name='AMQPS'),
         port_forward(15672, 15672, name='Management UI'),
     ],
     labels=['infrastructure'],
@@ -222,19 +222,19 @@ create_secret('postgresql-bootstrap-credentials', INFRA_NAMESPACE, {
 create_secret('transaction-service-postgresql-credentials', DEFAULT_NAMESPACE, {
     'username': 'transaction_service',
     'password': transaction_service_pg_password,
-    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/budget_analyzer',
+    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/budget_analyzer?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt',
 })
 
 create_secret('currency-service-postgresql-credentials', DEFAULT_NAMESPACE, {
     'username': 'currency_service',
     'password': currency_service_pg_password,
-    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/currency',
+    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/currency?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt',
 })
 
 create_secret('permission-service-postgresql-credentials', DEFAULT_NAMESPACE, {
     'username': 'permission_service',
     'password': permission_service_pg_password,
-    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/permission',
+    'url': 'jdbc:postgresql://' + postgresql_host + ':5432/permission?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt',
 })
 
 rabbitmq_admin_username = 'rabbitmq-admin'
@@ -261,7 +261,7 @@ create_secret('rabbitmq-bootstrap-credentials', INFRA_NAMESPACE, {
 
 create_secret('currency-service-rabbitmq-credentials', DEFAULT_NAMESPACE, {
     'host': rabbitmq_host,
-    'amqp-port': '5672',
+    'amqp-port': '5671',
     'username': rabbitmq_currency_service_username,
     'password': rabbitmq_currency_service_password,
     'virtual-host': rabbitmq_virtual_host,

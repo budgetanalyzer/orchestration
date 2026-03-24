@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -43,7 +46,30 @@ func NewSessionStore(cfg Config) (*SessionStore, error) {
 	}
 
 	if cfg.RedisTLS {
-		opts.TLSConfig = &tls.Config{}
+		if cfg.RedisCACert == "" {
+			return nil, errors.New("REDIS_CA_CERT is required when REDIS_TLS=true")
+		}
+
+		host, _, err := net.SplitHostPort(cfg.RedisAddr)
+		if err != nil {
+			return nil, fmt.Errorf("parse REDIS_ADDR for TLS server name: %w", err)
+		}
+
+		caPEM, err := os.ReadFile(cfg.RedisCACert)
+		if err != nil {
+			return nil, fmt.Errorf("read Redis CA cert: %w", err)
+		}
+
+		rootCAs := x509.NewCertPool()
+		if !rootCAs.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("parse Redis CA cert at %s", cfg.RedisCACert)
+		}
+
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    rootCAs,
+			ServerName: host,
+		}
 	}
 
 	client := redis.NewClient(opts)

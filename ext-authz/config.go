@@ -8,6 +8,7 @@ type Config struct {
 	RedisUsername     string
 	RedisPassword     string
 	RedisTLS          bool
+	RedisCACert       string
 	HTTPPort          string
 	HealthPort        string
 	SessionKeyPrefix  string
@@ -22,6 +23,7 @@ func LoadConfig() Config {
 		RedisUsername:     envOrDefault("REDIS_USERNAME", ""),
 		RedisPassword:     envOrDefault("REDIS_EXT_AUTHZ_PASSWORD", ""),
 		RedisTLS:          envOrDefault("REDIS_TLS", "false") == "true",
+		RedisCACert:       envOrDefault("REDIS_CA_CERT", ""),
 		HTTPPort:          envOrDefault("HTTP_PORT", "9002"),
 		HealthPort:        envOrDefault("HEALTH_PORT", "8090"),
 		SessionKeyPrefix:  envOrDefault("SESSION_KEY_PREFIX", "extauthz:session:"),

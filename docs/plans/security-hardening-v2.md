@@ -384,11 +384,18 @@ Apply this after the topology and egress model are settled.
 
 Infrastructure services (PostgreSQL, Redis, RabbitMQ) are not Istio mesh workloads — sidecar injection is disabled in the infrastructure namespace. Istio mTLS does not apply to them. Transport encryption for these services requires native TLS configuration on each service.
 
+Implementation status for March 23, 2026:
+
+- Sessions 1-6 are implemented in-repo: `./scripts/dev/setup-infra-tls.sh` creates the shared `infra-ca` plus the `infra-tls-*` secrets, Redis/PostgreSQL/RabbitMQ serve native TLS, and the consuming deployments mount `infra-ca` and use TLS-aware client settings.
+- Session 7 is the runtime proof and documentation alignment pass. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes.
+
 Certificate rules:
 
 - local Kind: generate internal service certs from a host-side process, not inside the container sandbox (the sandbox CA is not trusted by the host or browser)
 - production: use cert-manager or an equivalent automated certificate lifecycle tool with a self-signed or internal CA for in-cluster service certificates — do not rely on manually generated certificates in production
 - keep internal service trust material separate from the browser-facing wildcard cert
+- preserve the documented localhost port-forward workflows only if the service cert SANs also cover `localhost` / `127.0.0.1`; otherwise remove and document the workflow change explicitly
+- local preflight should fail clearly when the internal TLS secrets are missing and direct the user to the host-side certificate bootstrap step
 
 ### 4a. Redis TLS
 
@@ -405,7 +412,8 @@ Required updates:
 Required updates:
 
 - TLS listener on RabbitMQ
-- trusted CA material mounted into `transaction-service` and `currency-service`
+- trusted CA material mounted into `currency-service` (the sole RabbitMQ client)
+- Phase 2 network-policy manifests and verifier updated from port `5672` to `5671` in the same change set
 
 ### 4c. PostgreSQL TLS
 
@@ -414,11 +422,14 @@ Required updates:
 - PostgreSQL SSL enabled
 - certs match the service hostname used by clients
 - clients use certificate verification with hostname validation
+- localhost examples stay valid only if the cert SANs cover the documented local connection hostnames
 
 Security requirement:
 
 - do not describe `sslmode=require` as full server authentication
 - if authenticated TLS is the goal, use hostname-validated verification semantics
+- Phase 4 runtime verification must include at least one positive and one negative client-path test for Redis and PostgreSQL; listener presence and pod readiness are not sufficient proof
+- the Phase 4 completion gate is `./scripts/dev/verify-phase-4-transport-encryption.sh`
 
 ---
 

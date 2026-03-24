@@ -48,6 +48,12 @@ spec:
             secretKeyRef:
               name: session-gateway-redis-credentials
               key: password
+        - name: SPRING_DATA_REDIS_SSL_ENABLED
+          value: "true"
+        - name: SPRING_DATA_REDIS_SSL_BUNDLE
+          value: "infra-ca"
+        - name: INFRA_CA_CERT_PATH
+          value: "file:/etc/ssl/infra/ca.crt"
         # Permission service URL
         - name: PERMISSION_SERVICE_URL
           value: "http://permission-service:8086/permission-service"
@@ -55,6 +61,10 @@ spec:
         envFrom:
         - secretRef:
             name: auth0-credentials
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -82,3 +92,7 @@ spec:
           periodSeconds: 20
           timeoutSeconds: 5
           failureThreshold: 3
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca

@@ -49,9 +49,15 @@ spec:
               name: ext-authz-redis-credentials
               key: password
         - name: REDIS_TLS
-          value: "false"
+          value: "true"
+        - name: REDIS_CA_CERT
+          value: "/etc/ssl/infra/ca.crt"
         - name: LOG_FORMAT
           value: "json"
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
         resources:
           requests:
             memory: "32Mi"
@@ -75,3 +81,7 @@ spec:
             path: /healthz
             port: 8090
           periodSeconds: 10
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca

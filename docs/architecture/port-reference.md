@@ -15,9 +15,9 @@
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |
-| 5432 | PostgreSQL | TCP | Relational database | Internal (services only) |
-| 6379 | Redis | TCP | Session storage (Spring Session + ext_authz schema), caching | Internal (services only) |
-| 5672 | RabbitMQ | AMQP | Message broker | Internal (services only) |
+| 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients) | Internal (services only) |
+| 6379 | Redis | TCP/TLS | TLS-only session storage (Spring Session + ext_authz schema), caching | Internal (services only) |
+| 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
 
 ## Port Ranges by Layer
@@ -42,9 +42,9 @@
 - **3000** - React Dev Server (Tilt live reload)
 
 ### Infrastructure Layer (Internal)
-- **5432** - PostgreSQL (database)
-- **6379** - Redis (session storage + ext_authz schema)
-- **5672** - RabbitMQ (messaging)
+- **5432** - PostgreSQL (database, client cert trust anchored by `infra-ca`)
+- **6379** - Redis (TLS-only session storage + ext_authz schema)
+- **5671** - RabbitMQ (TLS-only AMQPS messaging)
 - **15672** - RabbitMQ Management UI
 
 ## Service Discovery Commands
@@ -97,7 +97,7 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 **Infrastructure (Standard ports)**:
 - 5432: PostgreSQL (standard)
 - 6379: Redis (standard)
-- 5672: RabbitMQ AMQP (standard)
+- 5671: RabbitMQ AMQPS (TLS-enabled standard secure listener)
 - 15672: RabbitMQ Management (standard)
 
 ## Adding a New Service
@@ -149,6 +149,7 @@ kubectl get svc --all-namespaces | grep <port>
 - The caller matrix below applies to pod-to-pod traffic only and is enforced by pod-label-scoped allowlists
 - Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this Phase 2 allowlist boundary
 - `session-gateway` and `currency-service` egress is constrained to the rendered Istio egress gateway pods only (`app: istio-egress-gateway`, `istio: egress-gateway`) in the `istio-egress` namespace; the gateway handles approved external traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts
+- Phase 4 transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full`, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
 
 **Approved pod-to-pod callers per protected port**:
 
@@ -164,7 +165,7 @@ kubectl get svc --all-namespaces | grep <port>
 | 8086 | Permission Service | session-gateway only |
 | 5432 | PostgreSQL | transaction-service, currency-service, permission-service only |
 | 6379 | Redis | session-gateway, ext-authz, currency-service only |
-| 5672 | RabbitMQ | currency-service only |
+| 5671 | RabbitMQ | currency-service only |
 | 15672 | RabbitMQ Management | No in-cluster callers (blocked by NetworkPolicy) |
 
 **Check network policies**:

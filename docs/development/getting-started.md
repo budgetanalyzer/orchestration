@@ -54,7 +54,9 @@ broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
 `currency-service`, `redis-ops`) plus a restricted probe-only `default` user.
 `setup.sh` now rebuilds the `kind` cluster from scratch on every run instead of
 reusing an existing cluster, and it installs Helm `v3.20.1` automatically if
-the current Helm binary is missing or unsupported.
+the current Helm binary is missing or unsupported. It also refreshes the
+existing `istio` Helm repo index on every run so the host does not reuse stale
+chart metadata after an Istio version bump.
 `setup.sh` now generates the internal transport-TLS secrets automatically.
 To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the host.
 `./scripts/dev/check-tilt-prerequisites.sh` fails until `infra-ca` plus the

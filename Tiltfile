@@ -954,7 +954,7 @@ local_resource(
     'istio-egress-gateway',
     cmd='''
         existing_release=$(kubectl get deployment istio-egress-gateway -n istio-egress \
-            -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
+            -o jsonpath="{.metadata.annotations['meta.helm.sh/release-name']}" 2>/dev/null || true)
         if [ -n "$existing_release" ] && [ "$existing_release" != "istio-egress-gateway" ]; then
             echo "Unexpected Helm ownership on istio-egress-gateway: $existing_release" >&2
             exit 1

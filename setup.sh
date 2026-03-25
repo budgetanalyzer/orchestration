@@ -264,11 +264,13 @@ fi
 print_step "Setting up Istio Helm repository..."
 
 if helm repo list 2>/dev/null | grep -q "^istio"; then
-    print_success "Istio Helm repository already configured"
+    helm repo add istio https://istio-release.storage.googleapis.com/charts --force-update >/dev/null
+    helm repo update istio >/dev/null
+    print_success "Istio Helm repository refreshed"
 else
-    helm repo add istio https://istio-release.storage.googleapis.com/charts
-    helm repo update istio
-    print_success "Istio Helm repository added"
+    helm repo add istio https://istio-release.storage.googleapis.com/charts >/dev/null
+    helm repo update istio >/dev/null
+    print_success "Istio Helm repository added and refreshed"
 fi
 
 # =============================================================================

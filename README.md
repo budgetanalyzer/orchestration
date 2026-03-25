@@ -27,6 +27,7 @@ See [Getting Started](docs/development/getting-started.md) for complete setup in
 Current local platform baseline:
 - `setup.sh` now deletes any existing `kind` cluster and recreates it with `disableDefaultCNI` plus pinned Calico so `NetworkPolicy` is actually enforceable.
 - `setup.sh` also ensures a supported Helm `3.20.x` toolchain is installed before continuing.
+- `setup.sh` now refreshes the existing `istio` Helm repo index on every run so fresh-cluster rebuilds pick up new pinned chart versions instead of reusing stale host-side metadata.
 - Tilt now installs `istio/cni` and enables `pilot.cni.enabled=true` for `istiod`, so meshed workloads can be reinjected without `istio-init` before broader Phase 5 Pod Security enforcement.
 - Tilt now pins Gateway API CRDs to `v1.4.0` and Istio Helm charts to `1.29.1`; ingress hardening is declared through Gateway `spec.infrastructure.parametersRef`, and the egress gateway installs directly from `istio/gateway` again using checked-in Helm values.
 - Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.

@@ -42,11 +42,13 @@ git --version
 mkcert --version
 ```
 
-Phase 3 no longer installs the Istio egress gateway from Helm at runtime. The
-repo still uses Helm for `istio-base`, `istiod`, and `kyverno`, but the egress
-gateway is a checked-in manifest rendered from `istio/gateway` `1.24.3`
-because that chart's schema rejects the required `service.type=ClusterIP`
-override under the tested Helm `v3.20.1` toolchain.
+Phase 3 now installs the Istio egress gateway directly from Helm again. The
+repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
+`1.29.1`; the egress gateway uses
+`kubernetes/istio/egress-gateway-values.yaml` to keep
+`service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
+now flow through Gateway `spec.infrastructure.parametersRef` via
+`kubernetes/istio/ingress-gateway-config.yaml`.
 
 ## Quick Start
 
@@ -184,7 +186,7 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `rabbitmq` - RabbitMQ StatefulSet
 - `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
 - `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
-- `istio-egress-gateway` - Istio egress gateway (checked-in manifest)
+- `istio-egress-gateway` - Istio egress gateway (Helm chart via values file)
 - `istio-egress-config` - ServiceEntries and egress routing
 
 ## Development Workflows

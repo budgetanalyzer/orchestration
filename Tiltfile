@@ -636,6 +636,49 @@ k8s_resource(
     ]
 )
 
+# Existing default namespace pods need one reinjection after the Istio CNI cutover.
+# New pods created after the cutover should already land without istio-init.
+local_resource(
+    'istio-reinject-default-workloads',
+    cmd='''
+        restart_required=false
+        for deployment in budget-analyzer-web currency-service ext-authz nginx-gateway permission-service session-gateway transaction-service; do
+            if ! kubectl get deployment "$deployment" -n default >/dev/null 2>&1; then
+                continue
+            fi
+
+            init_containers=$(kubectl get pods -n default -l "app=${deployment}" \
+                -o jsonpath='{range .items[*]}{.spec.initContainers[*].name}{"\n"}{end}' 2>/dev/null || true)
+
+            if printf '%s\n' "$init_containers" | grep -qw 'istio-init'; then
+                kubectl rollout restart "deployment/${deployment}" -n default
+                restart_required=true
+            fi
+        done
+
+        if [ "$restart_required" = true ]; then
+            for deployment in budget-analyzer-web currency-service ext-authz nginx-gateway permission-service session-gateway transaction-service; do
+                if kubectl get deployment "$deployment" -n default >/dev/null 2>&1; then
+                    kubectl rollout status "deployment/${deployment}" -n default --timeout=180s
+                fi
+            done
+        else
+            echo "Default namespace deployments are already running without istio-init"
+        fi
+    ''',
+    resource_deps=[
+        'budget-analyzer-web',
+        'currency-service',
+        'ext-authz',
+        'nginx-gateway',
+        'permission-service',
+        'session-gateway',
+        'transaction-service',
+        'istio-cni',
+    ],
+    labels=['infrastructure'],
+)
+
 # ============================================================================
 # GATEWAY API PREREQUISITES
 # ============================================================================
@@ -643,7 +686,7 @@ k8s_resource(
 # Gateway API CRDs (must be installed before Istio ingress gateway)
 local_resource(
     'gateway-api-crds',
-    cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml',
+    cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml',
     labels=['infrastructure'],
 )
 
@@ -658,9 +701,25 @@ local_resource(
         helm upgrade --install istio-base istio/base \
             --namespace istio-system \
             --create-namespace \
-            --version 1.24.3 \
+            --version 1.29.1 \
             --wait
     ''',
+    labels=['infrastructure'],
+)
+
+# Istio CNI (required before meshed namespaces can enforce Pod Security)
+local_resource(
+    'istio-cni',
+    cmd='''
+        helm upgrade --install istio-cni istio/cni \
+            --namespace istio-system \
+            --version 1.29.1 \
+            --values kubernetes/istio/cni-values.yaml \
+            --wait
+        kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=120s
+    ''',
+    deps=['kubernetes/istio/cni-values.yaml'],
+    resource_deps=['istio-base'],
     labels=['infrastructure'],
 )
 
@@ -670,12 +729,12 @@ local_resource(
     cmd='''
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
-            --version 1.24.3 \
+            --version 1.29.1 \
             --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
     deps=['kubernetes/istio/istiod-values.yaml'],
-    resource_deps=['istio-base'],
+    resource_deps=['istio-cni'],
     labels=['infrastructure'],
 )
 
@@ -693,6 +752,12 @@ local_resource(
         kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/enforce=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/warn=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/audit=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
     resource_deps=['istiod'],
     labels=['infrastructure'],
@@ -825,20 +890,23 @@ local_resource(
 )
 
 # Istio ingress gateway — auto-provisioned from the Gateway API resource.
-# Applies the namespace, TLS ReferenceGrant, and Gateway, then patches NodePort to 30443.
+# Istio 1.29.1 supports declarative deployment/service customization through
+# Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
+# Gateway and then waits for the generated workload to settle.
 local_resource(
     'istio-ingress-config',
     cmd='''
         kubectl apply -f kubernetes/istio/ingress-namespace.yaml
         kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
+        kubectl apply -f kubernetes/istio/ingress-gateway-config.yaml
         kubectl apply -f kubernetes/istio/istio-gateway.yaml
         kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=120s
-        kubectl patch svc -n istio-ingress istio-ingress-gateway-istio --type=json \
-            -p='[{"op":"replace","path":"/spec/ports/1/nodePort","value":30443}]'
+        kubectl rollout status deployment/istio-ingress-gateway-istio -n istio-ingress --timeout=120s
     ''',
     deps=[
         'kubernetes/istio/ingress-namespace.yaml',
         'kubernetes/istio/tls-reference-grant.yaml',
+        'kubernetes/istio/ingress-gateway-config.yaml',
         'kubernetes/istio/istio-gateway.yaml',
     ],
     resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'mkcert-tls-secret'],
@@ -879,18 +947,30 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Egress gateway rendered from istio/gateway 1.24.3 and checked into the repo.
-# The upstream chart rejects the required service.type input under Helm v3.20.1,
-# so Tilt applies the vendored manifest directly instead of depending on the
-# runtime schema bypass.
+# Egress gateway installed directly from istio/gateway 1.29.1.
+# The 1.29.1 chart now accepts the required service.type=ClusterIP input under
+# the repo's Helm v3.20.1 toolchain, so the vendored manifest path is removed.
 local_resource(
     'istio-egress-gateway',
     cmd='''
-        helm uninstall istio-egress-gateway -n istio-egress --ignore-not-found --wait || true
-        kubectl apply -f kubernetes/istio/egress-gateway.yaml
+        existing_release=$(kubectl get deployment istio-egress-gateway -n istio-egress \
+            -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
+        if [ -n "$existing_release" ] && [ "$existing_release" != "istio-egress-gateway" ]; then
+            echo "Unexpected Helm ownership on istio-egress-gateway: $existing_release" >&2
+            exit 1
+        fi
+        if kubectl get deployment istio-egress-gateway -n istio-egress >/dev/null 2>&1 && [ -z "$existing_release" ]; then
+            kubectl delete deployment,serviceaccount,role,rolebinding,service,hpa istio-egress-gateway \
+                -n istio-egress --ignore-not-found
+        fi
+        helm upgrade --install istio-egress-gateway istio/gateway \
+            --namespace istio-egress \
+            --version 1.29.1 \
+            --values kubernetes/istio/egress-gateway-values.yaml \
+            --wait
         kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s
     ''',
-    deps=['kubernetes/istio/egress-gateway.yaml'],
+    deps=['kubernetes/istio/egress-gateway-values.yaml'],
     resource_deps=['istio-egress-namespace'],
     labels=['infrastructure'],
 )

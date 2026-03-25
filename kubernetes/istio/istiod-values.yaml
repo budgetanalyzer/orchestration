@@ -1,4 +1,6 @@
 pilot:
+  cni:
+    enabled: true
   resources:
     requests:
       memory: 256Mi

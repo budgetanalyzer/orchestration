@@ -20,7 +20,14 @@ Relevant upstream guidance:
 
 - Istio CNI removes the need for privileged `istio-init` in sidecar mode: <https://istio.io/latest/docs/setup/additional-setup/cni/>
 - Istio with Pod Security Admission requires Istio CNI if meshed namespaces are going to enforce `baseline` or `restricted`: <https://istio.io/latest/docs/setup/additional-setup/pod-security-admission/>
-- Gateway API auto-provisioned gateway resources can be hardened declaratively through `spec.infrastructure.parametersRef`: <https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/>
+- Newer Istio releases can harden Gateway API auto-provisioned gateway resources declaratively through `spec.infrastructure.parametersRef`: <https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/>
+- The repo now targets Istio `1.29.1`, so Session 3 uses Gateway `spec.infrastructure.parametersRef` for ingress hardening and fixed NodePort ownership. The egress gateway also returns to direct Helm install because `istio/gateway` `1.29.1` accepts `service.type=ClusterIP` under the repo's Helm `v3.20.1` toolchain.
+
+Sequence update for March 25, 2026:
+
+- The repo-side work from [istio-1.29-upgrade.md](./istio-1.29-upgrade.md) is implemented: Istio pins are `1.29.1` and Gateway API CRDs are `v1.4.0`.
+- Complete the fresh-cluster regression gate from that plan before starting Session 4.
+- Revalidate Session 3's ingress and egress gateway hardening approach on the upgraded Istio baseline before resuming the remaining Phase 5 sessions.
 
 ## Target State
 
@@ -46,11 +53,11 @@ Phase 5 is complete when all of the following are true:
 | Spring Boot services (`session-gateway`, `currency-service`, `transaction-service`, `permission-service`) | Already run as UID `1001` | Manifest-only hardening in this repo | Yes | Add `/tmp` `emptyDir` before flipping read-only |
 | `ext-authz` | Distroless non-root | Manifest-only hardening in this repo | Yes | Low-risk first candidate |
 | `budget-analyzer-web` | Root image in sibling repo | Requires sibling Dockerfile change first | Validate after non-root cutover | Do not pretend this is orchestration-only |
-| `nginx-gateway` | Root image and root-owned paths | Orchestration-only, but needs image/runtime path changes | Yes | Move logs off `/var/log/nginx`; mount writable temp dirs |
-| `istio-ingress` generated gateway | Non-root proxy container, but no pod seccomp or token hardening yet | Declarative overlay through Gateway `parametersRef` | Already effectively yes | Do not use ad-hoc `kubectl patch` as source of truth |
-| `istio-egress` gateway | Non-root proxy container, but no pod seccomp or token hardening yet | Manifest hardening in this repo | Already yes | Repo already vendors this manifest |
-| `redis` | Root, writes ACL file to `/tmp`, AOF to default data path | Needs writable `/tmp` and `/data` plus explicit UID validation | Optional after validation | Current Deployment has no explicit Redis data volume |
-| `postgresql` | Root | Needs volume ownership strategy and explicit non-root validation | Optional after validation | Init container may remain UID `0` if strictly necessary |
+| `nginx-gateway` | Root image and root-owned paths | Orchestration-only, but needs image/runtime path changes | Yes | Move logs off `/var/log/nginx`; prefer a pinned unprivileged image over retrofitting the current root runtime |
+| `istio-ingress` generated gateway | Non-root proxy container, pod seccomp and fixed NodePort now configured declaratively | Gateway `parametersRef` customization | Already effectively yes | Retains SA token mount because the gateway watches TLS secrets; do not use ad-hoc `kubectl patch` as source of truth |
+| `istio-egress` gateway | Non-root proxy container, pod seccomp now applied through Helm values | Helm values hardening in this repo | Already yes | Currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it |
+| `redis` | Root, writes ACL file to `/tmp`, AOF to default data path | Needs writable `/tmp` and `/data` plus explicit UID validation | Optional after validation | Current Deployment has no explicit Redis data volume; AOF remains ephemeral in dev unless a PVC is introduced |
+| `postgresql` | Root | Needs volume ownership strategy and explicit non-root validation | Optional after validation | TLS-prep init container should move to UID/GID `70` after the writable `/tls` path is validated |
 | `rabbitmq` | Root | Needs volume ownership strategy and explicit non-root validation | Optional after validation | StatefulSet session should stand alone |
 
 ## Session Breakdown
@@ -62,6 +69,11 @@ Each session below is scoped so it can be finished, validated, and documented in
 **Goal**
 
 Remove the hard blocker that prevents meshed workloads from being admitted under Pod Security `restricted`.
+
+Current implementation status for March 25, 2026:
+
+- Session 1 is implemented in-repo.
+- Tilt now installs `istio/cni`, enables `pilot.cni.enabled=true` for `istiod`, labels `istio-system` for PSA `privileged`, and includes an idempotent reinjection step for `default` namespace deployments that still carry `istio-init`.
 
 **Files**
 
@@ -75,7 +87,7 @@ Remove the hard blocker that prevents meshed workloads from being admitted under
 - Set `pilot.cni.enabled=true` for the `istiod` install
 - Add an explicit `kubernetes/istio/cni-values.yaml` instead of baking CNI knobs into long inline Helm commands
 - Set `seccompProfile.type: RuntimeDefault` on the `istio-cni` DaemonSet through chart values
-- Label `istio-system` for PSA `enforce=privileged`
+- Label `istio-system` for PSA `enforce=privileged` through the existing Tiltfile namespace-label resource because the namespace is created by Helm, not by a checked-in namespace manifest
 - Restart or roll the meshed workloads in `default` so they are reinjected without `istio-init`
 - Leave `cniConfFileName` unset unless node inspection proves auto-detection picks the wrong Calico config file
 
@@ -99,6 +111,12 @@ Remove the hard blocker that prevents meshed workloads from being admitted under
 
 Land the low-risk hardening on workloads that are already built to run non-root.
 
+Current implementation status for March 25, 2026:
+
+- Session 2 is implemented in-repo for `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz`.
+- The Spring Boot services now mount an explicit `/tmp` `emptyDir`, seed Tilt's `/tmp/.restart-proc` marker through a hardened init container, pin UID/GID `1001` in the manifest, and run with `readOnlyRootFilesystem: true`.
+- `ext-authz` now disables service-account token automount and runs with pod seccomp, a read-only root filesystem, and explicit UID/GID `65532`.
+
 **Files**
 
 - `kubernetes/services/session-gateway/deployment.yaml`
@@ -121,7 +139,7 @@ Land the low-risk hardening on workloads that are already built to run non-root.
   - `allowPrivilegeEscalation: false`
   - `capabilities.drop: ["ALL"]`
   - `runAsNonRoot: true`
-- Set explicit UID/GID `1001` on the Spring Boot containers so the runtime does not rely on image metadata alone
+- For the Spring Boot services, set explicit `runAsUser: 1001` and `runAsGroup: 1001` so the runtime does not rely on image metadata alone
 - Add `/tmp` `emptyDir` mounts for the Spring Boot services, then validate and enable `readOnlyRootFilesystem: true`
 - Enable `readOnlyRootFilesystem: true` on `ext-authz`
 
@@ -137,32 +155,41 @@ Land the low-risk hardening on workloads that are already built to run non-root.
 
 **Goal**
 
-Make both gateway namespaces compatible with Pod Security `restricted` and remove Kubernetes API token mounts from the gateway pods.
+Make both gateway namespaces compatible with Pod Security `restricted` without introducing controller or chart drift. Ingress still needs Kubernetes API token access for TLS secret watching, while egress currently keeps the chart-managed token behavior.
+
+Current implementation status for March 25, 2026:
+
+- Session 3 is implemented in-repo.
+- The auto-provisioned Istio ingress gateway now uses Gateway `spec.infrastructure.parametersRef` to set pod `seccompProfile.type: RuntimeDefault`, keep service-account token automount explicit, and pin the HTTPS NodePort to `30443`.
+- The Istio egress gateway now installs directly from the `istio/gateway` chart with values that keep `service.type=ClusterIP`, preserve the chart-managed low-port binding sysctl, and set pod `seccompProfile.type: RuntimeDefault`.
+- The Phase 5 runtime verifier now treats ingress token retention and the current egress chart-managed token behavior as explicit exceptions instead of hardening failures.
 
 **Files**
 
 - `kubernetes/istio/istio-gateway.yaml`
-- `kubernetes/istio/ingress-gateway-options-configmap.yaml` (new)
-- `kubernetes/istio/egress-gateway.yaml`
+- `kubernetes/istio/ingress-gateway-config.yaml`
+- `kubernetes/istio/egress-gateway-values.yaml`
 - `Tiltfile`
 
 **Changes**
 
-- Add `spec.infrastructure.parametersRef` to the Gateway API `Gateway` in `istio-ingress`
-- Create a same-namespace ConfigMap that overlays the generated ingress `Deployment` and `ServiceAccount`
-- Use the ingress overlay to set:
-  - pod `automountServiceAccountToken: false`
+- Keep the Gateway API `Gateway` as the controller source of truth and use `spec.infrastructure.parametersRef` so the generated ingress `Deployment`, `Service`, and `ServiceAccount` are customized declaratively
+- Use the ingress Gateway config to set:
   - pod `securityContext.seccompProfile.type: RuntimeDefault`
-  - any missing service-account defaults needed to keep generated resources hardened after controller reconciliation
-- Update the vendored egress gateway manifest to set:
-  - pod `automountServiceAccountToken: false`
+  - `automountServiceAccountToken: true` on the generated ServiceAccount because the gateway still needs Kubernetes API access for TLS secret watching
+  - `nodePort: 30443` on the HTTPS Service port so Tilt no longer has to patch the generated Service after reconciliation
+- Update the checked-in egress gateway Helm values to set:
+  - `service.type: ClusterIP`
+  - `securityContext.sysctls[net.ipv4.ip_unprivileged_port_start=0]` so the non-root gateway keeps the chart's low-port binding behavior
   - pod `securityContext.seccompProfile.type: RuntimeDefault`
-  - ServiceAccount `automountServiceAccountToken: false`
+
+**Exception**
+
+The ingress gateway keeps Kubernetes API token access because it watches listener TLS secrets. The egress gateway currently retains the chart's default Kubernetes API token behavior because this repo does not add a separate post-render patch just to remove it. Phase 5 hardens both gateway pod security contexts, but it does not disable either token mount unless an explicit replacement path is introduced and validated.
 
 **Verification**
 
 - Ingress and egress gateway rollouts complete
-- Gateway pods do not mount `kube-api-access-*`
 - Ingress and egress gateway pods show pod-level `seccompProfile.type: RuntimeDefault`
 - [`verify-phase-3-istio-ingress.sh`](/workspace/orchestration/scripts/dev/verify-phase-3-istio-ingress.sh) passes
 
@@ -180,8 +207,10 @@ Remove the root runtime from NGINX and make the gateway read-only except for exp
 
 **Changes**
 
-- Replace the current root-based runtime with a pinned unprivileged NGINX image, or prove an equivalent explicit UID/GID strategy against the current image
-- Move access and error logs to stdout/stderr instead of `/var/log/nginx/*`
+- Switch to a pinned unprivileged NGINX image. `nginxinc/nginx-unprivileged:<pinned>-alpine` is the preferred path unless an equivalent pinned unprivileged image is already proven in-repo.
+- Change `nginx/nginx.k8s.conf` to write logs to stdout/stderr explicitly:
+  - `access_log /dev/stdout main;`
+  - `error_log /dev/stderr warn;`
 - Mount writable `emptyDir` volumes for the paths NGINX still needs at runtime (`/var/cache/nginx`, `/var/run`, and `/tmp` if required by the chosen image)
 - Add:
   - pod `automountServiceAccountToken: false`
@@ -258,6 +287,7 @@ Make Redis compatible with Phase 5 baseline hardening without changing the Phase
 - Add explicit writable mounts for:
   - `/tmp` for `users.acl`
   - `/data` for AOF output
+- Document explicitly that AOF on an `emptyDir` remains ephemeral in local dev; production persistence would require a PVC
 - Validate the Redis image with an explicit non-root UID/GID before turning on `runAsNonRoot: true`
 - Enable `readOnlyRootFilesystem: true` only after `/tmp` and `/data` are mounted and startup/probes pass
 
@@ -285,8 +315,8 @@ Remove the default root runtime from PostgreSQL without breaking bootstrap, TLS 
   - `allowPrivilegeEscalation: false`
   - `capabilities.drop: ["ALL"]`
   - `seccompProfile.type: RuntimeDefault`
+- Change the TLS-prep init container to run as UID/GID `70`, replace `chown` with `cp` plus `chmod 600`, and set `runAsNonRoot: true`
 - Move the main PostgreSQL process to an explicit non-root UID/GID once volume ownership and socket/tmp paths are validated
-- Keep the init container at UID `0` only if that remains necessary for file ownership fixes; do not give it extra capabilities
 - Enable `readOnlyRootFilesystem: true` only after all writable runtime paths are explicitly mounted
 
 **Verification**
@@ -330,7 +360,7 @@ Flip namespace `enforce` labels only after the workloads are actually compatible
 - `kubernetes/infrastructure/namespace.yaml`
 - `kubernetes/istio/ingress-namespace.yaml`
 - `kubernetes/istio/egress-namespace.yaml`
-- `Tiltfile` for `default` and `istio-system`
+- `Tiltfile` for `default`, `infrastructure`, and `istio-system`
 
 **Changes**
 
@@ -338,7 +368,7 @@ Flip namespace `enforce` labels only after the workloads are actually compatible
 - `istio-ingress`: `warn=audit=enforce=restricted`
 - `istio-egress`: `warn=audit=enforce=restricted`
 - `infrastructure`: `warn=audit=enforce=baseline`
-- `istio-system`: `enforce=privileged`
+- `istio-system`: `enforce=privileged` via the existing Tiltfile namespace-label resource because the namespace is created by Helm
 - Restart the affected workloads after the label flip so admission is re-proven under the final policy
 
 **Verification**
@@ -361,6 +391,11 @@ Treat Phase 5 as complete only when the new verifier and the earlier phase regre
 **Changes**
 
 - Finish any missing verifier checks discovered during the implementation sessions
+- Extend the regression step so Phase 5 re-runs:
+  - [`verify-phase-1-credentials.sh`](/workspace/orchestration/scripts/dev/verify-phase-1-credentials.sh)
+  - [`verify-phase-2-network-policies.sh`](/workspace/orchestration/scripts/dev/verify-phase-2-network-policies.sh)
+  - [`verify-phase-3-istio-ingress.sh`](/workspace/orchestration/scripts/dev/verify-phase-3-istio-ingress.sh)
+  - [`verify-phase-4-transport-encryption.sh`](/workspace/orchestration/scripts/dev/verify-phase-4-transport-encryption.sh)
 - Run the new Phase 5 verifier
 - Fix any drift exposed by the verifier before calling the phase complete
 - Update operational documentation in the same sessions as the implementation changes
@@ -381,9 +416,11 @@ That verifier is expected to prove:
 
 - namespace PSA labels are at their final enforce levels
 - `istio-cni` is installed and meshed secure pods no longer get `istio-init`
-- repo-managed workload pods disable Kubernetes API token automount
-- workload pods carry the expected hardening fields
+- repo-managed workload pods whose prerequisites are satisfied disable Kubernetes API token automount unless they have a concrete Kubernetes API dependency
+- workload pods whose prerequisites are satisfied carry the expected hardening fields
 - restricted PSA both admits a secure meshed pod and rejects an insecure one
-- Phase 3 ingress behavior and Phase 4 transport encryption still pass as regressions
+- Phase 1 credential isolation, Phase 2 network policies, Phase 3 ingress behavior, and Phase 4 transport encryption still pass as regressions
+
+The current verifier intentionally excludes `budget-analyzer-web` until Session 5's sibling-repo image prerequisite is complete.
 
 Do not declare Phase 5 complete until that verifier passes end-to-end.

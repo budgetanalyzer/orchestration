@@ -305,11 +305,11 @@ if kubectl cluster-info --context kind-kind &> /dev/null; then
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "  Installing Gateway API CRDs..."
-            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
             echo -e "${GREEN}✓${NC} Gateway API CRDs installed"
         else
             echo "  Skipped. Install manually with:"
-            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml"
+            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
             ((WARNINGS++))
         fi
     fi

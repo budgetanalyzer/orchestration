@@ -59,7 +59,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 1.24.3 (Helm charts) |
+| **Current version** | 1.29.1 (Helm charts) |
 | **Watch** | https://github.com/istio/istio |
 | **Also follow** | https://istio.io/latest/news/security/ (security bulletins) |
 | **Defined in** | `orchestration/Tiltfile` (helm upgrade commands) |
@@ -116,7 +116,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v1.2.0 |
+| **Current version** | v1.4.0 |
 | **Watch** | https://github.com/kubernetes-sigs/gateway-api |
 | **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/dev/check-tilt-prerequisites.sh` |
 
@@ -391,10 +391,13 @@ When Kind releases a new version with a newer Kubernetes node image, check Calic
 Istio version
   -> Gateway API CRDs (Istio release notes list supported versions)
   -> ext-authz protocol (verify extension provider config still works)
-  -> Egress gateway manifest (vendored from istio/gateway chart)
+  -> Egress gateway Helm values (service.type=ClusterIP + gateway hardening)
 ```
 
-The egress gateway manifest (`kubernetes/istio/egress-gateway.yaml`) is vendored from the `istio/gateway` Helm chart at version 1.24.3. When upgrading Istio, re-render this manifest from the matching chart version.
+The egress gateway now installs directly from the `istio/gateway` Helm chart.
+When upgrading Istio, re-check that
+`kubernetes/istio/egress-gateway-values.yaml` still matches the rendered chart
+behavior you depend on.
 
 ### Java Stack
 
@@ -430,10 +433,10 @@ Quick-reference table of every pinned version and where it's defined.
 | Tilt | latest (unpinned) | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
 | kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
-| Istio | 1.24.3 | `orchestration/Tiltfile` |
+| Istio | 1.29.1 | `orchestration/Tiltfile` |
 | Calico | v3.29.3 | `orchestration/scripts/dev/install-calico.sh` |
 | Kyverno | 3.7.1 | `orchestration/Tiltfile` |
-| Gateway API CRDs | v1.2.0 | `orchestration/Tiltfile` |
+| Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
 | mkcert | latest (unpinned) | Installed on host |
 
 ### Container Images

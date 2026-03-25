@@ -53,11 +53,11 @@ sudo mv kubectl /usr/local/bin/kubectl
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.20.1 bash
 ```
 
-Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo still uses
-Helm for `istio-base`, `istiod`, and `kyverno`, but the Istio egress gateway is
-applied from a checked-in manifest because the upstream `istio/gateway` `1.24.3`
-chart rejects the required `service.type=ClusterIP` override under Helm
-`v3.20.1` schema validation.
+Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo now uses
+Helm for `istio/base`, `istio/cni`, `istio/istiod`, `istio/gateway`, and
+`kyverno`. Gateway API CRDs are pinned to `v1.4.0`, ingress gateway hardening
+is declared through Gateway `spec.infrastructure.parametersRef`, and the egress
+gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
 
 ### Tilt
 

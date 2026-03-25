@@ -252,7 +252,7 @@ if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
     print_success "Gateway API CRDs already installed"
 else
     print_step "Installing Gateway API CRDs..."
-    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
     print_success "Gateway API CRDs installed"
 fi
 

@@ -437,10 +437,14 @@ Security requirement:
 
 Detailed implementation breakdown: [security-hardening-v2-phase-5-implementation.md](./security-hardening-v2-phase-5-implementation.md)
 
-Current authoring status for March 24, 2026:
+Current implementation status for March 25, 2026:
 
-- The detailed Phase 5 session breakdown and completion-gate verifier are now authored in-repo.
-- Phase 5 implementation is not started yet. Do not flip Pod Security `enforce` labels in meshed namespaces until the Istio CNI prerequisite in Session 1 is complete.
+- The detailed Phase 5 session breakdown and completion-gate verifier are authored in-repo.
+- Session 1 is implemented in-repo: Tilt installs `istio/cni`, `istiod` runs with `pilot.cni.enabled=true`, `istio-system` is labeled for PSA `privileged`, and existing `default` namespace workloads are rolled once when they still carry `istio-init`.
+- Session 2 is implemented in-repo: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` now disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
+- Session 3 is implemented in-repo on the refreshed Istio `1.29.1` baseline: ingress gateway hardening and the fixed `30443` NodePort now live in Gateway `spec.infrastructure.parametersRef` via `kubernetes/istio/ingress-gateway-config.yaml`; the egress gateway installs directly from `istio/gateway` using `kubernetes/istio/egress-gateway-values.yaml`; the ingress gateway intentionally retains Kubernetes API token access for TLS secret watching; and the egress gateway currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it.
+- The repo is now pinned to Istio `1.29.1` and Gateway API CRDs `v1.4.0`. Before starting Phase 5 Sessions 4+, run the fresh-cluster regression gate from [istio-1.29-upgrade.md](./istio-1.29-upgrade.md) on a host machine and confirm the security verifier stack is green.
+- Do not flip Pod Security `enforce` labels in `default`, `infrastructure`, `istio-ingress`, or `istio-egress` until the remaining Phase 5 sessions land.
 
 ### 5a. Manifest-level workload hardening
 

@@ -15,7 +15,26 @@ spec:
       labels:
         app: transaction-service
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: transaction-service
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: init-tmp
+        image: busybox:1.36.1
+        command: ["sh", "-c", "touch /tmp/.restart-proc && chmod 0666 /tmp/.restart-proc"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
       containers:
       - name: transaction-service
         image: transaction-service:latest
@@ -46,6 +65,16 @@ spec:
         - name: infra-ca
           mountPath: /etc/ssl/infra
           readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
         resources:
           requests:
             memory: "256Mi"
@@ -73,3 +102,5 @@ spec:
       - name: infra-ca
         secret:
           secretName: infra-ca
+      - name: tmp
+        emptyDir: {}

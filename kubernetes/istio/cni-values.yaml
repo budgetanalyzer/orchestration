@@ -1,0 +1,2 @@
+seccompProfile:
+  type: RuntimeDefault

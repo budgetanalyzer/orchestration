@@ -3,9 +3,12 @@ kind: Gateway
 metadata:
   name: istio-ingress-gateway
   namespace: istio-ingress
-  annotations:
-    networking.istio.io/service-type: NodePort
 spec:
+  infrastructure:
+    parametersRef:
+      group: ""
+      kind: ConfigMap
+      name: istio-ingress-gateway-config
   gatewayClassName: istio
   listeners:
     - name: https

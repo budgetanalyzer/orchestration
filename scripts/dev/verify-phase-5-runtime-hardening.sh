@@ -197,6 +197,20 @@ assert_no_kube_api_access_volume() {
     fi
 }
 
+assert_kube_api_access_volume_present() {
+    local namespace="$1"
+    local pod="$2"
+    local label="$3"
+    local volumes
+
+    volumes=$(get_pod_value "$namespace" "$pod" '{range .spec.volumes[*]}{.name}{"\n"}{end}')
+    if printf '%s\n' "$volumes" | grep -Eq '^kube-api-access-'; then
+        pass "$label still mounts the Kubernetes API token volume where the current gateway configuration intentionally retains it"
+    else
+        fail "$label does not mount the Kubernetes API token volume that the current gateway configuration still retains"
+    fi
+}
+
 container_security_line() {
     local namespace="$1"
     local pod="$2"
@@ -285,6 +299,20 @@ assert_serviceaccount_automount_false() {
     fi
 }
 
+assert_serviceaccount_automount_not_false() {
+    local namespace="$1"
+    local service_account="$2"
+    local label="$3"
+    local actual
+
+    actual=$(kubectl get serviceaccount "$service_account" -n "$namespace" -o jsonpath='{.automountServiceAccountToken}' 2>/dev/null || true)
+    if [[ "$actual" == "false" ]]; then
+        fail "$label ServiceAccount disables token automount even though the current gateway configuration still retains Kubernetes API access"
+    else
+        pass "$label ServiceAccount preserves Kubernetes API token automount for the current gateway configuration"
+    fi
+}
+
 verify_workload() {
     local namespace="$1"
     local selector="$2"
@@ -292,15 +320,27 @@ verify_workload() {
     local container="$4"
     local require_read_only="$5"
     local require_no_istio_init="$6"
-    local check_service_account="$7"
+    local token_mode="$7"
+    local check_service_account="$8"
     local pod sa
 
     pod=$(require_pod "$namespace" "$selector" "$label")
     assert_pod_ready "$namespace" "$pod" "$label"
-    assert_pod_automount_false "$namespace" "$pod" "$label"
-    assert_no_kube_api_access_volume "$namespace" "$pod" "$label"
     assert_pod_seccomp_runtime_default "$namespace" "$pod" "$label"
     assert_container_baseline "$namespace" "$pod" "$container" "$label" "$require_read_only"
+
+    case "$token_mode" in
+        disabled)
+            assert_pod_automount_false "$namespace" "$pod" "$label"
+            assert_no_kube_api_access_volume "$namespace" "$pod" "$label"
+            ;;
+        retained)
+            assert_kube_api_access_volume_present "$namespace" "$pod" "$label"
+            ;;
+        *)
+            fail "$label uses unsupported token verification mode: $token_mode"
+            ;;
+    esac
 
     if [[ "$require_no_istio_init" == "true" ]]; then
         assert_no_istio_init "$namespace" "$pod" "$label"
@@ -309,7 +349,11 @@ verify_workload() {
     if [[ "$check_service_account" == "true" ]]; then
         sa=$(pod_service_account "$namespace" "$pod")
         if [[ -n "$sa" ]]; then
-            assert_serviceaccount_automount_false "$namespace" "$sa" "$label"
+            if [[ "$token_mode" == "disabled" ]]; then
+                assert_serviceaccount_automount_false "$namespace" "$sa" "$label"
+            else
+                assert_serviceaccount_automount_not_false "$namespace" "$sa" "$label"
+            fi
         else
             fail "$label pod does not expose a serviceAccountName"
         fi
@@ -352,24 +396,23 @@ verify_workloads() {
     section "Workload Hardening"
 
     local specs=(
-        "default|app=budget-analyzer-web|budget-analyzer-web|budget-analyzer-web|false|true|true"
-        "default|app=currency-service|currency-service|currency-service|true|true|true"
-        "default|app=ext-authz|ext-authz|ext-authz|true|true|true"
-        "default|app=nginx-gateway|nginx-gateway|nginx|true|true|true"
-        "default|app=permission-service|permission-service|permission-service|true|true|true"
-        "default|app=session-gateway|session-gateway|session-gateway|true|true|true"
-        "default|app=transaction-service|transaction-service|transaction-service|true|true|true"
-        "infrastructure|app=redis|redis|redis|false|false|false"
-        "infrastructure|app=postgresql|postgresql|postgresql|false|false|false"
-        "infrastructure|app=rabbitmq|rabbitmq|rabbitmq|false|false|false"
-        "istio-ingress|gateway.networking.k8s.io/gateway-name=istio-ingress-gateway|istio ingress gateway|istio-proxy|true|false|true"
-        "istio-egress|app=istio-egress-gateway|istio egress gateway|istio-proxy|true|false|true"
+        "default|app=currency-service|currency-service|currency-service|true|true|disabled|true"
+        "default|app=ext-authz|ext-authz|ext-authz|true|true|disabled|true"
+        "default|app=nginx-gateway|nginx-gateway|nginx|true|true|disabled|true"
+        "default|app=permission-service|permission-service|permission-service|true|true|disabled|true"
+        "default|app=session-gateway|session-gateway|session-gateway|true|true|disabled|true"
+        "default|app=transaction-service|transaction-service|transaction-service|true|true|disabled|true"
+        "infrastructure|app=redis|redis|redis|false|false|disabled|false"
+        "infrastructure|app=postgresql|postgresql|postgresql|false|false|disabled|false"
+        "infrastructure|app=rabbitmq|rabbitmq|rabbitmq|false|false|disabled|false"
+        "istio-ingress|gateway.networking.k8s.io/gateway-name=istio-ingress-gateway|istio ingress gateway|istio-proxy|true|false|retained|true"
+        "istio-egress|app=istio-egress-gateway|istio egress gateway|istio-proxy|true|false|retained|true"
     )
-    local spec namespace selector label container require_ro require_no_init check_sa
+    local spec namespace selector label container require_ro require_no_init token_mode check_sa
 
     for spec in "${specs[@]}"; do
-        IFS='|' read -r namespace selector label container require_ro require_no_init check_sa <<<"$spec"
-        verify_workload "$namespace" "$selector" "$label" "$container" "$require_ro" "$require_no_init" "$check_sa"
+        IFS='|' read -r namespace selector label container require_ro require_no_init token_mode check_sa <<<"$spec"
+        verify_workload "$namespace" "$selector" "$label" "$container" "$require_ro" "$require_no_init" "$token_mode" "$check_sa"
     done
 }
 

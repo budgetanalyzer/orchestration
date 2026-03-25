@@ -16,11 +16,15 @@ This document tracks all software that has been manually installed within the de
 | Component | Chart Version | Namespace |
 |---|---|---|
 | cert-manager | `v1.13.2` | `cert-manager` |
-| Istio Base | `1.24.3` | `istio-system` |
-| istiod | `1.24.3` | `istio-system` |
+| Istio Base | `1.29.1` | `istio-system` |
+| Istio CNI | `1.29.1` | `istio-system` |
+| istiod | `1.29.1` | `istio-system` |
+| Istio Gateway (egress) | `1.29.1` | `istio-egress` |
 
-`istio/gateway` `1.24.3` is not installed directly from Helm in this repo's
-steady state. The checked-in
-[`kubernetes/istio/egress-gateway.yaml`](../../kubernetes/istio/egress-gateway.yaml)
-manifest was rendered from that chart because Helm `v3.20.1` reproduces the
-chart's schema-validation failure for `service.type=ClusterIP`.
+`istio/gateway` `1.29.1` is installed directly from Helm in this repo's steady
+state. The egress gateway uses
+[`kubernetes/istio/egress-gateway-values.yaml`](../../kubernetes/istio/egress-gateway-values.yaml)
+to keep `service.type=ClusterIP` and pod `seccompProfile.type: RuntimeDefault`.
+The ingress gateway remains auto-provisioned from Gateway API and is hardened
+through
+[`kubernetes/istio/ingress-gateway-config.yaml`](../../kubernetes/istio/ingress-gateway-config.yaml).

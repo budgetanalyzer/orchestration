@@ -15,7 +15,11 @@ spec:
       labels:
         app: ext-authz
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: ext-authz
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: ext-authz
         image: ext-authz:latest
@@ -58,6 +62,14 @@ spec:
         - name: infra-ca
           mountPath: /etc/ssl/infra
           readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
         resources:
           requests:
             memory: "32Mi"

@@ -183,11 +183,13 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 Helm `3.20.x` is still the required runtime toolchain, but `./setup.sh` now
 installs the tested `v3.20.1` automatically when Helm is missing or unsupported.
 
-**Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo. The
-Istio egress gateway is applied from the checked-in
-`kubernetes/istio/egress-gateway.yaml` manifest because the upstream
-`istio/gateway` `1.24.3` chart fails schema validation for the required
-`service.type=ClusterIP` override under the tested Helm `v3.20.1` toolchain.
+**Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo.
+Gateway API CRDs are pinned to `v1.4.0`, and the repo installs
+`istio/base`, `istio/cni`, `istio/istiod`, and `istio/gateway` `1.29.1`
+directly from Helm. Ingress gateway hardening is declared through
+`kubernetes/istio/ingress-gateway-config.yaml` via Gateway
+`spec.infrastructure.parametersRef`, and the egress gateway uses
+`kubernetes/istio/egress-gateway-values.yaml` with `service.type=ClusterIP`.
 
 Check prerequisites:
 ```bash

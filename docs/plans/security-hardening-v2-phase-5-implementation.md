@@ -52,13 +52,13 @@ Phase 5 is complete when all of the following are true:
 | --- | --- | --- | --- | --- |
 | Spring Boot services (`session-gateway`, `currency-service`, `transaction-service`, `permission-service`) | Already run as UID `1001` | Manifest-only hardening in this repo | Yes | Add `/tmp` `emptyDir` before flipping read-only |
 | `ext-authz` | Distroless non-root | Manifest-only hardening in this repo | Yes | Low-risk first candidate |
-| `budget-analyzer-web` | Root image in sibling repo | Requires sibling Dockerfile change first | Validate after non-root cutover | Do not pretend this is orchestration-only |
-| `nginx-gateway` | Root image and root-owned paths | Orchestration-only, but needs image/runtime path changes | Yes | Move logs off `/var/log/nginx`; prefer a pinned unprivileged image over retrofitting the current root runtime |
+| `budget-analyzer-web` | Sibling Docker runtime now runs as UID/GID `1001`, and the Deployment now pins `runAsUser`/`runAsGroup` to `1001` | Orchestration manifest hardening is implemented | Deferred until HMR writable-path validation is proven | `readOnlyRootFilesystem` remains intentionally off until the dev workflow is validated on narrow writable mounts |
+| `nginx-gateway` | Pinned unprivileged image, explicit `/tmp` runtime mount, read-only root filesystem | Implemented in this repo | Yes | Logs now go to stdout/stderr and temp/pid paths are moved under `/tmp` |
 | `istio-ingress` generated gateway | Non-root proxy container, pod seccomp and fixed NodePort now configured declaratively | Gateway `parametersRef` customization | Already effectively yes | Retains SA token mount because the gateway watches TLS secrets; do not use ad-hoc `kubectl patch` as source of truth |
 | `istio-egress` gateway | Non-root proxy container, pod seccomp now applied through Helm values | Helm values hardening in this repo | Already yes | Currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it |
-| `redis` | Root, writes ACL file to `/tmp`, AOF to default data path | Needs writable `/tmp` and `/data` plus explicit UID validation | Optional after validation | Current Deployment has no explicit Redis data volume; AOF remains ephemeral in dev unless a PVC is introduced |
-| `postgresql` | Root | Needs volume ownership strategy and explicit non-root validation | Optional after validation | TLS-prep init container should move to UID/GID `70` after the writable `/tls` path is validated |
-| `rabbitmq` | Root | Needs volume ownership strategy and explicit non-root validation | Optional after validation | StatefulSet session should stand alone |
+| `redis` | Runs as UID `999` / GID `1000` with explicit `/tmp` and `/data` writable mounts | Implemented in this repo | Yes | AOF remains intentionally ephemeral on `emptyDir` in local dev unless a PVC-backed path is introduced |
+| `postgresql` | Runs as UID/GID `70` with explicit writable mounts for `/tmp` and `/var/run/postgresql` | Implemented in this repo | Yes | TLS-prep init container also runs as UID/GID `70`, uses `readOnlyRootFilesystem: true`, and copies the mounted secret material into `/tls` |
+| `rabbitmq` | Runs as UID/GID `999` with `fsGroup: 999` and a PVC-backed data mount | Implemented in this repo | Yes | Config, definitions, and TLS mounts remain read-only while `/var/lib/rabbitmq` stays writable |
 
 ## Session Breakdown
 
@@ -199,6 +199,13 @@ The ingress gateway keeps Kubernetes API token access because it watches listene
 
 Remove the root runtime from NGINX and make the gateway read-only except for explicitly mounted runtime paths.
 
+Current implementation status for March 25, 2026:
+
+- Session 4 is implemented in-repo.
+- The `nginx-gateway` Deployment and ServiceAccount now disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned non-root container baseline.
+- The gateway now uses `nginxinc/nginx-unprivileged:1.29.4-alpine`, enables `readOnlyRootFilesystem: true`, and mounts an explicit writable `emptyDir` at `/tmp`.
+- `nginx/nginx.k8s.conf` now logs to stdout/stderr, moves the PID file under `/tmp`, and directs temp-file paths to `/tmp` so the read-only root filesystem remains compatible.
+
 **Files**
 
 - `kubernetes/services/nginx-gateway/deployment.yaml`
@@ -233,9 +240,13 @@ Remove the root runtime from NGINX and make the gateway read-only except for exp
 
 Remove the root runtime from the frontend container without breaking the current Vite/HMR workflow.
 
-**Prerequisite**
+Current implementation status for March 25, 2026:
 
-The sibling repo `../budget-analyzer-web` must stop building a root image first. This repo cannot finish that prerequisite because it is a sibling code change.
+- Session 5 is implemented across the orchestration and `budget-analyzer-web` repos.
+- The frontend Docker development runtimes now create a dedicated UID/GID `1001` user and run Vite as that numeric non-root user.
+- The `budget-analyzer-web` Deployment and ServiceAccount now disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, pin `runAsUser`/`runAsGroup` to `1001`, and apply the planned non-root container baseline.
+- The Phase 5 verifier now includes a dedicated frontend runtime section that asserts the pinned `1001`/`1001` container identity.
+- `readOnlyRootFilesystem: true` remains intentionally deferred until the HMR workflow is proven against explicit writable mounts.
 
 **Files**
 
@@ -258,7 +269,7 @@ The sibling repo `../budget-analyzer-web` must stop building a root image first.
 
 **Verification**
 
-- Frontend pod runs as non-root
+- Frontend pod runs as UID/GID `1001`
 - No `kube-api-access-*` mount remains
 - Login page loads
 - HMR still reconnects after an edited file sync
@@ -273,6 +284,13 @@ The sibling repo `../budget-analyzer-web` must stop building a root image first.
 **Goal**
 
 Make Redis compatible with Phase 5 baseline hardening without changing the Phase 1 ACL or Phase 4 TLS behavior.
+
+Current implementation status for March 25, 2026:
+
+- Session 6 is implemented in-repo.
+- The Redis Deployment now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, and runs the container as UID `999` / GID `1000` with the planned non-root baseline.
+- Redis now mounts writable `emptyDir` volumes at `/tmp` and `/data`, so `users.acl` bootstrap and AOF output remain compatible with `readOnlyRootFilesystem: true`.
+- The local-dev AOF path remains intentionally ephemeral on `emptyDir`; production persistence would require replacing that mount with a PVC-backed volume.
 
 **Files**
 
@@ -294,6 +312,7 @@ Make Redis compatible with Phase 5 baseline hardening without changing the Phase
 **Verification**
 
 - Redis restarts and stays Ready
+- `./scripts/dev/verify-phase-5-runtime-hardening.sh` asserts the Redis pod runs as UID `999` / GID `1000` and still exposes the explicit writable `emptyDir` mounts at `/tmp` and `/data`
 - [`verify-phase-1-credentials.sh`](/workspace/orchestration/scripts/dev/verify-phase-1-credentials.sh) passes
 - [`verify-phase-4-transport-encryption.sh`](/workspace/orchestration/scripts/dev/verify-phase-4-transport-encryption.sh) still passes
 
@@ -302,6 +321,14 @@ Make Redis compatible with Phase 5 baseline hardening without changing the Phase
 **Goal**
 
 Remove the default root runtime from PostgreSQL without breaking bootstrap, TLS material preparation, or PVC initialization.
+
+Current implementation status for March 25, 2026:
+
+- Session 7 is implemented in-repo.
+- The PostgreSQL StatefulSet now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, and pins pod/container ownership to UID/GID `70` through `runAsUser`, `runAsGroup`, and `fsGroup`.
+- The TLS-prep init container now runs as the `postgres` user with `readOnlyRootFilesystem: true`, copies the mounted secret material into `/tls`, and tightens the copied keypair permissions without any `chown`.
+- The main PostgreSQL container now runs with `readOnlyRootFilesystem: true` and explicit writable mounts for the PVC, `/tmp`, and `/var/run/postgresql`, while first-time bootstrap from an empty PVC remains compatible.
+- The Phase 5 verifier now asserts the `fix-tls-perms` init-container baseline alongside the main PostgreSQL runtime contract.
 
 **Files**
 
@@ -323,6 +350,7 @@ Remove the default root runtime from PostgreSQL without breaking bootstrap, TLS 
 
 - Bootstrap still succeeds from an empty PVC
 - PostgreSQL stays Ready
+- `./scripts/dev/verify-phase-5-runtime-hardening.sh` asserts the PostgreSQL pod runs as UID/GID `70`, the `fix-tls-perms` init container keeps the hardened baseline including `readOnlyRootFilesystem: true`, and the pod still exposes the explicit writable mounts at `/tmp` and `/var/run/postgresql`
 - [`verify-phase-4-transport-encryption.sh`](/workspace/orchestration/scripts/dev/verify-phase-4-transport-encryption.sh) passes
 
 ### Session 8: Harden RabbitMQ
@@ -330,6 +358,13 @@ Remove the default root runtime from PostgreSQL without breaking bootstrap, TLS 
 **Goal**
 
 Apply the same baseline hardening pattern to RabbitMQ as an isolated final infrastructure session.
+
+Current implementation status for March 25, 2026:
+
+- Session 8 is implemented in-repo.
+- The RabbitMQ StatefulSet now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, and pins pod/container ownership to UID/GID `999` through `fsGroup`, `runAsUser`, and `runAsGroup`.
+- The broker now runs with `readOnlyRootFilesystem: true` while keeping `/var/lib/rabbitmq` as the explicit PVC-backed writable path.
+- The mounted config, boot-time definitions, and TLS material remain read-only.
 
 **Files**
 
@@ -347,6 +382,7 @@ Apply the same baseline hardening pattern to RabbitMQ as an isolated final infra
 
 - RabbitMQ stays Ready
 - AMQPS and management remain reachable
+- `./scripts/dev/verify-phase-5-runtime-hardening.sh` asserts the RabbitMQ pod runs with `fsGroup`/UID/GID `999`, keeps `/var/lib/rabbitmq` mounted from a PVC, and keeps the config, definitions, and TLS mounts read-only
 - [`verify-phase-4-transport-encryption.sh`](/workspace/orchestration/scripts/dev/verify-phase-4-transport-encryption.sh) passes
 
 ### Session 9: Roll Out Final Namespace PSA Labels
@@ -354,6 +390,12 @@ Apply the same baseline hardening pattern to RabbitMQ as an isolated final infra
 **Goal**
 
 Flip namespace `enforce` labels only after the workloads are actually compatible.
+
+Current implementation status for March 25, 2026:
+
+- Session 9 is implemented in-repo.
+- `kubernetes/infrastructure/namespace.yaml`, `kubernetes/istio/ingress-namespace.yaml`, and `kubernetes/istio/egress-namespace.yaml` now declare the final `enforce` labels alongside `warn` and `audit`.
+- Tilt's `istio-injection` resource now reapplies the final Pod Security labels for `default`, `infrastructure`, and `istio-system`, so reconciliations restore the intended cluster state without ad-hoc manual labeling.
 
 **Files**
 
@@ -383,6 +425,14 @@ Flip namespace `enforce` labels only after the workloads are actually compatible
 
 Treat Phase 5 as complete only when the new verifier and the earlier phase regressions all pass together.
 
+Current implementation status for March 25, 2026:
+
+- Session 10 is complete in-repo.
+- Historical baseline: `./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 8m` passed end-to-end against the live Kind cluster on March 25, 2026 with `166/166` checks passing.
+- The current working tree expands that gate with 9 additional assertions: frontend UID/GID pinning plus the PostgreSQL `fix-tls-perms` init-container baseline.
+- Verified again on March 25, 2026: the expanded gate passed end-to-end at `175/175`.
+- The Phase 5 verifier now bounds each Phase 1 through Phase 4 regression rerun with a per-script timeout, and the nested Phase 2 rerun inside Phase 4 uses a slightly longer warmup budget to avoid transient probe-startup flakes while preserving the same policy assertions.
+
 **Files**
 
 - `scripts/dev/verify-phase-5-runtime-hardening.sh`
@@ -396,6 +446,7 @@ Treat Phase 5 as complete only when the new verifier and the earlier phase regre
   - [`verify-phase-2-network-policies.sh`](/workspace/orchestration/scripts/dev/verify-phase-2-network-policies.sh)
   - [`verify-phase-3-istio-ingress.sh`](/workspace/orchestration/scripts/dev/verify-phase-3-istio-ingress.sh)
   - [`verify-phase-4-transport-encryption.sh`](/workspace/orchestration/scripts/dev/verify-phase-4-transport-encryption.sh)
+- Keep those regression reruns bounded with a per-script timeout so the final gate fails cleanly instead of hanging indefinitely
 - Run the new Phase 5 verifier
 - Fix any drift exposed by the verifier before calling the phase complete
 - Update operational documentation in the same sessions as the implementation changes
@@ -412,6 +463,22 @@ The Phase 5 completion gate is the Phase 5 verifier added in this planning sessi
 ./scripts/dev/verify-phase-5-runtime-hardening.sh
 ```
 
+Verified on March 25, 2026 with:
+
+```bash
+./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 8m
+```
+
+Observed historical result before the follow-up verifier expansion: `166/166` checks passed.
+
+Verified again on March 25, 2026 with the expanded gate:
+
+```bash
+./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 8m
+```
+
+Observed expanded result: `175/175` checks passed.
+
 That verifier is expected to prove:
 
 - namespace PSA labels are at their final enforce levels
@@ -421,6 +488,6 @@ That verifier is expected to prove:
 - restricted PSA both admits a secure meshed pod and rejects an insecure one
 - Phase 1 credential isolation, Phase 2 network policies, Phase 3 ingress behavior, and Phase 4 transport encryption still pass as regressions
 
-The current verifier intentionally excludes `budget-analyzer-web` until Session 5's sibling-repo image prerequisite is complete.
+The current verifier now includes dedicated `budget-analyzer-web` UID/GID checks because Session 5's sibling-repo image prerequisite is satisfied in the checked-in frontend Dockerfiles, and it now also asserts the PostgreSQL `fix-tls-perms` init-container baseline from Session 7.
 
 Do not declare Phase 5 complete until that verifier passes end-to-end.

@@ -150,12 +150,17 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 3 Istio ingress/egress migration
 ./scripts/dev/verify-phase-3-istio-ingress.sh
+
+# Optional but recommended: prove the Phase 5 runtime hardening and final PSA labels
+./scripts/dev/verify-phase-5-runtime-hardening.sh
 ```
 
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
+gate and reruns the earlier phase verifiers as regressions.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
@@ -179,6 +184,8 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `transaction-service-compile` - Compiles transaction service
 - `currency-service-compile` - Compiles currency service
 - `session-gateway-compile` - Compiles session gateway
+- `permission-service-compile` - Compiles permission service
+
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
@@ -188,6 +195,45 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
 - `istio-egress-gateway` - Istio egress gateway (Helm chart via values file)
 - `istio-egress-config` - ServiceEntries and egress routing
+
+## Live Development Pipeline
+
+The Tiltfile implements a live update pipeline that delivers near-local iteration speed inside a production-faithful Kubernetes cluster. You edit code locally; changes reach the running pod in seconds — without image rebuilds or pod restarts — while the full infrastructure (service mesh, mTLS, network policies, ext_authz) stays active around it.
+
+### Java Services (Spring Boot)
+
+Each Java service uses a two-stage pipeline:
+
+**Stage 1 — Host-side compilation (`local_resource`):**
+Tilt watches `src/` and `build.gradle.kts`. When you save a Java file, Gradle runs `bootJar` on the host using the build cache. This produces a JAR in `build/libs/`.
+
+**Stage 2 — Live sync and process restart (`docker_build_with_restart`):**
+The dev image is JRE-only — no JDK, no Gradle, no source code. It's defined inline in the Tiltfile as a thin runtime container: `COPY build/libs/*.jar app.jar`. When the JAR changes, Tilt syncs it into the running pod and restarts the Java process. The pod itself is not recreated and the image is not rebuilt.
+
+This is intentionally different from the production Dockerfile in each service repo, which uses a full multi-stage build (JDK build stage + JRE runtime stage). The dev image skips the build stage because Gradle already ran on the host.
+
+### Frontend (React/Vite)
+
+The frontend uses a single-stage pipeline with Vite's built-in HMR:
+
+**Image build (`docker_build`):**
+Tilt builds from the Dockerfile in `budget-analyzer-web/` — installs dependencies, copies source, runs the Vite dev server.
+
+**Live sync (no restart needed):**
+When you edit React code, Tilt syncs `src/`, `public/`, and `index.html` into the running pod. Vite's HMR detects the change and hot-patches the browser — no container restart, no page reload. If `package.json` changes, Tilt triggers `npm install` inside the pod.
+
+### Shared Library Cascade
+
+When `service-common` source changes, Tilt:
+1. Publishes the library to Maven Local (`publishToMavenLocal`)
+2. Triggers recompilation of all four downstream services
+3. Each service's new JAR syncs into its pod and the process restarts
+
+The entire cascade — library publish, service recompiles, JAR syncs, process restarts — is automatic and typically completes in under 30 seconds.
+
+### Why This Matters
+
+Most teams compromise: develop locally without Kubernetes (fast but unfaithful to production) or rebuild images on every change (faithful but slow). This setup avoids the tradeoff — inner-loop development runs at near-local speed while the workload executes in a real Kubernetes cluster with Istio mTLS, Calico network policies, ext_authz session validation, and TLS-encrypted infrastructure connections.
 
 ## Development Workflows
 
@@ -201,8 +247,9 @@ tilt up
 ```
 
 **All services in Kubernetes:**
-- Live reload for all services
-- Automatic rebuilds on file changes
+- Java changes: host compile → JAR sync → process restart (seconds, no image rebuild)
+- React changes: source sync → Vite HMR (sub-second, no restart)
+- Shared library changes: automatic cascade to all dependent services
 - Unified logging in Tilt UI
 
 ### Workflow 2: Backend Service Local, Rest in Tilt
@@ -377,6 +424,7 @@ Redis local access:
 - `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
+- The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
 
 RabbitMQ local access:
 - Management UI: `http://localhost:15672`
@@ -387,6 +435,7 @@ RabbitMQ local access:
 - AMQPS port: `5671`
 - Direct `bootRun` must set `SPRING_RABBITMQ_SSL_ENABLED=true`, `SPRING_RABBITMQ_SSL_BUNDLE=infra-ca`, and `INFRA_CA_CERT_PATH` to the host-side `infra-ca.pem`
 - Virtual host: `/`
+- The in-cluster RabbitMQ StatefulSet now runs as UID/GID `999` with `fsGroup: 999` and `readOnlyRootFilesystem: true`; `/var/lib/rabbitmq` remains the only writable runtime path and stays PVC-backed, while the config, definitions, and TLS material stay mounted read-only.
 
 Activate with:
 ```bash

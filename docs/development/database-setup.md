@@ -19,6 +19,21 @@ Phase 1 Step 2 hardens that local PostgreSQL path:
   `infra-tls-postgresql` server certificate and the shared `infra-ca` trust
   bundle.
 
+Phase 5 Session 7 hardens the runtime posture without changing the bootstrap
+contract:
+
+- The pod disables Kubernetes API token automount and sets
+  `seccompProfile.type: RuntimeDefault`.
+- Both the TLS-prep init container and the main PostgreSQL container now run as
+  UID/GID `70` (`postgres`) with `allowPrivilegeEscalation: false` and
+  `capabilities.drop: ["ALL"]`.
+- The main container now runs with `readOnlyRootFilesystem: true`; writable
+  paths are limited to the PostgreSQL PVC, the copied TLS material, `/tmp`, and
+  `/var/run/postgresql`.
+- First bootstrap from an empty PVC still works because the pod-level
+  `fsGroup: 70` grants the non-root runtime write access to the mounted data and
+  scratch volumes.
+
 ## Secret Contract
 
 | Secret | Namespace | Purpose |
@@ -94,8 +109,13 @@ Tilt will:
 4. Start PostgreSQL with SCRAM-SHA-256 auth enabled.
 5. Enable the PostgreSQL SSL listener with the `infra-tls-postgresql`
    certificate.
-6. On first init, create the service users, databases, and ownership/grants.
-7. Set up port forwarding to `localhost:5432`.
+6. Copy the TLS keypair into a writable in-pod volume owned by the `postgres`
+   runtime user.
+7. Run PostgreSQL as UID/GID `70` with a read-only root filesystem plus
+   explicit writable mounts for the data directory, `/tmp`, and
+   `/var/run/postgresql`.
+8. On first init, create the service users, databases, and ownership/grants.
+9. Set up port forwarding to `localhost:5432`.
 
 ## Verification
 
@@ -103,6 +123,8 @@ Run the Phase 1 verifier after `tilt up`:
 
 ```bash
 ./scripts/dev/verify-phase-1-credentials.sh
+./scripts/dev/verify-phase-4-transport-encryption.sh
+./scripts/dev/verify-phase-5-runtime-hardening.sh
 ```
 
 For targeted PostgreSQL checks:
@@ -116,7 +138,9 @@ PGPASSWORD="$POSTGRES_BOOTSTRAP_PASSWORD" psql "host=localhost user=postgres_adm
 The first command should succeed as `transaction_service`. The second should be
 rejected because cross-database `CONNECT` is revoked. The third should return
 `on`, proving the port-forwarded listener presents a certificate trusted by the
-local `infra-ca`.
+local `infra-ca`. The Phase 5 verifier also asserts the non-root runtime
+contract: `runAsUser`/`runAsGroup` `70` plus the explicit writable mounts for
+`/tmp` and `/var/run/postgresql`.
 
 ## Connecting from Your Application
 

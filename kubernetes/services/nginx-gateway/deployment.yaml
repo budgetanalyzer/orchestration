@@ -15,13 +15,26 @@ spec:
       labels:
         app: nginx-gateway
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: nginx-gateway
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: nginxinc/nginx-unprivileged:1.29.4-alpine
         ports:
         - containerPort: 8080
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 101
+          runAsNonRoot: true
+          runAsUser: 101
         volumeMounts:
         - name: nginx-config
           mountPath: /etc/nginx/nginx.conf
@@ -33,6 +46,8 @@ spec:
         - name: nginx-docs
           mountPath: /usr/share/nginx/html/docs
           readOnly: true
+        - name: nginx-tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "64Mi"
@@ -62,3 +77,5 @@ spec:
       - name: nginx-docs
         configMap:
           name: nginx-gateway-docs
+      - name: nginx-tmp
+        emptyDir: {}

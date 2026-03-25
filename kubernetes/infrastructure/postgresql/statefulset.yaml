@@ -16,6 +16,12 @@ spec:
       labels:
         app: postgresql
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: fix-tls-perms
           image: postgres:16-alpine
@@ -26,8 +32,19 @@ spec:
               set -eu
               cp /tls-source/tls.crt /tls/server.crt
               cp /tls-source/tls.key /tls/server.key
+              chmod 600 /tls/server.crt
               chmod 600 /tls/server.key
-              chown 70:70 /tls/server.crt /tls/server.key
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 70
+            runAsNonRoot: true
+            runAsUser: 70
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: postgresql-tls-source
               mountPath: /tls-source
@@ -88,13 +105,29 @@ spec:
             limits:
               memory: 512Mi
               cpu: 500m
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 70
+            runAsNonRoot: true
+            runAsUser: 70
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
             - name: postgresql-tls
               mountPath: /tls
+            - name: postgresql-run
+              mountPath: /var/run/postgresql
+            - name: postgresql-tmp
+              mountPath: /tmp
             - name: postgresql-ca
               mountPath: /tls-ca
               readOnly: true
@@ -129,6 +162,10 @@ spec:
           secret:
             secretName: infra-tls-postgresql
         - name: postgresql-tls
+          emptyDir: {}
+        - name: postgresql-run
+          emptyDir: {}
+        - name: postgresql-tmp
           emptyDir: {}
         - name: postgresql-ca
           secret:

@@ -743,11 +743,15 @@ local_resource(
     'istio-injection',
     cmd='''
         kubectl label namespace default istio-injection=enabled --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/enforce=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
         kubectl label namespace default pod-security.kubernetes.io/warn=restricted --overwrite
         kubectl label namespace default pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace default pod-security.kubernetes.io/audit=restricted --overwrite
         kubectl label namespace default pod-security.kubernetes.io/audit-version=v1.32 --overwrite
         kubectl label namespace infrastructure istio-injection=disabled --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/enforce=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/warn=baseline --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
         kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite

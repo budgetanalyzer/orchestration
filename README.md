@@ -20,6 +20,16 @@ It intentionally leaves unsolved:
 
 This boundary is deliberate. Data ownership is domain-specific and opinionated - we surface the problem rather than prescribing a solution. We're more interested in discussing these patterns with other architects than generating more code.
 
+## Live Development in Kubernetes
+
+Edit code locally. Changes reach the running Kubernetes pod in seconds — without image rebuilds or pod restarts — while the full production stack (Istio mTLS, network policies, ext_authz, TLS infrastructure) stays active.
+
+- **Java services**: Gradle compiles on the host, Tilt syncs the JAR into the pod and restarts the process
+- **React frontend**: Tilt syncs source files, Vite HMR hot-patches the browser (sub-second)
+- **Shared library**: Changes to `service-common` automatically cascade to all downstream services
+
+This avoids the usual tradeoff between fast local development and production-faithful Kubernetes environments. See [Live Development Pipeline](docs/development/local-environment.md#live-development-pipeline) for details.
+
 ## Quick Start
 
 See [Getting Started](docs/development/getting-started.md) for complete setup instructions.
@@ -34,9 +44,9 @@ Current local platform baseline:
 - `setup.sh` now also runs `./scripts/dev/setup-infra-tls.sh` to generate the internal `infra-ca` and `infra-tls-*` TLS secrets for Redis, PostgreSQL, and RabbitMQ. Run that script standalone only when you need to regenerate the transport-TLS material.
 - Redis is now TLS-only in-cluster; verification and session seeding scripts connect through `infra-ca`, and direct service boot runs must enable Redis SSL with that CA bundle.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
-- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, and `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate.
+- After `tilt up`, run `./scripts/dev/verify-security-prereqs.sh` to prove the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate, and `./scripts/dev/verify-phase-5-runtime-hardening.sh` as the Phase 5 runtime-hardening and final PSA completion gate.
 
-Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass.
+Treat Phase 5 as complete only after `./scripts/dev/verify-phase-5-runtime-hardening.sh` passes. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass.
 
 Auth entrypoints are split intentionally: `/login` is the frontend login page, `/oauth2/authorization/idp` starts OAuth2, and Auth0 returns to `/login/oauth2/code/idp`.
 

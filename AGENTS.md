@@ -71,7 +71,7 @@ For containerized development environment setup, see the [workspace](https://git
 - **Gateway Pattern**: Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
 - **Resource-Based Routing**: Frontend remains decoupled from service topology
 - **Defense in Depth**: Multiple security layers (Istio ingress/ext_authz → Session Gateway or NGINX → Services)
-- **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development
+- **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development. The Tiltfile implements live update pipelines — Java JAR sync with process restart, React source sync with Vite HMR — so code changes reach running pods in seconds without image rebuilds, while the full production stack (mTLS, network policies, ext_authz) stays active. See [Live Development Pipeline](docs/development/local-environment.md#live-development-pipeline)
 
 ## Service Architecture
 
@@ -170,7 +170,7 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 - **Build System**: Gradle (all backend services use Gradle with wrapper)
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (Kubernetes manifests in `kubernetes/infrastructure/`)
 - **Ingress**: Istio Ingress Gateway (Kubernetes Gateway API)
-- **API Gateway**: NGINX (Alpine-based)
+- **API Gateway**: NGINX (unprivileged Alpine image)
 - **Development**: Tilt + Kind (local Kubernetes)
 
 **Note**: Docker images should be pinned to specific versions for reproducibility.
@@ -212,6 +212,8 @@ tilt up
 ./scripts/dev/verify-security-prereqs.sh
 # Close Phase 3 ingress/egress hardening
 ./scripts/dev/verify-phase-3-istio-ingress.sh
+# Close Phase 5 runtime hardening and namespace PSA enforcement
+./scripts/dev/verify-phase-5-runtime-hardening.sh
 
 # Access Tilt UI for logs and status
 # Browser: http://localhost:10350
@@ -223,7 +225,7 @@ tilt up
 tilt down
 ```
 
-`./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
+`./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
 
 ### Troubleshooting
 

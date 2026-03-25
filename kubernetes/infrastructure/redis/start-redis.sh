@@ -1,6 +1,7 @@
 #!/bin/sh
 
 set -eu
+umask 077
 
 ACL_FILE="/tmp/users.acl"
 
@@ -15,6 +16,7 @@ EOF
 exec redis-server \
   --appendonly yes \
   --aclfile "$ACL_FILE" \
+  --dir /data \
   --tls-port 6379 \
   --port 0 \
   --tls-cert-file /tls/tls.crt \

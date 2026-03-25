@@ -687,7 +687,12 @@ main() {
         fail "Phase 1 credential verification failed after transport-TLS cutover"
     fi
 
-    if "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"; then
+    # The temporary Phase 4 client probes add a small amount of extra policy and
+    # DNS churn in default/infrastructure. Give the nested Phase 2 rerun a
+    # slightly longer warmup budget so it validates policy intent instead of
+    # flaking on probe startup timing.
+    if PHASE2_ALLOW_ATTEMPTS=8 PHASE2_PROBE_STABILIZATION_SECONDS=8 \
+        "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"; then
         pass "Phase 2 network-policy verification still passes after RabbitMQ port cutover"
     else
         fail "Phase 2 network-policy verification failed after RabbitMQ port cutover"

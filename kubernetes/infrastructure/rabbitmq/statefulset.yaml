@@ -16,6 +16,12 @@ spec:
       labels:
         app: rabbitmq
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: rabbitmq
           image: rabbitmq:3.13-management
@@ -42,6 +48,17 @@ spec:
                 secretKeyRef:
                   name: rabbitmq-bootstrap-credentials
                   key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: rabbitmq-data
               mountPath: /var/lib/rabbitmq

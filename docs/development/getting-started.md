@@ -42,7 +42,9 @@ tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
 ./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
+./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
 ./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
+./scripts/dev/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
@@ -63,6 +65,9 @@ To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the h
 three `infra-tls-*` secrets exist.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the transport-TLS
 completion gate for Redis, PostgreSQL, and RabbitMQ.
+`./scripts/dev/verify-phase-5-runtime-hardening.sh` is the final Pod Security
+and runtime-hardening gate; it reruns the earlier phase verifiers as
+regressions.
 All verification scripts run against the current `kubectl` context. If a
 verifier says pods or network policies are missing while Tilt looks healthy,
 check `kubectl config current-context` and `tilt get uiresources` from the same

@@ -15,6 +15,10 @@ spec:
       labels:
         app: redis
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: redis:7-alpine
@@ -55,10 +59,23 @@ spec:
                 secretKeyRef:
                   name: redis-bootstrap-credentials
                   key: default-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 999
           volumeMounts:
             - name: redis-acl-bootstrap
               mountPath: /opt/redis
               readOnly: true
+            - name: redis-tmp
+              mountPath: /tmp
+            - name: redis-data
+              mountPath: /data
             - name: redis-tls
               mountPath: /tls
               readOnly: true
@@ -99,6 +116,11 @@ spec:
           configMap:
             name: redis-acl-bootstrap
             defaultMode: 0555
+        - name: redis-tmp
+          emptyDir: {}
+        # Local dev keeps Redis AOF ephemeral here; production persistence would require a PVC.
+        - name: redis-data
+          emptyDir: {}
         - name: redis-tls
           secret:
             secretName: infra-tls-redis

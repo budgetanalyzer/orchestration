@@ -125,6 +125,10 @@ metadata:
     sidecar.istio.io/inject: "false"
   labels:
 ${label_lines}spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
       image: ${BUSYBOX_IMAGE}
@@ -167,6 +171,9 @@ metadata:
 ${label_lines}spec:
   serviceAccountName: ${sa}
   automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
       image: ${BUSYBOX_IMAGE}
@@ -336,6 +343,10 @@ spec:
         app: p3-header-echo
         verify-phase3-temp: "true"
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: echo
           image: ${HEADER_ECHO_IMAGE}
@@ -512,6 +523,10 @@ spec:
         app: p3-mtls-echo
         verify-phase3-temp: "true"
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: echo
           image: ${HEADER_ECHO_IMAGE}

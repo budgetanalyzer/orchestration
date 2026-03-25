@@ -498,6 +498,8 @@ Execution model:
 
 ## Phase 6: Edge and Browser Hardening
 
+Detailed implementation breakdown: [security-hardening-v2-phase-6-implementation.md](./security-hardening-v2-phase-6-implementation.md)
+
 ### 6a. CSP split for dev and production
 
 Keep a development CSP for Vite/HMR, but define a strict production CSP that removes `unsafe-inline` and `unsafe-eval`.

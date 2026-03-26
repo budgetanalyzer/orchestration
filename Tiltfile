@@ -549,6 +549,72 @@ k8s_resource(
 # NGINX GATEWAY
 # ============================================================================
 
+frontend_repo = get_repo_path('budget-analyzer-web')
+
+def frontend_smoke_build_command(repo_path):
+    """Build the local production-smoke bundle with an explicit npm preflight."""
+    return (
+        'cd ' + shell_single_quote(repo_path) + ' && '
+        + 'if [ ! -d node_modules ]; then '
+        + "printf '%s\\n' " + shell_single_quote(
+            'budget-analyzer-web-prod-smoke-build requires local npm dependencies in the sibling budget-analyzer-web repo. Run "npm install" there before re-running Tilt. This preflight only applies to the local /_prod-smoke/ build path; the normal frontend pod still installs its dependencies inside its image.'
+        ) + ' >&2; '
+        + 'exit 1; '
+        + 'fi && '
+        + 'npm run build:prod-smoke'
+    )
+
+def frontend_smoke_build_deps(repo_path):
+    """Tracked sibling inputs for the local /_prod-smoke/ bundle."""
+    return [
+        repo_path + '/src',
+        repo_path + '/public',
+        repo_path + '/index.html',
+        repo_path + '/package.json',
+        repo_path + '/package-lock.json',
+        repo_path + '/postcss.config.js',
+        repo_path + '/tailwind.config.js',
+        repo_path + '/tsconfig.json',
+        repo_path + '/tsconfig.node.json',
+        repo_path + '/vite.config.ts',
+        repo_path + '/.env',
+        repo_path + '/.env.local',
+        repo_path + '/.env.production',
+        repo_path + '/.env.production.local',
+    ]
+
+# Build a production-bundle smoke variant that NGINX can serve statically under
+# /_prod-smoke/ without replacing the live Vite/HMR frontend route at /.
+local_resource(
+    'budget-analyzer-web-prod-smoke-build',
+    cmd=frontend_smoke_build_command(frontend_repo),
+    deps=frontend_smoke_build_deps(frontend_repo),
+    labels=['frontend'],
+)
+
+docker_build(
+    'budget-analyzer-web-prod-smoke',
+    context=frontend_repo,
+    dockerfile_contents='''
+FROM alpine:3.22.2
+
+WORKDIR /prod-smoke
+COPY dist/ ./
+''',
+    only=['dist'],
+)
+
+docker_build(
+    'budget-analyzer-docs-assets',
+    context='docs-aggregator',
+    dockerfile_contents='''
+FROM alpine:3.22.2
+
+WORKDIR /docs-assets
+COPY . ./
+''',
+)
+
 # Create ConfigMap from NGINX configuration with auto-reload
 configmap_create(
     'nginx-gateway-config',
@@ -562,17 +628,8 @@ configmap_create(
     namespace=DEFAULT_NAMESPACE,
     from_file=[
         'backend-headers.conf=nginx/includes/backend-headers.conf',
-    ],
-    watch=True
-)
-
-configmap_create(
-    'nginx-gateway-docs',
-    namespace=DEFAULT_NAMESPACE,
-    from_file=[
-        'index.html=docs-aggregator/index.html',
-        'openapi.json=docs-aggregator/openapi.json',
-        'openapi.yaml=docs-aggregator/openapi.yaml',
+        'security-headers-dev-csp.conf=nginx/includes/security-headers-dev-csp.conf',
+        'security-headers-strict-csp.conf=nginx/includes/security-headers-strict-csp.conf',
     ],
     watch=True
 )
@@ -589,14 +646,12 @@ k8s_resource(
         port_forward(8080, 8080, name='HTTP'),
     ],
     labels=['gateway'],
-    resource_deps=['istio-injection']
+    resource_deps=['istio-injection', 'budget-analyzer-web-prod-smoke-build']
 )
 
 # ============================================================================
 # FRONTEND (React/Vite with HMR)
 # ============================================================================
-
-frontend_repo = get_repo_path('budget-analyzer-web')
 
 # Use standard Dockerfile for frontend
 # If you need live HMR with Vite dev server, create a Dockerfile.dev that runs 'npm run dev'

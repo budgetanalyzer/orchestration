@@ -24,6 +24,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 **Routing**:
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
+- local development only: `/_prod-smoke/*` → NGINX (same-origin static frontend verification path)
 - `/login`, `/*` → NGINX (frontend, no auth required)
 
 ## Component Roles
@@ -35,7 +36,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
 - Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
-- Applies local rate limiting to auth-sensitive paths (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
+- Applies local rate limiting to auth-sensitive browser entry points (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
@@ -87,6 +88,8 @@ kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 - Routes requests to appropriate microservices
 - Resource-based routing with path transformation
 - Rate limits backend-facing API paths after ingress validation
+- Serves the production-smoke frontend bundle statically at `/_prod-smoke/` while the live dev route continues to proxy to Vite
+- Uses the checked-in `nginx/nginx.production.k8s.conf` variant for the production cutover, where `/` and `/login` serve the built frontend bundle directly, `/_prod-smoke/` is absent, and Vite-only public routes return `404`
 - Load balancing and circuit breaking
 
 **Key Benefit**: Clean routing logic, decoupled from authentication concerns
@@ -107,6 +110,8 @@ kubectl logs deployment/nginx-gateway
 ```
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
+
+**Runtime proof**: [`./scripts/dev/verify-phase-6-edge-browser-hardening.sh`](/workspace/orchestration/scripts/dev/verify-phase-6-edge-browser-hardening.sh) is the Phase 6 completion gate for the edge/browser contract. It checks the dev/strict CSP split, same-origin docs delivery, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, and reruns the existing Session 3, Session 7, and Phase 5 verifiers. Manual browser-console validation on `/_prod-smoke/` and `/api/docs` is still required before Phase 6 can be called complete.
 
 ### Session Gateway (Port 8081, HTTP) - BFF Layer
 

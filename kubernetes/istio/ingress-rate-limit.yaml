@@ -49,7 +49,7 @@ spec:
                       - name: ":path"
                         safe_regex_match:
                           google_re2: {}
-                          regex: "^/(logout(?:/.*)?|user|auth(?:/.*)?|oauth2(?:/.*)?|login/oauth2(?:/.*)?)(?:\\?.*)?$"
+                          regex: "^/(login|logout(?:/.*)?|user|auth(?:/.*)?|oauth2(?:/.*)?|login/oauth2(?:/.*)?)(?:\\?.*)?$"
           typed_per_filter_config:
             envoy.filters.http.local_ratelimit:
               "@type": type.googleapis.com/udpa.type.v1.TypedStruct

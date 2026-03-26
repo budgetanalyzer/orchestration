@@ -499,10 +499,17 @@ Execution model:
 ## Phase 6: Edge and Browser Hardening
 
 Detailed implementation breakdown: [security-hardening-v2-phase-6-implementation.md](./security-hardening-v2-phase-6-implementation.md)
+Post-review corrections plan: [security-hardening-v2-phase-6-corrections-implementation.md](./security-hardening-v2-phase-6-corrections-implementation.md)
+
+Current implementation status for March 26, 2026:
+
+- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate and reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade.
+- Final browser-enforcement validation remains open work: manual browser-console validation on `/_prod-smoke/` and `/api/docs` is still required before Phase 6 can be called complete.
 
 ### 6a. CSP split for dev and production
 
 Keep a development CSP for Vite/HMR, but define a strict production CSP that removes `unsafe-inline` and `unsafe-eval`.
+Do not leave the Vite/HMR route shape in production: `/_prod-smoke/` is only a local verification seam, while production serves the built frontend with the strict CSP on the normal app routes.
 
 ### 6b. Remove wildcard CORS on docs assets
 
@@ -529,6 +536,26 @@ Options:
 
 - trusted forwarded-header handling where required
 - or move edge-facing rate limiting entirely to ingress
+
+### 6e. Production frontend route cutover
+
+Do not treat the local Vite/HMR route shape as the production end state.
+
+Required production outcome:
+
+- `/` and `/login` serve the built frontend bundle
+- the strict frontend CSP applies on those normal app routes
+- Vite-only public routes such as `/@vite/client`, `/src`, and `/node_modules` are not exposed
+- `/_prod-smoke/` does not remain as a user-facing production path
+
+Implementation expectation:
+
+- use checked-in production-specific route configuration or a checked-in deployment overlay that swaps the frontend from Vite proxying to static-file serving
+- do not rely on an ad-hoc env var that leaves the dev route graph in place and only swaps headers
+
+Current implementation:
+
+- `nginx/nginx.production.k8s.conf` is now the checked-in production-specific route configuration for `nginx-gateway`
 
 ---
 

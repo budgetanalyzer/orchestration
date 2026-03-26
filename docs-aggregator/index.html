@@ -4,41 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Budget Analyzer API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css">
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-        }
-        /* Don't hide topbar - it contains the API selector dropdown */
-        .topbar-wrapper img {
-            display: none;  /* Hide swagger logo only */
-        }
-        .swagger-ui .info {
-            margin: 20px 0;
-        }
-        .custom-header {
-            background-color: #1b1b1b;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        .custom-header h1 {
-            margin: 0;
-            font-size: 2em;
-        }
-        .custom-header p {
-            margin: 10px 0 0 0;
-            opacity: 0.8;
-        }
-        .oauth-notice {
-            background-color: #fff3cd;
-            color: #856404;
-            padding: 12px 20px;
-            text-align: center;
-            border-bottom: 1px solid #ffc107;
-        }
-    </style>
+    <link rel="stylesheet" href="/api/docs/swagger-ui.css">
+    <link rel="stylesheet" href="/api/docs/docs-aggregator.css">
 </head>
 <body>
     <div class="custom-header">
@@ -50,57 +17,8 @@
     </div>
     <div id="swagger-ui"></div>
 
-    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            // Determine the base URL dynamically
-            const baseUrl = window.location.origin;
-
-            console.log('Swagger UI Configuration:', {
-                baseUrl: baseUrl,
-                urls: [
-                    baseUrl + "/api/transaction-service/v3/api-docs",
-                    baseUrl + "/api/currency-service/v3/api-docs"
-                ]
-            });
-
-            const ui = SwaggerUIBundle({
-                urls: [
-                    {
-                        name: "Transaction Service",
-                        url: baseUrl + "/api/transaction-service/v3/api-docs"
-                    },
-                    {
-                        name: "Currency Service",
-                        url: baseUrl + "/api/currency-service/v3/api-docs"
-                    }
-                ],
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout",
-                // Request interceptor to ensure requests go through the gateway
-                requestInterceptor: (request) => {
-                    console.log('API Request:', request.url);
-                    return request;
-                },
-                // Response interceptor for debugging
-                responseInterceptor: (response) => {
-                    console.log('API Response:', response.url, response.status);
-                    return response;
-                }
-            });
-
-            window.ui = ui;
-            console.log('Swagger UI initialized', ui);
-        };
-    </script>
+    <script src="/api/docs/swagger-ui-bundle.js" defer></script>
+    <script src="/api/docs/swagger-ui-standalone-preset.js" defer></script>
+    <script src="/api/docs/docs-aggregator.js" defer></script>
 </body>
 </html>

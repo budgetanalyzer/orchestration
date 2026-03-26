@@ -695,6 +695,12 @@ verify_forwarded_chain_log() {
         fail "NGINX access log format does not emit remote_addr for ${description}"
     fi
 
+    if printf '%s\n' "$nginx_log_line" | grep -q 'proxy_addr='; then
+        pass "NGINX access log emits the trusted proxy hop for ${description}"
+    else
+        fail "NGINX access log format does not emit the trusted proxy hop for ${description}"
+    fi
+
     if printf '%s\n' "$nginx_log_line" | grep -q 'xrealip="'; then
         pass "NGINX access log emits X-Real-IP for ${description}"
     else
@@ -888,6 +894,7 @@ main() {
         fail "Missing EnvoyFilter istio-ingress/ingress-auth-local-rate-limit"
     fi
 
+    require_ingress_rate_limit "/login?phase3-ingress-rate-limit=1" "/login"
     require_ingress_rate_limit "/oauth2/authorization/idp" "/oauth2/authorization/idp"
     require_ingress_rate_limit "/user" "/user"
 

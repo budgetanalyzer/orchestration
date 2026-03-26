@@ -153,14 +153,30 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 5 runtime hardening and final PSA labels
 ./scripts/dev/verify-phase-5-runtime-hardening.sh
+
+# Optional but recommended: prove the Phase 6 edge/browser hardening gate
+./scripts/dev/verify-phase-6-edge-browser-hardening.sh
 ```
 
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` is the
+scoped Phase 6 Session 7 gate for NGINX client-identity derivation and API
+rate-limit bucket correctness.
 `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
 gate and reruns the earlier phase verifiers as regressions.
+`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
+completion gate: it checks the live dev/strict CSP split, same-origin docs
+delivery, a real syntax check of the checked-in
+`nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod with
+the mounted include files, the fail-closed `/api/docs/*` contract for unknown
+docs paths and unvendored sourcemaps, final auth-edge throttling coverage,
+reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
+then reruns the Phase 5 gate as the regression cascade. It still does not
+replace the manual browser-console validation required on `/_prod-smoke/` and
+`/api/docs`.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
@@ -170,7 +186,7 @@ missing pods, secrets, or network policies while Tilt appears healthy, verify
 `kubectl config current-context` and `tilt get uiresources` from the same host
 shell before assuming the script is wrong.
 
-The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` loads as the frontend login page while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/oauth2/authorization/idp` and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 
@@ -214,13 +230,70 @@ This is intentionally different from the production Dockerfile in each service r
 
 ### Frontend (React/Vite)
 
-The frontend uses a single-stage pipeline with Vite's built-in HMR:
+The frontend keeps the single-stage Vite/HMR dev loop and adds a separate production-smoke build path for browser-policy verification:
 
 **Image build (`docker_build`):**
 Tilt builds from the Dockerfile in `budget-analyzer-web/` — installs dependencies, copies source, runs the Vite dev server.
 
 **Live sync (no restart needed):**
 When you edit React code, Tilt syncs `src/`, `public/`, and `index.html` into the running pod. Vite's HMR detects the change and hot-patches the browser — no container restart, no page reload. If `package.json` changes, Tilt triggers `npm install` inside the pod.
+
+**Production-smoke build (`local_resource` + init container):**
+Tilt also runs `npm run build:prod-smoke` from the sibling repo, builds a tiny static-asset image from `dist/`, and has `nginx-gateway` copy that bundle into an internal volume during pod startup. NGINX serves that bundle at `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other browser-security checks while `/` and `/login` stay on the live Vite route.
+
+That local smoke-build path depends on host/devcontainer npm state in the
+sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
+or refresh, make sure `npm install` has been run there so
+`npm run build:prod-smoke` can execute locally. This is intentionally separate
+from the normal frontend pod, which still installs and runs inside its own
+image. Tilt now watches the sibling smoke-build inputs plus the Vite env files
+that affect the build (`.env`, `.env.local`, `.env.production`, and
+`.env.production.local`) so those local config changes retrigger the smoke
+asset path.
+
+That seam is deliberately local-only. The checked-in production cutover now
+lives in `nginx/nginx.production.k8s.conf`, where `/` and `/login` serve the
+built frontend bundle directly and the Vite-only public paths plus
+`/_prod-smoke/` are not exposed.
+
+The Phase 6 Session 3 stop-gate is now repeatable from this repo with:
+
+```bash
+./scripts/dev/audit-phase-6-session-3-frontend-csp.sh
+```
+
+That audit rebuilds the sibling smoke bundle and proves the repo-owned
+strict-CSP prerequisites before and after Session 4 tightens the NGINX headers.
+It does not replace the manual browser-console validation required by the
+Phase 6 plan.
+
+The Phase 6 Session 7 runtime proof is also repeatable from this repo:
+
+```bash
+./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+```
+
+That verifier creates two temporary no-sidecar probe pods, sends authenticated
+API traffic through the live ingress gateway, confirms NGINX derives the client
+identity from the ingress-appended downstream hop instead of a forged external
+`X-Forwarded-For` value, and proves different downstream clients do not share
+the same NGINX API rate-limit bucket.
+
+The full Phase 6 completion gate is now:
+
+```bash
+./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+```
+
+That verifier checks the checked-in dev/strict CSP split, the live headers on
+`/`, `/_prod-smoke/`, and `/api/docs`, the same-origin docs delivery contract,
+the checked-in production-route syntax validation inside the live
+`nginx-gateway` runtime, the fail-closed `/api/docs/*` behavior for unknown
+docs paths and unvendored sourcemaps, the remaining auth-edge throttling
+paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
+proof, and then reruns the full Phase 5 runtime-hardening cascade. Manual
+browser-console validation on `/_prod-smoke/` and `/api/docs` is still
+required before Phase 6 can be declared complete.
 
 ### Shared Library Cascade
 
@@ -249,6 +322,8 @@ tilt up
 **All services in Kubernetes:**
 - Java changes: host compile → JAR sync → process restart (seconds, no image rebuild)
 - React changes: source sync → Vite HMR (sub-second, no restart)
+- React production-smoke checks: `/_prod-smoke/` serves the built bundle from NGINX on the same origin without replacing the live dev route
+- Production route cutover work should target `nginx/nginx.production.k8s.conf`, not mutate the live Vite route graph with ad-hoc env toggles
 - Shared library changes: automatic cascade to all dependent services
 - Unified logging in Tilt UI
 

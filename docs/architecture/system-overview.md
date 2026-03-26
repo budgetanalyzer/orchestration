@@ -96,7 +96,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 **Istio Ingress Gateway** (Port 443)
 - SSL/TLS termination
 - ext_authz enforcement on `/api/*` paths via meshConfig extensionProvider
-- Auth-path throttling on `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
+- Auth-path throttling on `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
 - Ingress routing based on path (Gateway API HTTPRoutes)
 - Kubernetes Gateway API compliant
 - Runs inside the Istio service mesh with SPIFFE identity
@@ -278,7 +278,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 - ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**
-- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`
+- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`
 - Istio Egress: Outbound traffic control (REGISTRY_ONLY + ServiceEntry allowlist)
 - Session Gateway: Auth lifecycle, OAuth2 callback handling under `/login/oauth2/*`, session dual-write to ext_authz Redis schema
 - ext_authz: Per-request session validation, header injection

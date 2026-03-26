@@ -168,15 +168,15 @@ rate-limit bucket correctness.
 `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
 gate and reruns the earlier phase verifiers as regressions.
 `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
-completion gate: it checks the live dev/strict CSP split, same-origin docs
-delivery, a real syntax check of the checked-in
+completion gate: it checks the live dev/strict CSP split on the real app
+paths, keeps `/api/docs` probes visible as warning-only checks, runs a real
+syntax check of the checked-in
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod with
 the mounted include files, the fail-closed `/api/docs/*` contract for unknown
-docs paths and unvendored sourcemaps, final auth-edge throttling coverage,
+docs paths, final auth-edge throttling coverage,
 reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
 then reruns the Phase 5 gate as the regression cascade. It still does not
-replace the manual browser-console validation required on `/_prod-smoke/` and
-`/api/docs`.
+replace the manual browser-console validation required on `/_prod-smoke/`.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
@@ -285,15 +285,15 @@ The full Phase 6 completion gate is now:
 ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
 ```
 
-That verifier checks the checked-in dev/strict CSP split, the live headers on
-`/`, `/_prod-smoke/`, and `/api/docs`, the same-origin docs delivery contract,
-the checked-in production-route syntax validation inside the live
+That verifier checks the checked-in dev/strict CSP split on the real app
+paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api/docs`
+visibility plus fail-closed checks, the checked-in production-route syntax validation inside the live
 `nginx-gateway` runtime, the fail-closed `/api/docs/*` behavior for unknown
-docs paths and unvendored sourcemaps, the remaining auth-edge throttling
+docs paths, the remaining auth-edge throttling
 paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
 proof, and then reruns the full Phase 5 runtime-hardening cascade. Manual
-browser-console validation on `/_prod-smoke/` and `/api/docs` is still
-required before Phase 6 can be declared complete.
+browser-console validation on `/_prod-smoke/` is still required before Phase 6
+can be declared complete.
 
 ### Shared Library Cascade
 

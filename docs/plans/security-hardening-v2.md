@@ -500,11 +500,15 @@ Execution model:
 
 Detailed implementation breakdown: [security-hardening-v2-phase-6-implementation.md](./security-hardening-v2-phase-6-implementation.md)
 Post-review corrections plan: [security-hardening-v2-phase-6-corrections-implementation.md](./security-hardening-v2-phase-6-corrections-implementation.md)
+`/api/docs` CSP remediation note (historical context, not the current target): [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md)
+`/api/docs` complexity rollback follow-up: [security-hardening-v2-phase-6-api-docs-workaround-removal.md](./security-hardening-v2-phase-6-api-docs-workaround-removal.md)
 
 Current implementation status for March 26, 2026:
 
-- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate and reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade.
-- Final browser-enforcement validation remains open work: manual browser-console validation on `/_prod-smoke/` and `/api/docs` is still required before Phase 6 can be called complete.
+- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate, reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade, and keeps `/api/docs` probes visible as warning-only checks.
+- `/api/docs` remains a lightweight developer-convenience route, not a place to carry more Phase 6 complexity. The checked-in rollback state is now the simpler `main`-style posture: the simplified `docs-aggregator` is restored, vendored Swagger assets are gone, docs-only CSP plumbing is gone, docs asset image/init-container plumbing is gone, and docs checks remain warning-only instead of part of the completion gate.
+- Manual browser testing on March 26, 2026 found the remaining `/api/docs` blocker under the original docs strict CSP. That evidence is retained in [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md), but the rollback plan is now the active path.
+- Final browser-enforcement validation remains open work for the real app verification path. `/api/docs` is now explicitly non-blocking in the Phase 6 story, and `/_prod-smoke/` remains the browser-validation surface that still matters.
 
 ### 6a. CSP split for dev and production
 

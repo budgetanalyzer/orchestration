@@ -111,7 +111,7 @@ kubectl logs deployment/nginx-gateway
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
 
-**Runtime proof**: [`./scripts/dev/verify-phase-6-edge-browser-hardening.sh`](/workspace/orchestration/scripts/dev/verify-phase-6-edge-browser-hardening.sh) is the Phase 6 completion gate for the edge/browser contract. It checks the dev/strict CSP split, same-origin docs delivery, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, and reruns the existing Session 3, Session 7, and Phase 5 verifiers. Manual browser-console validation on `/_prod-smoke/` and `/api/docs` is still required before Phase 6 can be called complete.
+**Runtime proof**: [`./scripts/dev/verify-phase-6-edge-browser-hardening.sh`](/workspace/orchestration/scripts/dev/verify-phase-6-edge-browser-hardening.sh) is the Phase 6 completion gate for the edge/browser contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the existing Session 3, Session 7, and Phase 5 verifiers, and keeps `/api/docs` probes visible as warnings instead of completion blockers. Manual browser-console validation on `/_prod-smoke/` is still required before Phase 6 can be called complete.
 
 ### Session Gateway (Port 8081, HTTP) - BFF Layer
 

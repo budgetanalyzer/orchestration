@@ -22,25 +22,6 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-      - name: api-docs-assets
-        image: budget-analyzer-docs-assets:latest
-        imagePullPolicy: Never
-        command:
-        - sh
-        - -c
-        - cp -R /docs-assets/. /workdir/
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 101
-          runAsNonRoot: true
-          runAsUser: 101
-        volumeMounts:
-        - name: nginx-docs
-          mountPath: /workdir
       - name: web-prod-smoke-assets
         image: budget-analyzer-web-prod-smoke:latest
         imagePullPolicy: Never
@@ -118,7 +99,8 @@ spec:
         configMap:
           name: nginx-gateway-includes
       - name: nginx-docs
-        emptyDir: {}
+        configMap:
+          name: nginx-gateway-docs
       - name: nginx-web-prod-smoke
         emptyDir: {}
       - name: nginx-tmp

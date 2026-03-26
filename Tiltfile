@@ -604,17 +604,6 @@ COPY dist/ ./
     only=['dist'],
 )
 
-docker_build(
-    'budget-analyzer-docs-assets',
-    context='docs-aggregator',
-    dockerfile_contents='''
-FROM alpine:3.22.2
-
-WORKDIR /docs-assets
-COPY . ./
-''',
-)
-
 # Create ConfigMap from NGINX configuration with auto-reload
 configmap_create(
     'nginx-gateway-config',
@@ -630,6 +619,17 @@ configmap_create(
         'backend-headers.conf=nginx/includes/backend-headers.conf',
         'security-headers-dev-csp.conf=nginx/includes/security-headers-dev-csp.conf',
         'security-headers-strict-csp.conf=nginx/includes/security-headers-strict-csp.conf',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-docs',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'index.html=docs-aggregator/index.html',
+        'openapi.json=docs-aggregator/openapi.json',
+        'openapi.yaml=docs-aggregator/openapi.yaml',
     ],
     watch=True
 )

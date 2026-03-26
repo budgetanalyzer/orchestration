@@ -92,7 +92,7 @@ API requests go through Istio Ingress Gateway (443) → ext_authz → NGINX (808
 OAuth2 and auth lifecycle requests go through Istio Ingress Gateway (443) → Session Gateway (8081).
 The frontend login page at `/login` goes through Istio Ingress Gateway (443) → NGINX (8080).
 The production-smoke verification path at `/_prod-smoke/` is served directly by NGINX from a built frontend bundle copied in by an init container; it does not proxy to the Vite dev server.
-The shared docs route at `/api/docs` now also serves pinned Swagger UI assets from the same NGINX pod via a local static-asset image and init-container copy step instead of loading them from a CDN. Unlisted `/api/docs/*` paths, including the unvendored Swagger sourcemap URLs still referenced by the pinned assets, intentionally return a docs-scoped strict-CSP `404` instead of falling through to the frontend SPA.
+The shared docs route at `/api/docs` now serves the checked-in HTML shell plus the generated OpenAPI downloads from the same NGINX pod through the `nginx-gateway-docs` ConfigMap mount. That page loads Swagger UI from the CDN at runtime. Unlisted `/api/docs/*` paths intentionally return `404` instead of falling through to the frontend SPA.
 
 ### 3. Verify it's working
 
@@ -112,8 +112,8 @@ curl -kI https://app.budgetanalyzer.localhost/ | grep -i content-security-policy
 # Public smoke route emits the strict CSP
 curl -kI https://app.budgetanalyzer.localhost/_prod-smoke/ | grep -i content-security-policy
 
-# /api/docs is behind ingress auth. Verify its strict CSP either after login in
-# the browser or by port-forwarding nginx-gateway directly:
+# /api/docs is behind ingress auth. Verify that it inherits the current config's
+# normal CSP either after login in the browser or by port-forwarding nginx-gateway directly:
 kubectl port-forward deployment/nginx-gateway -n default 18080:8080
 curl -I http://127.0.0.1:18080/api/docs | grep -i content-security-policy
 
@@ -138,18 +138,18 @@ bundle path.
 
 The smoke path is a verification seam, not a second long-term application mode. API and auth endpoints stay root-relative (`/api`, `/oauth2/authorization/idp`, `/logout`) regardless of which frontend path is loaded.
 
-The `/api/docs` route is also fully same-origin now: the HTML shell, custom CSS/JS, vendored Swagger UI assets, and OpenAPI downloads are all served by `nginx-gateway`.
+The `/api/docs` route still serves the checked-in HTML shell and OpenAPI downloads from `nginx-gateway`, but the page now pulls the Swagger UI runtime from the CDN when it loads.
 The download endpoints at `/api/docs/openapi.json` and `/api/docs/openapi.yaml` intentionally do not emit wildcard CORS headers; same-origin browser fetches and downloads work through the shared public origin instead.
-Any other `/api/docs/*` path is intentionally outside that allowlist and returns a strict-CSP `404`.
+Any other `/api/docs/*` path is intentionally outside that allowlist and returns `404`.
 
 ## CSP Split
 
 NGINX now serves two intentional CSP profiles:
 
 - Relaxed development CSP on the live Vite/HMR routes (`/`, `/login`, `/@vite/client`, `/src`, `/node_modules`, `/assets`)
-- Strict production-oriented CSP on `/_prod-smoke/`, `/api/docs`, `/api/docs/openapi.json`, `/api/docs/openapi.yaml`, and the same-origin docs asset files
+- Strict production-oriented CSP on `/_prod-smoke/` and on the checked-in production route variant
 
-The strict policy removes both `'unsafe-inline'` and `'unsafe-eval'`:
+The main strict policy removes both `'unsafe-inline'` and `'unsafe-eval'`:
 
 ```text
 default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self';
@@ -158,6 +158,12 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: ht
 NGINX applies those policies with checked-in include files so any `location`
 that adds route-specific headers can also re-include the full security-header
 set instead of accidentally dropping the inherited headers.
+
+`/api/docs` does not have its own CSP profile anymore. In `nginx/nginx.k8s.conf`
+it re-includes the relaxed dev policy because that file defaults to the Vite/HMR
+route graph. In `nginx/nginx.production.k8s.conf` it re-includes the normal
+strict policy. The docs route is a best-effort developer convenience path, not a
+separately hardened browser surface.
 
 Your React app should be configured with:
 
@@ -230,15 +236,16 @@ The full Phase 6 completion gate is:
 ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
 ```
 
-It verifies the dev/strict CSP split, the same-origin docs delivery contract,
+It verifies the dev/strict CSP split on the real app paths, warning-only docs visibility,
 the checked-in production route cutover, a real `nginx -t` syntax check of
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod, the
 fail-closed docs-path behavior,
 the remaining auth-edge throttling
 coverage, reruns the Session 3 frontend CSP audit, reruns the Session 7 API
 identity verifier, and then reruns the Phase 5 runtime-hardening cascade.
-Manual browser-console validation on `/_prod-smoke/` and `/api/docs` is still
-required before Phase 6 is actually complete.
+Manual browser-console validation on `/_prod-smoke/` is still required before
+Phase 6 is actually complete; `/api/docs` warnings remain visible but do not
+block completion.
 
 ## Customization
 
@@ -359,7 +366,7 @@ If you see CORS errors:
 2. Check that `VITE_API_BASE_URL=/api` in `.env` (relative URL, not full URL)
 3. Check Session Gateway is running and configured correctly
 4. Do not expect `/api/docs/openapi.{json,yaml}` to return `Access-Control-Allow-Origin: *`; those downloads are intentionally same-origin
-5. Do not expect `/api/docs/*.map` or other unlisted docs asset paths to work; the docs subtree is allowlisted and those requests intentionally return `404`
+5. Do not expect other unlisted `/api/docs/*` paths to work; the docs subtree is allowlisted and those requests intentionally return `404`
 
 ### ConfigMap not updating
 

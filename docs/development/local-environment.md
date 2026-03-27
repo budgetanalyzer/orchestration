@@ -165,6 +165,9 @@ open https://app.budgetanalyzer.localhost
 # Optional but recommended anytime: prove the Phase 7 static guardrails
 ./scripts/dev/verify-phase-7-static-manifests.sh
 
+# Optional but recommended right after tilt up on a clean rebuild: prove the app deployments were admitted cleanly
+./scripts/dev/verify-clean-tilt-deployment-admission.sh
+
 # Optional but recommended after the Phase 6 gate: run the final local Phase 7 completion gate
 ./scripts/dev/verify-phase-7-security-guardrails.sh
 ```
@@ -172,7 +175,13 @@ open https://app.budgetanalyzer.localhost
 `./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6
 local static guardrail gate; it matches the dedicated `security-guardrails.yml`
 workflow closely enough for local reproduction and does not require a running
-cluster.
+cluster. It now also generates a Kyverno replay for representative approved
+local Tilt `:tilt-<hash>` refs so the live deploy-time admission path stays
+covered by the static guardrail suite.
+`./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side
+clean-start proof for the seven expected app deployments in `default`. Run it
+after `tilt up` when you want the specific admission regression check from the
+fresh-cluster workflow.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and

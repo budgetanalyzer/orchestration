@@ -7,8 +7,9 @@ Stay informed about dependency updates to avoid painful catch-up upgrades. This 
 Phase 7 Session 1 froze the active pinning scope in
 [`docs/plans/security-hardening-v2-phase-7-session-1-contract.md`](./plans/security-hardening-v2-phase-7-session-1-contract.md).
 
-- Only the seven explicit local Tilt images may remain on `:latest`, and only
-  with `imagePullPolicy: Never`.
+- Only the seven explicit local Tilt image repos may remain on `:latest` in
+  checked-in manifests, and only with `imagePullPolicy: Never`. Live Tilt
+  deployments rewrite those same repos to immutable `:tilt-<hash>` tags.
 - Every third-party image or Docker base image is now an immutable-digest
   target, including retained test assets and sibling build surfaces.
 - `tests/setup-flow` and `tests/security-preflight` are retained, stale,

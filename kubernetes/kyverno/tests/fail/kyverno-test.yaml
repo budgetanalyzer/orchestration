@@ -50,9 +50,16 @@ results:
     kind: Deployment
     result: fail
   - policy: phase7-require-third-party-image-digests
-    rule: require-digest-or-approved-local-latest
+    rule: require-digest-or-approved-local-image
     resources:
       - default/mutable-third-party-image
+      - default/unapproved-local-mutable-image
+    kind: Deployment
+    result: fail
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
+    resources:
+      - default/approved-local-tilt-wrong-pull-policy
     kind: Deployment
     result: fail
   - policy: phase7-disallow-obvious-default-credentials

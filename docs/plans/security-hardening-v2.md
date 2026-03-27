@@ -570,7 +570,7 @@ Detailed implementation breakdown: [security-hardening-v2-phase-7-implementation
 Current implementation:
 
 - Session 1 is implemented as the contract freeze. The source-of-truth
-  inventory is [`security-hardening-v2-phase-7-session-1-contract.md`](./security-hardening-v2-phase-7-session-1-contract.md): it freezes the seven allowed local Tilt `:latest` images, inventories orchestration-owned and sibling third-party pinning targets, records the installer hardening targets, and classifies `tests/setup-flow` plus `tests/security-preflight` as stale non-gating Phase 7 assets until realigned.
+  inventory is [`security-hardening-v2-phase-7-session-1-contract.md`](./security-hardening-v2-phase-7-session-1-contract.md): it freezes the seven approved local Tilt image repos, distinguishes checked-in `:latest` literals from live Tilt `:tilt-<hash>` deploy refs, inventories orchestration-owned and sibling third-party pinning targets, records the installer hardening targets, and classifies `tests/setup-flow` plus `tests/security-preflight` as stale non-gating Phase 7 assets until realigned.
 - Session 2 is implemented in-repo: orchestration-owned third-party images are
   now digest-pinned across active manifests, inline Tilt Dockerfiles,
   `ext-authz/Dockerfile`, the main and retained Kind configs, the retained DinD
@@ -623,7 +623,9 @@ Pin:
 - NGINX
 - all third-party base images used by Dockerfiles or inline Tilt builds
 
-Local service images tagged `:latest` by Tilt are acceptable as local build outputs, but their base images must be pinned.
+The seven approved local service image repos may stay on checked-in `:latest`
+manifest literals for local development, but live Tilt deployments rewrite them
+to immutable `:tilt-<hash>` refs and their base images must still be pinned.
 
 ### 7b. Installer and bootstrap hardening
 

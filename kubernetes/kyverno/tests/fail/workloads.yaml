@@ -80,3 +80,65 @@ spec:
               drop: ["ALL"]
             runAsNonRoot: true
             runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unapproved-local-mutable-image
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unapproved-local-mutable-image
+  template:
+    metadata:
+      labels:
+        app: unapproved-local-mutable-image
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: rogue-local-service:tilt-0123456789abcdef
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: approved-local-tilt-wrong-pull-policy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: approved-local-tilt-wrong-pull-policy
+  template:
+    metadata:
+      labels:
+        app: approved-local-tilt-wrong-pull-policy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ext-authz:tilt-752304df648dc1e1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534

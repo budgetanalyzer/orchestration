@@ -20,6 +20,11 @@ The Phase 7 static gate wraps those fixtures together with schema validation,
 ./scripts/dev/verify-phase-7-static-manifests.sh
 ```
 
+That static gate also generates a small Kyverno replay from
+`scripts/dev/lib/phase-7-allowed-latest.txt` so representative approved local
+Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures
+stop matching the live apply path.
+
 Current exception boundaries are intentionally narrow:
 
 - `istio-ingress` keeps service-account token automount enabled for the ingress
@@ -35,5 +40,10 @@ Current exception boundaries are intentionally narrow:
   The direct Pod rule still covers non-meshed temporary probes, and the rule
   also retains a narrow allow-path for injected Istio data-plane container
   names when the injector surfaces the current non-digest proxy image form.
+- The local-image exception applies only to the seven approved Tilt-built repos
+  and only for `:latest` checked into manifests or immutable
+  `:tilt-<16 hex>` deploy tags for those same repos. The policy also accepts
+  the equivalent `docker.io/library/...` local form and still requires
+  `imagePullPolicy: Never` for every approved local ref.
 - Namespace Pod Security labels remain required for all non-excluded
   namespaces, including temporary verifier namespaces.

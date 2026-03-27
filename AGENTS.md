@@ -211,6 +211,10 @@ Check prerequisites:
 # Start all services with Tilt
 tilt up
 
+# Optional but recommended after tilt up on a clean rebuild
+# Prove the seven app deployments were admitted without Phase 7 image-policy violations
+./scripts/dev/verify-clean-tilt-deployment-admission.sh
+
 # Optional but recommended after core platform resources are healthy
 # Prove the Phase 0 platform baseline
 ./scripts/dev/verify-security-prereqs.sh
@@ -231,7 +235,7 @@ tilt up
 tilt down
 ```
 
-`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6 local static guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase 7 completion command; it runs the static gate first and then `./scripts/dev/verify-phase-7-runtime-guardrails.sh` for the live Session 7 proof. CI stays static-only. `./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
+`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6 local static guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase 7 completion command; it runs the static gate first and then `./scripts/dev/verify-phase-7-runtime-guardrails.sh` for the live Session 7 proof. CI stays static-only. `./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
 
 ### Troubleshooting
 
@@ -328,9 +332,10 @@ Each microservice is maintained in its own repository:
   `scripts/dev/lib/phase-7-image-pinning-targets.txt` and
   `scripts/dev/lib/phase-7-allowed-latest.txt`; keep them aligned with that
   contract doc.
-- Only the seven documented Tilt-built images may remain on `:latest`. Treat
-  every third-party `image:` or `FROM` ref as a digest-pinning target unless it
-  is explicitly excluded in that contract doc.
+- Only the seven documented local image repos may remain on `:latest` in
+  checked-in manifests. Live Tilt deploys rewrite those same repos to immutable
+  `:tilt-<hash>` refs; treat every third-party `image:` or `FROM` ref as a
+  digest-pinning target unless it is explicitly excluded in that contract doc.
 - `tests/setup-flow` and `tests/security-preflight` are stale, non-gating
   Phase 7 assets until they are explicitly realigned to the current Istio-only
   baseline. Do not treat them as current completion gates.

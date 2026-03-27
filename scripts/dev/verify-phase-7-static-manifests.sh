@@ -53,6 +53,7 @@ Runs the Phase 7 static guardrail suite:
 - kubeconform schema validation for checked-in manifests
 - kube-linter with the repo-specific security baseline
 - Kyverno CLI tests for the admission fixtures
+- generated Kyverno replay for representative approved local Tilt deploy refs
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
@@ -184,6 +185,256 @@ run_kube_linter() {
 
 run_kyverno_tests() {
     "${STATIC_TOOLS_BIN}/kyverno" test "${REPO_DIR}/kubernetes/kyverno/tests"
+}
+
+run_generated_tilt_local_image_replay() {
+    local temp_dir resources_file test_file
+    local canonical_repo=""
+    local safe_name
+    local repo
+    local tilt_hash="0123456789abcdef"
+    local -a repos=()
+
+    mapfile -t repos < <("${IMAGE_PINNING_SCRIPT}" --print-approved-local-repos)
+    if (( ${#repos[@]} == 0 )); then
+        echo "ERROR: no approved local repos were returned for the Tilt local-image replay" >&2
+        exit 1
+    fi
+
+    temp_dir="$(mktemp -d)"
+    resources_file="${temp_dir}/workloads.yaml"
+    test_file="${temp_dir}/kyverno-test.yaml"
+
+    for repo in "${repos[@]}"; do
+        if [[ "${repo}" == "ext-authz" ]]; then
+            canonical_repo="${repo}"
+            break
+        fi
+    done
+    if [[ -z "${canonical_repo}" ]]; then
+        canonical_repo="${repos[0]}"
+    fi
+
+    : > "${resources_file}"
+    : > "${test_file}"
+
+    for repo in "${repos[@]}"; do
+        safe_name="${repo//./-}"
+        safe_name="${safe_name//_/-}"
+
+        cat >> "${resources_file}" <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: replay-${safe_name}-tilt-ref
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: replay-${safe_name}-tilt-ref
+  template:
+    metadata:
+      labels:
+        app: replay-${safe_name}-tilt-ref
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ${repo}:tilt-${tilt_hash}
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+EOF
+    done
+
+    cat >> "${resources_file}" <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: replay-docker-library-local-ref
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: replay-docker-library-local-ref
+  template:
+    metadata:
+      labels:
+        app: replay-docker-library-local-ref
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: docker.io/library/${canonical_repo}:tilt-${tilt_hash}
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+EOF
+
+    if printf '%s\n' "${repos[@]}" | grep -Fxq 'budget-analyzer-web-prod-smoke'; then
+        cat >> "${resources_file}" <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: replay-local-smoke-init-ref
+  namespace: default
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+    - name: web-prod-smoke-assets
+      image: docker.io/library/budget-analyzer-web-prod-smoke:tilt-0123456789abcdef
+      imagePullPolicy: Never
+      command: ["sh", "-c", "true"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+  containers:
+    - name: app
+      image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+      command: ["sh", "-c", "sleep 3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+---
+EOF
+    fi
+
+    cat >> "${resources_file}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: replay-unapproved-local-ref
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: replay-unapproved-local-ref
+  template:
+    metadata:
+      labels:
+        app: replay-unapproved-local-ref
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: rogue-local-service:tilt-0123456789abcdef
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+EOF
+
+    cat >> "${test_file}" <<EOF
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: phase7-generated-local-image-replay
+policies:
+  - ${REPO_DIR}/kubernetes/kyverno/policies/50-require-third-party-image-digests.yaml
+resources:
+  - workloads.yaml
+results:
+EOF
+
+    for repo in "${repos[@]}"; do
+        safe_name="${repo//./-}"
+        safe_name="${safe_name//_/-}"
+        cat >> "${test_file}" <<EOF
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/replay-${safe_name}-tilt-ref
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
+    resources:
+      - default/replay-${safe_name}-tilt-ref
+    kind: Deployment
+    result: pass
+EOF
+    done
+
+    cat >> "${test_file}" <<EOF
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/replay-docker-library-local-ref
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
+    resources:
+      - default/replay-docker-library-local-ref
+    kind: Deployment
+    result: pass
+EOF
+
+    if printf '%s\n' "${repos[@]}" | grep -Fxq 'budget-analyzer-web-prod-smoke'; then
+        cat >> "${test_file}" <<'EOF'
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/replay-local-smoke-init-ref
+    kind: Pod
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
+    resources:
+      - default/replay-local-smoke-init-ref
+    kind: Pod
+    result: pass
+EOF
+    fi
+
+    cat >> "${test_file}" <<'EOF'
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/replay-unapproved-local-ref
+    kind: Deployment
+    result: fail
+EOF
+
+    "${STATIC_TOOLS_BIN}/kyverno" test "${temp_dir}"
+    rm -rf "${temp_dir}"
 }
 
 scan_namespace_psa_labels_in_files() {
@@ -401,6 +652,9 @@ main() {
 
     log_step "Kyverno policy fixtures"
     run_kyverno_tests
+
+    log_step "Generated Tilt local-image contract replay"
+    run_generated_tilt_local_image_replay
 
     log_step "Repo-specific pattern scans"
     run_repo_pattern_scans

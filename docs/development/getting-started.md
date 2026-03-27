@@ -38,8 +38,9 @@ From your **host terminal** (not the devcontainer):
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 vim .env          # Review infra password defaults; add Auth0 + FRED credentials
-./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof
+./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
 tilt up           # Start everything
+./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
 ./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
@@ -73,7 +74,13 @@ and runtime-hardening gate; it reruns the earlier phase verifiers as
 regressions.
 `./scripts/dev/verify-phase-7-static-manifests.sh` is the local static
 Session 6 guardrail gate and matches the dedicated CI workflow closely enough
-for local reproduction without a cluster.
+for local reproduction without a cluster. It now also replays representative
+approved local Tilt `:tilt-<hash>` refs through Kyverno so the deploy-time
+admission contract stays aligned with the manifest-literal inventory.
+`./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side
+clean-start proof for the seven app deployments in `default`; run it after
+`tilt up` when you want the specific admission-regression check from the clean
+rebuild workflow.
 `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
 7 completion command; it runs the Session 6 static gate and then the Session 7
 live runtime proof in order. The narrower

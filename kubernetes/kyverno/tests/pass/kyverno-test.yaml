@@ -32,55 +32,111 @@ results:
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-automount-disabled
+    rule: require-pod-automount-service-account-token-false
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-require-workload-security-context
     rule: require-pod-runtime-default-seccomp
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-pod-runtime-default-seccomp
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-require-workload-security-context
     rule: require-run-as-non-root
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-run-as-non-root
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-require-workload-security-context
     rule: require-no-privilege-escalation
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-no-privilege-escalation
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-require-workload-security-context
     rule: require-drop-all-capabilities
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-drop-all-capabilities
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-disallow-obvious-default-credentials
     rule: disallow-obvious-default-credential-env-values
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
     result: skip
+  - policy: phase7-disallow-obvious-default-credentials
+    rule: disallow-obvious-default-credential-env-values
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: skip
   - policy: phase7-require-third-party-image-digests
-    rule: require-digest-or-approved-local-latest
+    rule: require-digest-or-approved-local-image
     resources:
       - default/secure-local-workload
       - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-latest
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
     resources:
       - default/secure-local-workload
+      - default/secure-local-tilt-workload
     kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-image
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
     result: pass
   - policy: phase7-require-workload-automount-disabled
     rule: require-pod-automount-service-account-token-false
@@ -95,13 +151,13 @@ results:
     kind: Deployment
     result: skip
   - policy: phase7-require-third-party-image-digests
-    rule: require-digest-or-approved-local-latest
+    rule: require-digest-or-approved-local-image
     resources:
       - istio-ingress/ingress-chart-managed-exception
     kind: Deployment
     result: skip
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-latest
+    rule: require-image-pull-policy-never-for-approved-local-image
     resources:
       - istio-ingress/ingress-chart-managed-exception
     kind: Deployment

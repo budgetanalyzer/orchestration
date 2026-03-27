@@ -15,6 +15,7 @@ ALLOWED_LATEST_FILE="${SCRIPT_DIR}/lib/phase-7-allowed-latest.txt"
 
 TARGET_FILES=()
 ALLOWED_LATEST_REFS=()
+APPROVED_LOCAL_REPOS=()
 
 declare -A ALLOWED_LATEST=()
 
@@ -43,6 +44,40 @@ load_inventory() {
     for ref in "${ALLOWED_LATEST_REFS[@]}"; do
         ALLOWED_LATEST["$ref"]=1
     done
+}
+
+build_approved_local_repo_inventory() {
+    local ref repo
+    local -A seen_repos=()
+    local -a failures=()
+
+    APPROVED_LOCAL_REPOS=()
+
+    for ref in "${ALLOWED_LATEST_REFS[@]}"; do
+        if [[ ! "${ref}" =~ ^([a-z0-9]+([._-][a-z0-9]+)*)\:latest$ ]]; then
+            failures+=("unexpected approved-local ref format: ${ref}")
+            continue
+        fi
+
+        repo="${BASH_REMATCH[1]}"
+        if [[ -n "${seen_repos[${repo}]:-}" ]]; then
+            failures+=("duplicate approved-local repo in ${ALLOWED_LATEST_FILE}: ${repo}")
+            continue
+        fi
+
+        seen_repos["${repo}"]=1
+        APPROVED_LOCAL_REPOS+=("${repo}")
+    done
+
+    if (( ${#APPROVED_LOCAL_REPOS[@]} == 0 )); then
+        failures+=("no approved local repos were loaded from ${ALLOWED_LATEST_FILE}")
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'ERROR: approved local image contract is invalid:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        exit 1
+    fi
 }
 
 check_target_files_exist() {
@@ -83,10 +118,77 @@ extract_refs() {
         done
 }
 
+print_approved_local_repos() {
+    printf '%s\n' "${APPROVED_LOCAL_REPOS[@]}"
+}
+
+print_approved_local_tilt_refs() {
+    local repo
+    local tilt_hash="0123456789abcdef"
+
+    for repo in "${APPROVED_LOCAL_REPOS[@]}"; do
+        printf '%s:tilt-%s\n' "${repo}" "${tilt_hash}"
+        printf 'docker.io/library/%s:tilt-%s\n' "${repo}" "${tilt_hash}"
+    done
+}
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/dev/check-phase-7-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
+
+Without flags, scans the Phase 7 image-pinning inventory for unexpected
+checked-in :latest refs and missing third-party @sha256 digests.
+
+Optional output modes:
+  --print-approved-local-repos
+      Print the approved local Tilt-built repo names derived from
+      scripts/dev/lib/phase-7-allowed-latest.txt.
+  --print-approved-local-tilt-refs
+      Print representative bare and docker.io/library Tilt deploy refs for the
+      approved local repos using the contract hash pattern.
+EOF
+}
+
 main() {
+    local mode="scan"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --print-approved-local-repos)
+                mode="repos"
+                shift
+                ;;
+            --print-approved-local-tilt-refs)
+                mode="tilt-refs"
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                printf 'ERROR: unknown argument: %s\n' "$1" >&2
+                usage >&2
+                exit 1
+                ;;
+        esac
+    done
+
     cd "${REPO_DIR}"
     load_inventory
+    build_approved_local_repo_inventory
     check_target_files_exist
+
+    case "${mode}" in
+        repos)
+            print_approved_local_repos
+            return 0
+            ;;
+        tilt-refs)
+            print_approved_local_tilt_refs
+            return 0
+            ;;
+    esac
 
     local refs_checked=0
     local -a failures=()

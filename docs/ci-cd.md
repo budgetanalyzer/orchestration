@@ -78,6 +78,8 @@ The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 - schema validation for checked-in manifests
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
+- a generated Kyverno replay for representative approved local Tilt
+  `:tilt-<hash>` deploy refs derived from the checked-in contract inventory
 - pattern scans for image pinning, namespace PSA labels, and lingering
   pipe-to-shell guidance in active setup docs/scripts
 

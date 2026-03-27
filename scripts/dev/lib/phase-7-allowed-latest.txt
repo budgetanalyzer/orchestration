@@ -1,0 +1,9 @@
+# The only allowed :latest refs in Phase 7 are the seven local Tilt-built images.
+
+transaction-service:latest
+currency-service:latest
+permission-service:latest
+session-gateway:latest
+ext-authz:latest
+budget-analyzer-web:latest
+budget-analyzer-web-prod-smoke:latest

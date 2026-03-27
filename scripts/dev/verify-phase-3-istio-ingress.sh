@@ -86,6 +86,29 @@ require_cluster_access() {
     fi
 }
 
+decode_secret_value() {
+    local namespace="$1" secret_name="$2" key="$3"
+    local encoded
+
+    encoded=$(kubectl get secret "${secret_name}" -n "${namespace}" \
+        -o "jsonpath={.data['${key}']}" 2>/dev/null || true)
+    [[ -n "${encoded}" ]] || return 1
+
+    printf '%s' "${encoded}" | base64 -d 2>/dev/null
+}
+
+extract_host_from_uri() {
+    local uri="$1"
+    local host
+
+    host=$(printf '%s\n' "${uri}" | sed -E 's#^[[:space:]]*[A-Za-z][A-Za-z0-9+.-]*://([^/:?#]+).*$#\1#')
+    if [[ -z "${host}" || "${host}" == "${uri}" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "${host}"
+}
+
 extract_http_status() {
     printf '%s\n' "$1" | sed -n 's/^[[:space:]]*HTTP\/[^[:space:]]* \([0-9][0-9][0-9]\).*/\1/p' | tail -n 1
 }
@@ -1078,9 +1101,44 @@ main() {
         fail "Mesh outboundTrafficPolicy is not REGISTRY_ONLY"
     fi
 
-    local auth0_host auth0_output fred_host fred_output denied_output
+    local auth0_issuer_uri expected_auth0_host auth0_host auth0_gateway_host auth0_virtual_service_host
+    local auth0_output fred_host fred_output denied_output
+    auth0_issuer_uri=$(decode_secret_value default auth0-credentials AUTH0_ISSUER_URI || true)
+    if [[ -n "$auth0_issuer_uri" ]]; then
+        expected_auth0_host=$(extract_host_from_uri "$auth0_issuer_uri" || true)
+        if [[ -n "$expected_auth0_host" ]]; then
+            pass "auth0-credentials AUTH0_ISSUER_URI resolves to host ${expected_auth0_host}"
+        else
+            fail "Could not parse hostname from auth0-credentials AUTH0_ISSUER_URI"
+        fi
+    else
+        fail "Could not determine AUTH0_ISSUER_URI from secret auth0-credentials"
+    fi
+
     auth0_host=$(kubectl get serviceentry auth0-idp -n default -o jsonpath='{.spec.hosts[0]}' 2>/dev/null || true)
     if [[ -n "$auth0_host" ]]; then
+        if [[ -n "${expected_auth0_host:-}" && "$auth0_host" == "$expected_auth0_host" ]]; then
+            pass "Auth0 ServiceEntry host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
+        elif [[ -n "${expected_auth0_host:-}" ]]; then
+            fail "Auth0 ServiceEntry host is ${auth0_host} (expected ${expected_auth0_host} from auth0-credentials)"
+        fi
+
+        auth0_gateway_host=$(kubectl get gateway.networking.istio.io istio-egress-gateway -n default \
+            -o go-template='{{ range .spec.servers }}{{ if eq .port.name "tls-auth0" }}{{ index .hosts 0 }}{{ end }}{{ end }}' 2>/dev/null || true)
+        if [[ -n "${expected_auth0_host:-}" && "$auth0_gateway_host" == "$expected_auth0_host" ]]; then
+            pass "Auth0 egress Gateway host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
+        elif [[ -n "${expected_auth0_host:-}" ]]; then
+            fail "Auth0 egress Gateway host is ${auth0_gateway_host:-missing} (expected ${expected_auth0_host} from auth0-credentials)"
+        fi
+
+        auth0_virtual_service_host=$(kubectl get virtualservice.networking.istio.io auth0-via-egress -n default \
+            -o jsonpath='{.spec.hosts[0]}' 2>/dev/null || true)
+        if [[ -n "${expected_auth0_host:-}" && "$auth0_virtual_service_host" == "$expected_auth0_host" ]]; then
+            pass "Auth0 VirtualService host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
+        elif [[ -n "${expected_auth0_host:-}" ]]; then
+            fail "Auth0 VirtualService host is ${auth0_virtual_service_host:-missing} (expected ${expected_auth0_host} from auth0-credentials)"
+        fi
+
         auth0_output=$(kubectl exec deployment/session-gateway -c session-gateway -- \
             wget -S --spider --timeout=10 "https://${auth0_host}/" 2>&1 || true)
         if printf '%s\n' "$auth0_output" | grep -qE "HTTP/[0-9.]+ [0-9]+"; then

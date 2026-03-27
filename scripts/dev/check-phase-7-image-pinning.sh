@@ -10,48 +10,57 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+TARGET_LIST_FILE="${SCRIPT_DIR}/lib/phase-7-image-pinning-targets.txt"
+ALLOWED_LATEST_FILE="${SCRIPT_DIR}/lib/phase-7-allowed-latest.txt"
 
-TARGET_FILES=(
-    "kind-cluster-config.yaml"
-    "kubernetes/infrastructure/postgresql/statefulset.yaml"
-    "kubernetes/infrastructure/redis/deployment.yaml"
-    "kubernetes/infrastructure/rabbitmq/statefulset.yaml"
-    "kubernetes/services/budget-analyzer-web/deployment.yaml"
-    "kubernetes/services/currency-service/deployment.yaml"
-    "kubernetes/services/ext-authz/deployment.yaml"
-    "kubernetes/services/nginx-gateway/deployment.yaml"
-    "kubernetes/services/permission-service/deployment.yaml"
-    "kubernetes/services/session-gateway/deployment.yaml"
-    "kubernetes/services/transaction-service/deployment.yaml"
-    "Tiltfile"
-    "ext-authz/Dockerfile"
-    "tests/setup-flow/kind-cluster-test-config.yaml"
-    "tests/shared/Dockerfile.test-env"
-    "tests/setup-flow/docker-compose.test.yml"
-    "tests/security-preflight/docker-compose.test.yml"
-    "scripts/dev/verify-security-prereqs.sh"
-    "scripts/dev/verify-phase-2-network-policies.sh"
-    "scripts/dev/verify-phase-3-istio-ingress.sh"
-    "scripts/dev/verify-phase-4-transport-encryption.sh"
-    "scripts/dev/verify-phase-5-runtime-hardening.sh"
-    "scripts/dev/verify-phase-6-edge-browser-hardening.sh"
-    "scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh"
-)
-
-ALLOWED_LATEST_REFS=(
-    "transaction-service:latest"
-    "currency-service:latest"
-    "permission-service:latest"
-    "session-gateway:latest"
-    "ext-authz:latest"
-    "budget-analyzer-web:latest"
-    "budget-analyzer-web-prod-smoke:latest"
-)
+TARGET_FILES=()
+ALLOWED_LATEST_REFS=()
 
 declare -A ALLOWED_LATEST=()
-for ref in "${ALLOWED_LATEST_REFS[@]}"; do
-    ALLOWED_LATEST["$ref"]=1
-done
+
+load_list_file() {
+    local list_file="$1"
+    local -n output_ref="$2"
+
+    if [[ ! -f "${list_file}" ]]; then
+        printf 'ERROR: required list file not found: %s\n' "${list_file}" >&2
+        exit 1
+    fi
+
+    mapfile -t output_ref < <(grep -Ev '^[[:space:]]*(#|$)' "${list_file}")
+    if (( ${#output_ref[@]} == 0 )); then
+        printf 'ERROR: required list file is empty: %s\n' "${list_file}" >&2
+        exit 1
+    fi
+}
+
+load_inventory() {
+    local ref
+
+    load_list_file "${TARGET_LIST_FILE}" TARGET_FILES
+    load_list_file "${ALLOWED_LATEST_FILE}" ALLOWED_LATEST_REFS
+
+    for ref in "${ALLOWED_LATEST_REFS[@]}"; do
+        ALLOWED_LATEST["$ref"]=1
+    done
+}
+
+check_target_files_exist() {
+    local file
+    local -a missing=()
+
+    for file in "${TARGET_FILES[@]}"; do
+        if [[ ! -e "${file}" ]]; then
+            missing+=("${file}")
+        fi
+    done
+
+    if (( ${#missing[@]} > 0 )); then
+        printf 'ERROR: Phase 7 image pinning target list references missing files:\n' >&2
+        printf '  - %s\n' "${missing[@]}" >&2
+        exit 1
+    fi
+}
 
 extract_refs() {
     rg -n --no-heading '^[[:space:]]*image:[[:space:]]*|^[[:space:]]*FROM[[:space:]]+|^[A-Z0-9_]+IMAGE=' "${TARGET_FILES[@]}" |
@@ -76,6 +85,8 @@ extract_refs() {
 
 main() {
     cd "${REPO_DIR}"
+    load_inventory
+    check_target_files_exist
 
     local refs_checked=0
     local -a failures=()

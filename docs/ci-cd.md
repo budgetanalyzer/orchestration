@@ -63,6 +63,10 @@ The orchestration repo now has a dedicated static security workflow for Phase 7
 Session 6. It is intentionally additive beside `test-setup.yml`; it does not
 reuse the stale DinD suites as guardrails for this phase.
 
+It now runs on every push to `main` and every pull request targeting `main`.
+The narrower path filter was removed so guarded Phase 7 surfaces cannot bypass
+the workflow when a new file path is added to the static scope.
+
 What it runs:
 
 - `./scripts/dev/verify-phase-7-static-manifests.sh`

@@ -34,6 +34,11 @@ Copy these values to your `.env` file:
 AUTH0_ISSUER_URI=https://dev-abc123.us.auth0.com/
 ```
 
+That same `AUTH0_ISSUER_URI` value also drives the Istio Auth0 egress allowlist
+through `scripts/dev/render-istio-egress-config.sh`. If you change tenants,
+re-render or reapply the egress config so the Session Gateway secret and the
+Istio allowlist stay aligned.
+
 ### Application URIs
 
 Scroll down to **Application URIs** and configure:
@@ -80,6 +85,12 @@ AUTH0_CLIENT_SECRET=your-client-secret-here
 # Optional - defaults work for most setups
 # AUTH0_AUDIENCE=https://api.budgetanalyzer.org
 ```
+
+Tilt reads that value into `auth0-credentials` and also renders the Auth0
+egress `ServiceEntry`, egress `Gateway`, and `VirtualService` from the same URI.
+Production deployers should preserve that same contract: whichever system
+creates `auth0-credentials` must also feed the same `AUTH0_ISSUER_URI` into the
+egress rendering/apply step.
 
 ## Troubleshooting
 

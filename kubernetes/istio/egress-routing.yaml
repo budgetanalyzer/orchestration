@@ -1,4 +1,5 @@
 # Egress Gateway listener
+# Rendered by scripts/dev/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
 apiVersion: networking.istio.io/v1
 kind: Gateway
 metadata:
@@ -13,7 +14,7 @@ spec:
         name: tls-auth0
         protocol: TLS
       hosts:
-        - "dev-gcz1r8453xzz0317.us.auth0.com"
+        - "auth0-issuer.placeholder.invalid"
       tls:
         mode: PASSTHROUGH
     - port:
@@ -49,7 +50,7 @@ metadata:
   namespace: default
 spec:
   hosts:
-    - "dev-gcz1r8453xzz0317.us.auth0.com"
+    - "auth0-issuer.placeholder.invalid"
   gateways:
     - mesh
     - istio-egress-gateway
@@ -57,7 +58,7 @@ spec:
     - match:
         - gateways: ["mesh"]
           port: 443
-          sniHosts: ["dev-gcz1r8453xzz0317.us.auth0.com"]
+          sniHosts: ["auth0-issuer.placeholder.invalid"]
       route:
         - destination:
             host: istio-egress-gateway.istio-egress.svc.cluster.local
@@ -66,10 +67,10 @@ spec:
     - match:
         - gateways: ["istio-egress-gateway"]
           port: 443
-          sniHosts: ["dev-gcz1r8453xzz0317.us.auth0.com"]
+          sniHosts: ["auth0-issuer.placeholder.invalid"]
       route:
         - destination:
-            host: "dev-gcz1r8453xzz0317.us.auth0.com"
+            host: "auth0-issuer.placeholder.invalid"
             port:
               number: 443
 ---

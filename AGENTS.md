@@ -324,6 +324,10 @@ Each microservice is maintained in its own repository:
 - Use `docs/plans/security-hardening-v2-phase-7-session-1-contract.md` as the
   source of truth for Phase 7 image-pinning scope, local `:latest`
   exceptions, installer-hardening targets, and explicit exclusions.
+- The executable Phase 7 image inventories live in
+  `scripts/dev/lib/phase-7-image-pinning-targets.txt` and
+  `scripts/dev/lib/phase-7-allowed-latest.txt`; keep them aligned with that
+  contract doc.
 - Only the seven documented Tilt-built images may remain on `:latest`. Treat
   every third-party `image:` or `FROM` ref as a digest-pinning target unless it
   is explicitly excluded in that contract doc.

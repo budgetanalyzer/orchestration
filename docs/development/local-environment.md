@@ -213,7 +213,13 @@ missing pods, secrets, or network policies while Tilt appears healthy, verify
 `kubectl config current-context` and `tilt get uiresources` from the same host
 shell before assuming the script is wrong.
 
-The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+Tilt now renders the Auth0 Istio egress manifests through
+`./scripts/dev/render-istio-egress-config.sh`, using the same
+`AUTH0_ISSUER_URI` contract that populates the `auth0-credentials` secret.
+Production secret sourcing should keep that same seam: the value that creates
+`auth0-credentials` must also drive the Auth0 egress render/apply step.
+
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `auth0-credentials` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 

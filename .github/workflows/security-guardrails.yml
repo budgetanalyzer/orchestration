@@ -3,30 +3,8 @@ name: Security Guardrails
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/security-guardrails.yml'
-      - '.kube-linter.yaml'
-      - 'AGENTS.md'
-      - 'README.md'
-      - 'docs/**'
-      - 'kubernetes/**'
-      - 'scripts/**'
-      - 'setup.sh'
-      - 'tests/security-guardrails/**'
-      - 'tests/shared/Dockerfile.test-env'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/workflows/security-guardrails.yml'
-      - '.kube-linter.yaml'
-      - 'AGENTS.md'
-      - 'README.md'
-      - 'docs/**'
-      - 'kubernetes/**'
-      - 'scripts/**'
-      - 'setup.sh'
-      - 'tests/security-guardrails/**'
-      - 'tests/shared/Dockerfile.test-env'
   workflow_dispatch:
 
 jobs:
@@ -42,6 +20,7 @@ jobs:
           bash -n scripts/dev/check-phase-7-image-pinning.sh
           bash -n scripts/dev/install-verified-tool.sh
           bash -n scripts/dev/lib/pinned-tool-versions.sh
+          bash -n scripts/dev/render-istio-egress-config.sh
           bash -n scripts/dev/verify-phase-7-static-manifests.sh
 
       - name: Run static Phase 7 guardrails

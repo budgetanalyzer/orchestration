@@ -1,4 +1,5 @@
 # Auth0 IdP (used by session-gateway)
+# Rendered by scripts/dev/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
 apiVersion: networking.istio.io/v1
 kind: ServiceEntry
 metadata:
@@ -6,7 +7,7 @@ metadata:
   namespace: default
 spec:
   hosts:
-    - "dev-gcz1r8453xzz0317.us.auth0.com"  # Must match AUTH0_ISSUER_URI hostname
+    - "auth0-issuer.placeholder.invalid"
   location: MESH_EXTERNAL
   ports:
     - number: 443

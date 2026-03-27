@@ -1042,11 +1042,9 @@ local_resource(
 # ServiceEntries and egress routing (Gateway, DestinationRule, VirtualServices)
 local_resource(
     'istio-egress-config',
-    cmd='''
-        kubectl apply -f kubernetes/istio/egress-service-entries.yaml
-        kubectl apply -f kubernetes/istio/egress-routing.yaml
-    ''',
+    cmd='./scripts/dev/render-istio-egress-config.sh --apply --auth0-issuer-uri "' + os.getenv('AUTH0_ISSUER_URI', '') + '"',
     deps=[
+        'scripts/dev/render-istio-egress-config.sh',
         'kubernetes/istio/egress-service-entries.yaml',
         'kubernetes/istio/egress-routing.yaml',
     ],

@@ -91,7 +91,7 @@ spec:
       containers:
         - name: app
           image: transaction-service:tilt-f3207b6e83858452
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "sleep 3600"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -113,7 +113,7 @@ spec:
   initContainers:
     - name: web-prod-smoke-assets
       image: docker.io/library/budget-analyzer-web-prod-smoke:tilt-d1622efb13cae97b
-      imagePullPolicy: Never
+      imagePullPolicy: IfNotPresent
       command: ["sh", "-c", "true"]
       securityContext:
         allowPrivilegeEscalation: false

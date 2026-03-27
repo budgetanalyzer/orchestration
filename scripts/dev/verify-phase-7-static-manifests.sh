@@ -245,7 +245,7 @@ spec:
       containers:
         - name: app
           image: ${repo}:tilt-${tilt_hash}
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "sleep 3600"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -280,7 +280,7 @@ spec:
       containers:
         - name: app
           image: docker.io/library/${canonical_repo}:tilt-${tilt_hash}
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "sleep 3600"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -306,7 +306,7 @@ spec:
   initContainers:
     - name: web-prod-smoke-assets
       image: docker.io/library/budget-analyzer-web-prod-smoke:tilt-0123456789abcdef
-      imagePullPolicy: Never
+      imagePullPolicy: IfNotPresent
       command: ["sh", "-c", "true"]
       securityContext:
         allowPrivilegeEscalation: false
@@ -384,7 +384,7 @@ EOF
     kind: Deployment
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-for-approved-local-tilt-image
     resources:
       - default/replay-${safe_name}-tilt-ref
     kind: Deployment
@@ -400,7 +400,7 @@ EOF
     kind: Deployment
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-for-approved-local-tilt-image
     resources:
       - default/replay-docker-library-local-ref
     kind: Deployment
@@ -416,7 +416,7 @@ EOF
     kind: Pod
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-for-approved-local-tilt-image
     resources:
       - default/replay-local-smoke-init-ref
     kind: Pod

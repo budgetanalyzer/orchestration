@@ -11,7 +11,9 @@ metadata:
       Third-party workload images must be immutable digest references. The only
       local exceptions are the seven documented Tilt-built images, which may
       appear either as checked-in :latest refs or as Tilt's immutable
-      :tilt-<hash> deploy tags when imagePullPolicy remains Never.
+      :tilt-<hash> deploy tags. Checked-in :latest refs stay on
+      imagePullPolicy: Never; the current Tilt live apply path rewrites managed
+      local-image workloads to imagePullPolicy: IfNotPresent.
 spec:
   validationFailureAction: Enforce
   background: true
@@ -71,7 +73,7 @@ spec:
                   - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):(latest|tilt-[a-f0-9]{16}))$', element.image || '') || regex_match('^[^@]+@sha256:[a-f0-9]{64}$', element.image || '') || (regex_match('^istio-(proxy|init|validation)$', element.name || '') && (regex_match('^(docker\\.io/)?istio/proxyv2:[^@]+$', element.image || '') || regex_match('^auto$', element.image || ''))) }}"
                     operator: Equals
                     value: false
-    - name: require-image-pull-policy-never-for-approved-local-image
+    - name: require-image-pull-policy-never-for-approved-local-latest-image
       match:
         any:
           - resources:
@@ -96,7 +98,7 @@ spec:
             value: DELETE
       validate:
         message: >-
-          Approved local Tilt-built image refs must also set imagePullPolicy to
+          Approved local checked-in :latest refs must set imagePullPolicy to
           Never.
         foreach:
           - list: request.object.spec.containers[]
@@ -105,7 +107,7 @@ spec:
                 - key: "{{ element.image || '' }}"
                   operator: NotEquals
                   value: ""
-                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):(latest|tilt-[a-f0-9]{16}))$', element.image || '') }}"
+                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):latest)$', element.image || '') }}"
                   operator: Equals
                   value: true
             deny:
@@ -120,12 +122,76 @@ spec:
                 - key: "{{ element.image || '' }}"
                   operator: NotEquals
                   value: ""
-                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):(latest|tilt-[a-f0-9]{16}))$', element.image || '') }}"
+                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):latest)$', element.image || '') }}"
                   operator: Equals
                   value: true
             deny:
               conditions:
                 any:
+                  - key: "{{ element.imagePullPolicy || '' }}"
+                    operator: NotEquals
+                    value: Never
+    - name: require-image-pull-policy-for-approved-local-tilt-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: >-
+          Approved local Tilt deploy refs must set imagePullPolicy to
+          IfNotPresent or Never.
+        foreach:
+          - list: request.object.spec.containers[]
+            preconditions:
+              all:
+                - key: "{{ element.image || '' }}"
+                  operator: NotEquals
+                  value: ""
+                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):tilt-[a-f0-9]{16})$', element.image || '') }}"
+                  operator: Equals
+                  value: true
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.imagePullPolicy || '' }}"
+                    operator: NotEquals
+                    value: IfNotPresent
+                  - key: "{{ element.imagePullPolicy || '' }}"
+                    operator: NotEquals
+                    value: Never
+          - list: request.object.spec.initContainers[]
+            preconditions:
+              all:
+                - key: "{{ element.image || '' }}"
+                  operator: NotEquals
+                  value: ""
+                - key: "{{ regex_match('^((docker\\.io/library/)?(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):tilt-[a-f0-9]{16})$', element.image || '') }}"
+                  operator: Equals
+                  value: true
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.imagePullPolicy || '' }}"
+                    operator: NotEquals
+                    value: IfNotPresent
                   - key: "{{ element.imagePullPolicy || '' }}"
                     operator: NotEquals
                     value: Never

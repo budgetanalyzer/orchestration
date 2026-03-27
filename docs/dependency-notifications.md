@@ -9,7 +9,9 @@ Phase 7 Session 1 froze the active pinning scope in
 
 - Only the seven explicit local Tilt image repos may remain on `:latest` in
   checked-in manifests, and only with `imagePullPolicy: Never`. Live Tilt
-  deployments rewrite those same repos to immutable `:tilt-<hash>` tags.
+  deployments rewrite those same repos to immutable `:tilt-<hash>` tags and
+  currently force `imagePullPolicy: IfNotPresent` during the managed apply
+  path.
 - Every third-party image or Docker base image is now an immutable-digest
   target, including retained test assets and sibling build surfaces.
 - `tests/setup-flow` and `tests/security-preflight` are retained, stale,

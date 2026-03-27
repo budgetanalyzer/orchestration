@@ -115,6 +115,37 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: approved-local-latest-wrong-pull-policy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: approved-local-latest-wrong-pull-policy
+  template:
+    metadata:
+      labels:
+        app: approved-local-latest-wrong-pull-policy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: budget-analyzer-web:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: approved-local-tilt-wrong-pull-policy
   namespace: default
 spec:
@@ -134,7 +165,7 @@ spec:
       containers:
         - name: app
           image: ext-authz:tilt-752304df648dc1e1
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["sh", "-c", "sleep 3600"]
           securityContext:
             allowPrivilegeEscalation: false

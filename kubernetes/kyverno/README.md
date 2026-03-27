@@ -43,7 +43,8 @@ Current exception boundaries are intentionally narrow:
 - The local-image exception applies only to the seven approved Tilt-built repos
   and only for `:latest` checked into manifests or immutable
   `:tilt-<16 hex>` deploy tags for those same repos. The policy also accepts
-  the equivalent `docker.io/library/...` local form and still requires
-  `imagePullPolicy: Never` for every approved local ref.
+  the equivalent `docker.io/library/...` local form, keeps
+  `imagePullPolicy: Never` for checked-in `:latest` refs, and accepts the
+  current Tilt-managed `IfNotPresent` rewrite for live `:tilt-<hash>` deploys.
 - Namespace Pod Security labels remain required for all non-excluded
   namespaces, including temporary verifier namespaces.

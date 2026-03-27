@@ -334,7 +334,8 @@ Each microservice is maintained in its own repository:
   contract doc.
 - Only the seven documented local image repos may remain on `:latest` in
   checked-in manifests. Live Tilt deploys rewrite those same repos to immutable
-  `:tilt-<hash>` refs; treat every third-party `image:` or `FROM` ref as a
+  `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on
+  those managed deploys; treat every third-party `image:` or `FROM` ref as a
   digest-pinning target unless it is explicitly excluded in that contract doc.
 - `tests/setup-flow` and `tests/security-preflight` are stale, non-gating
   Phase 7 assets until they are explicitly realigned to the current Istio-only

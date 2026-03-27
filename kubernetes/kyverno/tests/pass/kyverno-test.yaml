@@ -126,14 +126,19 @@ results:
     kind: Pod
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-never-for-approved-local-latest-image
     resources:
       - default/secure-local-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-for-approved-local-tilt-image
+    resources:
       - default/secure-local-tilt-workload
     kind: Deployment
     result: pass
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-for-approved-local-tilt-image
     resources:
       - default/secure-local-smoke-init-workload
     kind: Pod
@@ -157,7 +162,13 @@ results:
     kind: Deployment
     result: skip
   - policy: phase7-require-third-party-image-digests
-    rule: require-image-pull-policy-never-for-approved-local-image
+    rule: require-image-pull-policy-never-for-approved-local-latest-image
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-for-approved-local-tilt-image
     resources:
       - istio-ingress/ingress-chart-managed-exception
     kind: Deployment

@@ -8,6 +8,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./scripts/dev/lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/scripts/dev/lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -42,7 +44,7 @@ print_warning() {
 
 SUPPORTED_HELM_MINIMUM="3.20.0"
 SUPPORTED_HELM_MAXIMUM="4.0.0"
-TESTED_HELM_VERSION="v3.20.1"
+TESTED_HELM_VERSION="$PHASE7_HELM_VERSION"
 
 normalize_semver() {
     printf '%s\n' "$1" | sed -nE 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
@@ -57,14 +59,8 @@ version_lt() {
 }
 
 install_supported_helm() {
-    if ! command -v curl &> /dev/null; then
-        print_error "curl is required to install Helm automatically"
-        echo "Install curl first, then rerun ./setup.sh"
-        exit 1
-    fi
-
     print_step "Installing Helm ${TESTED_HELM_VERSION}..."
-    if ! curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION="${TESTED_HELM_VERSION}" bash; then
+    if ! "$SCRIPT_DIR/scripts/dev/install-verified-tool.sh" helm; then
         print_error "Automatic Helm installation failed"
         echo "Install Helm ${TESTED_HELM_VERSION} manually, then rerun ./setup.sh"
         exit 1

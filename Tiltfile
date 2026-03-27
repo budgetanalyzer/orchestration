@@ -406,7 +406,7 @@ def spring_boot_service(name, deps=[]):
         name,
         context=repo_path,
         dockerfile_contents='''
-FROM eclipse-temurin:24-jre-alpine
+FROM eclipse-temurin:24-jre-alpine@sha256:4044b6c87cb088885bcd0220f7dc7a8a4aab76577605fa471945d2e98270741f
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar app.jar
@@ -484,7 +484,7 @@ docker_build_with_restart(
     'session-gateway',
     context=repo_path,
     dockerfile_contents='''
-FROM eclipse-temurin:24-jre-alpine
+FROM eclipse-temurin:24-jre-alpine@sha256:4044b6c87cb088885bcd0220f7dc7a8a4aab76577605fa471945d2e98270741f
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar app.jar
@@ -596,7 +596,7 @@ docker_build(
     'budget-analyzer-web-prod-smoke',
     context=frontend_repo,
     dockerfile_contents='''
-FROM alpine:3.22.2
+FROM alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
 
 WORKDIR /prod-smoke
 COPY dist/ ./
@@ -840,7 +840,7 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Kyverno admission controller (Phase 0 scaffold)
+# Kyverno admission controller and Phase 7 policy suite
 local_resource(
     'kyverno',
     cmd='''
@@ -870,10 +870,15 @@ local_resource(
 )
 
 local_resource(
-    'kyverno-smoke-policy',
-    cmd='kubectl apply -f kubernetes/kyverno/smoke-policy.yaml',
+    'kyverno-policies',
+    cmd='kubectl apply -f kubernetes/kyverno/policies',
     deps=[
-        'kubernetes/kyverno/smoke-policy.yaml',
+        'kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml',
+        'kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml',
+        'kubernetes/kyverno/policies/20-require-workload-automount-disabled.yaml',
+        'kubernetes/kyverno/policies/30-require-workload-security-context.yaml',
+        'kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml',
+        'kubernetes/kyverno/policies/50-require-third-party-image-digests.yaml',
     ],
     resource_deps=['kyverno-ready'],
     labels=['infrastructure'],

@@ -1,0 +1,95 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: phase7-require-third-party-image-digests
+  annotations:
+    policies.kyverno.io/title: Require Third-Party Image Digests
+    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Third-party workload images must be immutable digest references. The only
+      allowed :latest exceptions are the seven documented local Tilt-built
+      images loaded into Kind with imagePullPolicy Never.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-digest-or-approved-local-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+          - key: "{{ request.object.metadata.annotations.\"sidecar.istio.io/status\" || '' }}"
+            operator: Equals
+            value: ""
+      validate:
+        message: >-
+          Images must be pinned by digest unless they are one of the approved
+          local Tilt-built :latest exceptions.
+        foreach:
+          - list: request.object.spec.[ephemeralContainers, initContainers, containers][]
+            deny:
+              conditions:
+                all:
+                  - key: >-
+                      {{ regex_match('^(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):latest$', element.image || '') || regex_match('^[^@]+@sha256:[a-f0-9]{64}$', element.image || '') || (regex_match('^istio-(proxy|init|validation)$', element.name || '') && (regex_match('^(docker\\.io/)?istio/proxyv2:[^@]+$', element.image || '') || regex_match('^auto$', element.image || ''))) }}
+                    operator: Equals
+                    value: false
+    - name: require-image-pull-policy-never-for-approved-local-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: >-
+          Approved local :latest images must also set imagePullPolicy to Never.
+        foreach:
+          - list: request.object.spec.[ephemeralContainers, initContainers, containers][]
+            preconditions:
+              all:
+                - key: "{{ regex_match('^(transaction-service|currency-service|permission-service|session-gateway|ext-authz|budget-analyzer-web|budget-analyzer-web-prod-smoke):latest$', element.image || '') }}"
+                  operator: Equals
+                  value: true
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.imagePullPolicy || '' }}"
+                    operator: NotEquals
+                    value: Never

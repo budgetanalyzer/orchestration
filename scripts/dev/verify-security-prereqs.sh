@@ -4,8 +4,7 @@
 
 set -euo pipefail
 
-BUSYBOX_IMAGE="busybox:1.36.1"
-HTTP_ECHO_IMAGE="hashicorp/http-echo:1.0.0"
+BUSYBOX_IMAGE="busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
 
 TEMP_NAMESPACES=()
 TEMP_PODS=()
@@ -48,7 +47,20 @@ require_cluster_access() {
 new_temp_namespace() {
     local prefix="$1"
     local ns="${prefix}-$(date +%s)-$RANDOM"
-    kubectl create namespace "$ns" >/dev/null
+    cat <<MANIFEST | kubectl apply -f - >/dev/null
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${ns}
+  labels:
+    istio-injection: disabled
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.32
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.32
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.32
+MANIFEST
     TEMP_NAMESPACES+=("$ns")
     echo "$ns"
 }
@@ -91,14 +103,25 @@ metadata:
   labels:
     app: server
 spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: server
-      image: ${HTTP_ECHO_IMAGE}
-      args:
-        - "-listen=:8080"
-        - "-text=ok"
+      image: ${BUSYBOX_IMAGE}
+      command:
+        - sh
+        - -c
+        - mkdir -p /www && echo ok >/www/index.html && exec httpd -f -p 8080 -h /www
       ports:
         - containerPort: 8080
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
 ---
 apiVersion: v1
 kind: Service
@@ -118,6 +141,10 @@ metadata:
   labels:
     app: client
 spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: client
       image: ${BUSYBOX_IMAGE}
@@ -125,6 +152,12 @@ spec:
         - sh
         - -c
         - sleep 3600
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
 MANIFEST
 
     kubectl wait --for=condition=Ready pod/server pod/client -n "$ns" --timeout=120s >/dev/null

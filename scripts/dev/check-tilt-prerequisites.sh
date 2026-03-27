@@ -6,6 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
+# shellcheck source=./lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -109,7 +111,7 @@ check_helm_version() {
 
     supported_minimum="3.20.0"
     supported_maximum="4.0.0"
-    tested_version="v3.20.1"
+    tested_version="$PHASE7_HELM_VERSION"
     raw_version=$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)
     parsed_version=$(normalize_semver "$raw_version")
 
@@ -117,7 +119,7 @@ check_helm_version() {
         echo -e "${RED}✗${NC} Could not parse Helm version"
         echo "  Raw output: $raw_version"
         echo "  Install Helm $tested_version with:"
-        echo "  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=$tested_version bash"
+        echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
         ((ERRORS++))
         return 1
     fi
@@ -131,7 +133,7 @@ check_helm_version() {
     echo "  Supported range: >= $supported_minimum and < $supported_maximum"
     echo "  Helm 4 is not supported in this repo."
     echo "  Install Helm $tested_version with:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=$tested_version bash"
+    echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
     ((ERRORS++))
     return 1
 }
@@ -145,13 +147,13 @@ echo "---------------------------------------------"
 
 check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
 check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
-check_command "kubectl" "kubectl" "curl -LO https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl"
+check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRATION_DIR")"
 check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
-if check_command "helm" "Helm" "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.20.1 bash"; then
+if check_command "helm" "Helm" "$(phase7_install_hint helm "$ORCHESTRATION_DIR")"; then
     check_helm_version
 fi
-check_command "tilt" "Tilt" "curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash"
-check_command "mkcert" "mkcert" "sudo apt install libnss3-tools && curl -JLO 'https://dl.filippo.io/mkcert/latest?for=linux/amd64' && chmod +x mkcert-* && sudo mv mkcert-* /usr/local/bin/mkcert"
+check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"
+check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"
 
 echo
 

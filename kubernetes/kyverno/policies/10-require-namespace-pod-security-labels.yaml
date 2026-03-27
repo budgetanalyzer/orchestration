@@ -1,0 +1,61 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: phase7-require-namespace-pod-security-labels
+  annotations:
+    policies.kyverno.io/title: Require Namespace Pod Security Labels
+    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Namespace
+    policies.kyverno.io/description: >-
+      All user-managed namespaces must carry an explicit Pod Security Admission
+      posture and version labels so namespace drift cannot silently weaken the
+      runtime baseline.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-pod-security-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              names:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+      validate:
+        message: >-
+          Namespaces must declare a complete Pod Security Admission posture
+          using restricted, baseline, or privileged labels pinned to v1.32.
+        anyPattern:
+          - metadata:
+              labels:
+                pod-security.kubernetes.io/enforce: restricted
+                pod-security.kubernetes.io/enforce-version: v1.32
+                pod-security.kubernetes.io/warn: restricted
+                pod-security.kubernetes.io/warn-version: v1.32
+                pod-security.kubernetes.io/audit: restricted
+                pod-security.kubernetes.io/audit-version: v1.32
+          - metadata:
+              labels:
+                pod-security.kubernetes.io/enforce: baseline
+                pod-security.kubernetes.io/enforce-version: v1.32
+                pod-security.kubernetes.io/warn: baseline
+                pod-security.kubernetes.io/warn-version: v1.32
+                pod-security.kubernetes.io/audit: baseline
+                pod-security.kubernetes.io/audit-version: v1.32
+          - metadata:
+              labels:
+                pod-security.kubernetes.io/enforce: privileged
+                pod-security.kubernetes.io/enforce-version: v1.32
+                pod-security.kubernetes.io/warn: privileged
+                pod-security.kubernetes.io/warn-version: v1.32
+                pod-security.kubernetes.io/audit: privileged
+                pod-security.kubernetes.io/audit-version: v1.32

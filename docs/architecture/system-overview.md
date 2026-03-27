@@ -272,9 +272,9 @@ This reference architecture deliberately stops before solving data ownership. Un
 
 **Platform Security Baseline (Phase 0):**
 - Kind uses `disableDefaultCNI` with pinned Calico in local development so `NetworkPolicy` is enforceable
-- Namespace Pod Security Admission labels stay in `warn`/`audit` for application and infrastructure namespaces; `istio-system` is `enforce=privileged` because the `istio-cni` DaemonSet runs there
+- Namespace Pod Security Admission labels are explicit per namespace: application namespaces enforce `restricted`, `infrastructure` enforces `baseline`, and `istio-system` enforces `privileged` because the `istio-cni` DaemonSet runs there
 - Tilt installs Istio CNI so meshed workloads can run without injected `istio-init`
-- Kyverno is installed with a smoke policy and verified by `scripts/dev/verify-security-prereqs.sh`
+- Kyverno applies the checked-in Phase 7 admission suite plus the retained smoke policy bootstrap check, and `scripts/dev/verify-security-prereqs.sh` still proves the smoke path is alive
 - ext_authz dual-write for per-request validation
 
 **Gateway Patterns:**

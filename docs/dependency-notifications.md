@@ -2,6 +2,22 @@
 
 Stay informed about dependency updates to avoid painful catch-up upgrades. This guide organizes every major dependency by priority tier, provides GitHub watch links, and documents which dependencies must upgrade together.
 
+## Phase 7 Supply-Chain Contract
+
+Phase 7 Session 1 froze the active pinning scope in
+[`docs/plans/security-hardening-v2-phase-7-session-1-contract.md`](./plans/security-hardening-v2-phase-7-session-1-contract.md).
+
+- Only the seven explicit local Tilt images may remain on `:latest`, and only
+  with `imagePullPolicy: Never`.
+- Every third-party image or Docker base image is now an immutable-digest
+  target, including retained test assets and sibling build surfaces.
+- `tests/setup-flow` and `tests/security-preflight` are retained, stale,
+  non-gating Phase 7 assets until they are realigned, but their third-party
+  refs still follow the same digest-pinning rule.
+- The Session 1 installer inventory remains a frozen historical record; the
+  version tables below reflect the current checked-in workspace toolchain as of
+  March 27, 2026.
+
 ## How to Watch a GitHub Repository for Releases
 
 1. Go to the repository on GitHub
@@ -77,12 +93,12 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 | **Eclipse Temurin images** | https://github.com/adoptium/containers |
 | **Azul Zulu downloads** | https://www.azul.com/downloads/ |
 | **JDK release schedule** | https://www.java.com/releases/ |
-| **Defined in** | `service-common/build.gradle.kts` (toolchain), `workspace/ai-agent-sandbox/Dockerfile` (Zulu), `orchestration/Tiltfile` (Temurin base image) |
+| **Defined in** | `service-common/build.gradle.kts` (toolchain), `workspace/ai-agent-sandbox/Dockerfile` (Zulu), `orchestration/Tiltfile` (Temurin base image), `transaction-service/Dockerfile`, `currency-service/Dockerfile`, `permission-service/Dockerfile`, `session-gateway/Dockerfile` |
 | **Upgrade cadence** | New version every 6 months (March and September) |
 
 **Why critical**: Java 24 is non-LTS. When Java 25 ships (September 2026), Java 24 stops receiving security patches. You must either stay on the 6-month treadmill or drop back to the latest LTS (currently 21). Each JDK upgrade requires checking Gradle compatibility and revalidating base Docker images.
 
-**Coupling**: JDK version must match Eclipse Temurin base image tag in Tiltfile (`eclipse-temurin:24-jre-alpine`), Azul Zulu version in devcontainer Dockerfile, and Gradle's supported JDK range.
+**Coupling**: JDK version must match the Eclipse Temurin base image tags in the orchestration `Tiltfile` and the four backend service Dockerfiles, the Azul Zulu version in the devcontainer Dockerfile, and Gradle's supported JDK range.
 
 ---
 
@@ -106,11 +122,11 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | Latest (unpinned - installed via script) |
+| **Current version** | 0.37.0 |
 | **Watch** | https://github.com/tilt-dev/tilt |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (install script) |
+| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.0`, checksum-verified release tarball) |
 
-**Why important**: Tilt is under active development with Tiltfile API changes between versions. The entire development workflow (`tilt up`) depends on it. Breaking changes in extensions (`ext://restart_process`, `ext://configmap`, etc.) can silently break live reload. Since the version is currently unpinned, you're already on latest - watching releases helps you catch breaking changes before they surprise you.
+**Why important**: Tilt is under active development with Tiltfile API changes between versions. The entire development workflow (`tilt up`) depends on it. Breaking changes in extensions (`ext://restart_process`, `ext://configmap`, etc.) can silently break live reload, so the pinned baseline reduces surprise drift but release watching still matters before deliberate upgrades.
 
 ### Kubernetes Gateway API CRDs
 
@@ -213,7 +229,7 @@ Check quarterly. Lower breakage risk, strong backward compatibility, or limited 
 | **Current version** | 20-alpine (LTS) |
 | **Releases** | https://github.com/nodejs/node |
 | **LTS schedule** | https://nodejs.org/en/about/previous-releases |
-| **Defined in** | `budget-analyzer-web/Dockerfile` |
+| **Defined in** | `budget-analyzer-web/Dockerfile`, `budget-analyzer-web/Dockerfile.dev` |
 
 Node 20 LTS reaches end-of-life April 2026. Plan migration to Node 22 LTS before then.
 
@@ -263,12 +279,10 @@ Message broker for currency-service. Major versions are infrequent. Check lifecy
 
 | | |
 |---|---|
-| **Current version** | `alpine` (UNPINNED - uses latest) |
+| **Current version** | `nginxinc/nginx-unprivileged:1.29.4-alpine` |
 | **Releases** | https://github.com/nginx/nginx |
 | **Download page** | https://nginx.org/en/download.html |
 | **Defined in** | `orchestration/kubernetes/services/nginx-gateway/deployment.yaml` |
-
-**Action needed**: The NGINX image tag is currently `nginx:alpine` which pulls whatever the latest alpine build is. This should be pinned to a specific version (e.g., `nginx:1.27-alpine`) for reproducibility.
 
 ### Testcontainers
 
@@ -424,33 +438,41 @@ React major version
 
 Quick-reference table of every pinned version and where it's defined.
 
+Phase 7 Session 2 digest-pins the orchestration-owned third-party images in the
+active manifests, verifier scripts, Kind configs, and retained DinD assets. The
+table below tracks the human-readable tags; the checked-in refs now use
+`name:tag@sha256:...`.
+
 ### Infrastructure Tooling
 
 | Component | Version | Where Defined |
 |---|---|---|
 | Kind (binary) | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Kind node image | kindest/node:v1.30.8 | `orchestration/kind-cluster-config.yaml` |
-| Tilt | latest (unpinned) | `workspace/ai-agent-sandbox/Dockerfile` |
+| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
 | kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
 | Istio | 1.29.1 | `orchestration/Tiltfile` |
 | Calico | v3.29.3 | `orchestration/scripts/dev/install-calico.sh` |
 | Kyverno | 3.7.1 | `orchestration/Tiltfile` |
 | Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
-| mkcert | latest (unpinned) | Installed on host |
+| mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/dev/install-verified-tool.sh` |
+| kubeconform | v0.7.0 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
+| kube-linter | v0.8.3 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
+| Kyverno CLI | v1.17.1 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
 
 ### Container Images
 
 | Image | Tag | Where Used |
 |---|---|---|
 | eclipse-temurin | 24-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
-| node | 20-alpine | `budget-analyzer-web/Dockerfile` |
+| node | 20-alpine | `budget-analyzer-web/Dockerfile`, `budget-analyzer-web/Dockerfile.dev` |
 | golang | 1.24-alpine | `orchestration/ext-authz/Dockerfile` |
 | distroless/static | nonroot | `orchestration/ext-authz/Dockerfile` |
 | postgres | 16-alpine | `orchestration/kubernetes/infrastructure/postgresql/statefulset.yaml` |
 | redis | 7-alpine | `orchestration/kubernetes/infrastructure/redis/deployment.yaml` |
 | rabbitmq | 3.13-management | `orchestration/kubernetes/infrastructure/rabbitmq/statefulset.yaml` |
-| nginx | alpine (UNPINNED) | `orchestration/kubernetes/services/nginx-gateway/deployment.yaml` |
+| nginxinc/nginx-unprivileged | 1.29.4-alpine | `orchestration/kubernetes/services/nginx-gateway/deployment.yaml` |
 
 ### Backend (Java/Spring)
 
@@ -510,11 +532,11 @@ Quick-reference table of every pinned version and where it's defined.
 | Ubuntu | 24.04 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Azul Zulu JDK | 24 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Go | 1.24.1 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Node.js | LTS (latest) | `workspace/ai-agent-sandbox/Dockerfile` |
+| Node.js | 20.x (`NODE_MAJOR=20`) | `workspace/ai-agent-sandbox/Dockerfile` |
 | Kind | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
 | kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
-| Helm | latest 3.x | `workspace/ai-agent-sandbox/Dockerfile` |
-| Tilt | latest | `workspace/ai-agent-sandbox/Dockerfile` |
+| Helm | v3.20.1 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
 
 ---
 
@@ -537,8 +559,4 @@ Some critical information is published outside of GitHub releases.
 
 ## Known Issues
 
-1. **NGINX image unpinned**: `kubernetes/services/nginx-gateway/deployment.yaml` uses `nginx:alpine` instead of a pinned version like `nginx:1.27-alpine`. This means builds are not reproducible.
-
-2. **Spring Cloud version mismatch**: session-gateway uses Spring Cloud `2025.0.0` while currency-service uses `2024.0.0`. These should be aligned to the same release train.
-
-3. **Tilt version unpinned**: Installed via latest install script. Consider pinning to a specific version in the devcontainer Dockerfile for reproducibility.
+1. **Spring Cloud version mismatch**: session-gateway uses Spring Cloud `2025.0.0` while currency-service uses `2024.0.0`. These should be aligned to the same release train.

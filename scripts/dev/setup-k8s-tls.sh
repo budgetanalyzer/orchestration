@@ -14,7 +14,7 @@ if ! command -v mkcert &> /dev/null; then
     echo
     echo "Install mkcert first:"
     echo "  macOS:   brew install mkcert nss"
-    echo "  Linux:   sudo apt install libnss3-tools && curl -JLO https://dl.filippo.io/mkcert/latest?for=linux/amd64 && chmod +x mkcert-* && sudo mv mkcert-* /usr/local/bin/mkcert"
+    echo "  Linux:   sudo apt-get install -y libnss3-tools && \"$ORCHESTRATION_DIR/scripts/dev/install-verified-tool.sh\" mkcert"
     echo
     exit 1
 fi

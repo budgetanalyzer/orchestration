@@ -18,9 +18,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REDIS_PROBE_IMAGE="redis:7-alpine"
-POSTGRES_PROBE_IMAGE="postgres:16-alpine"
-RABBITMQ_PROBE_IMAGE="python:3.12-alpine"
+REDIS_PROBE_IMAGE="redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065"
+POSTGRES_PROBE_IMAGE="postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416"
+RABBITMQ_PROBE_IMAGE="python:3.12-alpine@sha256:7747d47f92cfca63a6e2b50275e23dba8407c30d8ae929a88ddd49a5d3f2d331"
 REDIS_PROBE="phase4-redis-client"
 POSTGRES_PROBE="phase4-postgresql-client"
 RABBITMQ_PROBE="phase4-rabbitmq-client"
@@ -189,6 +189,9 @@ metadata:
     sidecar.istio.io/inject: "false"
 spec:
   automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
       image: ${REDIS_PROBE_IMAGE}
@@ -226,6 +229,9 @@ metadata:
     sidecar.istio.io/inject: "false"
 spec:
   automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
       image: ${POSTGRES_PROBE_IMAGE}
@@ -263,6 +269,9 @@ metadata:
     sidecar.istio.io/inject: "false"
 spec:
   automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
       image: ${RABBITMQ_PROBE_IMAGE}

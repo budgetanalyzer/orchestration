@@ -10,12 +10,12 @@
 **Minimum versions:**
 - Docker 24.0+
 - Kind 0.20+
-- kubectl 1.28+
+- kubectl 1.30.8 (matches `kindest/node:v1.30.8`)
 - OpenSSL 3.x+
 - Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
-- Tilt 0.33+
+- Tilt 0.37.0
 - Git 2.40+
-- mkcert 1.4+
+- mkcert 1.4.4
 
 **For Backend Development (Optional):**
 - JDK 24 (for running services outside Docker)
@@ -49,6 +49,11 @@ repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
 `service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
 now flow through Gateway `spec.infrastructure.parametersRef` via
 `kubernetes/istio/ingress-gateway-config.yaml`.
+
+For host-side binary installs, prefer the checked-in verified installer:
+`./scripts/dev/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>`.
+It uses pinned release artifacts with checked-in SHA-256 values instead of
+floating installer endpoints.
 
 ## Quick Start
 
@@ -156,8 +161,18 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 6 edge/browser hardening gate
 ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+
+# Optional but recommended anytime: prove the Phase 7 static guardrails
+./scripts/dev/verify-phase-7-static-manifests.sh
+
+# Optional but recommended after the Phase 6 gate: run the final local Phase 7 completion gate
+./scripts/dev/verify-phase-7-security-guardrails.sh
 ```
 
+`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6
+local static guardrail gate; it matches the dedicated `security-guardrails.yml`
+workflow closely enough for local reproduction and does not require a running
+cluster.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
@@ -177,6 +192,18 @@ docs paths, final auth-edge throttling coverage,
 reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
 then reruns the Phase 5 gate as the regression cascade. It still does not
 replace the manual browser-console validation required on `/_prod-smoke/`.
+`./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local
+Phase 7 completion gate. It runs the Phase 7 Session 6 static gate first and
+then the Phase 7 Session 7 runtime gate so contributors do not have to stitch
+those commands together manually. CI intentionally remains static-only through
+`security-guardrails.yml`.
+`./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted
+Phase 7 Session 7 live-cluster guardrail proof. It adds the missing Redis ACL,
+PostgreSQL cross-database, and RabbitMQ permission-boundary denials, uses
+pinned temporary probe images plus self-cleaning temporary `NetworkPolicy`
+rules, and then reruns
+`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
+through Phase 6 runtime regression umbrella.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you

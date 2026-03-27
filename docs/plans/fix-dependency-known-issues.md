@@ -36,11 +36,14 @@ These are stable messaging APIs unlikely to have breaking changes between 2024.0
 
 ## Issue 3: Pin Tilt Version
 
+**Status (March 27, 2026)**: Closed.
+
 **File**: `workspace/ai-agent-sandbox/Dockerfile` (line 69)
 
-**Current**: `RUN curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash`
+**Historical state at plan creation**: `RUN curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash`
 
-The install script hardcodes `VERSION="0.37.0"` (current latest), but future runs will pull whatever version is latest at that time. Pin to a specific release tarball:
+The implemented fix replaced the mutable installer flow with an explicit
+version argument plus a checksum-verified release tarball:
 
 **Change**:
 ```dockerfile
@@ -50,7 +53,7 @@ RUN curl -fsSL "https://github.com/tilt-dev/tilt/releases/download/v${TILT_VERSI
     | tar -xz -C /usr/local/bin tilt
 ```
 
-This makes the version explicit and upgradeable via a single `ARG` change.
+This keeps the version explicit and upgradeable via a single `ARG` change.
 
 **Verification**: Rebuild devcontainer image and verify `tilt version` outputs `v0.37.0`
 
@@ -59,7 +62,7 @@ This makes the version explicit and upgradeable via a single `ARG` change.
 After fixing issues 1-3, update `docs/dependency-notifications.md`:
 - Remove the three items from the Known Issues section
 - Update NGINX version in the version inventory tables from `alpine (UNPINNED)` to `1.27-alpine`
-- Update Tilt version in the version inventory from `latest (unpinned)` to `0.37.0 (pinned)`
+- Keep the Tilt version inventory aligned to `0.37.0` (pinned)
 - Update Spring Cloud version for currency-service from `2024.0.0` to `2025.0.0`
 
 ## Files to Modify
@@ -68,5 +71,5 @@ After fixing issues 1-3, update `docs/dependency-notifications.md`:
 |---|---|---|
 | `kubernetes/services/nginx-gateway/deployment.yaml` | orchestration | Pin `nginx:1.27-alpine` |
 | `currency-service/gradle/libs.versions.toml` | currency-service (sibling config) | `springCloud = "2025.0.0"` |
-| `workspace/ai-agent-sandbox/Dockerfile` | workspace (sibling config) | Pin Tilt to v0.37.0 via release tarball |
+| `workspace/ai-agent-sandbox/Dockerfile` | workspace (sibling config) | Closed: Tilt now uses the `v0.37.0` release tarball with checksum verification |
 | `docs/dependency-notifications.md` | orchestration | Update Known Issues + version inventory |

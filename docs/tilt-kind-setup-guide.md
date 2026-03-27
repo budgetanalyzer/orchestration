@@ -41,16 +41,17 @@ sudo mv ./kind /usr/local/bin/kind
 ### kubectl
 
 ```bash
-# Download and install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/kubectl
+# From the orchestration repo root
+./scripts/dev/install-verified-tool.sh kubectl
 ```
+
+This repo pins `kubectl` to `v1.30.8` so the client matches the local Kind node
+image baseline (`kindest/node:v1.30.8`).
 
 ### Helm
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | DESIRED_VERSION=v3.20.1 bash
+./scripts/dev/install-verified-tool.sh helm
 ```
 
 Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo now uses
@@ -62,15 +63,18 @@ gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
 ### Tilt
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+./scripts/dev/install-verified-tool.sh tilt
 ```
 
 ### mkcert
 
 ```bash
-curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
-chmod +x mkcert-*
-sudo mv mkcert-* /usr/local/bin/mkcert
+# Linux
+sudo apt-get install -y libnss3-tools
+./scripts/dev/install-verified-tool.sh mkcert
+
+# macOS
+brew install mkcert nss
 ```
 
 ### Verify Installation
@@ -78,10 +82,10 @@ sudo mv mkcert-* /usr/local/bin/mkcert
 ```bash
 docker --version        # Expected: Docker 20.10+
 kind --version          # Expected: kind v0.20+
-kubectl version --client # Expected: v1.28+
+kubectl version --client # Expected: v1.30.8
 helm version            # Expected: v3.20.x
-tilt version            # Expected: v0.33+
-mkcert --version        # Expected: v1.4+
+tilt version            # Expected: v0.37.0
+mkcert --version        # Expected: v1.4.4
 ```
 
 ## Service Repositories
@@ -115,7 +119,7 @@ parent-directory/
 
 ## Setup Steps
 
-If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. It now deletes any existing `kind` cluster, recreates it from scratch, installs Helm `v3.20.1` automatically if your current Helm is missing or unsupported, and refreshes the existing `istio` Helm repo index so stale host-side chart metadata does not break fresh-cluster rebuilds. The steps below spell out the same flow manually for debugging and learning.
+If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. It now deletes any existing `kind` cluster, recreates it from scratch, installs Helm `v3.20.1` automatically from a pinned verified release if your current Helm is missing or unsupported, and refreshes the existing `istio` Helm repo index so stale host-side chart metadata does not break fresh-cluster rebuilds. The steps below spell out the same flow manually for debugging and learning.
 
 ### 1. Run Pre-flight Check
 

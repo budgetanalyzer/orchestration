@@ -187,6 +187,10 @@ The Docker socket acts like a wormhole - commands issued inside the container "t
 **Implemented in**: `tests/setup-flow/` and `tests/security-preflight/`
 **Use case**: Testing the complete developer onboarding flow and the isolated Phase 0 runtime baseline
 
+Phase 7 status: these retained DinD suites are stale against the current
+Istio-only baseline and are non-gating for Phase 7 until they are explicitly
+realigned. Keep them as reference assets, not as current completion proof.
+
 #### The Problem
 
 We need to test that a brand new developer can:

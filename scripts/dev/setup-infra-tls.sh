@@ -61,14 +61,40 @@ ensure_cluster_access() {
 
 ensure_namespace() {
     local namespace=$1
+    local injection_label="disabled"
+    local psa_level="restricted"
 
     if kubectl get namespace "$namespace" >/dev/null 2>&1; then
         ok "Namespace '$namespace' exists"
         return 0
     fi
 
+    case "$namespace" in
+        default)
+            injection_label="enabled"
+            psa_level="restricted"
+            ;;
+        infrastructure)
+            injection_label="disabled"
+            psa_level="baseline"
+            ;;
+    esac
+
     info "Creating namespace '$namespace'"
-    kubectl create namespace "$namespace" >/dev/null
+    cat <<MANIFEST | kubectl apply -f - >/dev/null
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${namespace}
+  labels:
+    istio-injection: ${injection_label}
+    pod-security.kubernetes.io/enforce: ${psa_level}
+    pod-security.kubernetes.io/enforce-version: v1.32
+    pod-security.kubernetes.io/warn: ${psa_level}
+    pod-security.kubernetes.io/warn-version: v1.32
+    pod-security.kubernetes.io/audit: ${psa_level}
+    pod-security.kubernetes.io/audit-version: v1.32
+MANIFEST
     ok "Namespace '$namespace' created"
 }
 

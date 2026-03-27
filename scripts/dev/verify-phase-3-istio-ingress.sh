@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-BUSYBOX_IMAGE="busybox:1.36.1"
-HEADER_ECHO_IMAGE="mendhak/http-https-echo:38"
+PROBE_IMAGE="postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416"
+HEADER_ECHO_IMAGE="mendhak/http-https-echo:38@sha256:c73e039e883944a38e37eaba829eb9a67641cd03eff868827683951feceef96e"
 CURL_TIMEOUT=10
 AUTH_RATE_LIMIT_BURST=15
 AUTH_RATE_LIMIT_MATCH_HEADER="x-local-rate-limit: auth-sensitive"
@@ -131,7 +131,7 @@ ${label_lines}spec:
       type: RuntimeDefault
   containers:
     - name: probe
-      image: ${BUSYBOX_IMAGE}
+      image: ${PROBE_IMAGE}
       command: ["sh", "-c", "sleep 3600"]
       securityContext:
         allowPrivilegeEscalation: false
@@ -176,7 +176,7 @@ ${label_lines}spec:
       type: RuntimeDefault
   containers:
     - name: probe
-      image: ${BUSYBOX_IMAGE}
+      image: ${PROBE_IMAGE}
       command: ["sh", "-c", "sleep 3600"]
       securityContext:
         allowPrivilegeEscalation: false

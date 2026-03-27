@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-BUSYBOX_IMAGE="busybox:1.36.1"
+PROBE_IMAGE="postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416"
 CONNECT_TIMEOUT="${PHASE2_CONNECT_TIMEOUT:-3}"
 DENY_TIMEOUT="${PHASE2_DENY_TIMEOUT:-3}"
 ALLOW_ATTEMPTS="${PHASE2_ALLOW_ATTEMPTS:-5}"
@@ -162,9 +162,13 @@ metadata:
     sidecar.istio.io/inject: "false"
   labels:
 ${label_lines}spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: probe
-      image: ${BUSYBOX_IMAGE}
+      image: ${PROBE_IMAGE}
       command: ["sh", "-c", "sleep 3600"]
       securityContext:
         allowPrivilegeEscalation: false

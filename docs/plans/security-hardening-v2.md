@@ -565,6 +565,54 @@ Current implementation:
 
 ## Phase 7: Supply Chain, Admission Policy, and Verification Guardrails
 
+Detailed implementation breakdown: [security-hardening-v2-phase-7-implementation.md](./security-hardening-v2-phase-7-implementation.md)
+
+Current implementation:
+
+- Session 1 is implemented as the contract freeze. The source-of-truth
+  inventory is [`security-hardening-v2-phase-7-session-1-contract.md`](./security-hardening-v2-phase-7-session-1-contract.md): it freezes the seven allowed local Tilt `:latest` images, inventories orchestration-owned and sibling third-party pinning targets, records the installer hardening targets, and classifies `tests/setup-flow` plus `tests/security-preflight` as stale non-gating Phase 7 assets until realigned.
+- Session 2 is implemented in-repo: orchestration-owned third-party images are
+  now digest-pinned across active manifests, inline Tilt Dockerfiles,
+  `ext-authz/Dockerfile`, the main and retained Kind configs, the retained DinD
+  assets, and the Phase 0 through Phase 6 verifier probe-image constants. The
+  repo also now ships `scripts/dev/check-phase-7-image-pinning.sh` as the
+  static guard against missing digests and unexpected `:latest` refs.
+- Session 5 is implemented in-repo: `kubernetes/kyverno/` now ships a real
+  policy layout plus positive/negative Kyverno CLI fixtures, Tilt applies the
+  policy directory instead of a single scaffold file, the retained smoke policy
+  stays as a cheap bootstrap signal, and the enforce-mode suite now covers
+  namespace Pod Security labels, workload `automountServiceAccountToken: false`,
+  the repo-owned workload `securityContext` baseline, obvious default-credential
+  literals, and third-party image digests. Exceptions are explicit and narrow:
+  system/chart-managed namespaces are excluded from the repo-owned workload
+  baseline, fully mutated sidecar-injected Pods are skipped by the direct Pod
+  digest rule because controller-spec autogen rules already enforce the
+  repo-owned images while Istio adds chart-managed containers during mutation,
+  and the ingress gateway token-retention case remains called out by design.
+- Session 6 is implemented in-repo: `scripts/dev/verify-phase-7-static-manifests.sh`
+  now bootstraps pinned `kubeconform`, `kube-linter`, and `kyverno` binaries,
+  validates checked-in manifests, runs the Kyverno fixture suite, reuses the
+  image-pinning guard, scans active setup guidance for forbidden pipe-to-shell
+  patterns, verifies namespace PSA labels, and exposes `--self-test` against
+  intentional failing fixtures. `.github/workflows/security-guardrails.yml`
+  runs that same gate on pull requests and `main`.
+- Session 7 is implemented in-repo:
+  `scripts/dev/verify-phase-7-runtime-guardrails.sh` now adds the live-cluster
+  Phase 7 proof. It creates pinned temporary Redis and PostgreSQL probe pods
+  plus self-cleaning `NetworkPolicy` rules, proves Redis ACL denials, proves
+  PostgreSQL cross-database denials, proves RabbitMQ unauthorized
+  vhost/queue/exchange access is rejected, and then reruns
+  `scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
+  through Phase 6 runtime regression umbrella.
+- Session 8 is implemented in-repo:
+  `scripts/dev/verify-phase-7-security-guardrails.sh` is now the single local
+  Phase 7 completion gate. It runs
+  `scripts/dev/verify-phase-7-static-manifests.sh` first and
+  `scripts/dev/verify-phase-7-runtime-guardrails.sh` second, while
+  `.github/workflows/security-guardrails.yml` stays intentionally static-only.
+  The final local gate passed on March 27, 2026 via
+  `./scripts/dev/verify-phase-7-security-guardrails.sh`.
+
 ### 7a. Pin third-party images and base images
 
 Pin:
@@ -581,6 +629,18 @@ Local service images tagged `:latest` by Tilt are acceptable as local build outp
 
 Replace pipe-to-shell installer guidance with integrity-checked install guidance wherever possible.
 
+- Session 4 is implemented for the orchestration-owned setup surfaces: host
+  guidance now flows through `scripts/dev/install-verified-tool.sh`, which
+  installs pinned `kubectl`, Helm, Tilt, and `mkcert` releases from
+  checksum-verified artifacts, `setup.sh` now uses that path for Helm
+  auto-install, and the retained DinD test image no longer uses floating
+  `stable.txt`, `latest`, or pipe-to-shell installer flows. The coordinated
+  `../workspace/ai-agent-sandbox/Dockerfile` is now on the same hardened path:
+  it uses a keyring-based NodeSource apt setup plus checksum-verified Helm and
+  Tilt downloads. The temporary
+  `tmp/ai-agent-sandbox.Dockerfile.phase7-session4` handoff was removed during
+  remediation after the sibling workspace Dockerfile matched it byte-for-byte.
+
 ### 7c. Kyverno admission policies
 
 Add cluster admission policies for:
@@ -589,8 +649,11 @@ Add cluster admission policies for:
 - `automountServiceAccountToken: false`
 - rejection of default credentials in manifests
 - required image pinning for third-party dependencies
-- required `NetworkPolicy` coverage for protected workloads
 - namespace Pod Security labels
+
+Do not use Kyverno to prove `NetworkPolicy` selector correctness or live
+reachability. Static checks and runtime verifiers remain the proof for that
+part of the security model.
 
 ### 7d. Static manifest validation
 

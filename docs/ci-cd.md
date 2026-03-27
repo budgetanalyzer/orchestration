@@ -1,6 +1,6 @@
 # CI/CD Workflows
 
-This document describes the GitHub Actions CI/CD setup for Budget Analyzer services.
+This document describes the GitHub Actions CI/CD setup for Budget Analyzer services and the orchestration repository.
 
 ## Overview
 
@@ -55,6 +55,44 @@ The build enforces code quality via:
 
 Backend services depend on `service-common`. Each workflow clones and builds service-common to Maven Local before building the service itself.
 
+## Orchestration Workflows
+
+### `security-guardrails.yml`
+
+The orchestration repo now has a dedicated static security workflow for Phase 7
+Session 6. It is intentionally additive beside `test-setup.yml`; it does not
+reuse the stale DinD suites as guardrails for this phase.
+
+What it runs:
+
+- `./scripts/dev/verify-phase-7-static-manifests.sh`
+- `./scripts/dev/verify-phase-7-static-manifests.sh --self-test`
+
+The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
+`kyverno` binaries through `scripts/dev/install-verified-tool.sh`, then runs:
+
+- schema validation for checked-in manifests
+- repo-specific kube-linter checks with documented exceptions
+- Kyverno CLI pass/fail fixtures
+- pattern scans for image pinning, namespace PSA labels, and lingering
+  pipe-to-shell guidance in active setup docs/scripts
+
+Use the same command locally to reproduce workflow failures without a cluster:
+
+```bash
+./scripts/dev/verify-phase-7-static-manifests.sh
+```
+
+For full local Phase 7 completion on a live cluster, use the separate final
+gate:
+
+```bash
+./scripts/dev/verify-phase-7-security-guardrails.sh
+```
+
+That wrapper intentionally stays out of GitHub Actions because the runtime
+proof depends on a live local cluster. CI for Phase 7 remains static-only.
+
 ## Running Locally
 
 To run the same checks locally:
@@ -74,6 +112,18 @@ To run the same checks locally:
 
 # Run checkstyle
 ./gradlew checkstyleMain checkstyleTest
+```
+
+For orchestration static security guardrails:
+
+```bash
+./scripts/dev/verify-phase-7-static-manifests.sh
+```
+
+For the full local Phase 7 completion gate on a running cluster:
+
+```bash
+./scripts/dev/verify-phase-7-security-guardrails.sh
 ```
 
 ## Future Enhancements

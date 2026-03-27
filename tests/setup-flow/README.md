@@ -1,5 +1,15 @@
 # Setup Flow Testing
 
+> Phase 7 status: this retained DinD suite is stale against the current
+> Istio-only baseline and is non-gating for Phase 7 until it is explicitly
+> realigned. Keep it in the inventory, and keep its third-party image refs
+> aligned with the same digest-pinning rule as the rest of the repo.
+>
+> Its Kind node image intentionally stays on `kindest/node:v1.32.2` while the
+> main local cluster config stays on `kindest/node:v1.30.8`. That divergence is
+> documented, not normalized: this suite is a retained reference asset, not the
+> current parity baseline.
+
 Containerized test environment that validates the complete `setup.sh` flow using Docker-in-Docker (DinD).
 
 ## Overview

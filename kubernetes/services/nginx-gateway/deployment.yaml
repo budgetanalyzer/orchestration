@@ -43,7 +43,7 @@ spec:
           mountPath: /workdir
       containers:
       - name: nginx
-        image: nginxinc/nginx-unprivileged:1.29.4-alpine
+        image: nginxinc/nginx-unprivileged:1.29.4-alpine@sha256:a6c4f61f456b85b8fdf7ec7ab28cc3e299440e6fb4a9dea520e5fd8fd440025e
         ports:
         - containerPort: 8080
           name: http

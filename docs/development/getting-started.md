@@ -38,6 +38,7 @@ From your **host terminal** (not the devcontainer):
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 vim .env          # Review infra password defaults; add Auth0 + FRED credentials
+./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof
 tilt up           # Start everything
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
@@ -45,6 +46,8 @@ tilt up           # Start everything
 ./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
 ./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
 ./scripts/dev/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
+./scripts/dev/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended Phase 6 completion gate
+./scripts/dev/verify-phase-7-security-guardrails.sh  # Optional but recommended final local Phase 7 completion gate
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
@@ -55,10 +58,10 @@ database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
 broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
 `currency-service`, `redis-ops`) plus a restricted probe-only `default` user.
 `setup.sh` now rebuilds the `kind` cluster from scratch on every run instead of
-reusing an existing cluster, and it installs Helm `v3.20.1` automatically if
-the current Helm binary is missing or unsupported. It also refreshes the
-existing `istio` Helm repo index on every run so the host does not reuse stale
-chart metadata after an Istio version bump.
+reusing an existing cluster, and it installs Helm `v3.20.1` automatically from
+a pinned verified release if the current Helm binary is missing or unsupported.
+It also refreshes the existing `istio` Helm repo index on every run so the host
+does not reuse stale chart metadata after an Istio version bump.
 `setup.sh` now generates the internal transport-TLS secrets automatically.
 To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the host.
 `./scripts/dev/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
@@ -68,12 +71,20 @@ completion gate for Redis, PostgreSQL, and RabbitMQ.
 `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the final Pod Security
 and runtime-hardening gate; it reruns the earlier phase verifiers as
 regressions.
+`./scripts/dev/verify-phase-7-static-manifests.sh` is the local static
+Session 6 guardrail gate and matches the dedicated CI workflow closely enough
+for local reproduction without a cluster.
+`./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
+7 completion command; it runs the Session 6 static gate and then the Session 7
+live runtime proof in order. The narrower
+`./scripts/dev/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful
+when you only need the live-cluster Phase 7 runtime half.
 All verification scripts run against the current `kubectl` context. If a
 verifier says pods or network policies are missing while Tilt looks healthy,
 check `kubectl config current-context` and `tilt get uiresources` from the same
 host shell before debugging the verifier itself.
 
-> **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and how to install it.
+> **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and points Linux/macOS hosts at the checked-in verified installer flow for `kubectl`, Helm, Tilt, and `mkcert`.
 
 ## External Services (~10 min one-time setup)
 

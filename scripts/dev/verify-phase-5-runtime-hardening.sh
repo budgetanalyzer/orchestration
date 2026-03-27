@@ -16,7 +16,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUSYBOX_IMAGE="busybox:1.36.1"
+PROBE_IMAGE="postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416"
 WAIT_TIMEOUT="120s"
 REGRESSION_TIMEOUT="10m"
 RUN_REGRESSIONS=true
@@ -735,13 +735,20 @@ verify_restricted_psa_smoke() {
     section "Restricted PSA Meshed Smoke Test"
 
     TEMP_NAMESPACE="ba-phase5-psa-$(date +%s)"
-    kubectl create namespace "${TEMP_NAMESPACE}" >/dev/null
-    kubectl label namespace "${TEMP_NAMESPACE}" \
-        istio-injection=enabled \
-        pod-security.kubernetes.io/enforce=restricted \
-        pod-security.kubernetes.io/warn=restricted \
-        pod-security.kubernetes.io/audit=restricted \
-        >/dev/null
+    cat <<MANIFEST | kubectl apply -f - >/dev/null
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${TEMP_NAMESPACE}
+  labels:
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.32
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.32
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.32
+MANIFEST
 
     set +e
     local output status
@@ -757,7 +764,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: app
-      image: ${BUSYBOX_IMAGE}
+      image: ${PROBE_IMAGE}
       command: ["sh", "-c", "sleep 300"]
       securityContext:
         allowPrivilegeEscalation: false
@@ -807,7 +814,7 @@ spec:
   automountServiceAccountToken: false
   containers:
     - name: app
-      image: ${BUSYBOX_IMAGE}
+      image: ${PROBE_IMAGE}
       command: ["sh", "-c", "sleep 300"]
       securityContext:
         privileged: true

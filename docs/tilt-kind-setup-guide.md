@@ -305,7 +305,7 @@ curl http://localhost:8081/actuator/health
 After all services are healthy:
 
 - **Application**: https://app.budgetanalyzer.localhost
-- **API Docs**: https://app.budgetanalyzer.localhost/api/docs
+- **API Docs**: https://app.budgetanalyzer.localhost/api-docs
 - **Tilt UI**: http://localhost:10350
 - **RabbitMQ Management**: http://localhost:15672 (`rabbitmq-admin` / value from `RABBITMQ_BOOTSTRAP_PASSWORD`)
 

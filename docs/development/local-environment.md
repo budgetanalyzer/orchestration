@@ -193,10 +193,10 @@ rate-limit bucket correctness.
 gate and reruns the earlier phase verifiers as regressions.
 `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
 completion gate: it checks the live dev/strict CSP split on the real app
-paths, keeps `/api/docs` probes visible as warning-only checks, runs a real
+paths, keeps `/api-docs` probes visible as warning-only checks, runs a real
 syntax check of the checked-in
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod with
-the mounted include files, the fail-closed `/api/docs/*` contract for unknown
+the mounted include files, the fail-closed `/api-docs/*` contract for unknown
 docs paths, final auth-edge throttling coverage,
 reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
 then reruns the Phase 5 gate as the regression cascade. It still does not
@@ -328,9 +328,9 @@ The full Phase 6 completion gate is now:
 ```
 
 That verifier checks the checked-in dev/strict CSP split on the real app
-paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api/docs`
+paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api-docs`
 visibility plus fail-closed checks, the checked-in production-route syntax validation inside the live
-`nginx-gateway` runtime, the fail-closed `/api/docs/*` behavior for unknown
+`nginx-gateway` runtime, the fail-closed `/api-docs/*` behavior for unknown
 docs paths, the remaining auth-edge throttling
 paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
 proof, and then reruns the full Phase 5 runtime-hardening cascade. Manual

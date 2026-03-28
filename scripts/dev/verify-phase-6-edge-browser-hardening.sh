@@ -7,7 +7,7 @@
 # behavior on the real app paths, the final auth-edge throttling coverage, the
 # API rate-limit identity model, and the Phase 5 regression cascade.
 #
-# The shared /api/docs surface remains observable here, but docs-route problems
+# The shared /api-docs surface remains observable here, but docs-route problems
 # are warning-only and do not block Phase 6 completion.
 #
 # Usage:
@@ -598,6 +598,10 @@ verify_static_contracts() {
         "Strict CSP include disables object-src"
     assert_file_contains "${REPO_DIR}/nginx/includes/security-headers-strict-csp.conf" "base-uri 'self'" \
         "Strict CSP include pins base-uri to self"
+    warn_file_contains "${REPO_DIR}/nginx/includes/security-headers-docs-csp.conf" "style-src 'self' 'unsafe-inline'" \
+        "Docs CSP include keeps the docs-only relaxed style policy explicit"
+    warn_file_not_contains "${REPO_DIR}/nginx/includes/security-headers-docs-csp.conf" "'unsafe-eval'" \
+        "Docs CSP include still omits 'unsafe-eval'"
 
     assert_file_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "include includes/security-headers-dev-csp\\.conf;" \
         "Dev NGINX config defaults to the relaxed CSP include"
@@ -612,28 +616,40 @@ verify_static_contracts() {
         "Dev smoke route re-includes the strict CSP"
 
     # Keep docs assertions limited to the retained route graph.
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api/docs \\{$" \
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
+        "include includes/security-headers-docs-csp.conf;" \
+        "Dev /api-docs route re-includes the docs-only CSP"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
         "alias /usr/share/nginx/html/docs/index.html;" \
-        "Dev /api/docs route still serves the checked-in docs shell"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location ~ \\^/api/docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
+        "Dev /api-docs route still serves the checked-in docs shell"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(swagger-ui\\\\\\.css\\|swagger-ui-bundle\\\\\\.js\\|swagger-initializer\\\\\\.js\\|swagger-ui-overrides\\\\\\.css\\)\\$ \\{$" \
+        "alias /usr/share/nginx/html/docs/\$1;" \
+        "Dev /api-docs route explicitly serves the self-hosted Swagger UI assets"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
         "alias /usr/share/nginx/html/docs/\$1;" \
         "Dev OpenAPI download route still serves the mounted spec files"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/docs/ \\{$" \
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
         "return 404;" \
-        "Dev /api/docs/* catch-all fails closed"
+        "Dev /api-docs/* catch-all fails closed"
 
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /@vite/client \\{$" \
         "return 404;" \
         "Production config removes /@vite/client"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api/docs \\{$" \
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
+        "include includes/security-headers-docs-csp.conf;" \
+        "Production /api-docs route re-includes the docs-only CSP"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
         "alias /usr/share/nginx/html/docs/index.html;" \
-        "Production /api/docs route still serves the checked-in docs shell"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location ~ \\^/api/docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
+        "Production /api-docs route still serves the checked-in docs shell"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(swagger-ui\\\\\\.css\\|swagger-ui-bundle\\\\\\.js\\|swagger-initializer\\\\\\.js\\|swagger-ui-overrides\\\\\\.css\\)\\$ \\{$" \
+        "alias /usr/share/nginx/html/docs/\$1;" \
+        "Production /api-docs route explicitly serves the self-hosted Swagger UI assets"
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
         "alias /usr/share/nginx/html/docs/\$1;" \
         "Production OpenAPI download route still serves the mounted spec files"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/docs/ \\{$" \
+    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
         "return 404;" \
-        "Production /api/docs/* catch-all fails closed"
+        "Production /api-docs/* catch-all fails closed"
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /_prod-smoke \\{$" \
         "return 404;" \
         "Production config removes /_prod-smoke"
@@ -687,13 +703,15 @@ verify_static_contracts() {
         "Auth HTTPRoute still routes /logout to Session Gateway"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /user' \
         "Auth HTTPRoute still routes /user to Session Gateway"
+    assert_file_contains "${REPO_DIR}/kubernetes/gateway/app-httproute.yaml" 'value: /api-docs' \
+        "App HTTPRoute explicitly routes /api-docs through nginx-gateway"
 }
 
 verify_docs_fail_closed_response() {
     local path="$1" label="$2"
     local response status csp body_response body
 
-    response="$(local_nginx_headers_and_status "${path}")"
+    response="$(external_headers_and_status "${path}")"
     status="$(extract_http_status "${response}")"
     if [[ "${status}" == "404" ]]; then
         pass "${label} returns 404"
@@ -708,7 +726,9 @@ verify_docs_fail_closed_response() {
         warn "${label} does not include a Content-Security-Policy header"
     fi
 
-    body_response="$(local_nginx_body_and_status "${path}")"
+    body_response="$(curl -sk --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
+        -w '\nHTTP_STATUS:%{http_code}\n' \
+        "${APP_BASE_URL}${path}" 2>/dev/null || true)"
     body="$(extract_body "${body_response}")"
     warn_text_excludes "${body}" "${label} does not fall through to the frontend SPA" "/@vite/client" "/src/main.tsx" '<div id="root"></div>'
 }
@@ -760,68 +780,76 @@ verify_public_headers() {
     assert_csp_contains "${csp}" "Production-smoke route uses the strict CSP contract" "script-src 'self'" "style-src 'self'" "object-src 'none'" "base-uri 'self'"
 }
 
-verify_local_docs_headers() {
-    section "Local NGINX Docs Visibility (Warning-Only)"
+verify_docs_headers() {
+    section "Docs Visibility (Warning-Only)"
 
     start_nginx_port_forward
 
     local response status csp cors
 
-    response="$(local_nginx_headers_and_status "/api/docs")"
+    response="$(external_headers_and_status "/api-docs")"
     status="$(extract_http_status "${response}")"
     if [[ "${status}" == "200" ]]; then
-        pass "Direct NGINX /api/docs route returns 200"
+        pass "Public /api-docs route returns 200"
     else
-        warn "Direct NGINX /api/docs route returned ${status:-000} (expected 200)"
+        warn "Public /api-docs route returned ${status:-000} (expected 200)"
     fi
     csp="$(extract_header_value "Content-Security-Policy" "${response}")"
     if [[ -n "${csp}" ]]; then
-        pass "Direct NGINX /api/docs route includes a Content-Security-Policy header"
+        pass "Public /api-docs route includes a Content-Security-Policy header"
     else
-        warn "Direct NGINX /api/docs route does not include a Content-Security-Policy header"
+        warn "Public /api-docs route does not include a Content-Security-Policy header"
     fi
 
-    response="$(local_nginx_headers_and_status "/api/docs/openapi.json")"
+    response="$(external_headers_and_status "/api-docs/openapi.json")"
     status="$(extract_http_status "${response}")"
     if [[ "${status}" == "200" ]]; then
-        pass "Direct NGINX /api/docs/openapi.json returns 200"
+        pass "Public /api-docs/openapi.json returns 200"
     else
-        warn "Direct NGINX /api/docs/openapi.json returned ${status:-000} (expected 200)"
+        warn "Public /api-docs/openapi.json returned ${status:-000} (expected 200)"
     fi
     cors="$(extract_header_value "Access-Control-Allow-Origin" "${response}")"
     if [[ "${cors}" == "*" ]]; then
-        warn "/api/docs/openapi.json still exposes wildcard CORS"
+        warn "/api-docs/openapi.json still exposes wildcard CORS"
     else
-        pass "/api/docs/openapi.json does not expose wildcard CORS"
+        pass "/api-docs/openapi.json does not expose wildcard CORS"
     fi
     csp="$(extract_header_value "Content-Security-Policy" "${response}")"
     if [[ -n "${csp}" ]]; then
-        pass "Direct NGINX /api/docs/openapi.json includes a Content-Security-Policy header"
+        pass "Public /api-docs/openapi.json includes a Content-Security-Policy header"
     else
-        warn "Direct NGINX /api/docs/openapi.json does not include a Content-Security-Policy header"
+        warn "Public /api-docs/openapi.json does not include a Content-Security-Policy header"
     fi
 
-    response="$(local_nginx_headers_and_status "/api/docs/openapi.yaml")"
+    response="$(external_headers_and_status "/api-docs/openapi.yaml")"
     status="$(extract_http_status "${response}")"
     if [[ "${status}" == "200" ]]; then
-        pass "Direct NGINX /api/docs/openapi.yaml returns 200"
+        pass "Public /api-docs/openapi.yaml returns 200"
     else
-        warn "Direct NGINX /api/docs/openapi.yaml returned ${status:-000} (expected 200)"
+        warn "Public /api-docs/openapi.yaml returned ${status:-000} (expected 200)"
     fi
     cors="$(extract_header_value "Access-Control-Allow-Origin" "${response}")"
     if [[ "${cors}" == "*" ]]; then
-        warn "/api/docs/openapi.yaml still exposes wildcard CORS"
+        warn "/api-docs/openapi.yaml still exposes wildcard CORS"
     else
-        pass "/api/docs/openapi.yaml does not expose wildcard CORS"
+        pass "/api-docs/openapi.yaml does not expose wildcard CORS"
     fi
     csp="$(extract_header_value "Content-Security-Policy" "${response}")"
     if [[ -n "${csp}" ]]; then
-        pass "Direct NGINX /api/docs/openapi.yaml includes a Content-Security-Policy header"
+        pass "Public /api-docs/openapi.yaml includes a Content-Security-Policy header"
     else
-        warn "Direct NGINX /api/docs/openapi.yaml does not include a Content-Security-Policy header"
+        warn "Public /api-docs/openapi.yaml does not include a Content-Security-Policy header"
     fi
 
-    verify_docs_fail_closed_response "/api/docs/not-a-real-file" "Direct NGINX unknown /api/docs path"
+    verify_docs_fail_closed_response "/api-docs/not-a-real-file" "Public unknown /api-docs path"
+
+    response="$(local_nginx_headers_and_status "/api-docs")"
+    status="$(extract_http_status "${response}")"
+    if [[ "${status}" == "200" ]]; then
+        pass "Direct NGINX /api-docs route returns 200"
+    else
+        warn "Direct NGINX /api-docs route returned ${status:-000} (expected 200)"
+    fi
 }
 
 verify_auth_edge_runtime() {
@@ -878,7 +906,7 @@ main() {
     verify_production_nginx_syntax
     verify_static_contracts
     verify_public_headers
-    verify_local_docs_headers
+    verify_docs_headers
     verify_auth_edge_runtime
     verify_nested_verifiers
 
@@ -887,7 +915,7 @@ main() {
     printf 'Failed: %d\n' "${FAILED}"
     printf 'Warnings: %d\n' "${WARNED}"
     info "Manual browser-console validation is still required on /_prod-smoke/ before Phase 6 can be called complete"
-    info "Warnings from /api/docs checks stay visible here but do not block Phase 6 completion"
+    info "Warnings from /api-docs checks stay visible here but do not block Phase 6 completion"
 
     echo
     echo "==============================================================="

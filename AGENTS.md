@@ -121,10 +121,11 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 **Single entry point**: `app.budgetanalyzer.localhost`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
+- `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
 - `/login`, `/*` → NGINX (frontend, no auth required)
 
 **Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions.
-  - `app.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
+  - `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:
 - Same-origin architecture = no CORS issues

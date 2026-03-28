@@ -2,10 +2,9 @@ openapi: 3.1.0
 info:
   title: Budget Analyzer - Unified API
   version: '1.0'
-  description: 'Unified API documentation for all Budget Analyzer microservices. This
-    specification combines the Budget Analyzer API, Currency Service, and Session
-    Gateway into a single document for client code generation. Note: Session Gateway
-    endpoints (User) are served from the BFF origin (app.*), not the API gateway.'
+  description: Unified API documentation for all Budget Analyzer microservices. This
+    specification combines the Budget Analyzer API and Currency Service into a single
+    document for client code generation.
   contact:
     name: Bleu Rubin
     email: contact@budgetanalyzer.org
@@ -13,44 +12,41 @@ info:
     name: MIT
     url: https://opensource.org/licenses/MIT
 servers:
-- url: https://app.budgetanalyzer.localhost/api
-  description: Local environment (via gateway)
-- url: https://api.budgetanalyzer.org
-  description: Production environment
+  - url: https://app.budgetanalyzer.localhost/api
+    description: Local environment (via gateway)
+  - url: https://api.budgetanalyzer.org
+    description: Production environment
 tags:
-- name: Saved Views
-  description: Create and manage saved transaction views
-  x-service: transaction-service
-- name: Statement Formats
-  description: Manage statement format configurations for imports
-  x-service: transaction-service
-- name: Transactions
-  description: Import and manipulate transactions
-  x-service: transaction-service
-- name: Currency Series Handler
-  description: Endpoints for querying, creating, and updating currency series
-  x-service: currency-service
-- name: Exchange Rates Handler
-  description: Endpoints for querying and importing exchange rates
-  x-service: currency-service
-- name: User
-  description: Authentication status and user information
-  x-service: session-gateway
+  - name: Saved Views
+    description: Create and manage saved transaction views
+    x-service: transaction-service
+  - name: Statement Formats
+    description: Manage statement format configurations for imports
+    x-service: transaction-service
+  - name: Transactions
+    description: Import and manipulate transactions
+    x-service: transaction-service
+  - name: Currency Series Handler
+    description: Endpoints for querying, creating, and updating currency series
+    x-service: currency-service
+  - name: Exchange Rates Handler
+    description: Endpoints for querying and importing exchange rates
+    x-service: currency-service
 paths:
   /v1/views/{id}:
     get:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Get a saved view
       description: Gets a saved view by ID
       operationId: getView
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: OK
@@ -87,17 +83,17 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Update a saved view
       description: Updates a saved view's name or criteria
       operationId: updateView
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -149,17 +145,17 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Delete a saved view
       description: Deletes a saved view
       operationId: deleteView
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '204':
           description: No Content
@@ -193,18 +189,18 @@ paths:
   /v1/statement-formats/{formatKey}:
     get:
       tags:
-      - Statement Formats
+        - Statement Formats
       summary: Get statement format details
       description: Returns details of a specific statement format by its format key.
       operationId: getFormat
       parameters:
-      - name: formatKey
-        in: path
-        description: Unique format identifier
-        required: true
-        schema:
-          type: string
-        example: capital-one
+        - name: formatKey
+          in: path
+          description: Unique format identifier
+          required: true
+          schema:
+            type: string
+          example: capital-one
       responses:
         '200':
           description: OK
@@ -241,19 +237,19 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-      - Statement Formats
+        - Statement Formats
       summary: Update a statement format
       description: Updates an existing statement format. Only provided fields will
         be updated. The format key and format type cannot be changed after creation.
       operationId: updateFormat
       parameters:
-      - name: formatKey
-        in: path
-        description: Unique format identifier
-        required: true
-        schema:
-          type: string
-        example: capital-one
+        - name: formatKey
+          in: path
+          description: Unique format identifier
+          required: true
+          schema:
+            type: string
+          example: capital-one
       requestBody:
         content:
           application/json:
@@ -305,19 +301,19 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-      - Statement Formats
+        - Statement Formats
       summary: Disable a statement format
       description: Disables a statement format (soft delete). Disabled formats will
         not be available for file imports but can be re-enabled by updating the format.
       operationId: disableFormat
       parameters:
-      - name: formatKey
-        in: path
-        description: Unique format identifier
-        required: true
-        schema:
-          type: string
-        example: capital-one
+        - name: formatKey
+          in: path
+          description: Unique format identifier
+          required: true
+          schema:
+            type: string
+          example: capital-one
       responses:
         '204':
           description: Format successfully disabled
@@ -351,7 +347,7 @@ paths:
   /v1/views:
     get:
       tags:
-      - Saved Views
+        - Saved Views
       summary: List saved views
       description: Gets all saved views for the current user
       operationId: listViews
@@ -384,7 +380,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Create a saved view
       description: Creates a new saved view for the current user
       operationId: createView
@@ -431,23 +427,23 @@ paths:
   /v1/views/{id}/pin/{txnId}:
     post:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Pin a transaction
       description: Pins a transaction to the view
       operationId: pinTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: txnId
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: OK
@@ -490,23 +486,23 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Unpin a transaction
       description: Removes a pin from the view
       operationId: unpinTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: txnId
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: OK
@@ -544,23 +540,23 @@ paths:
   /v1/views/{id}/exclude/{txnId}:
     post:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Exclude a transaction
       description: Excludes a transaction from the view
       operationId: excludeTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: txnId
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: OK
@@ -603,24 +599,24 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Remove exclusion
       description: Removes an exclusion, allowing the transaction to appear if it
         matches criteria
       operationId: unexcludeTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: txnId
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: OK
@@ -658,7 +654,7 @@ paths:
   /v1/transactions/preview:
     post:
       tags:
-      - Transactions
+        - Transactions
       summary: Preview transactions from a file before import
       description: Parses a CSV or PDF file and returns the extracted transactions
         for review and editing before batch import. No data is persisted. The format
@@ -666,21 +662,21 @@ paths:
         any parsing warnings.
       operationId: previewTransactions
       parameters:
-      - name: format
-        in: query
-        description: Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one'
-          for CSV). Use GET /v1/statement-formats to list available formats.
-        required: true
-        schema:
-          type: string
-        example: capital-one-yearly
-      - name: accountId
-        in: query
-        description: Account ID to pre-fill for all transactions
-        required: false
-        schema:
-          type: string
-        example: checking-12345
+        - name: format
+          in: query
+          description: Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one'
+            for CSV). Use GET /v1/statement-formats to list available formats.
+          required: true
+          schema:
+            type: string
+          example: capital-one-yearly
+        - name: accountId
+          in: query
+          description: Account ID to pre-fill for all transactions
+          required: false
+          schema:
+            type: string
+          example: checking-12345
       requestBody:
         content:
           multipart/form-data:
@@ -692,7 +688,7 @@ paths:
                   format: binary
                   description: CSV or PDF file to preview
               required:
-              - file
+                - file
         required: true
       responses:
         '200':
@@ -753,7 +749,7 @@ paths:
   /v1/transactions/bulk-delete:
     post:
       tags:
-      - Transactions
+        - Transactions
       summary: Bulk delete transactions
       description: Soft-deletes multiple transactions in a single operation. Returns
         the count of successfully deleted transactions and any IDs that were not found
@@ -779,8 +775,8 @@ paths:
                   value:
                     deletedCount: 2
                     notFoundIds:
-                    - 999
-                    - 1000
+                      - 999
+                      - 1000
         '400':
           description: Bad Request
           content:
@@ -811,7 +807,7 @@ paths:
   /v1/transactions/batch:
     post:
       tags:
-      - Transactions
+        - Transactions
       summary: Import a batch of transactions
       description: Imports transactions from a batch request (typically from the preview
         endpoint after user edits). Validates all transactions upfront and rejects
@@ -861,7 +857,7 @@ paths:
   /v1/statement-formats:
     get:
       tags:
-      - Statement Formats
+        - Statement Formats
       summary: List all statement formats
       description: Returns all configured statement formats (both enabled and disabled).
       operationId: listFormats
@@ -894,7 +890,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-      - Statement Formats
+        - Statement Formats
       summary: Create a new statement format
       description: Creates a new statement format configuration. For CSV formats,
         the column header fields (dateHeader, descriptionHeader, creditHeader) are
@@ -957,17 +953,17 @@ paths:
   /v1/transactions/{id}:
     get:
       tags:
-      - Transactions
+        - Transactions
       summary: Get transaction
       description: Get transaction by id
       operationId: getTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: OK
@@ -1004,17 +1000,17 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-      - Transactions
+        - Transactions
       summary: Delete transaction
       description: Delete transaction by id
       operationId: deleteTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '204':
           description: No Content
@@ -1047,18 +1043,18 @@ paths:
                 message: Service Unavailable
     patch:
       tags:
-      - Transactions
+        - Transactions
       summary: Update transaction
       description: Updates mutable fields (description and accountId) of a transaction.
         All other fields are immutable to preserve financial data integrity.
       operationId: updateTransaction
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       requestBody:
         content:
           application/json:
@@ -1111,18 +1107,18 @@ paths:
   /v1/views/{id}/transactions:
     get:
       tags:
-      - Saved Views
+        - Saved Views
       summary: Get view transaction IDs
       description: Gets IDs of active transactions in this view, grouped by membership
         type (matched, pinned, excluded). Soft-deleted transactions are excluded.
       operationId: getViewTransactions
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: OK
@@ -1160,7 +1156,7 @@ paths:
   /v1/transactions:
     get:
       tags:
-      - Transactions
+        - Transactions
       summary: Get transactions
       description: Get all transactions
       operationId: getTransactions
@@ -1194,17 +1190,17 @@ paths:
   /v1/transactions/count:
     get:
       tags:
-      - Transactions
+        - Transactions
       summary: Count transactions
       description: Returns the count of active transactions matching the given filter
         criteria. Non-admin users only count their own transactions.
       operationId: countTransactions
       parameters:
-      - name: filter
-        in: query
-        required: true
-        schema:
-          $ref: '#/components/schemas/TransactionFilter'
+        - name: filter
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TransactionFilter'
       responses:
         '200':
           description: OK
@@ -1234,17 +1230,17 @@ paths:
   /v1/currencies/{id}:
     get:
       tags:
-      - Currency Series Handler
+        - Currency Series Handler
       summary: Get currency series by ID
       description: Retrieve a currency series by its unique identifier
       operationId: getById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       responses:
         '200':
           description: Currency series retrieved successfully
@@ -1281,18 +1277,18 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-      - Currency Series Handler
+        - Currency Series Handler
       summary: Update currency series
       description: Update an existing currency series (currency code and provider
         series ID are immutable, only enabled status can be changed)
       operationId: update
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-          format: int64
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       requestBody:
         content:
           application/json:
@@ -1345,7 +1341,7 @@ paths:
   /v1/exchange-rates/import:
     post:
       tags:
-      - Exchange Rates Handler
+        - Exchange Rates Handler
       summary: Import latest available rates from FRED
       description: Retrieve latest un-imported exchange rates from FRED for all enabled
         currencies - manually triggers daily cron job
@@ -1389,18 +1385,18 @@ paths:
   /v1/currencies:
     get:
       tags:
-      - Currency Series Handler
+        - Currency Series Handler
       summary: Get all currency series
       description: Retrieve all currency series, optionally filtered by enabled status
       operationId: getAll
       parameters:
-      - name: enabledOnly
-        in: query
-        description: Filter by enabled status (true = enabled only, false = all)
-        required: false
-        schema:
-          type: boolean
-          default: false
+        - name: enabledOnly
+          in: query
+          description: Filter by enabled status (true = enabled only, false = all)
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: OK
@@ -1430,7 +1426,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-      - Currency Series Handler
+        - Currency Series Handler
       summary: Create a new currency series
       description: Create a new currency series. This endpoint is typically used when
         FRED adds support for new currency pairs. The 23 commonly-used currencies
@@ -1508,34 +1504,34 @@ paths:
   /v1/exchange-rates:
     get:
       tags:
-      - Exchange Rates Handler
+        - Exchange Rates Handler
       summary: Get exchange rates
       description: Get exchange rates for converting USD to the target currency
       operationId: getExchangeRates
       parameters:
-      - name: startDate
-        in: query
-        description: Start date for exchange rates in ISO format
-        required: false
-        schema:
-          type: string
-          format: date
-        example: '2024-01-01'
-      - name: endDate
-        in: query
-        description: End date for exchange rates in ISO format
-        required: false
-        schema:
-          type: string
-          format: date
-        example: '2024-12-31'
-      - name: targetCurrency
-        in: query
-        description: Target currency of exchange rate
-        required: true
-        schema:
-          type: string
-        example: THB
+        - name: startDate
+          in: query
+          description: Start date for exchange rates in ISO format
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2024-01-01'
+        - name: endDate
+          in: query
+          description: End date for exchange rates in ISO format
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2024-12-31'
+        - name: targetCurrency
+          in: query
+          description: Target currency of exchange rate
+          required: true
+          schema:
+            type: string
+          example: THB
       responses:
         '200':
           description: OK
@@ -1599,118 +1595,6 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /user:
-    get:
-      tags:
-      - User
-      summary: Get current user info
-      description: Returns the authenticated user's profile and roles. Returns 200
-        with user info if authenticated, or empty 401 if not.
-      operationId: getCurrentUser
-      parameters:
-      - name: session
-        in: query
-        required: true
-        schema:
-          $ref: '#/components/schemas/WebSession'
-      responses:
-        '200':
-          description: Authenticated user info
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserInfoResponse'
-        '401':
-          description: Not authenticated
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    servers:
-    - url: https://app.budgetanalyzer.localhost
-      description: Local environment (BFF)
-    - url: https://app.budgetanalyzer.org
-      description: Production environment (BFF)
-  /logout:
-    get:
-      tags:
-      - logout-controller
-      operationId: logout
-      responses:
-        '200':
-          description: OK
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    servers:
-    - url: https://app.budgetanalyzer.localhost
-      description: Local environment (BFF)
-    - url: https://app.budgetanalyzer.org
-      description: Production environment (BFF)
-  /.well-known/jwks.json:
-    get:
-      tags:
-      - jwks-controller
-      operationId: jwks
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: string
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    servers:
-    - url: https://app.budgetanalyzer.localhost
-      description: Local environment (BFF)
-    - url: https://app.budgetanalyzer.org
-      description: Production environment (BFF)
 components:
   schemas:
     UpdateSavedViewRequest:
@@ -1752,8 +1636,8 @@ components:
           type: array
           description: Bank names to filter by
           example:
-          - Capital One
-          - Truist
+            - Capital One
+            - Truist
           items:
             type: string
           uniqueItems: true
@@ -1761,8 +1645,8 @@ components:
           type: array
           description: Currency ISO codes to filter by
           example:
-          - USD
-          - EUR
+            - USD
+            - EUR
           items:
             type: string
           uniqueItems: true
@@ -1817,15 +1701,15 @@ components:
           format: date-time
           description: Timestamp when the view was last updated
       required:
-      - createdAt
-      - criteria
-      - excludedCount
-      - id
-      - name
-      - openEnded
-      - pinnedCount
-      - transactionCount
-      - updatedAt
+        - createdAt
+        - criteria
+        - excludedCount
+        - id
+        - name
+        - openEnded
+        - pinnedCount
+        - transactionCount
+        - updatedAt
     ApiErrorResponse:
       description: Standard API error response format
       properties:
@@ -1833,14 +1717,14 @@ components:
           type: string
           description: Error type categorization for API responses
           enum:
-          - INVALID_REQUEST
-          - VALIDATION_ERROR
-          - NOT_FOUND
-          - APPLICATION_ERROR
-          - SERVICE_UNAVAILABLE
-          - INTERNAL_ERROR
-          - UNAUTHORIZED
-          - FORBIDDEN
+            - INVALID_REQUEST
+            - VALIDATION_ERROR
+            - NOT_FOUND
+            - APPLICATION_ERROR
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
           example: APPLICATION_ERROR
         message:
           type: string
@@ -1858,8 +1742,8 @@ components:
           items:
             $ref: '#/components/schemas/FieldError'
       required:
-      - message
-      - type
+        - message
+        - type
     FieldError:
       description: Field-level validation error details
       properties:
@@ -1882,8 +1766,8 @@ components:
           description: Value that caused the error
           example: invalid@email
       required:
-      - field
-      - message
+        - field
+        - message
     UpdateStatementFormatRequest:
       type: object
       properties:
@@ -1942,9 +1826,9 @@ components:
         formatType:
           type: string
           enum:
-          - CSV
-          - PDF
-          - XLSX
+            - CSV
+            - PDF
+            - XLSX
         bankName:
           type: string
         defaultCurrencyIsoCode:
@@ -1983,8 +1867,8 @@ components:
           description: If true, the view includes transactions up to current date
           example: false
       required:
-      - criteria
-      - name
+        - criteria
+        - name
     PreviewResponse:
       type: object
       description: Response from transaction preview containing extracted transactions
@@ -2031,8 +1915,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-          - CREDIT
-          - DEBIT
+            - CREDIT
+            - DEBIT
           example: DEBIT
         category:
           type: string
@@ -2053,12 +1937,12 @@ components:
           description: Account identifier (may be null)
           example: checking-12345
       required:
-      - amount
-      - bankName
-      - currencyIsoCode
-      - date
-      - description
-      - type
+        - amount
+        - bankName
+        - currencyIsoCode
+        - date
+        - description
+        - type
     PreviewWarning:
       type: object
       description: Warning for a specific field in a previewed transaction
@@ -2084,15 +1968,15 @@ components:
           type: array
           description: List of transaction IDs to delete
           example:
-          - 1
-          - 2
-          - 3
+            - 1
+            - 2
+            - 3
           items:
             type: integer
             format: int64
           minItems: 1
       required:
-      - ids
+        - ids
     BulkDeleteResponse:
       type: object
       description: Response from bulk delete operation
@@ -2106,8 +1990,8 @@ components:
           type: array
           description: List of transaction IDs that were not found or already deleted
           example:
-          - 999
-          - 1000
+            - 999
+            - 1000
           items:
             type: integer
             format: int64
@@ -2122,7 +2006,7 @@ components:
             $ref: '#/components/schemas/PreviewTransaction'
           minItems: 1
       required:
-      - transactions
+        - transactions
     BatchImportResponse:
       type: object
       description: Response from batch transaction import
@@ -2176,8 +2060,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-          - CREDIT
-          - DEBIT
+            - CREDIT
+            - DEBIT
           example: DEBIT
         description:
           type: string
@@ -2194,15 +2078,15 @@ components:
           description: Timestamp when the transaction was last updated
           example: '2025-10-14T10:30:00Z'
       required:
-      - amount
-      - bankName
-      - createdAt
-      - currencyIsoCode
-      - date
-      - description
-      - id
-      - type
-      - updatedAt
+        - amount
+        - bankName
+        - createdAt
+        - currencyIsoCode
+        - date
+        - description
+        - id
+        - type
+        - updatedAt
     CreateStatementFormatRequest:
       type: object
       properties:
@@ -2218,9 +2102,9 @@ components:
         formatType:
           type: string
           enum:
-          - CSV
-          - PDF
-          - XLSX
+            - CSV
+            - PDF
+            - XLSX
         bankName:
           type: string
           maxLength: 100
@@ -2258,11 +2142,11 @@ components:
           maxLength: 50
           minLength: 0
       required:
-      - bankName
-      - defaultCurrencyIsoCode
-      - displayName
-      - formatKey
-      - formatType
+        - bankName
+        - defaultCurrencyIsoCode
+        - displayName
+        - formatKey
+        - formatType
     TransactionUpdateRequest:
       type: object
       description: Request to update a transaction's mutable fields
@@ -2289,9 +2173,9 @@ components:
           description: IDs of active transactions matching view criteria (excluding
             excluded IDs)
           example:
-          - 123
-          - 456
-          - 789
+            - 123
+            - 456
+            - 789
           items:
             type: integer
             format: int64
@@ -2300,8 +2184,8 @@ components:
           description: IDs of active transactions explicitly pinned (excluding those
             already matched)
           example:
-          - 101
-          - 102
+            - 101
+            - 102
           items:
             type: integer
             format: int64
@@ -2310,14 +2194,14 @@ components:
           description: IDs of active transactions explicitly excluded from matched
             set
           example:
-          - 234
+            - 234
           items:
             type: integer
             format: int64
       required:
-      - excluded
-      - matched
-      - pinned
+        - excluded
+        - matched
+        - pinned
     TransactionFilter:
       type: object
       description: Filter for querying transactions by various fields
@@ -2361,8 +2245,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-          - CREDIT
-          - DEBIT
+            - CREDIT
+            - DEBIT
           example: DEBIT
         description:
           type: string
@@ -2398,7 +2282,7 @@ components:
           description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-      - enabled
+        - enabled
     CurrencySeriesResponse:
       type: object
       description: Currency series response with mapping details
@@ -2431,12 +2315,12 @@ components:
           description: Timestamp when this currency series was last updated
           example: '2025-01-15T14:45:00Z'
       required:
-      - createdAt
-      - currencyCode
-      - enabled
-      - id
-      - providerSeriesId
-      - updatedAt
+        - createdAt
+        - currencyCode
+        - enabled
+        - id
+        - providerSeriesId
+        - updatedAt
     ExchangeRateImportResultResponse:
       type: object
       description: Exchange rate import result response for a specific currency
@@ -2483,12 +2367,12 @@ components:
           description: Timestamp of the import execution
           example: '2025-10-31T15:30:00Z'
       required:
-      - currencyCode
-      - newRecords
-      - providerSeriesId
-      - skippedRecords
-      - timestamp
-      - updatedRecords
+        - currencyCode
+        - newRecords
+        - providerSeriesId
+        - skippedRecords
+        - timestamp
+        - updatedRecords
     CurrencySeriesCreateRequest:
       type: object
       description: Request to create a new currency series
@@ -2513,8 +2397,8 @@ components:
           description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-      - currencyCode
-      - providerSeriesId
+        - currencyCode
+        - providerSeriesId
     ExchangeRateResponse:
       type: object
       description: Exchange rate response
@@ -2545,67 +2429,8 @@ components:
             rate
           example: '2025-10-31'
       required:
-      - baseCurrency
-      - date
-      - publishedDate
-      - rate
-      - targetCurrency
-    WebSession:
-      type: object
-      properties:
-        maxIdleTime:
-          type: string
-        expired:
-          type: boolean
-        id:
-          type: string
-        started:
-          type: boolean
-        attributes:
-          type: object
-          additionalProperties: {}
-        lastAccessTime:
-          type: string
-          format: date-time
-        creationTime:
-          type: string
-          format: date-time
-    UserInfoResponse:
-      type: object
-      description: Authenticated user information
-      properties:
-        sub:
-          type: string
-          description: IDP subject identifier
-          example: auth0|abc123
-        name:
-          type: string
-          description: User's display name
-          example: Jane Doe
-        email:
-          type: string
-          description: User's email address
-          example: jane@example.com
-        picture:
-          type: string
-          description: Profile picture URL
-          example: https://example.com/photo.jpg
-        emailVerified:
-          type: boolean
-          description: Whether the user's email has been verified
-          example: true
-        authenticated:
-          type: boolean
-          description: Always true when this response is returned
-          example: true
-        registrationId:
-          type: string
-          description: OAuth2 client registration ID
-          example: idp
-        roles:
-          type: array
-          description: User's roles for UI visibility
-          example:
-          - USER
-          items:
-            type: string
+        - baseCurrency
+        - date
+        - publishedDate
+        - rate
+        - targetCurrency

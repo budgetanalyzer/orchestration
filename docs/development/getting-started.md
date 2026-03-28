@@ -112,8 +112,16 @@ The app needs two external accounts in addition to the local infrastructure pass
 
 ### Using the App
 
+The docs UI and raw OpenAPI downloads stay on the same public origin as the
+main app. The `/api-docs` route uses a docs-only relaxed CSP (the stock Swagger
+UI bundle needs `'unsafe-inline'` in `style-src`). The main app and `/api/*`
+routes are not affected — they keep the strict CSP. The docs route is public,
+read-only, and serves self-hosted assets with no CDN dependency.
+
 - **Application**: https://app.budgetanalyzer.localhost
-- **API Docs**: https://app.budgetanalyzer.localhost/api/docs
+- **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs
+- **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
+- **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 - **Tilt UI**: http://localhost:10350 (logs and status)
 
 ### Stopping

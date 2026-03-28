@@ -618,6 +618,7 @@ configmap_create(
     from_file=[
         'backend-headers.conf=nginx/includes/backend-headers.conf',
         'security-headers-dev-csp.conf=nginx/includes/security-headers-dev-csp.conf',
+        'security-headers-docs-csp.conf=nginx/includes/security-headers-docs-csp.conf',
         'security-headers-strict-csp.conf=nginx/includes/security-headers-strict-csp.conf',
     ],
     watch=True
@@ -628,6 +629,8 @@ configmap_create(
     namespace=DEFAULT_NAMESPACE,
     from_file=[
         'index.html=docs-aggregator/index.html',
+        'swagger-initializer.js=docs-aggregator/swagger-initializer.js',
+        'swagger-ui-overrides.css=docs-aggregator/swagger-ui-overrides.css',
         'openapi.json=docs-aggregator/openapi.json',
         'openapi.yaml=docs-aggregator/openapi.yaml',
     ],

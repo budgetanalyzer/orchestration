@@ -10,6 +10,19 @@ spec:
   hostnames:
   - "app.budgetanalyzer.localhost"
   rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api-docs
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Proto
+          value: "https"
+    backendRefs:
+    - name: nginx-gateway
+      port: 8080
   - filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:

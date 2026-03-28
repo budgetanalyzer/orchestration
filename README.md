@@ -34,6 +34,16 @@ This avoids the usual tradeoff between fast local development and production-fai
 
 See [Getting Started](docs/development/getting-started.md) for complete setup instructions.
 
+Once the stack is running, the public API docs surface is split intentionally
+on the same origin:
+`/api-docs` is the human-readable Swagger UI page, while
+`/api-docs/openapi.json` and `/api-docs/openapi.yaml` remain the
+machine-readable unified contracts for direct download or tooling.
+The docs route uses a dedicated docs-only relaxed CSP because the stock Swagger
+UI bundle is not strict-CSP-compatible. The main app and `/api/*` routes keep
+their strict CSP posture. The docs route is public, read-only, and serves
+self-hosted Swagger UI assets — no CDN dependency.
+
 Current local platform baseline:
 - `setup.sh` now deletes any existing `kind` cluster and recreates it with `disableDefaultCNI` plus pinned Calico so `NetworkPolicy` is actually enforceable.
 - `setup.sh` also ensures a supported Helm `3.20.x` toolchain is installed from a pinned verified release before continuing.
@@ -48,7 +58,7 @@ Current local platform baseline:
 - Before cluster apply, run `./scripts/dev/verify-phase-7-static-manifests.sh` to catch Phase 7 static manifest and setup-guidance regressions locally with the same checks the `security-guardrails.yml` workflow uses, including a generated Kyverno replay for representative approved local Tilt `:tilt-<hash>` deploy refs.
 - After `tilt up`, run `./scripts/dev/verify-clean-tilt-deployment-admission.sh` first to prove the clean-start admission path for the seven app deployments in `default`, then `./scripts/dev/verify-security-prereqs.sh` for the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate, `./scripts/dev/verify-phase-5-runtime-hardening.sh` as the Phase 5 runtime-hardening and final PSA completion gate, `./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` for the Phase 6 Session 7 API rate-limit identity proof, `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the Phase 6 completion gate, and `./scripts/dev/verify-phase-7-security-guardrails.sh` as the final local Phase 7 completion gate.
 
-Treat Phase 5 as complete only after `./scripts/dev/verify-phase-5-runtime-hardening.sh` passes. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass. Treat Phase 6 as complete only after `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` passes and the manual browser-console validation on `/_prod-smoke/` is done; `/api/docs` probes now stay visible as warnings instead of blocking completion. Treat Phase 7 as complete only after `./scripts/dev/verify-phase-7-security-guardrails.sh` passes on the current cluster. The static script remains the CI/local reproducer for Session 6, and `./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted live-cluster Session 7 proof when you only need the runtime half.
+Treat Phase 5 as complete only after `./scripts/dev/verify-phase-5-runtime-hardening.sh` passes. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass. Treat Phase 6 as complete only after `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` passes and the manual browser-console validation on `/_prod-smoke/` is done; `/api-docs` probes now stay visible as warnings instead of blocking completion. Treat Phase 7 as complete only after `./scripts/dev/verify-phase-7-security-guardrails.sh` passes on the current cluster. The static script remains the CI/local reproducer for Session 6, and `./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted live-cluster Session 7 proof when you only need the runtime half.
 
 Auth entrypoints are split intentionally: `/login` is the frontend login page, `/oauth2/authorization/idp` starts OAuth2, and Auth0 returns to `/login/oauth2/code/idp`.
 The local `/_prod-smoke/` verification path is a separate Tilt `local_resource`: it runs `npm run build:prod-smoke` in the sibling `budget-analyzer-web` repo, so that repo needs local npm dependencies installed (`npm install`) in addition to the normal frontend container image build.

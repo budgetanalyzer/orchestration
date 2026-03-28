@@ -5,7 +5,7 @@
 # Usage: ./scripts/generate-unified-api-docs.sh
 #
 # This script will:
-# 1. Fetch OpenAPI specs from all running microservices (live endpoints)
+# 1. Fetch OpenAPI specs from running services through the Kubernetes service proxy
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
 #
@@ -13,6 +13,7 @@
 #
 # Note: Individual services generate their own specs at runtime via springdoc-openapi.
 # This script does NOT write static files to service repos - that's the anti-pattern.
+# It also does not depend on the browser-facing gateway docs routes.
 
 set -e
 
@@ -39,19 +40,40 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        print_error "$1 is required but not installed."
+        exit 1
+    fi
+}
+
+fetch_service_spec() {
+    local service_name="$1"
+    local port="$2"
+    local spec_path="$3"
+    local display_name="$4"
+    local proxy_path="/api/v1/namespaces/default/services/http:${service_name}:${port}/proxy${spec_path}"
+    local service_spec
+
+    print_info "Fetching ${display_name} spec via kubectl service proxy..." >&2
+
+    if ! service_spec="$(kubectl get --raw "$proxy_path" 2>/dev/null)"; then
+        print_error "Failed to fetch ${display_name} spec from service ${service_name}:${port}${spec_path}"
+        print_error "Make sure the cluster is running, the service exists, and your current kubectl context points at the local environment"
+        exit 1
+    fi
+
+    printf '%s' "$service_spec"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$REPO_ROOT/docs-aggregator"
 
 print_info "Generating unified OpenAPI specification..."
 
-# Check if jq is installed
-if ! command -v jq &> /dev/null; then
-    print_error "jq is required but not installed. Please install it:"
-    echo "  Ubuntu/Debian: sudo apt-get install jq"
-    echo "  macOS: brew install jq"
-    exit 1
-fi
+require_command jq
+require_command kubectl
 
 # Check if yq is installed and which version (optional, for YAML output)
 HAS_YQ=false
@@ -67,29 +89,19 @@ if command -v yq &> /dev/null; then
     fi
 fi
 
-# Fetch JSON for merging (use gateway endpoints)
-TRANSACTION_SERVICE="https://app.budgetanalyzer.localhost/api/transaction-service/v3/api-docs"
-CURRENCY_SERVICE="https://app.budgetanalyzer.localhost/api/currency-service/v3/api-docs"
-SESSION_GATEWAY="https://app.budgetanalyzer.localhost/v3/api-docs"
 print_info "Fetching specs for merging..."
 
-if ! BUDGET_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$TRANSACTION_SERVICE" 2>/dev/null); then
-    print_error "Failed to fetch Budget Analyzer API spec from $TRANSACTION_SERVICE"
-    print_error "Make sure the service is running and accessible"
+if ! BUDGET_SPEC="$(fetch_service_spec "transaction-service" "8082" "/v3/api-docs" "Transaction Service")"; then
     exit 1
 fi
 print_success "✓ Fetched Budget Analyzer API spec"
 
-if ! CURRENCY_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$CURRENCY_SERVICE" 2>/dev/null); then
-    print_error "Failed to fetch Currency Service spec from $CURRENCY_SERVICE"
-    print_error "Make sure the service is running and accessible"
+if ! CURRENCY_SPEC="$(fetch_service_spec "currency-service" "8084" "/v3/api-docs" "Currency Service")"; then
     exit 1
 fi
 print_success "✓ Fetched Currency Service spec"
 
-if ! SESSION_SPEC=$(curl -sfk --connect-timeout 5 --max-time 15 "$SESSION_GATEWAY" 2>/dev/null); then
-    print_error "Failed to fetch Session Gateway spec from $SESSION_GATEWAY"
-    print_error "Make sure the service is running and accessible"
+if ! SESSION_SPEC="$(fetch_service_spec "session-gateway" "8081" "/v3/api-docs" "Session Gateway")"; then
     exit 1
 fi
 print_success "✓ Fetched Session Gateway spec"
@@ -161,6 +173,7 @@ print_success "✓ Generated unified OpenAPI spec (JSON): $OUTPUT_JSON"
 
 # Save YAML output if yq is available
 OUTPUT_YAML="$OUTPUT_DIR/openapi.yaml"
+YAML_GENERATED=false
 if [ "$HAS_YQ" = true ]; then
     if [ "$YQ_VERSION" = "go" ]; then
         # mikefarah/yq (Go version)
@@ -169,11 +182,13 @@ if [ "$HAS_YQ" = true ]; then
         # Python yq version
         echo "$UNIFIED_SPEC" | yq -y '.' > "$OUTPUT_YAML"
     fi
+    YAML_GENERATED=true
     print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
 else
     # Fallback: use Python if available
     if command -v python3 &> /dev/null; then
         if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$OUTPUT_YAML" 2>/dev/null; then
+            YAML_GENERATED=true
             print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
         else
             print_warning "yq not installed and Python yaml module not available - skipping YAML output"
@@ -187,9 +202,11 @@ fi
 
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
-if [ -d "$WEB_DOCS_DIR" ]; then
+if [ "$YAML_GENERATED" = true ] && [ -d "$WEB_DOCS_DIR" ]; then
     cp "$OUTPUT_YAML" "$WEB_DOCS_DIR/budget-analyzer-api.yaml"
     print_success "✓ Copied to budget-analyzer-web: $WEB_DOCS_DIR/budget-analyzer-api.yaml"
+elif [ "$YAML_GENERATED" != true ] && [ -d "$WEB_DOCS_DIR" ]; then
+    print_warning "Skipping copy to budget-analyzer-web because YAML output was not generated"
 else
     print_warning "budget-analyzer-web/docs directory not found - skipping copy"
 fi
@@ -205,9 +222,9 @@ fi
 echo "  Generate client: openapi-generator-cli generate -i $OUTPUT_JSON -g <generator-name>"
 echo
 print_info "Available via NGINX at:"
-echo "  JSON: https://app.budgetanalyzer.localhost/api/docs/openapi.json"
-if [ "$HAS_YQ" = true ]; then
-    echo "  YAML: https://app.budgetanalyzer.localhost/api/docs/openapi.yaml"
+echo "  JSON: https://app.budgetanalyzer.localhost/api-docs/openapi.json"
+if [ "$YAML_GENERATED" = true ]; then
+    echo "  YAML: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml"
 fi
 echo
 print_info "To regenerate after service updates, run this script again"

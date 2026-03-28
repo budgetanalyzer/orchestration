@@ -22,6 +22,30 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
+      - name: swagger-ui-assets
+        image: swaggerapi/swagger-ui:v5.11.0@sha256:b02a61c633b74257d9e5141a4821451bd95f48a834acc23946c84bf81587f214
+        command:
+        - sh
+        - -c
+        - |
+          cp /usr/share/nginx/html/swagger-ui.css /workdir/
+          cp /usr/share/nginx/html/swagger-ui-bundle.js /workdir/
+          cp /custom-docs/* /workdir/
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 101
+          runAsNonRoot: true
+          runAsUser: 101
+        volumeMounts:
+        - name: nginx-docs
+          mountPath: /workdir
+        - name: nginx-docs-config
+          mountPath: /custom-docs
+          readOnly: true
       - name: web-prod-smoke-assets
         image: budget-analyzer-web-prod-smoke:latest
         imagePullPolicy: Never
@@ -99,6 +123,8 @@ spec:
         configMap:
           name: nginx-gateway-includes
       - name: nginx-docs
+        emptyDir: {}
+      - name: nginx-docs-config
         configMap:
           name: nginx-gateway-docs
       - name: nginx-web-prod-smoke

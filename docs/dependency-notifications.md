@@ -19,7 +19,7 @@ Phase 7 Session 1 froze the active pinning scope in
   refs still follow the same digest-pinning rule.
 - The Session 1 installer inventory remains a frozen historical record; the
   version tables below reflect the current checked-in workspace toolchain as of
-  March 27, 2026.
+  March 28, 2026.
 
 ## How to Watch a GitHub Repository for Releases
 
@@ -55,14 +55,14 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 2025.0.0 (session-gateway), 2024.0.0 (currency-service) |
+| **Current version** | 2025.0.0 (session-gateway, currency-service) |
 | **Watch** | https://github.com/spring-cloud/spring-cloud-release |
 | **Also watch** | https://github.com/spring-cloud/spring-cloud-gateway (session-gateway depends on this directly) |
 | **Defined in** | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
 
 **Why critical**: Release trains are tightly coupled to Spring Boot versions. The [Spring Cloud release train compatibility table](https://spring.io/projects/spring-cloud) dictates which Spring Cloud version works with which Spring Boot version. A Spring Boot upgrade without matching the Spring Cloud release train will break compilation.
 
-**Note**: There is currently a version mismatch between session-gateway (2025.0.0) and currency-service (2024.0.0). This should be reconciled.
+**Note**: session-gateway and currency-service are currently aligned on `2025.0.0`. Keep both services on the same release train when upgrading Spring Boot.
 
 ### Spring Security
 
@@ -388,7 +388,7 @@ Spring Boot version
   -> Spring Dependency Management plugin (must support the Boot version)
 ```
 
-When upgrading Spring Boot, always check the Spring Cloud release train compatibility first. The current mismatch (session-gateway on 2025.0.0, currency-service on 2024.0.0) should be resolved.
+When upgrading Spring Boot, always check the Spring Cloud release train compatibility first. session-gateway and currency-service should stay aligned on the same Spring Cloud release train.
 
 ### Kubernetes Stack
 
@@ -483,8 +483,7 @@ table below tracks the human-readable tags; the checked-in refs now use
 |---|---|---|
 | Java | 24 | `service-common/build.gradle.kts` |
 | Spring Boot | 3.5.7 | `*/gradle/libs.versions.toml` |
-| Spring Cloud | 2025.0.0 | `session-gateway/gradle/libs.versions.toml` |
-| Spring Cloud | 2024.0.0 | `currency-service/gradle/libs.versions.toml` |
+| Spring Cloud | 2025.0.0 | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
 | Spring Modulith | 1.4.0 | `currency-service/gradle/libs.versions.toml` |
 | Gradle | 8.14.2 | `*/gradle/wrapper/gradle-wrapper.properties` |
 | Spring Dep Mgmt Plugin | 1.1.7 | `*/gradle/libs.versions.toml` |
@@ -562,4 +561,4 @@ Some critical information is published outside of GitHub releases.
 
 ## Known Issues
 
-1. **Spring Cloud version mismatch**: session-gateway uses Spring Cloud `2025.0.0` while currency-service uses `2024.0.0`. These should be aligned to the same release train.
+No known issues are currently tracked from this dependency audit.

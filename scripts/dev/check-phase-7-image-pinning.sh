@@ -97,8 +97,19 @@ check_target_files_exist() {
     fi
 }
 
+search_image_refs() {
+    local pattern='^[[:space:]]*image:[[:space:]]*|^[[:space:]]*FROM[[:space:]]+|^[A-Z0-9_]+IMAGE='
+
+    if command -v rg >/dev/null 2>&1; then
+        rg -n --no-heading "${pattern}" "${TARGET_FILES[@]}" || true
+        return 0
+    fi
+
+    grep -nH -E --binary-files=without-match "${pattern}" "${TARGET_FILES[@]}" || true
+}
+
 extract_refs() {
-    rg -n --no-heading '^[[:space:]]*image:[[:space:]]*|^[[:space:]]*FROM[[:space:]]+|^[A-Z0-9_]+IMAGE=' "${TARGET_FILES[@]}" |
+    search_image_refs |
         while IFS= read -r match; do
             local file="${match%%:*}"
             local remainder="${match#*:}"

@@ -484,7 +484,7 @@ scan_pipe_to_shell_guidance() {
 
     while IFS= read -r line; do
         matches+=("${line}")
-    done < <(rg -n "${pattern}" "${paths[@]}" 2>/dev/null || true)
+    done < <(search_guidance_paths "${pattern}" "${paths[@]}")
 
     if (( ${#matches[@]} > 0 )); then
         printf '%s pipe-to-shell guidance scan failed:\n' "${subject}" >&2
@@ -503,7 +503,7 @@ extract_image_refs_from_files() {
         return 0
     fi
 
-    rg -n --no-heading '^[[:space:]]*image:[[:space:]]*|^[[:space:]]*FROM[[:space:]]+|^[A-Z0-9_]+IMAGE=' "${files[@]}" |
+    search_image_refs_in_files "${files[@]}" |
         while IFS= read -r match; do
             file="${match%%:*}"
             remainder="${match#*:}"
@@ -521,6 +521,29 @@ extract_image_refs_from_files() {
 
             printf '%s\t%s\t%s\n' "${file}" "${line}" "${ref}"
         done
+}
+
+search_guidance_paths() {
+    local pattern="$1"
+    shift
+
+    if command -v rg >/dev/null 2>&1; then
+        rg -n "${pattern}" "$@" 2>/dev/null || true
+        return 0
+    fi
+
+    grep -R -n -E --binary-files=without-match "${pattern}" "$@" 2>/dev/null || true
+}
+
+search_image_refs_in_files() {
+    local pattern='^[[:space:]]*image:[[:space:]]*|^[[:space:]]*FROM[[:space:]]+|^[A-Z0-9_]+IMAGE='
+
+    if command -v rg >/dev/null 2>&1; then
+        rg -n --no-heading "${pattern}" "$@" || true
+        return 0
+    fi
+
+    grep -nH -E --binary-files=without-match "${pattern}" "$@" || true
 }
 
 scan_image_pinning_in_files() {

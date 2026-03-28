@@ -10,11 +10,12 @@
 **Minimum versions:**
 - Docker 24.0+
 - Kind 0.20+
-- kubectl 1.28+
-- Helm 3.12+
-- Tilt 0.33+
+- kubectl 1.30.8 (matches `kindest/node:v1.30.8`)
+- OpenSSL 3.x+
+- Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
+- Tilt 0.37.0
 - Git 2.40+
-- mkcert 1.4+
+- mkcert 1.4.4
 
 **For Backend Development (Optional):**
 - JDK 24 (for running services outside Docker)
@@ -34,11 +35,25 @@
 docker --version
 kind --version
 kubectl version --client
+openssl version
 helm version
 tilt version
 git --version
 mkcert --version
 ```
+
+Phase 3 now installs the Istio egress gateway directly from Helm again. The
+repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
+`1.29.1`; the egress gateway uses
+`kubernetes/istio/egress-gateway-values.yaml` to keep
+`service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
+now flow through Gateway `spec.infrastructure.parametersRef` via
+`kubernetes/istio/ingress-gateway-config.yaml`.
+
+For host-side binary installs, prefer the checked-in verified installer:
+`./scripts/dev/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>`.
+It uses pinned release artifacts with checked-in SHA-256 values instead of
+floating installer endpoints.
 
 ## Quick Start
 
@@ -85,18 +100,12 @@ cd orchestration/
 ```
 
 **What `setup.sh` does in the current Phase 0 baseline:**
-1. Creates or validates the Kind cluster
+1. Deletes any existing `kind` cluster and recreates it from scratch
 2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
 3. Installs pinned Calico and waits for CoreDNS readiness
-4. Configures local DNS and TLS certificates
-5. Installs Gateway API CRDs and prepares `.env`
-
-If setup fails because you already have an older local Kind cluster:
-
-```bash
-kind delete cluster --name kind
-./setup.sh
-```
+4. Ensures a supported Helm `3.20.x` binary is installed before any Helm-backed setup continues
+5. Configures local DNS plus browser-facing and internal transport TLS
+6. Installs Gateway API CRDs and prepares `.env`
 
 ### 3. Configure Environment Variables
 
@@ -104,10 +113,15 @@ kind delete cluster --name kind
 # Create the file if setup.sh did not already create it
 [ -f .env ] || cp .env.example .env
 
-# Edit .env with your Auth0 credentials
+# Review the local PostgreSQL, RabbitMQ, and Redis password defaults, then add
+# your Auth0 and FRED credentials.
 ```
 
-### 4. Start All Services
+Tilt is the local secret producer for infrastructure credentials. The Kubernetes
+manifests now consume named secrets only, which is the seam production can later
+replace with another secret source.
+
+### 4. Start Tilt
 
 ```bash
 cd orchestration/
@@ -129,7 +143,94 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 0 platform prerequisites
 ./scripts/dev/verify-security-prereqs.sh
+
+# Optional but recommended: prove the Phase 1 credential split
+./scripts/dev/verify-phase-1-credentials.sh
+
+# Optional but recommended: prove the Phase 2 network policy enforcement
+./scripts/dev/verify-phase-2-network-policies.sh
+
+# Optional but recommended: prove the Phase 4 transport-TLS cutover
+./scripts/dev/verify-phase-4-transport-encryption.sh
+
+# Optional but recommended: prove the Phase 3 Istio ingress/egress migration
+./scripts/dev/verify-phase-3-istio-ingress.sh
+
+# Optional but recommended: prove the Phase 5 runtime hardening and final PSA labels
+./scripts/dev/verify-phase-5-runtime-hardening.sh
+
+# Optional but recommended: prove the Phase 6 edge/browser hardening gate
+./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+
+# Optional but recommended anytime: prove the Phase 7 static guardrails
+./scripts/dev/verify-phase-7-static-manifests.sh
+
+# Optional but recommended right after tilt up on a clean rebuild: prove the app deployments were admitted cleanly
+./scripts/dev/verify-clean-tilt-deployment-admission.sh
+
+# Optional but recommended after the Phase 6 gate: run the final local Phase 7 completion gate
+./scripts/dev/verify-phase-7-security-guardrails.sh
 ```
+
+`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6
+local static guardrail gate; it matches the dedicated `security-guardrails.yml`
+workflow closely enough for local reproduction and does not require a running
+cluster. It now also generates a Kyverno replay for representative approved
+local Tilt `:tilt-<hash>` refs so the live deploy-time admission path stays
+covered by the static guardrail suite.
+`./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side
+clean-start proof for the seven expected app deployments in `default`. Run it
+after `tilt up` when you want the specific admission regression check from the
+fresh-cluster workflow.
+`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
+transport-TLS completion gate, and
+`./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` is the
+scoped Phase 6 Session 7 gate for NGINX client-identity derivation and API
+rate-limit bucket correctness.
+`./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
+gate and reruns the earlier phase verifiers as regressions.
+`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
+completion gate: it checks the live dev/strict CSP split on the real app
+paths, keeps `/api/docs` probes visible as warning-only checks, runs a real
+syntax check of the checked-in
+`nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod with
+the mounted include files, the fail-closed `/api/docs/*` contract for unknown
+docs paths, final auth-edge throttling coverage,
+reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
+then reruns the Phase 5 gate as the regression cascade. It still does not
+replace the manual browser-console validation required on `/_prod-smoke/`.
+`./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local
+Phase 7 completion gate. It runs the Phase 7 Session 6 static gate first and
+then the Phase 7 Session 7 runtime gate so contributors do not have to stitch
+those commands together manually. CI intentionally remains static-only through
+`security-guardrails.yml`.
+`./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted
+Phase 7 Session 7 live-cluster guardrail proof. It adds the missing Redis ACL,
+PostgreSQL cross-database, and RabbitMQ permission-boundary denials, uses
+pinned temporary probe images plus self-cleaning temporary `NetworkPolicy`
+rules, and then reruns
+`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
+through Phase 6 runtime regression umbrella.
+`./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
+infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
+`./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
+need to regenerate just the internal transport-TLS secrets.
+All verification scripts use the current `kubectl` context. If one reports
+missing pods, secrets, or network policies while Tilt appears healthy, verify
+`kubectl config current-context` and `tilt get uiresources` from the same host
+shell before assuming the script is wrong.
+
+Tilt now renders the Auth0 Istio egress manifests through
+`./scripts/dev/render-istio-egress-config.sh`, using the same
+`AUTH0_ISSUER_URI` contract that populates the `auth0-credentials` secret.
+Production secret sourcing should keep that same seam: the value that creates
+`auth0-credentials` must also drive the Auth0 egress render/apply step.
+
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `auth0-credentials` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+
+The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 
 ## Tilt Resources
 
@@ -141,13 +242,113 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 - `transaction-service-compile` - Compiles transaction service
 - `currency-service-compile` - Compiles currency service
 - `session-gateway-compile` - Compiles session gateway
+- `permission-service-compile` - Compiles permission service
+
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
 - `redis` - Redis Deployment
 - `rabbitmq` - RabbitMQ StatefulSet
-- `envoy-gateway` - Envoy Gateway controller
-- `ingress-gateway` - Gateway and HTTPRoute resources
+- `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
+- `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
+- `istio-egress-gateway` - Istio egress gateway (Helm chart via values file)
+- `istio-egress-config` - ServiceEntries and egress routing
+
+## Live Development Pipeline
+
+The Tiltfile implements a live update pipeline that delivers near-local iteration speed inside a production-faithful Kubernetes cluster. You edit code locally; changes reach the running pod in seconds — without image rebuilds or pod restarts — while the full infrastructure (service mesh, mTLS, network policies, ext_authz) stays active around it.
+
+### Java Services (Spring Boot)
+
+Each Java service uses a two-stage pipeline:
+
+**Stage 1 — Host-side compilation (`local_resource`):**
+Tilt watches `src/` and `build.gradle.kts`. When you save a Java file, Gradle runs `bootJar` on the host using the build cache. This produces a JAR in `build/libs/`.
+
+**Stage 2 — Live sync and process restart (`docker_build_with_restart`):**
+The dev image is JRE-only — no JDK, no Gradle, no source code. It's defined inline in the Tiltfile as a thin runtime container: `COPY build/libs/*.jar app.jar`. When the JAR changes, Tilt syncs it into the running pod and restarts the Java process. The pod itself is not recreated and the image is not rebuilt.
+
+This is intentionally different from the production Dockerfile in each service repo, which uses a full multi-stage build (JDK build stage + JRE runtime stage). The dev image skips the build stage because Gradle already ran on the host.
+
+### Frontend (React/Vite)
+
+The frontend keeps the single-stage Vite/HMR dev loop and adds a separate production-smoke build path for browser-policy verification:
+
+**Image build (`docker_build`):**
+Tilt builds from the Dockerfile in `budget-analyzer-web/` — installs dependencies, copies source, runs the Vite dev server.
+
+**Live sync (no restart needed):**
+When you edit React code, Tilt syncs `src/`, `public/`, and `index.html` into the running pod. Vite's HMR detects the change and hot-patches the browser — no container restart, no page reload. If `package.json` changes, Tilt triggers `npm install` inside the pod.
+
+**Production-smoke build (`local_resource` + init container):**
+Tilt also runs `npm run build:prod-smoke` from the sibling repo, builds a tiny static-asset image from `dist/`, and has `nginx-gateway` copy that bundle into an internal volume during pod startup. NGINX serves that bundle at `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other browser-security checks while `/` and `/login` stay on the live Vite route.
+
+That local smoke-build path depends on host/devcontainer npm state in the
+sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
+or refresh, make sure `npm install` has been run there so
+`npm run build:prod-smoke` can execute locally. This is intentionally separate
+from the normal frontend pod, which still installs and runs inside its own
+image. Tilt now watches the sibling smoke-build inputs plus the Vite env files
+that affect the build (`.env`, `.env.local`, `.env.production`, and
+`.env.production.local`) so those local config changes retrigger the smoke
+asset path.
+
+That seam is deliberately local-only. The checked-in production cutover now
+lives in `nginx/nginx.production.k8s.conf`, where `/` and `/login` serve the
+built frontend bundle directly and the Vite-only public paths plus
+`/_prod-smoke/` are not exposed.
+
+The Phase 6 Session 3 stop-gate is now repeatable from this repo with:
+
+```bash
+./scripts/dev/audit-phase-6-session-3-frontend-csp.sh
+```
+
+That audit rebuilds the sibling smoke bundle and proves the repo-owned
+strict-CSP prerequisites before and after Session 4 tightens the NGINX headers.
+It does not replace the manual browser-console validation required by the
+Phase 6 plan.
+
+The Phase 6 Session 7 runtime proof is also repeatable from this repo:
+
+```bash
+./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+```
+
+That verifier creates two temporary no-sidecar probe pods, sends authenticated
+API traffic through the live ingress gateway, confirms NGINX derives the client
+identity from the ingress-appended downstream hop instead of a forged external
+`X-Forwarded-For` value, and proves different downstream clients do not share
+the same NGINX API rate-limit bucket.
+
+The full Phase 6 completion gate is now:
+
+```bash
+./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+```
+
+That verifier checks the checked-in dev/strict CSP split on the real app
+paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api/docs`
+visibility plus fail-closed checks, the checked-in production-route syntax validation inside the live
+`nginx-gateway` runtime, the fail-closed `/api/docs/*` behavior for unknown
+docs paths, the remaining auth-edge throttling
+paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
+proof, and then reruns the full Phase 5 runtime-hardening cascade. Manual
+browser-console validation on `/_prod-smoke/` is still required before Phase 6
+can be declared complete.
+
+### Shared Library Cascade
+
+When `service-common` source changes, Tilt:
+1. Publishes the library to Maven Local (`publishToMavenLocal`)
+2. Triggers recompilation of all four downstream services
+3. Each service's new JAR syncs into its pod and the process restarts
+
+The entire cascade — library publish, service recompiles, JAR syncs, process restarts — is automatic and typically completes in under 30 seconds.
+
+### Why This Matters
+
+Most teams compromise: develop locally without Kubernetes (fast but unfaithful to production) or rebuild images on every change (faithful but slow). This setup avoids the tradeoff — inner-loop development runs at near-local speed while the workload executes in a real Kubernetes cluster with Istio mTLS, Calico network policies, ext_authz session validation, and TLS-encrypted infrastructure connections.
 
 ## Development Workflows
 
@@ -161,8 +362,11 @@ tilt up
 ```
 
 **All services in Kubernetes:**
-- Live reload for all services
-- Automatic rebuilds on file changes
+- Java changes: host compile → JAR sync → process restart (seconds, no image rebuild)
+- React changes: source sync → Vite HMR (sub-second, no restart)
+- React production-smoke checks: `/_prod-smoke/` serves the built bundle from NGINX on the same origin without replacing the live dev route
+- Production route cutover work should target `nginx/nginx.production.k8s.conf`, not mutate the live Vite route graph with ad-hoc env toggles
+- Shared library changes: automatic cascade to all dependent services
 - Unified logging in Tilt UI
 
 ### Workflow 2: Backend Service Local, Rest in Tilt
@@ -213,15 +417,19 @@ See: [database-setup.md](database-setup.md) for detailed database configuration.
 
 **Quick reference:**
 ```bash
-# PostgreSQL connection (via port forward)
+# transaction-service database connection (via port forward)
 Host: localhost
 Port: 5432
 Database: budget_analyzer
-User: budget_analyzer
-Password: budget_analyzer
+User: transaction_service
+Password: value from POSTGRES_TRANSACTION_SERVICE_PASSWORD (default: budget-analyzer-transaction-service)
+
+# Break-glass admin connection
+User: postgres_admin
+Password: value from POSTGRES_BOOTSTRAP_PASSWORD (default: budget-analyzer-postgres-admin)
 
 # Connection string
-postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
+postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget-analyzer-transaction-service}@localhost:5432/budget_analyzer?sslmode=verify-full&sslrootcert=./nginx/certs/infra/infra-ca.pem
 ```
 
 
@@ -229,44 +437,122 @@ postgresql://budget_analyzer:budget_analyzer@localhost:5432/budget_analyzer
 
 | Service | Port | URL | Notes |
 |---------|------|-----|-------|
-| Envoy Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
-| Envoy Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
+| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
+| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
 | NGINX Gateway | 8080 | - | Internal (routing) |
-| Session Gateway | 8081 | - | Internal (behind Envoy) |
+| Session Gateway | 8081 | - | Internal (behind Istio ingress) |
 | transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
 | currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
+| permission-service | 8086 | http://localhost:8086 | Direct access via port forward |
+| ext-authz | 9002 | http://localhost:9002/check | Direct access via port forward |
+| ext-authz | 8090 | http://localhost:8090/healthz | Health endpoint |
 | Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
-| PostgreSQL | 5432 | localhost:5432 | Database access |
-| Redis | 6379 | localhost:6379 | Cache access |
-| RabbitMQ | 5672/15672 | localhost:15672 | Management UI |
+| PostgreSQL | 5432 | localhost:5432 | Database access (`sslmode=verify-full`) |
+| Redis | 6379 | localhost:6379 | TLS-only cache/session access |
+| RabbitMQ | 5671 | localhost:5671 | AMQPS data plane |
+| RabbitMQ Management | 15672 | http://localhost:15672 | Internal management UI |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables
 
 ### Backend Services (Spring Boot)
 
-Environment variables are injected via Kubernetes secrets. For local development outside Tilt, create `application-local.yml`:
+Environment variables are injected via Kubernetes secrets. PostgreSQL Step 2
+uses a `postgres_admin` bootstrap user plus dedicated service users. RabbitMQ
+Step 3 now bootstraps `rabbitmq-admin` and `currency-service` from a
+definitions file. Redis Step 4 now uses ACL users: a restricted `default` user
+for probes plus dedicated `session-gateway`, `ext-authz`, `currency-service`,
+and `redis-ops` identities.
+
+Current local secret names:
+
+| Secret | Namespace | Purpose |
+|--------|-----------|---------|
+| `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap admin + init inputs |
+| `transaction-service-postgresql-credentials` | `default` | transaction-service database connection |
+| `currency-service-postgresql-credentials` | `default` | currency-service database connection |
+| `permission-service-postgresql-credentials` | `default` | permission-service database connection |
+| `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin access + boot-time definitions |
+| `currency-service-rabbitmq-credentials` | `default` | currency-service AMQP connection |
+| `redis-bootstrap-credentials` | `infrastructure` | Redis ACL bootstrap + probe credentials |
+| `session-gateway-redis-credentials` | `default` | session-gateway Redis connection |
+| `ext-authz-redis-credentials` | `default` | ext-authz Redis connection |
+| `currency-service-redis-credentials` | `default` | currency-service Redis connection |
+
+For local development outside Tilt, create `application-local.yml`:
 
 ```yaml
 spring:
+  ssl:
+    bundle:
+      pem:
+        infra-ca:
+          truststore:
+            certificate: ${INFRA_CA_CERT_PATH:}
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/budget_analyzer
-    username: budget_analyzer
-    password: budget_analyzer
+    url: jdbc:postgresql://localhost:5432/budget_analyzer?sslmode=verify-full&sslrootcert=${POSTGRES_SSLROOTCERT:../orchestration/nginx/certs/infra/infra-ca.pem}
+    username: ${SPRING_DATASOURCE_USERNAME:transaction_service}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
 
-  redis:
-    host: localhost
-    port: 6379
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      username: ${SPRING_DATA_REDIS_USERNAME:session-gateway}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true}
+        bundle: ${SPRING_DATA_REDIS_SSL_BUNDLE:infra-ca}
 
+  # Only currency-service needs RabbitMQ locally.
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5671}
+    username: ${SPRING_RABBITMQ_USERNAME:currency-service}
+    password: ${SPRING_RABBITMQ_PASSWORD:}
+    ssl:
+      enabled: ${SPRING_RABBITMQ_SSL_ENABLED:true}
+      bundle: ${SPRING_RABBITMQ_SSL_BUNDLE:infra-ca}
 
 server:
   port: 8082  # Change per service
 ```
+
+Password placeholders intentionally default to empty. A direct `bootRun`
+without env vars should fail with a connection error so each service uses its
+own explicit password.
+
+For `currency-service`, swap in `currency`, `currency_service`, and set
+`SPRING_DATASOURCE_PASSWORD` from `POSTGRES_CURRENCY_SERVICE_PASSWORD`.
+For `permission-service`, use `permission`, `permission_service`, and set
+`SPRING_DATASOURCE_PASSWORD` from `POSTGRES_PERMISSION_SERVICE_PASSWORD`.
+`transaction-service` no longer needs any RabbitMQ env vars. `session-gateway`
+only needs `SPRING_DATA_REDIS_PASSWORD`; its Redis username defaults to
+`session-gateway`.
+Set `POSTGRES_SSLROOTCERT="$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
+for JDBC `sslrootcert`, and
+`INFRA_CA_CERT_PATH="file:$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
+for Spring SSL bundles.
+
+Redis local access:
+- `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
+- `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
+- `default` is probe-only and should not be used by application code
+- The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
+
+RabbitMQ local access:
+- Management UI: `http://localhost:15672`
+- Management username: `rabbitmq-admin`
+- Management password: value from `RABBITMQ_BOOTSTRAP_PASSWORD`
+- AMQP username for `currency-service`: `currency-service` (or override with `SPRING_RABBITMQ_USERNAME`)
+- AMQP password for `currency-service`: set `SPRING_RABBITMQ_PASSWORD` from `RABBITMQ_CURRENCY_SERVICE_PASSWORD`
+- AMQPS port: `5671`
+- Direct `bootRun` must set `SPRING_RABBITMQ_SSL_ENABLED=true`, `SPRING_RABBITMQ_SSL_BUNDLE=infra-ca`, and `INFRA_CA_CERT_PATH` to the host-side `infra-ca.pem`
+- Virtual host: `/`
+- The in-cluster RabbitMQ StatefulSet now runs as UID/GID `999` with `fsGroup: 999` and `readOnlyRootFilesystem: true`; `/var/lib/rabbitmq` remains the only writable runtime path and stays PVC-backed, while the config, definitions, and TLS material stay mounted read-only.
 
 Activate with:
 ```bash
@@ -366,27 +652,41 @@ kubectl logs -n default deployment/nginx-gateway
 tilt trigger nginx-gateway-config
 ```
 
-### Envoy Gateway Issues
+### Istio Ingress Gateway Issues
 
 ```bash
-# Check Envoy Gateway controller
-kubectl logs -n envoy-gateway-system deployment/envoy-gateway
+# Check Istio ingress gateway pod
+kubectl get pods -n istio-ingress
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+
+# Check the rendered ingress ServiceAccount/principal basis
+kubectl get deploy,sa -n istio-ingress -o yaml | rg 'istio-ingress-gateway-istio|serviceAccountName'
 
 # Check Gateway status
-kubectl get gateway -n default
+kubectl get gateway -n istio-ingress istio-ingress-gateway
 
 # Check HTTPRoute status
 kubectl get httproute -n default
+
+# Verify ext_authz is configured
+kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ```
 
 ### SSL Certificate Errors
 
 ```bash
-# Re-run certificate setup on HOST
+# Re-run browser-facing wildcard certificate setup on HOST
 ./scripts/dev/setup-k8s-tls.sh
 
-# Verify secret exists
+# Verify wildcard secret exists
 kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
+
+# Re-run internal transport-TLS setup on HOST
+./scripts/dev/setup-infra-tls.sh
+
+# Verify infra secrets exist
+kubectl get secret -n default infra-ca
+kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
 
 # Restart browser to clear certificate cache
 ```

@@ -129,7 +129,7 @@ kubectl wait --for=condition=Available deployment/kyverno-admission-controller -
 print_success "Kyverno is ready"
 
 print_step "Applying Kyverno smoke policy"
-kubectl apply -f "$ORCHESTRATION_DIR/kubernetes/kyverno/smoke-policy.yaml" >/dev/null
+kubectl apply -f "$ORCHESTRATION_DIR/kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml" >/dev/null
 print_success "Kyverno smoke policy applied"
 
 print_step "Running runtime verifier"

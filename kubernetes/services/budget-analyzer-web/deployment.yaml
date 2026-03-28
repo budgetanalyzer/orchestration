@@ -15,7 +15,11 @@ spec:
       labels:
         app: budget-analyzer-web
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: budget-analyzer-web
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: budget-analyzer-web
         image: budget-analyzer-web:latest
@@ -29,6 +33,13 @@ spec:
         # Vite configuration for Kubernetes
         - name: VITE_API_BASE_URL
           value: ""  # Empty for same-origin requests via session gateway
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
         resources:
           requests:
             memory: "256Mi"

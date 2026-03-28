@@ -1,0 +1,107 @@
+# Egress Gateway listener
+# Rendered by scripts/dev/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: istio-egress-gateway
+  namespace: default
+spec:
+  selector:
+    istio: egress-gateway  # Must match egress pod labels from Helm release
+  servers:
+    - port:
+        number: 443
+        name: tls-auth0
+        protocol: TLS
+      hosts:
+        - "auth0-issuer.placeholder.invalid"
+      tls:
+        mode: PASSTHROUGH
+    - port:
+        number: 443
+        name: tls-fred
+        protocol: TLS
+      hosts:
+        - "api.stlouisfed.org"
+      tls:
+        mode: PASSTHROUGH
+---
+# DestinationRule: disable auto-mTLS so the original TLS passes through to the
+# egress gateway's PASSTHROUGH listener, which needs to see the external-host SNI.
+# ISTIO_MUTUAL wraps the connection in mesh TLS, hiding the original SNI and causing
+# connection resets. The original TLS (e.g., Auth0's certificate) still provides
+# end-to-end encryption; only the intra-cluster hop is not double-encrypted.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: egress-gateway-dr
+  namespace: default
+spec:
+  host: istio-egress-gateway.istio-egress.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+# VirtualService: Auth0 via egress gateway
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: auth0-via-egress
+  namespace: default
+spec:
+  hosts:
+    - "auth0-issuer.placeholder.invalid"
+  gateways:
+    - mesh
+    - istio-egress-gateway
+  tls:
+    - match:
+        - gateways: ["mesh"]
+          port: 443
+          sniHosts: ["auth0-issuer.placeholder.invalid"]
+      route:
+        - destination:
+            host: istio-egress-gateway.istio-egress.svc.cluster.local
+            port:
+              number: 443
+    - match:
+        - gateways: ["istio-egress-gateway"]
+          port: 443
+          sniHosts: ["auth0-issuer.placeholder.invalid"]
+      route:
+        - destination:
+            host: "auth0-issuer.placeholder.invalid"
+            port:
+              number: 443
+---
+# VirtualService: FRED API via egress gateway
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: fred-api-via-egress
+  namespace: default
+spec:
+  hosts:
+    - "api.stlouisfed.org"
+  gateways:
+    - mesh
+    - istio-egress-gateway
+  tls:
+    - match:
+        - gateways: ["mesh"]
+          port: 443
+          sniHosts: ["api.stlouisfed.org"]
+      route:
+        - destination:
+            host: istio-egress-gateway.istio-egress.svc.cluster.local
+            port:
+              number: 443
+    - match:
+        - gateways: ["istio-egress-gateway"]
+          port: 443
+          sniHosts: ["api.stlouisfed.org"]
+      route:
+        - destination:
+            host: "api.stlouisfed.org"
+            port:
+              number: 443

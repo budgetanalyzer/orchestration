@@ -267,7 +267,20 @@ else
 fi
 
 # =============================================================================
-# Test 9: Install Envoy Gateway
+# Test 9: Refresh Istio Helm repository
+# =============================================================================
+print_test "Refreshing Istio Helm repository..."
+
+if helm repo add istio https://istio-release.storage.googleapis.com/charts --force-update >/dev/null 2>&1 \
+    && helm repo update istio >/dev/null \
+    && helm search repo istio/base --versions | grep -q "^istio/base"; then
+    pass_test "Istio Helm repository refresh is idempotent and chart metadata is available"
+else
+    fail_test "Istio Helm repository refresh failed"
+fi
+
+# =============================================================================
+# Test 10: Install Envoy Gateway
 # =============================================================================
 print_test "Installing Envoy Gateway..."
 
@@ -287,7 +300,7 @@ else
 fi
 
 # =============================================================================
-# Test 10: Generate TLS certificates
+# Test 11: Generate TLS certificates
 # =============================================================================
 print_test "Generating TLS certificates..."
 
@@ -322,7 +335,7 @@ else
 fi
 
 # =============================================================================
-# Test 11: Create Kubernetes TLS secret
+# Test 12: Create Kubernetes TLS secret
 # =============================================================================
 print_test "Creating Kubernetes TLS secret..."
 
@@ -348,7 +361,7 @@ else
 fi
 
 # =============================================================================
-# Test 12: Create .env file
+# Test 13: Create .env file
 # =============================================================================
 print_test "Creating .env file..."
 

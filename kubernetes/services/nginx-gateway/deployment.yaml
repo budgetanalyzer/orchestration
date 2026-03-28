@@ -15,13 +15,47 @@ spec:
       labels:
         app: nginx-gateway
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: nginx-gateway
+      securityContext:
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: web-prod-smoke-assets
+        image: budget-analyzer-web-prod-smoke:latest
+        imagePullPolicy: Never
+        command:
+        - sh
+        - -c
+        - cp -R /prod-smoke/. /workdir/
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 101
+          runAsNonRoot: true
+          runAsUser: 101
+        volumeMounts:
+        - name: nginx-web-prod-smoke
+          mountPath: /workdir
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: nginxinc/nginx-unprivileged:1.29.4-alpine@sha256:a6c4f61f456b85b8fdf7ec7ab28cc3e299440e6fb4a9dea520e5fd8fd440025e
         ports:
         - containerPort: 8080
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 101
+          runAsNonRoot: true
+          runAsUser: 101
         volumeMounts:
         - name: nginx-config
           mountPath: /etc/nginx/nginx.conf
@@ -33,6 +67,11 @@ spec:
         - name: nginx-docs
           mountPath: /usr/share/nginx/html/docs
           readOnly: true
+        - name: nginx-web-prod-smoke
+          mountPath: /usr/share/nginx/html/_prod-smoke
+          readOnly: true
+        - name: nginx-tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "64Mi"
@@ -62,3 +101,7 @@ spec:
       - name: nginx-docs
         configMap:
           name: nginx-gateway-docs
+      - name: nginx-web-prod-smoke
+        emptyDir: {}
+      - name: nginx-tmp
+        emptyDir: {}

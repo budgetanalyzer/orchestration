@@ -47,7 +47,7 @@ This project has reached its intended scope. We are no longer actively developin
 
 **What's implemented:**
 - Authentication: OAuth2/OIDC with Auth0, BFF pattern, opaque session tokens + ext_authz
-- API Gateway: Envoy ext_authz for session validation, NGINX for routing and rate limiting
+- API Gateway: Istio ext_authz for session validation and auth-path throttling, NGINX for API routing and backend/API rate limiting
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
 **What's intentionally left unsolved:**
@@ -68,10 +68,10 @@ For containerized development environment setup, see the [workspace](https://git
 - **Production Parity**: Development environment faithfully recreates production
 - **Microservices**: Independently deployable services with clear boundaries
 - **BFF Pattern**: Session Gateway provides browser security and authentication management
-- **API Gateway Pattern**: NGINX provides unified routing, rate limiting, and load balancing
+- **Gateway Pattern**: Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
 - **Resource-Based Routing**: Frontend remains decoupled from service topology
-- **Defense in Depth**: Multiple security layers (Session Gateway → NGINX → Services)
-- **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development
+- **Defense in Depth**: Multiple security layers (Istio ingress/ext_authz → Session Gateway or NGINX → Services)
+- **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development. The Tiltfile implements live update pipelines — Java JAR sync with process restart, React source sync with Vite HMR — so code changes reach running pods in seconds without image rebuilds, while the full production stack (mTLS, network policies, ext_authz) stays active. See [Live Development Pipeline](docs/development/local-environment.md#live-development-pipeline)
 
 ## Service Architecture
 
@@ -93,10 +93,11 @@ kubectl get svc
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
 - **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
-- **ext-authz**: Go HTTP service (port 9002) - Envoy external authorization, session validation via Redis
+- **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
-- **Ingress**: Envoy Gateway (port 443, HTTPS) - SSL termination, routing, and ext_authz enforcement
-- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, rate limiting, and load balancing
+- **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
+- **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
+- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
 
 **Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
 
@@ -113,14 +114,14 @@ This prevents "connection refused" errors during deployments when services are s
 
 **Request Flow**:
 ```
-Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
+Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
 ```
 
 **Single entry point**: `app.budgetanalyzer.localhost`
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
-- `/*` → NGINX (frontend, no auth required)
+- `/login`, `/*` → NGINX (frontend, no auth required)
 
 **Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions.
   - `app.budgetanalyzer.localhost/api/docs` → Unified API documentation (Swagger UI)
@@ -128,7 +129,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 **Key Benefits**:
 - Same-origin architecture = no CORS issues
 - Opaque session tokens = no JWTs exposed to browser (XSS protection)
-- Centralized session validation via ext_authz at the Envoy layer
+- Centralized session validation and auth-path throttling at Istio ingress, with backend/API rate limiting remaining at NGINX
 
 **Discovery**:
 ```bash
@@ -168,8 +169,8 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 - **Backend**: Spring Boot + Java (version managed in service-common)
 - **Build System**: Gradle (all backend services use Gradle with wrapper)
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (Kubernetes manifests in `kubernetes/infrastructure/`)
-- **Ingress**: Envoy Gateway (Kubernetes Gateway API)
-- **API Gateway**: NGINX (Alpine-based)
+- **Ingress**: Istio Ingress Gateway (Kubernetes Gateway API)
+- **API Gateway**: NGINX (unprivileged Alpine image)
 - **Development**: Tilt + Kind (local Kubernetes)
 
 **Note**: Docker images should be pinned to specific versions for reproducibility.
@@ -178,7 +179,17 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 
 ### Prerequisites & Setup
 
-**Required tools**: Docker, Kind, kubectl, Helm, Tilt, Git, mkcert
+**Required tools**: Docker, Kind, kubectl, OpenSSL, Tilt, Git, mkcert
+Helm `3.20.x` is still the required runtime toolchain, but `./setup.sh` now
+installs the tested `v3.20.1` automatically when Helm is missing or unsupported.
+
+**Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo.
+Gateway API CRDs are pinned to `v1.4.0`, and the repo installs
+`istio/base`, `istio/cni`, `istio/istiod`, and `istio/gateway` `1.29.1`
+directly from Helm. Ingress gateway hardening is declared through
+`kubernetes/istio/ingress-gateway-config.yaml` via Gateway
+`spec.infrastructure.parametersRef`, and the egress gateway uses
+`kubernetes/istio/egress-gateway-values.yaml` with `service.type=ClusterIP`.
 
 Check prerequisites:
 ```bash
@@ -187,17 +198,32 @@ Check prerequisites:
 
 **First-time setup**:
 ```bash
-./setup.sh        # Creates/validates cluster, installs Calico, configures certs, DNS, and .env
+./setup.sh        # Recreates the kind cluster from scratch, installs Calico, ensures supported Helm, refreshes the Istio Helm repo index, configures certs (browser + infra TLS), DNS, and .env
 # Edit .env with your Auth0 and FRED API credentials
 ```
 
 ### Quick Start
 ```bash
+# Optional but recommended before cluster apply
+# Catch Phase 7 static manifest/security regressions locally
+./scripts/dev/verify-phase-7-static-manifests.sh
+
 # Start all services with Tilt
 tilt up
 
+# Optional but recommended after tilt up on a clean rebuild
+# Prove the seven app deployments were admitted without Phase 7 image-policy violations
+./scripts/dev/verify-clean-tilt-deployment-admission.sh
+
 # Optional but recommended after core platform resources are healthy
+# Prove the Phase 0 platform baseline
 ./scripts/dev/verify-security-prereqs.sh
+# Close Phase 3 ingress/egress hardening
+./scripts/dev/verify-phase-3-istio-ingress.sh
+# Close Phase 5 runtime hardening and namespace PSA enforcement
+./scripts/dev/verify-phase-5-runtime-hardening.sh
+# Close the final local Phase 7 security-guardrail gate
+./scripts/dev/verify-phase-7-security-guardrails.sh
 
 # Access Tilt UI for logs and status
 # Browser: http://localhost:10350
@@ -208,6 +234,8 @@ tilt up
 # Stop all services
 tilt down
 ```
+
+`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6 local static guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase 7 completion command; it runs the static gate first and then `./scripts/dev/verify-phase-7-runtime-guardrails.sh` for the live Session 7 proof. CI stays static-only. `./scripts/dev/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
 
 ### Troubleshooting
 
@@ -225,8 +253,8 @@ kubectl logs deployment/nginx-gateway
 # Check NGINX configuration validity
 kubectl exec deployment/nginx-gateway -- nginx -t
 
-# View Envoy Gateway logs
-kubectl logs -n envoy-gateway-system deployment/envoy-gateway
+# View Istio ingress gateway logs
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
 
 ```
 
@@ -295,6 +323,24 @@ Each microservice is maintained in its own repository:
 3. Bug fixes in existing functionality
 4. NOT new features or data-ownership implementation
 
+### Phase 7 Contract Freeze
+
+- Use `docs/plans/security-hardening-v2-phase-7-session-1-contract.md` as the
+  source of truth for Phase 7 image-pinning scope, local `:latest`
+  exceptions, installer-hardening targets, and explicit exclusions.
+- The executable Phase 7 image inventories live in
+  `scripts/dev/lib/phase-7-image-pinning-targets.txt` and
+  `scripts/dev/lib/phase-7-allowed-latest.txt`; keep them aligned with that
+  contract doc.
+- Only the seven documented local image repos may remain on `:latest` in
+  checked-in manifests. Live Tilt deploys rewrite those same repos to immutable
+  `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on
+  those managed deploys; treat every third-party `image:` or `FROM` ref as a
+  digest-pinning target unless it is explicitly excluded in that contract doc.
+- `tests/setup-flow` and `tests/security-preflight` are stale, non-gating
+  Phase 7 assets until they are explicitly realigned to the current Istio-only
+  baseline. Do not treat them as current completion gates.
+
 **CRITICAL - Prerequisites First**: Before implementing any plan or feature:
 1. Check for prerequisites in documentation (e.g., "Prerequisites: service-common Enhancement")
 2. If prerequisites are NOT satisfied, STOP immediately and inform the user
@@ -336,7 +382,7 @@ If a fix requires code changes in a service repo, describe the needed changes an
 **Forbidden operations** (must be run by user on host):
 - `mkcert` (any certificate generation)
 - `openssl genrsa`, `openssl req -new`, `openssl x509 -req` (key/cert generation)
-- Any script that generates certificates (e.g., `setup-k8s-tls.sh`)
+- Any script that generates certificates (e.g., `setup-k8s-tls.sh`, `setup-infra-tls.sh`)
 
 **Allowed operations** (read-only):
 - `openssl x509 -text -noout` (inspect certificates)

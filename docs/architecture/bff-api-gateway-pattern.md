@@ -1,6 +1,6 @@
 # BFF + API Gateway Hybrid Pattern
 
-**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing, and Envoy ext_authz for per-request session validation.
+**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing, and Istio ext_authz for per-request session validation.
 
 ## Overview
 
@@ -11,46 +11,49 @@ Budget Analyzer uses a multi-layer gateway architecture that separates browser s
 **Single entry point**: `app.budgetanalyzer.localhost`
 
 ```
-Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
+Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 ```
 
 **Key stages**:
-1. **Envoy**: SSL termination, ext_authz enforcement on `/api/*` paths
+1. **Istio Ingress**: SSL termination, ext_authz enforcement on `/api/*` paths, and auth-path throttling
 2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
-4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/login/*`, `/logout`)
+4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 
 **Routing**:
-- `/auth/*`, `/oauth2/*`, `/login/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
-- `/*` → NGINX (frontend, no auth required)
+- local development only: `/_prod-smoke/*` → NGINX (same-origin static frontend verification path)
+- `/login`, `/*` → NGINX (frontend, no auth required)
 
 ## Component Roles
 
-### Envoy Gateway (Port 443, HTTPS) - Ingress Layer
+### Istio Ingress Gateway (Port 443, HTTPS) - Ingress Layer
 
-**Purpose**: SSL termination, ext_authz enforcement, and initial routing
+**Purpose**: SSL termination, ext_authz enforcement, and initial routing — inside the Istio service mesh with SPIFFE identity
 
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
-- Enforces ext_authz on `/api/*` paths (session validation before routing)
+- Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
+- Applies local rate limiting to auth-sensitive browser entry points (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
+- Participates in mesh mTLS (has SPIFFE identity for AuthorizationPolicy enforcement)
 
-**Key Benefit**: Per-request session validation at the edge, before requests reach any backend
+**Key Benefit**: Per-request session validation at the edge, with full mesh identity for mTLS and policy enforcement
 
 **Discovery**:
 ```bash
-# Check Envoy Gateway status
-kubectl get gateway -n default
+# Check Istio ingress gateway status
+kubectl get gateway -n istio-ingress istio-ingress-gateway
 
-# View Envoy Gateway logs
-kubectl logs -n envoy-gateway-system deployment/envoy-gateway
+# View Istio ingress gateway logs
+kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
 
-# Inspect Gateway configuration
-kubectl get gateway ingress-gateway -n default -o yaml
+# Verify ext_authz extension provider
+kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ```
 
 ### ext_authz Service (Port 9002 HTTP, Port 8090 Health) - Authorization Layer
@@ -58,9 +61,10 @@ kubectl get gateway ingress-gateway -n default -o yaml
 **Purpose**: Per-request session validation via Redis lookup
 
 **Responsibilities**:
+- Authenticates to Redis with the dedicated `ext-authz` ACL user
 - Validates session tokens by looking up `extauthz:session:{id}` in Redis
 - Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
-- Returns 401 for invalid/expired sessions (request rejected by Envoy)
+- Returns 401 for invalid/expired sessions (request rejected by Istio ingress)
 
 **Key Benefit**: Centralized session validation, instant revocation via Redis key deletion
 
@@ -78,12 +82,14 @@ kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 
 ### NGINX (Port 8080, HTTP) - API Gateway Layer
 
-**Purpose**: Routing and rate limiting for backend services
+**Purpose**: Routing and backend/API rate limiting for backend services
 
 **Responsibilities**:
 - Routes requests to appropriate microservices
 - Resource-based routing with path transformation
-- Rate limiting per user/IP
+- Rate limits backend-facing API paths after ingress validation
+- Serves the production-smoke frontend bundle statically at `/_prod-smoke/` while the live dev route continues to proxy to Vite
+- Uses the checked-in `nginx/nginx.production.k8s.conf` variant for the production cutover, where `/` and `/login` serve the built frontend bundle directly, `/_prod-smoke/` is absent, and Vite-only public routes return `404`
 - Load balancing and circuit breaking
 
 **Key Benefit**: Clean routing logic, decoupled from authentication concerns
@@ -105,13 +111,15 @@ kubectl logs deployment/nginx-gateway
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
 
+**Runtime proof**: [`./scripts/dev/verify-phase-6-edge-browser-hardening.sh`](/workspace/orchestration/scripts/dev/verify-phase-6-edge-browser-hardening.sh) is the Phase 6 completion gate for the edge/browser contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the existing Session 3, Session 7, and Phase 5 verifiers, and keeps `/api/docs` probes visible as warnings instead of completion blockers. Manual browser-console validation on `/_prod-smoke/` is still required before Phase 6 can be called complete.
+
 ### Session Gateway (Port 8081, HTTP) - BFF Layer
 
 **Purpose**: Browser authentication and session security
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Stores Auth0 tokens in Redis for refresh
+- Stores Auth0 tokens in Redis for refresh using the dedicated `session-gateway` ACL user
 - Dual-writes session data (userId, roles, permissions) to ext_authz Redis schema
 - Issues HttpOnly, Secure session cookies to browsers
 - Proactive token refresh before expiration (includes permission re-fetch and ext_authz session update)
@@ -131,17 +139,24 @@ kubectl logs deployment/session-gateway
 # Test Session Gateway health
 kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
-# Check Redis connection (session storage)
-kubectl exec -n infrastructure deployment/redis -- redis-cli PING
+# Check Redis connection (session storage) with the redis-ops ACL user
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
 
+`redis-ops` is a maintenance identity only. Application paths use the
+service-specific Redis ACL users, not a shared password.
+
 **Repository**: https://github.com/budgetanalyzer/session-gateway
+
+Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
 ## Why This Pattern?
 
 ### No CORS Needed
 
-**Same-Origin Architecture**: All browser requests go through a single entry point (app.budgetanalyzer.localhost). Envoy routes to Session Gateway or NGINX internally. Browser sees single origin = no CORS issues!
+**Same-Origin Architecture**: All browser requests go through a single entry point (app.budgetanalyzer.localhost). The Istio ingress gateway routes to Session Gateway or NGINX internally. Browser sees single origin = no CORS issues!
 
 **Traditional architecture (CORS required)**:
 ```
@@ -150,13 +165,13 @@ Browser → Frontend (3000) → Backend Services (8082+)  ❌ Different origins
 
 **Current architecture (No CORS)**:
 ```
-Browser → Envoy (app.budgetanalyzer.localhost) → ext_authz → NGINX → Backend Services  ✅ Same origin
+Browser → Istio Ingress (app.budgetanalyzer.localhost) → ext_authz → NGINX → Backend Services  ✅ Same origin
 ```
 
 ### Security Benefits - Defense in Depth
 
 **Multiple security layers**:
-1. **Envoy Gateway**: SSL termination for all traffic
+1. **Istio Ingress Gateway**: SSL termination for all traffic
 2. **Session Gateway**: Prevents token exposure to browser (XSS protection)
 3. **ext_authz**: Validates every API request via Redis session lookup
 4. **Backend Services**: Data-level authorization (user owns resource)
@@ -176,11 +191,11 @@ Browser → Envoy (app.budgetanalyzer.localhost) → ext_authz → NGINX → Bac
 
 | Port | Service | Purpose | Access |
 |------|---------|---------|--------|
-| 443 | Envoy Gateway | SSL termination, ext_authz enforcement (HTTPS) | Public (browsers via app.budgetanalyzer.localhost) |
-| 9002 | ext_authz | Session validation (HTTP) | Internal (Envoy only) |
+| 443 | Istio Ingress Gateway | SSL termination, ext_authz enforcement, auth-path throttling (HTTPS) | Public (browsers via app.budgetanalyzer.localhost) |
+| 9002 | ext_authz | Session validation (HTTP) | Internal (Istio ingress only) |
 | 8090 | ext_authz | Health endpoint (HTTP) | Internal (probes only) |
-| 8080 | NGINX Gateway | Routing, rate limiting | Internal (Envoy only) |
-| 8081 | Session Gateway | Browser authentication, session management | Internal (Envoy only) |
+| 8080 | NGINX Gateway | Routing, backend/API rate limiting | Internal (Istio ingress only) |
+| 8081 | Session Gateway | Browser authentication, session management | Internal (Istio ingress only) |
 | 8086 | Permission Service | Internal roles/permissions (network isolation) | Internal (Session Gateway only) |
 | 8082 | Transaction Service | Business logic | Internal (NGINX only) |
 | 8084 | Currency Service | Business logic | Internal (NGINX only) |
@@ -239,11 +254,14 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 # Check ext_authz service
 kubectl logs deployment/ext-authz
 
+REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+
 # Verify ext_authz session exists in Redis
-kubectl exec -n infrastructure deployment/redis -- redis-cli HGETALL "extauthz:session:{session-id}"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "extauthz:session:{session-id}"
 
 # Check Session Gateway session storage
-kubectl exec -n infrastructure deployment/redis -- redis-cli KEYS "spring:session:*"
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
 ```
 
 **Session not persisting**:

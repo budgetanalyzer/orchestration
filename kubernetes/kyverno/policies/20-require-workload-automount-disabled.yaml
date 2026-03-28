@@ -1,0 +1,45 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: phase7-require-workload-automount-disabled
+  annotations:
+    policies.kyverno.io/title: Require Automount Disabled
+    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Repo-managed workloads must explicitly disable service-account token
+      automount. System and chart-managed namespaces are excluded, including the
+      ingress gateway's intentional token-retention case.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-pod-automount-service-account-token-false
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: "Pods must set spec.automountServiceAccountToken to false."
+        pattern:
+          spec:
+            automountServiceAccountToken: false

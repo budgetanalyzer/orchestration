@@ -1,5 +1,7 @@
 # Security Hardening Plan v2
 
+> **No backward compatibility required.** This is a reference architecture with no live users, no forks, and no existing deployments to preserve. Implementation sessions should do clean replacements — no dual-parent cutover strategies, temporary ports, staged migrations, or legacy coexistence scaffolding. Rip and replace.
+
 ## Context
 
 This is the production-grade security hardening plan for the orchestration repository.
@@ -8,7 +10,7 @@ It replaces the earlier split between "implement now" and "future work." Materia
 
 Key corrections carried forward from the earlier review:
 
-- External header spoofing through the public ingress path is already mitigated by ext_authz `headersToBackend` allowlisting.
+- External header spoofing through the public ingress path is already mitigated by ext_authz `headersToUpstreamOnAllow` allowlisting.
 - Istio `AuthorizationPolicy` cannot protect ingress-facing services in the current topology because Envoy Gateway is outside the mesh and has no SPIFFE identity.
 - The real current gap is the in-cluster bypass path:
 
@@ -43,9 +45,7 @@ Target end state:
 
 ---
 
-## Phase 0: Platform Preconditions
-
-Detailed implementation breakdown: [security-hardening-v2-phase-0-implementation.md](./security-hardening-v2-phase-0-implementation.md)
+## Phase 0: Platform Preconditions (Implemented)
 
 ### 0a. NetworkPolicy-capable CNI
 
@@ -86,7 +86,16 @@ Target namespace posture:
 
 ## Phase 1: Credential and Secret Hardening
 
+Detailed implementation breakdown: [security-hardening-v2-phase-1-implementation.md](./security-hardening-v2-phase-1-implementation.md)
+
+Current local Phase 1 baseline:
+
+- Tilt generates `postgresql-bootstrap-credentials`, per-service PostgreSQL secrets, `rabbitmq-bootstrap-credentials`, `currency-service-rabbitmq-credentials`, `redis-bootstrap-credentials`, and per-service Redis secrets from `.env` for local Kind only.
+- `./scripts/dev/verify-phase-1-credentials.sh` is the runtime proof for PostgreSQL, RabbitMQ, Redis ACL isolation, and the ext-authz Redis username/password path.
+
 ### 1a. Per-service PostgreSQL users
+
+Rename the bootstrap superuser from `budget_analyzer` to `postgres_admin` to eliminate the identity collision between the superuser and the application database/user name. The superuser password must come from the bootstrap secret, not be hardcoded in the StatefulSet.
 
 Create dedicated DB users with grants scoped to their own database only:
 
@@ -94,9 +103,35 @@ Create dedicated DB users with grants scoped to their own database only:
 - `currency_service` -> `currency`
 - `permission_service` -> `permission`
 
+Isolation requires explicit privilege revocation — PostgreSQL's default allows any authenticated user to connect to any database:
+
+```sql
+REVOKE CONNECT ON DATABASE budget_analyzer FROM PUBLIC;
+REVOKE CONNECT ON DATABASE currency FROM PUBLIC;
+REVOKE CONNECT ON DATABASE permission FROM PUBLIC;
+GRANT CONNECT ON DATABASE budget_analyzer TO transaction_service;
+GRANT CONNECT ON DATABASE currency TO currency_service;
+GRANT CONNECT ON DATABASE permission TO permission_service;
+```
+
+Also revoke default schema creation rights in each database:
+
+```sql
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+```
+
+Then grant `CREATE ON SCHEMA public` only to the owning service user in each database.
+
+Use SCRAM-SHA-256 for password authentication instead of the weaker default `md5`. Set `password_encryption = scram-sha-256` in PostgreSQL config and use `scram-sha-256` in `pg_hba.conf`.
+
+The init script must be a shell script (`.sh` in `/docker-entrypoint-initdb.d/`) rather than plain SQL, so it can read per-service passwords from environment variables sourced from Kubernetes Secrets.
+
+Update the PostgreSQL readiness probe to use the admin user from the bootstrap secret instead of the old `budget_analyzer` superuser identity.
+
 Files to modify:
 
 - `kubernetes/infrastructure/postgresql/configmap.yaml`
+- `kubernetes/infrastructure/postgresql/statefulset.yaml`
 - `Tiltfile`
 - `kubernetes/services/transaction-service/deployment.yaml`
 - `kubernetes/services/currency-service/deployment.yaml`
@@ -106,21 +141,26 @@ Files to modify:
 
 Remove `guest/guest`.
 
-Create one RabbitMQ user per service:
+Create RabbitMQ users:
 
-- `transaction-service`
-- `currency-service`
+- `currency-service` — the only service with active RabbitMQ usage (Spring Cloud Stream: publishes to `currency.created`, consumes from `currency.created.exchange-rate-import-service`)
+- `rabbitmq-admin` — admin/ops user with `administrator` tag for Management UI access (port 15672)
+
+**Note**: transaction-service has zero RabbitMQ code — no Spring Cloud Stream config, no `@RabbitListener`, no messaging classes. The current orchestration layer gives it RabbitMQ credentials and a Tilt dependency, but these are dead wiring. Clean up the dead wiring (deployment env vars, Tilt dependency) rather than creating a phantom user for a service that doesn't connect.
 
 Scope permissions by vhost and by `configure` / `write` / `read` rights.
 
 If a shared vhost remains necessary, do not collapse back to a shared credential.
+
+When definitions change (e.g., adding or removing users), the RabbitMQ PVC must be recreated for changes to take effect — the definitions file is only imported at first startup. Document this in the developer workflow.
 
 Files to modify:
 
 - `kubernetes/infrastructure/rabbitmq/configmap.yaml`
 - `kubernetes/infrastructure/rabbitmq/statefulset.yaml`
 - `Tiltfile`
-- service deployment manifests for transaction-service and currency-service
+- `kubernetes/services/currency-service/deployment.yaml`
+- `kubernetes/services/transaction-service/deployment.yaml` (remove dead RabbitMQ wiring)
 
 ### 1c. Redis ACL users
 
@@ -131,12 +171,41 @@ Required Redis users:
 - `session-gateway`
 - `ext-authz`
 - `currency-service`
+- `redis-ops` — admin user for maintenance scripts and break-glass operations
 
-Required scope:
+Proposed ACL rules for Phase 1:
 
-- `session-gateway`: read/write Spring Session keys and ext_authz session keys
-- `ext-authz`: read-only access to ext_authz session keys and only the commands it needs
-- `currency-service`: access only its cache namespace and required cache commands
+- `ext-authz` command scope is confirmed from source (`PING` plus `HGETALL` on `extauthz:session:*`)
+- `session-gateway` should use broad command access with key-pattern isolation because Spring Session relies on framework-managed Redis operations
+- `currency-service` should start with a cache-focused allow-list and be validated in runtime tests because Spring Cache/Lettuce hides the exact Redis command set behind abstractions
+
+```
+# session-gateway: Spring Session uses a wide range of internal commands (hash ops,
+# set ops, key ops, pub/sub for session events). Restricting to specific commands
+# risks breakage on Spring Session upgrades. Use +@all with key-pattern isolation.
+user session-gateway on >PASSWORD ~spring:session:* ~extauthz:session:* +@all
+
+# ext-authz: read-only on ext-authz sessions + health check
+user ext-authz on >PASSWORD ~extauthz:session:* +hgetall +ping +auth +hello +info
+
+# currency-service: initial cache-focused allow-list on its namespace only.
+# Validate this in runtime tests and expand only if framework behavior proves
+# an additional command is required.
+user currency-service on >PASSWORD ~currency-service:* +get +set +del +keys +scan +ping +auth +hello +ttl +pttl +expire +exists +type +object
+
+# redis-ops: admin for maintenance scripts and break-glass operations
+user redis-ops on >PASSWORD ~* +@all
+
+# default: restricted to PING and AUTH only (do not disable — probes need it as fallback)
+user default on >PASSWORD ~* +ping +auth
+```
+
+**Probe authentication**: Disabling the `default` user entirely breaks Redis probes because `REDISCLI_AUTH` only provides a password — Redis ACL requires `AUTH <username> <password>`. Kubernetes exec probes do not support env var expansion in command arrays. Two viable options:
+
+1. Keep `default` user enabled but restricted to only `+ping +auth` (simplest)
+2. Use a wrapper shell script mounted into the container that calls `redis-cli --user $REDIS_OPS_USERNAME --pass $REDIS_OPS_PASSWORD ping`
+
+Option 1 is recommended for Phase 1.
 
 Files to modify:
 
@@ -167,6 +236,8 @@ Production seam:
 
 ## Phase 2: Immediate Network Isolation
 
+Detailed implementation breakdown: [security-hardening-v2-phase-2-implementation.md](./security-hardening-v2-phase-2-implementation.md)
+
 Add Kubernetes `NetworkPolicy` now, before the ingress migration, to close the current bypass path.
 
 ### 2a. Default namespace policies
@@ -176,6 +247,12 @@ New files:
 - `kubernetes/network-policies/default-deny.yaml`
 - `kubernetes/network-policies/default-allow.yaml`
 
+Current authoring status for March 21, 2026:
+
+- Session 2 is implemented in-repo: the `default` namespace deny and allow manifests are authored.
+- `kubectl apply --dry-run=server` succeeded for both manifests against the active `kind-kind` cluster.
+- Tilt rollout wiring is still intentionally deferred; Session 2 stops at authoring and validation so Session 3 can land the matching `infrastructure` namespace policies before live enforcement.
+
 Allow rules in the current topology:
 
 - `nginx-gateway` <- Envoy Gateway proxy pods only
@@ -184,7 +261,7 @@ Allow rules in the current topology:
 - `nginx-gateway` -> backend services, budget-analyzer-web
 - `session-gateway` -> Redis, permission-service
 - `ext-authz` -> Redis
-- `transaction-service` -> PostgreSQL, RabbitMQ
+- `transaction-service` -> PostgreSQL
 - `currency-service` -> PostgreSQL, RabbitMQ, Redis
 - `permission-service` -> PostgreSQL
 - all pods -> DNS only, plus any explicitly approved dependency
@@ -193,6 +270,8 @@ Implementation notes:
 
 - Match both namespace and pod labels for ingress callers
 - Do not implicitly trust an entire namespace when a narrower pod selector is possible
+- Session 1 froze the active topology without a `session-gateway` -> `nginx-gateway:8080` edge; Envoy already routes `/api/*` and `/*` directly to `nginx-gateway`
+- Do not add pod-to-pod allow rules for `ext-authz:8090`, `rabbitmq:15672`, or `nginx-gateway:/health`; those are probe/debug or local management paths, not application dependencies
 
 ### 2b. Infrastructure namespace policies
 
@@ -201,11 +280,17 @@ New files:
 - `kubernetes/network-policies/infrastructure-deny.yaml`
 - `kubernetes/network-policies/infrastructure-allow.yaml`
 
+Current authoring status for March 21, 2026:
+
+- Session 3 is implemented in-repo: the `infrastructure` namespace deny and allow manifests are authored.
+- `kubectl apply --dry-run=server` succeeded for both infrastructure manifests against the active `kind-kind` cluster.
+- Tilt rollout is still intentionally deferred until Session 4 applies the `default` and `infrastructure` policy sets together.
+
 Allow rules:
 
 - `redis` <- `session-gateway`, `ext-authz`, `currency-service`
 - `postgresql` <- `transaction-service`, `currency-service`, `permission-service`
-- `rabbitmq` <- `transaction-service`, `currency-service`
+- `rabbitmq` <- `currency-service`
 
 ### 2c. Egress posture before Istio egress cutover
 
@@ -215,6 +300,7 @@ Interim goal:
 
 - `session-gateway` only needs outbound HTTPS to the configured IdP host
 - `currency-service` only needs outbound HTTPS to `api.stlouisfed.org`
+- Session 1 re-check across the checked-in topology and sibling repo configs found no other workload with a required external HTTPS dependency
 
 Important limitation:
 
@@ -271,12 +357,24 @@ Final goal:
 - application workloads egress only to the Istio egress gateway at the Kubernetes network layer
 - the egress gateway is the only workload allowed to talk to approved external hosts
 
+Current topology detail:
+
+- the egress gateway listeners use TLS `PASSTHROUGH`
+- the workload-to-egress `DestinationRule` therefore uses `tls.mode: DISABLE` so the original external TLS/SNI reaches the gateway unchanged
+- external TLS remains end-to-end; the sidecar-to-egress-gateway hop is not additionally wrapped in mesh mTLS
+
 ### 3d. NetworkPolicy alignment after cutover
 
 After Istio ingress and egress gateways are live:
 
 - update application namespace `NetworkPolicy` so workloads only talk to the ingress/egress gateways and their approved in-cluster dependencies
 - remove Envoy Gateway-specific allowances
+
+Runtime completion gate:
+
+- `./scripts/dev/verify-phase-3-istio-ingress.sh` must pass after `tilt up`
+- the verifier proves auth-path throttling at Istio ingress, end-to-end header sanitization with a seeded ext_authz session and temporary echo backend, HTTP-level mTLS and ingress-identity denials, and NGINX forwarded-chain logging
+- do not describe Phase 3 as complete until that verifier and the live validation checklist pass
 
 ---
 
@@ -286,11 +384,18 @@ Apply this after the topology and egress model are settled.
 
 Infrastructure services (PostgreSQL, Redis, RabbitMQ) are not Istio mesh workloads — sidecar injection is disabled in the infrastructure namespace. Istio mTLS does not apply to them. Transport encryption for these services requires native TLS configuration on each service.
 
+Implementation status for March 23, 2026:
+
+- Sessions 1-6 are implemented in-repo: `./scripts/dev/setup-infra-tls.sh` creates the shared `infra-ca` plus the `infra-tls-*` secrets, Redis/PostgreSQL/RabbitMQ serve native TLS, and the consuming deployments mount `infra-ca` and use TLS-aware client settings.
+- Session 7 is the runtime proof and documentation alignment pass. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes.
+
 Certificate rules:
 
 - local Kind: generate internal service certs from a host-side process, not inside the container sandbox (the sandbox CA is not trusted by the host or browser)
 - production: use cert-manager or an equivalent automated certificate lifecycle tool with a self-signed or internal CA for in-cluster service certificates — do not rely on manually generated certificates in production
 - keep internal service trust material separate from the browser-facing wildcard cert
+- preserve the documented localhost port-forward workflows only if the service cert SANs also cover `localhost` / `127.0.0.1`; otherwise remove and document the workflow change explicitly
+- local preflight should fail clearly when the internal TLS secrets are missing and direct the user to the host-side certificate bootstrap step
 
 ### 4a. Redis TLS
 
@@ -307,7 +412,8 @@ Required updates:
 Required updates:
 
 - TLS listener on RabbitMQ
-- trusted CA material mounted into `transaction-service` and `currency-service`
+- trusted CA material mounted into `currency-service` (the sole RabbitMQ client)
+- Phase 2 network-policy manifests and verifier updated from port `5672` to `5671` in the same change set
 
 ### 4c. PostgreSQL TLS
 
@@ -316,15 +422,35 @@ Required updates:
 - PostgreSQL SSL enabled
 - certs match the service hostname used by clients
 - clients use certificate verification with hostname validation
+- localhost examples stay valid only if the cert SANs cover the documented local connection hostnames
 
 Security requirement:
 
 - do not describe `sslmode=require` as full server authentication
 - if authenticated TLS is the goal, use hostname-validated verification semantics
+- Phase 4 runtime verification must include at least one positive and one negative client-path test for Redis and PostgreSQL; listener presence and pod readiness are not sufficient proof
+- the Phase 4 completion gate is `./scripts/dev/verify-phase-4-transport-encryption.sh`
 
 ---
 
 ## Phase 5: Runtime Hardening and Pod Security
+
+Detailed implementation breakdown: [security-hardening-v2-phase-5-implementation.md](./security-hardening-v2-phase-5-implementation.md)
+
+Current implementation status for March 25, 2026:
+
+- The detailed Phase 5 session breakdown and completion-gate verifier are authored in-repo.
+- Session 1 is implemented in-repo: Tilt installs `istio/cni`, `istiod` runs with `pilot.cni.enabled=true`, `istio-system` is labeled for PSA `privileged`, and existing `default` namespace workloads are rolled once when they still carry `istio-init`.
+- Session 2 is implemented in-repo: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` now disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
+- Session 3 is implemented in-repo on the refreshed Istio `1.29.1` baseline: ingress gateway hardening and the fixed `30443` NodePort now live in Gateway `spec.infrastructure.parametersRef` via `kubernetes/istio/ingress-gateway-config.yaml`; the egress gateway installs directly from `istio/gateway` using `kubernetes/istio/egress-gateway-values.yaml`; the ingress gateway intentionally retains Kubernetes API token access for TLS secret watching; and the egress gateway currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it.
+- Session 4 is implemented in-repo: `nginx-gateway` now uses `nginxinc/nginx-unprivileged:1.29.4-alpine`, disables service-account token automount at both the pod and ServiceAccount levels, runs with pod `seccompProfile.type: RuntimeDefault`, applies the non-root container baseline as UID/GID `101`, mounts an explicit writable `/tmp` `emptyDir`, and logs to stdout/stderr so `readOnlyRootFilesystem: true` remains compatible.
+- Session 5 is implemented across the orchestration and `budget-analyzer-web` repos: the frontend Docker runtime now runs as UID/GID `1001`, the `budget-analyzer-web` Deployment and ServiceAccount disable service-account token automount, the Deployment now pins `runAsUser`/`runAsGroup` to `1001`, and the Phase 5 verifier now includes dedicated frontend UID/GID checks alongside the other repo-managed pods.
+- Session 6 is implemented in-repo: Redis now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs as UID `999` / GID `1000` with `allowPrivilegeEscalation: false`, `capabilities.drop: ["ALL"]`, and `readOnlyRootFilesystem: true`, and uses explicit `/tmp` plus `/data` `emptyDir` mounts so ACL bootstrap and AOF still work in local dev. The Phase 5 verifier now also asserts that Redis UID/GID and those writable mounts at runtime.
+- Session 7 is implemented in-repo: PostgreSQL now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs the pod and main container as UID/GID `70`, hardens the TLS-prep init container to the same non-root ownership with `readOnlyRootFilesystem: true`, and keeps the main container `readOnlyRootFilesystem: true` compatible through explicit writable `/tmp` and `/var/run/postgresql` mounts.
+- Session 8 is implemented in-repo: RabbitMQ now disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs as UID/GID `999` with `fsGroup: 999`, and enables `readOnlyRootFilesystem: true` while keeping `/var/lib/rabbitmq` as the explicit PVC-backed writable path. The Phase 5 verifier now also asserts that RabbitMQ ownership and mount contract at runtime.
+- Session 9 is implemented in-repo: the namespace manifests now declare the final Pod Security `enforce` labels for `infrastructure`, `istio-ingress`, and `istio-egress`, while Tilt's namespace-labeling step reapplies the final `default`, `infrastructure`, and `istio-system` labels during reconciliation.
+- The repo is now pinned to Istio `1.29.1` and Gateway API CRDs `v1.4.0`.
+- Session 10 is complete in-repo: `./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 8m` passed end-to-end on March 25, 2026 at both the original `166/166` baseline and the expanded `175/175` gate after adding the frontend UID/GID pinning plus the PostgreSQL init-container baseline assertions. The verifier reruns remain bounded per script so the final gate fails instead of hanging indefinitely.
 
 ### 5a. Manifest-level workload hardening
 
@@ -372,9 +498,22 @@ Execution model:
 
 ## Phase 6: Edge and Browser Hardening
 
+Detailed implementation breakdown: [security-hardening-v2-phase-6-implementation.md](./security-hardening-v2-phase-6-implementation.md)
+Post-review corrections plan: [security-hardening-v2-phase-6-corrections-implementation.md](./security-hardening-v2-phase-6-corrections-implementation.md)
+`/api/docs` CSP remediation note (historical context, not the current target): [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md)
+`/api/docs` complexity rollback follow-up: [security-hardening-v2-phase-6-api-docs-workaround-removal.md](./security-hardening-v2-phase-6-api-docs-workaround-removal.md)
+
+Current implementation status for March 26, 2026:
+
+- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate, reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade, and keeps `/api/docs` probes visible as warning-only checks.
+- `/api/docs` remains a lightweight developer-convenience route, not a place to carry more Phase 6 complexity. The checked-in rollback state is now the simpler `main`-style posture: the simplified `docs-aggregator` is restored, vendored Swagger assets are gone, docs-only CSP plumbing is gone, docs asset image/init-container plumbing is gone, and docs checks remain warning-only instead of part of the completion gate.
+- Manual browser testing on March 26, 2026 found the remaining `/api/docs` blocker under the original docs strict CSP. That evidence is retained in [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md), but the rollback plan is now the active path.
+- Final browser-enforcement validation remains open work for the real app verification path. `/api/docs` is now explicitly non-blocking in the Phase 6 story, and `/_prod-smoke/` remains the browser-validation surface that still matters.
+
 ### 6a. CSP split for dev and production
 
 Keep a development CSP for Vite/HMR, but define a strict production CSP that removes `unsafe-inline` and `unsafe-eval`.
+Do not leave the Vite/HMR route shape in production: `/_prod-smoke/` is only a local verification seam, while production serves the built frontend with the strict CSP on the normal app routes.
 
 ### 6b. Remove wildcard CORS on docs assets
 
@@ -384,11 +523,14 @@ Do not keep `Access-Control-Allow-Origin: *` unless a concrete cross-origin use 
 
 Rate limiting for `/auth/*`, `/login/*`, `/oauth2/*`, `/logout`, and `/user` belongs at the ingress gateway.
 
-Target:
+Current implementation:
 
-- rate limit auth-sensitive paths at Istio ingress
-- prefer local rate limiting first if the deployment stays single-replica
-- move to distributed/global rate limiting if ingress scales horizontally
+- auth-sensitive paths are locally rate limited at Istio ingress
+- the Phase 3 verifier treats missing auth-path throttling as a failure
+
+Follow-up:
+
+- revisit distributed/global rate limiting if ingress scales horizontally
 
 ### 6d. API rate-limiting identity correctness
 
@@ -399,9 +541,77 @@ Options:
 - trusted forwarded-header handling where required
 - or move edge-facing rate limiting entirely to ingress
 
+### 6e. Production frontend route cutover
+
+Do not treat the local Vite/HMR route shape as the production end state.
+
+Required production outcome:
+
+- `/` and `/login` serve the built frontend bundle
+- the strict frontend CSP applies on those normal app routes
+- Vite-only public routes such as `/@vite/client`, `/src`, and `/node_modules` are not exposed
+- `/_prod-smoke/` does not remain as a user-facing production path
+
+Implementation expectation:
+
+- use checked-in production-specific route configuration or a checked-in deployment overlay that swaps the frontend from Vite proxying to static-file serving
+- do not rely on an ad-hoc env var that leaves the dev route graph in place and only swaps headers
+
+Current implementation:
+
+- `nginx/nginx.production.k8s.conf` is now the checked-in production-specific route configuration for `nginx-gateway`
+
 ---
 
 ## Phase 7: Supply Chain, Admission Policy, and Verification Guardrails
+
+Detailed implementation breakdown: [security-hardening-v2-phase-7-implementation.md](./security-hardening-v2-phase-7-implementation.md)
+
+Current implementation:
+
+- Session 1 is implemented as the contract freeze. The source-of-truth
+  inventory is [`security-hardening-v2-phase-7-session-1-contract.md`](./security-hardening-v2-phase-7-session-1-contract.md): it freezes the seven approved local Tilt image repos, distinguishes checked-in `:latest` literals from live Tilt `:tilt-<hash>` deploy refs, inventories orchestration-owned and sibling third-party pinning targets, records the installer hardening targets, and classifies `tests/setup-flow` plus `tests/security-preflight` as stale non-gating Phase 7 assets until realigned.
+- Session 2 is implemented in-repo: orchestration-owned third-party images are
+  now digest-pinned across active manifests, inline Tilt Dockerfiles,
+  `ext-authz/Dockerfile`, the main and retained Kind configs, the retained DinD
+  assets, and the Phase 0 through Phase 6 verifier probe-image constants. The
+  repo also now ships `scripts/dev/check-phase-7-image-pinning.sh` as the
+  static guard against missing digests and unexpected `:latest` refs.
+- Session 5 is implemented in-repo: `kubernetes/kyverno/` now ships a real
+  policy layout plus positive/negative Kyverno CLI fixtures, Tilt applies the
+  policy directory instead of a single scaffold file, the retained smoke policy
+  stays as a cheap bootstrap signal, and the enforce-mode suite now covers
+  namespace Pod Security labels, workload `automountServiceAccountToken: false`,
+  the repo-owned workload `securityContext` baseline, obvious default-credential
+  literals, and third-party image digests. Exceptions are explicit and narrow:
+  system/chart-managed namespaces are excluded from the repo-owned workload
+  baseline, fully mutated sidecar-injected Pods are skipped by the direct Pod
+  digest rule because controller-spec autogen rules already enforce the
+  repo-owned images while Istio adds chart-managed containers during mutation,
+  and the ingress gateway token-retention case remains called out by design.
+- Session 6 is implemented in-repo: `scripts/dev/verify-phase-7-static-manifests.sh`
+  now bootstraps pinned `kubeconform`, `kube-linter`, and `kyverno` binaries,
+  validates checked-in manifests, runs the Kyverno fixture suite, reuses the
+  image-pinning guard, scans active setup guidance for forbidden pipe-to-shell
+  patterns, verifies namespace PSA labels, and exposes `--self-test` against
+  intentional failing fixtures. `.github/workflows/security-guardrails.yml`
+  runs that same gate on pull requests and `main`.
+- Session 7 is implemented in-repo:
+  `scripts/dev/verify-phase-7-runtime-guardrails.sh` now adds the live-cluster
+  Phase 7 proof. It creates pinned temporary Redis and PostgreSQL probe pods
+  plus self-cleaning `NetworkPolicy` rules, proves Redis ACL denials, proves
+  PostgreSQL cross-database denials, proves RabbitMQ unauthorized
+  vhost/queue/exchange access is rejected, and then reruns
+  `scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
+  through Phase 6 runtime regression umbrella.
+- Session 8 is implemented in-repo:
+  `scripts/dev/verify-phase-7-security-guardrails.sh` is now the single local
+  Phase 7 completion gate. It runs
+  `scripts/dev/verify-phase-7-static-manifests.sh` first and
+  `scripts/dev/verify-phase-7-runtime-guardrails.sh` second, while
+  `.github/workflows/security-guardrails.yml` stays intentionally static-only.
+  The final local gate passed on March 27, 2026 via
+  `./scripts/dev/verify-phase-7-security-guardrails.sh`.
 
 ### 7a. Pin third-party images and base images
 
@@ -413,11 +623,25 @@ Pin:
 - NGINX
 - all third-party base images used by Dockerfiles or inline Tilt builds
 
-Local service images tagged `:latest` by Tilt are acceptable as local build outputs, but their base images must be pinned.
+The seven approved local service image repos may stay on checked-in `:latest`
+manifest literals for local development, but live Tilt deployments rewrite them
+to immutable `:tilt-<hash>` refs and their base images must still be pinned.
 
 ### 7b. Installer and bootstrap hardening
 
 Replace pipe-to-shell installer guidance with integrity-checked install guidance wherever possible.
+
+- Session 4 is implemented for the orchestration-owned setup surfaces: host
+  guidance now flows through `scripts/dev/install-verified-tool.sh`, which
+  installs pinned `kubectl`, Helm, Tilt, and `mkcert` releases from
+  checksum-verified artifacts, `setup.sh` now uses that path for Helm
+  auto-install, and the retained DinD test image no longer uses floating
+  `stable.txt`, `latest`, or pipe-to-shell installer flows. The coordinated
+  `../workspace/ai-agent-sandbox/Dockerfile` is now on the same hardened path:
+  it uses a keyring-based NodeSource apt setup plus checksum-verified Helm and
+  Tilt downloads. The temporary
+  `tmp/ai-agent-sandbox.Dockerfile.phase7-session4` handoff was removed during
+  remediation after the sibling workspace Dockerfile matched it byte-for-byte.
 
 ### 7c. Kyverno admission policies
 
@@ -427,8 +651,11 @@ Add cluster admission policies for:
 - `automountServiceAccountToken: false`
 - rejection of default credentials in manifests
 - required image pinning for third-party dependencies
-- required `NetworkPolicy` coverage for protected workloads
 - namespace Pod Security labels
+
+Do not use Kyverno to prove `NetworkPolicy` selector correctness or live
+reachability. Static checks and runtime verifiers remain the proof for that
+part of the security model.
 
 ### 7d. Static manifest validation
 

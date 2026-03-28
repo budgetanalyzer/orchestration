@@ -15,7 +15,11 @@ spec:
       labels:
         app: ext-authz
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: ext-authz
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: ext-authz
         image: ext-authz:latest
@@ -26,17 +30,46 @@ spec:
         - containerPort: 8090
           name: health
         env:
-        - name: REDIS_ADDR
-          value: "redis.infrastructure:6379"
-        - name: REDIS_PASSWORD
+        - name: REDIS_HOST
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: ext-authz-redis-credentials
+              key: host
+        - name: REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
+              key: port
+        - name: REDIS_ADDR
+          value: "$(REDIS_HOST):$(REDIS_PORT)"
+        - name: REDIS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
+              key: username
+        - name: REDIS_EXT_AUTHZ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ext-authz-redis-credentials
               key: password
         - name: REDIS_TLS
-          value: "false"
+          value: "true"
+        - name: REDIS_CA_CERT
+          value: "/etc/ssl/infra/ca.crt"
         - name: LOG_FORMAT
           value: "json"
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
         resources:
           requests:
             memory: "32Mi"
@@ -60,3 +93,7 @@ spec:
             path: /healthz
             port: 8090
           periodSeconds: 10
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca

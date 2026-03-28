@@ -1,0 +1,30 @@
+name: Security Guardrails
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  static-security-guardrails:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate changed shell syntax
+        run: |
+          bash -n scripts/dev/check-phase-7-image-pinning.sh
+          bash -n scripts/dev/install-verified-tool.sh
+          bash -n scripts/dev/lib/pinned-tool-versions.sh
+          bash -n scripts/dev/render-istio-egress-config.sh
+          bash -n scripts/dev/verify-phase-7-static-manifests.sh
+
+      - name: Run static Phase 7 guardrails
+        run: ./scripts/dev/verify-phase-7-static-manifests.sh
+
+      - name: Prove bad fixtures are rejected
+        run: ./scripts/dev/verify-phase-7-static-manifests.sh --self-test

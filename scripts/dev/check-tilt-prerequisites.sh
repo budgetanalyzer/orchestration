@@ -6,6 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
+# shellcheck source=./lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -34,8 +36,17 @@ check_command() {
         # Different tools use different version flags
         local version
         case "$cmd" in
-            kubectl|helm|tilt)
-                version=$($cmd version --client --short 2>&1 | head -n1 || $cmd version 2>&1 | head -n1)
+            kubectl)
+                version=$($cmd version --client 2>&1 | head -n1 || $cmd version 2>&1 | head -n1)
+                ;;
+            helm)
+                version=$($cmd version --template '{{.Version}}' 2>&1 | head -n1 || $cmd version 2>&1 | head -n1)
+                ;;
+            tilt)
+                version=$($cmd version 2>&1 | head -n1)
+                ;;
+            openssl)
+                version=$($cmd version 2>&1 | head -n1)
                 ;;
             *)
                 version=$($cmd --version 2>&1 | head -n1)
@@ -83,6 +94,50 @@ check_file() {
     fi
 }
 
+normalize_semver() {
+    printf '%s\n' "$1" | sed -nE 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+}
+
+version_ge() {
+    [ "$1" = "$2" ] || [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+version_lt() {
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+check_helm_version() {
+    local raw_version supported_minimum supported_maximum tested_version parsed_version
+
+    supported_minimum="3.20.0"
+    supported_maximum="4.0.0"
+    tested_version="$PHASE7_HELM_VERSION"
+    raw_version=$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)
+    parsed_version=$(normalize_semver "$raw_version")
+
+    if [ -z "$parsed_version" ]; then
+        echo -e "${RED}✗${NC} Could not parse Helm version"
+        echo "  Raw output: $raw_version"
+        echo "  Install Helm $tested_version with:"
+        echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
+        ((ERRORS++))
+        return 1
+    fi
+
+    if version_ge "$parsed_version" "$supported_minimum" && version_lt "$parsed_version" "$supported_maximum"; then
+        echo -e "${GREEN}✓${NC} Helm version supported for this repo ($raw_version; tested with $tested_version)"
+        return 0
+    fi
+
+    echo -e "${RED}✗${NC} Unsupported Helm version: $raw_version"
+    echo "  Supported range: >= $supported_minimum and < $supported_maximum"
+    echo "  Helm 4 is not supported in this repo."
+    echo "  Install Helm $tested_version with:"
+    echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
+    ((ERRORS++))
+    return 1
+}
+
 expected_kind_node_image() {
     awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$ORCHESTRATION_DIR/kind-cluster-config.yaml"
 }
@@ -92,10 +147,13 @@ echo "---------------------------------------------"
 
 check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
 check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
-check_command "kubectl" "kubectl" "curl -LO https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl"
-check_command "helm" "Helm" "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-check_command "tilt" "Tilt" "curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash"
-check_command "mkcert" "mkcert" "sudo apt install libnss3-tools && curl -JLO 'https://dl.filippo.io/mkcert/latest?for=linux/amd64' && chmod +x mkcert-* && sudo mv mkcert-* /usr/local/bin/mkcert"
+check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRATION_DIR")"
+check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
+if check_command "helm" "Helm" "$(phase7_install_hint helm "$ORCHESTRATION_DIR")"; then
+    check_helm_version
+fi
+check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"
+check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"
 
 echo
 
@@ -235,7 +293,7 @@ fi
 
 echo
 
-echo "7. Checking Gateway API and Envoy Gateway..."
+echo "7. Checking Gateway API CRDs..."
 echo "---------------------------------------------"
 
 # Only check if cluster exists and is accessible
@@ -249,32 +307,11 @@ if kubectl cluster-info --context kind-kind &> /dev/null; then
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "  Installing Gateway API CRDs..."
-            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
             echo -e "${GREEN}✓${NC} Gateway API CRDs installed"
         else
             echo "  Skipped. Install manually with:"
-            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml"
-            ((WARNINGS++))
-        fi
-    fi
-
-    # Check Envoy Gateway
-    if kubectl get deployment -n envoy-gateway-system envoy-gateway &> /dev/null; then
-        echo -e "${GREEN}✓${NC} Envoy Gateway installed"
-    else
-        echo -e "${YELLOW}!${NC} Envoy Gateway NOT installed"
-        read -p "  Install Envoy Gateway? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "  Installing Envoy Gateway..."
-            # Use --server-side to avoid annotation size limit issues with large CRDs
-            kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.2.1/install.yaml
-            echo "  Waiting for Envoy Gateway to be ready..."
-            kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
-            echo -e "${GREEN}✓${NC} Envoy Gateway installed and ready"
-        else
-            echo "  Skipped. Install manually with:"
-            echo "  kubectl apply --server-side -f https://github.com/envoyproxy/gateway/releases/download/v1.2.1/install.yaml"
+            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
             ((WARNINGS++))
         fi
     fi
@@ -315,7 +352,51 @@ fi
 
 echo
 
-echo "10. Verifying runtime security prerequisites..."
+echo "10. Checking Phase 4 infrastructure TLS secrets..."
+echo "---------------------------------------------"
+
+if [ "$CLUSTER_CONNECTED" = true ]; then
+    PHASE4_MISSING=()
+    PHASE4_INFRA_SECRETS=(infra-ca infra-tls-redis infra-tls-postgresql infra-tls-rabbitmq)
+
+    if ! kubectl get namespace infrastructure &> /dev/null; then
+        PHASE4_MISSING+=("namespace/infrastructure")
+    fi
+
+    if ! kubectl get secret infra-ca -n default &> /dev/null; then
+        PHASE4_MISSING+=("secret/default/infra-ca")
+    fi
+
+    if kubectl get namespace infrastructure &> /dev/null; then
+        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
+            if ! kubectl get secret "$secret_name" -n infrastructure &> /dev/null; then
+                PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+            fi
+        done
+    else
+        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
+            PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+        done
+    fi
+
+    if [ ${#PHASE4_MISSING[@]} -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} Phase 4 infrastructure TLS secrets are present"
+    else
+        echo -e "${RED}✗${NC} Phase 4 infrastructure TLS prerequisites are missing"
+        for missing in "${PHASE4_MISSING[@]}"; do
+            echo "  Missing: $missing"
+        done
+        echo "  Run ./scripts/dev/setup-infra-tls.sh on your host, then rerun the prerequisite check."
+        ((ERRORS++))
+    fi
+else
+    echo -e "${YELLOW}!${NC} Skipping Phase 4 TLS secret check (cluster not connected)"
+    ((WARNINGS++))
+fi
+
+echo
+
+echo "11. Verifying runtime security prerequisites..."
 echo "---------------------------------------------"
 
 VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/dev/verify-security-prereqs.sh"

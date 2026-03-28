@@ -15,7 +15,26 @@ spec:
       labels:
         app: session-gateway
     spec:
+      automountServiceAccountToken: false
       serviceAccountName: session-gateway
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: init-tmp
+        image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+        command: ["sh", "-c", "touch /tmp/.restart-proc && chmod 0666 /tmp/.restart-proc"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
       containers:
       - name: session-gateway
         image: session-gateway:latest
@@ -31,18 +50,29 @@ spec:
         - name: SPRING_DATA_REDIS_HOST
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: host
         - name: SPRING_DATA_REDIS_PORT
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: port
+        - name: SPRING_DATA_REDIS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: session-gateway-redis-credentials
+              key: username
         - name: SPRING_DATA_REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-credentials
+              name: session-gateway-redis-credentials
               key: password
+        - name: SPRING_DATA_REDIS_SSL_ENABLED
+          value: "true"
+        - name: SPRING_DATA_REDIS_SSL_BUNDLE
+          value: "infra-ca"
+        - name: INFRA_CA_CERT_PATH
+          value: "file:/etc/ssl/infra/ca.crt"
         # Permission service URL
         - name: PERMISSION_SERVICE_URL
           value: "http://permission-service:8086/permission-service"
@@ -50,6 +80,20 @@ spec:
         envFrom:
         - secretRef:
             name: auth0-credentials
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
         resources:
           requests:
             memory: "256Mi"
@@ -77,3 +121,9 @@ spec:
           periodSeconds: 20
           timeoutSeconds: 5
           failureThreshold: 3
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca
+      - name: tmp
+        emptyDir: {}

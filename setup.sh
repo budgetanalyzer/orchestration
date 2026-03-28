@@ -8,6 +8,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./scripts/dev/lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/scripts/dev/lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,6 +40,62 @@ print_error() {
 
 print_warning() {
     echo -e "${YELLOW}!${NC} $1"
+}
+
+SUPPORTED_HELM_MINIMUM="3.20.0"
+SUPPORTED_HELM_MAXIMUM="4.0.0"
+TESTED_HELM_VERSION="$PHASE7_HELM_VERSION"
+
+normalize_semver() {
+    printf '%s\n' "$1" | sed -nE 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+}
+
+version_ge() {
+    [ "$1" = "$2" ] || [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+version_lt() {
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+install_supported_helm() {
+    print_step "Installing Helm ${TESTED_HELM_VERSION}..."
+    if ! "$SCRIPT_DIR/scripts/dev/install-verified-tool.sh" helm; then
+        print_error "Automatic Helm installation failed"
+        echo "Install Helm ${TESTED_HELM_VERSION} manually, then rerun ./setup.sh"
+        exit 1
+    fi
+}
+
+ensure_supported_helm() {
+    local raw_version
+    local parsed_version
+
+    if command -v helm &> /dev/null; then
+        raw_version="$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)"
+        parsed_version="$(normalize_semver "$raw_version")"
+
+        if [[ -n "$parsed_version" ]] && version_ge "$parsed_version" "$SUPPORTED_HELM_MINIMUM" && version_lt "$parsed_version" "$SUPPORTED_HELM_MAXIMUM"; then
+            print_success "Helm version supported: $raw_version"
+            return 0
+        fi
+
+        print_warning "Unsupported Helm version detected: ${raw_version:-unknown}"
+    else
+        print_warning "Helm not found"
+    fi
+
+    install_supported_helm
+
+    raw_version="$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)"
+    parsed_version="$(normalize_semver "$raw_version")"
+    if [[ -z "$parsed_version" ]] || ! version_ge "$parsed_version" "$SUPPORTED_HELM_MINIMUM" || ! version_lt "$parsed_version" "$SUPPORTED_HELM_MAXIMUM"; then
+        print_error "Helm installation did not produce a supported version"
+        echo "Expected >= ${SUPPORTED_HELM_MINIMUM} and < ${SUPPORTED_HELM_MAXIMUM}; got ${raw_version:-unknown}"
+        exit 1
+    fi
+
+    print_success "Helm version ready: $raw_version"
 }
 
 expected_kind_node_image() {
@@ -106,7 +164,6 @@ check_tool() {
 check_tool "docker" || true
 check_tool "kind" || true
 check_tool "kubectl" || true
-check_tool "helm" || true
 check_tool "tilt" || true
 check_tool "mkcert" || true
 check_tool "git" || true
@@ -130,24 +187,22 @@ fi
 
 print_success "Docker daemon is running"
 
+ensure_supported_helm
+
 # =============================================================================
 # Step 2: Create Kind cluster
 # =============================================================================
 print_step "Setting up Kind cluster..."
 
 if kind get clusters 2>/dev/null | grep -q "^kind$"; then
-    print_success "Kind cluster already exists"
-
-    # Check port mappings
-    if ! docker port kind-control-plane 2>/dev/null | grep -q "30443/tcp -> 0.0.0.0:443"; then
-        print_warning "Kind cluster exists but port mappings may be incorrect"
-        echo "  Consider recreating: kind delete cluster && kind create cluster --config kind-cluster-config.yaml"
-    fi
-else
-    print_step "Creating Kind cluster with port mappings..."
-    kind create cluster --config "$SCRIPT_DIR/kind-cluster-config.yaml"
-    print_success "Kind cluster created"
+    print_warning "Deleting existing Kind cluster 'kind' to guarantee a clean bootstrap"
+    kind delete cluster --name kind
+    print_success "Existing Kind cluster deleted"
 fi
+
+print_step "Creating Kind cluster with port mappings..."
+kind create cluster --config "$SCRIPT_DIR/kind-cluster-config.yaml"
+print_success "Kind cluster created"
 
 # Set kubectl context
 kubectl config use-context kind-kind &>/dev/null || true
@@ -188,16 +243,16 @@ fi
 # =============================================================================
 print_step "Setting up Gateway API CRDs..."
 
-# Gateway API CRDs (required before Envoy Gateway, which Tilt installs via Helm)
+# Gateway API CRDs (required before Istio ingress gateway, which Tilt installs)
 if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
     print_success "Gateway API CRDs already installed"
 else
     print_step "Installing Gateway API CRDs..."
-    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
     print_success "Gateway API CRDs installed"
 fi
 
-# Note: Envoy Gateway is installed by Tilt via Helm (see Tiltfile)
+# Note: Istio and the ingress gateway are installed by Tilt via Helm (see Tiltfile)
 
 # =============================================================================
 # Step 6: Install Istio Helm repository
@@ -205,11 +260,13 @@ fi
 print_step "Setting up Istio Helm repository..."
 
 if helm repo list 2>/dev/null | grep -q "^istio"; then
-    print_success "Istio Helm repository already configured"
+    helm repo add istio https://istio-release.storage.googleapis.com/charts --force-update >/dev/null
+    helm repo update istio >/dev/null
+    print_success "Istio Helm repository refreshed"
 else
-    helm repo add istio https://istio-release.storage.googleapis.com/charts
-    helm repo update istio
-    print_success "Istio Helm repository added"
+    helm repo add istio https://istio-release.storage.googleapis.com/charts >/dev/null
+    helm repo update istio >/dev/null
+    print_success "Istio Helm repository added and refreshed"
 fi
 
 # =============================================================================
@@ -220,7 +277,14 @@ print_step "Setting up TLS certificates..."
 "$SCRIPT_DIR/scripts/dev/setup-k8s-tls.sh"
 
 # =============================================================================
-# Step 8: Create .env file
+# Step 8: Generate infrastructure TLS certificates
+# =============================================================================
+print_step "Setting up infrastructure TLS certificates..."
+
+"$SCRIPT_DIR/scripts/dev/setup-infra-tls.sh"
+
+# =============================================================================
+# Step 9: Create .env file
 # =============================================================================
 print_step "Setting up environment file..."
 
@@ -241,6 +305,12 @@ echo ""
 echo "┌─────────────────────────────────────────────────────────────┐"
 echo "│  Configure your .env file with:                             │"
 echo "├─────────────────────────────────────────────────────────────┤"
+echo "│                                                             │"
+echo "│  0. Review local infrastructure credential defaults         │"
+echo "│     - PostgreSQL now uses postgres_admin plus distinct      │"
+echo "│       service-user passwords from .env                      │"
+echo "│     - RabbitMQ and Redis now use fixed local service        │"
+echo "│       identities and passwords from .env                    │"
 echo "│                                                             │"
 echo "│  1. Auth0 (authentication)                                  │"
 echo "│     - Go to: https://manage.auth0.com                       │"

@@ -1,0 +1,28 @@
+# Phase 7 image pinning targets.
+# Keep this list aligned with docs/plans/security-hardening-v2-phase-7-session-1-contract.md.
+
+kind-cluster-config.yaml
+kubernetes/infrastructure/postgresql/statefulset.yaml
+kubernetes/infrastructure/redis/deployment.yaml
+kubernetes/infrastructure/rabbitmq/statefulset.yaml
+kubernetes/services/budget-analyzer-web/deployment.yaml
+kubernetes/services/currency-service/deployment.yaml
+kubernetes/services/ext-authz/deployment.yaml
+kubernetes/services/nginx-gateway/deployment.yaml
+kubernetes/services/permission-service/deployment.yaml
+kubernetes/services/session-gateway/deployment.yaml
+kubernetes/services/transaction-service/deployment.yaml
+Tiltfile
+ext-authz/Dockerfile
+tests/setup-flow/kind-cluster-test-config.yaml
+tests/shared/Dockerfile.test-env
+tests/setup-flow/docker-compose.test.yml
+tests/security-preflight/docker-compose.test.yml
+scripts/dev/verify-security-prereqs.sh
+scripts/dev/verify-phase-2-network-policies.sh
+scripts/dev/verify-phase-3-istio-ingress.sh
+scripts/dev/verify-phase-4-transport-encryption.sh
+scripts/dev/verify-phase-5-runtime-hardening.sh
+scripts/dev/verify-phase-6-edge-browser-hardening.sh
+scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+scripts/dev/verify-phase-7-runtime-guardrails.sh

@@ -7,7 +7,7 @@
 services:
   # Docker-in-Docker daemon
   dind:
-    image: docker:27-dind
+    image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
     privileged: true
     command:
       - --default-ulimit=nofile=1048576:1048576

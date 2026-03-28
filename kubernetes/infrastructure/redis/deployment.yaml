@@ -15,27 +15,73 @@ spec:
       labels:
         app: redis
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
           ports:
             - name: redis
               containerPort: 6379
           command:
-            - sh
-            - -c
-            - redis-server --appendonly yes --requirepass $(REDIS_PASSWORD)
+            - /bin/sh
+            - /opt/redis/start-redis.sh
           env:
-            - name: REDIS_PASSWORD
+            - name: REDIS_DEFAULT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redis-credentials
-                  key: password
+                  name: redis-bootstrap-credentials
+                  key: default-password
+            - name: REDIS_SESSION_GATEWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: session-gateway-password
+            - name: REDIS_EXT_AUTHZ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: ext-authz-password
+            - name: REDIS_CURRENCY_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: currency-service-password
+            - name: REDIS_OPS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: ops-password
             - name: REDISCLI_AUTH
               valueFrom:
                 secretKeyRef:
-                  name: redis-credentials
-                  key: password
+                  name: redis-bootstrap-credentials
+                  key: default-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 999
+          volumeMounts:
+            - name: redis-acl-bootstrap
+              mountPath: /opt/redis
+              readOnly: true
+            - name: redis-tmp
+              mountPath: /tmp
+            - name: redis-data
+              mountPath: /data
+            - name: redis-tls
+              mountPath: /tls
+              readOnly: true
+            - name: redis-ca
+              mountPath: /tls-ca
+              readOnly: true
           resources:
             requests:
               memory: 128Mi
@@ -47,6 +93,9 @@ spec:
             exec:
               command:
                 - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
                 - ping
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -55,7 +104,26 @@ spec:
             exec:
               command:
                 - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
                 - ping
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
+      volumes:
+        - name: redis-acl-bootstrap
+          configMap:
+            name: redis-acl-bootstrap
+            defaultMode: 0555
+        - name: redis-tmp
+          emptyDir: {}
+        # Local dev keeps Redis AOF ephemeral here; production persistence would require a PVC.
+        - name: redis-data
+          emptyDir: {}
+        - name: redis-tls
+          secret:
+            secretName: infra-tls-redis
+        - name: redis-ca
+          secret:
+            secretName: infra-ca

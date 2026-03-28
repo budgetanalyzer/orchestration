@@ -13,8 +13,32 @@ This document outlines the security architecture for a financial data applicatio
 
 Current repository state:
 - The ingress/session/routing topology described here is implemented.
-- Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, namespace PSA labels are staged in `warn`/`audit`, and Kyverno plus a smoke policy are installed and verifiable.
-- Application `NetworkPolicy` allowlists, credential hardening, and ingress unification remain later phases.
+- Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy still proves admission is alive, and the checked-in Phase 7 suite now enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
+- Phase 1 credential isolation is implemented: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
+- Phase 2 network policies are enforced: `default`, `infrastructure`, `istio-ingress`, and `istio-egress` namespaces have deny-by-default ingress and egress with explicit allowlists. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists.
+- Phase 3 manifests now describe the intended Istio ingress/egress topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-only `AuthorizationPolicy` rules. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
+- Phase 5 Session 1 is implemented in-repo: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods no longer require `istio-init`.
+- Phase 5 Session 2 is implemented in-repo for the non-root application workloads: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
+- Phase 5 Session 3 is implemented in-repo for the gateway workloads on the refreshed Istio `1.29.1` baseline: the auto-provisioned ingress gateway now receives pod `seccompProfile.type: RuntimeDefault`, fixed NodePort ownership, and explicit service-account token retention through Gateway `spec.infrastructure.parametersRef`, and the egress gateway installs directly from the `istio/gateway` chart using checked-in values that keep `service.type=ClusterIP`, preserve the low-port binding sysctl needed by the non-root proxy, and add pod-level seccomp hardening. The ingress gateway intentionally keeps its Kubernetes API token mount for TLS secret watching, while the egress gateway currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it.
+- Phase 5 Session 4 is implemented in-repo for `nginx-gateway`: the Deployment and ServiceAccount disable service-account token automount, the pod sets `seccompProfile.type: RuntimeDefault`, the container now runs as UID/GID `101` from `nginxinc/nginx-unprivileged:1.29.4-alpine`, `readOnlyRootFilesystem: true` is enabled, and the gateway relies on an explicit writable `/tmp` mount while logging to stdout/stderr.
+- Phase 5 Session 5 is implemented across the orchestration and `budget-analyzer-web` repos: the frontend dev image now runs Vite as UID/GID `1001`, the Kubernetes Deployment and ServiceAccount disable service-account token automount, the pod sets `seccompProfile.type: RuntimeDefault`, the container now pins `runAsUser`/`runAsGroup` to `1001`, and the container applies the planned non-root baseline without forcing `readOnlyRootFilesystem` before the HMR workflow is proven on explicit writable paths.
+- Phase 5 Session 6 is implemented in-repo for Redis: the Deployment disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs Redis as UID `999` / GID `1000` with a read-only root filesystem, and mounts explicit writable `emptyDir` paths for ACL bootstrap (`/tmp`) and local-dev AOF output (`/data`). That AOF storage remains intentionally ephemeral in local development; production persistence would require a PVC-backed replacement.
+- Phase 5 Session 7 is implemented in-repo for PostgreSQL: the StatefulSet disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, pins pod and container ownership to UID/GID `70`, hardens the TLS-prep init container to the same ownership with `readOnlyRootFilesystem: true`, and keeps the main container `readOnlyRootFilesystem: true` compatible through explicit writable mounts at `/tmp` and `/var/run/postgresql`.
+- Phase 5 Session 8 is implemented in-repo for RabbitMQ: the StatefulSet disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs the broker as UID/GID `999` with `fsGroup: 999`, and enables `readOnlyRootFilesystem: true` while keeping `/var/lib/rabbitmq` as the explicit PVC-backed writable path and leaving config, definitions, and TLS mounts read-only.
+- Phase 5 Session 9 is implemented in-repo: the checked-in namespace manifests now declare the final Pod Security `enforce` labels for `infrastructure`, `istio-ingress`, and `istio-egress`, while Tilt reapplies the final `default`, `infrastructure`, and `istio-system` labels during reconciliation.
+- Phase 5 Session 10 is complete in-repo: `./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 8m` passed end-to-end twice on March 25, 2026, first at the original `166/166` baseline and again at `175/175` after adding the frontend UID/GID assertions plus the PostgreSQL init-container baseline assertions. The verifier reruns remain bounded per script so the final gate fails instead of hanging indefinitely.
+- Phase 6 Session 1 is implemented in-repo: Tilt now runs the sibling frontend `build:prod-smoke` target, packages the resulting `dist/` bundle into a local static-asset image, and `nginx-gateway` serves that bundle at `/_prod-smoke/` through a non-root init-container copy step while `/` and `/login` remain on the Vite/HMR dev route.
+- Phase 6 Session 2 is now partly rolled back in-repo: `/api/docs` remains available as a lightweight developer convenience route, `nginx-gateway` mounts `docs-aggregator/index.html` plus the generated `openapi.{json,yaml}` files directly through the `nginx-gateway-docs` ConfigMap again, the page loads Swagger UI `5.11.0` from the CDN at runtime, and unlisted `/api/docs/*` requests still return `404` instead of falling through to the frontend SPA.
+- Phase 6 Session 3 is implemented in-repo as a stop-gate audit: `./scripts/dev/audit-phase-6-session-3-frontend-csp.sh` rebuilds the sibling production-smoke bundle and checks the repo-owned strict-CSP prerequisites. As of March 26, 2026, that static audit passes after the sibling frontend removed the inline-style and `sonner` blockers. Manual browser-console validation is still required. See [Phase 6 Session 3 audit](../plans/security-hardening-v2-phase-6-session-3-frontend-csp-audit.md).
+- Phase 6 Session 4 is implemented in-repo, with the later `/api/docs` rollback applied: `nginx-gateway` splits the relaxed Vite/HMR CSP from the production-oriented policy using checked-in include files, keeps the relaxed policy on the live dev routes, keeps the main strict policy without `'unsafe-inline'` or `'unsafe-eval'` on `/_prod-smoke/`, and the docs/download locations now re-include the normal per-config CSP instead of carrying a dedicated docs-only profile.
+- Phase 6 Session 5 is implemented in-repo: the `/api/docs/openapi.{json,yaml}` download endpoints no longer emit `Access-Control-Allow-Origin: *`, and the shared docs/download flow now stays same-origin by default unless a future explicit allowlist is documented for a real cross-origin consumer.
+- Phase 6 Session 6 is implemented in-repo: the ingress auth-path local rate limit now explicitly covers the frontend-owned `/login` entry point, including query-string variants, while keeping `/login` routed through NGINX and leaving `/login/oauth2/*` on Session Gateway. The Phase 3 verifier now proves both the low-rate frontend response and the ingress `429` marker on `/login`.
+- Phase 6 Session 7 is implemented in-repo: before enabling `real_ip_*`, the live NGINX capture showed `remote_addr=127.0.0.6`, `xff="<caller>,<downstream-hop>"`, and `xrealip="-"`, which proved the trust anchor is the pod-local Envoy sidecar hop rather than a guessed cluster CIDR. `nginx-gateway` now trusts only `127.0.0.0/8` for `real_ip_header X-Forwarded-For`, keeps `real_ip_recursive on`, logs both the derived client identity and the trusted proxy hop, and therefore keys API `limit_req` buckets on the ingress-appended downstream client hop instead of the proxy sidecar address. `./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` proves forged external `X-Forwarded-For` values cannot pick a new bucket and that different downstream clients do not share one bucket.
+- Phase 6 Session 8 is implemented in-repo: `nginx/nginx.production.k8s.conf` now makes the production frontend cutover explicit by serving the built frontend bundle on `/` and `/login` under the strict CSP, returning `404` for `/_prod-smoke/`, and removing the Vite-only public paths from the production route set instead of relying on a header-only toggle over the dev graph.
+- Phase 6 Session 9 is implemented in-repo with the rollback follow-up applied: `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` now combines checked-in dev/strict CSP checks for the real app paths, live header verification for `/` and `/_prod-smoke/`, warning-only `/api/docs` visibility and fail-closed probes, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, the Session 3 frontend CSP audit, the Session 7 API rate-limit identity verifier, and the full Phase 5 regression cascade. Manual browser-console validation on `/_prod-smoke/` remains required before Phase 6 can be declared complete.
+- Phase 7 now has one local completion gate: `./scripts/dev/verify-phase-7-security-guardrails.sh` runs the Session 6 static manifest/admission suite first and the Session 7 live-cluster runtime proof second. The dedicated `security-guardrails.yml` workflow remains intentionally static-only, and the narrower `./scripts/dev/verify-phase-7-runtime-guardrails.sh` entrypoint remains available for targeted runtime-only reruns.
+
+Operationally, those ingress-facing policies depend on the rendered gateway label `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` and the rendered principal `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. The egress `DestinationRule` uses `tls.mode: DISABLE` on the workload-to-egress hop so the original external TLS/SNI reaches the egress gateway's `PASSTHROUGH` listener; external TLS remains end-to-end, but that intra-cluster hop is not additionally wrapped in mesh mTLS. `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass. Treat Phase 6 as complete only after `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` passes and the manual browser-console validation on `/_prod-smoke/` is done; `/api/docs` warnings remain visible but non-blocking.
 
 ---
 
@@ -28,11 +52,11 @@ Current repository state:
 
 ### Request Flow
 
-**All browser traffic enters through Envoy.** Envoy handles SSL termination and ext_authz enforcement.
+**All browser traffic enters through the Istio ingress gateway.** It handles SSL termination, auth-path throttling, and ext_authz enforcement within the service mesh.
 
 ```
-Browser → Envoy (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
+Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
+Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 ```
 
 ### Component Architecture
@@ -49,12 +73,14 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
          │ (HTTPS)               │ (HTTPS)              │ (HTTPS)
          ▼                       ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Envoy Gateway (Port 443, HTTPS)               │
+│              Istio Ingress Gateway (Port 443, HTTPS)             │
 │                    • SSL Termination (all traffic)               │
 │                    • ext_authz enforcement on /api/* paths       │
-│                    • Routes /auth/*, /login/*, /logout →         │
-│                      Session Gateway                             │
+│                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
+│                      /logout, /user → Session Gateway            │
 │                    • Routes /api/*, /* → NGINX                   │
+│                    • Local rate limiting on auth-sensitive paths │
+│                    • Mesh identity (SPIFFE) for mTLS             │
 └────────┬───────────────────────┬──────────────────────┬─────────┘
          │                       │                      │
          ▼                       │                      │
@@ -73,7 +99,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 ┌─────────────────────────────────────────────────────────────────┐
 │                    NGINX API Gateway (Port 8080, HTTP)           │
 │                    • Request Routing                             │
-│                    • Rate Limiting                               │
+│                    • Backend/API Rate Limiting                   │
 │                    • Load Balancing                              │
 └────────┬────────────────────────────────────────────────────────┘
          │
@@ -105,7 +131,7 @@ Auth paths: Browser → Envoy (:443) → Session Gateway (:8081)
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
 - Store Auth0 tokens in Redis for refresh
-- Dual-write session data (userId, roles, permissions) to ext_authz Redis schema for Envoy-based authorization
+- Dual-write session data (userId, roles, permissions) to ext_authz Redis schema for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Proactive token refresh before expiration
 - Session lifecycle management (login/logout)
@@ -134,7 +160,7 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 
 ### 2. ext_authz Service
 
-**Purpose:** Per-request session validation at the Envoy layer
+**Purpose:** Per-request session validation at the Istio ingress layer
 
 **Responsibilities:**
 - Validate session tokens by looking up ext_authz Redis hash (`extauthz:session:{id}`)
@@ -143,24 +169,24 @@ The Session Gateway implements the Backend-for-Frontend (BFF) pattern specifical
 
 **Technology:** Go HTTP service implementing Envoy ext_authz protocol
 
-**Why HTTP mode over gRPC:** Envoy Gateway's HTTP ext_authz mode provides `headersToBackend` — an infrastructure-level allowlist in the SecurityPolicy that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the Envoy layer: even if a client sends `X-User-Id` in the original request, only headers explicitly listed in `headersToBackend` (and returned by ext_authz) reach the backend. The gRPC ext_authz mode lacks this infrastructure-level allowlist, requiring the ext_authz service itself to handle header stripping.
+**Why HTTP mode over gRPC:** Istio's `meshConfig.extensionProviders` with `envoyExtAuthzHttp` provides `headersToUpstreamOnAllow` — an infrastructure-level allowlist that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the ingress layer: even if a client sends `X-User-Id` in the original request, the Envoy ext_authz filter overwrites it with the value from ext_authz's response. Only headers listed in `headersToUpstreamOnAllow` are forwarded upstream.
 
-**Integration:** Called by Envoy on every request to `/api/*` paths
+**Integration:** Called by the Istio ingress gateway on every request to `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
 
 ---
 
 ### 3. NGINX API Gateway
 
-**Purpose:** Internal API gateway for routing and rate limiting
+**Purpose:** Internal API gateway for routing and backend/API rate limiting
 
 **Responsibilities:**
 - Route requests to appropriate microservices
-- Rate limiting per user/client
+- Rate limit backend-facing API paths after ingress validation
 - Load balancing across service instances
 - WAF integration points
 - Circuit breaking and retry logic
 
-**Note:** SSL/TLS termination is handled by Envoy Gateway, not NGINX. Session validation is handled by ext_authz at the Envoy layer — NGINX receives pre-validated requests with identity headers already injected.
+**Note:** SSL/TLS termination is handled by the Istio ingress gateway, not NGINX. Session validation is handled by ext_authz at the Istio ingress layer — NGINX receives pre-validated requests with identity headers already injected.
 
 **Technology:** NGINX (industry standard)
 
@@ -213,37 +239,38 @@ Service Logic:
 
 ```
 1. User clicks "Login" in React app
-2. React → Session Gateway /login endpoint
-3. Session Gateway redirects to Auth0 authorize endpoint
-4. User authenticates at Auth0 (enters credentials)
-5. Auth0 redirects to Session Gateway /callback with authorization code
-6. Session Gateway exchanges code for tokens (access + refresh)
-7. Session Gateway stores Auth0 tokens in Redis
-8. Session Gateway calls permission-service to resolve roles/permissions
-9. Session Gateway dual-writes session data to ext_authz Redis schema
-10. Session Gateway sets HTTP-only session cookie in browser
-11. Browser redirected to application home page
+2. React routes to the frontend login page at `/login`
+3. Frontend initiates `GET /oauth2/authorization/idp`
+4. Session Gateway redirects to Auth0 authorize endpoint
+5. User authenticates at Auth0 (enters credentials)
+6. Auth0 redirects to Session Gateway `/login/oauth2/code/idp` with authorization code
+7. Session Gateway exchanges code for tokens (access + refresh)
+8. Session Gateway stores Auth0 tokens in Redis
+9. Session Gateway calls permission-service to resolve roles/permissions
+10. Session Gateway dual-writes session data to ext_authz Redis schema
+11. Session Gateway sets HTTP-only session cookie in browser
+12. Browser redirected to application home page
 ```
 
 **Security Benefits:**
 - Tokens never exposed to browser JavaScript
 - Tokens immune to XSS attacks
 - Session cookie has HttpOnly, Secure, SameSite attributes
-- ext_authz session enables per-request validation at the Envoy layer
+- ext_authz session enables per-request validation at the Istio ingress layer
 
 ---
 
 ### API Request Flow (Authenticated User)
 
 ```
-1. Browser sends request with session cookie → Envoy (:443)
-2. Envoy calls ext_authz HTTP service (:9002)
+1. Browser sends request with session cookie → Istio Ingress (:443)
+2. Istio ingress calls ext_authz HTTP service (:9002)
 3. ext_authz looks up session in Redis (extauthz:session:{id})
 4. If valid: ext_authz injects X-User-Id, X-Roles, X-Permissions headers
-5. Envoy routes to NGINX (:8080) with injected headers
+5. Istio ingress routes to NGINX (:8080) with injected headers
 6. NGINX routes to appropriate microservice
 7. Microservice reads identity from headers, validates user has permission for specific data
-8. Response flows back through NGINX → Envoy → Browser
+8. Response flows back through NGINX → Istio Ingress → Browser
 ```
 
 **Key Points:**
@@ -282,9 +309,9 @@ Mobile app authentication strategy is still being evaluated. We will assess the 
 - Token exchange via Session Gateway (`POST /auth/token/exchange`)
 - Simpler implementation with proven SDKs
 
-**Option 2: NGINX Proxy Pattern**
-- Mobile app calls NGINX /auth/* endpoints
-- NGINX proxies to Auth0
+**Option 2: Session Gateway Proxy Pattern**
+- Mobile app calls Session Gateway auth endpoints through Istio ingress
+- Session Gateway proxies to Auth0
 - Maintains identity provider abstraction
 - Consistent with overall architecture principles
 
@@ -305,7 +332,7 @@ The mobile authentication approach will be finalized during mobile application d
 2. Client exchanges Auth0 token for opaque session via POST /auth/token/exchange
 3. Session Gateway validates token, creates session, writes ext_authz Redis hash
 4. Client uses opaque bearer token for API calls
-5. Envoy ext_authz validates bearer token from Redis
+5. Istio ingress ext_authz validates bearer token from Redis
 6. If valid: routes to backend service with identity headers
 ```
 
@@ -318,14 +345,16 @@ The mobile authentication approach will be finalized during mobile application d
 
 ### Internal Service-to-Service Authentication
 
-Internal services currently rely on network isolation for authentication. Permission-service is called directly by Session Gateway without bearer authentication — Kubernetes network policies restrict access.
+Internal services rely on network isolation enforced by Kubernetes NetworkPolicy. Permission-service is called directly by Session Gateway without bearer authentication — NetworkPolicy allowlists restrict which pods can reach it.
 
 **Current approach:**
 - Session Gateway calls permission-service via internal Kubernetes DNS
 - No bearer token or cryptographic proof of caller identity
-- Security relies on network isolation (only Session Gateway can reach permission-service)
+- NetworkPolicy enforces that only Session Gateway pods can reach permission-service (Phase 2)
+- Backend services only accept traffic from their documented pod callers (NGINX for transaction/currency/web, Session Gateway for permission-service)
+- Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
 
-**Implemented:** mTLS via Istio service mesh. STRICT for east-west traffic, PERMISSIVE for ingress-facing services. Provides cryptographic caller authentication without application-level token management.
+**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway, ext-authz, session-gateway) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Provides cryptographic caller authentication without application-level token management.
 
 ---
 
@@ -336,15 +365,19 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 
 ### Implementation
 
-**All authentication flows go through Session Gateway:**
+**All authentication protocol endpoints go through Session Gateway:**
 - `/auth/*` - Auth lifecycle endpoints
-- `/login/*` - OAuth2 login initiation
+- `/oauth2/*` - OAuth2 callback and continuation endpoints
+- `/login/oauth2/*` - OAuth2 callback path
 - `/logout` - End session
+- `/user` - Session inspection for the browser client
 - `/auth/token/exchange` - Token exchange for native/M2M clients
+
+The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by calling `/oauth2/authorization/idp`, and ingress now rate limits it as an auth-sensitive entry point, but it is not itself a Session Gateway route.
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes
-2. **Centralized Control:** Rate limiting and audit logging at your boundary
+2. **Centralized Control:** Auth-path throttling at ingress, API throttling at NGINX, and audit logging at your boundary
 3. **Versioning:** Evolve authentication APIs independently
 4. **Security:** Additional validation layer before external provider
 5. **Compliance:** Keep authentication flows within your infrastructure boundary
@@ -372,7 +405,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 - HTTP-only, Secure, SameSite cookies
 - Session timeout and absolute expiration
 
-**Layer 2: ext_authz (Envoy)**
+**Layer 2: ext_authz (Istio Ingress)**
 - Per-request session validation from Redis
 - Header injection (X-User-Id, X-Roles, X-Permissions)
 - Rejects unauthorized requests before they reach backend services
@@ -416,7 +449,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 | Token replay | Short session expiration; server-side session validation |
 | CSRF | SameSite cookies; CSRF tokens on state changes |
 | Unauthorized data access | Service-layer authorization by user ID |
-| Credential stuffing | Rate limiting at NGINX; Auth0 anomaly detection |
+| Credential stuffing | Auth-path rate limiting at Istio ingress; API throttling at NGINX; Auth0 anomaly detection |
 | Session hijacking | Opaque session IDs; Redis-backed validation |
 | Man-in-the-middle | HTTPS/TLS everywhere; HSTS headers |
 | Instant revocation | Delete Redis session — next request fails immediately |
@@ -442,7 +475,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Envoy Gateway (443)                          │
+│                 Istio Ingress Gateway (443)                     │
 │                    • SSL Termination                           │
 │                    • ext_authz enforcement                     │
 └────────┬────────────────────────────┬──────────────────────────┘
@@ -541,7 +574,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 1. Deploy Redis cluster
 2. Deploy Session Gateway (Spring Cloud Gateway)
 3. Deploy ext_authz HTTP service
-4. Configure Envoy Gateway with ext_authz
+4. Configure Istio ingress gateway with ext_authz
 5. Set up monitoring and alerting
 
 ### Phase 2: Authentication Integration
@@ -597,7 +630,7 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 | Spring Cloud Gateway for BFF | Team expertise; minimal code; native OAuth support |
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
 | Opaque session tokens | Instant revocation via Redis delete; no expiry window |
-| Envoy ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol |
+| Istio ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol via meshConfig |
 | 30 min session timeout | Balance security vs user experience |
 | Proactive token refresh | Avoid request failures due to expiration |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |

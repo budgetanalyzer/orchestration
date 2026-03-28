@@ -14,7 +14,7 @@ if ! command -v mkcert &> /dev/null; then
     echo
     echo "Install mkcert first:"
     echo "  macOS:   brew install mkcert nss"
-    echo "  Linux:   sudo apt install libnss3-tools && curl -JLO https://dl.filippo.io/mkcert/latest?for=linux/amd64 && chmod +x mkcert-* && sudo mv mkcert-* /usr/local/bin/mkcert"
+    echo "  Linux:   sudo apt-get install -y libnss3-tools && \"$ORCHESTRATION_DIR/scripts/dev/install-verified-tool.sh\" mkcert"
     echo
     exit 1
 fi
@@ -198,7 +198,7 @@ kubectl get secret "$SECRET_NAME" -n "$NAMESPACE"
 echo
 echo "=== Setup Complete! ==="
 echo
-echo "The TLS secret '$SECRET_NAME' is now available for the Envoy Gateway."
+echo "The TLS secret '$SECRET_NAME' is now available for the Istio ingress gateway."
 echo
 echo "=== Next Steps ==="
 echo
@@ -209,5 +209,5 @@ echo "2. Run Tilt:"
 echo "   tilt up"
 echo
 echo "3. Access application:"
-echo "   https://app.budgetanalyzer.localhost (via port forward or Envoy Gateway)"
+echo "   https://app.budgetanalyzer.localhost (via Istio ingress gateway)"
 echo

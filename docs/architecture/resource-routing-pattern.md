@@ -26,7 +26,7 @@ The frontend should never call service-specific paths such as `/transaction-serv
 ```text
 Browser
   -> https://app.budgetanalyzer.localhost/api/v1/transactions
-  -> Envoy Gateway
+  -> Istio Ingress Gateway
   -> ext_authz
   -> NGINX
   -> transaction-service /transaction-service/v1/transactions

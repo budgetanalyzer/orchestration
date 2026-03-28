@@ -3,7 +3,13 @@
 # This image contains all prerequisites needed by orchestration DinD test suites
 # (currently setup-flow and security-preflight).
 
-FROM ubuntu:22.04
+FROM ubuntu:22.04@sha256:ce4a593b4e323dcc3dd728e397e0a866a1bf516a1b7c31d6aa06991baec4f2e0
+
+ARG TARGETARCH
+ARG KUBECTL_VERSION=v1.30.8
+ARG HELM_VERSION=v3.20.1
+ARG TILT_VERSION=0.37.0
+ARG MKCERT_VERSION=v1.4.4
 
 # Avoid prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -28,25 +34,61 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     && rm -rf /var/lib/apt/lists/*
 
 # Install kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
-    && chmod +x kubectl \
-    && mv kubectl /usr/local/bin/
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) kubectl_sha256='7f39bdcf768ce4b8c1428894c70c49c8b4d2eee52f3606eb02f5f7d10f66d692' ;; \
+        arm64) kubectl_sha256='e51d6a76fade0871a9143b64dc62a5ff44f369aa6cb4b04967d93798bf39d15b' ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \
+    echo "${kubectl_sha256}  /usr/local/bin/kubectl" | sha256sum -c -; \
+    chmod +x /usr/local/bin/kubectl
 
 # Install kind
-RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64 \
-    && chmod +x ./kind \
-    && mv ./kind /usr/local/bin/kind
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64|arm64) : ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-${TARGETARCH}"; \
+    chmod +x /usr/local/bin/kind
 
 # Install helm
-RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) helm_sha256='0165ee4a2db012cc657381001e593e981f42aa5707acdd50658326790c9d0dc3' ;; \
+        arm64) helm_sha256='56b9d1b0e0efbb739be6e68a37860ace8ec9c7d3e6424e3b55d4c459bc3a0401' ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-${TARGETARCH}.tar.gz"; \
+    echo "${helm_sha256}  /tmp/helm.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/helm.tar.gz -C /tmp; \
+    mv "/tmp/linux-${TARGETARCH}/helm" /usr/local/bin/helm; \
+    chmod +x /usr/local/bin/helm; \
+    rm -rf /tmp/helm.tar.gz "/tmp/linux-${TARGETARCH}"
 
 # Install tilt
-RUN curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) tilt_arch='x86_64'; tilt_sha256='c2c7d3649233f01bc5d230b66b8ccd332401f348dc22b863fcf7244da6970ff1' ;; \
+        arm64) tilt_arch='arm64'; tilt_sha256='84457137539d8e4be6e90e9afecf8ef692ad3f8c19e9bf3355f3fbf4f8dce55f' ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo /tmp/tilt.tar.gz "https://github.com/tilt-dev/tilt/releases/download/v${TILT_VERSION}/tilt.${TILT_VERSION}.linux.${tilt_arch}.tar.gz"; \
+    echo "${tilt_sha256}  /tmp/tilt.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/tilt.tar.gz -C /usr/local/bin tilt; \
+    rm -f /tmp/tilt.tar.gz
 
 # Install mkcert
-RUN curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64" \
-    && chmod +x mkcert-v*-linux-amd64 \
-    && mv mkcert-v*-linux-amd64 /usr/local/bin/mkcert
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) mkcert_sha256='6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52' ;; \
+        arm64) mkcert_sha256='b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0' ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo /usr/local/bin/mkcert "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-${TARGETARCH}"; \
+    echo "${mkcert_sha256}  /usr/local/bin/mkcert" | sha256sum -c -; \
+    chmod +x /usr/local/bin/mkcert
 
 # Create test user with sudo access
 RUN useradd -m -s /bin/bash testuser \

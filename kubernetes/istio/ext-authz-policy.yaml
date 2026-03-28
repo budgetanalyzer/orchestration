@@ -1,0 +1,16 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ext-authz-at-ingress
+  namespace: istio-ingress
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  action: CUSTOM
+  provider:
+    name: ext-authz-http
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/*"]

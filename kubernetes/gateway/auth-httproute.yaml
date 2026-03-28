@@ -5,7 +5,8 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-  - name: ingress-gateway
+  - name: istio-ingress-gateway
+    namespace: istio-ingress
   hostnames:
   - "app.budgetanalyzer.localhost"
   rules:
@@ -15,7 +16,7 @@ spec:
         value: /oauth2
     - path:
         type: PathPrefix
-        value: /login
+        value: /login/oauth2
     - path:
         type: PathPrefix
         value: /logout

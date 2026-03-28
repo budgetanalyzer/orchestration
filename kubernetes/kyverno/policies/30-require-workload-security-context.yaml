@@ -1,0 +1,147 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: phase7-require-workload-security-context
+  annotations:
+    policies.kyverno.io/title: Require Workload Security Context
+    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Repo-managed workloads must use the Phase 5 pod-hardening baseline:
+      RuntimeDefault seccomp at the pod level plus non-root, no privilege
+      escalation, and drop ALL capabilities for every container and init
+      container.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-pod-runtime-default-seccomp
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: "Pods must set spec.securityContext.seccompProfile.type to RuntimeDefault."
+        pattern:
+          spec:
+            securityContext:
+              seccompProfile:
+                type: RuntimeDefault
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: "All containers and init containers must set runAsNonRoot to true."
+        foreach:
+          - list: request.object.spec.[ephemeralContainers, initContainers, containers][]
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.runAsNonRoot || '' }}"
+                    operator: NotEquals
+                    value: true
+    - name: require-no-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: "All containers and init containers must set allowPrivilegeEscalation to false."
+        foreach:
+          - list: request.object.spec.[ephemeralContainers, initContainers, containers][]
+            deny:
+              conditions:
+                any:
+                  - key: false
+                    operator: AnyNotIn
+                    value: "{{ [element.securityContext.allowPrivilegeEscalation] || `[]` }}"
+    - name: require-drop-all-capabilities
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+      validate:
+        message: "All containers and init containers must drop ALL capabilities."
+        foreach:
+          - list: request.object.spec.[ephemeralContainers, initContainers, containers][]
+            deny:
+              conditions:
+                any:
+                  - key: ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop[] || `[]` }}"

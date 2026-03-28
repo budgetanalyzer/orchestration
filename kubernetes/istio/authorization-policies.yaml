@@ -1,15 +1,14 @@
 # ============================================================================
-# Authorization Policies for east-west (service-to-service) traffic
+# Authorization Policies for service-to-service traffic
 # ============================================================================
 #
-# Ingress-facing services (nginx-gateway, ext-authz, session-gateway) do NOT
-# have AuthorizationPolicies because they receive traffic from the Envoy Gateway
-# proxy, which is outside the Istio mesh and has no mTLS identity. The Envoy
-# Gateway itself is the security boundary for these services (TLS termination,
-# ext_authz enforcement).
+# With Istio-managed ingress (Phase 3), the ingress gateway has a SPIFFE
+# identity and participates in mesh mTLS. All services — both ingress-facing
+# and internal — now have AuthorizationPolicies restricting their callers.
 #
-# Internal services below use STRICT mTLS AuthorizationPolicies to restrict
-# which mesh services can call them.
+# Ingress-facing services (nginx-gateway, ext-authz, session-gateway) accept
+# traffic only from the Istio ingress gateway identity.
+# Internal backend services accept traffic only from nginx-gateway.
 # ============================================================================
 
 # Backend services: only accept traffic from nginx-gateway
@@ -77,3 +76,60 @@ spec:
     - from:
         - source:
             principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+# ============================================================================
+# Ingress-facing services: accept from Istio ingress gateway only
+# ============================================================================
+# The Istio ingress gateway runs in istio-ingress namespace as
+# ServiceAccount istio-ingress-gateway-istio, giving it the SPIFFE identity
+# below. These policies close the security seam that existed when Envoy
+# Gateway was outside the mesh.
+# ============================================================================
+
+# nginx-gateway: accepts from istio ingress gateway only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: nginx-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+---
+# ext-authz: accepts from istio ingress gateway only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ext-authz-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ext-authz
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+---
+# session-gateway: accepts from istio ingress gateway only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: session-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: session-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]

@@ -296,15 +296,43 @@ spec:
       - name: redis
         image: redis:7-alpine
         command:
-        - redis-server
-        - --appendonly yes
-        - --requirepass $(REDIS_PASSWORD)
+        - sh
+        - -ceu
+        - |
+          cat > /tmp/users.acl <<EOF
+          user session-gateway on >${REDIS_SESSION_GATEWAY_PASSWORD} ~spring:session:* ~extauthz:session:* +@all
+          user ext-authz on >${REDIS_EXT_AUTHZ_PASSWORD} ~extauthz:session:* +hgetall +ping +auth +hello +info
+          user currency-service on >${REDIS_CURRENCY_SERVICE_PASSWORD} ~currency-service:* +get +set +del +keys +scan +ping +auth +hello +ttl +pttl +expire +exists +type +object
+          user redis-ops on >${REDIS_OPS_PASSWORD} ~* +@all
+          user default on >${REDIS_DEFAULT_PASSWORD} ~* +ping +auth
+          EOF
+          exec redis-server --appendonly yes --aclfile /tmp/users.acl
         env:
-        - name: REDIS_PASSWORD
+        - name: REDIS_DEFAULT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: redis-credentials
-              key: password
+              key: default-password
+        - name: REDIS_SESSION_GATEWAY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: session-gateway-password
+        - name: REDIS_EXT_AUTHZ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: ext-authz-password
+        - name: REDIS_CURRENCY_SERVICE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: currency-service-password
+        - name: REDIS_OPS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: ops-password
         ports:
         - containerPort: 6379
           name: redis
@@ -321,19 +349,17 @@ spec:
         livenessProbe:
           exec:
             command:
-            - redis-cli
-            - --pass
-            - $(REDIS_PASSWORD)
-            - ping
+            - sh
+            - -ceu
+            - redis-cli --user default --pass "$REDIS_DEFAULT_PASSWORD" --no-auth-warning ping
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           exec:
             command:
-            - redis-cli
-            - --pass
-            - $(REDIS_PASSWORD)
-            - ping
+            - sh
+            - -ceu
+            - redis-cli --user default --pass "$REDIS_DEFAULT_PASSWORD" --no-auth-warning ping
           initialDelaySeconds: 5
           periodSeconds: 5
   volumeClaimTemplates:

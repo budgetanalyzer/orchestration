@@ -1,0 +1,32 @@
+# Auth0 IdP (used by session-gateway)
+# Rendered by scripts/dev/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: auth0-idp
+  namespace: default
+spec:
+  hosts:
+    - "auth0-issuer.placeholder.invalid"
+  location: MESH_EXTERNAL
+  ports:
+    - number: 443
+      name: https
+      protocol: TLS
+  resolution: DNS
+---
+# FRED API (used by currency-service)
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: fred-api
+  namespace: default
+spec:
+  hosts:
+    - "api.stlouisfed.org"
+  location: MESH_EXTERNAL
+  ports:
+    - number: 443
+      name: https
+      protocol: TLS
+  resolution: DNS

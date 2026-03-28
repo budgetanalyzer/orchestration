@@ -1,0 +1,175 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: phase7-pass
+policies:
+  - ../../policies/00-smoke-disallow-privileged.yaml
+  - ../../policies/10-require-namespace-pod-security-labels.yaml
+  - ../../policies/20-require-workload-automount-disabled.yaml
+  - ../../policies/30-require-workload-security-context.yaml
+  - ../../policies/40-disallow-obvious-default-credentials.yaml
+  - ../../policies/50-require-third-party-image-digests.yaml
+resources:
+  - workloads.yaml
+  - namespaces.yaml
+results:
+  - policy: phase7-require-namespace-pod-security-labels
+    rule: require-pod-security-labels
+    resources:
+      - restricted-pass
+      - baseline-pass
+      - privileged-pass
+    kind: Namespace
+    result: pass
+  - policy: phase7-require-namespace-pod-security-labels
+    rule: require-pod-security-labels
+    resources:
+      - kyverno
+    kind: Namespace
+    result: skip
+  - policy: phase7-require-workload-automount-disabled
+    rule: require-pod-automount-service-account-token-false
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-automount-disabled
+    rule: require-pod-automount-service-account-token-false
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-pod-runtime-default-seccomp
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-pod-runtime-default-seccomp
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-run-as-non-root
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-run-as-non-root
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-no-privilege-escalation
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-no-privilege-escalation
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-drop-all-capabilities
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-workload-security-context
+    rule: require-drop-all-capabilities
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-disallow-obvious-default-credentials
+    rule: disallow-obvious-default-credential-env-values
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: skip
+  - policy: phase7-disallow-obvious-default-credentials
+    rule: disallow-obvious-default-credential-env-values
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: skip
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/secure-local-workload
+      - infrastructure/secure-digest-workload
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-latest-image
+    resources:
+      - default/secure-local-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-for-approved-local-tilt-image
+    resources:
+      - default/secure-local-tilt-workload
+    kind: Deployment
+    result: pass
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-for-approved-local-tilt-image
+    resources:
+      - default/secure-local-smoke-init-workload
+    kind: Pod
+    result: pass
+  - policy: phase7-require-workload-automount-disabled
+    rule: require-pod-automount-service-account-token-false
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip
+  - policy: phase7-require-workload-security-context
+    rule: require-pod-runtime-default-seccomp
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip
+  - policy: phase7-require-third-party-image-digests
+    rule: require-digest-or-approved-local-image
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-never-for-approved-local-latest-image
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip
+  - policy: phase7-require-third-party-image-digests
+    rule: require-image-pull-policy-for-approved-local-tilt-image
+    resources:
+      - istio-ingress/ingress-chart-managed-exception
+    kind: Deployment
+    result: skip

@@ -1,0 +1,18 @@
+# Repo-specific kube-linter baseline for the Phase 7 static gate.
+#
+# These excludes are intentional:
+# - `latest-tag` conflicts with the narrower Session 1/2 contract implemented
+#   in scripts/dev/check-phase-7-image-pinning.sh, which allows only the seven
+#   documented local Tilt-built `:latest` images.
+# - `no-read-only-root-fs` is not yet a universal repo baseline; Phase 5 proves
+#   the workloads that are intentionally hardened there.
+# - `unset-cpu-requirements` and `unset-memory-requirements` stay noisy for
+#   short-lived init containers and local-only helper containers. The Phase 7
+#   static gate is meant to catch actual security regressions, not force a new
+#   resource-governance policy in the same session.
+checks:
+  exclude:
+    - latest-tag
+    - no-read-only-root-fs
+    - unset-cpu-requirements
+    - unset-memory-requirements

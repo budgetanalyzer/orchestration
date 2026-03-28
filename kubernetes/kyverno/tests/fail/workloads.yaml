@@ -1,0 +1,175 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: missing-hardening
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: missing-hardening
+  template:
+    metadata:
+      labels:
+        app: missing-hardening
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          command: ["sh", "-c", "sleep 3600"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mutable-third-party-image
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mutable-third-party-image
+  template:
+    metadata:
+      labels:
+        app: mutable-third-party-image
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: nginx:1.29.4-alpine
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obvious-default-credential
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: obvious-default-credential
+  template:
+    metadata:
+      labels:
+        app: obvious-default-credential
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          command: ["sh", "-c", "sleep 3600"]
+          env:
+            - name: ADMIN_PASSWORD
+              value: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unapproved-local-mutable-image
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unapproved-local-mutable-image
+  template:
+    metadata:
+      labels:
+        app: unapproved-local-mutable-image
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: rogue-local-service:tilt-0123456789abcdef
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: approved-local-latest-wrong-pull-policy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: approved-local-latest-wrong-pull-policy
+  template:
+    metadata:
+      labels:
+        app: approved-local-latest-wrong-pull-policy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: budget-analyzer-web:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: approved-local-tilt-wrong-pull-policy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: approved-local-tilt-wrong-pull-policy
+  template:
+    metadata:
+      labels:
+        app: approved-local-tilt-wrong-pull-policy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ext-authz:tilt-752304df648dc1e1
+          imagePullPolicy: Always
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 65534

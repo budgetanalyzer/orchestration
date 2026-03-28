@@ -41,30 +41,40 @@ sudo mv ./kind /usr/local/bin/kind
 ### kubectl
 
 ```bash
-# Download and install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/kubectl
+# From the orchestration repo root
+./scripts/dev/install-verified-tool.sh kubectl
 ```
+
+This repo pins `kubectl` to `v1.30.8` so the client matches the local Kind node
+image baseline (`kindest/node:v1.30.8`).
 
 ### Helm
 
 ```bash
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+./scripts/dev/install-verified-tool.sh helm
 ```
+
+Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo now uses
+Helm for `istio/base`, `istio/cni`, `istio/istiod`, `istio/gateway`, and
+`kyverno`. Gateway API CRDs are pinned to `v1.4.0`, ingress gateway hardening
+is declared through Gateway `spec.infrastructure.parametersRef`, and the egress
+gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
 
 ### Tilt
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+./scripts/dev/install-verified-tool.sh tilt
 ```
 
 ### mkcert
 
 ```bash
-curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
-chmod +x mkcert-*
-sudo mv mkcert-* /usr/local/bin/mkcert
+# Linux
+sudo apt-get install -y libnss3-tools
+./scripts/dev/install-verified-tool.sh mkcert
+
+# macOS
+brew install mkcert nss
 ```
 
 ### Verify Installation
@@ -72,10 +82,10 @@ sudo mv mkcert-* /usr/local/bin/mkcert
 ```bash
 docker --version        # Expected: Docker 20.10+
 kind --version          # Expected: kind v0.20+
-kubectl version --client # Expected: v1.28+
-helm version            # Expected: v3.13+
-tilt version            # Expected: v0.33+
-mkcert --version        # Expected: v1.4+
+kubectl version --client # Expected: v1.30.8
+helm version            # Expected: v3.20.x
+tilt version            # Expected: v0.37.0
+mkcert --version        # Expected: v1.4.4
 ```
 
 ## Service Repositories
@@ -109,7 +119,7 @@ parent-directory/
 
 ## Setup Steps
 
-If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. The steps below spell out the same flow manually for debugging and learning.
+If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. It now deletes any existing `kind` cluster, recreates it from scratch, installs Helm `v3.20.1` automatically from a pinned verified release if your current Helm is missing or unsupported, and refreshes the existing `istio` Helm repo index so stale host-side chart metadata does not break fresh-cluster rebuilds. The steps below spell out the same flow manually for debugging and learning.
 
 ### 1. Run Pre-flight Check
 
@@ -172,7 +182,7 @@ Add entries to `/etc/hosts`:
 echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
-### 5. Generate TLS Certificates
+### 5. Generate Browser TLS Certificates
 
 ```bash
 ./scripts/dev/setup-k8s-tls.sh
@@ -182,7 +192,21 @@ This creates:
 - Trusted certificates for `*.budgetanalyzer.localhost`
 - Kubernetes TLS secret `budgetanalyzer-localhost-wildcard-tls`
 
-### 6. Configure Auth0 Credentials
+### 6. Generate Internal Transport TLS Secrets
+
+`setup.sh` handles this automatically. To regenerate standalone:
+
+```bash
+./scripts/dev/setup-infra-tls.sh
+```
+
+This creates:
+- `infra-ca` in the `default` and `infrastructure` namespaces
+- `infra-tls-redis`
+- `infra-tls-postgresql`
+- `infra-tls-rabbitmq`
+
+### 7. Configure Auth0 Credentials
 
 Create `.env` from `.env.example`, then set the required values before running Tilt.
 
@@ -191,7 +215,7 @@ Create `.env` from `.env.example`, then set the required values before running T
 vim .env
 ```
 
-### 7. Start Tilt
+### 8. Start Tilt
 
 ```bash
 cd /path/to/orchestration
@@ -200,15 +224,17 @@ tilt up
 
 Access the Tilt UI at http://localhost:10350
 
-### 8. Run Security Preflight Verifier
+### 9. Run Security Verifiers
 
 After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
 
 ```bash
 ./scripts/dev/verify-security-prereqs.sh
+./scripts/dev/verify-phase-4-transport-encryption.sh
 ```
 
-This provides deterministic runtime proof for Phase 0 prerequisites.
+These provide deterministic runtime proof for the Phase 0 platform baseline and
+the Phase 4 transport-TLS cutover.
 
 ## Verification
 
@@ -281,18 +307,18 @@ After all services are healthy:
 - **Application**: https://app.budgetanalyzer.localhost
 - **API Docs**: https://app.budgetanalyzer.localhost/api/docs
 - **Tilt UI**: http://localhost:10350
-- **RabbitMQ Management**: http://localhost:15672 (user/password)
+- **RabbitMQ Management**: http://localhost:15672 (`rabbitmq-admin` / value from `RABBITMQ_BOOTSTRAP_PASSWORD`)
 
 ## Port Reference
 
 | Port | Service | Purpose |
 |------|---------|---------|
-| 443 | Envoy Gateway | HTTPS entry point (via NodePort 30443) |
+| 443 | Istio Ingress Gateway | HTTPS entry point (via NodePort 30443) |
 | 80 | Kind host mapping | Reserved host mapping in the Kind config |
 | 3000 | budget-analyzer-web | Vite Dev Server |
 | 5432 | PostgreSQL | Database |
-| 6379 | Redis | Cache |
-| 5672 | RabbitMQ | AMQP |
+| 6379 | Redis | TLS-only cache/session storage |
+| 5671 | RabbitMQ | AMQPS |
 | 15672 | RabbitMQ | Management UI |
 | 8080 | nginx-gateway | API Gateway (internal) |
 | 8081 | session-gateway | BFF (internal) |
@@ -350,10 +376,16 @@ Common causes:
 
 ### TLS Certificate Errors
 
-Regenerate certificates:
+Regenerate browser-facing wildcard certificates:
 ```bash
 rm -rf nginx/certs/k8s
 ./scripts/dev/setup-k8s-tls.sh
+```
+
+Regenerate internal transport-TLS material:
+```bash
+rm -rf nginx/certs/infra
+./scripts/dev/setup-infra-tls.sh
 ```
 
 ### Kind Cluster Issues
@@ -414,12 +446,8 @@ Edit `/etc/hosts` and remove lines containing `budgetanalyzer.localhost`.
 # First, publish service-common (run once)
 cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orchestration
 
-# Then run the setup
-kind create cluster --config kind-cluster-config.yaml && \
-./scripts/dev/install-calico.sh && \
-echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts && \
-./scripts/dev/setup-k8s-tls.sh && \
-cp .env.example .env && \
+# Then run the setup (creates cluster, installs Calico, generates all certs, creates .env)
+./setup.sh && \
 vim .env && \
 tilt up
 ```
@@ -438,9 +466,6 @@ tilt up
 ```bash
 tilt down
 kind delete cluster --name kind
-kind create cluster --config kind-cluster-config.yaml
-./scripts/dev/install-calico.sh
-./scripts/dev/setup-k8s-tls.sh
-[ -f .env ] || cp .env.example .env
+./setup.sh    # Recreates cluster, Calico, all certs, .env
 tilt up
 ```

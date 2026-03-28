@@ -16,21 +16,88 @@ spec:
       labels:
         app: postgresql
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: fix-tls-perms
+          image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cp /tls-source/tls.crt /tls/server.crt
+              cp /tls-source/tls.key /tls/server.key
+              chmod 600 /tls/server.crt
+              chmod 600 /tls/server.key
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 70
+            runAsNonRoot: true
+            runAsUser: 70
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: postgresql-tls-source
+              mountPath: /tls-source
+              readOnly: true
+            - name: postgresql-tls
+              mountPath: /tls
       containers:
         - name: postgresql
-          image: postgres:16-alpine
+          image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
           ports:
             - name: postgresql
               containerPort: 5432
           env:
             - name: POSTGRES_USER
-              value: "budget_analyzer"
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: username
             - name: POSTGRES_PASSWORD
-              value: "budget_analyzer"
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: password
             - name: POSTGRES_DB
               value: "postgres"
+            - name: POSTGRES_INITDB_ARGS
+              value: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
             - name: PGDATA
               value: "/var/lib/postgresql/data/pgdata"
+            - name: POSTGRES_TRANSACTION_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: transaction-service-password
+            - name: POSTGRES_CURRENCY_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: currency-service-password
+            - name: POSTGRES_PERMISSION_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-bootstrap-credentials
+                  key: permission-service-password
+          args:
+            - -c
+            - password_encryption=scram-sha-256
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/tls/server.crt
+            - -c
+            - ssl_key_file=/tls/server.key
           resources:
             requests:
               memory: 256Mi
@@ -38,17 +105,38 @@ spec:
             limits:
               memory: 512Mi
               cpu: 500m
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 70
+            runAsNonRoot: true
+            runAsUser: 70
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: postgresql-tls
+              mountPath: /tls
+            - name: postgresql-run
+              mountPath: /var/run/postgresql
+            - name: postgresql-tmp
+              mountPath: /tmp
+            - name: postgresql-ca
+              mountPath: /tls-ca
+              readOnly: true
           livenessProbe:
             exec:
               command:
-                - pg_isready
-                - -U
-                - budget_analyzer
+                - /bin/sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -58,9 +146,10 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  pg_isready -U budget_analyzer &&
-                  psql -U budget_analyzer -d budget_analyzer -c 'SELECT 1' &&
-                  psql -U budget_analyzer -d currency -c 'SELECT 1'
+                  PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d budget_analyzer -c 'SELECT 1' &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d currency -c 'SELECT 1' &&
+                  PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d permission -c 'SELECT 1'
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
@@ -68,6 +157,19 @@ spec:
         - name: init-scripts
           configMap:
             name: postgresql-init
+            defaultMode: 493
+        - name: postgresql-tls-source
+          secret:
+            secretName: infra-tls-postgresql
+        - name: postgresql-tls
+          emptyDir: {}
+        - name: postgresql-run
+          emptyDir: {}
+        - name: postgresql-tmp
+          emptyDir: {}
+        - name: postgresql-ca
+          secret:
+            secretName: infra-ca
   volumeClaimTemplates:
     - metadata:
         name: postgresql-data

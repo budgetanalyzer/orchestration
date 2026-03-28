@@ -17,6 +17,41 @@ NC='\033[0m'
 DATA_ONLY=false
 DATABASES=("budget_analyzer" "currency" "permission")
 
+database_owner_for() {
+    case "$1" in
+        budget_analyzer)
+            echo "transaction_service"
+            ;;
+        currency)
+            echo "currency_service"
+            ;;
+        permission)
+            echo "permission_service"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+postgres_psql() {
+    local database="$1"
+    local sql="$2"
+
+    kubectl exec -n infrastructure "$POSTGRES_POD" -- /bin/sh -ceu \
+        'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -c "$2"' \
+        sh "$database" "$sql"
+}
+
+postgres_query() {
+    local database="$1"
+    local sql="$2"
+
+    kubectl exec -n infrastructure "$POSTGRES_POD" -- /bin/sh -ceu \
+        'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -tAc "$2" -U "$POSTGRES_USER" -d "$1"' \
+        sh "$database" "$sql"
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -77,11 +112,10 @@ if [ "$DATA_ONLY" = true ]; then
     # Truncate all tables in each database
     for DB in "${DATABASES[@]}"; do
         echo -n -e "${YELLOW}Truncating all tables in $DB...${NC} "
+        DB_OWNER=$(database_owner_for "$DB")
 
         # Check if database exists
-        DB_EXISTS=$(kubectl exec -n infrastructure "$POSTGRES_POD" -- \
-            psql -U budget_analyzer -d postgres -tAc \
-            "SELECT 1 FROM pg_database WHERE datname='$DB';" 2>/dev/null)
+        DB_EXISTS=$(postgres_query postgres "SELECT 1 FROM pg_database WHERE datname='$DB';" 2>/dev/null)
 
         if [ "$DB_EXISTS" != "1" ]; then
             echo -e "${YELLOW}skipped (not found)${NC}"
@@ -89,8 +123,7 @@ if [ "$DATA_ONLY" = true ]; then
         fi
 
         # Truncate all tables in public schema
-        kubectl exec -n infrastructure "$POSTGRES_POD" -- \
-            psql -U budget_analyzer -d "$DB" -c "
+        postgres_psql "$DB" "
 DO \$\$
 DECLARE
     tables_list TEXT;
@@ -107,6 +140,9 @@ BEGIN
 END \$\$;
 " > /dev/null 2>&1
 
+        postgres_psql postgres "REVOKE CONNECT ON DATABASE $DB FROM PUBLIC; GRANT CONNECT ON DATABASE $DB TO $DB_OWNER;" > /dev/null 2>&1
+        postgres_psql "$DB" "REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT CREATE ON SCHEMA public TO $DB_OWNER;" > /dev/null 2>&1
+
         echo -e "${GREEN}done${NC}"
         ((++RESET_COUNT))
     done
@@ -114,20 +150,18 @@ else
     # Drop and recreate each database
     for DB in "${DATABASES[@]}"; do
         echo -n -e "${YELLOW}Dropping and recreating $DB...${NC} "
+        DB_OWNER=$(database_owner_for "$DB")
 
         # Terminate existing connections
-        kubectl exec -n infrastructure "$POSTGRES_POD" -- \
-            psql -U budget_analyzer -d postgres -c \
+        postgres_psql postgres \
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$DB' AND pid != pg_backend_pid();" \
             > /dev/null 2>&1 || true
 
-        kubectl exec -n infrastructure "$POSTGRES_POD" -- \
-            psql -U budget_analyzer -d postgres -c "DROP DATABASE IF EXISTS $DB;" \
-            > /dev/null 2>&1
+        postgres_psql postgres "DROP DATABASE IF EXISTS $DB;" > /dev/null 2>&1
 
-        kubectl exec -n infrastructure "$POSTGRES_POD" -- \
-            psql -U budget_analyzer -d postgres -c "CREATE DATABASE $DB OWNER budget_analyzer;" \
-            > /dev/null 2>&1
+        postgres_psql postgres "CREATE DATABASE $DB OWNER $DB_OWNER;" > /dev/null 2>&1
+        postgres_psql postgres "REVOKE CONNECT ON DATABASE $DB FROM PUBLIC; GRANT CONNECT ON DATABASE $DB TO $DB_OWNER;" > /dev/null 2>&1
+        postgres_psql "$DB" "REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT CREATE ON SCHEMA public TO $DB_OWNER;" > /dev/null 2>&1
 
         echo -e "${GREEN}done${NC}"
         ((++RESET_COUNT))

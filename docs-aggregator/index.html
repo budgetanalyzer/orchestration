@@ -10,9 +10,9 @@
             margin: 0;
             padding: 0;
         }
-        /* Don't hide topbar - it contains the API selector dropdown */
+        /* Keep the service selector, hide only the default logo. */
         .topbar-wrapper img {
-            display: none;  /* Hide swagger logo only */
+            display: none;
         }
         .swagger-ui .info {
             margin: 20px 0;
@@ -54,16 +54,7 @@
     <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
     <script>
         window.onload = function() {
-            // Determine the base URL dynamically
             const baseUrl = window.location.origin;
-
-            console.log('Swagger UI Configuration:', {
-                baseUrl: baseUrl,
-                urls: [
-                    baseUrl + "/api/transaction-service/v3/api-docs",
-                    baseUrl + "/api/currency-service/v3/api-docs"
-                ]
-            });
 
             const ui = SwaggerUIBundle({
                 urls: [
@@ -76,7 +67,7 @@
                         url: baseUrl + "/api/currency-service/v3/api-docs"
                     }
                 ],
-                dom_id: '#swagger-ui',
+                dom_id: "#swagger-ui",
                 deepLinking: true,
                 presets: [
                     SwaggerUIBundle.presets.apis,
@@ -86,20 +77,11 @@
                     SwaggerUIBundle.plugins.DownloadUrl
                 ],
                 layout: "StandaloneLayout",
-                // Request interceptor to ensure requests go through the gateway
-                requestInterceptor: (request) => {
-                    console.log('API Request:', request.url);
-                    return request;
-                },
-                // Response interceptor for debugging
-                responseInterceptor: (response) => {
-                    console.log('API Response:', response.url, response.status);
-                    return response;
-                }
+                tryItOutEnabled: false,
+                supportedSubmitMethods: []
             });
 
             window.ui = ui;
-            console.log('Swagger UI initialized', ui);
         };
     </script>
 </body>

@@ -105,9 +105,9 @@ claude -p "fix all lint errors" \
 The sandbox directory is mounted read-only to prevent accidental modification:
 
 ```yaml
-# claude-code-sandbox/docker-compose.yml
+# ai-agent-sandbox/docker-compose.yml
 volumes:
-  - .:/workspace/orchestration/claude-code-sandbox:ro  # read-only
+  - .:/workspace/orchestration/ai-agent-sandbox:ro  # read-only
 ```
 
 Claude cannot "shoot itself in the foot" by modifying its own container config.
@@ -132,7 +132,7 @@ Claude Code runs in a container. How does it run Docker commands to create test 
 Mount the host's Docker socket into the Claude container:
 
 ```yaml
-# claude-code-sandbox/docker-compose.yml
+# ai-agent-sandbox/docker-compose.yml
 volumes:
   - /var/run/docker.sock:/var/run/docker.sock  # "Wormhole" to host Docker
 
@@ -186,6 +186,10 @@ The Docker socket acts like a wormhole - commands issued inside the container "t
 
 **Implemented in**: `tests/setup-flow/` and `tests/security-preflight/`
 **Use case**: Testing the complete developer onboarding flow and the isolated Phase 0 runtime baseline
+
+Phase 7 status: these retained DinD suites are stale against the current
+Istio-only baseline and are non-gating for Phase 7 until they are explicitly
+realigned. Keep them as reference assets, not as current completion proof.
 
 #### The Problem
 
@@ -416,7 +420,7 @@ cd /path/to/orchestration
 ```json
 {
   "name": "Budget Analyzer",
-  "dockerComposeFile": "../claude-code-sandbox/docker-compose.yml",
+  "dockerComposeFile": "../ai-agent-sandbox/docker-compose.yml",
   "service": "claude-dev",
   "workspaceFolder": "/workspace/orchestration",
   "shutdownAction": "none",  // Container persists across sessions
@@ -433,7 +437,7 @@ cd /path/to/orchestration
 
 ### Docker Compose Configuration
 
-**File**: `claude-code-sandbox/docker-compose.yml`
+**File**: `ai-agent-sandbox/docker-compose.yml`
 
 Key configurations:
 
@@ -449,7 +453,7 @@ services:
       - ../..:/workspace
 
       # Sandbox config (read-only)
-      - .:/workspace/orchestration/claude-code-sandbox:ro
+      - .:/workspace/orchestration/ai-agent-sandbox:ro
 
       # Docker socket wormhole
       - /var/run/docker.sock:/var/run/docker.sock
@@ -466,7 +470,7 @@ services:
 
 ### Bash Aliases
 
-**File**: `claude-code-sandbox/bash_aliases.sh`
+**File**: `ai-agent-sandbox/bash_aliases.sh`
 
 Sourced automatically on container startup:
 
@@ -588,7 +592,7 @@ ls -la /var/run/docker.sock
 groups | grep docker
 
 # Rebuild container
-cd claude-code-sandbox
+cd ai-agent-sandbox
 docker compose down
 docker compose up -d
 ```
@@ -610,7 +614,7 @@ env | grep TESTCONTAINERS
 # TESTCONTAINERS_REUSE_ENABLE=true
 
 # If missing, rebuild container
-cd claude-code-sandbox
+cd ai-agent-sandbox
 docker compose down
 docker compose build --no-cache
 docker compose up -d

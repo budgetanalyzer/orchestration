@@ -1,0 +1,8 @@
+service:
+  type: ClusterIP
+securityContext:
+  sysctls:
+    - name: net.ipv4.ip_unprivileged_port_start
+      value: "0"
+  seccompProfile:
+    type: RuntimeDefault

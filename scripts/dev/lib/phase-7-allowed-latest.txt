@@ -1,0 +1,12 @@
+# The only allowed checked-in :latest refs in Phase 7 are the seven approved
+# local Tilt-built image repos. Live Tilt deploys rewrite these same repos to
+# immutable :tilt-<hash> tags; see
+# docs/plans/security-hardening-v2-phase-7-session-1-contract.md.
+
+transaction-service:latest
+currency-service:latest
+permission-service:latest
+session-gateway:latest
+ext-authz:latest
+budget-analyzer-web:latest
+budget-analyzer-web-prod-smoke:latest

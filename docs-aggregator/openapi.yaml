@@ -1,2663 +1,2436 @@
-openapi: "3.1.0"
+openapi: 3.1.0
 info:
-  title: "Budget Analyzer - Unified API"
-  version: "1.0"
-  description: "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API, Currency Service, and Session Gateway into a single document for client code generation. Note: Session Gateway endpoints (User) are served from the BFF origin (app.*), not the API gateway."
+  title: Budget Analyzer - Unified API
+  version: '1.0'
+  description: Unified API documentation for all Budget Analyzer microservices. This
+    specification combines the Budget Analyzer API and Currency Service into a single
+    document for client code generation.
   contact:
-    name: "Bleu Rubin"
-    email: "contact@budgetanalyzer.org"
+    name: Bleu Rubin
+    email: contact@budgetanalyzer.org
   license:
-    name: "MIT"
-    url: "https://opensource.org/licenses/MIT"
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 servers:
-  -
-    url: "https://app.budgetanalyzer.localhost/api"
-    description: "Local environment (via gateway)"
-  -
-    url: "https://api.budgetanalyzer.org"
-    description: "Production environment"
+  - url: https://app.budgetanalyzer.localhost/api
+    description: Local environment (via gateway)
+  - url: https://api.budgetanalyzer.org
+    description: Production environment
 tags:
-  -
-    name: "Saved Views"
-    description: "Create and manage saved transaction views"
-    x-service: "transaction-service"
-  -
-    name: "Statement Formats"
-    description: "Manage statement format configurations for imports"
-    x-service: "transaction-service"
-  -
-    name: "Transactions"
-    description: "Import and manipulate transactions"
-    x-service: "transaction-service"
-  -
-    name: "Currency Series Handler"
-    description: "Endpoints for querying, creating, and updating currency series"
-    x-service: "currency-service"
-  -
-    name: "Exchange Rates Handler"
-    description: "Endpoints for querying and importing exchange rates"
-    x-service: "currency-service"
-  -
-    name: "User"
-    description: "Authentication status and user information"
-    x-service: "session-gateway"
-  -
-    name: "Token Exchange"
-    description: "Token exchange for native clients"
-    x-service: "session-gateway"
+  - name: Saved Views
+    description: Create and manage saved transaction views
+    x-service: transaction-service
+  - name: Statement Formats
+    description: Manage statement format configurations for imports
+    x-service: transaction-service
+  - name: Transactions
+    description: Import and manipulate transactions
+    x-service: transaction-service
+  - name: Currency Series Handler
+    description: Endpoints for querying, creating, and updating currency series
+    x-service: currency-service
+  - name: Exchange Rates Handler
+    description: Endpoints for querying and importing exchange rates
+    x-service: currency-service
 paths:
-  "/v1/views/{id}":
+  /v1/views/{id}:
     get:
       tags:
-        - "Saved Views"
-      summary: "Get a saved view"
-      description: "Gets a saved view by ID"
-      operationId: "getView"
+        - Saved Views
+      summary: Get a saved view
+      description: Gets a saved view by ID
+      operationId: getView
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
+            type: string
+            format: uuid
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     put:
       tags:
-        - "Saved Views"
-      summary: "Update a saved view"
-      description: "Updates a saved view's name or criteria"
-      operationId: "updateView"
+        - Saved Views
+      summary: Update a saved view
+      description: Updates a saved view's name or criteria
+      operationId: updateView
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
+            type: string
+            format: uuid
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/UpdateSavedViewRequest"
+              $ref: '#/components/schemas/UpdateSavedViewRequest'
         required: true
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: NOT_FOUND
+                message: Not Found
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     delete:
       tags:
-        - "Saved Views"
-      summary: "Delete a saved view"
-      description: "Deletes a saved view"
-      operationId: "deleteView"
+        - Saved Views
+      summary: Delete a saved view
+      description: Deletes a saved view
+      operationId: deleteView
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
+            type: string
+            format: uuid
       responses:
-        204:
-          description: "No Content"
-        404:
-          description: "Not Found"
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/statement-formats/{formatKey}":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/{formatKey}:
     get:
       tags:
-        - "Statement Formats"
-      summary: "Get statement format details"
-      description: "Returns details of a specific statement format by its format key."
-      operationId: "getFormat"
+        - Statement Formats
+      summary: Get statement format details
+      description: Returns details of a specific statement format by its format key.
+      operationId: getFormat
       parameters:
-        -
-          name: "formatKey"
-          in: "path"
-          description: "Unique format identifier"
+        - name: formatKey
+          in: path
+          description: Unique format identifier
           required: true
           schema:
-            type: "string"
-          example: "capital-one"
+            type: string
+          example: capital-one
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/StatementFormatResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     put:
       tags:
-        - "Statement Formats"
-      summary: "Update a statement format"
-      description: "Updates an existing statement format. Only provided fields will be updated. The format key and format type cannot be changed after creation."
-      operationId: "updateFormat"
+        - Statement Formats
+      summary: Update a statement format
+      description: Updates an existing statement format. Only provided fields will
+        be updated. The format key and format type cannot be changed after creation.
+      operationId: updateFormat
       parameters:
-        -
-          name: "formatKey"
-          in: "path"
-          description: "Unique format identifier"
+        - name: formatKey
+          in: path
+          description: Unique format identifier
           required: true
           schema:
-            type: "string"
-          example: "capital-one"
+            type: string
+          example: capital-one
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/UpdateStatementFormatRequest"
+              $ref: '#/components/schemas/UpdateStatementFormatRequest'
         required: true
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/StatementFormatResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: NOT_FOUND
+                message: Not Found
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     delete:
       tags:
-        - "Statement Formats"
-      summary: "Disable a statement format"
-      description: "Disables a statement format (soft delete). Disabled formats will not be available for file imports but can be re-enabled by updating the format."
-      operationId: "disableFormat"
+        - Statement Formats
+      summary: Disable a statement format
+      description: Disables a statement format (soft delete). Disabled formats will
+        not be available for file imports but can be re-enabled by updating the format.
+      operationId: disableFormat
       parameters:
-        -
-          name: "formatKey"
-          in: "path"
-          description: "Unique format identifier"
+        - name: formatKey
+          in: path
+          description: Unique format identifier
           required: true
           schema:
-            type: "string"
-          example: "capital-one"
+            type: string
+          example: capital-one
       responses:
-        204:
-          description: "Format successfully disabled"
-        404:
-          description: "Not Found"
+        '204':
+          description: Format successfully disabled
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/views":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views:
     get:
       tags:
-        - "Saved Views"
-      summary: "List saved views"
-      description: "Gets all saved views for the current user"
-      operationId: "listViews"
+        - Saved Views
+      summary: List saved views
+      description: Gets all saved views for the current user
+      operationId: listViews
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/SavedViewResponse"
-        500:
-          description: "Internal Server Error"
+                  $ref: '#/components/schemas/SavedViewResponse'
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     post:
       tags:
-        - "Saved Views"
-      summary: "Create a saved view"
-      description: "Creates a new saved view for the current user"
-      operationId: "createView"
+        - Saved Views
+      summary: Create a saved view
+      description: Creates a new saved view for the current user
+      operationId: createView
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/CreateSavedViewRequest"
+              $ref: '#/components/schemas/CreateSavedViewRequest'
         required: true
       responses:
-        201:
-          description: "Created"
+        '201':
+          description: Created
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/views/{id}/pin/{txnId}":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/pin/{txnId}:
     post:
       tags:
-        - "Saved Views"
-      summary: "Pin a transaction"
-      description: "Pins a transaction to the view"
-      operationId: "pinTransaction"
+        - Saved Views
+      summary: Pin a transaction
+      description: Pins a transaction to the view
+      operationId: pinTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
-        -
-          name: "txnId"
-          in: "path"
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-        500:
-          description: "Internal Server Error"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     delete:
       tags:
-        - "Saved Views"
-      summary: "Unpin a transaction"
-      description: "Removes a pin from the view"
-      operationId: "unpinTransaction"
+        - Saved Views
+      summary: Unpin a transaction
+      description: Removes a pin from the view
+      operationId: unpinTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
-        -
-          name: "txnId"
-          in: "path"
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/views/{id}/exclude/{txnId}":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/exclude/{txnId}:
     post:
       tags:
-        - "Saved Views"
-      summary: "Exclude a transaction"
-      description: "Excludes a transaction from the view"
-      operationId: "excludeTransaction"
+        - Saved Views
+      summary: Exclude a transaction
+      description: Excludes a transaction from the view
+      operationId: excludeTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
-        -
-          name: "txnId"
-          in: "path"
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-        500:
-          description: "Internal Server Error"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     delete:
       tags:
-        - "Saved Views"
-      summary: "Remove exclusion"
-      description: "Removes an exclusion, allowing the transaction to appear if it matches criteria"
-      operationId: "unexcludeTransaction"
+        - Saved Views
+      summary: Remove exclusion
+      description: Removes an exclusion, allowing the transaction to appear if it
+        matches criteria
+      operationId: unexcludeTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
-        -
-          name: "txnId"
-          in: "path"
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/SavedViewResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions/preview":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/preview:
     post:
       tags:
-        - "Transactions"
-      summary: "Preview transactions from a file before import"
-      description: "Parses a CSV or PDF file and returns the extracted transactions for review and editing before batch import. No data is persisted. The format parameter is required and determines which parser to use. The response includes any parsing warnings."
-      operationId: "previewTransactions"
+        - Transactions
+      summary: Preview transactions from a file before import
+      description: Parses a CSV or PDF file and returns the extracted transactions
+        for review and editing before batch import. No data is persisted. The format
+        parameter is required and determines which parser to use. The response includes
+        any parsing warnings.
+      operationId: previewTransactions
       parameters:
-        -
-          name: "format"
-          in: "query"
-          description: "Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one' for CSV). Use GET /v1/statement-formats to list available formats."
+        - name: format
+          in: query
+          description: Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one'
+            for CSV). Use GET /v1/statement-formats to list available formats.
           required: true
           schema:
-            type: "string"
-          example: "capital-one-yearly"
-        -
-          name: "accountId"
-          in: "query"
-          description: "Account ID to pre-fill for all transactions"
+            type: string
+          example: capital-one-yearly
+        - name: accountId
+          in: query
+          description: Account ID to pre-fill for all transactions
           required: false
           schema:
-            type: "string"
-          example: "checking-12345"
+            type: string
+          example: checking-12345
       requestBody:
         content:
-          "multipart/form-data":
+          multipart/form-data:
             schema:
-              type: "object"
+              type: object
               properties:
                 file:
-                  type: "string"
-                  format: "binary"
-                  description: "CSV or PDF file to preview"
+                  type: string
+                  format: binary
+                  description: CSV or PDF file to preview
               required:
-                - "file"
+                - file
         required: true
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/PreviewResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/PreviewResponse'
+        '422':
+          description: Unprocessable Entity
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        422:
-          description: "Unprocessable Entity"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               examples:
-                "Format Not Supported":
-                  summary: "Invalid format parameter"
-                  description: "Format Not Supported"
+                Format Not Supported:
+                  summary: Invalid format parameter
+                  description: Format Not Supported
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Format not supported: fake-bank"
-                    code: "FORMAT_NOT_SUPPORTED"
-                "Parsing Error":
-                  summary: "Missing required column"
-                  description: "Parsing Error"
+                    type: APPLICATION_ERROR
+                    message: 'Format not supported: fake-bank'
+                    code: FORMAT_NOT_SUPPORTED
+                Parsing Error:
+                  summary: Missing required column
+                  description: Parsing Error
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Missing value for required column 'Description' at line 1"
-                    code: "CSV_PARSING_ERROR"
-        500:
-          description: "Internal Server Error"
+                    type: APPLICATION_ERROR
+                    message: Missing value for required column 'Description' at line
+                      1
+                    code: CSV_PARSING_ERROR
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions/bulk-delete":
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/bulk-delete:
     post:
       tags:
-        - "Transactions"
-      summary: "Bulk delete transactions"
-      description: "Soft-deletes multiple transactions in a single operation. Returns the count of successfully deleted transactions and any IDs that were not found or already deleted."
-      operationId: "bulkDeleteTransactions"
+        - Transactions
+      summary: Bulk delete transactions
+      description: Soft-deletes multiple transactions in a single operation. Returns
+        the count of successfully deleted transactions and any IDs that were not found
+        or already deleted.
+      operationId: bulkDeleteTransactions
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/BulkDeleteRequest"
+              $ref: '#/components/schemas/BulkDeleteRequest'
         required: true
       responses:
-        200:
-          description: "Some transactions not found"
+        '200':
+          description: Some transactions not found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/BulkDeleteResponse"
+                $ref: '#/components/schemas/BulkDeleteResponse'
               examples:
-                "Partial success":
-                  summary: "Some IDs not found"
-                  description: "Partial success"
+                Partial success:
+                  summary: Some IDs not found
+                  description: Partial success
                   value:
                     deletedCount: 2
                     notFoundIds:
                       - 999
                       - 1000
-        400:
-          description: "Bad Request"
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions/batch":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/batch:
     post:
       tags:
-        - "Transactions"
-      summary: "Import a batch of transactions"
-      description: "Imports transactions from a batch request (typically from the preview endpoint after user edits). Validates all transactions upfront and rejects the entire batch if any fail. Duplicates (matching date + amount + description) are skipped."
-      operationId: "batchImportTransactions"
+        - Transactions
+      summary: Import a batch of transactions
+      description: Imports transactions from a batch request (typically from the preview
+        endpoint after user edits). Validates all transactions upfront and rejects
+        the entire batch if any fail. Duplicates (matching date + amount + description)
+        are skipped.
+      operationId: batchImportTransactions
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/BatchImportRequest"
+              $ref: '#/components/schemas/BatchImportRequest'
         required: true
       responses:
-        201:
-          description: "Created"
+        '201':
+          description: Created
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/BatchImportResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/BatchImportResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/statement-formats":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats:
     get:
       tags:
-        - "Statement Formats"
-      summary: "List all statement formats"
-      description: "Returns all configured statement formats (both enabled and disabled)."
-      operationId: "listFormats"
+        - Statement Formats
+      summary: List all statement formats
+      description: Returns all configured statement formats (both enabled and disabled).
+      operationId: listFormats
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/StatementFormatResponse"
-        500:
-          description: "Internal Server Error"
+                  $ref: '#/components/schemas/StatementFormatResponse'
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     post:
       tags:
-        - "Statement Formats"
-      summary: "Create a new statement format"
-      description: "Creates a new statement format configuration. For CSV formats, the column header fields (dateHeader, descriptionHeader, creditHeader) are required."
-      operationId: "createFormat"
+        - Statement Formats
+      summary: Create a new statement format
+      description: Creates a new statement format configuration. For CSV formats,
+        the column header fields (dateHeader, descriptionHeader, creditHeader) are
+        required.
+      operationId: createFormat
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/CreateStatementFormatRequest"
+              $ref: '#/components/schemas/CreateStatementFormatRequest'
         required: true
       responses:
-        201:
-          description: "Created"
+        '201':
+          description: Created
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/StatementFormatResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        422:
-          description: "Unprocessable Entity"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '422':
+          description: Unprocessable Entity
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               examples:
-                "Duplicate Format Key":
-                  summary: "Format key already exists"
-                  description: "Duplicate Format Key"
+                Duplicate Format Key:
+                  summary: Format key already exists
+                  description: Duplicate Format Key
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Format key already exists: capital-one"
-                    code: "FORMAT_KEY_ALREADY_EXISTS"
-        500:
-          description: "Internal Server Error"
+                    type: APPLICATION_ERROR
+                    message: 'Format key already exists: capital-one'
+                    code: FORMAT_KEY_ALREADY_EXISTS
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions/{id}":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/{id}:
     get:
       tags:
-        - "Transactions"
-      summary: "Get transaction"
-      description: "Get transaction by id"
-      operationId: "getTransaction"
+        - Transactions
+      summary: Get transaction
+      description: Get transaction by id
+      operationId: getTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/TransactionResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/TransactionResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     delete:
       tags:
-        - "Transactions"
-      summary: "Delete transaction"
-      description: "Delete transaction by id"
-      operationId: "deleteTransaction"
+        - Transactions
+      summary: Delete transaction
+      description: Delete transaction by id
+      operationId: deleteTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        204:
-          description: "No Content"
-        404:
-          description: "Not Found"
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     patch:
       tags:
-        - "Transactions"
-      summary: "Update transaction"
-      description: "Updates mutable fields (description and accountId) of a transaction. All other fields are immutable to preserve financial data integrity."
-      operationId: "updateTransaction"
+        - Transactions
+      summary: Update transaction
+      description: Updates mutable fields (description and accountId) of a transaction.
+        All other fields are immutable to preserve financial data integrity.
+      operationId: updateTransaction
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/TransactionUpdateRequest"
+              $ref: '#/components/schemas/TransactionUpdateRequest'
         required: true
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/TransactionResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/TransactionResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: NOT_FOUND
+                message: Not Found
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/views/{id}/transactions":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/transactions:
     get:
       tags:
-        - "Saved Views"
-      summary: "Get view transaction IDs"
-      description: "Gets IDs of active transactions in this view, grouped by membership type (matched, pinned, excluded). Soft-deleted transactions are excluded."
-      operationId: "getViewTransactions"
+        - Saved Views
+      summary: Get view transaction IDs
+      description: Gets IDs of active transactions in this view, grouped by membership
+        type (matched, pinned, excluded). Soft-deleted transactions are excluded.
+      operationId: getViewTransactions
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "string"
-            format: "uuid"
+            type: string
+            format: uuid
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ViewMembershipResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/ViewMembershipResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions:
     get:
       tags:
-        - "Transactions"
-      summary: "Get transactions"
-      description: "Get all transactions"
-      operationId: "getTransactions"
+        - Transactions
+      summary: Get transactions
+      description: Get all transactions
+      operationId: getTransactions
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/TransactionResponse"
-        500:
-          description: "Internal Server Error"
+                  $ref: '#/components/schemas/TransactionResponse'
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/transactions/count":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/count:
     get:
       tags:
-        - "Transactions"
-      summary: "Count transactions"
-      description: "Returns the count of active transactions matching the given filter criteria. Non-admin users only count their own transactions."
-      operationId: "countTransactions"
+        - Transactions
+      summary: Count transactions
+      description: Returns the count of active transactions matching the given filter
+        criteria. Non-admin users only count their own transactions.
+      operationId: countTransactions
       parameters:
-        -
-          name: "filter"
-          in: "query"
+        - name: filter
+          in: query
           required: true
           schema:
-            "$ref": "#/components/schemas/TransactionFilter"
+            $ref: '#/components/schemas/TransactionFilter'
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "integer"
-                format: "int64"
-        500:
-          description: "Internal Server Error"
+                type: integer
+                format: int64
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/currencies/{id}":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/currencies/{id}:
     get:
       tags:
-        - "Currency Series Handler"
-      summary: "Get currency series by ID"
-      description: "Retrieve a currency series by its unique identifier"
-      operationId: "getById"
+        - Currency Series Handler
+      summary: Get currency series by ID
+      description: Retrieve a currency series by its unique identifier
+      operationId: getById
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       responses:
-        200:
-          description: "Currency series retrieved successfully"
+        '200':
+          description: Currency series retrieved successfully
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/CurrencySeriesResponse"
-        404:
-          description: "Not Found"
+                $ref: '#/components/schemas/CurrencySeriesResponse'
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     put:
       tags:
-        - "Currency Series Handler"
-      summary: "Update currency series"
-      description: "Update an existing currency series (currency code and provider series ID are immutable, only enabled status can be changed)"
-      operationId: "update"
+        - Currency Series Handler
+      summary: Update currency series
+      description: Update an existing currency series (currency code and provider
+        series ID are immutable, only enabled status can be changed)
+      operationId: update
       parameters:
-        -
-          name: "id"
-          in: "path"
+        - name: id
+          in: path
           required: true
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/CurrencySeriesUpdateRequest"
+              $ref: '#/components/schemas/CurrencySeriesUpdateRequest'
         required: true
       responses:
-        200:
-          description: "Currency series updated successfully"
+        '200':
+          description: Currency series updated successfully
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/CurrencySeriesResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/CurrencySeriesResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        404:
-          description: "Not Found"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Not Found
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "NOT_FOUND"
-                message: "Not Found"
-        500:
-          description: "Internal Server Error"
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/exchange-rates/import":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/exchange-rates/import:
     post:
       tags:
-        - "Exchange Rates Handler"
-      summary: "Import latest available rates from FRED"
-      description: "Retrieve latest un-imported exchange rates from FRED for all enabled currencies - manually triggers daily cron job"
-      operationId: "importLatestExchangeRates"
+        - Exchange Rates Handler
+      summary: Import latest available rates from FRED
+      description: Retrieve latest un-imported exchange rates from FRED for all enabled
+        currencies - manually triggers daily cron job
+      operationId: importLatestExchangeRates
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/ExchangeRateImportResultResponse"
-        400:
-          description: "Bad Request"
+                  $ref: '#/components/schemas/ExchangeRateImportResultResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        500:
-          description: "Internal Server Error"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/currencies":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/currencies:
     get:
       tags:
-        - "Currency Series Handler"
-      summary: "Get all currency series"
-      description: "Retrieve all currency series, optionally filtered by enabled status"
-      operationId: "getAll"
+        - Currency Series Handler
+      summary: Get all currency series
+      description: Retrieve all currency series, optionally filtered by enabled status
+      operationId: getAll
       parameters:
-        -
-          name: "enabledOnly"
-          in: "query"
-          description: "Filter by enabled status (true = enabled only, false = all)"
+        - name: enabledOnly
+          in: query
+          description: Filter by enabled status (true = enabled only, false = all)
           required: false
           schema:
-            type: "boolean"
+            type: boolean
             default: false
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/CurrencySeriesResponse"
-        500:
-          description: "Internal Server Error"
+                  $ref: '#/components/schemas/CurrencySeriesResponse'
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
     post:
       tags:
-        - "Currency Series Handler"
-      summary: "Create a new currency series"
-      description: "Create a new currency series. This endpoint is typically used when FRED adds support for new currency pairs. The 23 commonly-used currencies are already pre-populated and can be enabled via the PUT endpoint."
-      operationId: "create"
+        - Currency Series Handler
+      summary: Create a new currency series
+      description: Create a new currency series. This endpoint is typically used when
+        FRED adds support for new currency pairs. The 23 commonly-used currencies
+        are already pre-populated and can be enabled via the PUT endpoint.
+      operationId: create
       requestBody:
         content:
-          "application/json":
+          application/json:
             schema:
-              "$ref": "#/components/schemas/CurrencySeriesCreateRequest"
+              $ref: '#/components/schemas/CurrencySeriesCreateRequest'
         required: true
       responses:
-        201:
-          description: "Currency series created successfully"
+        '201':
+          description: Currency series created successfully
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/CurrencySeriesResponse"
-        400:
-          description: "Bad Request"
+                $ref: '#/components/schemas/CurrencySeriesResponse'
+        '400':
+          description: Bad Request
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        422:
-          description: "Business validation failed"
+                type: INVALID_REQUEST
+                message: Bad Request
+        '422':
+          description: Business validation failed
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               examples:
-                "Duplicate Currency Code":
-                  summary: "Currency code already exists"
-                  description: "Duplicate Currency Code"
+                Duplicate Currency Code:
+                  summary: Currency code already exists
+                  description: Duplicate Currency Code
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Currency code 'EUR' already exists"
-                    code: "DUPLICATE_CURRENCY_CODE"
-                "Invalid ISO 4217 Code":
-                  summary: "Currency code is not a valid ISO 4217 code"
-                  description: "Invalid ISO 4217 Code"
+                    type: APPLICATION_ERROR
+                    message: Currency code 'EUR' already exists
+                    code: DUPLICATE_CURRENCY_CODE
+                Invalid ISO 4217 Code:
+                  summary: Currency code is not a valid ISO 4217 code
+                  description: Invalid ISO 4217 Code
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Invalid ISO 4217 currency code: XXX"
-                    code: "INVALID_ISO_4217_CODE"
-                "Invalid Provider Series ID":
-                  summary: "Provider series ID does not exist in FRED"
-                  description: "Invalid Provider Series ID"
+                    type: APPLICATION_ERROR
+                    message: 'Invalid ISO 4217 currency code: XXX'
+                    code: INVALID_ISO_4217_CODE
+                Invalid Provider Series ID:
+                  summary: Provider series ID does not exist in FRED
+                  description: Invalid Provider Series ID
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Provider series ID 'INVALID_SERIES' does not exist in the external provider"
-                    code: "INVALID_PROVIDER_SERIES_ID"
-        500:
-          description: "Internal Server Error"
+                    type: APPLICATION_ERROR
+                    message: Provider series ID 'INVALID_SERIES' does not exist in
+                      the external provider
+                    code: INVALID_PROVIDER_SERIES_ID
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/v1/exchange-rates":
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/exchange-rates:
     get:
       tags:
-        - "Exchange Rates Handler"
-      summary: "Get exchange rates"
-      description: "Get exchange rates for converting USD to the target currency"
-      operationId: "getExchangeRates"
+        - Exchange Rates Handler
+      summary: Get exchange rates
+      description: Get exchange rates for converting USD to the target currency
+      operationId: getExchangeRates
       parameters:
-        -
-          name: "startDate"
-          in: "query"
-          description: "Start date for exchange rates in ISO format"
+        - name: startDate
+          in: query
+          description: Start date for exchange rates in ISO format
           required: false
           schema:
-            type: "string"
-            format: "date"
-          example: "2024-01-01"
-        -
-          name: "endDate"
-          in: "query"
-          description: "End date for exchange rates in ISO format"
+            type: string
+            format: date
+          example: '2024-01-01'
+        - name: endDate
+          in: query
+          description: End date for exchange rates in ISO format
           required: false
           schema:
-            type: "string"
-            format: "date"
-          example: "2024-12-31"
-        -
-          name: "targetCurrency"
-          in: "query"
-          description: "Target currency of exchange rate"
+            type: string
+            format: date
+          example: '2024-12-31'
+        - name: targetCurrency
+          in: query
+          description: Target currency of exchange rate
           required: true
           schema:
-            type: "string"
-          example: "THB"
+            type: string
+          example: THB
       responses:
-        200:
-          description: "OK"
+        '200':
+          description: OK
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/ExchangeRateResponse"
-        400:
-          description: "Invalid request"
+                  $ref: '#/components/schemas/ExchangeRateResponse'
+        '400':
+          description: Invalid request
           content:
-            "application/json":
+            application/json:
               schema:
-                type: "array"
+                type: array
                 items:
-                  "$ref": "#/components/schemas/ExchangeRateResponse"
-        422:
-          description: "Business validation failed"
+                  $ref: '#/components/schemas/ExchangeRateResponse'
+        '422':
+          description: Business validation failed
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               examples:
-                "No Exchange Rate Data Available":
-                  summary: "No exchange rate data exists for the requested currency"
-                  description: "No Exchange Rate Data Available"
+                No Exchange Rate Data Available:
+                  summary: No exchange rate data exists for the requested currency
+                  description: No Exchange Rate Data Available
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "No exchange rate data available for currency: EUR"
-                    code: "NO_EXCHANGE_RATE_DATA_AVAILABLE"
-                "Start Date Out of Range":
-                  summary: "Start date is before the earliest available data"
-                  description: "Start Date Out of Range"
+                    type: APPLICATION_ERROR
+                    message: 'No exchange rate data available for currency: EUR'
+                    code: NO_EXCHANGE_RATE_DATA_AVAILABLE
+                Start Date Out of Range:
+                  summary: Start date is before the earliest available data
+                  description: Start Date Out of Range
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Exchange rates for THB not available before 2000-01-03"
-                    code: "START_DATE_OUT_OF_RANGE"
-                "Currency Not Enabled":
-                  summary: "Currency not enabled for exchange rate data"
-                  description: "Currency Not Enabled"
+                    type: APPLICATION_ERROR
+                    message: Exchange rates for THB not available before 2000-01-03
+                    code: START_DATE_OUT_OF_RANGE
+                Currency Not Enabled:
+                  summary: Currency not enabled for exchange rate data
+                  description: Currency Not Enabled
                   value:
-                    type: "APPLICATION_ERROR"
-                    message: "Currency is not enabled: EUR"
-                    code: "CURRENCY_NOT_ENABLED"
-        500:
-          description: "Internal Server Error"
+                    type: APPLICATION_ERROR
+                    message: 'Currency is not enabled: EUR'
+                    code: CURRENCY_NOT_ENABLED
+        '500':
+          description: Internal Server Error
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
           content:
-            "application/json":
+            application/json:
               schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-  "/auth/token/exchange":
-    post:
-      tags:
-        - "Token Exchange"
-      summary: "Exchange IDP token for session token"
-      description: "Validates an IDP access token via userinfo, creates a session, and returns an opaque bearer token for native clients."
-      operationId: "exchangeToken"
-      requestBody:
-        content:
-          "application/json":
-            schema:
-              "$ref": "#/components/schemas/TokenExchangeRequest"
-        required: true
-      responses:
-        200:
-          description: "Token exchange successful"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/TokenExchangeResponse"
-        400:
-          description: "Bad Request"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "INVALID_REQUEST"
-                message: "Bad Request"
-        401:
-          description: "Invalid IDP access token"
-          content:
-            "*/*":
-              schema:
-                "$ref": "#/components/schemas/TokenExchangeResponse"
-        500:
-          description: "Internal Server Error"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-    servers:
-      -
-        url: "https://app.budgetanalyzer.localhost"
-        description: "Local environment (BFF)"
-      -
-        url: "https://app.budgetanalyzer.org"
-        description: "Production environment (BFF)"
-  "/user":
-    get:
-      tags:
-        - "User"
-      summary: "Get current user info"
-      description: "Returns the authenticated user's profile and roles. Returns 200 with user info if authenticated, or empty 401 if not."
-      operationId: "getCurrentUser"
-      parameters:
-        -
-          name: "session"
-          in: "query"
-          required: true
-          schema:
-            "$ref": "#/components/schemas/WebSession"
-      responses:
-        200:
-          description: "Authenticated user info"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/UserInfoResponse"
-        401:
-          description: "Not authenticated"
-        500:
-          description: "Internal Server Error"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-    servers:
-      -
-        url: "https://app.budgetanalyzer.localhost"
-        description: "Local environment (BFF)"
-      -
-        url: "https://app.budgetanalyzer.org"
-        description: "Production environment (BFF)"
-  "/logout":
-    get:
-      tags:
-        - "logout-controller"
-      operationId: "logout"
-      responses:
-        200:
-          description: "OK"
-        500:
-          description: "Internal Server Error"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "INTERNAL_ERROR"
-                message: "Internal Server Error"
-        503:
-          description: "Service Unavailable"
-          content:
-            "application/json":
-              schema:
-                "$ref": "#/components/schemas/ApiErrorResponse"
-              example:
-                type: "SERVICE_UNAVAILABLE"
-                message: "Service Unavailable"
-    servers:
-      -
-        url: "https://app.budgetanalyzer.localhost"
-        description: "Local environment (BFF)"
-      -
-        url: "https://app.budgetanalyzer.org"
-        description: "Production environment (BFF)"
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
 components:
   schemas:
     UpdateSavedViewRequest:
-      type: "object"
-      description: "Request to update a saved view"
+      type: object
+      description: Request to update a saved view
       properties:
         name:
-          type: "string"
-          description: "New name for the view"
-          example: "SF Trip December 2024"
+          type: string
+          description: New name for the view
+          example: SF Trip December 2024
           maxLength: 255
           minLength: 0
         criteria:
-          "$ref": "#/components/schemas/ViewCriteriaApi"
-          description: "New filter criteria for the view"
+          $ref: '#/components/schemas/ViewCriteriaApi'
+          description: New filter criteria for the view
         openEnded:
-          type: "boolean"
-          description: "If true, the view includes transactions up to current date"
+          type: boolean
+          description: If true, the view includes transactions up to current date
     ViewCriteriaApi:
-      type: "object"
-      description: "Filter criteria for a saved view"
+      type: object
+      description: Filter criteria for a saved view
       properties:
         startDate:
-          type: "string"
-          format: "date"
-          description: "Start date for transaction date range"
-          example: "2024-12-01"
+          type: string
+          format: date
+          description: Start date for transaction date range
+          example: '2024-12-01'
         endDate:
-          type: "string"
-          format: "date"
-          description: "End date for transaction date range (null for open-ended views)"
+          type: string
+          format: date
+          description: End date for transaction date range (null for open-ended views)
         accountIds:
-          type: "array"
-          description: "Account IDs to filter by"
+          type: array
+          description: Account IDs to filter by
           items:
-            type: "string"
+            type: string
           uniqueItems: true
         bankNames:
-          type: "array"
-          description: "Bank names to filter by"
+          type: array
+          description: Bank names to filter by
           example:
-            - "Capital One"
-            - "Truist"
+            - Capital One
+            - Truist
           items:
-            type: "string"
+            type: string
           uniqueItems: true
         currencyIsoCodes:
-          type: "array"
-          description: "Currency ISO codes to filter by"
+          type: array
+          description: Currency ISO codes to filter by
           example:
-            - "USD"
-            - "EUR"
+            - USD
+            - EUR
           items:
-            type: "string"
+            type: string
           uniqueItems: true
         minAmount:
-          type: "number"
-          description: "Minimum transaction amount"
-          example: 10
+          type: number
+          description: Minimum transaction amount
+          example: 10.0
         maxAmount:
-          type: "number"
-          description: "Maximum transaction amount"
-          example: 500
+          type: number
+          description: Maximum transaction amount
+          example: 500.0
         searchText:
-          type: "string"
-          description: "Text to match in the transaction description"
-          example: "coffee"
+          type: string
+          description: Text to match in the transaction description
+          example: coffee
     SavedViewResponse:
-      type: "object"
-      description: "Saved view response"
+      type: object
+      description: Saved view response
       properties:
         id:
-          type: "string"
-          format: "uuid"
-          description: "Unique identifier for the view"
+          type: string
+          format: uuid
+          description: Unique identifier for the view
         name:
-          type: "string"
-          description: "Name of the view"
-          example: "SF Trip December 2024"
+          type: string
+          description: Name of the view
+          example: SF Trip December 2024
         criteria:
-          "$ref": "#/components/schemas/ViewCriteriaApi"
-          description: "Filter criteria for the view"
+          $ref: '#/components/schemas/ViewCriteriaApi'
+          description: Filter criteria for the view
         openEnded:
-          type: "boolean"
-          description: "If true, the view includes transactions up to the current date"
+          type: boolean
+          description: If true, the view includes transactions up to the current date
         pinnedCount:
-          type: "integer"
-          format: "int32"
-          description: "Number of pinned transactions"
+          type: integer
+          format: int32
+          description: Number of pinned transactions
         excludedCount:
-          type: "integer"
-          format: "int32"
-          description: "Number of excluded transactions"
+          type: integer
+          format: int32
+          description: Number of excluded transactions
         transactionCount:
-          type: "integer"
-          format: "int64"
-          description: "Total number of transactions matching this view"
+          type: integer
+          format: int64
+          description: Total number of transactions matching this view
         createdAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when the view was created"
+          type: string
+          format: date-time
+          description: Timestamp when the view was created
         updatedAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when the view was last updated"
+          type: string
+          format: date-time
+          description: Timestamp when the view was last updated
       required:
-        - "createdAt"
-        - "criteria"
-        - "excludedCount"
-        - "id"
-        - "name"
-        - "openEnded"
-        - "pinnedCount"
-        - "transactionCount"
-        - "updatedAt"
+        - createdAt
+        - criteria
+        - excludedCount
+        - id
+        - name
+        - openEnded
+        - pinnedCount
+        - transactionCount
+        - updatedAt
     ApiErrorResponse:
-      description: "Standard API error response format"
+      description: Standard API error response format
       properties:
         type:
-          type: "string"
-          description: "Error type categorization for API responses"
+          type: string
+          description: Error type categorization for API responses
           enum:
-            - "INVALID_REQUEST"
-            - "VALIDATION_ERROR"
-            - "NOT_FOUND"
-            - "APPLICATION_ERROR"
-            - "SERVICE_UNAVAILABLE"
-            - "INTERNAL_ERROR"
-            - "UNAUTHORIZED"
-            - "FORBIDDEN"
-          example: "APPLICATION_ERROR"
+            - INVALID_REQUEST
+            - VALIDATION_ERROR
+            - NOT_FOUND
+            - APPLICATION_ERROR
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+          example: APPLICATION_ERROR
         message:
-          type: "string"
-          description: "Human-readable message describing the error"
-          example: "CSV format: fake-bank not supported"
+          type: string
+          description: Human-readable message describing the error
+          example: 'CSV format: fake-bank not supported'
         code:
-          type: "string"
-          description: "Machine-readable error code for specific application errors (required for APPLICATION_ERROR type)"
-          example: "CSV_PARSING_ERROR"
+          type: string
+          description: Machine-readable error code for specific application errors
+            (required for APPLICATION_ERROR type)
+          example: CSV_PARSING_ERROR
         fieldErrors:
-          type: "array"
-          description: "List of field-level validation errors (populated for VALIDATION_ERROR type)"
+          type: array
+          description: List of field-level validation errors (populated for VALIDATION_ERROR
+            type)
           items:
-            "$ref": "#/components/schemas/FieldError"
+            $ref: '#/components/schemas/FieldError'
       required:
-        - "message"
-        - "type"
+        - message
+        - type
     FieldError:
-      description: "Field-level validation error details"
+      description: Field-level validation error details
       properties:
         index:
-          type: "integer"
-          format: "int32"
-          description: "Zero-based index of the item in a batch/list that caused the error. Null for single-item validation errors."
+          type: integer
+          format: int32
+          description: Zero-based index of the item in a batch/list that caused the
+            error. Null for single-item validation errors.
           example: 44
         field:
-          type: "string"
-          description: "Field that triggered the error"
-          example: "email"
+          type: string
+          description: Field that triggered the error
+          example: email
         message:
-          type: "string"
-          description: "Error message"
-          example: "must be a valid email address"
+          type: string
+          description: Error message
+          example: must be a valid email address
         rejectedValue:
-          type: "object"
-          description: "Value that caused the error"
-          example: "invalid@email"
+          type: object
+          description: Value that caused the error
+          example: invalid@email
       required:
-        - "field"
-        - "message"
+        - field
+        - message
     UpdateStatementFormatRequest:
-      type: "object"
+      type: object
       properties:
         displayName:
-          type: "string"
+          type: string
           maxLength: 100
           minLength: 0
         bankName:
-          type: "string"
+          type: string
           maxLength: 100
           minLength: 0
         defaultCurrencyIsoCode:
-          type: "string"
+          type: string
           maxLength: 3
           minLength: 3
         dateHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         dateFormat:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         descriptionHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         creditHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         debitHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         typeHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         categoryHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         enabled:
-          type: "boolean"
+          type: boolean
     StatementFormatResponse:
-      type: "object"
+      type: object
       properties:
         id:
-          type: "integer"
-          format: "int64"
+          type: integer
+          format: int64
         formatKey:
-          type: "string"
+          type: string
         displayName:
-          type: "string"
+          type: string
         formatType:
-          type: "string"
+          type: string
           enum:
-            - "CSV"
-            - "PDF"
-            - "XLSX"
+            - CSV
+            - PDF
+            - XLSX
         bankName:
-          type: "string"
+          type: string
         defaultCurrencyIsoCode:
-          type: "string"
+          type: string
         dateHeader:
-          type: "string"
+          type: string
         dateFormat:
-          type: "string"
+          type: string
         descriptionHeader:
-          type: "string"
+          type: string
         creditHeader:
-          type: "string"
+          type: string
         debitHeader:
-          type: "string"
+          type: string
         typeHeader:
-          type: "string"
+          type: string
         categoryHeader:
-          type: "string"
+          type: string
         enabled:
-          type: "boolean"
+          type: boolean
     CreateSavedViewRequest:
-      type: "object"
-      description: "Request to create a new saved view"
+      type: object
+      description: Request to create a new saved view
       properties:
         name:
-          type: "string"
-          description: "Name of the saved view"
-          example: "SF Trip December 2024"
+          type: string
+          description: Name of the saved view
+          example: SF Trip December 2024
           maxLength: 255
           minLength: 0
         criteria:
-          "$ref": "#/components/schemas/ViewCriteriaApi"
-          description: "Filter criteria for the view"
+          $ref: '#/components/schemas/ViewCriteriaApi'
+          description: Filter criteria for the view
         openEnded:
-          type: "boolean"
-          description: "If true, the view includes transactions up to current date"
+          type: boolean
+          description: If true, the view includes transactions up to current date
           example: false
       required:
-        - "criteria"
-        - "name"
+        - criteria
+        - name
     PreviewResponse:
-      type: "object"
-      description: "Response from transaction preview containing extracted transactions"
+      type: object
+      description: Response from transaction preview containing extracted transactions
       properties:
         sourceFile:
-          type: "string"
-          description: "Original filename of the uploaded file"
-          example: "cap-one-2024.csv"
+          type: string
+          description: Original filename of the uploaded file
+          example: cap-one-2024.csv
         detectedFormat:
-          type: "string"
-          description: "Detected format key used for parsing (informational)"
-          example: "capital-one-ytd"
+          type: string
+          description: Detected format key used for parsing (informational)
+          example: capital-one-ytd
         transactions:
-          type: "array"
-          description: "List of extracted transactions ready for review"
+          type: array
+          description: List of extracted transactions ready for review
           items:
-            "$ref": "#/components/schemas/PreviewTransaction"
+            $ref: '#/components/schemas/PreviewTransaction'
         warnings:
-          type: "array"
-          description: "List of warnings for fields with potential issues. Empty for CSV extraction; populated for PDF extraction where OCR confidence may be low."
+          type: array
+          description: List of warnings for fields with potential issues. Empty for
+            CSV extraction; populated for PDF extraction where OCR confidence may
+            be low.
           items:
-            "$ref": "#/components/schemas/PreviewWarning"
+            $ref: '#/components/schemas/PreviewWarning'
     PreviewTransaction:
-      type: "object"
-      description: "Previewed transaction data before import"
+      type: object
+      description: Previewed transaction data before import
       properties:
         date:
-          type: "string"
-          format: "date"
-          description: "Date of the transaction"
-          example: "2024-04-12"
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2024-04-12'
         description:
-          type: "string"
-          description: "Description of the transaction"
-          example: "TAQUERIA DEL SOL #3"
+          type: string
+          description: Description of the transaction
+          example: 'TAQUERIA DEL SOL #3'
           minLength: 1
         amount:
-          type: "number"
-          description: "Amount of the transaction"
+          type: number
+          description: Amount of the transaction
           example: 55.12
         type:
-          type: "string"
-          description: "Type of the transaction"
+          type: string
+          description: Type of the transaction
           enum:
-            - "CREDIT"
-            - "DEBIT"
-          example: "DEBIT"
+            - CREDIT
+            - DEBIT
+          example: DEBIT
         category:
-          type: "string"
-          description: "Category extracted from source data"
-          example: "Dining"
+          type: string
+          description: Category extracted from source data
+          example: Dining
         bankName:
-          type: "string"
-          description: "Name of the bank"
-          example: "Capital One"
+          type: string
+          description: Name of the bank
+          example: Capital One
           minLength: 1
         currencyIsoCode:
-          type: "string"
-          description: "ISO currency code"
-          example: "USD"
+          type: string
+          description: ISO currency code
+          example: USD
           minLength: 1
         accountId:
-          type: "string"
-          description: "Account identifier (may be null)"
-          example: "checking-12345"
+          type: string
+          description: Account identifier (may be null)
+          example: checking-12345
       required:
-        - "amount"
-        - "bankName"
-        - "currencyIsoCode"
-        - "date"
-        - "description"
-        - "type"
+        - amount
+        - bankName
+        - currencyIsoCode
+        - date
+        - description
+        - type
     PreviewWarning:
-      type: "object"
-      description: "Warning for a specific field in a previewed transaction"
+      type: object
+      description: Warning for a specific field in a previewed transaction
       properties:
         index:
-          type: "integer"
-          format: "int32"
-          description: "Zero-based index of the transaction in the preview list"
+          type: integer
+          format: int32
+          description: Zero-based index of the transaction in the preview list
           example: 12
         field:
-          type: "string"
-          description: "Name of the field with the warning"
-          example: "amount"
+          type: string
+          description: Name of the field with the warning
+          example: amount
         message:
-          type: "string"
-          description: "Warning message"
-          example: "OCR confidence low"
+          type: string
+          description: Warning message
+          example: OCR confidence low
     BulkDeleteRequest:
-      type: "object"
-      description: "Request to bulk delete multiple transactions"
+      type: object
+      description: Request to bulk delete multiple transactions
       properties:
         ids:
-          type: "array"
-          description: "List of transaction IDs to delete"
+          type: array
+          description: List of transaction IDs to delete
           example:
             - 1
             - 2
             - 3
           items:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
           minItems: 1
       required:
-        - "ids"
+        - ids
     BulkDeleteResponse:
-      type: "object"
-      description: "Response from bulk delete operation"
+      type: object
+      description: Response from bulk delete operation
       properties:
         deletedCount:
-          type: "integer"
-          format: "int32"
-          description: "Number of transactions successfully deleted"
+          type: integer
+          format: int32
+          description: Number of transactions successfully deleted
           example: 5
         notFoundIds:
-          type: "array"
-          description: "List of transaction IDs that were not found or already deleted"
+          type: array
+          description: List of transaction IDs that were not found or already deleted
           example:
             - 999
             - 1000
           items:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
     BatchImportRequest:
-      type: "object"
-      description: "Request for batch importing transactions"
+      type: object
+      description: Request for batch importing transactions
       properties:
         transactions:
-          type: "array"
-          description: "List of transactions to import"
+          type: array
+          description: List of transactions to import
           items:
-            "$ref": "#/components/schemas/PreviewTransaction"
+            $ref: '#/components/schemas/PreviewTransaction'
           minItems: 1
       required:
-        - "transactions"
+        - transactions
     BatchImportResponse:
-      type: "object"
-      description: "Response from batch transaction import"
+      type: object
+      description: Response from batch transaction import
       properties:
         created:
-          type: "integer"
-          format: "int32"
-          description: "Number of transactions created"
+          type: integer
+          format: int32
+          description: Number of transactions created
           example: 156
         duplicatesSkipped:
-          type: "integer"
-          format: "int32"
-          description: "Number of duplicates skipped"
+          type: integer
+          format: int32
+          description: Number of duplicates skipped
           example: 3
         transactions:
-          type: "array"
-          description: "List of created transactions with IDs"
+          type: array
+          description: List of created transactions with IDs
           items:
-            "$ref": "#/components/schemas/TransactionResponse"
+            $ref: '#/components/schemas/TransactionResponse'
     TransactionResponse:
-      type: "object"
-      description: "Transaction response representing a financial transaction"
+      type: object
+      description: Transaction response representing a financial transaction
       properties:
         id:
-          type: "integer"
-          format: "int64"
-          description: "Unique identifier for the transaction"
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
           example: 1
         accountId:
-          type: "string"
-          description: "Identifier for the account associated with the transaction"
-          example: "checking-3223"
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
         bankName:
-          type: "string"
-          description: "Name of the bank where the transaction occurred"
-          example: "Capital One"
+          type: string
+          description: Name of the bank where the transaction occurred
+          example: Capital One
         date:
-          type: "string"
-          format: "date"
-          description: "Date of the transaction"
-          example: "2025-10-14"
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2025-10-14'
         currencyIsoCode:
-          type: "string"
-          description: "ISO currency code for the transaction"
-          example: "USD"
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
         amount:
-          type: "number"
-          description: "Amount of the transaction"
+          type: number
+          description: Amount of the transaction
           example: 100.5
         type:
-          type: "string"
-          description: "Type of the transaction"
+          type: string
+          description: Type of the transaction
           enum:
-            - "CREDIT"
-            - "DEBIT"
-          example: "DEBIT"
+            - CREDIT
+            - DEBIT
+          example: DEBIT
         description:
-          type: "string"
-          description: "Description of the transaction"
-          example: "Grocery shopping"
+          type: string
+          description: Description of the transaction
+          example: Grocery shopping
         createdAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when the transaction was created"
-          example: "2025-10-14T10:30:00Z"
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+          example: '2025-10-14T10:30:00Z'
         updatedAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when the transaction was last updated"
-          example: "2025-10-14T10:30:00Z"
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+          example: '2025-10-14T10:30:00Z'
       required:
-        - "amount"
-        - "bankName"
-        - "createdAt"
-        - "currencyIsoCode"
-        - "date"
-        - "description"
-        - "id"
-        - "type"
-        - "updatedAt"
+        - amount
+        - bankName
+        - createdAt
+        - currencyIsoCode
+        - date
+        - description
+        - id
+        - type
+        - updatedAt
     CreateStatementFormatRequest:
-      type: "object"
+      type: object
       properties:
         formatKey:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
-          pattern: "^[a-z0-9-]+$"
+          pattern: ^[a-z0-9-]+$
         displayName:
-          type: "string"
+          type: string
           maxLength: 100
           minLength: 0
         formatType:
-          type: "string"
+          type: string
           enum:
-            - "CSV"
-            - "PDF"
-            - "XLSX"
+            - CSV
+            - PDF
+            - XLSX
         bankName:
-          type: "string"
+          type: string
           maxLength: 100
           minLength: 0
         defaultCurrencyIsoCode:
-          type: "string"
+          type: string
           maxLength: 3
           minLength: 3
         dateHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         dateFormat:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         descriptionHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         creditHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         debitHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         typeHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
         categoryHeader:
-          type: "string"
+          type: string
           maxLength: 50
           minLength: 0
       required:
-        - "bankName"
-        - "defaultCurrencyIsoCode"
-        - "displayName"
-        - "formatKey"
-        - "formatType"
+        - bankName
+        - defaultCurrencyIsoCode
+        - displayName
+        - formatKey
+        - formatType
     TransactionUpdateRequest:
-      type: "object"
-      description: "Request to update a transaction's mutable fields"
+      type: object
+      description: Request to update a transaction's mutable fields
       properties:
         description:
-          type: "string"
-          description: "Updated description for the transaction"
-          example: "Whole Foods - groceries for dinner party"
+          type: string
+          description: Updated description for the transaction
+          example: Whole Foods - groceries for dinner party
           maxLength: 500
           minLength: 0
         accountId:
-          type: "string"
-          description: "Updated account ID to associate with the transaction"
-          example: "checking-12345"
+          type: string
+          description: Updated account ID to associate with the transaction
+          example: checking-12345
           maxLength: 100
           minLength: 0
     ViewMembershipResponse:
-      type: "object"
-      description: "Transaction IDs grouped by membership type in a saved view. Only includes active (non-deleted) transactions."
+      type: object
+      description: Transaction IDs grouped by membership type in a saved view. Only
+        includes active (non-deleted) transactions.
       properties:
         matched:
-          type: "array"
-          description: "IDs of active transactions matching view criteria (excluding excluded IDs)"
+          type: array
+          description: IDs of active transactions matching view criteria (excluding
+            excluded IDs)
           example:
             - 123
             - 456
             - 789
           items:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
         pinned:
-          type: "array"
-          description: "IDs of active transactions explicitly pinned (excluding those already matched)"
+          type: array
+          description: IDs of active transactions explicitly pinned (excluding those
+            already matched)
           example:
             - 101
             - 102
           items:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
         excluded:
-          type: "array"
-          description: "IDs of active transactions explicitly excluded from matched set"
+          type: array
+          description: IDs of active transactions explicitly excluded from matched
+            set
           example:
             - 234
           items:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
       required:
-        - "excluded"
-        - "matched"
-        - "pinned"
+        - excluded
+        - matched
+        - pinned
     TransactionFilter:
-      type: "object"
-      description: "Filter for querying transactions by various fields"
+      type: object
+      description: Filter for querying transactions by various fields
       properties:
         id:
-          type: "integer"
-          format: "int64"
-          description: "Unique identifier for the transaction"
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
           example: 1
         accountId:
-          type: "string"
-          description: "Identifier for the account associated with the transaction"
-          example: "checking-3223"
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
         bankName:
-          type: "string"
-          description: "Name of the bank where the transaction occurred"
-          example: "Capital One"
+          type: string
+          description: Name of the bank where the transaction occurred
+          example: Capital One
         dateFrom:
-          type: "string"
-          format: "date"
-          description: "Start date for transaction date range"
-          example: "2025-10-01"
+          type: string
+          format: date
+          description: Start date for transaction date range
+          example: '2025-10-01'
         dateTo:
-          type: "string"
-          format: "date"
-          description: "End date for transaction date range"
-          example: "2025-10-14"
+          type: string
+          format: date
+          description: End date for transaction date range
+          example: '2025-10-14'
         currencyIsoCode:
-          type: "string"
-          description: "ISO currency code for the transaction"
-          example: "USD"
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
         minAmount:
-          type: "number"
-          description: "Minimum transaction amount"
-          example: 10
+          type: number
+          description: Minimum transaction amount
+          example: 10.0
         maxAmount:
-          type: "number"
-          description: "Maximum transaction amount"
-          example: 500
+          type: number
+          description: Maximum transaction amount
+          example: 500.0
         type:
-          type: "string"
-          description: "Type of the transaction"
+          type: string
+          description: Type of the transaction
           enum:
-            - "CREDIT"
-            - "DEBIT"
-          example: "DEBIT"
+            - CREDIT
+            - DEBIT
+          example: DEBIT
         description:
-          type: "string"
-          description: "Text to match in the transaction description"
-          example: "Grocery"
+          type: string
+          description: Text to match in the transaction description
+          example: Grocery
         createdAfter:
-          type: "string"
-          format: "date-time"
-          description: "Start of creation timestamp range"
-          example: "2025-10-14T00:00:00Z"
+          type: string
+          format: date-time
+          description: Start of creation timestamp range
+          example: '2025-10-14T00:00:00Z'
         createdBefore:
-          type: "string"
-          format: "date-time"
-          description: "End of creation timestamp range"
-          example: "2025-10-15T00:00:00Z"
+          type: string
+          format: date-time
+          description: End of creation timestamp range
+          example: '2025-10-15T00:00:00Z'
         updatedAfter:
-          type: "string"
-          format: "date-time"
-          description: "Start of last update timestamp range"
-          example: "2025-10-14T00:00:00Z"
+          type: string
+          format: date-time
+          description: Start of last update timestamp range
+          example: '2025-10-14T00:00:00Z'
         updatedBefore:
-          type: "string"
-          format: "date-time"
-          description: "End of last update timestamp range"
-          example: "2025-10-15T00:00:00Z"
+          type: string
+          format: date-time
+          description: End of last update timestamp range
+          example: '2025-10-15T00:00:00Z'
     CurrencySeriesUpdateRequest:
-      type: "object"
-      description: "Request to update an existing currency series (currency code and provider series ID are immutable)"
+      type: object
+      description: Request to update an existing currency series (currency code and
+        provider series ID are immutable)
       properties:
         enabled:
-          type: "boolean"
-          description: "Whether this currency is enabled for exchange rate access"
+          type: boolean
+          description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-        - "enabled"
+        - enabled
     CurrencySeriesResponse:
-      type: "object"
-      description: "Currency series response with mapping details"
+      type: object
+      description: Currency series response with mapping details
       properties:
         id:
-          type: "integer"
-          format: "int64"
-          description: "Unique identifier"
+          type: integer
+          format: int64
+          description: Unique identifier
           example: 1
         currencyCode:
-          type: "string"
-          description: "ISO 4217 three-letter currency code"
-          example: "EUR"
+          type: string
+          description: ISO 4217 three-letter currency code
+          example: EUR
         providerSeriesId:
-          type: "string"
-          description: "Exchange rate provider series identifier"
-          example: "DEXUSEU"
+          type: string
+          description: Exchange rate provider series identifier
+          example: DEXUSEU
         enabled:
-          type: "boolean"
-          description: "Whether this currency is enabled for exchange rate access"
+          type: boolean
+          description: Whether this currency is enabled for exchange rate access
           example: true
         createdAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when this currency series was created"
-          example: "2025-01-15T10:30:00Z"
+          type: string
+          format: date-time
+          description: Timestamp when this currency series was created
+          example: '2025-01-15T10:30:00Z'
         updatedAt:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp when this currency series was last updated"
-          example: "2025-01-15T14:45:00Z"
+          type: string
+          format: date-time
+          description: Timestamp when this currency series was last updated
+          example: '2025-01-15T14:45:00Z'
       required:
-        - "createdAt"
-        - "currencyCode"
-        - "enabled"
-        - "id"
-        - "providerSeriesId"
-        - "updatedAt"
+        - createdAt
+        - currencyCode
+        - enabled
+        - id
+        - providerSeriesId
+        - updatedAt
     ExchangeRateImportResultResponse:
-      type: "object"
-      description: "Exchange rate import result response for a specific currency"
+      type: object
+      description: Exchange rate import result response for a specific currency
       properties:
         currencyCode:
-          type: "string"
-          description: "ISO 4217 currency code"
-          example: "EUR"
+          type: string
+          description: ISO 4217 currency code
+          example: EUR
         providerSeriesId:
-          type: "string"
-          description: "Provider series ID used for this import"
-          example: "DEXUSEU"
+          type: string
+          description: Provider series ID used for this import
+          example: DEXUSEU
         newRecords:
-          type: "integer"
-          format: "int32"
-          description: "Number of new exchange rates created"
+          type: integer
+          format: int32
+          description: Number of new exchange rates created
           example: 10
         updatedRecords:
-          type: "integer"
-          format: "int32"
-          description: "Number of exchange rates that were updated due to having a different rate than what we have stored- should never happen, rates shouldn't change"
+          type: integer
+          format: int32
+          description: Number of exchange rates that were updated due to having a
+            different rate than what we have stored- should never happen, rates shouldn't
+            change
           example: 0
         skippedRecords:
-          type: "integer"
-          format: "int32"
-          description: "Number of rows in the csv that already had matching exchange rates created in the database"
+          type: integer
+          format: int32
+          description: Number of rows in the csv that already had matching exchange
+            rates created in the database
           example: 5
         earliestExchangeRateDate:
-          type: "string"
-          format: "date"
-          description: "Date of the earliest exchange rate in this import"
-          example: "2025-01-01"
+          type: string
+          format: date
+          description: Date of the earliest exchange rate in this import
+          example: '2025-01-01'
         latestExchangeRateDate:
-          type: "string"
-          format: "date"
-          description: "Date of the latest exchange rate in this import"
-          example: "2025-10-31"
+          type: string
+          format: date
+          description: Date of the latest exchange rate in this import
+          example: '2025-10-31'
         timestamp:
-          type: "string"
-          format: "date-time"
-          description: "Timestamp of the import execution"
-          example: "2025-10-31T15:30:00Z"
+          type: string
+          format: date-time
+          description: Timestamp of the import execution
+          example: '2025-10-31T15:30:00Z'
       required:
-        - "currencyCode"
-        - "newRecords"
-        - "providerSeriesId"
-        - "skippedRecords"
-        - "timestamp"
-        - "updatedRecords"
+        - currencyCode
+        - newRecords
+        - providerSeriesId
+        - skippedRecords
+        - timestamp
+        - updatedRecords
     CurrencySeriesCreateRequest:
-      type: "object"
-      description: "Request to create a new currency series"
+      type: object
+      description: Request to create a new currency series
       properties:
         currencyCode:
-          type: "string"
-          description: "ISO 4217 three-letter currency code"
-          example: "EUR"
+          type: string
+          description: ISO 4217 three-letter currency code
+          example: EUR
           maxLength: 3
           minLength: 3
-          pattern: "^[A-Z]{3}$"
+          pattern: ^[A-Z]{3}$
         providerSeriesId:
-          type: "string"
-          description: "Exchange rate provider series identifier (e.g., DEXUSEU for EUR/USD). Must be a valid FRED series ID."
-          example: "DEXUSEU"
+          type: string
+          description: Exchange rate provider series identifier (e.g., DEXUSEU for
+            EUR/USD). Must be a valid FRED series ID.
+          example: DEXUSEU
           maxLength: 50
           minLength: 0
         enabled:
-          type: "boolean"
+          type: boolean
           default: true
-          description: "Whether this currency is enabled for exchange rate access"
+          description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-        - "currencyCode"
-        - "providerSeriesId"
+        - currencyCode
+        - providerSeriesId
     ExchangeRateResponse:
-      type: "object"
-      description: "Exchange rate response"
+      type: object
+      description: Exchange rate response
       properties:
         baseCurrency:
-          type: "string"
-          description: "Base currency (1 unit of base = rate units of target, currently only USD supported)"
-          example: "USD"
+          type: string
+          description: Base currency (1 unit of base = rate units of target, currently
+            only USD supported)
+          example: USD
         targetCurrency:
-          type: "string"
-          description: "Target currency"
-          example: "THB"
+          type: string
+          description: Target currency
+          example: THB
         date:
-          type: "string"
-          format: "date"
-          description: "Date for the given rate"
-          example: "2025-11-02"
+          type: string
+          format: date
+          description: Date for the given rate
+          example: '2025-11-02'
         rate:
-          type: "number"
-          description: "Exchange rate for the given date"
+          type: number
+          description: Exchange rate for the given date
           example: 32.68
         publishedDate:
-          type: "string"
-          format: "date"
-          description: "Date the exchange rate was published. FRED doesn't publish rates for weekends and holidays, so we use the nearest previously published rate"
-          example: "2025-10-31"
+          type: string
+          format: date
+          description: Date the exchange rate was published. FRED doesn't publish
+            rates for weekends and holidays, so we use the nearest previously published
+            rate
+          example: '2025-10-31'
       required:
-        - "baseCurrency"
-        - "date"
-        - "publishedDate"
-        - "rate"
-        - "targetCurrency"
-    TokenExchangeRequest:
-      type: "object"
-      description: "Token exchange request"
-      properties:
-        accessToken:
-          type: "string"
-          description: "IDP access token"
-      required:
-        - "accessToken"
-    TokenExchangeResponse:
-      type: "object"
-      description: "Token exchange response"
-      properties:
-        token:
-          type: "string"
-          description: "Opaque bearer token"
-          example: "abc123-session-id"
-        expiresIn:
-          type: "integer"
-          format: "int64"
-          description: "Token lifetime in seconds"
-          example: 1800
-        tokenType:
-          type: "string"
-          description: "Token type"
-          example: "Bearer"
-    WebSession:
-      type: "object"
-      properties:
-        maxIdleTime:
-          type: "string"
-        expired:
-          type: "boolean"
-        id:
-          type: "string"
-        started:
-          type: "boolean"
-        attributes:
-          type: "object"
-          additionalProperties:
-            {}
-        lastAccessTime:
-          type: "string"
-          format: "date-time"
-        creationTime:
-          type: "string"
-          format: "date-time"
-    UserInfoResponse:
-      type: "object"
-      description: "Authenticated user information"
-      properties:
-        sub:
-          type: "string"
-          description: "IDP subject identifier"
-          example: "auth0|abc123"
-        name:
-          type: "string"
-          description: "User's display name"
-          example: "Jane Doe"
-        email:
-          type: "string"
-          description: "User's email address"
-          example: "jane@example.com"
-        picture:
-          type: "string"
-          description: "Profile picture URL"
-          example: "https://example.com/photo.jpg"
-        emailVerified:
-          type: "boolean"
-          description: "Whether the user's email has been verified"
-          example: true
-        authenticated:
-          type: "boolean"
-          description: "Always true when this response is returned"
-          example: true
-        registrationId:
-          type: "string"
-          description: "OAuth2 client registration ID"
-          example: "idp"
-        roles:
-          type: "array"
-          description: "User's roles for UI visibility"
-          example:
-            - "USER"
-          items:
-            type: "string"
+        - baseCurrency
+        - date
+        - publishedDate
+        - rate
+        - targetCurrency

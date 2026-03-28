@@ -106,13 +106,23 @@ Creates and pushes release tags for services.
 Generates the checked-in unified OpenAPI artifacts used by `/api-docs`.
 
 The script fetches live `v3/api-docs` payloads from the in-cluster services via
-the Kubernetes service proxy, merges them, writes
+the Kubernetes service proxy and falls back to an in-pod localhost fetch when
+the proxy path is unavailable, then merges them and writes
 `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and keeps
 the browser-facing docs page decoupled from per-service runtime docs routes.
 
 **Usage:**
 ```bash
 ./scripts/generate-unified-api-docs.sh
+```
+
+The script exits non-zero and prints the underlying `kubectl` error to stderr if
+any service spec cannot be fetched or returns invalid OpenAPI JSON. YAML output
+uses `yq` when available and otherwise falls back to Python PyYAML or `node`.
+Override the default proxy timeout with `KUBECTL_REQUEST_TIMEOUT`, for example:
+
+```bash
+KUBECTL_REQUEST_TIMEOUT=30s ./scripts/generate-unified-api-docs.sh
 ```
 
 ## Development Scripts

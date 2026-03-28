@@ -53,6 +53,11 @@
       "name": "User",
       "description": "Authentication status and user information",
       "x-service": "session-gateway"
+    },
+    {
+      "name": "Token Exchange",
+      "description": "Token exchange for native clients",
+      "x-service": "session-gateway"
     }
   ],
   "paths": {
@@ -2436,6 +2441,100 @@
         }
       }
     },
+    "/auth/token/exchange": {
+      "post": {
+        "tags": [
+          "Token Exchange"
+        ],
+        "summary": "Exchange IDP token for session token",
+        "description": "Validates an IDP access token via userinfo, creates a session, and returns an opaque bearer token for native clients.",
+        "operationId": "exchangeToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token exchange successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid IDP access token",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      },
+      "servers": [
+        {
+          "url": "https://app.budgetanalyzer.localhost",
+          "description": "Local environment (BFF)"
+        },
+        {
+          "url": "https://app.budgetanalyzer.org",
+          "description": "Production environment (BFF)"
+        }
+      ]
+    },
     "/user": {
       "get": {
         "tags": [
@@ -2518,64 +2617,6 @@
         "responses": {
           "200": {
             "description": "OK"
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                },
-                "example": {
-                  "type": "INTERNAL_ERROR",
-                  "message": "Internal Server Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                },
-                "example": {
-                  "type": "SERVICE_UNAVAILABLE",
-                  "message": "Service Unavailable"
-                }
-              }
-            }
-          }
-        }
-      },
-      "servers": [
-        {
-          "url": "https://app.budgetanalyzer.localhost",
-          "description": "Local environment (BFF)"
-        },
-        {
-          "url": "https://app.budgetanalyzer.org",
-          "description": "Production environment (BFF)"
-        }
-      ]
-    },
-    "/.well-known/jwks.json": {
-      "get": {
-        "tags": [
-          "jwks-controller"
-        ],
-        "operationId": "jwks",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
           },
           "500": {
             "description": "Internal Server Error",
@@ -3673,6 +3714,41 @@
           "rate",
           "targetCurrency"
         ]
+      },
+      "TokenExchangeRequest": {
+        "type": "object",
+        "description": "Token exchange request",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "IDP access token"
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
+      "TokenExchangeResponse": {
+        "type": "object",
+        "description": "Token exchange response",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Opaque bearer token",
+            "example": "abc123-session-id"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Token lifetime in seconds",
+            "example": 1800
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Token type",
+            "example": "Bearer"
+          }
+        }
       },
       "WebSession": {
         "type": "object",

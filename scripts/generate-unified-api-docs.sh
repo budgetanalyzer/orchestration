@@ -5,7 +5,8 @@
 # Usage: ./scripts/generate-unified-api-docs.sh
 #
 # This script will:
-# 1. Fetch OpenAPI specs from running services through the Kubernetes service proxy
+# 1. Fetch OpenAPI specs from running services through the Kubernetes service proxy,
+#    falling back to an in-pod localhost fetch when the proxy path is unavailable
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
 #
@@ -15,7 +16,7 @@
 # This script does NOT write static files to service repos - that's the anti-pattern.
 # It also does not depend on the browser-facing gateway docs routes.
 
-set -e
+set -Eeuo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -40,9 +41,21 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+print_error_stderr() {
+    print_error "$1" >&2
+}
+
+handle_unexpected_error() {
+    local exit_code="$1"
+    local line_number="$2"
+
+    print_error_stderr "Unified OpenAPI generation failed at line ${line_number} (exit ${exit_code})."
+    exit "$exit_code"
+}
+
 require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
-        print_error "$1 is required but not installed."
+        print_error_stderr "$1 is required but not installed."
         exit 1
     fi
 }
@@ -52,15 +65,42 @@ fetch_service_spec() {
     local port="$2"
     local spec_path="$3"
     local display_name="$4"
+    local request_timeout="${KUBECTL_REQUEST_TIMEOUT:-15s}"
     local proxy_path="/api/v1/namespaces/default/services/http:${service_name}:${port}/proxy${spec_path}"
     local service_spec
+    local proxy_error
+    local exec_error
 
     print_info "Fetching ${display_name} spec via kubectl service proxy..." >&2
 
-    if ! service_spec="$(kubectl get --raw "$proxy_path" 2>/dev/null)"; then
-        print_error "Failed to fetch ${display_name} spec from service ${service_name}:${port}${spec_path}"
-        print_error "Make sure the cluster is running, the service exists, and your current kubectl context points at the local environment"
-        exit 1
+    if ! service_spec="$(kubectl --request-timeout="$request_timeout" get --raw "$proxy_path" 2>&1)"; then
+        proxy_error="$service_spec"
+        print_warning "Service proxy fetch failed for ${display_name}; retrying inside the pod..." >&2
+
+        if ! service_spec="$(
+            kubectl --request-timeout="$request_timeout" exec "deployment/${service_name}" -c "$service_name" -- sh -lc "
+                if command -v wget >/dev/null 2>&1; then
+                    wget -qO- http://127.0.0.1:${port}${spec_path}
+                elif command -v curl >/dev/null 2>&1; then
+                    curl --fail --silent --show-error http://127.0.0.1:${port}${spec_path}
+                else
+                    echo 'Neither wget nor curl is available in the container' >&2
+                    exit 127
+                fi
+            " 2>&1
+        )"; then
+            exec_error="$service_spec"
+            print_error_stderr "Failed to fetch ${display_name} spec from service ${service_name}:${port}${spec_path}"
+            print_error_stderr "Service proxy error: ${proxy_error}"
+            print_error_stderr "In-pod fallback error: ${exec_error}"
+            print_error_stderr "Make sure the cluster is running, the service exists, and your current kubectl context points at the local environment"
+            return 1
+        fi
+    fi
+
+    if ! jq -e 'type == "object" and has("openapi")' >/dev/null 2>&1 <<<"$service_spec"; then
+        print_error_stderr "Fetched ${display_name} spec is not a valid OpenAPI document."
+        return 1
     fi
 
     printf '%s' "$service_spec"
@@ -69,6 +109,8 @@ fetch_service_spec() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$REPO_ROOT/docs-aggregator"
+
+trap 'handle_unexpected_error "$?" "$LINENO"' ERR
 
 print_info "Generating unified OpenAPI specification..."
 
@@ -89,14 +131,81 @@ if command -v yq &> /dev/null; then
     fi
 fi
 
+generate_yaml_with_node() {
+    OPENAPI_JSON="$1" node - <<'EOF'
+const fs = require('fs');
+
+const input = process.env.OPENAPI_JSON || '';
+const document = JSON.parse(input);
+
+function isScalar(value) {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function formatScalar(value) {
+  if (value === null) {
+    return 'null';
+  }
+
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function formatKey(key) {
+  return /^[A-Za-z0-9_-]+$/.test(key) ? key : JSON.stringify(key);
+}
+
+function render(value, indent = 0) {
+  const pad = ' '.repeat(indent);
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return `${pad}[]`;
+    }
+
+    return value.map((item) => {
+      if (isScalar(item)) {
+        return `${pad}- ${formatScalar(item)}`;
+      }
+
+      return `${pad}-\n${render(item, indent + 2)}`;
+    }).join('\n');
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) {
+      return `${pad}{}`;
+    }
+
+    return entries.map(([key, entryValue]) => {
+      if (isScalar(entryValue)) {
+        return `${pad}${formatKey(key)}: ${formatScalar(entryValue)}`;
+      }
+
+      return `${pad}${formatKey(key)}:\n${render(entryValue, indent + 2)}`;
+    }).join('\n');
+  }
+
+  return `${pad}${formatScalar(value)}`;
+}
+
+process.stdout.write(`${render(document)}\n`);
+EOF
+}
+
 print_info "Fetching specs for merging..."
 
-if ! BUDGET_SPEC="$(fetch_service_spec "transaction-service" "8082" "/v3/api-docs" "Transaction Service")"; then
+if ! BUDGET_SPEC="$(fetch_service_spec "transaction-service" "8082" "/transaction-service/v3/api-docs" "Transaction Service")"; then
     exit 1
 fi
-print_success "✓ Fetched Budget Analyzer API spec"
+print_success "✓ Fetched Transaction Service spec"
 
-if ! CURRENCY_SPEC="$(fetch_service_spec "currency-service" "8084" "/v3/api-docs" "Currency Service")"; then
+if ! CURRENCY_SPEC="$(fetch_service_spec "currency-service" "8084" "/currency-service/v3/api-docs" "Currency Service")"; then
     exit 1
 fi
 print_success "✓ Fetched Currency Service spec"
@@ -168,35 +277,50 @@ def with_session_servers:
 
 # Save JSON output
 OUTPUT_JSON="$OUTPUT_DIR/openapi.json"
-echo "$UNIFIED_SPEC" | jq '.' > "$OUTPUT_JSON"
+TMP_JSON="$(mktemp "${OUTPUT_JSON}.tmp.XXXXXX")"
+echo "$UNIFIED_SPEC" | jq '.' > "$TMP_JSON"
+mv "$TMP_JSON" "$OUTPUT_JSON"
 print_success "✓ Generated unified OpenAPI spec (JSON): $OUTPUT_JSON"
 
 # Save YAML output if yq is available
 OUTPUT_YAML="$OUTPUT_DIR/openapi.yaml"
 YAML_GENERATED=false
+TMP_YAML="$(mktemp "${OUTPUT_YAML}.tmp.XXXXXX")"
 if [ "$HAS_YQ" = true ]; then
     if [ "$YQ_VERSION" = "go" ]; then
         # mikefarah/yq (Go version)
-        echo "$UNIFIED_SPEC" | yq -P '.' > "$OUTPUT_YAML"
+        echo "$UNIFIED_SPEC" | yq -P '.' > "$TMP_YAML"
     elif [ "$YQ_VERSION" = "python" ]; then
         # Python yq version
-        echo "$UNIFIED_SPEC" | yq -y '.' > "$OUTPUT_YAML"
+        echo "$UNIFIED_SPEC" | yq -y '.' > "$TMP_YAML"
     fi
     YAML_GENERATED=true
+    mv "$TMP_YAML" "$OUTPUT_YAML"
     print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
 else
     # Fallback: use Python if available
     if command -v python3 &> /dev/null; then
-        if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$OUTPUT_YAML" 2>/dev/null; then
+        if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$TMP_YAML" 2>/dev/null; then
             YAML_GENERATED=true
+            mv "$TMP_YAML" "$OUTPUT_YAML"
+            print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
+        elif command -v node &> /dev/null && generate_yaml_with_node "$UNIFIED_SPEC" > "$TMP_YAML"; then
+            YAML_GENERATED=true
+            mv "$TMP_YAML" "$OUTPUT_YAML"
             print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
         else
+            rm -f "$TMP_YAML"
             print_warning "yq not installed and Python yaml module not available - skipping YAML output"
-            print_info "To generate YAML output, install yq or Python PyYAML: pip install pyyaml"
+            print_info "To generate YAML output, install yq, Python PyYAML, or Node.js"
         fi
+    elif command -v node &> /dev/null && generate_yaml_with_node "$UNIFIED_SPEC" > "$TMP_YAML"; then
+        YAML_GENERATED=true
+        mv "$TMP_YAML" "$OUTPUT_YAML"
+        print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
     else
+        rm -f "$TMP_YAML"
         print_warning "yq not installed - skipping YAML output"
-        print_info "To generate YAML output, install yq: https://github.com/mikefarah/yq"
+        print_info "To generate YAML output, install yq, Python PyYAML, or Node.js"
     fi
 fi
 

@@ -69,7 +69,7 @@ Example:
 ```nginx
 location /api/v1/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=20 nodelay;
+    limit_req zone=per_ip burst=50 nodelay;
     limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;

@@ -257,7 +257,7 @@ block completion.
 ```nginx
 location /api/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=20 nodelay;
+    limit_req zone=per_ip burst=50 nodelay;
     limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;
@@ -280,7 +280,7 @@ apiClient.get('/accounts')
 ```nginx
 location /api/reports {
     set $reports_backend "http://reports-service.default.svc.cluster.local:8086";
-    limit_req zone=per_ip burst=20 nodelay;
+    limit_req zone=per_ip burst=50 nodelay;
     limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /reports-service/v1/$1 break;
     proxy_pass $reports_backend;
@@ -301,7 +301,7 @@ location /api/reports {
 ```nginx
 location /api/v1/transactions {
     set $transaction_backend "http://new-transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=20 nodelay;
+    limit_req zone=per_ip burst=50 nodelay;
     limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /new-transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;

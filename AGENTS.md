@@ -403,6 +403,8 @@ When working on this project:
 - **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
 - Ignore all files in docs/archive and docs/decisions. Never change them, they are just for historical reference.
 
+**NO GIT WRITE OPERATIONS**: Never run git commands (commit, push, checkout, reset, etc.) without explicit user request. The user controls git workflow entirely. You may suggest what to commit, but don't do it.
+
 ## Honest Discourse
 
 Do not over-validate ideas. The user wants honest pushback, not agreement.

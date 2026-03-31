@@ -43,7 +43,7 @@ tilt up           # Start everything
 ./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
-./scripts/dev/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the unified session namespace and /auth routing
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the unified session namespace and full Session Gateway auth-route contract
 ./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
 ./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
 ./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
@@ -85,7 +85,8 @@ rebuild workflow.
 `./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the
 repo-level proof that the Session Gateway cutover still matches orchestration:
 Redis ACL bootstrap uses `session:*` and `oauth2:state:*`, ext-authz keeps
-`SESSION_KEY_PREFIX=session:`, and `/auth/*` still belongs to Session Gateway.
+`SESSION_KEY_PREFIX=session:`, and `/auth/*`, `/oauth2/*`,
+`/login/oauth2/*`, `/logout`, plus `/user` still belong to Session Gateway.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
 `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase

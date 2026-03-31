@@ -190,7 +190,9 @@ fresh-cluster workflow.
 `./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
 Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
 uses `session:*` and `oauth2:state:*`, ext-authz keeps
-`SESSION_KEY_PREFIX=session:`, and `/auth/*` still routes to Session Gateway.
+`SESSION_KEY_PREFIX=session:`, and `/auth/*`, `/oauth2/*`,
+`/login/oauth2/*`, `/logout`, plus `/user` still route only to Session
+Gateway.
 Use `--static-only` for repo-level validation before login. After a browser
 login, rerun it without that flag when you want the live Redis ACL/keyspace
 proof too, or add `--require-live-session` to insist on at least one real

@@ -18,7 +18,7 @@ Usage: ./scripts/dev/verify-session-architecture-phase-5.sh [options]
 Verifies the Session Architecture Rethink Phase 5 contract:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
 - ext-authz is configured with `SESSION_KEY_PREFIX=session:`
-- `/auth/*` and the related auth paths still route to Session Gateway
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user` still route only to Session Gateway
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
 Options:
@@ -85,6 +85,191 @@ assert_file_not_contains() {
     fi
 }
 
+capture_command_output() {
+    local __resultvar="$1"
+    shift
+    local output
+
+    if ! output="$("$@" 2>&1)"; then
+        printf -v "$__resultvar" '%s' "$output"
+        return 1
+    fi
+
+    printf -v "$__resultvar" '%s' "$output"
+    return 0
+}
+
+parse_auth_route_rules() {
+    local route_yaml="$1"
+
+    awk '
+        function indent_of(line,    match_pos) {
+            match(line, /[^ ]/)
+            match_pos = RSTART
+            return match_pos ? match_pos - 1 : length(line)
+        }
+
+        BEGIN {
+            in_rules = 0
+            rules_indent = -1
+            current_rule = 0
+            path_indent = -1
+            backend_refs_indent = -1
+            current_path_type = ""
+        }
+
+        /^[[:space:]]*rules:[[:space:]]*$/ {
+            in_rules = 1
+            rules_indent = indent_of($0)
+            next
+        }
+
+        in_rules {
+            current_indent = indent_of($0)
+            if ($0 !~ /^[[:space:]]*$/ \
+                && (current_indent < rules_indent \
+                || (current_indent == rules_indent && $0 !~ /^[[:space:]]*-/))) {
+                in_rules = 0
+                path_indent = -1
+                backend_refs_indent = -1
+                current_path_type = ""
+            }
+        }
+
+        !in_rules { next }
+
+        /^[[:space:]]*-[[:space:]]*matches:[[:space:]]*$/ {
+            current_rule++
+            path_indent = -1
+            backend_refs_indent = -1
+            current_path_type = ""
+            next
+        }
+
+        path_indent >= 0 {
+            current_indent = indent_of($0)
+            if ($0 !~ /^[[:space:]]*$/ && current_indent <= path_indent) {
+                path_indent = -1
+                current_path_type = ""
+            }
+        }
+
+        backend_refs_indent >= 0 {
+            current_indent = indent_of($0)
+            if ($0 !~ /^[[:space:]]*$/ \
+                && (current_indent < backend_refs_indent \
+                || (current_indent == backend_refs_indent && $0 !~ /^[[:space:]]*-/))) {
+                backend_refs_indent = -1
+            }
+        }
+
+        /^[[:space:]]*-[[:space:]]*path:[[:space:]]*$/ {
+            path_indent = indent_of($0)
+            current_path_type = ""
+            next
+        }
+
+        path_indent >= 0 && /^[[:space:]]*type:[[:space:]]*/ {
+            current_path_type = $0
+            sub(/^[[:space:]]*type:[[:space:]]*/, "", current_path_type)
+            gsub(/"/, "", current_path_type)
+            next
+        }
+
+        path_indent >= 0 && current_path_type != "" && /^[[:space:]]*value:[[:space:]]*/ {
+            path_value = $0
+            sub(/^[[:space:]]*value:[[:space:]]*/, "", path_value)
+            gsub(/"/, "", path_value)
+            print "PATH\t" current_rule "\t" current_path_type "\t" path_value
+            next
+        }
+
+        /^[[:space:]]*backendRefs:[[:space:]]*$/ {
+            backend_refs_indent = indent_of($0)
+            next
+        }
+
+        backend_refs_indent >= 0 && /^[[:space:]]*-[[:space:]]*name:[[:space:]]*/ {
+            backend_name = $0
+            sub(/^[[:space:]]*-[[:space:]]*name:[[:space:]]*/, "", backend_name)
+            gsub(/"/, "", backend_name)
+            print "BACKEND\t" current_rule "\t" backend_name
+        }
+    ' <<<"$route_yaml"
+}
+
+rule_targets_only_session_gateway() {
+    local backend_lines="$1"
+    local backend_count=0
+    local backend_name
+
+    while IFS= read -r backend_name; do
+        [[ -z "$backend_name" ]] && continue
+        backend_count=$((backend_count + 1))
+        if [[ "$backend_name" != "session-gateway" ]]; then
+            return 1
+        fi
+    done <<<"$backend_lines"
+
+    [[ "$backend_count" -eq 1 ]]
+}
+
+assert_auth_route_contract_yaml() {
+    local route_yaml="$1"
+    local scope="$2"
+    local parsed kind rule type value key expected_label
+    local -A rule_backends=()
+    local -A rule_paths=()
+    local -A expected_paths=(
+        ["PathPrefix|/auth"]="/auth/*"
+        ["PathPrefix|/oauth2"]="/oauth2/*"
+        ["PathPrefix|/login/oauth2"]="/login/oauth2/*"
+        ["PathPrefix|/logout"]="/logout"
+        ["Exact|/user"]="/user"
+    )
+    local found bad_backend
+
+    parsed="$(parse_auth_route_rules "$route_yaml")"
+
+    while IFS=$'\t' read -r kind rule type value; do
+        [[ -z "$kind" ]] && continue
+
+        if [[ "$kind" == "BACKEND" ]]; then
+            rule_backends["$rule"]+="${type}"$'\n'
+        elif [[ "$kind" == "PATH" ]]; then
+            key="${type}|${value}"
+            if [[ -n "${expected_paths[$key]:-}" ]]; then
+                rule_paths["$rule"]+="${key}"$'\n'
+            fi
+        fi
+    done <<<"$parsed"
+
+    for key in "PathPrefix|/auth" "PathPrefix|/oauth2" "PathPrefix|/login/oauth2" "PathPrefix|/logout" "Exact|/user"; do
+        expected_label="${expected_paths[$key]}"
+        found=false
+        bad_backend=false
+
+        for rule in "${!rule_paths[@]}"; do
+            if grep -Fxq -- "$key" <<<"${rule_paths[$rule]}"; then
+                found=true
+                if rule_targets_only_session_gateway "${rule_backends[$rule]:-}"; then
+                    :
+                else
+                    bad_backend=true
+                fi
+            fi
+        done
+
+        if [[ "$bad_backend" == true ]]; then
+            fail "${scope} routes ${expected_label} to a backend other than session-gateway"
+        elif [[ "$found" == true ]]; then
+            pass "${scope} routes ${expected_label} only to session-gateway"
+        else
+            fail "${scope} is missing the ${expected_label} -> session-gateway contract"
+        fi
+    done
+}
+
 require_kubectl_resource() {
     local kind="$1"
     local name="$2"
@@ -122,6 +307,8 @@ REDIS_OPS_USERNAME=""
 REDIS_OPS_PASSWORD=""
 
 run_static_checks() {
+    local route_yaml
+
     section "Static Contract"
 
     assert_file_contains \
@@ -150,14 +337,10 @@ run_static_checks() {
         'value: "session:"' \
         "ext-authz deployment sets SESSION_KEY_PREFIX=session:"
 
-    assert_file_contains \
-        "${REPO_ROOT}/kubernetes/gateway/auth-httproute.yaml" \
-        "value: /auth" \
-        "auth-route still includes the /auth prefix"
-    assert_file_contains \
-        "${REPO_ROOT}/kubernetes/gateway/auth-httproute.yaml" \
-        "name: session-gateway" \
-        "auth-route still targets session-gateway"
+    route_yaml="$(<"${REPO_ROOT}/kubernetes/gateway/auth-httproute.yaml")"
+    assert_auth_route_contract_yaml \
+        "$route_yaml" \
+        "checked-in auth-route"
 }
 
 prepare_live_redis_context() {
@@ -180,11 +363,9 @@ run_live_checks() {
 
     if require_kubectl_resource httproute auth-route default; then
         route_yaml="$(kubectl get httproute auth-route -n default -o yaml)"
-        if grep -Fq 'value: /auth' <<<"$route_yaml" && grep -Fq 'name: session-gateway' <<<"$route_yaml"; then
-            pass "live auth-route sends /auth traffic to session-gateway"
-        else
-            fail "live auth-route does not match the checked-in Session Gateway auth routing contract"
-        fi
+        assert_auth_route_contract_yaml \
+            "$route_yaml" \
+            "live auth-route"
     else
         fail "httproute/auth-route is missing from the live cluster"
     fi
@@ -217,50 +398,65 @@ run_live_checks() {
         return
     fi
 
-    sg_acl="$(redis_exec ACL GETUSER session-gateway 2>&1 || true)"
-    if grep -Fq '~session:*' <<<"$sg_acl" && grep -Fq '~oauth2:state:*' <<<"$sg_acl" \
-        && ! grep -Fq '~spring:session:*' <<<"$sg_acl" && ! grep -Fq '~extauthz:session:*' <<<"$sg_acl"; then
-        pass "live session-gateway ACL matches the unified session namespace contract"
-    else
-        fail "live session-gateway ACL does not match the unified session namespace contract"
-    fi
-
-    ea_acl="$(redis_exec ACL GETUSER ext-authz 2>&1 || true)"
-    if grep -Fq '~session:*' <<<"$ea_acl" \
-        && ! grep -Fq '~spring:session:*' <<<"$ea_acl" && ! grep -Fq '~extauthz:session:*' <<<"$ea_acl"; then
-        pass "live ext-authz ACL matches the unified session namespace contract"
-    else
-        fail "live ext-authz ACL does not match the unified session namespace contract"
-    fi
-
-    old_spring_keys="$(redis_exec KEYS 'spring:session:*' 2>&1 || true)"
-    if [[ -z "$old_spring_keys" ]]; then
-        pass "live Redis has no spring:session:* keys"
-    else
-        fail "live Redis still has spring:session:* keys"
-    fi
-
-    old_extauthz_keys="$(redis_exec KEYS 'extauthz:session:*' 2>&1 || true)"
-    if [[ -z "$old_extauthz_keys" ]]; then
-        pass "live Redis has no extauthz:session:* keys"
-    else
-        fail "live Redis still has extauthz:session:* keys"
-    fi
-
-    session_keys="$(redis_exec KEYS 'session:*' 2>&1 || true)"
-    if [[ "$REQUIRE_LIVE_SESSION" == true ]]; then
-        if [[ -n "$session_keys" ]]; then
-            pass "live Redis has at least one session:* key"
+    if capture_command_output sg_acl redis_exec ACL GETUSER session-gateway; then
+        if grep -Fq '~session:*' <<<"$sg_acl" && grep -Fq '~oauth2:state:*' <<<"$sg_acl" \
+            && ! grep -Fq '~spring:session:*' <<<"$sg_acl" && ! grep -Fq '~extauthz:session:*' <<<"$sg_acl"; then
+            pass "live session-gateway ACL matches the unified session namespace contract"
         else
-            fail "live Redis has no session:* keys; create a session first and rerun with --require-live-session"
+            fail "live session-gateway ACL does not match the unified session namespace contract"
         fi
     else
-        pass "live Redis session:* namespace query succeeded"
-        if [[ -n "$session_keys" ]]; then
-            info "Observed live session:* keys"
+        fail "live session-gateway ACL query failed"
+    fi
+
+    if capture_command_output ea_acl redis_exec ACL GETUSER ext-authz; then
+        if grep -Fq '~session:*' <<<"$ea_acl" \
+            && ! grep -Fq '~spring:session:*' <<<"$ea_acl" && ! grep -Fq '~extauthz:session:*' <<<"$ea_acl"; then
+            pass "live ext-authz ACL matches the unified session namespace contract"
         else
-            info "No live session:* keys observed; use --require-live-session after a login if you want that stronger proof"
+            fail "live ext-authz ACL does not match the unified session namespace contract"
         fi
+    else
+        fail "live ext-authz ACL query failed"
+    fi
+
+    if capture_command_output old_spring_keys redis_exec KEYS 'spring:session:*'; then
+        if [[ -z "$old_spring_keys" ]]; then
+            pass "live Redis has no spring:session:* keys"
+        else
+            fail "live Redis still has spring:session:* keys"
+        fi
+    else
+        fail "live Redis spring:session:* query failed"
+    fi
+
+    if capture_command_output old_extauthz_keys redis_exec KEYS 'extauthz:session:*'; then
+        if [[ -z "$old_extauthz_keys" ]]; then
+            pass "live Redis has no extauthz:session:* keys"
+        else
+            fail "live Redis still has extauthz:session:* keys"
+        fi
+    else
+        fail "live Redis extauthz:session:* query failed"
+    fi
+
+    if capture_command_output session_keys redis_exec KEYS 'session:*'; then
+        if [[ "$REQUIRE_LIVE_SESSION" == true ]]; then
+            if [[ -n "$session_keys" ]]; then
+                pass "live Redis has at least one session:* key"
+            else
+                fail "live Redis has no session:* keys; create a session first and rerun with --require-live-session"
+            fi
+        else
+            pass "live Redis session:* namespace query succeeded"
+            if [[ -n "$session_keys" ]]; then
+                info "Observed live session:* keys"
+            else
+                info "No live session:* keys observed; use --require-live-session after a login if you want that stronger proof"
+            fi
+        fi
+    else
+        fail "live Redis session:* query failed"
     fi
 }
 

@@ -141,7 +141,7 @@ kubectl logs deployment/session-gateway
 kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
 # Check Redis connection (session storage) with the redis-ops ACL user
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
@@ -270,7 +270,7 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 # Check ext_authz service
 kubectl logs deployment/ext-authz
 
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
 # Verify session exists in Redis

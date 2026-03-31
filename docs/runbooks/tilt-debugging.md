@@ -215,10 +215,11 @@ Auth failures after login?
 ├── Check ext-authz health
 │   └── curl http://localhost:8090/healthz
 ├── Check Redis for session data
-│   └── REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+│   └── REDIS_OPS_USERNAME=redis-ops
 │       REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 │       kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
-└── Check Auth0 credentials secret
+└── Check Session Gateway Auth0 config and secret
+    ├── kubectl get configmap session-gateway-idp-config -o yaml
     └── kubectl get secret auth0-credentials -o yaml
 ```
 
@@ -257,7 +258,7 @@ kubectl logs -f deployment/session-gateway
 curl http://localhost:8081/actuator/health
 
 # Check Redis sessions with the redis-ops ACL user
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
@@ -473,8 +474,9 @@ kubectl logs -f deployment/nginx-gateway | grep -E "(upstream|error)"
 
 **7. Verify secrets are configured**
 ```bash
-# Auth0 credentials
-kubectl get secret auth0-credentials -o jsonpath='{.data}' | base64 -d
+# Auth0 config + secret
+kubectl get configmap session-gateway-idp-config -o yaml
+kubectl get secret auth0-credentials -o jsonpath='{.data.AUTH0_CLIENT_SECRET}' | base64 -d
 
 # PostgreSQL bootstrap admin credentials
 kubectl get secret postgresql-bootstrap-credentials -n infrastructure -o jsonpath='{.data}' | base64 -d
@@ -485,7 +487,7 @@ kubectl get secret transaction-service-postgresql-credentials -o jsonpath='{.dat
 
 **8. Check Redis for session data**
 ```bash
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
 # Should see session:* keys after login; oauth2:state:* only exists during the OAuth2 round-trip

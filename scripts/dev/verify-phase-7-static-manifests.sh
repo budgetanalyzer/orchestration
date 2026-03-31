@@ -10,6 +10,7 @@ STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-to
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/dev/check-phase-7-image-pinning.sh"
+SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/dev/check-secrets-only-handling.sh"
 
 # shellcheck source=./lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/lib/pinned-tool-versions.sh"
@@ -54,6 +55,7 @@ Runs the Phase 7 static guardrail suite:
 - kube-linter with the repo-specific security baseline
 - Kyverno CLI tests for the admission fixtures
 - generated Kyverno replay for representative approved local Tilt deploy refs
+- Tilt secret/config boundary inventory validation
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
@@ -678,6 +680,9 @@ main() {
 
     log_step "Generated Tilt local-image contract replay"
     run_generated_tilt_local_image_replay
+
+    log_step "Tilt secret/config boundary inventory"
+    "${SECRETS_ONLY_SCRIPT}"
 
     log_step "Repo-specific pattern scans"
     run_repo_pattern_scans

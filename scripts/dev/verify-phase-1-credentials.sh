@@ -21,6 +21,13 @@ source "${SCRIPT_DIR}/lib/redis-cli.sh"
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
 TMP_FILES=()
+PG_ADMIN_USER="postgres_admin"
+RMQ_ADMIN_USER="rabbitmq-admin"
+RMQ_CS_USER="currency-service"
+REDIS_OPS_USER="redis-ops"
+REDIS_SG_USER="session-gateway"
+REDIS_EA_USER="ext-authz"
+REDIS_CS_USER="currency-service"
 
 usage() {
     cat <<'EOF'
@@ -301,24 +308,17 @@ RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
 REDIS_POD=$(require_pod infrastructure app=redis Redis)
 EXT_AUTHZ_POD=$(require_pod default app=ext-authz ext-authz)
 
-PG_ADMIN_USER=$(require_secret_value infrastructure postgresql-bootstrap-credentials username)
 PG_ADMIN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials password)
 PG_TXN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials transaction-service-password)
 PG_CUR_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials currency-service-password)
 PG_PER_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials permission-service-password)
 
-RMQ_ADMIN_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials username)
 RMQ_ADMIN_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials password)
-RMQ_CS_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-username)
-RMQ_CS_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-password)
+RMQ_CS_PASS=$(require_secret_value default currency-service-rabbitmq-credentials password)
 
-REDIS_OPS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ops-username)
 REDIS_OPS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ops-password)
-REDIS_SG_USER=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-username)
 REDIS_SG_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
-REDIS_EA_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-username)
 REDIS_EA_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-password)
-REDIS_CS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-username)
 REDIS_CS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-password)
 
 section "PostgreSQL: Positive (service user -> own database)"

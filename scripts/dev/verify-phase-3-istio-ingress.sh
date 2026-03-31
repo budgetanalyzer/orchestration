@@ -97,6 +97,17 @@ decode_secret_value() {
     printf '%s' "${encoded}" | base64 -d 2>/dev/null
 }
 
+read_configmap_value() {
+    local namespace="$1" configmap_name="$2" key="$3"
+    local value
+
+    value=$(kubectl get configmap "${configmap_name}" -n "${namespace}" \
+        -o "jsonpath={.data['${key}']}" 2>/dev/null || true)
+    [[ -n "${value}" ]] || return 1
+
+    printf '%s' "${value}"
+}
+
 extract_host_from_uri() {
     local uri="$1"
     local host
@@ -1103,16 +1114,16 @@ main() {
 
     local auth0_issuer_uri expected_auth0_host auth0_host auth0_gateway_host auth0_virtual_service_host
     local auth0_output fred_host fred_output denied_output
-    auth0_issuer_uri=$(decode_secret_value default auth0-credentials AUTH0_ISSUER_URI || true)
+    auth0_issuer_uri=$(read_configmap_value default session-gateway-idp-config AUTH0_ISSUER_URI || true)
     if [[ -n "$auth0_issuer_uri" ]]; then
         expected_auth0_host=$(extract_host_from_uri "$auth0_issuer_uri" || true)
         if [[ -n "$expected_auth0_host" ]]; then
-            pass "auth0-credentials AUTH0_ISSUER_URI resolves to host ${expected_auth0_host}"
+            pass "session-gateway-idp-config AUTH0_ISSUER_URI resolves to host ${expected_auth0_host}"
         else
-            fail "Could not parse hostname from auth0-credentials AUTH0_ISSUER_URI"
+            fail "Could not parse hostname from session-gateway-idp-config AUTH0_ISSUER_URI"
         fi
     else
-        fail "Could not determine AUTH0_ISSUER_URI from secret auth0-credentials"
+        fail "Could not determine AUTH0_ISSUER_URI from configmap session-gateway-idp-config"
     fi
 
     auth0_host=$(kubectl get serviceentry auth0-idp -n default -o jsonpath='{.spec.hosts[0]}' 2>/dev/null || true)
@@ -1120,7 +1131,7 @@ main() {
         if [[ -n "${expected_auth0_host:-}" && "$auth0_host" == "$expected_auth0_host" ]]; then
             pass "Auth0 ServiceEntry host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
         elif [[ -n "${expected_auth0_host:-}" ]]; then
-            fail "Auth0 ServiceEntry host is ${auth0_host} (expected ${expected_auth0_host} from auth0-credentials)"
+            fail "Auth0 ServiceEntry host is ${auth0_host} (expected ${expected_auth0_host} from session-gateway-idp-config)"
         fi
 
         auth0_gateway_host=$(kubectl get gateway.networking.istio.io istio-egress-gateway -n default \
@@ -1128,7 +1139,7 @@ main() {
         if [[ -n "${expected_auth0_host:-}" && "$auth0_gateway_host" == "$expected_auth0_host" ]]; then
             pass "Auth0 egress Gateway host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
         elif [[ -n "${expected_auth0_host:-}" ]]; then
-            fail "Auth0 egress Gateway host is ${auth0_gateway_host:-missing} (expected ${expected_auth0_host} from auth0-credentials)"
+            fail "Auth0 egress Gateway host is ${auth0_gateway_host:-missing} (expected ${expected_auth0_host} from session-gateway-idp-config)"
         fi
 
         auth0_virtual_service_host=$(kubectl get virtualservice.networking.istio.io auth0-via-egress -n default \
@@ -1136,7 +1147,7 @@ main() {
         if [[ -n "${expected_auth0_host:-}" && "$auth0_virtual_service_host" == "$expected_auth0_host" ]]; then
             pass "Auth0 VirtualService host matches AUTH0_ISSUER_URI hostname (${expected_auth0_host})"
         elif [[ -n "${expected_auth0_host:-}" ]]; then
-            fail "Auth0 VirtualService host is ${auth0_virtual_service_host:-missing} (expected ${expected_auth0_host} from auth0-credentials)"
+            fail "Auth0 VirtualService host is ${auth0_virtual_service_host:-missing} (expected ${expected_auth0_host} from session-gateway-idp-config)"
         fi
 
         auth0_output=$(kubectl exec deployment/session-gateway -c session-gateway -- \

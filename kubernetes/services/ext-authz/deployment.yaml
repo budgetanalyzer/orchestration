@@ -31,22 +31,13 @@ spec:
           name: health
         env:
         - name: REDIS_HOST
-          valueFrom:
-            secretKeyRef:
-              name: ext-authz-redis-credentials
-              key: host
+          value: "redis.infrastructure"
         - name: REDIS_PORT
-          valueFrom:
-            secretKeyRef:
-              name: ext-authz-redis-credentials
-              key: port
+          value: "6379"
         - name: REDIS_ADDR
           value: "$(REDIS_HOST):$(REDIS_PORT)"
         - name: REDIS_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: ext-authz-redis-credentials
-              key: username
+          value: "ext-authz"
         - name: REDIS_EXT_AUTHZ_PASSWORD
           valueFrom:
             secretKeyRef:

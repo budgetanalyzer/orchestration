@@ -366,7 +366,8 @@ Common causes:
 
 1. Verify credentials are set:
    ```bash
-   kubectl get secret auth0-credentials -o jsonpath='{.data.client-id}' | base64 -d
+   kubectl get configmap session-gateway-idp-config -o jsonpath='{.data.AUTH0_CLIENT_ID}'
+   kubectl get secret auth0-credentials -o jsonpath='{.data.AUTH0_CLIENT_SECRET}' | base64 -d
    ```
 
 2. Check session-gateway logs:

@@ -39,10 +39,7 @@ spec:
               cpu: 500m
           env:
             - name: RABBITMQ_DEFAULT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: rabbitmq-bootstrap-credentials
-                  key: username
+              value: "rabbitmq-admin"
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom:
                 secretKeyRef:

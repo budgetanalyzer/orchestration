@@ -37,7 +37,7 @@ From your **host terminal** (not the devcontainer):
 ```bash
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
-vim .env          # Review infra password defaults; add Auth0 + FRED credentials
+vim .env          # Review infra password defaults; add Auth0 config/client secret and FRED API key
 ./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
 tilt up           # Start everything
 ./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
@@ -55,6 +55,10 @@ tilt up           # Start everything
 Open https://app.budgetanalyzer.localhost when services are green.
 
 Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
+The repo also ships a checked-in fallback
+`ConfigMap/session-gateway-idp-config`, and Tilt overwrites its non-secret
+Session Gateway Auth0 settings from `.env`, while
+`Secret/auth0-credentials` now carries only `AUTH0_CLIENT_SECRET`.
 PostgreSQL uses a `postgres_admin` bootstrap user plus distinct per-service
 database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
 broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,

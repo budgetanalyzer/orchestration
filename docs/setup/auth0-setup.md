@@ -36,7 +36,7 @@ AUTH0_ISSUER_URI=https://dev-abc123.us.auth0.com/
 
 That same `AUTH0_ISSUER_URI` value also drives the Istio Auth0 egress allowlist
 through `scripts/dev/render-istio-egress-config.sh`. If you change tenants,
-re-render or reapply the egress config so the Session Gateway secret and the
+re-render or reapply the egress config so `session-gateway-idp-config` and the
 Istio allowlist stay aligned.
 
 ### Application URIs
@@ -88,11 +88,14 @@ AUTH0_CLIENT_SECRET=your-client-secret-here
 # IDP_LOGOUT_RETURN_TO=https://app.budgetanalyzer.localhost/peace
 ```
 
-Tilt reads that value into `auth0-credentials` and also renders the Auth0
-egress `ServiceEntry`, egress `Gateway`, and `VirtualService` from the same URI.
-Production deployers should preserve that same contract: whichever system
-creates `auth0-credentials` must also feed the same `AUTH0_ISSUER_URI` into the
-egress rendering/apply step.
+The repo ships a checked-in fallback `ConfigMap/session-gateway-idp-config` for
+non-Tilt applies. Tilt overwrites `AUTH0_ISSUER_URI`, `AUTH0_CLIENT_ID`,
+`IDP_AUDIENCE`, and `IDP_LOGOUT_RETURN_TO` from `.env`, keeps only
+`AUTH0_CLIENT_SECRET` in `Secret/auth0-credentials`, and renders the Auth0
+egress `ServiceEntry`, egress `Gateway`, and `VirtualService` from the same
+URI. Production deployers should preserve that same contract: whichever system
+creates the Session Gateway IDP config must also feed the same
+`AUTH0_ISSUER_URI` into the egress rendering/apply step.
 
 ## Troubleshooting
 

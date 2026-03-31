@@ -11,7 +11,7 @@ Phase 1 Step 2 hardens that local PostgreSQL path:
 - PostgreSQL bootstrap credentials come from `postgresql-bootstrap-credentials`
   instead of inline manifest values.
 - The bootstrap superuser is now `postgres_admin`.
-- Each consuming service gets its own PostgreSQL connection secret and its own
+- Each consuming service gets its own PostgreSQL password secret and its own
   database user.
 - First-time bootstrap uses a shell init script that reads per-service
   passwords from Kubernetes Secrets and stores them with SCRAM-SHA-256.
@@ -45,9 +45,7 @@ contract:
 
 Each service secret uses the same keys:
 
-- `username`
 - `password`
-- `url`
 
 ## Relevant .env Variables
 
@@ -105,7 +103,7 @@ Tilt will:
 
 1. Deploy the PostgreSQL StatefulSet to the `infrastructure` namespace.
 2. Generate `postgresql-bootstrap-credentials`.
-3. Generate one PostgreSQL connection secret per consuming service.
+3. Generate one PostgreSQL password secret per consuming service.
 4. Start PostgreSQL with SCRAM-SHA-256 auth enabled.
 5. Enable the PostgreSQL SSL listener with the `infra-tls-postgresql`
    certificate.
@@ -180,8 +178,10 @@ For manual in-cluster TLS checks, use the Kubernetes DNS name plus the mounted
 jdbc:postgresql://postgresql.infrastructure:5432/<database>?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt
 ```
 
-The corresponding service deployment reads the exact URL, username, and
-password from its own `*-postgresql-credentials` secret.
+The corresponding service deployment reads the password from its own
+`*-postgresql-credentials` secret. The JDBC URL and username stay in the
+checked-in deployment manifest because they are ordinary connection metadata,
+not secrets.
 
 ## Adding a New Database
 
@@ -193,9 +193,9 @@ When adding a new microservice that needs its own database:
    service role and database mapping.
 3. Add a dedicated secret in `Tiltfile` with the pattern
    `your-service-postgresql-credentials`.
-4. Populate that service secret with `username`, `password`, and a JDBC `url`
-   that includes `sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt`.
-5. Update the consuming deployment to read from that service-specific secret.
+4. Populate that service secret with the service password only.
+5. Update the consuming deployment with the checked-in JDBC `url` and
+   `username`, plus the service-specific secret-backed password.
 6. Mount the `infra-ca` secret in the consuming deployment at
    `/etc/ssl/infra`.
 
@@ -245,7 +245,8 @@ Ensure the service:
 
 1. Uses `postgresql.infrastructure` as the hostname.
 2. Reads from its own `*-postgresql-credentials` secret.
-3. Uses the correct `url`, `username`, and `password` keys.
+3. Uses the checked-in `SPRING_DATASOURCE_URL` and `SPRING_DATASOURCE_USERNAME`
+   values plus the secret-backed `password`.
 4. Is connecting with its own database user, not `postgres_admin`.
 
 ### PostgreSQL Pod Not Starting

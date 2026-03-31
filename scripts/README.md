@@ -135,7 +135,8 @@ Key scripts:
 - `scripts/dev/check-tilt-prerequisites.sh` - Tooling/repo preflight checks and optional runtime security verification.
 - `scripts/dev/setup-k8s-tls.sh` - Host-only bootstrap for the browser-facing wildcard certificate and TLS secret.
 - `scripts/dev/setup-infra-tls.sh` - Host-only bootstrap for the internal `infra-ca` plus the Redis/PostgreSQL/RabbitMQ TLS secrets. `setup.sh` calls it during the standard local platform bootstrap.
-- `scripts/dev/render-istio-egress-config.sh` - Renders or applies the checked-in Auth0/FRED Istio egress manifests. The Auth0 host is derived from `AUTH0_ISSUER_URI` so the egress allowlist can stay aligned with the `auth0-credentials` secret in both local Tilt and production secret-sourcing flows.
+- `scripts/dev/render-istio-egress-config.sh` - Renders or applies the checked-in Auth0/FRED Istio egress manifests. The Auth0 host is derived from `AUTH0_ISSUER_URI` so the egress allowlist can stay aligned with `ConfigMap/session-gateway-idp-config` in both local Tilt and production config-sourcing flows.
+- `scripts/dev/check-secrets-only-handling.sh` - Static inventory check for the local Tilt-generated secret payloads. It fails if non-secret config keys drift back into Kubernetes `Secret` objects without an explicit inventory update.
 - `scripts/dev/seed-ext-authz-session.sh` - Seeds a test ext-authz session in Redis using the TLS-only in-cluster Redis listener.
 - `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
 - `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio readiness, and the retained Kyverno smoke-policy bootstrap check that now runs alongside the broader Phase 7 admission suite).

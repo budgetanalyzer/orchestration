@@ -202,7 +202,7 @@ Check prerequisites:
 **First-time setup**:
 ```bash
 ./setup.sh        # Recreates the kind cluster from scratch, installs Calico, ensures supported Helm, refreshes the Istio Helm repo index, configures certs (browser + infra TLS), DNS, and .env
-# Edit .env with your Auth0 and FRED API credentials
+# Edit .env with your Auth0 config/client secret and FRED API key
 ```
 
 ### Quick Start

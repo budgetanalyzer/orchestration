@@ -27,6 +27,8 @@ RABBITMQ_PROBE="phase4-rabbitmq-client"
 WAIT_TIMEOUT="120s"
 TEMP_LABEL_KEY="verify-phase4-temp"
 TEMP_LABEL_VALUE="true"
+REDIS_SESSION_GATEWAY_USERNAME="session-gateway"
+POSTGRES_TRANSACTION_USERNAME="transaction_service"
 
 PASSED=0
 FAILED=0
@@ -585,9 +587,9 @@ main() {
     require_secret_exists infrastructure infra-tls-postgresql
     require_secret_exists infrastructure infra-tls-rabbitmq
 
-    REDIS_USERNAME=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-username)
+    REDIS_USERNAME="${REDIS_SESSION_GATEWAY_USERNAME}"
     REDIS_PASSWORD=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
-    PG_USERNAME=$(require_secret_value default transaction-service-postgresql-credentials username)
+    PG_USERNAME="${POSTGRES_TRANSACTION_USERNAME}"
     PG_PASSWORD=$(require_secret_value default transaction-service-postgresql-credentials password)
     RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
 

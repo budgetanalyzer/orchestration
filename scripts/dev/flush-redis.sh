@@ -39,9 +39,9 @@ fi
 echo -e "${YELLOW}Using Redis pod: $REDIS_POD${NC}"
 echo ""
 
-# Read ops password from the Redis bootstrap secret.
-# flush-redis uses FLUSHALL which requires admin-level access (redis-ops in Step 4).
-REDIS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+# Read the redis-ops password from the Redis bootstrap secret.
+# flush-redis uses FLUSHALL which requires admin-level access.
+REDIS_USERNAME="redis-ops"
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
 # Flush all Redis data over the Redis server's TLS-only listener.

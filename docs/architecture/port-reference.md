@@ -16,7 +16,7 @@
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |
 | 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients) | Internal (services only) |
-| 6379 | Redis | TCP/TLS | TLS-only session storage (Spring Session + ext_authz schema), caching | Internal (services only) |
+| 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
 
@@ -32,7 +32,7 @@
 - **9002** - ext_authz HTTP (session validation, header injection)
 - **8090** - ext_authz health (HTTP health probes)
 - **8080** - NGINX Gateway (API routing, backend/API rate limiting)
-- **8081** - Session Gateway (BFF, session management)
+- **8081** - Session Gateway (auth, session management)
 
 ### Business Services Layer (Internal)
 - **8082** - Transaction Service
@@ -43,7 +43,7 @@
 
 ### Infrastructure Layer (Internal)
 - **5432** - PostgreSQL (database, client cert trust anchored by `infra-ca`)
-- **6379** - Redis (TLS-only session storage + ext_authz schema)
+- **6379** - Redis (TLS-only session hash storage)
 - **5671** - RabbitMQ (TLS-only AMQPS messaging)
 - **15672** - RabbitMQ Management UI
 
@@ -82,7 +82,7 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 
 **Gateway Layer (8080-8090, 9002)**:
 - 8080: NGINX Gateway (API routing)
-- 8081: Session Gateway (BFF)
+- 8081: Session Gateway (auth)
 - 9002: ext_authz HTTP (session validation)
 - 8090: ext_authz health
 
@@ -188,6 +188,6 @@ kubectl get svc -n istio-ingress
 
 ## Related Documentation
 
-- **BFF + API Gateway Pattern**: [bff-api-gateway-pattern.md](bff-api-gateway-pattern.md)
+- **Session Edge Authorization + API Gateway Pattern**: [session-edge-authorization-pattern.md](session-edge-authorization-pattern.md)
 - **NGINX Configuration**: [../../nginx/README.md](../../nginx/README.md)
 - **Security Architecture**: [security-architecture.md](security-architecture.md)

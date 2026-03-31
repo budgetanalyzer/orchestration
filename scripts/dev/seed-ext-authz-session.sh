@@ -25,7 +25,7 @@ SESSION_ID="${1:-test-session-001}"
 EXPIRES_AT=$(date -d '+30 minutes' +%s 2>/dev/null || date -v+30M +%s)
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" HSET \
-    "extauthz:session:${SESSION_ID}" \
+    "session:${SESSION_ID}" \
     user_id "test-user-001" \
     roles "ROLE_USER,ROLE_ADMIN" \
     permissions "transactions:read,transactions:write,currencies:read" \
@@ -33,6 +33,6 @@ redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSW
     expires_at "${EXPIRES_AT}" >/dev/null
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" EXPIRE \
-    "extauthz:session:${SESSION_ID}" 1800 >/dev/null
+    "session:${SESSION_ID}" 1800 >/dev/null
 
-echo "Seeded session: extauthz:session:${SESSION_ID}"
+echo "Seeded session: session:${SESSION_ID}"

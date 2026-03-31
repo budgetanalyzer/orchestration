@@ -33,6 +33,9 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 # Validate Phase 1 credential isolation
 ./scripts/dev/verify-phase-1-credentials.sh
 
+# Validate the Session Architecture Rethink Phase 5 contract
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only
+
 # Validate Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
 
@@ -40,7 +43,16 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 ./scripts/dev/verify-phase-3-istio-ingress.sh
 ```
 
-`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. The browser login page is `/login`; the actual OAuth2 redirect starts at `/oauth2/authorization/idp` and returns to `/login/oauth2/code/idp`.
+`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform
+baseline. `./scripts/dev/verify-session-architecture-phase-5.sh` proves the
+unified Redis session namespace and `/auth/*` ownership contract.
+`./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
+gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
+`/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
+browser sessions are extended by `GET /auth/session`. The browser only carries
+an opaque `SESSION` cookie; Session Gateway keeps the session data in Redis
+under `session:{id}` and the temporary OAuth2 request state under
+`oauth2:state:{state}`.
 
 ### Port Mapping
 
@@ -188,8 +200,14 @@ Auth failures after login?
 │   │   └── Session Gateway not setting cookie after login
 │   │       └── kubectl logs -f deployment/session-gateway
 │   └── Request has SESSION cookie but still 401/403?
-│       └── ext_authz session validation failing
-│           └── kubectl logs -f deployment/ext-authz
+│       ├── Probe the heartbeat directly with that cookie
+│       │   └── curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+│       ├── /auth/session returns 401?
+│       │   └── Session missing/expired or IDP grant revoked
+│       │       └── kubectl logs -f deployment/session-gateway
+│       └── /auth/session returns 200 but /api/* still fails?
+│           └── ext_authz session validation or permission injection failing
+│               └── kubectl logs -f deployment/ext-authz
 ├── Check ext-authz health
 │   └── curl http://localhost:8090/healthz
 ├── Check Redis for session data
@@ -237,8 +255,17 @@ curl http://localhost:8081/actuator/health
 # Check Redis sessions with the redis-ops ACL user
 REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "extauthz:session:*"
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
+
+# Test the heartbeat with a copied browser session cookie
+curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+
+# Inspect one specific session hash if you have the cookie value
+kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
+
+# Verify the full Session Architecture Rethink Phase 5 contract
+./scripts/dev/verify-session-architecture-phase-5.sh
 
 # Flush all Redis data (clears all sessions)
 ./scripts/dev/flush-redis.sh
@@ -247,6 +274,8 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
+- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway
+- `IDP grant revoked for sessionId=` or `IDP token refresh failed for sessionId=` - Auth0 refresh or revocation checks are breaking heartbeats
 
 ### RabbitMQ
 
@@ -391,6 +420,9 @@ curl http://localhost:8080/health
 # 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
 curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
+
+# 4. Probe the heartbeat path with the same cookie
+curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
 ```
 
 ---
@@ -452,7 +484,7 @@ kubectl get secret transaction-service-postgresql-credentials -o jsonpath='{.dat
 REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
-# Should see session keys after login
+# Should see session:* keys after login; oauth2:state:* only exists during the OAuth2 round-trip
 ```
 
 ### Common Causes

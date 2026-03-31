@@ -8,7 +8,7 @@
 
 This project demonstrates production-grade patterns:
 
-- **Authentication**: OAuth2/OIDC with Auth0, BFF pattern, session management
+- **Authentication**: OAuth2/OIDC with Auth0, session-based edge authorization, session management
 - **API Gateway**: Session validation (ext_authz), auth-path throttling at Istio ingress, API routing and API-path throttling at NGINX
 - **Microservices**: Spring Boot, Kubernetes, Tilt local development
 
@@ -75,7 +75,7 @@ The local `/_prod-smoke/` verification path is a separate Tilt `local_resource`:
 - [transaction-service](https://github.com/budgetanalyzer/transaction-service) - Transaction API
 - [currency-service](https://github.com/budgetanalyzer/currency-service) - Currency API
 - [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) - React frontend
-- [session-gateway](https://github.com/budgetanalyzer/session-gateway) - Authentication BFF
+- [session-gateway](https://github.com/budgetanalyzer/session-gateway) - OAuth2 authentication and session management
 
 ## License
 

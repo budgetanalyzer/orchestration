@@ -10,7 +10,7 @@ M2M (Machine-to-Machine) authentication allows external systems to securely acce
 
 | Use Case | Authentication Method |
 |----------|----------------------|
-| Browser-based user access | BFF pattern (Session Gateway + session cookies) |
+| Browser-based user access | Session-based auth (Session Gateway + session cookies) |
 | Third-party integrations | M2M (Token exchange → opaque bearer token) |
 | Backend service-to-service | Network isolation (mTLS planned) |
 | Mobile apps (future) | Native Auth0 SDK + token exchange |
@@ -18,13 +18,13 @@ M2M (Machine-to-Machine) authentication allows external systems to securely acce
 
 ## Architecture Comparison
 
-### Browser Authentication Flow (BFF Pattern)
+### Browser Authentication Flow (Session-Based)
 
 ```
 Browser → Envoy (app.budgetanalyzer.localhost, :443)
     ↓ (auth paths)
 Session Gateway (8081)
-    ↓ (session cookie → dual-write to Redis)
+    ↓ (session cookie → write session hash to Redis)
 Envoy ext_authz
     ↓ (session validation, header injection)
 NGINX → Backend Services
@@ -32,7 +32,7 @@ NGINX → Backend Services
 
 **Characteristics:**
 - Session cookies (HTTP-only, Secure, SameSite)
-- Session data stored server-side in Redis (Spring Session + ext_authz schema)
+- Session data stored server-side as Redis hashes (`session:{id}`)
 - Stateful (session must exist in Redis)
 - User-interactive OAuth2 flows
 
@@ -50,7 +50,7 @@ NGINX → Backend Services
 
 **Characteristics:**
 - Opaque bearer tokens (not JWTs on the wire)
-- Server-managed session in Redis (ext_authz schema)
+- Server-managed session in Redis (session hash)
 - Token exchange creates session with scoped permissions
 - Instant revocation via Redis key deletion
 
@@ -102,7 +102,7 @@ Content-Type: application/json
 1. Client sends IDP access token to Session Gateway via `/auth/token/exchange`
 2. Session Gateway validates token against IDP userinfo endpoint
 3. Session Gateway fetches permissions from permission-service
-4. Session Gateway creates session and dual-writes to ext_authz Redis schema
+4. Session Gateway creates session hash in Redis (`session:{id}`)
 5. Session Gateway returns opaque session bearer token
 6. Client stores token securely (NOT in browser)
 
@@ -117,7 +117,7 @@ Authorization: Bearer <opaque-session-id>
 **Flow through infrastructure:**
 1. Request arrives at Envoy (:443)
 2. Envoy calls ext_authz (:9002)
-3. ext_authz looks up session in Redis (`extauthz:session:{token}`)
+3. ext_authz looks up session in Redis (`session:{token}`)
 4. ext_authz validates session (checks expiry, reads permissions)
 5. ext_authz injects `X-User-Id`, `X-Roles`, `X-Permissions` headers
 6. Envoy routes to NGINX (:8080) with injected headers
@@ -160,7 +160,7 @@ M2M clients use scopes resolved from permission-service:
 **Immediate Response:**
 
 1. **Session Revocation**
-   - Delete ext_authz Redis sessions for the compromised client
+   - Delete Redis session hashes for the compromised client
    - Next request immediately fails at ext_authz
    - **Timeline:** Immediate (next request rejected)
 
@@ -317,11 +317,11 @@ M2M clients have separate rate limits:
 
 ## Comparison with User Authentication
 
-| Aspect | User (BFF) | M2M Client |
+| Aspect | User (Browser) | M2M Client |
 |--------|-----------|------------|
 | **Auth flow** | Authorization Code + PKCE | Client Credentials → Token Exchange |
 | **Token on wire** | Session cookie (opaque) | Bearer token (opaque) |
-| **Session storage** | Redis (Spring Session + ext_authz) | Redis (ext_authz) |
+| **Session storage** | Redis session hash | Redis session hash |
 | **Token lifetime** | 30 minutes (sliding) | 30 minutes |
 | **Refresh** | Proactive (Session Gateway) | Re-exchange before expiry |
 | **Session cookies** | Yes (HTTP-only) | No |

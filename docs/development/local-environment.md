@@ -147,6 +147,10 @@ open https://app.budgetanalyzer.localhost
 # Optional but recommended: prove the Phase 1 credential split
 ./scripts/dev/verify-phase-1-credentials.sh
 
+# Optional but recommended: prove the Session Architecture Rethink Phase 5
+# contract from orchestration before you log in
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only
+
 # Optional but recommended: prove the Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
 
@@ -183,6 +187,14 @@ clean-start proof for the seven expected app deployments in `default`. Run it
 after `tilt up` when you want the specific admission regression check from the
 fresh-cluster workflow.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
+Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
+uses `session:*` and `oauth2:state:*`, ext-authz keeps
+`SESSION_KEY_PREFIX=session:`, and `/auth/*` still routes to Session Gateway.
+Use `--static-only` for repo-level validation before login. After a browser
+login, rerun it without that flag when you want the live Redis ACL/keyspace
+proof too, or add `--require-live-session` to insist on at least one real
+`session:*` key.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
@@ -541,6 +553,8 @@ Redis local access:
 - `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
+- `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
+- active browser sessions are extended through same-origin `GET /auth/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
 - The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
 
 RabbitMQ local access:

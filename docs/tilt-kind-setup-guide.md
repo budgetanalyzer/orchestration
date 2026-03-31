@@ -321,7 +321,7 @@ After all services are healthy:
 | 5671 | RabbitMQ | AMQPS |
 | 15672 | RabbitMQ | Management UI |
 | 8080 | nginx-gateway | API Gateway (internal) |
-| 8081 | session-gateway | BFF (internal) |
+| 8081 | session-gateway | Auth (internal) |
 | 8082 | transaction-service | Business Logic |
 | 8084 | currency-service | Business Logic |
 | 5005 | transaction-service | Debug (JDWP) |

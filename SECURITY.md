@@ -32,10 +32,16 @@ This policy applies to all repositories in the Budget Analyzer organization:
 
 ## Security Architecture
 
-Budget Analyzer implements defense-in-depth security patterns. For details, see:
+Budget Analyzer implements defense-in-depth security patterns. Browsers
+authenticate through Session Gateway, receive an opaque `SESSION` cookie, and
+keep the server-side session alive with same-origin `GET /auth/session`
+heartbeats. Session state lives in Redis hashes that ext-authz reads at the
+Istio ingress, so browser clients never receive long-lived API tokens.
+
+For details, see:
 
 - [Security Architecture](docs/architecture/security-architecture.md)
-- [BFF Security Benefits](docs/architecture/bff-security-benefits.md)
+- [Session Security Benefits](docs/architecture/session-security-benefits.md)
 
 ## Supported Versions
 

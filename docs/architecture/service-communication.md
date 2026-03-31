@@ -247,7 +247,7 @@ const rates = await fetch('/api/v1/exchange-rates');
 ```
 
 **Instead:**
-- Gateway or BFF aggregates if needed
+- Gateway aggregates if needed
 - Single API endpoint returns complete data
 - Backend handles data composition
 

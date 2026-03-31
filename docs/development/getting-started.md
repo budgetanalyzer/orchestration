@@ -43,6 +43,7 @@ tilt up           # Start everything
 ./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the unified session namespace and /auth routing
 ./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
 ./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
 ./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
@@ -81,6 +82,12 @@ admission contract stays aligned with the manifest-literal inventory.
 clean-start proof for the seven app deployments in `default`; run it after
 `tilt up` when you want the specific admission-regression check from the clean
 rebuild workflow.
+`./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the
+repo-level proof that the Session Gateway cutover still matches orchestration:
+Redis ACL bootstrap uses `session:*` and `oauth2:state:*`, ext-authz keeps
+`SESSION_KEY_PREFIX=session:`, and `/auth/*` still belongs to Session Gateway.
+After logging in once, rerun the verifier without `--static-only` or with
+`--require-live-session` when you want the live Redis ACL/keyspace proof too.
 `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
 7 completion command; it runs the Session 6 static gate and then the Session 7
 live runtime proof in order. The narrower
@@ -117,6 +124,12 @@ main app. The `/api-docs` route uses a docs-only relaxed CSP (the stock Swagger
 UI bundle needs `'unsafe-inline'` in `style-src`). The main app and `/api/*`
 routes are not affected — they keep the strict CSP. The docs route is public,
 read-only, and serves self-hosted assets with no CDN dependency.
+The browser-visible login page is `/login`; it starts the real OAuth2 flow at
+`/oauth2/authorization/idp`. After sign-in, the frontend keeps the opaque
+`SESSION` cookie alive with same-origin `GET /auth/session` heartbeats while
+the user is active. Session Gateway stores browser sessions as `session:{id}`
+hashes in Redis and uses temporary `oauth2:state:{state}` hashes for the
+OAuth2 round-trip.
 
 - **Application**: https://app.budgetanalyzer.localhost
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs

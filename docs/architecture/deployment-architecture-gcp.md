@@ -854,7 +854,7 @@ spec:
 # application.yml (Session Gateway)
 session:
   key-prefix: "session:"
-  ttl-seconds: 1800
+  ttl-seconds: 900
 spring:
   data:
     redis:
@@ -2147,11 +2147,11 @@ export const config = configs[env as keyof typeof configs];
        password: 'testpassword',
      });
      check(loginRes, { 'login successful': (r) => r.status === 200 });
-     let sessionCookie = loginRes.cookies['SESSION'];
+     let sessionCookie = loginRes.cookies['BA_SESSION'];
 
      // Get transactions
      let txRes = http.get('https://api.budgetanalyzer.com/api/v1/transactions', {
-       cookies: { SESSION: sessionCookie },
+       cookies: { BA_SESSION: sessionCookie },
      });
      check(txRes, { 'transactions fetched': (r) => r.status === 200 });
 
@@ -3197,7 +3197,7 @@ spring:
           max-idle: 5
           min-idle: 2
   key-prefix: "session:"
-  ttl-seconds: 1800
+  ttl-seconds: 900
 ```
 
 **Temporary Mitigation (If Redis is down):**
@@ -3211,7 +3211,7 @@ redis-cli -h MEMORYSTORE_IP ping
 # Expected: PONG
 
 # Test session creation (login via browser, then check cookie)
-# Expected: Set-Cookie: SESSION=... header
+# Expected: Set-Cookie: BA_SESSION=... header
 
 # Check session stored in Redis
 redis-cli -h MEMORYSTORE_IP KEYS "session:*"

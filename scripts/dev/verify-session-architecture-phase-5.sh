@@ -17,8 +17,8 @@ Usage: ./scripts/dev/verify-session-architecture-phase-5.sh [options]
 
 Verifies the Session Architecture Rethink Phase 5 contract:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
-- Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=SESSION` defaults
-- ext-authz bakes in the shared session defaults and does not override `SESSION_KEY_PREFIX` in deployment
+- Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
+- ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user` still route only to Session Gateway
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
@@ -183,16 +183,14 @@ extract_session_gateway_cookie_name_default_from_yaml() {
             sub(/^[[:space:]]*name:[[:space:]]*/, "", value)
             sub(/[[:space:]]+#.*$/, "", value)
             gsub(/"/, "", value)
+            if (value ~ /^\$\{SESSION_COOKIE_NAME:.*\}$/) {
+                sub(/^\$\{SESSION_COOKIE_NAME:/, "", value)
+                sub(/\}$/, "", value)
+            }
             print value
             exit
         }
     ' "$file"
-}
-
-extract_session_gateway_cookie_name_default_from_helper() {
-    local file="$1"
-
-    sed -nE 's/.*@Value\("\$\{session\.cookie\.name:([^}]*)\}"\).*/\1/p' "$file" | head -n 1
 }
 
 extract_ext_authz_session_key_prefix_default() {
@@ -205,6 +203,31 @@ extract_ext_authz_session_cookie_name_default() {
     local file="$1"
 
     sed -nE 's/.*SessionCookieName:[[:space:]]*envOrDefault\("SESSION_COOKIE_NAME", "([^"]+)"\).*/\1/p' "$file" | head -n 1
+}
+
+extract_named_env_value_from_yaml() {
+    local env_name="$1"
+
+    awk -v target="$env_name" '
+        BEGIN {
+            current_name = ""
+        }
+
+        /^[[:space:]]*-[[:space:]]*name:[[:space:]]*/ {
+            current_name = $0
+            sub(/^[[:space:]]*-[[:space:]]*name:[[:space:]]*/, "", current_name)
+            gsub(/"/, "", current_name)
+            next
+        }
+
+        current_name == target && /^[[:space:]]*value:[[:space:]]*/ {
+            value = $0
+            sub(/^[[:space:]]*value:[[:space:]]*/, "", value)
+            gsub(/"/, "", value)
+            print value
+            exit
+        }
+    '
 }
 
 capture_command_output() {
@@ -430,14 +453,15 @@ REDIS_OPS_PASSWORD=""
 
 run_static_checks() {
     local route_yaml
-    local ext_authz_config_file session_gateway_application_file session_gateway_cookie_helper_file
+    local ext_authz_config_file ext_authz_deployment_file session_gateway_application_file session_gateway_cookie_helper_file
     local session_gateway_key_prefix_default ext_authz_key_prefix_default
-    local session_gateway_cookie_name_yaml_default session_gateway_cookie_name_code_default
+    local session_gateway_cookie_name_yaml_default ext_authz_deployment_cookie_name
     local ext_authz_cookie_name_default
 
     section "Static Contract"
 
     ext_authz_config_file="${REPO_ROOT}/ext-authz/config.go"
+    ext_authz_deployment_file="${REPO_ROOT}/kubernetes/services/ext-authz/deployment.yaml"
     session_gateway_application_file="${REPO_ROOT}/../session-gateway/src/main/resources/application.yml"
     session_gateway_cookie_helper_file="${REPO_ROOT}/../session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session/SessionCookieHelper.java"
 
@@ -471,8 +495,8 @@ run_static_checks() {
     session_gateway_key_prefix_default="$(extract_session_gateway_key_prefix_default "$session_gateway_application_file")"
     ext_authz_key_prefix_default="$(extract_ext_authz_session_key_prefix_default "$ext_authz_config_file")"
     session_gateway_cookie_name_yaml_default="$(extract_session_gateway_cookie_name_default_from_yaml "$session_gateway_application_file")"
-    session_gateway_cookie_name_code_default="$(extract_session_gateway_cookie_name_default_from_helper "$session_gateway_cookie_helper_file")"
     ext_authz_cookie_name_default="$(extract_ext_authz_session_cookie_name_default "$ext_authz_config_file")"
+    ext_authz_deployment_cookie_name="$(extract_named_env_value_from_yaml "SESSION_COOKIE_NAME" < "$ext_authz_deployment_file")"
 
     assert_value_equals \
         "$session_gateway_key_prefix_default" \
@@ -489,27 +513,27 @@ run_static_checks() {
 
     assert_value_equals \
         "$session_gateway_cookie_name_yaml_default" \
-        "SESSION" \
-        "Session Gateway application.yml default is session.cookie.name=SESSION"
+        "BA_SESSION" \
+        "Session Gateway application.yml default is session.cookie.name=BA_SESSION"
+    assert_file_contains \
+        "$session_gateway_cookie_helper_file" \
+        'this.cookieName = cookieProperties.name();' \
+        "Session Gateway SessionCookieHelper reads the cookie name from SessionProperties"
     assert_value_equals \
-        "$session_gateway_cookie_name_code_default" \
-        "SESSION" \
-        "Session Gateway SessionCookieHelper default is session.cookie.name=SESSION"
+        "$ext_authz_cookie_name_default" \
+        "BA_SESSION" \
+        "ext-authz default is SESSION_COOKIE_NAME=BA_SESSION"
     assert_values_match \
         "$session_gateway_cookie_name_yaml_default" \
-        "$session_gateway_cookie_name_code_default" \
-        "Session Gateway keeps the cookie-name default aligned between YAML and code"
-    assert_value_equals \
-        "$ext_authz_cookie_name_default" \
-        "SESSION" \
-        "ext-authz default is SESSION_COOKIE_NAME=SESSION"
-    assert_values_match \
-        "$session_gateway_cookie_name_code_default" \
         "$ext_authz_cookie_name_default" \
         "Session Gateway and ext-authz share the session cookie-name default"
+    assert_value_equals \
+        "$ext_authz_deployment_cookie_name" \
+        "BA_SESSION" \
+        "ext-authz deployment explicitly sets SESSION_COOKIE_NAME=BA_SESSION"
 
     assert_file_not_contains \
-        "${REPO_ROOT}/kubernetes/services/ext-authz/deployment.yaml" \
+        "$ext_authz_deployment_file" \
         "- name: SESSION_KEY_PREFIX" \
         "ext-authz deployment does not override SESSION_KEY_PREFIX"
 
@@ -533,7 +557,7 @@ prepare_live_redis_context() {
 }
 
 run_live_checks() {
-    local route_yaml ext_authz_yaml session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl
+    local route_yaml ext_authz_yaml ext_authz_deployment_cookie_name session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl
 
     section "Live Cluster Contract"
 
@@ -548,6 +572,11 @@ run_live_checks() {
 
     if require_kubectl_resource deployment ext-authz default; then
         ext_authz_yaml="$(kubectl get deployment ext-authz -n default -o yaml)"
+        ext_authz_deployment_cookie_name="$(extract_named_env_value_from_yaml "SESSION_COOKIE_NAME" <<<"$ext_authz_yaml")"
+        assert_value_equals \
+            "$ext_authz_deployment_cookie_name" \
+            "BA_SESSION" \
+            "live ext-authz deployment explicitly sets SESSION_COOKIE_NAME=BA_SESSION"
         if grep -Fq 'name: SESSION_KEY_PREFIX' <<<"$ext_authz_yaml"; then
             fail "live ext-authz deployment still overrides SESSION_KEY_PREFIX"
         else

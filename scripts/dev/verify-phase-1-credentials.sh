@@ -557,7 +557,7 @@ EXT_AUTHZ_SESSION_ID="phase1-verify-$RANDOM-$RANDOM"
 AUTH_HEADERS=$(mktemp)
 TMP_FILES+=("$AUTH_HEADERS")
 AUTH_STATUS=$(curl -sS -D "$AUTH_HEADERS" -o /dev/null -w '%{http_code}' \
-    -H "Cookie: SESSION=${EXT_AUTHZ_SESSION_ID}" \
+    -H "Cookie: BA_SESSION=${EXT_AUTHZ_SESSION_ID}" \
     -H 'X-Envoy-Original-Path: /api/v1/currencies' \
     "http://127.0.0.1:${EXT_AUTHZ_HTTP_PORT}/check")
 

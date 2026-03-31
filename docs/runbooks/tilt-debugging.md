@@ -46,14 +46,15 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform
 baseline. `./scripts/dev/verify-session-architecture-phase-5.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
-`SESSION` cookie-name defaults across Session Gateway and ext-authz, and the
-full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
-`/login/oauth2/*`, `/logout`, and `/user`.
+`BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
+explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
+deployment, and the full Session Gateway auth-route ownership contract for
+`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`.
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
 gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/session`. The browser only carries
-an opaque `SESSION` cookie; Session Gateway keeps the session data in Redis
+an opaque `BA_SESSION` cookie; Session Gateway keeps the session data in Redis
 under `session:{id}` and the temporary OAuth2 request state under
 `oauth2:state:{state}`.
 
@@ -199,12 +200,12 @@ Pod not starting?
 ```
 Auth failures after login?
 ├── Check browser DevTools → Network tab
-│   ├── Request missing SESSION cookie?
+│   ├── Request missing BA_SESSION cookie?
 │   │   └── Session Gateway not setting cookie after login
 │   │       └── kubectl logs -f deployment/session-gateway
-│   └── Request has SESSION cookie but still 401/403?
+│   └── Request has BA_SESSION cookie but still 401/403?
 │       ├── Probe the heartbeat directly with that cookie
-│       │   └── curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+│       │   └── curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
 │       ├── /auth/session returns 401?
 │       │   └── Session missing/expired or IDP grant revoked
 │       │       └── kubectl logs -f deployment/session-gateway
@@ -262,7 +263,7 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
-curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
 
 # Inspect one specific session hash if you have the cookie value
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
@@ -422,10 +423,10 @@ curl http://localhost:8080/health
 
 # 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
-curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
+curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 
 # 4. Probe the heartbeat path with the same cookie
-curl -k -H "Cookie: SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
 ```
 
 ---

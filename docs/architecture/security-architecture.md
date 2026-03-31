@@ -296,7 +296,7 @@ Service Logic:
 
 **Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
 
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 30 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
 
 ---
 
@@ -422,14 +422,14 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 ### Token Configuration
 
 **Opaque Session Token** (cookie or bearer token):
-- Lifetime: 30 minutes (sliding expiration via `GET /auth/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
+- Lifetime: 15 minutes (sliding expiration via `GET /auth/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
 - Validated by: ext_authz service via Redis lookup
 
 **Session Redis Hash** (`session:{id}`):
 - Fields: `user_id`, `idp_sub`, `email`, `display_name`, `picture`, `roles` (comma-joined), `permissions` (comma-joined), `refresh_token`, `token_expires_at`, `created_at`, `expires_at`
-- TTL: 30 minutes (configurable via `session.ttl-seconds`)
+- TTL: 15 minutes (configurable via `session.ttl-seconds`)
 - Written by: Session Gateway on login, token refresh, and token exchange
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
 
@@ -443,7 +443,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 - HttpOnly: true (prevents JavaScript access)
 - Secure: true (HTTPS only)
 - SameSite: Strict (CSRF protection)
-- Max-Age: 30 minutes (matches session timeout)
+- Max-Age: 15 minutes (matches session timeout)
 
 ### Threat Mitigation
 
@@ -583,7 +583,7 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 
 **Redis Configuration:**
 - Session key pattern: `session:{session-id}`
-- TTL: 30 minutes (configurable via `session.ttl-seconds`)
+- TTL: 15 minutes (configurable via `session.ttl-seconds`)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery
 
@@ -657,7 +657,7 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
 | Opaque session tokens | Instant revocation via Redis delete; no expiry window |
 | Istio ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol via meshConfig |
-| 30 min session timeout | Balance security vs user experience |
+| 15 min session timeout | Favor shorter default session windows for browser and token-exchange flows |
 | Proactive token refresh | Avoid request failures due to expiration |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; single hash per session |

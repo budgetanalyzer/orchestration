@@ -190,9 +190,10 @@ fresh-cluster workflow.
 `./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
 Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
 uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
-`session:` key prefix contract plus the `SESSION` cookie-name default, and `/auth/*`, `/oauth2/*`,
-`/login/oauth2/*`, `/logout`, plus `/user` still route only to Session
-Gateway.
+`session:` key prefix contract plus the `BA_SESSION` cookie-name default,
+orchestration explicitly wires `SESSION_COOKIE_NAME=BA_SESSION` into the
+`ext-authz` deployment, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`,
+`/logout`, plus `/user` still route only to Session Gateway.
 Use `--static-only` for repo-level validation before login. After a browser
 login, rerun it without that flag when you want the live Redis ACL/keyspace
 proof too, or add `--require-live-session` to insist on at least one real
@@ -241,6 +242,12 @@ Tilt now renders the Auth0 Istio egress manifests through
 `AUTH0_ISSUER_URI` contract that populates the `auth0-credentials` secret.
 Production secret sourcing should keep that same seam: the value that creates
 `auth0-credentials` must also drive the Auth0 egress render/apply step.
+
+Session Gateway runtime knobs that orchestration intentionally exposes now stay
+on the checked-in manifest path. Today that means
+`ConfigMap/session-gateway-config` carries `SESSION_TTL_SECONDS=900` seconds
+(15 minutes) for local browser and token-exchange sessions, instead of relying
+on a Tilt-only secret override from `.env`.
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `auth0-credentials` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 

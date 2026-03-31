@@ -86,8 +86,10 @@ rebuild workflow.
 repo-level proof that the Session Gateway cutover still matches orchestration:
 Redis ACL bootstrap uses `session:*` and `oauth2:state:*`, ext-authz and
 Session Gateway share the `session:` key prefix contract plus the
-`SESSION` cookie-name default, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`,
-`/logout`, plus `/user` still belong to Session Gateway.
+`BA_SESSION` cookie-name default, orchestration explicitly wires
+`SESSION_COOKIE_NAME=BA_SESSION` into the `ext-authz` deployment, and
+`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, plus `/user` still
+belong to Session Gateway.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
 `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
@@ -128,7 +130,7 @@ routes are not affected — they keep the strict CSP. The docs route is public,
 read-only, and serves self-hosted assets with no CDN dependency.
 The browser-visible login page is `/login`; it starts the real OAuth2 flow at
 `/oauth2/authorization/idp`. After sign-in, the frontend keeps the opaque
-`SESSION` cookie alive with same-origin `GET /auth/session` heartbeats while
+`BA_SESSION` cookie alive with same-origin `GET /auth/session` heartbeats while
 the user is active. Session Gateway stores browser sessions as `session:{id}`
 hashes in Redis and uses temporary `oauth2:state:{state}` hashes for the
 OAuth2 round-trip.

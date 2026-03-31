@@ -5,4 +5,5 @@ metadata:
   namespace: default
   labels:
     app: session-gateway
-data: {}
+data:
+  SESSION_TTL_SECONDS: "900"

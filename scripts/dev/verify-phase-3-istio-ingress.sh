@@ -934,14 +934,14 @@ main() {
         -H 'X-User-Id: forged-user-999' \
         -H 'X-Roles: ROLE_FORGED' \
         -H 'X-Permissions: forged:all' \
-        --cookie "SESSION=${session_id}" \
+        --cookie "BA_SESSION=${session_id}" \
         -w '\nHTTP_STATUS:%{http_code}\n' \
         "https://app.budgetanalyzer.localhost/api/p3-header-echo?phase3_header_echo=${session_id}" 2>/dev/null || true)
     echo_status=$(printf '%s\n' "$echo_response" | sed -n 's/^HTTP_STATUS://p' | tail -n 1)
     echo_body=$(printf '%s\n' "$echo_response" | sed '/^HTTP_STATUS:/d')
 
     if [[ "$echo_status" == "200" ]]; then
-        pass "Temporary header echo route returned 200 with a seeded SESSION cookie"
+        pass "Temporary header echo route returned 200 with a seeded BA_SESSION cookie"
     else
         fail "Temporary header echo route returned $echo_status (expected 200)"
     fi
@@ -1190,7 +1190,7 @@ main() {
     api_probe_status=$(retry_external_status "/api/v1/transactions?phase3_client_ip_test=${api_probe_id}" \
         -H "X-Forwarded-For: ${FORGED_XFF_SENTINEL}" \
         -A "phase3-xff/${api_probe_id}" \
-        --cookie "SESSION=${session_id}")
+        --cookie "BA_SESSION=${session_id}")
     if [[ "$api_probe_status" == "200" ]]; then
         pass "Authenticated API forwarded-chain probe returned 200"
     else

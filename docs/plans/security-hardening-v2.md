@@ -92,7 +92,7 @@ Current local Phase 1 baseline:
 
 - Tilt generates `postgresql-bootstrap-credentials`, per-service PostgreSQL secrets, `rabbitmq-bootstrap-credentials`, `currency-service-rabbitmq-credentials`, `redis-bootstrap-credentials`, and per-service Redis secrets from `.env` for local Kind only.
 - `./scripts/dev/verify-phase-1-credentials.sh` is the runtime proof for PostgreSQL, RabbitMQ, Redis ACL isolation, and the ext-authz Redis username/password path.
-- `./scripts/dev/verify-session-architecture-phase-5.sh` is the companion proof that the later Session Gateway cutover still matches the Phase 1 Redis ACL namespace contract: `session:*` for live sessions, `oauth2:state:*` for OAuth2 request state, and the shared `session:` key-prefix plus `SESSION` cookie-name defaults across Session Gateway and ext-authz.
+- `./scripts/dev/verify-session-architecture-phase-5.sh` is the companion proof that the later Session Gateway cutover still matches the Phase 1 Redis ACL namespace contract: `session:*` for live sessions, `oauth2:state:*` for OAuth2 request state, and the shared `session:` key-prefix plus `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, with orchestration explicitly wiring `SESSION_COOKIE_NAME=BA_SESSION` into the `ext-authz` deployment.
 
 ### 1a. Per-service PostgreSQL users
 

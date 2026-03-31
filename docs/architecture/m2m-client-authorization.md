@@ -93,7 +93,7 @@ Content-Type: application/json
 ```json
 {
   "token": "<opaque-session-id>",
-  "expiresIn": 1800,
+  "expiresIn": 900,
   "tokenType": "Bearer"
 }
 ```
@@ -322,7 +322,7 @@ M2M clients have separate rate limits:
 | **Auth flow** | Authorization Code + PKCE | Client Credentials → Token Exchange |
 | **Token on wire** | Session cookie (opaque) | Bearer token (opaque) |
 | **Session storage** | Redis session hash | Redis session hash |
-| **Token lifetime** | 30 minutes (sliding) | 30 minutes |
+| **Token lifetime** | 15 minutes (sliding) | 15 minutes |
 | **Refresh** | Proactive (Session Gateway) | Re-exchange before expiry |
 | **Session cookies** | Yes (HTTP-only) | No |
 | **Rate limiting** | Per user | Per client identifier |

@@ -63,6 +63,8 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated. 
 
 For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
 
+**Default debugging environment**: Tilt runs on the host machine, while AI agents run inside the container with full read access to the shared workspace and full `kubectl` access to the host-managed cluster. Treat that host-Tilt plus in-container-`kubectl` split as the default deployment-debugging setup for this repository.
+
 ## Architecture Principles
 
 - **Production Parity**: Development environment faithfully recreates production

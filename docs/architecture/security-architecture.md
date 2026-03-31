@@ -296,6 +296,8 @@ Service Logic:
 
 **Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
 
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 30 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
+
 ---
 
 ### Mobile App Authentication
@@ -420,7 +422,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 ### Token Configuration
 
 **Opaque Session Token** (cookie or bearer token):
-- Lifetime: 30 minutes (sliding expiration via `GET /auth/session` heartbeat for active browser sessions)
+- Lifetime: 30 minutes (sliding expiration via `GET /auth/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
 - Validated by: ext_authz service via Redis lookup

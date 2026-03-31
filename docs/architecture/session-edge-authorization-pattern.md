@@ -155,6 +155,8 @@ Bare `/login` remains a frontend route. The SPA owns that page and initiates the
 
 Active browser sessions also call `GET /auth/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to validate or refresh the upstream IDP grant without putting Session Gateway on the API hot path.
 
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 30 min) lapses naturally via Redis key expiration.
+
 ## Why This Pattern?
 
 ### No CORS Needed

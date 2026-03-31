@@ -92,7 +92,7 @@ Current local Phase 1 baseline:
 
 - Tilt generates `postgresql-bootstrap-credentials`, per-service PostgreSQL secrets, `rabbitmq-bootstrap-credentials`, `currency-service-rabbitmq-credentials`, `redis-bootstrap-credentials`, and per-service Redis secrets from `.env` for local Kind only.
 - `./scripts/dev/verify-phase-1-credentials.sh` is the runtime proof for PostgreSQL, RabbitMQ, Redis ACL isolation, and the ext-authz Redis username/password path.
-- `./scripts/dev/verify-session-architecture-phase-5.sh` is the companion proof that the later Session Gateway cutover still matches the Phase 1 Redis ACL namespace contract: `session:*` for live sessions, `oauth2:state:*` for OAuth2 request state, and `SESSION_KEY_PREFIX=session:` in ext-authz.
+- `./scripts/dev/verify-session-architecture-phase-5.sh` is the companion proof that the later Session Gateway cutover still matches the Phase 1 Redis ACL namespace contract: `session:*` for live sessions, `oauth2:state:*` for OAuth2 request state, and the shared `session:` key-prefix plus `SESSION` cookie-name defaults across Session Gateway and ext-authz.
 
 ### 1a. Per-service PostgreSQL users
 
@@ -205,8 +205,8 @@ user default on >PASSWORD ~* +ping +auth
 1. Keep `default` user enabled but restricted to only `+ping +auth` (simplest)
 2. Use a wrapper shell script mounted into the container that calls `redis-cli --user $REDIS_OPS_USERNAME --pass $REDIS_OPS_PASSWORD ping`
 
-This ACL contract now pairs with the `ext-authz`
-`SESSION_KEY_PREFIX=session:` deployment setting from Phase 5b.
+This ACL contract now pairs with the shared `session:` key-prefix default used
+by Session Gateway and ext-authz in Phase 5b.
 Keep the Redis ACL key patterns and the ext_authz session prefix aligned, or
 live authorization checks will drift back to the wrong namespace.
 

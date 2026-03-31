@@ -45,9 +45,10 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform
 baseline. `./scripts/dev/verify-session-architecture-phase-5.sh` proves the
-unified Redis session namespace and the full Session Gateway auth-route
-ownership contract for `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`,
-and `/user`.
+unified Redis session namespace, the shared `session:` key prefix and
+`SESSION` cookie-name defaults across Session Gateway and ext-authz, and the
+full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
+`/login/oauth2/*`, `/logout`, and `/user`.
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
 gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active

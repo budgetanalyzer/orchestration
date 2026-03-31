@@ -157,6 +157,16 @@ Active browser sessions also call `GET /auth/session` under the `/auth/*` route 
 
 **Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 30 min) lapses naturally via Redis key expiration.
 
+## Shared Session Contract
+
+The browser session interface shared between Session Gateway and `ext_authz` is intentionally small:
+
+- `SESSION_KEY_PREFIX` defaults to `session:` in both repos. Session Gateway writes browser sessions under `session:{id}`, and `ext_authz` reads the same Redis namespace.
+- The browser session cookie name defaults to `SESSION` in both repos. Session Gateway writes that cookie, and `ext_authz` reads it on `/api/*` requests.
+- Session Gateway owns the session hash contents and expiry behavior. `ext_authz` only assumes the hash exists, that it contains a parseable `expires_at` field, and that the current time is still before that timestamp.
+
+`./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in `orchestration/ext-authz` and the sibling `session-gateway` repo before any live-cluster checks run.
+
 ## Why This Pattern?
 
 ### No CORS Needed

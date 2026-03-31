@@ -70,7 +70,8 @@ For proper JWT audience configuration:
 4. Identifier: `https://api.budgetanalyzer.org`
 5. Click **Create**
 
-The identifier becomes your `AUTH0_AUDIENCE` value. The default in `.env.example` is already set to `https://api.budgetanalyzer.org`.
+The identifier becomes your `IDP_AUDIENCE` value. The default in `.env.example`
+is already set to `https://api.budgetanalyzer.org`.
 
 ## 5. Final .env Configuration
 
@@ -83,7 +84,8 @@ AUTH0_CLIENT_ID=your-client-id-here
 AUTH0_CLIENT_SECRET=your-client-secret-here
 
 # Optional - defaults work for most setups
-# AUTH0_AUDIENCE=https://api.budgetanalyzer.org
+# IDP_AUDIENCE=https://api.budgetanalyzer.org
+# IDP_LOGOUT_RETURN_TO=https://app.budgetanalyzer.localhost/peace
 ```
 
 Tilt reads that value into `auth0-credentials` and also renders the Auth0

@@ -189,8 +189,8 @@ fresh-cluster workflow.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
 `./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
 Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
-uses `session:*` and `oauth2:state:*`, ext-authz keeps
-`SESSION_KEY_PREFIX=session:`, and `/auth/*`, `/oauth2/*`,
+uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
+`session:` key prefix contract plus the `SESSION` cookie-name default, and `/auth/*`, `/oauth2/*`,
 `/login/oauth2/*`, `/logout`, plus `/user` still route only to Session
 Gateway.
 Use `--static-only` for repo-level validation before login. After a browser

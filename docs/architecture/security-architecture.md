@@ -445,7 +445,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 - Storage: Redis (web), Secure storage (mobile)
 - Revocation: Supported via token introspection
 
-> **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration).
+> **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md) (authoritative values) and [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration) (quickstart context).
 
 **Session Cookie:**
 - HttpOnly: true (prevents JavaScript access)

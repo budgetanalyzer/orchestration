@@ -99,50 +99,11 @@ creates the Session Gateway IDP config must also feed the same
 
 ## 6. Security Configuration
 
-These Auth0 tenant settings control token lifetimes and session behavior that the Session Gateway architecture depends on. Default Auth0 values make security features ineffective — a 24-hour access token never hits the 10-minute refresh threshold, and a persistent 3-day Auth0 session lets users silently re-authenticate after the app session expires.
+Default Auth0 tenant settings undermine Session Gateway's security features. A 24-hour access token never hits the refresh threshold, so revocation detection through `IdpTokenRefreshClient` never fires. A persistent 3-day Auth0 session lets users silently re-authenticate after the app's 15-minute session expires — someone at an unlocked browser gets back in without credentials.
 
-### API Settings
+The recommended Auth0 dashboard values (token lifetimes, refresh token rotation, tenant session policy) are maintained alongside Session Gateway's runtime defaults:
 
-**Applications → APIs → budget-analyzer-api** (the API matching your `IDP_AUDIENCE`):
-
-| Setting | Default | Recommended | Why |
-|---------|---------|-------------|-----|
-| Maximum Access Token Lifetime | 86400 (24 hrs) | 900 (15 min) | Enables revocation detection — Session Gateway's proactive refresh fires at the 10-min remaining threshold during heartbeat. A 24-hour token never reaches that threshold during any realistic session, making `IdpTokenRefreshClient` dead code. |
-| Implicit/Hybrid Flow Lifetime | 7200 | Irrelevant | The application uses `authorization_code` with PKCE. This setting has no effect. |
-
-### Application Settings
-
-**Applications → Budget Analyzer → Settings**:
-
-| Setting | Default | Recommended | Why |
-|---------|---------|-------------|-----|
-| ID Token Expiration | 36000 (10 hrs) | 3600 (1 hr) | Only used once at login for identity claims. 10 hours is needlessly generous. |
-| Idle Refresh Token Lifetime | 1296000 (15 days) | 3600 (1 hr) | Stale refresh tokens should not linger for weeks. |
-| Max Refresh Token Lifetime | 2592000 (30 days) | 28800 (8 hrs) | Hard ceiling matching a workday. |
-| Rotation | Enabled | Keep | Required — Session Gateway expects new refresh tokens on each use. |
-| Overlap | 0 | Keep | No overlap window between old and new refresh tokens. |
-
-### Session Settings
-
-**Settings → Advanced → Session Expiration**:
-
-| Setting | Default | Recommended | Why |
-|---------|---------|-------------|-----|
-| Default Session Policy | Persistent | Non-persistent | Closing the browser should kill the Auth0 session. See rationale below. |
-| Idle Session Lifetime | 4320 min (3 days) | 15 min | Match the app session. When the app session expires from inactivity, the Auth0 session should also be dead so the user sees a login form, not silent re-authentication. |
-| Maximum Session Lifetime | 10080 min (7 days) | 480 min (8 hrs) | Hard ceiling — forces re-authentication once per workday. |
-
-**Why session policy matters for a financial application:**
-
-With "Persistent" and a 3-day idle timeout, the app's 15-minute session expiration gives a false sense of security:
-
-1. User's app session expires (15 min idle, Redis key gone)
-2. User clicks Login
-3. Auth0 still has a live session (3-day idle, persistent cookie survived browser close)
-4. Auth0 silently re-authenticates — no password prompt
-5. User gets a new app session without proving they know the password
-
-Someone who walks away from an unlocked browser gets back in without credentials as long as the Auth0 session is alive. Setting the policy to non-persistent with a 15-minute idle timeout closes this gap. The `/v2/logout` call in Session Gateway's `LogoutController` already kills the Auth0 session on explicit logout — these settings are the safety net for when logout doesn't happen cleanly (browser crash, tab close, session timeout).
+→ **[Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md)** — the authoritative reference, tied to `SESSION_TTL_SECONDS`, `SESSION_REFRESH_THRESHOLD_SECONDS`, and heartbeat cadence.
 
 ## Troubleshooting
 

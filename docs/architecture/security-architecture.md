@@ -433,11 +433,19 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 - Written by: Session Gateway on login, token refresh, and token exchange
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
 
+**IDP Access Token** (Auth0):
+- Lifetime: 15 minutes (configured in Auth0 API settings)
+- Used by: Session Gateway for upstream API calls
+- Refresh: Proactive at 10-min remaining threshold during heartbeat
+- Not exposed to browser
+
 **Refresh Token:**
 - Lifetime: 8 hours (web), 30 days (mobile)
 - Rotation: Issue new refresh token on each use
 - Storage: Redis (web), Secure storage (mobile)
 - Revocation: Supported via token introspection
+
+> **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration).
 
 **Session Cookie:**
 - HttpOnly: true (prevents JavaScript access)

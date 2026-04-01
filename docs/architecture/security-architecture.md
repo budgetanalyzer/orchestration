@@ -287,7 +287,7 @@ Service Logic:
 ```
 1. Frontend detects active browser use and calls `GET /auth/session`
 2. Session Gateway reads the Redis session hash
-3. If the Auth0 access token is near expiry (5 min threshold), Session Gateway calls the Auth0 token endpoint with the refresh token
+3. If the Auth0 access token is near expiry (10 min threshold), Session Gateway calls the Auth0 token endpoint with the refresh token
 4. Auth0 returns new access token (and optionally new refresh token)
 5. Session Gateway updates the Redis session hash with new Auth0 tokens
 6. Session Gateway re-fetches permissions from permission-service
@@ -296,7 +296,7 @@ Service Logic:
 
 **Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
 
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
 
 ---
 

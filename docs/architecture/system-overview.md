@@ -116,7 +116,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 - OAuth2 authentication with Auth0
 - Session management via Redis hashes (`session:{id}`)
 - Auth0 token storage in Redis session hashes (never exposed to browser)
-- Heartbeat endpoint `GET /auth/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry
+- Heartbeat endpoint `GET /auth/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry (10-minute refresh threshold, 3-minute frontend heartbeat cadence)
 - Calls permission-service to enrich session with roles/permissions
 - Token exchange endpoint for native/M2M clients
 

@@ -123,7 +123,7 @@ kubectl logs deployment/nginx-gateway
 - Writes session data (userId, roles, permissions) as Redis hashes (`session:{id}`)
 - Issues HttpOnly, Secure session cookies to browsers
 - Provides heartbeat endpoint `GET /auth/session` to extend the session TTL for active browser users
-- Proactive token refresh before expiration (includes permission re-fetch and session hash update)
+- Proactive token refresh when the IDP token is within the 10-minute refresh threshold (includes permission re-fetch and session hash update)
 - Calls permission-service to enrich session with roles/permissions (email and displayName passed as query params)
 - Provides token exchange endpoint for native/M2M clients (`POST /auth/token/exchange`)
 
@@ -155,7 +155,7 @@ Bare `/login` remains a frontend route. The SPA owns that page and initiates the
 
 Active browser sessions also call `GET /auth/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to validate or refresh the upstream IDP grant without putting Session Gateway on the API hot path.
 
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
 
 ## Shared Session Contract
 

@@ -321,7 +321,7 @@ After all services are healthy:
 | 5671 | RabbitMQ | AMQPS |
 | 15672 | RabbitMQ | Management UI |
 | 8080 | nginx-gateway | API Gateway (internal) |
-| 8081 | session-gateway | BFF (internal) |
+| 8081 | session-gateway | Auth (internal) |
 | 8082 | transaction-service | Business Logic |
 | 8084 | currency-service | Business Logic |
 | 5005 | transaction-service | Debug (JDWP) |
@@ -366,7 +366,8 @@ Common causes:
 
 1. Verify credentials are set:
    ```bash
-   kubectl get secret auth0-credentials -o jsonpath='{.data.client-id}' | base64 -d
+   kubectl get configmap session-gateway-idp-config -o jsonpath='{.data.AUTH0_CLIENT_ID}'
+   kubectl get secret auth0-credentials -o jsonpath='{.data.AUTH0_CLIENT_SECRET}' | base64 -d
    ```
 
 2. Check session-gateway logs:

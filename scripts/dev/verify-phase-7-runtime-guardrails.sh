@@ -20,10 +20,16 @@ WAIT_TIMEOUT="${PHASE7_WAIT_TIMEOUT:-120s}"
 REGRESSION_TIMEOUT="${PHASE7_REGRESSION_TIMEOUT:-35m}"
 RUN_ID="$(date +%s)"
 REDIS_ALLOWED_KEY="currency-service:phase7-runtime:${RUN_ID}"
-REDIS_DENIED_KEY="spring:session:phase7-runtime:${RUN_ID}"
+REDIS_DENIED_KEY="session:phase7-runtime:${RUN_ID}"
 RABBITMQ_TEMP_VHOST="phase7-runtime-${RUN_ID}"
 RABBITMQ_FORBIDDEN_QUEUE="phase7.runtime.forbidden.queue.${RUN_ID}"
 RABBITMQ_FORBIDDEN_EXCHANGE="phase7.runtime.forbidden.exchange.${RUN_ID}"
+REDIS_CURRENCY_SERVICE_USERNAME="currency-service"
+POSTGRES_TRANSACTION_USERNAME="transaction_service"
+POSTGRES_PERMISSION_USERNAME="permission_service"
+RABBITMQ_ADMIN_USERNAME="rabbitmq-admin"
+RABBITMQ_ADMIN_VHOST="/"
+RABBITMQ_CURRENCY_SERVICE_USERNAME="currency-service"
 
 NEW_PASSED=0
 NEW_FAILED=0
@@ -84,13 +90,10 @@ delete_rabbitmq_temp_vhost() {
 
     rabbitmq_pod=$(kubectl get pods -n "${INFRA_NAMESPACE}" -l app=rabbitmq \
         -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-    admin_username=$(kubectl get secret rabbitmq-bootstrap-credentials -n "${INFRA_NAMESPACE}" \
-        -o "jsonpath={.data['username']}" 2>/dev/null | base64 -d 2>/dev/null || true)
+    admin_username="${RABBITMQ_ADMIN_USERNAME}"
     admin_password=$(kubectl get secret rabbitmq-bootstrap-credentials -n "${INFRA_NAMESPACE}" \
         -o "jsonpath={.data['password']}" 2>/dev/null | base64 -d 2>/dev/null || true)
-    admin_vhost=$(kubectl get secret rabbitmq-bootstrap-credentials -n "${INFRA_NAMESPACE}" \
-        -o "jsonpath={.data['virtual-host']}" 2>/dev/null | base64 -d 2>/dev/null || true)
-    [[ -z "${admin_vhost}" ]] && admin_vhost="/"
+    admin_vhost="${RABBITMQ_ADMIN_VHOST}"
 
     if [[ -n "${rabbitmq_pod}" && -n "${admin_username}" && -n "${admin_password}" ]]; then
         kubectl exec -n "${INFRA_NAMESPACE}" "${rabbitmq_pod}" -- \
@@ -834,7 +837,7 @@ verify_redis_acl_guardrails() {
 
     section "New Phase 7 Assertions: Redis ACL Guardrails"
 
-    redis_username=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-redis-credentials username)
+    redis_username="${REDIS_CURRENCY_SERVICE_USERNAME}"
     redis_password=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-redis-credentials password)
 
     if capture_command output \
@@ -883,9 +886,9 @@ verify_postgresql_guardrails() {
 
     section "New Phase 7 Assertions: PostgreSQL Database Isolation"
 
-    txn_user=$(require_secret_value "${PROBE_NAMESPACE}" transaction-service-postgresql-credentials username)
+    txn_user="${POSTGRES_TRANSACTION_USERNAME}"
     txn_password=$(require_secret_value "${PROBE_NAMESPACE}" transaction-service-postgresql-credentials password)
-    perm_user=$(require_secret_value "${PROBE_NAMESPACE}" permission-service-postgresql-credentials username)
+    perm_user="${POSTGRES_PERMISSION_USERNAME}"
     perm_password=$(require_secret_value "${PROBE_NAMESPACE}" permission-service-postgresql-credentials password)
 
     if capture_command output \
@@ -929,12 +932,12 @@ verify_rabbitmq_guardrails() {
     section "New Phase 7 Assertions: RabbitMQ Permission Boundaries"
 
     rabbitmq_pod=$(require_pod "${INFRA_NAMESPACE}" app=rabbitmq RabbitMQ)
-    admin_username=$(require_secret_value "${INFRA_NAMESPACE}" rabbitmq-bootstrap-credentials username)
+    admin_username="${RABBITMQ_ADMIN_USERNAME}"
     admin_password=$(require_secret_value "${INFRA_NAMESPACE}" rabbitmq-bootstrap-credentials password)
-    admin_vhost=$(require_secret_value "${INFRA_NAMESPACE}" rabbitmq-bootstrap-credentials virtual-host)
-    currency_username=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-rabbitmq-credentials username)
+    admin_vhost="${RABBITMQ_ADMIN_VHOST}"
+    currency_username="${RABBITMQ_CURRENCY_SERVICE_USERNAME}"
     currency_password=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-rabbitmq-credentials password)
-    currency_vhost=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-rabbitmq-credentials virtual-host)
+    currency_vhost="${RABBITMQ_ADMIN_VHOST}"
 
     if capture_command output \
         rabbitmq_admin "${rabbitmq_pod}" "${admin_username}" "${admin_password}" "${admin_vhost}" \

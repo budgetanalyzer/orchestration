@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 DEFAULT_NAMESPACE="default"
-DEFAULT_SECRET_NAME="auth0-credentials"
-AUTH0_SECRET_KEY="AUTH0_ISSUER_URI"
+DEFAULT_CONFIGMAP_NAME="session-gateway-idp-config"
+AUTH0_CONFIG_KEY="AUTH0_ISSUER_URI"
 AUTH0_HOST_PLACEHOLDER="auth0-issuer.placeholder.invalid"
 TEMPLATE_FILES=(
     "${REPO_DIR}/kubernetes/istio/egress-service-entries.yaml"
@@ -25,29 +25,29 @@ derived from AUTH0_ISSUER_URI.
 Options:
   --apply                         Apply the rendered manifests with kubectl.
   --auth0-issuer-uri URI          Override the issuer URI instead of reading the
-                                  in-cluster auth0-credentials secret.
-  --namespace NAMESPACE           Secret namespace when reading from the cluster
+                                  in-cluster session-gateway IDP config.
+  --namespace NAMESPACE           ConfigMap namespace when reading from the cluster
                                   (default: default).
-  --secret-name NAME              Secret name when reading from the cluster
-                                  (default: auth0-credentials).
+  --configmap-name NAME           ConfigMap name when reading from the cluster
+                                  (default: session-gateway-idp-config).
   -h, --help                      Show this help text.
 
 When --auth0-issuer-uri is omitted, the script reads AUTH0_ISSUER_URI from the
-configured Kubernetes secret. That keeps local Tilt secret wiring and any
-production secret manager on the same contract: the egress allowlist and the
-session-gateway config must both come from the same issuer URI.
+configured Kubernetes ConfigMap. That keeps local Tilt config rendering and any
+production config source on the same contract: the egress allowlist and the
+session-gateway IDP config must both come from the same issuer URI.
 EOF
 }
 
-decode_secret_value() {
-    local namespace="$1" secret_name="$2" key="$3"
-    local encoded
+read_configmap_value() {
+    local namespace="$1" configmap_name="$2" key="$3"
+    local value
 
-    encoded=$(kubectl get secret "${secret_name}" -n "${namespace}" \
+    value=$(kubectl get configmap "${configmap_name}" -n "${namespace}" \
         -o "jsonpath={.data['${key}']}" 2>/dev/null || true)
-    [[ -n "${encoded}" ]] || return 1
+    [[ -n "${value}" ]] || return 1
 
-    printf '%s' "${encoded}" | base64 -d 2>/dev/null
+    printf '%s' "${value}"
 }
 
 extract_host_from_uri() {
@@ -81,7 +81,7 @@ render_templates() {
 main() {
     local apply_rendered=false
     local namespace="${DEFAULT_NAMESPACE}"
-    local secret_name="${DEFAULT_SECRET_NAME}"
+    local configmap_name="${DEFAULT_CONFIGMAP_NAME}"
     local auth0_issuer_uri=""
     local auth0_host=""
 
@@ -98,8 +98,8 @@ main() {
                 namespace="${2:-}"
                 shift
                 ;;
-            --secret-name)
-                secret_name="${2:-}"
+            --configmap-name)
+                configmap_name="${2:-}"
                 shift
                 ;;
             -h|--help)
@@ -116,12 +116,12 @@ main() {
     done
 
     if [[ -z "${auth0_issuer_uri}" ]]; then
-        auth0_issuer_uri=$(decode_secret_value "${namespace}" "${secret_name}" "${AUTH0_SECRET_KEY}" || true)
+        auth0_issuer_uri=$(read_configmap_value "${namespace}" "${configmap_name}" "${AUTH0_CONFIG_KEY}" || true)
     fi
 
     if [[ -z "${auth0_issuer_uri}" ]]; then
         printf 'ERROR: AUTH0_ISSUER_URI is required. Pass --auth0-issuer-uri or create %s/%s[%s].\n' \
-            "${namespace}" "${secret_name}" "${AUTH0_SECRET_KEY}" >&2
+            "${namespace}" "${configmap_name}" "${AUTH0_CONFIG_KEY}" >&2
         exit 1
     fi
 

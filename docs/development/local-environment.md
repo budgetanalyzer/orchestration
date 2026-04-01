@@ -114,12 +114,14 @@ cd orchestration/
 [ -f .env ] || cp .env.example .env
 
 # Review the local PostgreSQL, RabbitMQ, and Redis password defaults, then add
-# your Auth0 and FRED credentials.
+# your Auth0 config/client secret and FRED API key.
 ```
 
-Tilt is the local secret producer for infrastructure credentials. The Kubernetes
-manifests now consume named secrets only, which is the seam production can later
-replace with another secret source.
+Tilt is the local secret producer for infrastructure credentials and the local
+renderer for non-secret Session Gateway Auth0 config. The Kubernetes manifests
+now keep passwords, client secrets, and API keys on the secret path, while
+issuer URIs, client IDs, audiences, hosts, ports, usernames, JDBC URLs, and
+logout URLs stay on checked-in manifests or ConfigMaps instead.
 
 ### 4. Start Tilt
 
@@ -146,6 +148,10 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 1 credential split
 ./scripts/dev/verify-phase-1-credentials.sh
+
+# Optional but recommended: prove the Session Architecture Rethink Phase 5
+# contract from orchestration before you log in
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only
 
 # Optional but recommended: prove the Phase 2 network policy enforcement
 ./scripts/dev/verify-phase-2-network-policies.sh
@@ -183,6 +189,17 @@ clean-start proof for the seven expected app deployments in `default`. Run it
 after `tilt up` when you want the specific admission regression check from the
 fresh-cluster workflow.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
+Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
+uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
+`session:` key prefix contract plus the `BA_SESSION` cookie-name default,
+orchestration explicitly wires `SESSION_COOKIE_NAME=BA_SESSION` into the
+`ext-authz` deployment, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`,
+`/logout`, plus `/user` still route only to Session Gateway.
+Use `--static-only` for repo-level validation before login. After a browser
+login, rerun it without that flag when you want the live Redis ACL/keyspace
+proof too, or add `--require-live-session` to insist on at least one real
+`session:*` key.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
@@ -224,11 +241,18 @@ shell before assuming the script is wrong.
 
 Tilt now renders the Auth0 Istio egress manifests through
 `./scripts/dev/render-istio-egress-config.sh`, using the same
-`AUTH0_ISSUER_URI` contract that populates the `auth0-credentials` secret.
-Production secret sourcing should keep that same seam: the value that creates
-`auth0-credentials` must also drive the Auth0 egress render/apply step.
+`AUTH0_ISSUER_URI` contract that populates `ConfigMap/session-gateway-idp-config`.
+Production config sourcing should keep that same seam: the value that creates
+the Session Gateway IDP config must also drive the Auth0 egress render/apply
+step.
 
-The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `auth0-credentials` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+Session Gateway runtime knobs that orchestration intentionally exposes now stay
+on the checked-in manifest path. Today that means
+`ConfigMap/session-gateway-config` carries `SESSION_TTL_SECONDS=900` seconds
+(15 minutes) for local browser and token-exchange sessions, instead of relying
+on a Tilt-only secret override from `.env`.
+
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 
@@ -457,27 +481,38 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 
 ### Backend Services (Spring Boot)
 
-Environment variables are injected via Kubernetes secrets. PostgreSQL Step 2
-uses a `postgres_admin` bootstrap user plus dedicated service users. RabbitMQ
-Step 3 now bootstraps `rabbitmq-admin` and `currency-service` from a
-definitions file. Redis Step 4 now uses ACL users: a restricted `default` user
-for probes plus dedicated `session-gateway`, `ext-authz`, `currency-service`,
-and `redis-ops` identities.
+Sensitive environment variables are injected via Kubernetes secrets, while
+non-secret runtime settings stay on checked-in manifests or ConfigMaps.
+PostgreSQL Step 2 uses a `postgres_admin` bootstrap user plus dedicated service
+users. RabbitMQ Step 3 now bootstraps `rabbitmq-admin` and `currency-service`
+from a definitions file. Redis Step 4 now uses ACL users: a restricted
+`default` user for probes plus dedicated `session-gateway`, `ext-authz`,
+`currency-service`, and `redis-ops` identities.
 
 Current local secret names:
 
 | Secret | Namespace | Purpose |
 |--------|-----------|---------|
-| `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap admin + init inputs |
-| `transaction-service-postgresql-credentials` | `default` | transaction-service database connection |
-| `currency-service-postgresql-credentials` | `default` | currency-service database connection |
-| `permission-service-postgresql-credentials` | `default` | permission-service database connection |
-| `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin access + boot-time definitions |
-| `currency-service-rabbitmq-credentials` | `default` | currency-service AMQP connection |
-| `redis-bootstrap-credentials` | `infrastructure` | Redis ACL bootstrap + probe credentials |
-| `session-gateway-redis-credentials` | `default` | session-gateway Redis connection |
-| `ext-authz-redis-credentials` | `default` | ext-authz Redis connection |
-| `currency-service-redis-credentials` | `default` | currency-service Redis connection |
+| `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap/admin and init passwords |
+| `transaction-service-postgresql-credentials` | `default` | transaction-service PostgreSQL password |
+| `currency-service-postgresql-credentials` | `default` | currency-service PostgreSQL password |
+| `permission-service-postgresql-credentials` | `default` | permission-service PostgreSQL password |
+| `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin password plus boot-time definitions document |
+| `currency-service-rabbitmq-credentials` | `default` | currency-service RabbitMQ password |
+| `redis-bootstrap-credentials` | `infrastructure` | Redis ACL bootstrap and probe passwords |
+| `session-gateway-redis-credentials` | `default` | session-gateway Redis password |
+| `ext-authz-redis-credentials` | `default` | ext-authz Redis password |
+| `currency-service-redis-credentials` | `default` | currency-service Redis password |
+
+Current local config names:
+
+| ConfigMap | Namespace | Purpose |
+|-----------|-----------|---------|
+| `session-gateway-config` | `default` | checked-in Session Gateway runtime settings such as `SESSION_TTL_SECONDS` |
+| `session-gateway-idp-config` | `default` | checked-in fallback for non-secret Auth0/IDP settings (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`); Tilt overwrites it locally from `.env` |
+
+For the full local secret/config inventory and the static guardrail that checks
+it, see [Secrets-Only Handling](secrets-only-handling.md).
 
 For local development outside Tilt, create `application-local.yml`:
 
@@ -541,6 +576,8 @@ Redis local access:
 - `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
+- `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
+- active browser sessions are extended through same-origin `GET /auth/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
 - The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
 
 RabbitMQ local access:

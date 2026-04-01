@@ -185,7 +185,7 @@ pod_api_status() {
             --resolve app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP} \
             -A '${probe_id}' \
             -H 'X-Forwarded-For: ${forged_xff}' \
-            --cookie 'SESSION=${session_id}' \
+            --cookie 'BA_SESSION=${session_id}' \
             'https://app.budgetanalyzer.localhost/api/v1/transactions?${probe_id}'"
 }
 
@@ -197,7 +197,7 @@ pod_api_burst() {
                 --resolve app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP} \
                 -A '${probe_prefix}-'\$i \
                 -H 'X-Forwarded-For: ${forged_xff}' \
-                --cookie 'SESSION=${session_id}' \
+                --cookie 'BA_SESSION=${session_id}' \
                 'https://app.budgetanalyzer.localhost/api/v1/transactions?${probe_prefix}-'\$i
         done"
 }

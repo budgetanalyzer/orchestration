@@ -48,20 +48,11 @@ spec:
           value: "kubernetes"
         # Redis connection
         - name: SPRING_DATA_REDIS_HOST
-          valueFrom:
-            secretKeyRef:
-              name: session-gateway-redis-credentials
-              key: host
+          value: "redis.infrastructure"
         - name: SPRING_DATA_REDIS_PORT
-          valueFrom:
-            secretKeyRef:
-              name: session-gateway-redis-credentials
-              key: port
+          value: "6379"
         - name: SPRING_DATA_REDIS_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: session-gateway-redis-credentials
-              key: username
+          value: "session-gateway"
         - name: SPRING_DATA_REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -76,10 +67,16 @@ spec:
         # Permission service URL
         - name: PERMISSION_SERVICE_URL
           value: "http://permission-service:8086/permission-service"
-        # IDP Configuration - loaded from secret via envFrom
+        # Keep the legacy secret source first so the checked-in/Tilt-rendered
+        # IDP config wins during upgrades if stale non-secret Auth0 keys still
+        # exist in auth0-credentials.
         envFrom:
         - secretRef:
             name: auth0-credentials
+        - configMapRef:
+            name: session-gateway-config
+        - configMapRef:
+            name: session-gateway-idp-config
         volumeMounts:
         - name: infra-ca
           mountPath: /etc/ssl/infra

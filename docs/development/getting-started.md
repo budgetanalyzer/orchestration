@@ -37,12 +37,13 @@ From your **host terminal** (not the devcontainer):
 ```bash
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
-vim .env          # Review infra password defaults; add Auth0 + FRED credentials
+vim .env          # Review infra password defaults; add Auth0 config/client secret and FRED API key
 ./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
 tilt up           # Start everything
 ./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
 ./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
 ./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
+./scripts/dev/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the shared session contract and full Session Gateway auth-route contract
 ./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
 ./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
 ./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
@@ -54,6 +55,10 @@ tilt up           # Start everything
 Open https://app.budgetanalyzer.localhost when services are green.
 
 Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
+The repo also ships a checked-in fallback
+`ConfigMap/session-gateway-idp-config`, and Tilt overwrites its non-secret
+Session Gateway Auth0 settings from `.env`, while
+`Secret/auth0-credentials` now carries only `AUTH0_CLIENT_SECRET`.
 PostgreSQL uses a `postgres_admin` bootstrap user plus distinct per-service
 database users. RabbitMQ uses `rabbitmq-admin` plus the `currency-service`
 broker identity. Redis uses ACL users (`session-gateway`, `ext-authz`,
@@ -81,6 +86,16 @@ admission contract stays aligned with the manifest-literal inventory.
 clean-start proof for the seven app deployments in `default`; run it after
 `tilt up` when you want the specific admission-regression check from the clean
 rebuild workflow.
+`./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the
+repo-level proof that the Session Gateway cutover still matches orchestration:
+Redis ACL bootstrap uses `session:*` and `oauth2:state:*`, ext-authz and
+Session Gateway share the `session:` key prefix contract plus the
+`BA_SESSION` cookie-name default, orchestration explicitly wires
+`SESSION_COOKIE_NAME=BA_SESSION` into the `ext-authz` deployment, and
+`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, plus `/user` still
+belong to Session Gateway.
+After logging in once, rerun the verifier without `--static-only` or with
+`--require-live-session` when you want the live Redis ACL/keyspace proof too.
 `./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
 7 completion command; it runs the Session 6 static gate and then the Session 7
 live runtime proof in order. The narrower
@@ -117,6 +132,12 @@ main app. The `/api-docs` route uses a docs-only relaxed CSP (the stock Swagger
 UI bundle needs `'unsafe-inline'` in `style-src`). The main app and `/api/*`
 routes are not affected — they keep the strict CSP. The docs route is public,
 read-only, and serves self-hosted assets with no CDN dependency.
+The browser-visible login page is `/login`; it starts the real OAuth2 flow at
+`/oauth2/authorization/idp`. After sign-in, the frontend keeps the opaque
+`BA_SESSION` cookie alive with same-origin `GET /auth/session` heartbeats while
+the user is active. Session Gateway stores browser sessions as `session:{id}`
+hashes in Redis and uses temporary `oauth2:state:{state}` hashes for the
+OAuth2 round-trip.
 
 - **Application**: https://app.budgetanalyzer.localhost
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs

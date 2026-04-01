@@ -1,18 +1,18 @@
-## Primary Security Benefits Of BFF (Backend-for-Frontend) architecture
+## Primary Security Benefits of Session-Based Edge Authorization
 
 ### 1. **XSS Attack Protection**
 **The Critical Advantage:** Tokens never reach the browser's JavaScript environment at all.
 
-- **BFF Pattern:** Session Gateway stores Auth0 tokens server-side in Redis. Browser only receives HTTP-only session cookies that JavaScript cannot access. Session data is dual-written to ext_authz Redis schema for per-request validation.
+- **Session Pattern:** Session Gateway stores Auth0 tokens server-side in Redis session hashes. Browser only receives HTTP-only session cookies that JavaScript cannot access. ext_authz reads the same session hash for per-request validation.
 - **Direct Token:** Browser must store tokens in localStorage or sessionStorage, making them vulnerable to XSS attacks. Any malicious script can steal the token.
 
 **Impact:** Even if an attacker injects malicious JavaScript, they cannot steal authentication credentials.
 
 ### 2. **Defense in Depth - Multiple Validation Layers**
 
-The BFF architecture creates 3 independent security layers:
+The session-based edge authorization architecture creates 3 independent security layers:
 
-1. **Session Gateway** - Validates session cookies, manages token lifecycle, dual-writes to ext_authz Redis
+1. **Session Gateway** - Validates session cookies, manages token lifecycle, writes session data to Redis
 2. **ext_authz (Envoy)** - Per-request session validation from Redis, header injection
 3. **Backend Services** - Data-level authorization
 
@@ -20,7 +20,7 @@ The BFF architecture creates 3 independent security layers:
 
 ### 3. **Automatic Token Refresh Without Browser Involvement**
 
-- **BFF Pattern:** Session Gateway proactively refreshes Auth0 tokens 5 minutes before expiration, re-fetches permissions from permission-service, and updates the ext_authz Redis session. Browser never sees or handles refresh tokens.
+- **Session Pattern:** Session Gateway proactively refreshes Auth0 tokens before expiration, re-fetches permissions from permission-service, and updates the Redis session hash. Browser never sees or handles refresh tokens.
 - **Direct Token:** Browser must store refresh tokens (even more sensitive than access tokens) and handle refresh logic in JavaScript, exposing another attack surface.
 
 **Security implication:** Refresh tokens are long-lived (8 hours to 30 days). Exposing them to XSS dramatically increases breach window.
@@ -36,7 +36,7 @@ Tokens in Authorization headers don't have these browser-level protections.
 
 ### 5. **Reduced Attack Surface**
 
-**BFF Pattern:**
+**Session Pattern:**
 ```
 Browser → Session Cookie → Envoy → ext_authz (Redis lookup) → NGINX → Services
 ```
@@ -59,14 +59,14 @@ For a financial data application requiring maximum security:
 
 ## The Key Insight
 
-> **Decision: Use BFF pattern**
+> **Decision: Use session-based edge authorization**
 > **Rationale: Maximum security for browser-based financial application**
 
-The BFF pattern trades architectural complexity for eliminating the entire class of XSS-based token theft attacks, which is appropriate for high-security financial applications.
+Session-based edge authorization trades architectural complexity for eliminating the entire class of XSS-based token theft attacks, which is appropriate for high-security financial applications.
 
 ## Threat Mitigation Scenarios
 
-This section describes how the BFF architecture enables rapid response when a user account becomes a threat (compromised, malicious activity, or policy violation).
+This section describes how the session-based edge authorization architecture enables rapid response when a user account becomes a threat (compromised, malicious activity, or policy violation).
 
 ### User Account Compromise Response
 
@@ -75,7 +75,7 @@ When a user account is identified as compromised or malicious, the response invo
 **Immediate Actions:**
 
 1. **Session Deletion**
-   - Delete all Redis sessions for the user (both Spring Session and ext_authz keys)
+   - Delete the user's Redis session hash (`session:{id}`)
    - ext_authz immediately rejects subsequent requests (session not found in Redis)
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
@@ -85,7 +85,7 @@ When a user account is identified as compromised or malicious, the response invo
 The ext_authz architecture provides **instant revocation by design**:
 
 **How it works:**
-- Delete user's session(s) from Redis (both `spring:session:*` and `extauthz:session:*` keys)
+- Delete user's session hash from Redis (`session:{id}`)
 - ext_authz lookup fails on next request → 401 returned by Envoy
 - Session cookie becomes invalid (no matching session)
 - User redirected to login

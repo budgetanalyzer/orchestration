@@ -13,7 +13,7 @@ if [ -z "$REDIS_POD" ]; then
     exit 1
 fi
 
-REDIS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_USERNAME="redis-ops"
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
 if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_OPS_PASSWORD" ]; then
@@ -22,10 +22,11 @@ if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_OPS_PASSWORD" ]; then
 fi
 
 SESSION_ID="${1:-test-session-001}"
-EXPIRES_AT=$(date -d '+30 minutes' +%s 2>/dev/null || date -v+30M +%s)
+SESSION_TTL_SECONDS="${SESSION_TTL_SECONDS:-900}"
+EXPIRES_AT="$(($(date +%s) + SESSION_TTL_SECONDS))"
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" HSET \
-    "extauthz:session:${SESSION_ID}" \
+    "session:${SESSION_ID}" \
     user_id "test-user-001" \
     roles "ROLE_USER,ROLE_ADMIN" \
     permissions "transactions:read,transactions:write,currencies:read" \
@@ -33,6 +34,6 @@ redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSW
     expires_at "${EXPIRES_AT}" >/dev/null
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" EXPIRE \
-    "extauthz:session:${SESSION_ID}" 1800 >/dev/null
+    "session:${SESSION_ID}" "${SESSION_TTL_SECONDS}" >/dev/null
 
-echo "Seeded session: extauthz:session:${SESSION_ID}"
+echo "Seeded session: session:${SESSION_ID}"

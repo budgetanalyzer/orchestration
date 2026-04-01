@@ -8,7 +8,7 @@
 
 This project demonstrates production-grade patterns:
 
-- **Authentication**: OAuth2/OIDC with Auth0, BFF pattern, session management
+- **Authentication**: OAuth2/OIDC with Auth0, session-based edge authorization, session management
 - **API Gateway**: Session validation (ext_authz), auth-path throttling at Istio ingress, API routing and API-path throttling at NGINX
 - **Microservices**: Spring Boot, Kubernetes, Tilt local development
 
@@ -50,8 +50,8 @@ Current local platform baseline:
 - `setup.sh` now refreshes the existing `istio` Helm repo index on every run so fresh-cluster rebuilds pick up new pinned chart versions instead of reusing stale host-side metadata.
 - Tilt now installs `istio/cni` and enables `pilot.cni.enabled=true` for `istiod`, so meshed workloads can be reinjected without `istio-init` before broader Phase 5 Pod Security enforcement.
 - Tilt now pins Gateway API CRDs to `v1.4.0` and Istio Helm charts to `1.29.1`; ingress hardening is declared through Gateway `spec.infrastructure.parametersRef`, and the egress gateway installs directly from `istio/gateway` again using checked-in Helm values.
-- Tilt now generates local bootstrap and per-service infrastructure secrets from `.env`; Kubernetes manifests only consume named secrets so production can replace the source later.
-- The Auth0 egress allowlist is now rendered from the same `AUTH0_ISSUER_URI` contract used by `auth0-credentials`, via `scripts/dev/render-istio-egress-config.sh`, so the Session Gateway config and the Istio egress policy do not drift by tenant.
+- The repo now ships a checked-in fallback `ConfigMap/session-gateway-idp-config` for non-Tilt applies, and Tilt overwrites that non-secret Session Gateway Auth0 config from `.env`; Kubernetes manifests no longer treat ordinary connection metadata or Auth0 tenant settings as secret data.
+- The Auth0 egress allowlist is now rendered from the same `AUTH0_ISSUER_URI` contract used by `session-gateway-idp-config`, via `scripts/dev/render-istio-egress-config.sh`, so the Session Gateway config and the Istio egress policy do not drift by tenant.
 - `setup.sh` now also runs `./scripts/dev/setup-infra-tls.sh` to generate the internal `infra-ca` and `infra-tls-*` TLS secrets for Redis, PostgreSQL, and RabbitMQ. Run that script standalone only when you need to regenerate the transport-TLS material.
 - Redis is now TLS-only in-cluster; verification and session seeding scripts connect through `infra-ca`, and direct service boot runs must enable Redis SSL with that CA bundle.
 - PostgreSQL uses `postgres_admin` plus per-service database users, RabbitMQ uses `rabbitmq-admin` plus `currency-service`, and Redis uses ACL users instead of one shared password.
@@ -75,7 +75,7 @@ The local `/_prod-smoke/` verification path is a separate Tilt `local_resource`:
 - [transaction-service](https://github.com/budgetanalyzer/transaction-service) - Transaction API
 - [currency-service](https://github.com/budgetanalyzer/currency-service) - Currency API
 - [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) - React frontend
-- [session-gateway](https://github.com/budgetanalyzer/session-gateway) - Authentication BFF
+- [session-gateway](https://github.com/budgetanalyzer/session-gateway) - OAuth2 authentication and session management
 
 ## License
 

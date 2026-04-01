@@ -1,6 +1,6 @@
-# BFF + API Gateway Hybrid Pattern
+# Session Edge Authorization + API Gateway Pattern
 
-**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing, and Istio ext_authz for per-request session validation.
+**Pattern**: Hybrid architecture combining session-based edge authorization for browser security with API Gateway for routing, and Istio ext_authz for per-request session validation.
 
 ## Overview
 
@@ -19,7 +19,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 1. **Istio Ingress**: SSL termination, ext_authz enforcement on `/api/*` paths, and auth-path throttling
 2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
-4. **Session Gateway**: Auth lifecycle only (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
+4. **Session Gateway**: Auth lifecycle and session heartbeat (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
 
 **Routing**:
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
@@ -62,7 +62,7 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 
 **Responsibilities**:
 - Authenticates to Redis with the dedicated `ext-authz` ACL user
-- Validates session tokens by looking up `extauthz:session:{id}` in Redis
+- Validates session tokens by looking up `session:{id}` in Redis
 - Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
 - Returns 401 for invalid/expired sessions (request rejected by Istio ingress)
 
@@ -113,16 +113,17 @@ kubectl logs deployment/nginx-gateway
 
 **Runtime proof**: [`./scripts/dev/verify-phase-6-edge-browser-hardening.sh`](/workspace/orchestration/scripts/dev/verify-phase-6-edge-browser-hardening.sh) is the Phase 6 completion gate for the edge/browser contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the existing Session 3, Session 7, and Phase 5 verifiers, and keeps `/api-docs` probes visible as warnings instead of completion blockers. Manual browser-console validation on `/_prod-smoke/` is still required before Phase 6 can be called complete.
 
-### Session Gateway (Port 8081, HTTP) - BFF Layer
+### Session Gateway (Port 8081, HTTP) - Auth Layer
 
 **Purpose**: Browser authentication and session security
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Stores Auth0 tokens in Redis for refresh using the dedicated `session-gateway` ACL user
-- Dual-writes session data (userId, roles, permissions) to ext_authz Redis schema
+- Stores Auth0 tokens in Redis session hashes using the dedicated `session-gateway` ACL user
+- Writes session data (userId, roles, permissions) as Redis hashes (`session:{id}`)
 - Issues HttpOnly, Secure session cookies to browsers
-- Proactive token refresh before expiration (includes permission re-fetch and ext_authz session update)
+- Provides heartbeat endpoint `GET /auth/session` to extend the session TTL for active browser users
+- Proactive token refresh before expiration (includes permission re-fetch and session hash update)
 - Calls permission-service to enrich session with roles/permissions (email and displayName passed as query params)
 - Provides token exchange endpoint for native/M2M clients (`POST /auth/token/exchange`)
 
@@ -140,7 +141,7 @@ kubectl logs deployment/session-gateway
 kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
 # Check Redis connection (session storage) with the redis-ops ACL user
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
 ```
@@ -151,6 +152,21 @@ service-specific Redis ACL users, not a shared password.
 **Repository**: https://github.com/budgetanalyzer/session-gateway
 
 Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
+
+Active browser sessions also call `GET /auth/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to validate or refresh the upstream IDP grant without putting Session Gateway on the API hot path.
+
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
+
+## Shared Session Contract
+
+The browser session interface shared between Session Gateway and `ext_authz` is intentionally small:
+
+- `SESSION_KEY_PREFIX` defaults to `session:` in both repos. Session Gateway writes browser sessions under `session:{id}`, and `ext_authz` reads the same Redis namespace.
+- The browser session cookie name defaults to `BA_SESSION` in both repos. Session Gateway writes that cookie, and `ext_authz` reads it on `/api/*` requests.
+- Orchestration also sets `SESSION_COOKIE_NAME=BA_SESSION` explicitly on the checked-in `ext-authz` deployment so the live cluster does not depend on the compiled default.
+- Session Gateway owns the session hash contents and expiry behavior. `ext_authz` only assumes the hash exists, that it contains a parseable `expires_at` field, and that the current time is still before that timestamp.
+
+`./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in `orchestration/ext-authz` and the sibling `session-gateway` repo before any live-cluster checks run.
 
 ## Why This Pattern?
 
@@ -178,7 +194,7 @@ Browser → Istio Ingress (app.budgetanalyzer.localhost) → ext_authz → NGINX
 
 **Tokens never reach browser**:
 - Traditional approach: Store JWT in localStorage/sessionStorage → Vulnerable to XSS attacks
-- BFF approach: Store session data in Redis, issue secure session cookie → XSS cannot steal tokens
+- Session-based approach: Store session data in Redis, issue secure session cookie → XSS cannot steal tokens
 - Financial application: Protecting access tokens is critical for user financial data
 
 **Instant session revocation**:
@@ -254,14 +270,14 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 # Check ext_authz service
 kubectl logs deployment/ext-authz
 
-REDIS_OPS_USERNAME=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-username}' | base64 -d)
+REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-# Verify ext_authz session exists in Redis
-kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "extauthz:session:{session-id}"
+# Verify session exists in Redis
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:{session-id}"
 
-# Check Session Gateway session storage
-kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "spring:session:*"
+# Check session storage
+kubectl exec -n infrastructure deployment/redis -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
 ```
 
 **Session not persisting**:

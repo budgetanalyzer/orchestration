@@ -55,7 +55,7 @@ This document defines the deployment architecture for Budget Analyzer on Google 
 
 🚨 **CRITICAL: Cannot deploy to production without Session Gateway implementation**
 - Authentication layer not yet built
-- Estimated 8 weeks to implement full OAuth2 + BFF pattern
+- Estimated 8 weeks to implement full OAuth2 + session-based edge authorization
 - Must deploy to private network only until authentication is ready
 
 📅 **HIGH: NGINX Ingress Controller retiring March 2026**
@@ -137,7 +137,7 @@ Based on the current local orchestration topology in [Tiltfile](../../Tiltfile):
 **Backend Microservices:**
 - `transaction-service`: Spring Boot - transactions, budgets, CSV import (port 8082)
 - `currency-service`: Spring Boot - exchange rates, FRED API integration (port 8084)
-- `session-gateway`: Spring Cloud Gateway - OAuth2/session management (port 8081, implemented)
+- `session-gateway`: Spring WebFlux - OAuth2/session management (port 8081, implemented)
 
 **Infrastructure:**
 - PostgreSQL: Per-service schemas (transaction_service, currency_service)
@@ -368,7 +368,7 @@ Based on the current local orchestration topology in [Tiltfile](../../Tiltfile):
 
 **Cons:**
 - 🔒 **Extreme vendor lock-in** - GCP-only solution
-- **Cannot replicate Session Gateway BFF pattern**
+- **Cannot replicate Session Gateway session-based auth pattern**
 - Different auth model than planned OAuth2 architecture
 - Would require complete security redesign
 
@@ -730,7 +730,7 @@ Browser → Envoy → ext_authz (session validation) → NGINX → Backend Servi
 ```
 
 **What now exists locally:**
-1. Session Gateway (BFF pattern)
+1. Session Gateway (session-based edge authorization)
 2. ext_authz service (HTTP, port 9002)
 3. Envoy ext_authz integration
 4. Redis-backed session storage and header injection
@@ -852,11 +852,10 @@ spec:
 **1. Use Redis for ALL session storage (not in-memory)**
 ```yaml
 # application.yml (Session Gateway)
+session:
+  key-prefix: "session:"
+  ttl-seconds: 900
 spring:
-  session:
-    store-type: redis
-    redis:
-      namespace: spring:session
   data:
     redis:
       host: MEMORYSTORE_IP
@@ -1979,7 +1978,7 @@ export const config = configs[env as keyof typeof configs];
 #### Weeks 1-2: Credential and Session Hardening
 - Validate Session Gateway and ext_authz behavior in the target environment
 - Deploy ext_authz HTTP service (port 9002)
-- Store sessions in Redis (Spring Session + ext_authz schema), issue HTTP-only session cookies
+- Store sessions in Redis hashes (`session:{id}`), issue HTTP-only session cookies
 - Proactive token refresh (5 min before expiration)
 - Begin per-service credential separation
 
@@ -2007,7 +2006,7 @@ export const config = configs[env as keyof typeof configs];
 - [ ] ext_authz service deployed to GKE (HTTP + health)
 - [ ] Auth0 tenant configured (production)
 - [ ] Envoy Gateway configured with ext_authz enforcement
-- [ ] Redis cluster for session storage (Spring Session + ext_authz schema, HA)
+- [ ] Redis cluster for session hash storage (HA)
 - [ ] End-to-end auth flow tested
 - [ ] Security audit passed
 - [ ] Penetration testing passed
@@ -2148,11 +2147,11 @@ export const config = configs[env as keyof typeof configs];
        password: 'testpassword',
      });
      check(loginRes, { 'login successful': (r) => r.status === 200 });
-     let sessionCookie = loginRes.cookies['SESSION'];
+     let sessionCookie = loginRes.cookies['BA_SESSION'];
 
      // Get transactions
      let txRes = http.get('https://api.budgetanalyzer.com/api/v1/transactions', {
-       cookies: { SESSION: sessionCookie },
+       cookies: { BA_SESSION: sessionCookie },
      });
      check(txRes, { 'transactions fetched': (r) => r.status === 200 });
 
@@ -3197,32 +3196,13 @@ spring:
           max-active: 10
           max-idle: 5
           min-idle: 2
-  session:
-    store-type: redis
-    redis:
-      namespace: spring:session
+  key-prefix: "session:"
+  ttl-seconds: 900
 ```
 
 **Temporary Mitigation (If Redis is down):**
 
-**Option A: Restart Session Gateway with in-memory sessions (NOT RECOMMENDED for production)**
-```yaml
-# Emergency only: Switch to in-memory sessions
-spring:
-  session:
-    store-type: none  # WARNING: Sessions lost on pod restart
-```
-
-**Option B: Redirect users to login page**
-```yaml
-# Session Gateway: Fail gracefully
-spring:
-  session:
-    redis:
-      flush-mode: on-save
-      namespace: spring:session
-      configure-action: none  # Don't fail on Redis unavailable
-```
+Session Gateway requires Redis — there is no in-memory fallback. If Redis is unavailable, users must wait for Redis recovery and re-authenticate.
 
 **Validation:**
 ```bash
@@ -3230,14 +3210,11 @@ spring:
 redis-cli -h MEMORYSTORE_IP ping
 # Expected: PONG
 
-# Test session creation
-curl -v -X POST https://api.budgetanalyzer.com/auth/login \
-  -d '{"username":"test@example.com","password":"password"}' \
-  -H "Content-Type: application/json"
-# Expected: Set-Cookie: SESSION=... header
+# Test session creation (login via browser, then check cookie)
+# Expected: Set-Cookie: BA_SESSION=... header
 
 # Check session stored in Redis
-redis-cli -h MEMORYSTORE_IP KEYS "spring:session:sessions:*"
+redis-cli -h MEMORYSTORE_IP KEYS "session:*"
 
 # Monitor error rate (should drop to < 1%)
 ```

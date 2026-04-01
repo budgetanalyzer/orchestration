@@ -47,15 +47,9 @@ spec:
           value: "kubernetes"
         # Database connection
         - name: SPRING_DATASOURCE_URL
-          valueFrom:
-            secretKeyRef:
-              name: permission-service-postgresql-credentials
-              key: url
+          value: "jdbc:postgresql://postgresql.infrastructure:5432/permission?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt"
         - name: SPRING_DATASOURCE_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: permission-service-postgresql-credentials
-              key: username
+          value: "permission_service"
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:

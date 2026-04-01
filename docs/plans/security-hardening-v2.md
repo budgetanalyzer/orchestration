@@ -92,6 +92,7 @@ Current local Phase 1 baseline:
 
 - Tilt generates `postgresql-bootstrap-credentials`, per-service PostgreSQL secrets, `rabbitmq-bootstrap-credentials`, `currency-service-rabbitmq-credentials`, `redis-bootstrap-credentials`, and per-service Redis secrets from `.env` for local Kind only.
 - `./scripts/dev/verify-phase-1-credentials.sh` is the runtime proof for PostgreSQL, RabbitMQ, Redis ACL isolation, and the ext-authz Redis username/password path.
+- `./scripts/dev/verify-session-architecture-phase-5.sh` is the companion proof that the later Session Gateway cutover still matches the Phase 1 Redis ACL namespace contract: `session:*` for live sessions, `oauth2:state:*` for OAuth2 request state, and the shared `session:` key-prefix plus `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, with orchestration explicitly wiring `SESSION_COOKIE_NAME=BA_SESSION` into the `ext-authz` deployment.
 
 ### 1a. Per-service PostgreSQL users
 
@@ -175,18 +176,17 @@ Required Redis users:
 
 Proposed ACL rules for Phase 1:
 
-- `ext-authz` command scope is confirmed from source (`PING` plus `HGETALL` on `extauthz:session:*`)
-- `session-gateway` should use broad command access with key-pattern isolation because Spring Session relies on framework-managed Redis operations
+- `ext-authz` command scope is confirmed from source (`PING` plus `HGETALL` on `session:*`)
+- `session-gateway` should use broad command access with key-pattern isolation because it manages both the single `session:{id}` hashes and the temporary `oauth2:state:{state}` authorization request hashes
 - `currency-service` should start with a cache-focused allow-list and be validated in runtime tests because Spring Cache/Lettuce hides the exact Redis command set behind abstractions
 
 ```
-# session-gateway: Spring Session uses a wide range of internal commands (hash ops,
-# set ops, key ops, pub/sub for session events). Restricting to specific commands
-# risks breakage on Spring Session upgrades. Use +@all with key-pattern isolation.
-user session-gateway on >PASSWORD ~spring:session:* ~extauthz:session:* +@all
+# session-gateway: keep broad command access, but limit it to the unified
+# session namespace plus OAuth2 state storage.
+user session-gateway on >PASSWORD ~session:* ~oauth2:state:* +@all
 
-# ext-authz: read-only on ext-authz sessions + health check
-user ext-authz on >PASSWORD ~extauthz:session:* +hgetall +ping +auth +hello +info
+# ext-authz: read-only on unified session hashes + health check
+user ext-authz on >PASSWORD ~session:* +hgetall +ping +auth +hello +info
 
 # currency-service: initial cache-focused allow-list on its namespace only.
 # Validate this in runtime tests and expand only if framework behavior proves
@@ -204,6 +204,11 @@ user default on >PASSWORD ~* +ping +auth
 
 1. Keep `default` user enabled but restricted to only `+ping +auth` (simplest)
 2. Use a wrapper shell script mounted into the container that calls `redis-cli --user $REDIS_OPS_USERNAME --pass $REDIS_OPS_PASSWORD ping`
+
+This ACL contract now pairs with the shared `session:` key-prefix default used
+by Session Gateway and ext-authz in Phase 5b.
+Keep the Redis ACL key patterns and the ext_authz session prefix aligned, or
+live authorization checks will drift back to the wrong namespace.
 
 Option 1 is recommended for Phase 1.
 
@@ -500,15 +505,15 @@ Execution model:
 
 Detailed implementation breakdown: [security-hardening-v2-phase-6-implementation.md](./security-hardening-v2-phase-6-implementation.md)
 Post-review corrections plan: [security-hardening-v2-phase-6-corrections-implementation.md](./security-hardening-v2-phase-6-corrections-implementation.md)
-`/api/docs` CSP remediation note (historical context, not the current target): [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md)
-`/api/docs` complexity rollback follow-up: [security-hardening-v2-phase-6-api-docs-workaround-removal.md](./security-hardening-v2-phase-6-api-docs-workaround-removal.md)
+`/api-docs` CSP remediation note (historical context, not the current target): [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md)
+`/api-docs` complexity rollback follow-up: [security-hardening-v2-phase-6-api-docs-workaround-removal.md](./security-hardening-v2-phase-6-api-docs-workaround-removal.md)
 
 Current implementation status for March 26, 2026:
 
-- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate, reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade, and keeps `/api/docs` probes visible as warning-only checks.
-- `/api/docs` remains a lightweight developer-convenience route, not a place to carry more Phase 6 complexity. The checked-in rollback state is now the simpler `main`-style posture: the simplified `docs-aggregator` is restored, vendored Swagger assets are gone, docs-only CSP plumbing is gone, docs asset image/init-container plumbing is gone, and docs checks remain warning-only instead of part of the completion gate.
-- Manual browser testing on March 26, 2026 found the remaining `/api/docs` blocker under the original docs strict CSP. That evidence is retained in [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md), but the rollback plan is now the active path.
-- Final browser-enforcement validation remains open work for the real app verification path. `/api/docs` is now explicitly non-blocking in the Phase 6 story, and `/_prod-smoke/` remains the browser-validation surface that still matters.
+- Sessions 1-9 are implemented in-repo. Local development keeps the explicit `/_prod-smoke/` verification seam and the live Vite/HMR route graph, while `nginx/nginx.production.k8s.conf` now captures the production frontend cutover explicitly: `/` and `/login` serve the built frontend bundle under the strict CSP, `/_prod-smoke/` returns `404`, and `/@vite/client`, `/src`, plus `/node_modules` are absent from the production route set. `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is now the dedicated Phase 6 completion gate, reruns the Session 3 CSP audit, the Session 7 API identity verifier, and the full Phase 5 regression cascade, and keeps `/api-docs` probes visible as warning-only checks.
+- `/api-docs` remains a lightweight developer-convenience route, not a place to carry more Phase 6 complexity. The checked-in rollback state is now the simpler `main`-style posture: the simplified `docs-aggregator` is restored, vendored Swagger assets are gone, docs-only CSP plumbing is gone, docs asset image/init-container plumbing is gone, and docs checks remain warning-only instead of part of the completion gate.
+- Manual browser testing on March 26, 2026 found the remaining `/api-docs` blocker under the original docs strict CSP. That evidence is retained in [security-hardening-v2-phase-6-api-docs-csp-remediation.md](./security-hardening-v2-phase-6-api-docs-csp-remediation.md), but the rollback plan is now the active path.
+- Final browser-enforcement validation remains open work for the real app verification path. `/api-docs` is now explicitly non-blocking in the Phase 6 story, and `/_prod-smoke/` remains the browser-validation surface that still matters.
 
 ### 6a. CSP split for dev and production
 

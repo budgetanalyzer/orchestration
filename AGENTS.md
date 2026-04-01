@@ -46,7 +46,7 @@ This orchestration repository coordinates the deployment and development environ
 This project has reached its intended scope. We are no longer actively developing Budget Analyzer features - we're interested in discussing these patterns with other architects.
 
 **What's implemented:**
-- Authentication: OAuth2/OIDC with Auth0, BFF pattern, opaque session tokens + ext_authz
+- Authentication: OAuth2/OIDC with Auth0, session-based edge authorization, opaque session tokens + ext_authz
 - API Gateway: Istio ext_authz for session validation and auth-path throttling, NGINX for API routing and backend/API rate limiting
 - Microservices patterns: Spring Boot, Kubernetes, Tilt
 
@@ -63,11 +63,13 @@ This boundary is deliberate. Data ownership is domain-specific and opinionated. 
 
 For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
 
+**Default debugging environment**: Tilt runs on the host machine, while AI agents run inside the container with full read access to the shared workspace and full `kubectl` access to the host-managed cluster. Treat that host-Tilt plus in-container-`kubectl` split as the default deployment-debugging setup for this repository.
+
 ## Architecture Principles
 
 - **Production Parity**: Development environment faithfully recreates production
 - **Microservices**: Independently deployable services with clear boundaries
-- **BFF Pattern**: Session Gateway provides browser security and authentication management
+- **Session-Based Edge Authorization**: Session Gateway provides browser security and authentication management
 - **Gateway Pattern**: Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
 - **Resource-Based Routing**: Frontend remains decoupled from service topology
 - **Defense in Depth**: Multiple security layers (Istio ingress/ext_authz → Session Gateway or NGINX → Services)
@@ -92,14 +94,14 @@ kubectl get svc
 **Service Types**:
 - **Frontend services**: React-based web applications (port 3000 in dev)
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
-- **Session Gateway (BFF)**: Spring Cloud Gateway (port 8081, HTTP) - browser authentication and session management
+- **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
 - **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
 - **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
 - **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
 
-**Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md) for details.
+**Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/session-edge-authorization-pattern.md](docs/architecture/session-edge-authorization-pattern.md) for details.
 
 **Health Probes**: All Spring Boot services use a three-probe pattern:
 - **startupProbe**: Allows up to 120s for slow-starting JVM apps (5s × 24 checks). Pod won't receive traffic until startup succeeds.
@@ -108,9 +110,9 @@ kubectl get svc
 
 This prevents "connection refused" errors during deployments when services are still starting.
 
-## BFF + API Gateway Hybrid Pattern
+## Session Edge Authorization + API Gateway Pattern
 
-**Pattern**: Hybrid architecture combining Backend-for-Frontend (BFF) for browser security with API Gateway for routing and validation.
+**Pattern**: Hybrid architecture combining session-based edge authorization for browser security with API Gateway for routing and validation.
 
 **Request Flow**:
 ```
@@ -124,8 +126,8 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
 - `/login`, `/*` → NGINX (frontend, no auth required)
 
-**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions.
-  - `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
+**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/session` under `/auth/*`, which lets Session Gateway extend the session TTL and refresh the upstream IDP grant when needed.
+- `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:
 - Same-origin architecture = no CORS issues
@@ -145,7 +147,7 @@ kubectl get svc
 ```
 
 **When to consult detailed documentation**:
-- Understanding component roles and request flow → [docs/architecture/bff-api-gateway-pattern.md](docs/architecture/bff-api-gateway-pattern.md)
+- Understanding component roles and request flow → [docs/architecture/session-edge-authorization-pattern.md](docs/architecture/session-edge-authorization-pattern.md)
 - Port reference and service topology → [docs/architecture/port-reference.md](docs/architecture/port-reference.md)
 - Adding new API routes → "Adding a New Resource Route" in [nginx/README.md](nginx/README.md)
 - Adding new microservices → "Adding a New Microservice" in [nginx/README.md](nginx/README.md)
@@ -200,7 +202,7 @@ Check prerequisites:
 **First-time setup**:
 ```bash
 ./setup.sh        # Recreates the kind cluster from scratch, installs Calico, ensures supported Helm, refreshes the Istio Helm repo index, configures certs (browser + infra TLS), DNS, and .env
-# Edit .env with your Auth0 and FRED API credentials
+# Edit .env with your Auth0 config/client secret and FRED API key
 ```
 
 ### Quick Start
@@ -270,7 +272,7 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── .github/                    # Organization-level GitHub config (templates, profile README)
 ├── workspace/                  # Devcontainer entry point (clone this first)
 ├── orchestration/              # This repo - deployment coordination
-├── session-gateway/            # BFF service (auth lifecycle)
+├── session-gateway/            # Auth service (session lifecycle)
 ├── transaction-service/        # Transaction management
 ├── currency-service/           # Currency/exchange rates
 ├── permission-service/         # Internal roles/permissions
@@ -304,7 +306,7 @@ Each microservice is maintained in its own repository:
 - **transaction-service**: https://github.com/budgetanalyzer/transaction-service - Transaction management API
 - **currency-service**: https://github.com/budgetanalyzer/currency-service - Currency and exchange rate API
 - **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
-- **session-gateway**: https://github.com/budgetanalyzer/session-gateway - BFF for browser authentication
+- **session-gateway**: https://github.com/budgetanalyzer/session-gateway - OAuth2 authentication and session management
 - **permission-service**: https://github.com/budgetanalyzer/permission-service - Internal roles/permissions resolution
 
 ## Best Practices

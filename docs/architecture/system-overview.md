@@ -54,7 +54,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
           ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────┐
 │   Session Gateway    │   │   ext_authz (:9002)  │
-│   (BFF, OAuth2)      │   │   session validation │
+│   (OAuth2, Sessions) │   │   session validation │
 │   :8081              │   └──────────┬───────────┘
 └───────┬──────────────┘              │ headers injected
         │                             ▼
@@ -76,7 +76,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 ┌─────────────────────────────────────────────────────────────┐
 │              Shared Infrastructure                           │
 │  • PostgreSQL (primary database)                             │
-│  • Redis (session storage + ext_authz schema, caching)       │
+│  • Redis (session hash storage, caching)                     │
 │  • RabbitMQ (async messaging)                                │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -112,10 +112,11 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 - Header injection (X-User-Id, X-Roles, X-Permissions)
 - Go HTTP service implementing Envoy ext_authz protocol
 
-**Session Gateway (BFF)** (Port 8081)
+**Session Gateway** (Port 8081)
 - OAuth2 authentication with Auth0
-- Session management via Redis
-- Auth0 token storage; dual-writes session data to ext_authz Redis schema (never exposed to browser)
+- Session management via Redis hashes (`session:{id}`)
+- Auth0 token storage in Redis session hashes (never exposed to browser)
+- Heartbeat endpoint `GET /auth/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry
 - Calls permission-service to enrich session with roles/permissions
 - Token exchange endpoint for native/M2M clients
 
@@ -145,7 +146,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 - Managed via Flyway migrations per service
 
 **Redis**
-- Session storage (Session Gateway - Spring Session + ext_authz schema)
+- Session storage (Session Gateway writes `session:{id}` hashes, ext_authz reads them)
 - Distributed caching (currency-service)
 
 **RabbitMQ**
@@ -249,7 +250,7 @@ tilt get uiresources
 
 ### Caching Strategy
 - **Redis distributed cache**: Used by currency-service
-- **Session storage**: Used by session-gateway (Spring Session + ext_authz schema)
+- **Session storage**: Used by session-gateway (Redis hashes, read by ext_authz)
 - **TTL-based expiration**: Configurable per cache
 - **Cache-aside pattern**: Services manage cache population
 
@@ -266,8 +267,8 @@ This reference architecture deliberately stops before solving data ownership. Un
 
 **Authentication & Sessions:**
 - OAuth2/OIDC flows with Auth0
-- BFF pattern (browser never sees tokens)
-- Redis-backed session management
+- Session-based edge authorization (browser never sees tokens)
+- Redis-backed session management with heartbeat-driven sliding expiration
 - Token refresh and lifecycle
 
 **Platform Security Baseline (Phase 0):**
@@ -275,12 +276,12 @@ This reference architecture deliberately stops before solving data ownership. Un
 - Namespace Pod Security Admission labels are explicit per namespace: application namespaces enforce `restricted`, `infrastructure` enforces `baseline`, and `istio-system` enforces `privileged` because the `istio-cni` DaemonSet runs there
 - Tilt installs Istio CNI so meshed workloads can run without injected `istio-init`
 - Kyverno applies the checked-in Phase 7 admission suite plus the retained smoke policy bootstrap check, and `scripts/dev/verify-security-prereqs.sh` still proves the smoke path is alive
-- ext_authz dual-write for per-request validation
+- ext_authz reads session hashes for per-request validation
 
 **Gateway Patterns:**
 - Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`
 - Istio Egress: Outbound traffic control (REGISTRY_ONLY + ServiceEntry allowlist)
-- Session Gateway: Auth lifecycle, OAuth2 callback handling under `/login/oauth2/*`, session dual-write to ext_authz Redis schema
+- Session Gateway: Auth lifecycle, `GET /auth/session` heartbeat, OAuth2 callback handling under `/login/oauth2/*`, session write to Redis hash
 - ext_authz: Per-request session validation, header injection
 - NGINX: Resource routing, backend/API rate limiting, frontend login page at `/login`
 

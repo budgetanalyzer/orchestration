@@ -300,8 +300,8 @@ spec:
         - -ceu
         - |
           cat > /tmp/users.acl <<EOF
-          user session-gateway on >${REDIS_SESSION_GATEWAY_PASSWORD} ~spring:session:* ~extauthz:session:* +@all
-          user ext-authz on >${REDIS_EXT_AUTHZ_PASSWORD} ~extauthz:session:* +hgetall +ping +auth +hello +info
+          user session-gateway on >${REDIS_SESSION_GATEWAY_PASSWORD} ~session:* ~oauth2:state:* +@all
+          user ext-authz on >${REDIS_EXT_AUTHZ_PASSWORD} ~session:* +hgetall +ping +auth +hello +info
           user currency-service on >${REDIS_CURRENCY_SERVICE_PASSWORD} ~currency-service:* +get +set +del +keys +scan +ping +auth +hello +ttl +pttl +expire +exists +type +object
           user redis-ops on >${REDIS_OPS_PASSWORD} ~* +@all
           user default on >${REDIS_DEFAULT_PASSWORD} ~* +ping +auth

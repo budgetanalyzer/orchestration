@@ -21,6 +21,13 @@ source "${SCRIPT_DIR}/lib/redis-cli.sh"
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
 TMP_FILES=()
+PG_ADMIN_USER="postgres_admin"
+RMQ_ADMIN_USER="rabbitmq-admin"
+RMQ_CS_USER="currency-service"
+REDIS_OPS_USER="redis-ops"
+REDIS_SG_USER="session-gateway"
+REDIS_EA_USER="ext-authz"
+REDIS_CS_USER="currency-service"
 
 usage() {
     cat <<'EOF'
@@ -301,24 +308,17 @@ RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
 REDIS_POD=$(require_pod infrastructure app=redis Redis)
 EXT_AUTHZ_POD=$(require_pod default app=ext-authz ext-authz)
 
-PG_ADMIN_USER=$(require_secret_value infrastructure postgresql-bootstrap-credentials username)
 PG_ADMIN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials password)
 PG_TXN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials transaction-service-password)
 PG_CUR_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials currency-service-password)
 PG_PER_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials permission-service-password)
 
-RMQ_ADMIN_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials username)
 RMQ_ADMIN_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials password)
-RMQ_CS_USER=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-username)
-RMQ_CS_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials currency-service-password)
+RMQ_CS_PASS=$(require_secret_value default currency-service-rabbitmq-credentials password)
 
-REDIS_OPS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ops-username)
 REDIS_OPS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ops-password)
-REDIS_SG_USER=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-username)
 REDIS_SG_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
-REDIS_EA_USER=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-username)
 REDIS_EA_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-password)
-REDIS_CS_USER=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-username)
 REDIS_CS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-password)
 
 section "PostgreSQL: Positive (service user -> own database)"
@@ -435,30 +435,30 @@ section "Redis: Positive (authorized operations)"
 
 VERIFY_KEY="__phase1_verify__"
 
-SG_SET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" SET "spring:session:${VERIFY_KEY}" "ok")
-SG_GET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "spring:session:${VERIFY_KEY}")
-redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "spring:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
+SG_SET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" SET "session:${VERIFY_KEY}" "ok")
+SG_GET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "session:${VERIFY_KEY}")
+redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "session:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if [ "$SG_SET" = "OK" ] && [ "$SG_GET" = "ok" ]; then
-    pass "session-gateway SET/GET on spring:session:*"
+    pass "session-gateway SET/GET on session:*"
 else
-    fail "session-gateway SET/GET on spring:session:* (SET=${SG_SET}, GET=${SG_GET})"
+    fail "session-gateway SET/GET on session:* (SET=${SG_SET}, GET=${SG_GET})"
 fi
 
-EA_SG_HSET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HSET "extauthz:session:${VERIFY_KEY}" "field" "value")
-redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "extauthz:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
+EA_SG_HSET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HSET "oauth2:state:${VERIFY_KEY}" "redirect_uri" "/login/oauth2/code/idp")
+redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "oauth2:state:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if echo "$EA_SG_HSET" | grep -qE '^[0-9]+$'; then
-    pass "session-gateway HSET on extauthz:session:*"
+    pass "session-gateway HSET on oauth2:state:*"
 else
-    fail "session-gateway HSET on extauthz:session:* (${EA_SG_HSET})"
+    fail "session-gateway HSET on oauth2:state:* (${EA_SG_HSET})"
 fi
 
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "extauthz:session:${VERIFY_KEY}" "field" "value" >/dev/null 2>&1
-EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "extauthz:session:${VERIFY_KEY}")
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${VERIFY_KEY}" >/dev/null 2>&1 || true
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "session:${VERIFY_KEY}" "field" "value" >/dev/null 2>&1
+EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "session:${VERIFY_KEY}")
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "session:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if echo "$EA_READ" | grep -q 'value'; then
-    pass "ext-authz HGETALL on extauthz:session:*"
+    pass "ext-authz HGETALL on session:*"
 else
-    fail "ext-authz HGETALL on extauthz:session:* (${EA_READ})"
+    fail "ext-authz HGETALL on session:* (${EA_READ})"
 fi
 
 EA_PING=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" PING)
@@ -479,25 +479,25 @@ fi
 
 section "Redis: Negative (unauthorized operations denied)"
 
-EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "extauthz:session:${VERIFY_KEY}" "nope")
+EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "session:${VERIFY_KEY}" "nope")
 if echo "$EA_SET" | grep -qi 'NOPERM'; then
     pass "ext-authz denied SET command"
 else
     fail "ext-authz NOT denied SET (${EA_SET})"
 fi
 
-EA_CROSS=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "spring:session:anything")
+EA_CROSS=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "oauth2:state:anything")
 if echo "$EA_CROSS" | grep -qi 'NOPERM'; then
-    pass "ext-authz denied on spring:session:* keys"
+    pass "ext-authz denied on oauth2:state:* keys"
 else
-    fail "ext-authz NOT denied on spring:session:* (${EA_CROSS})"
+    fail "ext-authz NOT denied on oauth2:state:* (${EA_CROSS})"
 fi
 
-CS_CROSS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "spring:session:anything")
+CS_CROSS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "session:anything")
 if echo "$CS_CROSS" | grep -qi 'NOPERM'; then
-    pass "currency-service denied on spring:session:* keys"
+    pass "currency-service denied on session:* keys"
 else
-    fail "currency-service NOT denied on spring:session:* (${CS_CROSS})"
+    fail "currency-service NOT denied on session:* (${CS_CROSS})"
 fi
 
 SG_CROSS=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "currency-service:anything")
@@ -557,7 +557,7 @@ EXT_AUTHZ_SESSION_ID="phase1-verify-$RANDOM-$RANDOM"
 AUTH_HEADERS=$(mktemp)
 TMP_FILES+=("$AUTH_HEADERS")
 AUTH_STATUS=$(curl -sS -D "$AUTH_HEADERS" -o /dev/null -w '%{http_code}' \
-    -H "Cookie: SESSION=${EXT_AUTHZ_SESSION_ID}" \
+    -H "Cookie: BA_SESSION=${EXT_AUTHZ_SESSION_ID}" \
     -H 'X-Envoy-Original-Path: /api/v1/currencies' \
     "http://127.0.0.1:${EXT_AUTHZ_HTTP_PORT}/check")
 
@@ -570,7 +570,7 @@ else
     fail "ext-authz session lookup failed (status=${AUTH_STATUS})"
 fi
 
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "extauthz:session:${EXT_AUTHZ_SESSION_ID}" >/dev/null 2>&1 || true
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "session:${EXT_AUTHZ_SESSION_ID}" >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="

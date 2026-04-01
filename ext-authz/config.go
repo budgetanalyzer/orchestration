@@ -26,8 +26,8 @@ func LoadConfig() Config {
 		RedisCACert:       envOrDefault("REDIS_CA_CERT", ""),
 		HTTPPort:          envOrDefault("HTTP_PORT", "9002"),
 		HealthPort:        envOrDefault("HEALTH_PORT", "8090"),
-		SessionKeyPrefix:  envOrDefault("SESSION_KEY_PREFIX", "extauthz:session:"),
-		SessionCookieName: envOrDefault("SESSION_COOKIE_NAME", "SESSION"),
+		SessionKeyPrefix:  envOrDefault("SESSION_KEY_PREFIX", "session:"),
+		SessionCookieName: envOrDefault("SESSION_COOKIE_NAME", "BA_SESSION"),
 		LogLevel:          envOrDefault("LOG_LEVEL", "info"),
 		LogFormat:         envOrDefault("LOG_FORMAT", "json"),
 	}

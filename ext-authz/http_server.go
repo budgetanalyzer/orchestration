@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 )
 
+type SessionLookupStore interface {
+	LookupSession(ctx context.Context, sessionID string) (*SessionData, error)
+}
+
 // NewHTTPAuthHandler returns an HTTP handler that implements ext_authz HTTP mode.
 // Envoy forwards the original request headers; the handler extracts the session
 // cookie, validates against Redis, and returns 200 with identity headers on
 // success or 401 on failure.
-func NewHTTPAuthHandler(store *SessionStore, cfg Config) http.Handler {
+func NewHTTPAuthHandler(store SessionLookupStore, cfg Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.Header.Get("X-Envoy-Original-Path")
 		if path == "" {

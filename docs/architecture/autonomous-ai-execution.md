@@ -639,7 +639,7 @@ on my host machine (outside the container).
 
 ## Related Documentation
 
-- [BFF + API Gateway Pattern](bff-api-gateway-pattern.md) - Request flow and routing architecture
+- [Session Edge Authorization + API Gateway Pattern](session-edge-authorization-pattern.md) - Request flow and routing architecture
 - [Security Architecture](security-architecture.md) - Defense-in-depth security model
 - [Workspace README](../../../workspace/README.md) - Devcontainer and sandbox entry point
 - [Setup Flow Testing](../../tests/setup-flow/README.md) - Docker-in-Docker bootstrap validation

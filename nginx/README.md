@@ -369,7 +369,7 @@ This is the power of resource-based routing!
 
 **You shouldn't have CORS issues!** Everything is same-origin (`app.budgetanalyzer.localhost` via Istio ingress gateway).
 
-The BFF (Backend for Frontend) pattern eliminates CORS:
+The session-based edge authorization pattern eliminates CORS:
 - Browser sees single origin: `app.budgetanalyzer.localhost`
 - Istio ingress gateway routes to NGINX or Session Gateway
 - NGINX routes to backend services

@@ -9,6 +9,8 @@
 #    falling back to an in-pod localhost fetch when the proxy path is unavailable
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
+# 4. Fetch the Session Gateway spec separately (not merged) and save alongside
+# 5. Copy both specs to budget-analyzer-web/docs/api/
 #
 # The unified spec can be used by clients to generate client libraries
 #
@@ -57,6 +59,39 @@ require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         print_error_stderr "$1 is required but not installed."
         exit 1
+    fi
+}
+
+# Convert JSON on stdin to YAML at the given output path.
+# Usage: echo "$JSON" | convert_json_to_yaml "/path/to/output.yaml" "description"
+# Returns 1 if no YAML converter is available.
+convert_json_to_yaml() {
+    local output_path="$1"
+    local description="$2"
+    local tmp_yaml
+    tmp_yaml="$(mktemp "${output_path}.tmp.XXXXXX")"
+
+    if command -v yq &>/dev/null; then
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            cat | yq -P '.' > "$tmp_yaml"
+        else
+            cat | yq -y '.' > "$tmp_yaml"
+        fi
+        mv "$tmp_yaml" "$output_path"
+        print_success "✓ Generated ${description} (YAML): $output_path"
+    elif command -v python3 &>/dev/null; then
+        if cat | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$tmp_yaml" 2>/dev/null; then
+            mv "$tmp_yaml" "$output_path"
+            print_success "✓ Generated ${description} (YAML): $output_path"
+        else
+            rm -f "$tmp_yaml"
+            print_warning "Python yaml module not available — skipping YAML output for ${description}"
+            return 1
+        fi
+    else
+        rm -f "$tmp_yaml"
+        print_warning "Neither yq nor python3 found — skipping YAML output for ${description}"
+        return 1
     fi
 }
 
@@ -177,34 +212,45 @@ print_success "✓ Generated unified OpenAPI spec (JSON): $OUTPUT_JSON"
 
 # Save YAML output
 OUTPUT_YAML="$OUTPUT_DIR/openapi.yaml"
-TMP_YAML="$(mktemp "${OUTPUT_YAML}.tmp.XXXXXX")"
-if command -v yq &>/dev/null; then
-    if yq --version 2>&1 | grep -q "mikefarah"; then
-        echo "$UNIFIED_SPEC" | yq -P '.' > "$TMP_YAML"
-    else
-        # Python yq (kislyuk/yq) wraps jq — uses -y for YAML output
-        echo "$UNIFIED_SPEC" | yq -y '.' > "$TMP_YAML"
-    fi
-    mv "$TMP_YAML" "$OUTPUT_YAML"
-    print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
-elif command -v python3 &>/dev/null; then
-    if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$TMP_YAML" 2>/dev/null; then
-        mv "$TMP_YAML" "$OUTPUT_YAML"
-        print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
-    else
-        rm -f "$TMP_YAML"
-        print_warning "Python yaml module not available — skipping YAML output"
-    fi
-else
-    rm -f "$TMP_YAML"
-    print_warning "Neither yq nor python3 found — skipping YAML output"
+echo "$UNIFIED_SPEC" | convert_json_to_yaml "$OUTPUT_YAML" "unified OpenAPI spec" || true
+
+# --- Session Gateway spec (separate from unified spec) ---
+
+print_info "Fetching Session Gateway spec..."
+
+if ! SESSION_GW_SPEC="$(fetch_service_spec "session-gateway" "8081" "/v3/api-docs" "Session Gateway")"; then
+    exit 1
 fi
+print_success "✓ Fetched Session Gateway spec"
+
+# Filter out /internal/* routes — those are service-to-service only
+SESSION_GW_SPEC=$(echo "$SESSION_GW_SPEC" | jq '.paths |= with_entries(select(.key | startswith("/internal") | not))')
+
+SESSION_GW_JSON="$OUTPUT_DIR/session-gateway-api.json"
+TMP_SESSION_JSON="$(mktemp "${SESSION_GW_JSON}.tmp.XXXXXX")"
+echo "$SESSION_GW_SPEC" | jq '.' > "$TMP_SESSION_JSON"
+mv "$TMP_SESSION_JSON" "$SESSION_GW_JSON"
+print_success "✓ Generated Session Gateway spec (JSON): $SESSION_GW_JSON"
+
+SESSION_GW_YAML="$OUTPUT_DIR/session-gateway-api.yaml"
+echo "$SESSION_GW_SPEC" | convert_json_to_yaml "$SESSION_GW_YAML" "Session Gateway spec" || true
 
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
 if [ -d "$WEB_DOCS_DIR" ]; then
     cp "$OUTPUT_YAML" "$WEB_DOCS_DIR/budget-analyzer-api.yaml"
     print_success "✓ Copied to budget-analyzer-web: $WEB_DOCS_DIR/budget-analyzer-api.yaml"
+
+    WEB_API_DIR="$WEB_DOCS_DIR/api"
+    mkdir -p "$WEB_API_DIR"
+    cp "$OUTPUT_YAML" "$WEB_API_DIR/budget-analyzer-api.yaml"
+    print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/budget-analyzer-api.yaml"
+    if [ -f "$SESSION_GW_YAML" ]; then
+        cp "$SESSION_GW_YAML" "$WEB_API_DIR/session-gateway-api.yaml"
+        print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/session-gateway-api.yaml"
+    else
+        print_warning "Session Gateway YAML not available — skipping copy to $WEB_API_DIR"
+    fi
 else
     print_warning "budget-analyzer-web/docs directory not found - skipping copy"
 fi

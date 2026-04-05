@@ -305,6 +305,13 @@ create_configmap('session-gateway-idp-config', DEFAULT_NAMESPACE, {
     'IDP_LOGOUT_RETURN_TO': os.getenv('IDP_LOGOUT_RETURN_TO', 'https://app.budgetanalyzer.localhost/peace'),
 })
 
+# Session Gateway config: override checked-in configmap so local dev
+# gets Springdoc/Swagger UI enabled.
+create_configmap('session-gateway-config', DEFAULT_NAMESPACE, {
+    'SESSION_TTL_SECONDS': '900',
+    'SPRINGDOC_ENABLED': 'true',
+})
+
 create_secret('auth0-credentials', DEFAULT_NAMESPACE, {
     'AUTH0_CLIENT_SECRET': os.getenv('AUTH0_CLIENT_SECRET', ''),
 })
@@ -476,7 +483,6 @@ k8s_yaml([
     'kubernetes/services/session-gateway/serviceaccount.yaml',
     'kubernetes/services/session-gateway/deployment.yaml',
     'kubernetes/services/session-gateway/service.yaml',
-    'kubernetes/services/session-gateway/configmap.yaml',
 ])
 
 k8s_resource(

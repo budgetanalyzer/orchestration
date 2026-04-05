@@ -395,7 +395,7 @@ EXPOSE ''' + str(port) + '''
         'kubernetes/services/' + name + '/serviceaccount.yaml',
         'kubernetes/services/' + name + '/deployment.yaml',
         'kubernetes/services/' + name + '/service.yaml',
-    ])
+    ] + glob('kubernetes/services/' + name + '/configmap.yaml'))
 
     # Step 4: Configure resource with port forwards and dependencies
     port_forwards_list = [

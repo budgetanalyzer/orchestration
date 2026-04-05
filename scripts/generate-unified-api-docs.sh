@@ -157,18 +157,29 @@ if ! CURRENCY_SPEC="$(fetch_service_spec "currency-service" "8084" "/currency-se
 fi
 print_success "✓ Fetched Currency Service spec"
 
+if ! PERMISSION_SPEC="$(fetch_service_spec "permission-service" "8086" "/permission-service/v3/api-docs" "Permission Service")"; then
+    exit 1
+fi
+print_success "✓ Fetched Permission Service spec"
+
+# Filter out /internal/* routes and Internal* schemas from all specs — those are service-to-service only
+BUDGET_SPEC=$(echo "$BUDGET_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+CURRENCY_SPEC=$(echo "$CURRENCY_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+PERMISSION_SPEC=$(echo "$PERMISSION_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+
 print_info "Merging OpenAPI specifications..."
 
 # Create unified spec using jq
 UNIFIED_SPEC=$(jq -n \
     --argjson budget "$BUDGET_SPEC" \
-    --argjson currency "$CURRENCY_SPEC" '
+    --argjson currency "$CURRENCY_SPEC" \
+    --argjson permission "$PERMISSION_SPEC" '
 {
     "openapi": "3.1.0",
     "info": {
         "title": "Budget Analyzer - Unified API",
         "version": "1.0",
-        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API and Currency Service into a single document for client code generation.",
+        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Transaction Service, Currency Service, and Permission Service into a single document for client code generation.\n\nAll endpoints are served under the `/api` base path.",
         "contact": {
             "name": "Bleu Rubin",
             "email": "contact@budgetanalyzer.org"
@@ -189,15 +200,16 @@ UNIFIED_SPEC=$(jq -n \
         }
     ],
     "tags": (
-        ($budget.tags // [] | map(. + {"x-service": "transaction-service"})) +
-        ($currency.tags // [] | map(. + {"x-service": "currency-service"}))
+        ($budget.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "transaction-service"})) +
+        ($currency.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "currency-service"})) +
+        ($permission.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "permission-service"}))
     ),
     "paths": (
-        ($budget.paths // {}) + ($currency.paths // {})
+        ($budget.paths // {}) + ($currency.paths // {}) + ($permission.paths // {})
     ),
     "components": {
         "schemas": (
-            ($budget.components.schemas // {}) + ($currency.components.schemas // {})
+            ($budget.components.schemas // {}) + ($currency.components.schemas // {}) + ($permission.components.schemas // {})
         )
     }
 }

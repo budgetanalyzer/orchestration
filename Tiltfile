@@ -391,11 +391,15 @@ EXPOSE ''' + str(port) + '''
     )
 
     # Step 3: Load Kubernetes manifests
-    k8s_yaml([
+    service_manifests = [
         'kubernetes/services/' + name + '/serviceaccount.yaml',
         'kubernetes/services/' + name + '/deployment.yaml',
         'kubernetes/services/' + name + '/service.yaml',
-    ] + glob('kubernetes/services/' + name + '/configmap.yaml'))
+    ]
+    optional_configmap = 'kubernetes/services/' + name + '/configmap.yaml'
+    if os.path.exists(optional_configmap):
+        service_manifests.append(optional_configmap)
+    k8s_yaml(service_manifests)
 
     # Step 4: Configure resource with port forwards and dependencies
     port_forwards_list = [

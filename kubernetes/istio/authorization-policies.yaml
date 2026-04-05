@@ -118,7 +118,8 @@ spec:
         - source:
             principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
 ---
-# session-gateway: accepts from istio ingress gateway only
+# session-gateway: accepts from istio ingress gateway, plus the narrow
+# permission-service revocation path used for bulk session invalidation
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -133,3 +134,11 @@ spec:
     - from:
         - source:
             principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/permission-service"]
+      to:
+        - operation:
+            ports: ["8081"]
+            methods: ["DELETE"]
+            paths: ["/internal/v1/sessions/users/{*}"]

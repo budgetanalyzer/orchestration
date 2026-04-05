@@ -45,12 +45,12 @@
       "x-service": "transaction-service"
     },
     {
-      "name": "Currency Series Handler",
+      "name": "Currency Series",
       "description": "Endpoints for querying, creating, and updating currency series",
       "x-service": "currency-service"
     },
     {
-      "name": "Exchange Rates Handler",
+      "name": "Exchange Rates",
       "description": "Endpoints for querying and importing exchange rates",
       "x-service": "currency-service"
     }
@@ -2058,7 +2058,7 @@
     "/v1/currencies/{id}": {
       "get": {
         "tags": [
-          "Currency Series Handler"
+          "Currency Series"
         ],
         "summary": "Get currency series by ID",
         "description": "Retrieve a currency series by its unique identifier",
@@ -2131,7 +2131,7 @@
       },
       "put": {
         "tags": [
-          "Currency Series Handler"
+          "Currency Series"
         ],
         "summary": "Update currency series",
         "description": "Update an existing currency series (currency code and provider series ID are immutable, only enabled status can be changed)",
@@ -2230,7 +2230,7 @@
     "/v1/exchange-rates/import": {
       "post": {
         "tags": [
-          "Exchange Rates Handler"
+          "Exchange Rates"
         ],
         "summary": "Import latest available rates from FRED",
         "description": "Retrieve latest un-imported exchange rates from FRED for all enabled currencies - manually triggers daily cron job",
@@ -2297,7 +2297,7 @@
     "/v1/currencies": {
       "get": {
         "tags": [
-          "Currency Series Handler"
+          "Currency Series"
         ],
         "summary": "Get all currency series",
         "description": "Retrieve all currency series, optionally filtered by enabled status",
@@ -2360,7 +2360,7 @@
       },
       "post": {
         "tags": [
-          "Currency Series Handler"
+          "Currency Series"
         ],
         "summary": "Create a new currency series",
         "description": "Create a new currency series. This endpoint is typically used when FRED adds support for new currency pairs. The 23 commonly-used currencies are already pre-populated and can be enabled via the PUT endpoint.",
@@ -2473,7 +2473,7 @@
     "/v1/exchange-rates": {
       "get": {
         "tags": [
-          "Exchange Rates Handler"
+          "Exchange Rates"
         ],
         "summary": "Get exchange rates",
         "description": "Get exchange rates for converting USD to the target currency",

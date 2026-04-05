@@ -194,8 +194,8 @@ Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
 uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
 `session:` key prefix contract plus the `BA_SESSION` cookie-name default,
 orchestration explicitly wires `SESSION_COOKIE_NAME=BA_SESSION` into the
-`ext-authz` deployment, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`,
-`/logout`, plus `/user` still route only to Session Gateway.
+`ext-authz` deployment, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and
+`/logout` still route only to Session Gateway with no standalone `/user` match.
 Use `--static-only` for repo-level validation before login. After a browser
 login, rerun it without that flag when you want the live Redis ACL/keyspace
 proof too, or add `--require-live-session` to insist on at least one real
@@ -254,7 +254,7 @@ the in-cluster `SESSION_GATEWAY_BASE_URL` plus the bounded session-revocation
 retry defaults. Those values stay in checked-in config instead of drifting into
 ad hoc deployment env entries or secret-only paths.
 
-The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/auth/v1/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming Phase 3 policies still attach.
 
@@ -580,7 +580,7 @@ Redis local access:
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
 - `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
-- active browser sessions are extended through same-origin `GET /auth/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
+- active browser sessions are extended through same-origin `GET /auth/v1/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
 - The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
 
 RabbitMQ local access:

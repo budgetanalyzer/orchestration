@@ -691,8 +691,8 @@ verify_static_contracts() {
         "Ingress rate-limit config still covers /auth/*"
     assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'logout' \
         "Ingress rate-limit config still covers /logout"
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'user' \
-        "Ingress rate-limit config still covers /user"
+    assert_file_not_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'logout\(\?:/\.\*\)\?\|user\|auth\(\?:/\.\*\)\?' \
+        "Ingress rate-limit config no longer carries a standalone /user matcher"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /auth' \
         "Auth HTTPRoute still routes /auth/* to Session Gateway"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /oauth2' \
@@ -701,8 +701,8 @@ verify_static_contracts() {
         "Auth HTTPRoute still routes /login/oauth2/* to Session Gateway"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /logout' \
         "Auth HTTPRoute still routes /logout to Session Gateway"
-    assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /user' \
-        "Auth HTTPRoute still routes /user to Session Gateway"
+    assert_file_not_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /user' \
+        "Auth HTTPRoute no longer exposes a standalone /user match"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/app-httproute.yaml" 'value: /api-docs' \
         "App HTTPRoute explicitly routes /api-docs through nginx-gateway"
 }
@@ -866,8 +866,7 @@ verify_auth_edge_runtime() {
     wait_for_probe_ready
 
     require_ingress_rate_limit_from_probe "/login" "/login"
-    require_ingress_rate_limit_from_probe "/auth/token/exchange" "/auth/token/exchange" \
-        -X POST -H "Content-Type: application/json" --data '{}'
+    require_ingress_rate_limit_from_probe "/auth/v1/user" "/auth/v1/user"
     require_ingress_rate_limit_from_probe "/logout" "/logout"
     require_ingress_rate_limit_from_probe "/login/oauth2/code/idp?code=phase6&state=phase6" "/login/oauth2/code/idp"
 }

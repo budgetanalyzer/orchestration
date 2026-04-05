@@ -49,13 +49,14 @@ unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
 deployment, and the full Session Gateway auth-route ownership contract for
-`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`.
+`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`, with no standalone
+`/user` match.
 `./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
 gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
-browser sessions are extended by `GET /auth/session`. The browser only carries
-an opaque `BA_SESSION` cookie; Session Gateway keeps the session data in Redis
-under `session:{id}` and the temporary OAuth2 request state under
+browser sessions are extended by `GET /auth/v1/session`. The browser only
+carries an opaque `BA_SESSION` cookie; Session Gateway keeps the session data
+in Redis under `session:{id}` and the temporary OAuth2 request state under
 `oauth2:state:{state}`.
 
 ### Port Mapping
@@ -205,11 +206,11 @@ Auth failures after login?
 │   │       └── kubectl logs -f deployment/session-gateway
 │   └── Request has BA_SESSION cookie but still 401/403?
 │       ├── Probe the heartbeat directly with that cookie
-│       │   └── curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
-│       ├── /auth/session returns 401?
+│       │   └── curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+│       ├── /auth/v1/session returns 401?
 │       │   └── Session missing/expired or IDP grant revoked
 │       │       └── kubectl logs -f deployment/session-gateway
-│       └── /auth/session returns 200 but /api/* still fails?
+│       └── /auth/v1/session returns 200 but /api/* still fails?
 │           └── ext_authz session validation or permission injection failing
 │               └── kubectl logs -f deployment/ext-authz
 ├── Check ext-authz health
@@ -264,7 +265,7 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
-curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
 # Inspect one specific session hash if you have the cookie value
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
@@ -427,7 +428,7 @@ curl http://localhost:8080/health
 curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 
 # 4. Probe the heartbeat path with the same cookie
-curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/session
+curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 ```
 
 ---

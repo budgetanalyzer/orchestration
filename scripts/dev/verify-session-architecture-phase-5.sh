@@ -19,7 +19,7 @@ Verifies the Session Architecture Rethink Phase 5 contract:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user` still route only to Session Gateway
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
 Options:
@@ -370,7 +370,6 @@ assert_auth_route_contract_yaml() {
         ["PathPrefix|/oauth2"]="/oauth2/*"
         ["PathPrefix|/login/oauth2"]="/login/oauth2/*"
         ["PathPrefix|/logout"]="/logout"
-        ["Exact|/user"]="/user"
     )
     local found bad_backend
 
@@ -389,7 +388,13 @@ assert_auth_route_contract_yaml() {
         fi
     done <<<"$parsed"
 
-    for key in "PathPrefix|/auth" "PathPrefix|/oauth2" "PathPrefix|/login/oauth2" "PathPrefix|/logout" "Exact|/user"; do
+    if awk -F '\t' '$1 == "PATH" && $3 == "Exact" && $4 == "/user" { found = 1 } END { exit(found ? 0 : 1) }' <<<"$parsed"; then
+        fail "${scope} still exposes a standalone /user -> session-gateway contract"
+    else
+        pass "${scope} no longer exposes a standalone /user auth-route match"
+    fi
+
+    for key in "PathPrefix|/auth" "PathPrefix|/oauth2" "PathPrefix|/login/oauth2" "PathPrefix|/logout"; do
         expected_label="${expected_paths[$key]}"
         found=false
         bad_backend=false
@@ -467,7 +472,7 @@ run_static_checks() {
 
     assert_file_contains \
         "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
-        'user session-gateway reset on >${REDIS_SESSION_GATEWAY_PASSWORD} ~session:* ~oauth2:state:* &* +@all' \
+        'user session-gateway reset on >${REDIS_SESSION_GATEWAY_PASSWORD} ~session:* ~user_sessions:* ~oauth2:state:* &* +@all' \
         "Redis ACL bootstrap grants session-gateway access to session:* and oauth2:state:*"
     assert_file_contains \
         "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \

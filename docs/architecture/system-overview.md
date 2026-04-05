@@ -16,7 +16,7 @@ Browser (https://app.budgetanalyzer.localhost)
     ▼ HTTPS
 Istio Ingress Gateway (:443) ─── SSL termination, ext_authz on /api/* paths, auth-path rate limiting
     │
-    ├─ /auth/*, /oauth2/*, /login/oauth2/*, /logout, /user → Session Gateway (:8081) ─── auth lifecycle
+    ├─ /auth/*, /oauth2/*, /login/oauth2/*, /logout → Session Gateway (:8081) ─── auth lifecycle
     │
     ├─ /api/* → ext_authz (:9002) validates session from Redis
     │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
@@ -96,7 +96,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 **Istio Ingress Gateway** (Port 443)
 - SSL/TLS termination
 - ext_authz enforcement on `/api/*` paths via meshConfig extensionProvider
-- Auth-path throttling on `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
+- Auth-path throttling on `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`
 - Ingress routing based on path (Gateway API HTTPRoutes)
 - Kubernetes Gateway API compliant
 - Runs inside the Istio service mesh with SPIFFE identity
@@ -116,7 +116,7 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 - OAuth2 authentication with Auth0
 - Session management via Redis hashes (`session:{id}`)
 - Auth0 token storage in Redis session hashes (never exposed to browser)
-- Heartbeat endpoint `GET /auth/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry (10-minute refresh threshold, 3-minute frontend heartbeat cadence)
+- Heartbeat endpoint `GET /auth/v1/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry (10-minute refresh threshold, 3-minute frontend heartbeat cadence)
 - Calls permission-service to enrich session with roles/permissions
 - Token exchange endpoint for native/M2M clients
 
@@ -279,9 +279,9 @@ This reference architecture deliberately stops before solving data ownership. Un
 - ext_authz reads session hashes for per-request validation
 
 **Gateway Patterns:**
-- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`
+- Istio Ingress: SSL termination, ext_authz enforcement, and auth-path rate limiting for `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`
 - Istio Egress: Outbound traffic control (REGISTRY_ONLY + ServiceEntry allowlist)
-- Session Gateway: Auth lifecycle, `GET /auth/session` heartbeat, OAuth2 callback handling under `/login/oauth2/*`, session write to Redis hash
+- Session Gateway: Auth lifecycle, `GET /auth/v1/session` heartbeat, `GET /auth/v1/user` browser session inspection, OAuth2 callback handling under `/login/oauth2/*`, session write to Redis hash
 - ext_authz: Per-request session validation, header injection
 - NGINX: Resource routing, backend/API rate limiting, frontend login page at `/login`
 

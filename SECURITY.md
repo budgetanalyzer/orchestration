@@ -33,8 +33,8 @@ This policy applies to all repositories in the Budget Analyzer organization:
 ## Security Architecture
 
 Budget Analyzer implements defense-in-depth security patterns. Browsers
-authenticate through Session Gateway, receive an opaque `SESSION` cookie, and
-keep the server-side session alive with same-origin `GET /auth/session`
+authenticate through Session Gateway, receive an opaque `BA_SESSION` cookie, and
+keep the server-side session alive with same-origin `GET /auth/v1/session`
 heartbeats. Session state lives in Redis hashes that ext-authz reads at the
 Istio ingress, so browser clients never receive long-lived API tokens.
 

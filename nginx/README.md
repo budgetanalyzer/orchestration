@@ -17,7 +17,7 @@ Browser (https://app.budgetanalyzer.localhost)
     ▼
 Istio Ingress Gateway (:443) ─── SSL termination + ext_authz session validation
     │
-    ├─→ /auth/*, /oauth2/*, /login/oauth2/*, /logout, /user → Session Gateway (:8081)
+    ├─→ /auth/*, /oauth2/*, /login/oauth2/*, /logout → Session Gateway (:8081)
     │
     ├─→ /api/* → NGINX (:8080)
     │
@@ -47,7 +47,7 @@ NGINX (:8080) ─── API-path rate limiting, route to service
 
 ## Rate-Limiting Split
 
-- Istio ingress rate limits auth-sensitive browser entry points: `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, and `/user`
+- Istio ingress rate limits auth-sensitive browser entry points: `/login`, `/auth/*` (including `/auth/v1/session` and `/auth/v1/user`), `/oauth2/*`, `/login/oauth2/*`, and `/logout`
 - NGINX rate limits backend-facing API paths after ingress validation and routing
 - NGINX now derives the API limiter identity from the rightmost ingress-appended `X-Forwarded-For` hop while trusting only the pod-local Envoy sidecar loopback source (`set_real_ip_from 127.0.0.0/8` with `real_ip_recursive on`)
 
@@ -98,7 +98,7 @@ This deploys NGINX as a Kubernetes deployment with ConfigMap-mounted configurati
 Open your browser to **`https://app.budgetanalyzer.localhost`**
 
 API requests go through Istio Ingress Gateway (443) → ext_authz → NGINX (8080).
-OAuth2 and auth lifecycle requests go through Istio Ingress Gateway (443) → Session Gateway (8081).
+OAuth2 and auth lifecycle requests go through Istio Ingress Gateway (443) → Session Gateway (8081). The browser JSON endpoints now live at `/auth/v1/session` and `/auth/v1/user`.
 The frontend login page at `/login` goes through Istio Ingress Gateway (443) → NGINX (8080).
 The production-smoke verification path at `/_prod-smoke/` is served directly by NGINX from a built frontend bundle copied in by an init container; it does not proxy to the Vite dev server.
 The shared docs route at `/api-docs` now serves a checked-in wrapper plus the generated OpenAPI downloads from the same NGINX pod. Stock Swagger UI assets are copied in by a pinned init container and served same-origin from that docs mount. Unlisted `/api-docs/*` paths intentionally return `404` instead of falling through to the frontend SPA.

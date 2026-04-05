@@ -77,7 +77,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 │                    • SSL Termination (all traffic)               │
 │                    • ext_authz enforcement on /api/* paths       │
 │                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
-│                      /logout, /user → Session Gateway            │
+│                      /logout, /auth/v1/* → Session Gateway       │
 │                    • Routes /api/*, /* → NGINX                   │
 │                    • Local rate limiting on auth-sensitive paths │
 │                    • Mesh identity (SPIFFE) for mTLS             │
@@ -133,7 +133,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 - Store Auth0 tokens in Redis session hashes for refresh
 - Write session data (userId, roles, permissions) as Redis hashes (`session:{id}`) — ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
-- Provide heartbeat endpoint (`GET /auth/session`) that extends the session TTL for active browser users
+- Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
 - Proactive token refresh before expiration
 - Session lifecycle management (login/logout)
 - Call permission-service to resolve roles/permissions, passing `email` and `displayName` extracted from the OAuth2 principal
@@ -285,7 +285,7 @@ Service Logic:
 ### Token Refresh Flow
 
 ```
-1. Frontend detects active browser use and calls `GET /auth/session`
+1. Frontend detects active browser use and calls `GET /auth/v1/session`
 2. Session Gateway reads the Redis session hash
 3. If the Auth0 access token is near expiry (10 min threshold), Session Gateway calls the Auth0 token endpoint with the refresh token
 4. Auth0 returns new access token (and optionally new refresh token)
@@ -294,7 +294,7 @@ Service Logic:
 7. Session Gateway updates `expires_at` / TTL and returns session status to the frontend
 ```
 
-**Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
+**Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/v1/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
 
 **Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
 
@@ -369,12 +369,11 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 ### Implementation
 
 **All authentication protocol endpoints go through Session Gateway:**
-- `/auth/*` - Auth lifecycle endpoints
+- `/auth/v1/*` - Versioned browser JSON endpoints (`session`, `user`)
+- `/auth/token/exchange` - Temporary unversioned token exchange endpoint for native/M2M clients
 - `/oauth2/*` - OAuth2 callback and continuation endpoints
 - `/login/oauth2/*` - OAuth2 callback path
 - `/logout` - End session
-- `/user` - Session inspection for the browser client
-- `/auth/token/exchange` - Token exchange for native/M2M clients
 
 The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by calling `/oauth2/authorization/idp`, and ingress now rate limits it as an auth-sensitive entry point, but it is not itself a Session Gateway route.
 
@@ -422,7 +421,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 ### Token Configuration
 
 **Opaque Session Token** (cookie or bearer token):
-- Lifetime: 15 minutes (sliding expiration via `GET /auth/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
+- Lifetime: 15 minutes (sliding expiration via `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
 - Validated by: ext_authz service via Redis lookup

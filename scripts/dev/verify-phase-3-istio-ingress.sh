@@ -905,6 +905,12 @@ main() {
         fail "HTTPRoute default/auth-route still claims bare /login"
     fi
 
+    if ! printf '%s\n' "$auth_route_matches" | grep -Fxq 'Exact:/user'; then
+        pass "HTTPRoute default/auth-route no longer claims standalone /user"
+    else
+        fail "HTTPRoute default/auth-route still claims standalone /user"
+    fi
+
     auth_route_backends=$(kubectl get httproute auth-route -n default \
         -o go-template='{{ range .spec.rules }}{{ range .backendRefs }}{{ printf "%s:%v\n" .name .port }}{{ end }}{{ end }}' 2>/dev/null || true)
     if printf '%s\n' "$auth_route_backends" | grep -Fxq 'session-gateway:8081'; then
@@ -930,7 +936,7 @@ main() {
 
     require_ingress_rate_limit "/login?phase3-ingress-rate-limit=1" "/login"
     require_ingress_rate_limit "/oauth2/authorization/idp" "/oauth2/authorization/idp"
-    require_ingress_rate_limit "/user" "/user"
+    require_ingress_rate_limit "/auth/v1/user" "/auth/v1/user"
 
     section "Header Sanitization"
 

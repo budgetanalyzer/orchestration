@@ -10,7 +10,7 @@
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
 # 4. Fetch the Session Gateway spec separately (not merged) and save alongside
-# 5. Copy both specs to budget-analyzer-web/docs/api/
+# 5. Copy both specs to budget-analyzer-web/docs/api/ (only the api/ subdirectory)
 #
 # The unified spec can be used by clients to generate client libraries
 #
@@ -237,9 +237,6 @@ fi
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
 if [ -d "$WEB_DOCS_DIR" ]; then
-    cp "$OUTPUT_YAML" "$WEB_DOCS_DIR/budget-analyzer-api.yaml"
-    print_success "✓ Copied to budget-analyzer-web: $WEB_DOCS_DIR/budget-analyzer-api.yaml"
-
     WEB_API_DIR="$WEB_DOCS_DIR/api"
     mkdir -p "$WEB_API_DIR"
     cp "$OUTPUT_YAML" "$WEB_API_DIR/budget-analyzer-api.yaml"

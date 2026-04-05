@@ -10,7 +10,12 @@ redis_cli_in_pod() {
     local password="$4"
     shift 4
 
-    kubectl exec -n "$namespace" "$pod" -- \
+    local -a kubectl_flags=()
+    if [ -t 0 ] && [ $# -eq 0 ]; then
+        kubectl_flags+=("-it")
+    fi
+
+    kubectl exec "${kubectl_flags[@]}" -n "$namespace" "$pod" -- \
         redis-cli \
         --tls \
         --cacert /tls-ca/ca.crt \

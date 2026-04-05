@@ -354,7 +354,7 @@ Internal services rely on network isolation enforced by Kubernetes NetworkPolicy
 - Session Gateway calls permission-service via internal Kubernetes DNS
 - Permission-service calls Session Gateway for user deactivation (bulk session revocation)
 - No bearer token or cryptographic proof of caller identity
-- NetworkPolicy enforces pod-level allowlists: Session Gateway ↔ permission-service (bidirectional), NGINX → transaction/currency/web
+- NetworkPolicy enforces pod-level allowlists: Session Gateway ↔ permission-service (bidirectional), NGINX → transaction/currency/web/permission-service
 - Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
 
 **Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway and ext-authz) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Session Gateway follows the same pattern except for one explicit east-west allowance: `permission-service` may issue `DELETE /internal/v1/sessions/users/{userId}` on port `8081` for bulk session revocation. This preserves cryptographic caller authentication without introducing shared application-level bearer tokens.

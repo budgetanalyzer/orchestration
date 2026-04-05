@@ -35,6 +35,7 @@ NGINX (:8080) ─── API-path rate limiting, route to service
     ├─→ /_prod-smoke/*    → Static smoke bundle
     ├─→ /api/v1/transactions → Transaction Service (:8082)
     ├─→ /api/v1/currencies   → Currency Service (:8084)
+    ├─→ /api/v1/users        → Permission Service (:8086)
     └─→ /health     → Health check
 ```
 
@@ -74,8 +75,12 @@ proxy_pass $frontend_backend;
 The frontend sees clean resource paths:
 - `GET /api/v1/transactions` → Transaction Service
 - `GET /api/v1/currencies` → Currency Service
+- `POST /api/v1/users/{id}/deactivate` → Permission Service
 
 NGINX handles the routing and path transformation to backend services.
+The browser edge intentionally does not route any `/internal/**` path. Internal
+service endpoints stay east-west only unless a specific public `/api/...` route
+is added here.
 
 ## Usage with Tilt
 

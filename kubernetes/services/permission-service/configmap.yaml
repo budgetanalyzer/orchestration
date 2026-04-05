@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: permission-service-config
+  namespace: default
+  labels:
+    app: permission-service
+data:
+  SESSION_GATEWAY_BASE_URL: "http://session-gateway:8081"
+  SESSION_GATEWAY_REVOCATION_MAX_ATTEMPTS: "3"
+  SESSION_GATEWAY_REVOCATION_INITIAL_DELAY: "200ms"
+  SESSION_GATEWAY_REVOCATION_MULTIPLIER: "2.0"
+  SESSION_GATEWAY_REVOCATION_MAX_DELAY: "2s"

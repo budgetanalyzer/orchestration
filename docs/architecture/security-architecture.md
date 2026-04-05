@@ -16,7 +16,7 @@ Current repository state:
 - Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy still proves admission is alive, and the checked-in Phase 7 suite now enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Phase 1 credential isolation is implemented: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
 - Phase 2 network policies are enforced: `default`, `infrastructure`, `istio-ingress`, and `istio-egress` namespaces have deny-by-default ingress and egress with explicit allowlists. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists.
-- Phase 3 manifests now describe the intended Istio ingress/egress topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-only `AuthorizationPolicy` rules. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
+- Phase 3 manifests now describe the intended Istio ingress/egress topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, with one documented exception: `permission-service` may call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
 - Phase 5 Session 1 is implemented in-repo: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods no longer require `istio-init`.
 - Phase 5 Session 2 is implemented in-repo for the non-root application workloads: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
 - Phase 5 Session 3 is implemented in-repo for the gateway workloads on the refreshed Istio `1.29.1` baseline: the auto-provisioned ingress gateway now receives pod `seccompProfile.type: RuntimeDefault`, fixed NodePort ownership, and explicit service-account token retention through Gateway `spec.infrastructure.parametersRef`, and the egress gateway installs directly from the `istio/gateway` chart using checked-in values that keep `service.type=ClusterIP`, preserve the low-port binding sysctl needed by the non-root proxy, and add pod-level seccomp hardening. The ingress gateway intentionally keeps its Kubernetes API token mount for TLS secret watching, while the egress gateway currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it.
@@ -352,12 +352,12 @@ Internal services rely on network isolation enforced by Kubernetes NetworkPolicy
 
 **Current approach:**
 - Session Gateway calls permission-service via internal Kubernetes DNS
+- Permission-service calls Session Gateway for user deactivation (bulk session revocation)
 - No bearer token or cryptographic proof of caller identity
-- NetworkPolicy enforces that only Session Gateway pods can reach permission-service (Phase 2)
-- Backend services only accept traffic from their documented pod callers (NGINX for transaction/currency/web, Session Gateway for permission-service)
+- NetworkPolicy enforces pod-level allowlists: Session Gateway ↔ permission-service (bidirectional), NGINX → transaction/currency/web
 - Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
 
-**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway, ext-authz, session-gateway) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Provides cryptographic caller authentication without application-level token management.
+**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway and ext-authz) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Session Gateway follows the same pattern except for one explicit east-west allowance: `permission-service` may issue `DELETE /internal/v1/sessions/users/{userId}` on port `8081` for bulk session revocation. This preserves cryptographic caller authentication without introducing shared application-level bearer tokens.
 
 ---
 
@@ -591,14 +591,15 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 
 **Redis Configuration:**
 - Session key pattern: `session:{session-id}`
+- User session index pattern: `user_sessions:{userId}` (SET of session IDs for bulk revocation)
 - TTL: 15 minutes (configurable via `session.ttl-seconds`)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery
 
 **Session Cleanup:**
 - Expired sessions automatically removed by Redis TTL
-- Explicit session invalidation on logout (session hash deleted)
-- Bulk session revocation capability for security incidents
+- Explicit session invalidation on logout (session hash deleted, entry removed from user session index)
+- Bulk session revocation via `DELETE /internal/v1/sessions/users/{userId}` — uses the user session index to delete all sessions without scanning, and the mesh only allows this route from the `permission-service` workload identity
 
 ---
 

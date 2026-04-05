@@ -55,6 +55,9 @@ spec:
             secretKeyRef:
               name: permission-service-postgresql-credentials
               key: password
+        envFrom:
+        - configMapRef:
+            name: permission-service-config
         volumeMounts:
         - name: infra-ca
           mountPath: /etc/ssl/infra

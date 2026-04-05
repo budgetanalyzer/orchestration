@@ -246,11 +246,13 @@ Production config sourcing should keep that same seam: the value that creates
 the Session Gateway IDP config must also drive the Auth0 egress render/apply
 step.
 
-Session Gateway runtime knobs that orchestration intentionally exposes now stay
-on the checked-in manifest path. Today that means
-`ConfigMap/session-gateway-config` carries `SESSION_TTL_SECONDS=900` seconds
-(15 minutes) for local browser and token-exchange sessions, instead of relying
-on a Tilt-only secret override from `.env`.
+Service runtime knobs that orchestration intentionally exposes now stay on the
+checked-in manifest path. Today that means `ConfigMap/session-gateway-config`
+carries `SESSION_TTL_SECONDS=900` seconds (15 minutes) for local browser and
+token-exchange sessions, while `ConfigMap/permission-service-config` carries
+the in-cluster `SESSION_GATEWAY_BASE_URL` plus the bounded session-revocation
+retry defaults. Those values stay in checked-in config instead of drifting into
+ad hoc deployment env entries or secret-only paths.
 
 The Phase 3 verifier is the runtime completion gate for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
 
@@ -508,6 +510,7 @@ Current local config names:
 
 | ConfigMap | Namespace | Purpose |
 |-----------|-----------|---------|
+| `permission-service-config` | `default` | checked-in Permission Service runtime settings such as `SESSION_GATEWAY_BASE_URL` and bounded session-revocation retry knobs |
 | `session-gateway-config` | `default` | checked-in Session Gateway runtime settings such as `SESSION_TTL_SECONDS` |
 | `session-gateway-idp-config` | `default` | checked-in fallback for non-secret Auth0/IDP settings (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`); Tilt overwrites it locally from `.env` |
 

@@ -244,7 +244,7 @@ kubectl describe svc nginx-gateway
 **When adding a new microservice**:
 
 1. **Add Kubernetes manifests**: `kubernetes/services/{service-name}/`
-2. **Register with Tilt**: Add to `Tiltfile` using `spring_boot_service()` pattern
+2. **Register with Tilt**: Add to `Tiltfile` using `spring_boot_service()` pattern. If the service needs non-secret runtime config, place it at `kubernetes/services/{service-name}/configmap.yaml`; the helper loads that manifest automatically when present.
 3. **Add NGINX routes**: Update `nginx/nginx.k8s.conf` with new location blocks using variable-based `proxy_pass` (e.g., `set $backend "http://service.default.svc.cluster.local:port"; proxy_pass $backend;`)
 
 **See [nginx/README.md](../../nginx/README.md) for detailed instructions.**

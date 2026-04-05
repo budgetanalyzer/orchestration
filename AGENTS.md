@@ -121,12 +121,12 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 ```
 
 **Single entry point**: `app.budgetanalyzer.localhost`
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
 - `/login`, `/*` → NGINX (frontend, no auth required)
 
-**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/session` under `/auth/*`, which lets Session Gateway extend the session TTL and refresh the upstream IDP grant when needed.
+**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/v1/session`, and browser session inspection now lives at `GET /auth/v1/user`. Both stay on the direct `/auth/*` lane so Session Gateway can extend the session TTL and refresh the upstream IDP grant without joining the API hot path.
 - `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
 
 **Key Benefits**:

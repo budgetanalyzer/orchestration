@@ -2,9 +2,12 @@ openapi: 3.1.0
 info:
   title: Budget Analyzer - Unified API
   version: '1.0'
-  description: Unified API documentation for all Budget Analyzer microservices. This
-    specification combines the Budget Analyzer API and Currency Service into a single
-    document for client code generation.
+  description: 'Unified API documentation for all Budget Analyzer microservices. This
+    specification combines the Transaction Service, Currency Service, and Permission
+    Service into a single document for client code generation.
+
+
+    All endpoints are served under the `/api` base path.'
   contact:
     name: Bleu Rubin
     email: contact@budgetanalyzer.org
@@ -26,12 +29,21 @@ tags:
   - name: Transactions
     description: Import and manipulate transactions
     x-service: transaction-service
-  - name: Currency Series Handler
+  - name: Admin Transactions
+    description: Admin transaction search and management
+    x-service: transaction-service
+  - name: Currency Series
     description: Endpoints for querying, creating, and updating currency series
     x-service: currency-service
-  - name: Exchange Rates Handler
+  - name: Exchange Rates
     description: Endpoints for querying and importing exchange rates
     x-service: currency-service
+  - name: User Permissions
+    description: User permission management
+    x-service: permission-service
+  - name: Roles
+    description: Role management - CRUD operations for authorization roles
+    x-service: permission-service
 paths:
   /v1/views/{id}:
     get:
@@ -1192,9 +1204,125 @@ paths:
       tags:
         - Transactions
       summary: Count transactions
-      description: Returns the count of active transactions matching the given filter
-        criteria. Non-admin users only count their own transactions.
+      description: Returns the count of active transactions owned by the requesting
+        user and matching the given filter criteria.
       operationId: countTransactions
+      parameters:
+        - name: filter
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TransactionFilter'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: integer
+                format: int64
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/admin/transactions:
+    get:
+      tags:
+        - Admin Transactions
+      summary: Search transactions across all users
+      operationId: searchTransactions
+      parameters:
+        - name: filter
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TransactionFilter'
+        - name: page
+          in: query
+          description: Zero-based page index (0..N)
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: The size of the page to be returned
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+        - name: sort
+          in: query
+          description: 'Sorting criteria in the format: property,(asc|desc). Default
+            sort order is ascending. Multiple sort criteria are supported.'
+          required: false
+          schema:
+            type: array
+            default:
+              - date,DESC
+              - id,DESC
+            items:
+              type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                Invalid Sort Field:
+                  summary: Unsupported sort field requested
+                  description: Invalid Sort Field
+                  value:
+                    type: VALIDATION_ERROR
+                    message: 'Unsupported sort field: invalid. Allowed sort fields:
+                      id, ownerId, accountId, bankName, date, currencyIsoCode, amount,
+                      type, description, createdAt, updatedAt'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/admin/transactions/count:
+    get:
+      tags:
+        - Admin Transactions
+      summary: Count transactions across all users
+      operationId: countTransactions_1
       parameters:
         - name: filter
           in: query
@@ -1230,7 +1358,7 @@ paths:
   /v1/currencies/{id}:
     get:
       tags:
-        - Currency Series Handler
+        - Currency Series
       summary: Get currency series by ID
       description: Retrieve a currency series by its unique identifier
       operationId: getById
@@ -1277,7 +1405,7 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-        - Currency Series Handler
+        - Currency Series
       summary: Update currency series
       description: Update an existing currency series (currency code and provider
         series ID are immutable, only enabled status can be changed)
@@ -1341,7 +1469,7 @@ paths:
   /v1/exchange-rates/import:
     post:
       tags:
-        - Exchange Rates Handler
+        - Exchange Rates
       summary: Import latest available rates from FRED
       description: Retrieve latest un-imported exchange rates from FRED for all enabled
         currencies - manually triggers daily cron job
@@ -1385,7 +1513,7 @@ paths:
   /v1/currencies:
     get:
       tags:
-        - Currency Series Handler
+        - Currency Series
       summary: Get all currency series
       description: Retrieve all currency series, optionally filtered by enabled status
       operationId: getAll
@@ -1426,7 +1554,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-        - Currency Series Handler
+        - Currency Series
       summary: Create a new currency series
       description: Create a new currency series. This endpoint is typically used when
         FRED adds support for new currency pairs. The 23 commonly-used currencies
@@ -1504,7 +1632,7 @@ paths:
   /v1/exchange-rates:
     get:
       tags:
-        - Exchange Rates Handler
+        - Exchange Rates
       summary: Get exchange rates
       description: Get exchange rates for converting USD to the target currency
       operationId: getExchangeRates
@@ -1577,6 +1705,607 @@ paths:
                     type: APPLICATION_ERROR
                     message: 'Currency is not enabled: EUR'
                     code: CURRENCY_NOT_ENABLED
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/roles/{id}:
+    get:
+      tags:
+        - Roles
+      summary: Get role by ID
+      description: Returns a specific role by ID.
+      operationId: getRole
+      parameters:
+        - name: id
+          in: path
+          description: Role ID
+          required: true
+          schema:
+            type: string
+          example: ADMIN
+      responses:
+        '200':
+          description: Role retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    put:
+      tags:
+        - Roles
+      summary: Update role
+      description: Updates an existing role.
+      operationId: updateRole
+      parameters:
+        - name: id
+          in: path
+          description: Role ID
+          required: true
+          schema:
+            type: string
+          example: ADMIN
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+        required: true
+      responses:
+        '200':
+          description: Role updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+        - Roles
+      summary: Delete role
+      description: Soft-deletes a role and removes all assignments.
+      operationId: deleteRole
+      parameters:
+        - name: id
+          in: path
+          description: Role ID
+          required: true
+          schema:
+            type: string
+          example: ADMIN
+      responses:
+        '204':
+          description: Role deleted successfully
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/users/{id}/roles:
+    get:
+      tags:
+        - User Permissions
+      summary: Get user's roles
+      description: Returns all roles assigned to a user.
+      operationId: getUserRoles
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+          example: usr_abc123
+      responses:
+        '200':
+          description: Roles retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    post:
+      tags:
+        - User Permissions
+      summary: Assign role to user
+      description: Assigns a role to a user. Requires 'roles:write' permission.
+      operationId: assignRole
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+          example: usr_abc123
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRoleAssignmentRequest'
+        required: true
+      responses:
+        '204':
+          description: Role assigned successfully
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: User or role not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '422':
+          description: User already has this role
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/users/{id}/deactivate:
+    post:
+      tags:
+        - User Permissions
+      summary: Deactivate a user
+      description: Marks a user as deactivated, removes all role assignments, and
+        revokes active sessions. Idempotent — deactivating an already-deactivated
+        user returns 200.
+      operationId: deactivateUser
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+          example: usr_abc123
+      responses:
+        '200':
+          description: User deactivated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserDeactivationResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: User not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+  /v1/roles:
+    get:
+      tags:
+        - Roles
+      summary: List all roles
+      description: Returns all active (non-deleted) roles.
+      operationId: getAllRoles
+      responses:
+        '200':
+          description: Roles retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    post:
+      tags:
+        - Roles
+      summary: Create new role
+      description: Creates a new role.
+      operationId: createRole
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+        required: true
+      responses:
+        '201':
+          description: Role created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/users/{id}/permissions:
+    get:
+      tags:
+        - User Permissions
+      summary: Get user's permissions
+      description: Returns all effective permissions for a specified user.
+      operationId: getUserPermissions
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+          example: usr_abc123
+      responses:
+        '200':
+          description: Permissions retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserPermissionsResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/users/me/permissions:
+    get:
+      tags:
+        - User Permissions
+      summary: Get current user's permissions
+      description: Returns all effective permissions for the authenticated user
+      operationId: getCurrentUserPermissions
+      responses:
+        '200':
+          description: Permissions retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserPermissionsResponse'
+        '401':
+          description: Not authenticated
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/users/{id}/roles/{roleId}:
+    delete:
+      tags:
+        - User Permissions
+      summary: Revoke role from user
+      description: Revokes a role from a user. Requires 'roles:write' permission.
+      operationId: revokeRole
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+          example: usr_abc123
+        - name: roleId
+          in: path
+          description: Role ID to revoke
+          required: true
+          schema:
+            type: string
+          example: USER
+      responses:
+        '204':
+          description: Role revoked successfully
+        '403':
+          description: Insufficient permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -2211,6 +2940,12 @@ components:
           format: int64
           description: Unique identifier for the transaction
           example: 1
+        ownerId:
+          type: string
+          description: ID of the user who owns the transaction. Only effective on
+            admin endpoints; ignored on user-scoped endpoints where the authenticated
+            user is always applied.
+          example: usr_test123
         accountId:
           type: string
           description: Identifier for the account associated with the transaction
@@ -2434,3 +3169,77 @@ components:
         - publishedDate
         - rate
         - targetCurrency
+    RoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Role name
+          example: Project Manager
+          maxLength: 100
+          minLength: 0
+        description:
+          type: string
+          description: Role description
+          example: Manages project resources and timelines
+          maxLength: 500
+          minLength: 0
+      required:
+        - name
+    RoleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Role identifier
+          example: ADMIN
+        name:
+          type: string
+          description: Human-readable role name
+          example: Administrator
+        description:
+          type: string
+          description: Role description
+          example: Full access to all resources
+        createdAt:
+          type: string
+          format: date-time
+          description: When the role was created
+          example: '2024-01-15T10:30:00Z'
+    UserRoleAssignmentRequest:
+      type: object
+      properties:
+        roleId:
+          type: string
+          description: Role ID to assign
+          example: USER
+          minLength: 1
+      required:
+        - roleId
+    UserDeactivationResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - DEACTIVATED
+        rolesRemoved:
+          type: integer
+          format: int32
+        sessionsRevoked:
+          type: boolean
+    UserPermissionsResponse:
+      type: object
+      properties:
+        permissions:
+          type: array
+          description: Set of all effective permission IDs from roles
+          example:
+            - transactions:read
+            - accounts:write
+          items:
+            type: string
+          uniqueItems: true

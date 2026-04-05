@@ -9,6 +9,8 @@
 #    falling back to an in-pod localhost fetch when the proxy path is unavailable
 # 2. Merge them into a single unified OpenAPI spec
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
+# 4. Fetch the Session Gateway spec separately (not merged) and save alongside
+# 5. Copy both specs to budget-analyzer-web/docs/api/ (only the api/ subdirectory)
 #
 # The unified spec can be used by clients to generate client libraries
 #
@@ -57,6 +59,39 @@ require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         print_error_stderr "$1 is required but not installed."
         exit 1
+    fi
+}
+
+# Convert JSON on stdin to YAML at the given output path.
+# Usage: echo "$JSON" | convert_json_to_yaml "/path/to/output.yaml" "description"
+# Returns 1 if no YAML converter is available.
+convert_json_to_yaml() {
+    local output_path="$1"
+    local description="$2"
+    local tmp_yaml
+    tmp_yaml="$(mktemp "${output_path}.tmp.XXXXXX")"
+
+    if command -v yq &>/dev/null; then
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            cat | yq -P '.' > "$tmp_yaml"
+        else
+            cat | yq -y '.' > "$tmp_yaml"
+        fi
+        mv "$tmp_yaml" "$output_path"
+        print_success "✓ Generated ${description} (YAML): $output_path"
+    elif command -v python3 &>/dev/null; then
+        if cat | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$tmp_yaml" 2>/dev/null; then
+            mv "$tmp_yaml" "$output_path"
+            print_success "✓ Generated ${description} (YAML): $output_path"
+        else
+            rm -f "$tmp_yaml"
+            print_warning "Python yaml module not available — skipping YAML output for ${description}"
+            return 1
+        fi
+    else
+        rm -f "$tmp_yaml"
+        print_warning "Neither yq nor python3 found — skipping YAML output for ${description}"
+        return 1
     fi
 }
 
@@ -122,18 +157,29 @@ if ! CURRENCY_SPEC="$(fetch_service_spec "currency-service" "8084" "/currency-se
 fi
 print_success "✓ Fetched Currency Service spec"
 
+if ! PERMISSION_SPEC="$(fetch_service_spec "permission-service" "8086" "/permission-service/v3/api-docs" "Permission Service")"; then
+    exit 1
+fi
+print_success "✓ Fetched Permission Service spec"
+
+# Filter out /internal/* routes and Internal* schemas from all specs — those are service-to-service only
+BUDGET_SPEC=$(echo "$BUDGET_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+CURRENCY_SPEC=$(echo "$CURRENCY_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+PERMISSION_SPEC=$(echo "$PERMISSION_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+
 print_info "Merging OpenAPI specifications..."
 
 # Create unified spec using jq
 UNIFIED_SPEC=$(jq -n \
     --argjson budget "$BUDGET_SPEC" \
-    --argjson currency "$CURRENCY_SPEC" '
+    --argjson currency "$CURRENCY_SPEC" \
+    --argjson permission "$PERMISSION_SPEC" '
 {
     "openapi": "3.1.0",
     "info": {
         "title": "Budget Analyzer - Unified API",
         "version": "1.0",
-        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Budget Analyzer API and Currency Service into a single document for client code generation.",
+        "description": "Unified API documentation for all Budget Analyzer microservices. This specification combines the Transaction Service, Currency Service, and Permission Service into a single document for client code generation.\n\nAll endpoints are served under the `/api` base path.",
         "contact": {
             "name": "Bleu Rubin",
             "email": "contact@budgetanalyzer.org"
@@ -154,15 +200,16 @@ UNIFIED_SPEC=$(jq -n \
         }
     ],
     "tags": (
-        ($budget.tags // [] | map(. + {"x-service": "transaction-service"})) +
-        ($currency.tags // [] | map(. + {"x-service": "currency-service"}))
+        ($budget.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "transaction-service"})) +
+        ($currency.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "currency-service"})) +
+        ($permission.tags // [] | map(select(.name != "Internal")) | map(. + {"x-service": "permission-service"}))
     ),
     "paths": (
-        ($budget.paths // {}) + ($currency.paths // {})
+        ($budget.paths // {}) + ($currency.paths // {}) + ($permission.paths // {})
     ),
     "components": {
         "schemas": (
-            ($budget.components.schemas // {}) + ($currency.components.schemas // {})
+            ($budget.components.schemas // {}) + ($currency.components.schemas // {}) + ($permission.components.schemas // {})
         )
     }
 }
@@ -177,37 +224,42 @@ print_success "✓ Generated unified OpenAPI spec (JSON): $OUTPUT_JSON"
 
 # Save YAML output
 OUTPUT_YAML="$OUTPUT_DIR/openapi.yaml"
-TMP_YAML="$(mktemp "${OUTPUT_YAML}.tmp.XXXXXX")"
-if command -v yq &>/dev/null; then
-    if yq --version 2>&1 | grep -q "mikefarah"; then
-        echo "$UNIFIED_SPEC" | yq -P '.' > "$TMP_YAML"
-    else
-        # Python yq (kislyuk/yq) wraps jq — uses -y for YAML output
-        echo "$UNIFIED_SPEC" | yq -y '.' > "$TMP_YAML"
-    fi
-    mv "$TMP_YAML" "$OUTPUT_YAML"
-    print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
-elif command -v python3 &>/dev/null; then
-    if echo "$UNIFIED_SPEC" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False, sort_keys=False)" > "$TMP_YAML" 2>/dev/null; then
-        mv "$TMP_YAML" "$OUTPUT_YAML"
-        print_success "✓ Generated unified OpenAPI spec (YAML): $OUTPUT_YAML"
-    else
-        rm -f "$TMP_YAML"
-        print_warning "Python yaml module not available — skipping YAML output"
-    fi
-else
-    rm -f "$TMP_YAML"
-    print_warning "Neither yq nor python3 found — skipping YAML output"
+echo "$UNIFIED_SPEC" | convert_json_to_yaml "$OUTPUT_YAML" "unified OpenAPI spec" || true
+
+# --- Session Gateway spec (separate from unified spec) ---
+
+print_info "Fetching Session Gateway spec..."
+
+if ! SESSION_GW_SPEC="$(fetch_service_spec "session-gateway" "8081" "/v3/api-docs" "Session Gateway")"; then
+    exit 1
+fi
+print_success "✓ Fetched Session Gateway spec"
+
+# Filter out /internal/* routes — those are service-to-service only
+SESSION_GW_SPEC=$(echo "$SESSION_GW_SPEC" | jq '.paths |= with_entries(select(.key | startswith("/internal") | not))')
+
+# Convert to YAML via temp file (not saved to docs-aggregator — that's NGINX-served)
+SESSION_GW_YAML="$(mktemp "${OUTPUT_DIR}/session-gateway-api.yaml.tmp.XXXXXX")"
+if ! echo "$SESSION_GW_SPEC" | convert_json_to_yaml "$SESSION_GW_YAML" "Session Gateway spec"; then
+    rm -f "$SESSION_GW_YAML"
+    print_error "Failed to convert Session Gateway spec to YAML"
+    exit 1
 fi
 
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
 if [ -d "$WEB_DOCS_DIR" ]; then
-    cp "$OUTPUT_YAML" "$WEB_DOCS_DIR/budget-analyzer-api.yaml"
-    print_success "✓ Copied to budget-analyzer-web: $WEB_DOCS_DIR/budget-analyzer-api.yaml"
+    WEB_API_DIR="$WEB_DOCS_DIR/api"
+    mkdir -p "$WEB_API_DIR"
+    cp "$OUTPUT_YAML" "$WEB_API_DIR/budget-analyzer-api.yaml"
+    cp "$SESSION_GW_YAML" "$WEB_API_DIR/session-gateway-api.yaml"
+    print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/budget-analyzer-api.yaml"
+    print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/session-gateway-api.yaml"
 else
     print_warning "budget-analyzer-web/docs directory not found - skipping copy"
 fi
+
+rm -f "$SESSION_GW_YAML"
 
 echo
 print_success "=== Unified OpenAPI specification generated successfully ==="

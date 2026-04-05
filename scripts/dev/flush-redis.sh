@@ -6,7 +6,10 @@
 # Usage:
 #   ./flush-redis.sh
 
-set -e
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "${SCRIPT_DIR}/lib/redis-cli.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,9 +27,7 @@ echo ""
 echo -e "${YELLOW}Flushing Redis...${NC}"
 echo ""
 
-# Find Redis pod
-REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
+REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$REDIS_POD" ]; then
     echo -e "${RED}Redis pod not found in infrastructure namespace${NC}"
     echo ""
@@ -39,13 +40,9 @@ fi
 echo -e "${YELLOW}Using Redis pod: $REDIS_POD${NC}"
 echo ""
 
-# Read the redis-ops password from the Redis bootstrap secret.
-# flush-redis uses FLUSHALL which requires admin-level access.
-REDIS_USERNAME="redis-ops"
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-# Flush all Redis data over the Redis server's TLS-only listener.
-kubectl exec -n infrastructure "$REDIS_POD" -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning FLUSHALL > /dev/null 2>&1
+redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" FLUSHALL > /dev/null 2>&1
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}SUCCESS! Redis has been flushed${NC}"

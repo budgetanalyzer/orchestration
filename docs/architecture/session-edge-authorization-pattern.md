@@ -19,10 +19,10 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 1. **Istio Ingress**: SSL termination, ext_authz enforcement on `/api/*` paths, and auth-path throttling
 2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
-4. **Session Gateway**: Auth lifecycle and session heartbeat (`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
+4. **Session Gateway**: Auth lifecycle plus the versioned browser JSON endpoints (`/auth/v1/session`, `/auth/v1/user`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
 
 **Routing**:
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user` → Session Gateway (auth lifecycle)
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - local development only: `/_prod-smoke/*` → NGINX (same-origin static frontend verification path)
 - `/login`, `/*` → NGINX (frontend, no auth required)
@@ -36,7 +36,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
 - Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
-- Applies local rate limiting to auth-sensitive browser entry points (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/user`)
+- Applies local rate limiting to auth-sensitive browser entry points (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
@@ -122,7 +122,7 @@ kubectl logs deployment/nginx-gateway
 - Stores Auth0 tokens in Redis session hashes using the dedicated `session-gateway` ACL user
 - Writes session data (userId, roles, permissions) as Redis hashes (`session:{id}`)
 - Issues HttpOnly, Secure session cookies to browsers
-- Provides heartbeat endpoint `GET /auth/session` to extend the session TTL for active browser users
+- Provides browser session endpoints `GET /auth/v1/session` and `GET /auth/v1/user`
 - Proactive token refresh when the IDP token is within the 10-minute refresh threshold (includes permission re-fetch and session hash update)
 - Calls permission-service to enrich session with roles/permissions (email and displayName passed as query params)
 - Provides token exchange endpoint for native/M2M clients (`POST /auth/token/exchange`)
@@ -153,7 +153,7 @@ service-specific Redis ACL users, not a shared password.
 
 Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
-Active browser sessions also call `GET /auth/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to validate or refresh the upstream IDP grant without putting Session Gateway on the API hot path.
+Active browser sessions also call `GET /auth/v1/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to validate or refresh the upstream IDP grant without putting Session Gateway on the API hot path. Browser session inspection lives alongside it at `GET /auth/v1/user`.
 
 **Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
 

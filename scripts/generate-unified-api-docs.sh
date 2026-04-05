@@ -226,14 +226,13 @@ print_success "✓ Fetched Session Gateway spec"
 # Filter out /internal/* routes — those are service-to-service only
 SESSION_GW_SPEC=$(echo "$SESSION_GW_SPEC" | jq '.paths |= with_entries(select(.key | startswith("/internal") | not))')
 
-SESSION_GW_JSON="$OUTPUT_DIR/session-gateway-api.json"
-TMP_SESSION_JSON="$(mktemp "${SESSION_GW_JSON}.tmp.XXXXXX")"
-echo "$SESSION_GW_SPEC" | jq '.' > "$TMP_SESSION_JSON"
-mv "$TMP_SESSION_JSON" "$SESSION_GW_JSON"
-print_success "✓ Generated Session Gateway spec (JSON): $SESSION_GW_JSON"
-
-SESSION_GW_YAML="$OUTPUT_DIR/session-gateway-api.yaml"
-echo "$SESSION_GW_SPEC" | convert_json_to_yaml "$SESSION_GW_YAML" "Session Gateway spec" || true
+# Convert to YAML via temp file (not saved to docs-aggregator — that's NGINX-served)
+SESSION_GW_YAML="$(mktemp "${OUTPUT_DIR}/session-gateway-api.yaml.tmp.XXXXXX")"
+if ! echo "$SESSION_GW_SPEC" | convert_json_to_yaml "$SESSION_GW_YAML" "Session Gateway spec"; then
+    rm -f "$SESSION_GW_YAML"
+    print_error "Failed to convert Session Gateway spec to YAML"
+    exit 1
+fi
 
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
@@ -244,16 +243,14 @@ if [ -d "$WEB_DOCS_DIR" ]; then
     WEB_API_DIR="$WEB_DOCS_DIR/api"
     mkdir -p "$WEB_API_DIR"
     cp "$OUTPUT_YAML" "$WEB_API_DIR/budget-analyzer-api.yaml"
+    cp "$SESSION_GW_YAML" "$WEB_API_DIR/session-gateway-api.yaml"
     print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/budget-analyzer-api.yaml"
-    if [ -f "$SESSION_GW_YAML" ]; then
-        cp "$SESSION_GW_YAML" "$WEB_API_DIR/session-gateway-api.yaml"
-        print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/session-gateway-api.yaml"
-    else
-        print_warning "Session Gateway YAML not available — skipping copy to $WEB_API_DIR"
-    fi
+    print_success "✓ Copied to budget-analyzer-web: $WEB_API_DIR/session-gateway-api.yaml"
 else
     print_warning "budget-analyzer-web/docs directory not found - skipping copy"
 fi
+
+rm -f "$SESSION_GW_YAML"
 
 echo
 print_success "=== Unified OpenAPI specification generated successfully ==="

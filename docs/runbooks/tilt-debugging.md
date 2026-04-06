@@ -145,10 +145,12 @@ Use port-forwards to bypass the gateway and test services directly:
 # Test transaction-service directly
 curl http://localhost:8082/actuator/health
 curl http://localhost:8082/actuator/info
-
-# Test with a bearer token (for example, an exchanged opaque session token)
-curl -H "Authorization: Bearer <token>" http://localhost:8082/api/v1/transactions
 ```
+
+Authenticated API behavior must be tested through the ingress path, not a
+direct service port-forward. The backend services trust identity headers that
+`ext_authz` injects at the edge; port-forwarding to a service bypasses that
+path and does not reproduce real authenticated requests.
 
 ### 4. Remote Debugging (IDE)
 

@@ -65,13 +65,10 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENT LAYER                              │
 ├─────────────────────────────────────────────────────────────────┤
-│  React Web App          iOS/Android App       3rd Party Client  │
-│  (Port 3000)            (Native)              (External API)    │
-└────────┬───────────────────────┬──────────────────────┬─────────┘
-         │                       │                      │
-         │ Session Cookie        │ Bearer Token          │ Bearer Token
-         │ (HTTPS)               │ (HTTPS)              │ (HTTPS)
-         ▼                       ▼                      ▼
+│              React Web App (Browser, Port 3000)                 │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ Session Cookie (HTTPS)
+                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │              Istio Ingress Gateway (Port 443, HTTPS)             │
 │                    • SSL Termination (all traffic)               │
@@ -81,21 +78,18 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 │                    • Routes /api/*, /* → NGINX                   │
 │                    • Local rate limiting on auth-sensitive paths │
 │                    • Mesh identity (SPIFFE) for mTLS             │
-└────────┬───────────────────────┬──────────────────────┬─────────┘
-         │                       │                      │
-         ▼                       │                      │
-┌────────────────────────┐       │                      │
-│   ext_authz HTTP       │       │                      │
-│   Port 9002            │       │                      │
-│   • Session lookup     │       │                      │
-│     in Redis           │       │                      │
-│   • Header injection   │       │                      │
-│     (X-User-Id, etc.)  │       │                      │
-└────────────────────────┘       │                      │
-                                 │                      │
-         ┌───────────────────────┴──────────────────────┘
-         │ Validated headers (X-User-Id, X-Roles, X-Permissions)
-         ▼
+└──────────────────────────────┬──────────────────────────────────┘
+                               ▼
+┌────────────────────────┐
+│   ext_authz HTTP       │
+│   Port 9002            │
+│   • Session lookup     │
+│     in Redis           │
+│   • Header injection   │
+│     (X-User-Id, etc.)  │
+└────────────────────────┘
+               │ Validated headers (X-User-Id, X-Roles, X-Permissions)
+               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    NGINX API Gateway (Port 8080, HTTP)           │
 │                    • Request Routing                             │
@@ -120,8 +114,6 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 │     (east-west)        │
 └────────────────────────┘
 ```
-
-> The "3rd Party Client" column depicts the future stateless bearer-token lane tracked in [docs/plans/stateless-m2m-edge-authorization-plan.md](../plans/stateless-m2m-edge-authorization-plan.md). It is not wired end-to-end today. Session Gateway does not accept bearer clients, and Istio/ext_authz has no bearer validation path in the current deployment.
 
 ---
 
@@ -298,58 +290,21 @@ The heartbeat does not call Auth0. Session liveness is entirely local. IDP revoc
 
 ---
 
-### Mobile App Authentication
-
-**Status:** Under Consideration
-
-Mobile app authentication strategy is still being evaluated. We will assess the following options when mobile development begins:
-
-**Option 1: Direct Auth0 Integration**
-- Mobile app uses Auth0 native SDKs
-- Tokens stored in secure OS storage (Keychain/Keystore)
-- A stateless bearer-token lane (see docs/plans/stateless-m2m-edge-authorization-plan.md) is the most likely target shape; Session Gateway does not currently accept bearer clients
-- Simpler implementation with proven SDKs
-
-**Option 2: Session Gateway Proxy Pattern**
-- Mobile app calls Session Gateway auth endpoints through Istio ingress
-- Session Gateway proxies to Auth0
-- Maintains identity provider abstraction
-- Consistent with overall architecture principles
-
-**Decision Factors:**
-- Security requirements for mobile vs web
-- Native OS token storage capabilities
-- Operational complexity vs abstraction benefits
-- Team expertise with mobile OAuth implementations
-
-The mobile authentication approach will be finalized during mobile application design phase, weighing the trade-offs between simplicity and architectural consistency.
-
----
-
-### Machine-to-Machine / Bearer Clients
-
-Session Gateway does not currently expose an authentication path for
-non-browser clients. A future stateless bearer-token lane for M2M and external
-API access is tracked as a draft in
-[docs/plans/stateless-m2m-edge-authorization-plan.md](../plans/stateless-m2m-edge-authorization-plan.md).
-Until that plan is implemented, non-browser callers are limited to the
-explicit internal east-west allowances described under "Internal
-Service-to-Service Authentication" below.
-
----
-
 ### Internal Service-to-Service Authentication
 
-Internal services rely on network isolation enforced by Kubernetes NetworkPolicy. Permission-service is called directly by Session Gateway without bearer authentication — NetworkPolicy allowlists restrict which pods can reach it.
+Internal services rely on Istio mTLS, ingress-scoped `AuthorizationPolicy`
+rules, and Kubernetes `NetworkPolicy` allowlists. Permission-service is called
+directly by Session Gateway over the mesh for role resolution and bulk session
+revocation.
 
 **Current approach:**
 - Session Gateway calls permission-service via internal Kubernetes DNS
 - Permission-service calls Session Gateway for user deactivation (bulk session revocation)
-- No bearer token or cryptographic proof of caller identity
+- No browser session cookie is used for east-west service calls
 - NetworkPolicy enforces pod-level allowlists: Session Gateway ↔ permission-service (bidirectional), NGINX → transaction/currency/web/permission-service
 - Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
 
-**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway and ext-authz) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Session Gateway follows the same pattern except for one explicit east-west allowance: `permission-service` may issue `DELETE /internal/v1/sessions/users/{userId}` on port `8081` for bulk session revocation. This preserves cryptographic caller authentication without introducing shared application-level bearer tokens.
+**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway and ext-authz) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Session Gateway follows the same pattern except for one explicit east-west allowance: `permission-service` may issue `DELETE /internal/v1/sessions/users/{userId}` on port `8081` for bulk session revocation. This preserves cryptographic caller authentication without introducing shared application credentials.
 
 ---
 
@@ -411,7 +366,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 
 ### Token Configuration
 
-**Opaque Session Token** (cookie or bearer token):
+**Opaque Session Token** (browser cookie value):
 - Lifetime: 15 minutes (sliding expiration via `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
@@ -649,12 +604,12 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 | Keep NGINX as API gateway | Industry standard; operational maturity; team familiarity |
 | Spring WebFlux for Session Gateway | Team expertise; minimal code; native OAuth support |
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
-| Opaque session tokens | Instant revocation via Redis delete; no expiry window |
+| Opaque session cookies | Instant revocation via Redis delete; no expiry window |
 | Istio ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol via meshConfig |
-| 15 min session timeout | Favor shorter default session windows for browser sessions; no non-browser flows exist on Session Gateway |
+| 15 min session timeout | Favor shorter default session windows for browser sessions |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; single hash per session |
-| Network isolation for internal M2M | Simplicity; mTLS implemented via Istio for cryptographic authentication |
+| East-west caller authentication | Istio mTLS plus AuthorizationPolicy for service-to-service traffic |
 
 ---
 

@@ -10,7 +10,6 @@ Related documents:
 - `docs/architecture/security-architecture.md`
 - `docs/architecture/session-edge-authorization-pattern.md`
 - `docs/architecture/system-overview.md`
-- `docs/architecture/m2m-client-authorization.md`
 - `docs/decisions/006-session-architecture-rethink.md`
 - [`../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md`](../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md)
 

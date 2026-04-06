@@ -1979,7 +1979,6 @@ export const config = configs[env as keyof typeof configs];
 - Validate Session Gateway and ext_authz behavior in the target environment
 - Deploy ext_authz HTTP service (port 9002)
 - Store sessions in Redis hashes (`session:{id}`), issue HTTP-only session cookies
-- Proactive token refresh (10 min before expiration)
 - Begin per-service credential separation
 
 #### Weeks 3-4: Auth0 Integration + Envoy ext_authz Configuration
@@ -1992,11 +1991,10 @@ export const config = configs[env as keyof typeof configs];
 - Verify ext_authz header injection (X-User-Id, X-Roles, X-Permissions)
 - Backend services read identity from injected headers
 - Implement data-level authorization (query scoping by user ID from headers)
-- Token exchange endpoint for M2M clients
 
 #### Weeks 7-8: Testing, Security Audit, Penetration Testing
 - End-to-end authentication flow testing
-- Session management testing (logout, expiration, refresh)
+- Session management testing (logout, expiration, heartbeat, bulk revocation)
 - Security audit (OWASP Top 10 check)
 - Penetration testing (hire external auditor)
 - Fix any vulnerabilities discovered
@@ -2018,7 +2016,7 @@ export const config = configs[env as keyof typeof configs];
 - ext_authz validates every API request and injects identity headers
 - Backend services read X-User-Id from headers for authorization
 - User can only access their own transactions (data-level authorization)
-- Token refresh works seamlessly (no user interruption)
+- Session heartbeat extends sliding TTL without frontend interruption; idle sessions expire on Redis TTL
 
 ---
 

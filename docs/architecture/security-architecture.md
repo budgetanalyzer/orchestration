@@ -116,9 +116,12 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 │   • Session lifecycle  │       │   • User Management         │
 │   • Session write      │       └─────────────────────────────┘
 │     to Redis           │
-│   • Token exchange     │
+│   • Bulk revocation    │
+│     (east-west)        │
 └────────────────────────┘
 ```
+
+> The "3rd Party Client" column depicts the future stateless bearer-token lane tracked in [docs/plans/stateless-m2m-edge-authorization-plan.md](../plans/stateless-m2m-edge-authorization-plan.md). It is not wired end-to-end today. Session Gateway does not accept bearer clients, and Istio/ext_authz has no bearer validation path in the current deployment.
 
 ---
 
@@ -130,14 +133,12 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
-- Store Auth0 tokens in Redis session hashes for refresh
+- Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes — no Auth0 tokens are stored
 - Write session data (userId, roles, permissions) as Redis hashes (`session:{id}`) — ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
-- Proactive token refresh before expiration
 - Session lifecycle management (login/logout)
 - Call permission-service to resolve roles/permissions, passing `email` and `displayName` extracted from the OAuth2 principal
-- Provide token exchange endpoint for native PKCE/M2M clients (`POST /auth/token/exchange`)
 
 **Technology:** Spring WebFlux with Spring Security OAuth2 Client
 
@@ -245,12 +246,11 @@ Service Logic:
 4. Session Gateway redirects to Auth0 authorize endpoint
 5. User authenticates at Auth0 (enters credentials)
 6. Auth0 redirects to Session Gateway `/login/oauth2/code/idp` with authorization code
-7. Session Gateway exchanges code for tokens (access + refresh)
-8. Session Gateway stores Auth0 tokens in Redis session hash
-9. Session Gateway calls permission-service to resolve roles/permissions
-10. Session Gateway writes session data as Redis hash (`session:{id}`)
-11. Session Gateway sets HTTP-only session cookie in browser
-12. Browser redirected to application home page
+7. Session Gateway exchanges the authorization code for tokens at Auth0 (tokens are used only to derive identity)
+8. Session Gateway calls permission-service to resolve roles/permissions
+9. Session Gateway writes session data (user_id, idp_sub, email, display_name, picture, roles, permissions) to the Redis session hash (`session:{id}`) — no Auth0 tokens are persisted
+10. Session Gateway sets HTTP-only session cookie in browser
+11. Browser redirected to application home page
 ```
 
 **Security Benefits:**
@@ -282,19 +282,17 @@ Service Logic:
 
 ---
 
-### Token Refresh Flow
+### Session Heartbeat Flow
 
 ```
 1. Frontend detects active browser use and calls `GET /auth/v1/session`
 2. Session Gateway reads the Redis session hash
-3. If the Auth0 access token is near expiry (10 min threshold), Session Gateway calls the Auth0 token endpoint with the refresh token
-4. Auth0 returns new access token (and optionally new refresh token)
-5. Session Gateway updates the Redis session hash with new Auth0 tokens
-6. Session Gateway re-fetches permissions from permission-service
-7. Session Gateway updates `expires_at` / TTL and returns session status to the frontend
+3. If missing or expired, Session Gateway returns 401
+4. Otherwise, Session Gateway extends the Redis TTL and `expires_at`
+5. Session Gateway returns `{ active, userId, roles, expiresAt }` to the frontend
 ```
 
-**Refresh Strategy:** Proactive refresh is heartbeat-driven. The browser keeps the sliding session alive with `GET /auth/v1/session`, and Session Gateway refreshes the upstream IDP grant when that heartbeat sees the access token nearing expiry.
+The heartbeat does not call Auth0. Session liveness is entirely local. IDP revocation propagates via explicit east-west bulk revocation through `DELETE /internal/v1/sessions/users/{userId}`, which deletes all sessions for that user via the `user_sessions:{userId}` Redis index.
 
 **Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
 
@@ -309,7 +307,7 @@ Mobile app authentication strategy is still being evaluated. We will assess the 
 **Option 1: Direct Auth0 Integration**
 - Mobile app uses Auth0 native SDKs
 - Tokens stored in secure OS storage (Keychain/Keystore)
-- Token exchange via Session Gateway (`POST /auth/token/exchange`)
+- A stateless bearer-token lane (see docs/plans/stateless-m2m-edge-authorization-plan.md) is the most likely target shape; Session Gateway does not currently accept bearer clients
 - Simpler implementation with proven SDKs
 
 **Option 2: Session Gateway Proxy Pattern**
@@ -328,21 +326,15 @@ The mobile authentication approach will be finalized during mobile application d
 
 ---
 
-### Client Credentials Flow (M2M)
+### Machine-to-Machine / Bearer Clients
 
-```
-1. External client obtains Auth0 access token via client_credentials grant
-2. Client exchanges Auth0 token for opaque session via POST /auth/token/exchange
-3. Session Gateway validates token, creates session hash in Redis
-4. Client uses opaque bearer token for API calls
-5. Istio ingress ext_authz validates bearer token from Redis
-6. If valid: routes to backend service with identity headers
-```
-
-**Security:**
-- Token exchange creates a server-managed session — no long-lived tokens on wire
-- ext_authz validates every request
-- Scoped permissions resolved from permission-service
+Session Gateway does not currently expose an authentication path for
+non-browser clients. A future stateless bearer-token lane for M2M and external
+API access is tracked as a draft in
+[docs/plans/stateless-m2m-edge-authorization-plan.md](../plans/stateless-m2m-edge-authorization-plan.md).
+Until that plan is implemented, non-browser callers are limited to the
+explicit internal east-west allowances described under "Internal
+Service-to-Service Authentication" below.
 
 ---
 
@@ -370,7 +362,6 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 
 **All authentication protocol endpoints go through Session Gateway:**
 - `/auth/v1/*` - Versioned browser JSON endpoints (`session`, `user`)
-- `/auth/token/exchange` - Temporary unversioned token exchange endpoint for native/M2M clients
 - `/oauth2/*` - OAuth2 callback and continuation endpoints
 - `/login/oauth2/*` - OAuth2 callback path
 - `/logout` - End session
@@ -390,7 +381,7 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 **Future Options:** Okta, Keycloak, Azure AD, custom solution
 
 **Migration Impact:**
-- Clients: No changes (still use session cookies or token exchange)
+- Clients: No changes (still use session cookies)
 - Session Gateway: Update OAuth configuration
 - ext_authz: No changes (reads from Redis, provider-independent)
 - Services: No changes (read identity from headers, provider-independent)
@@ -427,24 +418,19 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 - Validated by: ext_authz service via Redis lookup
 
 **Session Redis Hash** (`session:{id}`):
-- Fields: `user_id`, `idp_sub`, `email`, `display_name`, `picture`, `roles` (comma-joined), `permissions` (comma-joined), `refresh_token`, `token_expires_at`, `created_at`, `expires_at`
+- Fields: user_id, idp_sub, email, display_name, picture, roles (comma-joined), permissions (comma-joined), created_at, expires_at
 - TTL: 15 minutes (configurable via `session.ttl-seconds`)
-- Written by: Session Gateway on login, token refresh, and token exchange
+- Written by: Session Gateway on login and session heartbeat
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
+- Companion index: `user_sessions:{userId}` — a Redis set of session IDs for that user, used by `DELETE /internal/v1/sessions/users/{userId}` for bulk revocation
 
 **IDP Access Token** (Auth0):
-- Lifetime: 15 minutes (configured in Auth0 API settings)
-- Used by: Session Gateway for upstream API calls
-- Refresh: Proactive at 10-min remaining threshold during heartbeat
-- Not exposed to browser
+- Obtained by Session Gateway during the OAuth2 authorization code exchange
+- Used only to derive the user identity (sub, email, name) and permissions during login
+- Not persisted. Not used for any upstream API call after login.
+- Not exposed to the browser.
 
-**Refresh Token:**
-- Lifetime: 8 hours (web), 30 days (mobile)
-- Rotation: Issue new refresh token on each use
-- Storage: Redis (web), Secure storage (mobile)
-- Revocation: Supported via token introspection
-
-> **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md) (authoritative values) and [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration) (quickstart context).
+> **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md) (authoritative values, tied to SESSION_TTL_SECONDS and heartbeat cadence) and [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration) (quickstart context).
 
 **Session Cookie:**
 - HttpOnly: true (prevents JavaScript access)
@@ -665,8 +651,7 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
 | Opaque session tokens | Instant revocation via Redis delete; no expiry window |
 | Istio ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol via meshConfig |
-| 15 min session timeout | Favor shorter default session windows for browser and token-exchange flows |
-| Proactive token refresh | Avoid request failures due to expiration |
+| 15 min session timeout | Favor shorter default session windows for browser sessions; no non-browser flows exist on Session Gateway |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; single hash per session |
 | Network isolation for internal M2M | Simplicity; mTLS implemented via Istio for cryptographic authentication |

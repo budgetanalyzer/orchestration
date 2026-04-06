@@ -280,8 +280,8 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway
-- `IDP grant revoked for sessionId=` or `IDP token refresh failed for sessionId=` - Auth0 refresh or revocation checks are breaking heartbeats
+- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway; the heartbeat is local Redis only and never calls Auth0
+- `Session revocation requested for userId=` / `Session revocation completed for userId=, deletedSessions=` / `Session revocation failed for userId=` - bulk revocation through `DELETE /internal/v1/sessions/users/{userId}` is being driven east-west by permission-service
 
 ### RabbitMQ
 

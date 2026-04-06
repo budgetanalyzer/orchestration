@@ -1,7 +1,7 @@
 # Plan: Stateless M2M Edge Authorization
 
 Date: 2026-04-02
-Updated: 2026-04-04
+Updated: 2026-04-06
 
 Status: Draft
 
@@ -24,20 +24,19 @@ the linked Session Gateway plan and should stay there.
 
 ## Session Gateway Dependency
 
-Before this plan becomes implementation work, Session Gateway needs a clean browser-only boundary.
-That is tracked in
-[`../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md`](../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md).
-
-This orchestration plan assumes the following end state from that document:
+This plan's prerequisites on Session Gateway are now satisfied (as of
+2026-04-06, executed via the sibling session-gateway plan
+`local-session-revocation-and-refresh-token-removal.md` and recorded in ADR
+[`007-browser-only-session-gateway.md`](../decisions/007-browser-only-session-gateway.md)):
 
 - Session Gateway is explicitly browser-only.
-- browser-session validity is local and Redis-based, not Auth0-refresh-based
-- local revoke-all-sessions-for-user exists
-- `POST /auth/token/exchange` is removed or is only present during a short documented removal
-  window, not treated as a supported M2M contract
+- Browser-session validity is local and Redis-based, not Auth0-refresh-based.
+- Local bulk revocation exists via
+  `DELETE /internal/v1/sessions/users/{userId}`.
+- `POST /auth/token/exchange` has been removed.
 
-If those points are still unresolved, this plan should not try to paper over them with duplicate
-text.
+The remainder of this plan therefore describes a new, independent lane.
+It no longer has a blocking precondition on Session Gateway.
 
 ## Problem Statement
 

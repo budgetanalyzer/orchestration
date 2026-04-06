@@ -157,3 +157,24 @@ Implementation is phased across repos:
 - [Session Edge Authorization Pattern](../architecture/session-edge-authorization-pattern.md)
 - [Security Architecture](../architecture/security-architecture.md)
 - [Port Reference](../architecture/port-reference.md)
+
+## Subsequent Updates
+
+**2026-04-06** — Parts of this decision have been refined after implementation
+experience. The core architecture (single Redis hash, no Spring Cloud Gateway,
+no Spring Session, heartbeat-driven sliding TTL, ext_authz read-only) stands.
+The following points have changed and are captured in the new ADR
+[`007-browser-only-session-gateway.md`](007-browser-only-session-gateway.md):
+
+- **No refresh token in the session hash.** The `refresh_token` and
+  `token_expires_at` fields have been removed from `session:{id}`. The session
+  hash no longer holds any Auth0 tokens.
+- **No `offline_access` scope.** Auth0 scope is now `openid profile email`.
+  Auth0 issues no refresh token to Session Gateway.
+- **Heartbeat is local-only.** `GET /auth/v1/session` extends the Redis TTL
+  and returns `{ active, userId, roles, expiresAt }`. It no longer calls Auth0
+  or attempts a refresh-token exchange. IDP revocation propagates via explicit
+  bulk-revocation calls from permission-service to the new
+  `DELETE /internal/v1/sessions/users/{userId}` endpoint.
+- **`POST /auth/token/exchange` has been removed.** Session Gateway is
+  explicitly browser-only. There is no M2M surface on Session Gateway.

@@ -830,8 +830,8 @@ paths:
               $ref: '#/components/schemas/BatchImportRequest'
         required: true
       responses:
-        '201':
-          description: Created
+        '200':
+          description: OK
           content:
             application/json:
               schema:
@@ -1243,11 +1243,157 @@ paths:
       summary: Search transactions across all users
       operationId: searchTransactions
       parameters:
-        - name: filter
+        - name: id
           in: query
-          required: true
+          description: Unique identifier for the transaction
+          required: false
           schema:
-            $ref: '#/components/schemas/TransactionFilter'
+            type: integer
+            format: int64
+            description: Unique identifier for the transaction
+            example: 1
+          example: 1
+        - name: ownerId
+          in: query
+          description: ID of the user who owns the transaction. Only effective on
+            admin endpoints; ignored on user-scoped endpoints where the authenticated
+            user is always applied.
+          required: false
+          schema:
+            type: string
+            description: ID of the user who owns the transaction. Only effective on
+              admin endpoints; ignored on user-scoped endpoints where the authenticated
+              user is always applied.
+            example: usr_test123
+          example: usr_test123
+        - name: accountId
+          in: query
+          description: Identifier for the account associated with the transaction
+          required: false
+          schema:
+            type: string
+            description: Identifier for the account associated with the transaction
+            example: checking-3223
+          example: checking-3223
+        - name: bankName
+          in: query
+          description: Name of the bank where the transaction occurred
+          required: false
+          schema:
+            type: string
+            description: Name of the bank where the transaction occurred
+            example: Capital One
+          example: Capital One
+        - name: dateFrom
+          in: query
+          description: Start date for transaction date range
+          required: false
+          schema:
+            type: string
+            format: date
+            description: Start date for transaction date range
+            example: '2025-10-01'
+          example: '2025-10-01'
+        - name: dateTo
+          in: query
+          description: End date for transaction date range
+          required: false
+          schema:
+            type: string
+            format: date
+            description: End date for transaction date range
+            example: '2025-10-14'
+          example: '2025-10-14'
+        - name: currencyIsoCode
+          in: query
+          description: ISO currency code for the transaction
+          required: false
+          schema:
+            type: string
+            description: ISO currency code for the transaction
+            example: USD
+          example: USD
+        - name: minAmount
+          in: query
+          description: Minimum transaction amount
+          required: false
+          schema:
+            type: number
+            description: Minimum transaction amount
+            example: 10.0
+          example: 10.0
+        - name: maxAmount
+          in: query
+          description: Maximum transaction amount
+          required: false
+          schema:
+            type: number
+            description: Maximum transaction amount
+            example: 500.0
+          example: 500.0
+        - name: type
+          in: query
+          description: Type of the transaction
+          required: false
+          schema:
+            type: string
+            description: Type of the transaction
+            enum:
+              - CREDIT
+              - DEBIT
+              - CREDIT
+              - DEBIT
+            example: DEBIT
+          example: DEBIT
+        - name: description
+          in: query
+          description: Text to match in the transaction description
+          required: false
+          schema:
+            type: string
+            description: Text to match in the transaction description
+            example: Grocery
+          example: Grocery
+        - name: createdAfter
+          in: query
+          description: Start of creation timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: Start of creation timestamp range
+            example: '2025-10-14T00:00:00Z'
+          example: '2025-10-14T00:00:00Z'
+        - name: createdBefore
+          in: query
+          description: End of creation timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: End of creation timestamp range
+            example: '2025-10-15T00:00:00Z'
+          example: '2025-10-15T00:00:00Z'
+        - name: updatedAfter
+          in: query
+          description: Start of last update timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: Start of last update timestamp range
+            example: '2025-10-14T00:00:00Z'
+          example: '2025-10-14T00:00:00Z'
+        - name: updatedBefore
+          in: query
+          description: End of last update timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: End of last update timestamp range
+            example: '2025-10-15T00:00:00Z'
+          example: '2025-10-15T00:00:00Z'
         - name: page
           in: query
           description: Zero-based page index (0..N)
@@ -1278,9 +1424,11 @@ paths:
               type: string
       responses:
         '200':
-          description: OK
+          description: Admin transactions retrieved successfully
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedResponseAdminTransactionResponse'
         '400':
           description: Bad Request
           content:
@@ -1321,11 +1469,157 @@ paths:
       summary: Count transactions across all users
       operationId: countTransactions_1
       parameters:
-        - name: filter
+        - name: id
           in: query
-          required: true
+          description: Unique identifier for the transaction
+          required: false
           schema:
-            $ref: '#/components/schemas/TransactionFilter'
+            type: integer
+            format: int64
+            description: Unique identifier for the transaction
+            example: 1
+          example: 1
+        - name: ownerId
+          in: query
+          description: ID of the user who owns the transaction. Only effective on
+            admin endpoints; ignored on user-scoped endpoints where the authenticated
+            user is always applied.
+          required: false
+          schema:
+            type: string
+            description: ID of the user who owns the transaction. Only effective on
+              admin endpoints; ignored on user-scoped endpoints where the authenticated
+              user is always applied.
+            example: usr_test123
+          example: usr_test123
+        - name: accountId
+          in: query
+          description: Identifier for the account associated with the transaction
+          required: false
+          schema:
+            type: string
+            description: Identifier for the account associated with the transaction
+            example: checking-3223
+          example: checking-3223
+        - name: bankName
+          in: query
+          description: Name of the bank where the transaction occurred
+          required: false
+          schema:
+            type: string
+            description: Name of the bank where the transaction occurred
+            example: Capital One
+          example: Capital One
+        - name: dateFrom
+          in: query
+          description: Start date for transaction date range
+          required: false
+          schema:
+            type: string
+            format: date
+            description: Start date for transaction date range
+            example: '2025-10-01'
+          example: '2025-10-01'
+        - name: dateTo
+          in: query
+          description: End date for transaction date range
+          required: false
+          schema:
+            type: string
+            format: date
+            description: End date for transaction date range
+            example: '2025-10-14'
+          example: '2025-10-14'
+        - name: currencyIsoCode
+          in: query
+          description: ISO currency code for the transaction
+          required: false
+          schema:
+            type: string
+            description: ISO currency code for the transaction
+            example: USD
+          example: USD
+        - name: minAmount
+          in: query
+          description: Minimum transaction amount
+          required: false
+          schema:
+            type: number
+            description: Minimum transaction amount
+            example: 10.0
+          example: 10.0
+        - name: maxAmount
+          in: query
+          description: Maximum transaction amount
+          required: false
+          schema:
+            type: number
+            description: Maximum transaction amount
+            example: 500.0
+          example: 500.0
+        - name: type
+          in: query
+          description: Type of the transaction
+          required: false
+          schema:
+            type: string
+            description: Type of the transaction
+            enum:
+              - CREDIT
+              - DEBIT
+              - CREDIT
+              - DEBIT
+            example: DEBIT
+          example: DEBIT
+        - name: description
+          in: query
+          description: Text to match in the transaction description
+          required: false
+          schema:
+            type: string
+            description: Text to match in the transaction description
+            example: Grocery
+          example: Grocery
+        - name: createdAfter
+          in: query
+          description: Start of creation timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: Start of creation timestamp range
+            example: '2025-10-14T00:00:00Z'
+          example: '2025-10-14T00:00:00Z'
+        - name: createdBefore
+          in: query
+          description: End of creation timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: End of creation timestamp range
+            example: '2025-10-15T00:00:00Z'
+          example: '2025-10-15T00:00:00Z'
+        - name: updatedAfter
+          in: query
+          description: Start of last update timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: Start of last update timestamp range
+            example: '2025-10-14T00:00:00Z'
+          example: '2025-10-14T00:00:00Z'
+        - name: updatedBefore
+          in: query
+          description: End of last update timestamp range
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: End of last update timestamp range
+            example: '2025-10-15T00:00:00Z'
+          example: '2025-10-15T00:00:00Z'
       responses:
         '200':
           description: OK
@@ -2466,6 +2760,132 @@ components:
           format: date-time
           description: End of last update timestamp range
           example: '2025-10-15T00:00:00Z'
+    AdminTransactionResponse:
+      type: object
+      description: Admin transaction response including owner information
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
+          example: 1
+        ownerId:
+          type: string
+          description: ID of the user who owns this transaction
+          example: usr_test123
+        accountId:
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
+        bankName:
+          type: string
+          description: Name of the bank where the transaction occurred
+          example: Capital One
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2025-10-14'
+        currencyIsoCode:
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
+        amount:
+          type: number
+          description: Amount of the transaction
+          example: 100.5
+        type:
+          type: string
+          description: Type of the transaction
+          enum:
+            - CREDIT
+            - DEBIT
+          example: DEBIT
+        description:
+          type: string
+          description: Description of the transaction
+          example: Grocery shopping
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+          example: '2025-10-14T10:30:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+          example: '2025-10-14T10:30:00Z'
+      required:
+        - amount
+        - bankName
+        - createdAt
+        - currencyIsoCode
+        - date
+        - description
+        - id
+        - ownerId
+        - type
+        - updatedAt
+    PageMetadataResponse:
+      type: object
+      description: Pagination metadata for a paged API response
+      properties:
+        page:
+          type: integer
+          format: int32
+          description: Zero-based current page index
+          example: 0
+        size:
+          type: integer
+          format: int32
+          description: Requested page size
+          example: 50
+        numberOfElements:
+          type: integer
+          format: int32
+          description: Number of items included in the current page
+          example: 50
+        totalElements:
+          type: integer
+          format: int64
+          description: Total number of matching records across all pages
+          example: 12437
+        totalPages:
+          type: integer
+          format: int32
+          description: Total number of pages for the current query
+          example: 249
+        first:
+          type: boolean
+          description: Whether this is the first page
+          example: true
+        last:
+          type: boolean
+          description: Whether this is the last page
+          example: false
+      required:
+        - first
+        - last
+        - numberOfElements
+        - page
+        - size
+        - totalElements
+        - totalPages
+    PagedResponseAdminTransactionResponse:
+      type: object
+      description: Stable paged API response wrapper
+      properties:
+        content:
+          type: array
+          description: Items included in the current page
+          items:
+            $ref: '#/components/schemas/AdminTransactionResponse'
+        metadata:
+          $ref: '#/components/schemas/PageMetadataResponse'
+          description: Pagination metadata for the current result set
+      required:
+        - content
+        - metadata
     CurrencySeriesUpdateRequest:
       type: object
       description: Request to update an existing currency series (currency code and

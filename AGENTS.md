@@ -125,6 +125,7 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
 - `/login`, `/*` → NGINX (frontend, no auth required)
+- public NGINX-owned API examples include `/api/v1/transactions`, `/api/v1/admin/transactions`, `/api/v1/admin/transactions/count`, `/api/v1/currencies`, and `/api/v1/users`
 
 **Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/v1/session`, and browser session inspection now lives at `GET /auth/v1/user`. Both stay on the direct `/auth/*` lane so Session Gateway can extend the session TTL without joining the API hot path. The heartbeat is Redis-local and does not call Auth0; IDP revocation propagates via explicit bulk revocation on the east-west `DELETE /internal/v1/sessions/users/{userId}` path.
 - `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
@@ -397,6 +398,7 @@ When SSL issues occur, guide the user to run certificate scripts on their host m
 
 When working on this project:
 - Follow the resource-based routing pattern for new API endpoints
+- Treat public `/api/...` additions as incomplete until both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` claim the route and verification proves it does not fall through to the frontend SPA
 - Ensure Kubernetes configurations remain simple and maintainable
 - Keep service independence - avoid tight coupling between services
 - Each microservice lives in its own repository

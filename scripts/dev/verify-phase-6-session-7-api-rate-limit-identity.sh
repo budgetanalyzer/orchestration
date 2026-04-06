@@ -21,7 +21,8 @@ INGRESS_POD_LABEL_KEY="gateway.networking.k8s.io/gateway-name"
 INGRESS_POD_LABEL_VALUE="istio-ingress-gateway"
 FORGED_XFF_PRIMARY="198.51.100.77"
 FORGED_XFF_SECONDARY="198.51.100.99"
-API_BURST_REQUESTS=45
+API_BURST_REQUESTS=120
+API_BURST_PARALLELISM=20
 EXPECTED_PROXY_REGEX='^127\.'
 
 PASSED=0
@@ -190,16 +191,45 @@ pod_api_status() {
 }
 
 pod_api_burst() {
-    local pod_name="$1" session_id="$2" forged_xff="$3" probe_prefix="$4" count="$5"
-    kubectl exec -n "${PROBE_NAMESPACE}" "${pod_name}" -- sh -lc \
-        "for i in \$(seq 1 ${count}); do
-            curl -sk -o /dev/null -w '%{http_code}\n' \
-                --resolve app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP} \
-                -A '${probe_prefix}-'\$i \
-                -H 'X-Forwarded-For: ${forged_xff}' \
-                --cookie 'BA_SESSION=${session_id}' \
-                'https://app.budgetanalyzer.localhost/api/v1/transactions?${probe_prefix}-'\$i
-        done"
+    local pod_name="$1" session_id="$2" forged_xff="$3" probe_prefix="$4" count="$5" parallelism="$6"
+    kubectl exec -i -n "${PROBE_NAMESPACE}" "${pod_name}" -- sh -s -- \
+        "${INGRESS_CLUSTER_IP}" "${session_id}" "${forged_xff}" "${probe_prefix}" "${count}" "${parallelism}" <<'POD_BURST'
+set -u
+
+ingress_cluster_ip="$1"
+session_id="$2"
+forged_xff="$3"
+probe_prefix="$4"
+count="$5"
+parallelism="$6"
+i=1
+active=0
+
+while [ "$i" -le "$count" ]; do
+    (
+        status="$(
+            curl -sk -o /dev/null -w '%{http_code}' \
+                --resolve app.budgetanalyzer.localhost:443:${ingress_cluster_ip} \
+                -A "${probe_prefix}-${i}" \
+                -H "X-Forwarded-For: ${forged_xff}" \
+                --cookie "BA_SESSION=${session_id}" \
+                "https://app.budgetanalyzer.localhost/api/v1/transactions?${probe_prefix}-${i}" \
+                2>/dev/null || printf '000'
+        )"
+        printf '%s\n' "${status}"
+    ) &
+
+    active=$((active + 1))
+    if [ "$active" -ge "$parallelism" ]; then
+        wait
+        active=0
+    fi
+
+    i=$((i + 1))
+done
+
+wait
+POD_BURST
 }
 
 verify_log_identity() {
@@ -309,17 +339,18 @@ main() {
 
     section "Rate-Limit Buckets"
 
-    local rate_session burst_prefix burst_statuses burst_429s other_client_status
+    local rate_session burst_prefix burst_statuses burst_429s burst_summary other_client_status
     rate_session="phase6-session7-rate-$(date +%s)"
     "${SCRIPT_DIR}/seed-ext-authz-session.sh" "${rate_session}" >/dev/null
     burst_prefix="${rate_session}-burst-a"
-    burst_statuses=$(pod_api_burst "${PROBE_POD_A}" "${rate_session}" "${FORGED_XFF_PRIMARY}" "${burst_prefix}" "${API_BURST_REQUESTS}")
+    burst_statuses=$(pod_api_burst "${PROBE_POD_A}" "${rate_session}" "${FORGED_XFF_PRIMARY}" "${burst_prefix}" "${API_BURST_REQUESTS}" "${API_BURST_PARALLELISM}")
     burst_429s=$(printf '%s\n' "${burst_statuses}" | count_status 429)
+    burst_summary="$(printf '%s\n' "${burst_statuses}" | sort | uniq -c | tr '\n' '; ' | sed 's/; $//')"
 
     if [[ "${burst_429s}" -ge 1 ]]; then
         pass "Same real client exhausted a single API rate-limit bucket (saw ${burst_429s} HTTP 429 responses)"
     else
-        fail "Burst traffic from one real client did not trigger any HTTP 429 responses"
+        fail "Burst traffic from one real client did not trigger any HTTP 429 responses (statuses: ${burst_summary})"
     fi
 
     other_client_status=$(pod_api_status "${PROBE_POD_B}" "${rate_session}" "${FORGED_XFF_PRIMARY}" "${rate_session}-other-client")

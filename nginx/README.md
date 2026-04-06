@@ -34,6 +34,8 @@ NGINX (:8080) ─── API-path rate limiting, route to service
     ├─→ /api-docs*        → Swagger UI page + unified contract downloads
     ├─→ /_prod-smoke/*    → Static smoke bundle
     ├─→ /api/v1/transactions → Transaction Service (:8082)
+    ├─→ /api/v1/admin/transactions → Transaction Service (:8082)
+    ├─→ /api/v1/admin/transactions/count → Transaction Service (:8082)
     ├─→ /api/v1/currencies   → Currency Service (:8084)
     ├─→ /api/v1/users        → Permission Service (:8086)
     └─→ /health     → Health check
@@ -74,6 +76,8 @@ proxy_pass $frontend_backend;
 
 The frontend sees clean resource paths:
 - `GET /api/v1/transactions` → Transaction Service
+- `GET /api/v1/admin/transactions` → Transaction Service
+- `GET /api/v1/admin/transactions/count` → Transaction Service
 - `GET /api/v1/currencies` → Currency Service
 - `POST /api/v1/users/{id}/deactivate` → Permission Service
 
@@ -127,6 +131,10 @@ curl -kI https://app.budgetanalyzer.localhost/api-docs | grep -i content-securit
 # Machine-readable unified contracts stay public and same-origin:
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.json
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
+
+# Admin transaction APIs should route to transaction-service, not the SPA:
+curl -kisS "https://app.budgetanalyzer.localhost/api/v1/admin/transactions?page=0&size=1&sort=date,DESC&sort=id,DESC"
+curl -kisS https://app.budgetanalyzer.localhost/api/v1/admin/transactions/count
 
 # Run the full Phase 6 completion gate
 ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
@@ -272,24 +280,41 @@ block completion.
 
 **Scenario:** You want to add `/api/accounts` served by Transaction Service.
 
-1. Add location block in `nginx.k8s.conf`:
+1. Add matching location blocks in both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf`:
 ```nginx
-location /api/accounts {
+location /api/v1/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
     limit_req zone=per_ip burst=50 nodelay;
     limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;
-    include /etc/nginx/includes/backend-headers.conf;
+    include includes/backend-headers.conf;
 }
 ```
 
-2. Tilt will automatically reload the ConfigMap and NGINX.
+2. Verify checked-in route ownership in both files:
+```bash
+rg -n "/api/v1/accounts" nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
+```
 
-3. Frontend code (no changes needed if using consistent API client):
+3. Validate the active NGINX pod still parses the live config:
+```bash
+kubectl exec deployment/nginx-gateway -- nginx -t
+```
+
+4. Probe the public route and make sure it does not leak the frontend SPA:
+```bash
+curl -kisS https://app.budgetanalyzer.localhost/api/v1/accounts
+```
+
+5. Frontend code (no changes needed if using consistent API client):
 ```typescript
 apiClient.get('/accounts')
 ```
+
+Public `/api/...` work is incomplete if only one NGINX variant changes or if
+verification stops at status codes. Unclaimed API paths can still return `200`
+with frontend HTML.
 
 ### Adding a New Microservice
 

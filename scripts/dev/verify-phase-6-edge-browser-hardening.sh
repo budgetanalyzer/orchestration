@@ -252,6 +252,15 @@ external_headers_and_status() {
         "$@" "${APP_BASE_URL}${path}" 2>/dev/null || true
 }
 
+external_body_and_status() {
+    local path="$1"
+    shift
+
+    curl -sk --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
+        -w '\nHTTP_STATUS:%{http_code}\n' \
+        "$@" "${APP_BASE_URL}${path}" 2>/dev/null || true
+}
+
 start_nginx_port_forward() {
     kubectl rollout status "${NGINX_DEPLOYMENT}" -n "${NGINX_NAMESPACE}" --timeout=120s >/dev/null
 
@@ -631,6 +640,30 @@ verify_static_contracts() {
     warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
         "return 404;" \
         "Dev /api-docs/* catch-all fails closed"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "set \$transaction_backend \"http://transaction-service.default.svc.cluster.local:8082\";" \
+        "Dev config routes /api/v1/admin/transactions/count to transaction-service"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "limit_req zone=per_ip burst=50 nodelay;" \
+        "Dev config rate limits /api/v1/admin/transactions/count like other backend APIs"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "rewrite ^/api/v1/(.*)$ /transaction-service/v1/\$1 break;" \
+        "Dev config rewrites /api/v1/admin/transactions/count into the transaction-service path"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "include includes/backend-headers.conf;" \
+        "Dev config preserves backend headers on /api/v1/admin/transactions/count"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "set \$transaction_backend \"http://transaction-service.default.svc.cluster.local:8082\";" \
+        "Dev config routes /api/v1/admin/transactions to transaction-service"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "limit_req zone=per_ip burst=50 nodelay;" \
+        "Dev config rate limits /api/v1/admin/transactions like other backend APIs"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "rewrite ^/api/v1/(.*)$ /transaction-service/v1/\$1 break;" \
+        "Dev config rewrites /api/v1/admin/transactions into the transaction-service path"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "include includes/backend-headers.conf;" \
+        "Dev config preserves backend headers on /api/v1/admin/transactions"
 
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /@vite/client \\{$" \
         "return 404;" \
@@ -650,6 +683,30 @@ verify_static_contracts() {
     warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
         "return 404;" \
         "Production /api-docs/* catch-all fails closed"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "set \$transaction_backend \"http://transaction-service.default.svc.cluster.local:8082\";" \
+        "Production config routes /api/v1/admin/transactions/count to transaction-service"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "limit_req zone=per_ip burst=50 nodelay;" \
+        "Production config rate limits /api/v1/admin/transactions/count like other backend APIs"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "rewrite ^/api/v1/(.*)$ /transaction-service/v1/\$1 break;" \
+        "Production config rewrites /api/v1/admin/transactions/count into the transaction-service path"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions/count \\{$" \
+        "include includes/backend-headers.conf;" \
+        "Production config preserves backend headers on /api/v1/admin/transactions/count"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "set \$transaction_backend \"http://transaction-service.default.svc.cluster.local:8082\";" \
+        "Production config routes /api/v1/admin/transactions to transaction-service"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "limit_req zone=per_ip burst=50 nodelay;" \
+        "Production config rate limits /api/v1/admin/transactions like other backend APIs"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "rewrite ^/api/v1/(.*)$ /transaction-service/v1/\$1 break;" \
+        "Production config rewrites /api/v1/admin/transactions into the transaction-service path"
+    assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api/v1/admin/transactions \\{$" \
+        "include includes/backend-headers.conf;" \
+        "Production config preserves backend headers on /api/v1/admin/transactions"
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /_prod-smoke \\{$" \
         "return 404;" \
         "Production config removes /_prod-smoke"
@@ -780,6 +837,45 @@ verify_public_headers() {
     assert_csp_contains "${csp}" "Production-smoke route uses the strict CSP contract" "script-src 'self'" "style-src 'self'" "object-src 'none'" "base-uri 'self'"
 }
 
+verify_public_api_route_not_spa() {
+    local path="$1" label="$2"
+    shift 2
+
+    local response status content_type body_response body
+
+    response="$(external_headers_and_status "${path}" "$@")"
+    status="$(extract_http_status "${response}")"
+    content_type="$(extract_header_value "Content-Type" "${response}")"
+
+    if [[ "${content_type}" == text/html* ]]; then
+        fail "${label} should not advertise text/html through the public ingress"
+    else
+        pass "${label} does not advertise text/html through the public ingress"
+    fi
+
+    if [[ "${status}" == "200" ]]; then
+        info "${label} returned HTTP 200; checking body for SPA leakage"
+    else
+        info "${label} returned HTTP ${status:-000}; checking body for SPA leakage"
+    fi
+
+    body_response="$(external_body_and_status "${path}" "$@")"
+    body="$(extract_body "${body_response}")"
+    assert_text_excludes "${body}" "${label} does not fall through to the frontend SPA" \
+        "/@vite/client" "/src/main.tsx" '<div id="root"></div>'
+}
+
+verify_public_api_route_ownership() {
+    section "Public API Route Ownership"
+
+    verify_public_api_route_not_spa \
+        "/api/v1/admin/transactions?page=0&size=1&sort=date,DESC&sort=id,DESC" \
+        "Public admin transactions collection route"
+    verify_public_api_route_not_spa \
+        "/api/v1/admin/transactions/count" \
+        "Public admin transactions count route"
+}
+
 verify_docs_headers() {
     section "Docs Visibility (Warning-Only)"
 
@@ -905,6 +1001,7 @@ main() {
     verify_production_nginx_syntax
     verify_static_contracts
     verify_public_headers
+    verify_public_api_route_ownership
     verify_docs_headers
     verify_auth_edge_runtime
     verify_nested_verifiers

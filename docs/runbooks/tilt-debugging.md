@@ -145,10 +145,12 @@ Use port-forwards to bypass the gateway and test services directly:
 # Test transaction-service directly
 curl http://localhost:8082/actuator/health
 curl http://localhost:8082/actuator/info
-
-# Test with a bearer token (for example, an exchanged opaque session token)
-curl -H "Authorization: Bearer <token>" http://localhost:8082/api/v1/transactions
 ```
+
+Authenticated API behavior must be tested through the ingress path, not a
+direct service port-forward. The backend services trust identity headers that
+`ext_authz` injects at the edge; port-forwarding to a service bypasses that
+path and does not reproduce real authenticated requests.
 
 ### 4. Remote Debugging (IDE)
 
@@ -280,8 +282,8 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway
-- `IDP grant revoked for sessionId=` or `IDP token refresh failed for sessionId=` - Auth0 refresh or revocation checks are breaking heartbeats
+- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway; the heartbeat is local Redis only and never calls Auth0
+- `Session revocation requested for userId=` / `Session revocation completed for userId=, deletedSessions=` / `Session revocation failed for userId=` - bulk revocation through `DELETE /internal/v1/sessions/users/{userId}` is being driven east-west by permission-service
 
 ### RabbitMQ
 

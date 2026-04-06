@@ -115,10 +115,9 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 **Session Gateway** (Port 8081)
 - OAuth2 authentication with Auth0
 - Session management via Redis hashes (`session:{id}`)
-- Auth0 token storage in Redis session hashes (never exposed to browser)
-- Heartbeat endpoint `GET /auth/v1/session` extends the session TTL for active browser users and refreshes IDP tokens near expiry (10-minute refresh threshold, 3-minute frontend heartbeat cadence)
+- No Auth0 tokens stored after login — session hashes hold only user identity and permissions
+- Heartbeat endpoint `GET /auth/v1/session` extends the session TTL for active browser users (2-minute frontend default cadence; heartbeat is local Redis only, no Auth0 calls)
 - Calls permission-service to enrich session with roles/permissions
-- Token exchange endpoint for native/M2M clients
 
 **NGINX API Gateway** (Port 8080)
 - Resource-based routing
@@ -269,7 +268,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 - OAuth2/OIDC flows with Auth0
 - Session-based edge authorization (browser never sees tokens)
 - Redis-backed session management with heartbeat-driven sliding expiration
-- Token refresh and lifecycle
+- Bulk session revocation (`DELETE /internal/v1/sessions/users/{userId}`) driven east-west by permission-service when a user is deactivated
 
 **Platform Security Baseline (Phase 0):**
 - Kind uses `disableDefaultCNI` with pinned Calico in local development so `NetworkPolicy` is enforceable

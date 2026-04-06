@@ -248,8 +248,8 @@ step.
 
 Service runtime knobs that orchestration intentionally exposes now stay on the
 checked-in manifest path. Today that means `ConfigMap/session-gateway-config`
-carries `SESSION_TTL_SECONDS=900` seconds (15 minutes) for local browser and
-token-exchange sessions, while `ConfigMap/permission-service-config` carries
+carries `SESSION_TTL_SECONDS=900` seconds (15 minutes) for local browser
+sessions, while `ConfigMap/permission-service-config` carries
 the in-cluster `SESSION_GATEWAY_BASE_URL` plus the bounded session-revocation
 retry defaults. Those values stay in checked-in config instead of drifting into
 ad hoc deployment env entries or secret-only paths.

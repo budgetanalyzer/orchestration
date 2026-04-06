@@ -99,11 +99,20 @@ creates the Session Gateway IDP config must also feed the same
 
 ## 6. Security Configuration
 
-Default Auth0 tenant settings undermine Session Gateway's security features. A 24-hour access token never hits the refresh threshold, so revocation detection through `IdpTokenRefreshClient` never fires. A persistent 3-day Auth0 session lets users silently re-authenticate after the app's 15-minute session expires — someone at an unlocked browser gets back in without credentials.
+Default Auth0 tenant settings can undermine Session Gateway's security
+posture. A persistent multi-day Auth0 SSO session lets users silently
+re-authenticate after the app's 15-minute session has expired — someone at an
+unlocked browser gets back in without credentials. The Auth0 application
+should be configured so tenant-level session lifetimes do not outlast the
+intended Session Gateway session window.
 
-The recommended Auth0 dashboard values (token lifetimes, refresh token rotation, tenant session policy) are maintained alongside Session Gateway's runtime defaults:
+The recommended Auth0 dashboard values (token lifetimes, tenant session
+policy, allowed scopes) are maintained alongside Session Gateway's runtime
+defaults:
 
-→ **[Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md)** — the authoritative reference, tied to `SESSION_TTL_SECONDS`, `SESSION_REFRESH_THRESHOLD_SECONDS`, and heartbeat cadence.
+→ **[Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md)**
+— the authoritative reference, tied to `SESSION_TTL_SECONDS` and the
+heartbeat cadence.
 
 ## Troubleshooting
 

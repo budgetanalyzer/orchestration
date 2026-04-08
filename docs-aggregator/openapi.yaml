@@ -29,9 +29,6 @@ tags:
   - name: Transactions
     description: Import and manipulate transactions
     x-service: transaction-service
-  - name: Admin Transactions
-    description: Admin transaction search and management
-    x-service: transaction-service
   - name: Currency Series
     description: Endpoints for querying, creating, and updating currency series
     x-service: currency-service
@@ -1196,51 +1193,11 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /v1/transactions/count:
+  /v1/transactions/search:
     get:
       tags:
         - Transactions
-      summary: Count transactions
-      description: Returns the count of active transactions owned by the requesting
-        user and matching the given filter criteria.
-      operationId: countTransactions
-      parameters:
-        - name: filter
-          in: query
-          required: true
-          schema:
-            $ref: '#/components/schemas/TransactionFilter'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: integer
-                format: int64
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/admin/transactions:
-    get:
-      tags:
-        - Admin Transactions
-      summary: Search transactions across all users
+      summary: Search transactions across users
       operationId: searchTransactions
       parameters:
         - name: id
@@ -1424,11 +1381,11 @@ paths:
               type: string
       responses:
         '200':
-          description: Admin transactions retrieved successfully
+          description: Transactions retrieved successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PagedResponseAdminTransactionResponse'
+                $ref: '#/components/schemas/PagedResponseTransactionResponse'
         '400':
           description: Bad Request
           content:
@@ -1462,12 +1419,12 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /v1/admin/transactions/count:
+  /v1/transactions/search/count:
     get:
       tags:
-        - Admin Transactions
-      summary: Count transactions across all users
-      operationId: countTransactions_1
+        - Transactions
+      summary: Count transactions across users
+      operationId: countTransactionsAcrossUsers
       parameters:
         - name: id
           in: query
@@ -1620,6 +1577,46 @@ paths:
             description: End of last update timestamp range
             example: '2025-10-15T00:00:00Z'
           example: '2025-10-15T00:00:00Z'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: integer
+                format: int64
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/transactions/count:
+    get:
+      tags:
+        - Transactions
+      summary: Count transactions
+      description: Returns the count of active transactions owned by the requesting
+        user and matching the given filter criteria.
+      operationId: countTransactions
+      parameters:
+        - name: filter
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TransactionFilter'
       responses:
         '200':
           description: OK
@@ -2517,6 +2514,10 @@ components:
           format: int64
           description: Unique identifier for the transaction
           example: 1
+        ownerId:
+          type: string
+          description: ID of the user who owns this transaction
+          example: usr_test123
         accountId:
           type: string
           description: Identifier for the account associated with the transaction
@@ -2567,6 +2568,7 @@ components:
         - date
         - description
         - id
+        - ownerId
         - type
         - updatedAt
     CreateStatementFormatRequest:
@@ -2684,6 +2686,66 @@ components:
         - excluded
         - matched
         - pinned
+    PageMetadataResponse:
+      type: object
+      description: Pagination metadata for a paged API response
+      properties:
+        page:
+          type: integer
+          format: int32
+          description: Zero-based current page index
+          example: 0
+        size:
+          type: integer
+          format: int32
+          description: Requested page size
+          example: 50
+        numberOfElements:
+          type: integer
+          format: int32
+          description: Number of items included in the current page
+          example: 50
+        totalElements:
+          type: integer
+          format: int64
+          description: Total number of matching records across all pages
+          example: 12437
+        totalPages:
+          type: integer
+          format: int32
+          description: Total number of pages for the current query
+          example: 249
+        first:
+          type: boolean
+          description: Whether this is the first page
+          example: true
+        last:
+          type: boolean
+          description: Whether this is the last page
+          example: false
+      required:
+        - first
+        - last
+        - numberOfElements
+        - page
+        - size
+        - totalElements
+        - totalPages
+    PagedResponseTransactionResponse:
+      type: object
+      description: Stable paged API response wrapper
+      properties:
+        content:
+          type: array
+          description: Items included in the current page
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+        metadata:
+          $ref: '#/components/schemas/PageMetadataResponse'
+          description: Pagination metadata for the current result set
+      required:
+        - content
+        - metadata
     TransactionFilter:
       type: object
       description: Filter for querying transactions by various fields
@@ -2760,132 +2822,6 @@ components:
           format: date-time
           description: End of last update timestamp range
           example: '2025-10-15T00:00:00Z'
-    AdminTransactionResponse:
-      type: object
-      description: Admin transaction response including owner information
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique identifier for the transaction
-          example: 1
-        ownerId:
-          type: string
-          description: ID of the user who owns this transaction
-          example: usr_test123
-        accountId:
-          type: string
-          description: Identifier for the account associated with the transaction
-          example: checking-3223
-        bankName:
-          type: string
-          description: Name of the bank where the transaction occurred
-          example: Capital One
-        date:
-          type: string
-          format: date
-          description: Date of the transaction
-          example: '2025-10-14'
-        currencyIsoCode:
-          type: string
-          description: ISO currency code for the transaction
-          example: USD
-        amount:
-          type: number
-          description: Amount of the transaction
-          example: 100.5
-        type:
-          type: string
-          description: Type of the transaction
-          enum:
-            - CREDIT
-            - DEBIT
-          example: DEBIT
-        description:
-          type: string
-          description: Description of the transaction
-          example: Grocery shopping
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was created
-          example: '2025-10-14T10:30:00Z'
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was last updated
-          example: '2025-10-14T10:30:00Z'
-      required:
-        - amount
-        - bankName
-        - createdAt
-        - currencyIsoCode
-        - date
-        - description
-        - id
-        - ownerId
-        - type
-        - updatedAt
-    PageMetadataResponse:
-      type: object
-      description: Pagination metadata for a paged API response
-      properties:
-        page:
-          type: integer
-          format: int32
-          description: Zero-based current page index
-          example: 0
-        size:
-          type: integer
-          format: int32
-          description: Requested page size
-          example: 50
-        numberOfElements:
-          type: integer
-          format: int32
-          description: Number of items included in the current page
-          example: 50
-        totalElements:
-          type: integer
-          format: int64
-          description: Total number of matching records across all pages
-          example: 12437
-        totalPages:
-          type: integer
-          format: int32
-          description: Total number of pages for the current query
-          example: 249
-        first:
-          type: boolean
-          description: Whether this is the first page
-          example: true
-        last:
-          type: boolean
-          description: Whether this is the last page
-          example: false
-      required:
-        - first
-        - last
-        - numberOfElements
-        - page
-        - size
-        - totalElements
-        - totalPages
-    PagedResponseAdminTransactionResponse:
-      type: object
-      description: Stable paged API response wrapper
-      properties:
-        content:
-          type: array
-          description: Items included in the current page
-          items:
-            $ref: '#/components/schemas/AdminTransactionResponse'
-        metadata:
-          $ref: '#/components/schemas/PageMetadataResponse'
-          description: Pagination metadata for the current result set
-      required:
-        - content
-        - metadata
     CurrencySeriesUpdateRequest:
       type: object
       description: Request to update an existing currency series (currency code and

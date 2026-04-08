@@ -34,8 +34,6 @@ NGINX (:8080) ─── API-path rate limiting, route to service
     ├─→ /api-docs*        → Swagger UI page + unified contract downloads
     ├─→ /_prod-smoke/*    → Static smoke bundle
     ├─→ /api/v1/transactions → Transaction Service (:8082)
-    ├─→ /api/v1/admin/transactions → Transaction Service (:8082)
-    ├─→ /api/v1/admin/transactions/count → Transaction Service (:8082)
     ├─→ /api/v1/currencies   → Currency Service (:8084)
     ├─→ /api/v1/users        → Permission Service (:8086)
     └─→ /health     → Health check
@@ -76,8 +74,6 @@ proxy_pass $frontend_backend;
 
 The frontend sees clean resource paths:
 - `GET /api/v1/transactions` → Transaction Service
-- `GET /api/v1/admin/transactions` → Transaction Service
-- `GET /api/v1/admin/transactions/count` → Transaction Service
 - `GET /api/v1/currencies` → Currency Service
 - `POST /api/v1/users/{id}/deactivate` → Permission Service
 
@@ -131,10 +127,6 @@ curl -kI https://app.budgetanalyzer.localhost/api-docs | grep -i content-securit
 # Machine-readable unified contracts stay public and same-origin:
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.json
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
-
-# Admin transaction APIs should route to transaction-service, not the SPA:
-curl -kisS "https://app.budgetanalyzer.localhost/api/v1/admin/transactions?page=0&size=1&sort=date,DESC&sort=id,DESC"
-curl -kisS https://app.budgetanalyzer.localhost/api/v1/admin/transactions/count
 
 # Run the full Phase 6 completion gate
 ./scripts/dev/verify-phase-6-edge-browser-hardening.sh

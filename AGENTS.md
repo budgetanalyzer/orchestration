@@ -125,7 +125,7 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
 - `/login`, `/*` → NGINX (frontend, no auth required)
-- public NGINX-owned API examples include `/api/v1/transactions`, `/api/v1/admin/transactions`, `/api/v1/admin/transactions/count`, `/api/v1/currencies`, and `/api/v1/users`
+- public NGINX-owned API examples include `/api/v1/transactions`, `/api/v1/currencies`, and `/api/v1/users`
 
 **Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/v1/session`, and browser session inspection now lives at `GET /auth/v1/user`. Both stay on the direct `/auth/*` lane so Session Gateway can extend the session TTL without joining the API hot path. The heartbeat is Redis-local and does not call Auth0; IDP revocation propagates via explicit bulk revocation on the east-west `DELETE /internal/v1/sessions/users/{userId}` path.
 - `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)

@@ -238,6 +238,9 @@ docker-compose.local.yml
 
 # Container data volumes
 data/
+
+# Synthetic local loadtest/session fixture output
+.loadtest/
 volumes/
 
 # =============================================================================
@@ -330,4 +333,3 @@ scratch/
 
 #Python cache
 +__pycache__
-

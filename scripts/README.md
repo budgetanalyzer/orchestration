@@ -159,6 +159,38 @@ All verification scripts execute against the current `kubectl` context. If they
 report missing pods, secrets, or policies while Tilt appears healthy, confirm
 the active context and Tilt resource state from the same host shell first.
 
+### Synthetic loadtest data scripts
+
+Track 1 is currently the synthetic data-fixture path only. Use these scripts
+when you want realistic local users, sessions, and transaction volume for
+flows like user deactivation and session revocation, without generating local
+traffic.
+
+- `scripts/dev/seed-loadtest-users.sh` - Seeds `permission-service.users`,
+  `user_roles`, Redis `session:*` hashes, and Redis `user_sessions:{userId}`
+  sets for deterministic synthetic users. Supports `--count`,
+  `--admin-count`, and `--session-ttl`.
+- `scripts/dev/seed-loadtest-transactions.sh` - Adds deterministic synthetic
+  transactions for the seeded users. Supports `--per-user` and `--shape`
+  (`uniform`, `heavy-tail`, `sparse`).
+- `scripts/dev/teardown-loadtest.sh` - Removes all synthetic Redis and
+  PostgreSQL artifacts by the checked-in `loadtest` markers and deletes the
+  generated `.loadtest/session-pool.txt` file.
+
+Typical sequence:
+
+```bash
+./scripts/dev/seed-loadtest-users.sh --count 500 --admin-count 20 --session-ttl 86400
+./scripts/dev/seed-loadtest-transactions.sh --per-user 200 --shape heavy-tail
+
+# Later, when finished with the fixture set
+./scripts/dev/teardown-loadtest.sh
+```
+
+`seed-loadtest-users.sh` still emits `.loadtest/session-pool.txt`, but that is
+only a reusable fixture artifact for any later traffic-replay work. No local
+load driver is part of the active Track 1 flow.
+
 ## Adding New Scripts
 
 When adding a new script:

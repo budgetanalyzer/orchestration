@@ -239,6 +239,34 @@ missing pods, secrets, or network policies while Tilt appears healthy, verify
 `kubectl config current-context` and `tilt get uiresources` from the same host
 shell before assuming the script is wrong.
 
+### 6. Optional: Seed Synthetic Users, Sessions, and Transactions
+
+Track 1 currently stops at data loading. Use the synthetic fixture scripts when
+you want realistic local data volume, including live Redis session hashes and
+`user_sessions:{userId}` revocation indexes, without running a local load
+driver.
+
+```bash
+# Seed synthetic users plus Redis-backed sessions. The first 25 users become
+# ADMIN so admin-path flows are available; the 24h TTL keeps sessions alive for
+# manual testing.
+./scripts/dev/seed-loadtest-users.sh --count 1000 --admin-count 25 --session-ttl 86400
+
+# Amplify per-user transaction volume after the users exist.
+./scripts/dev/seed-loadtest-transactions.sh --per-user 100 --shape heavy-tail
+
+# Remove every synthetic user/session/transaction artifact when finished.
+./scripts/dev/teardown-loadtest.sh
+```
+
+The synthetic identities are deterministic: user `n` is
+`usr_loadtest_<n>`, session `n` is `loadtest_<n>`, and the first
+`--admin-count` users receive the `ADMIN` role. That makes it easy to seed a
+known admin session plus many ordinary users, then exercise flows such as user
+deactivation and bulk session revocation against predictable IDs. The seeder
+also writes `.loadtest/session-pool.txt` for any future traffic-replay tooling,
+but no local k6 step is currently required.
+
 Tilt now renders the Auth0 Istio egress manifests through
 `./scripts/dev/render-istio-egress-config.sh`, using the same
 `AUTH0_ISSUER_URI` contract that populates `ConfigMap/session-gateway-idp-config`.

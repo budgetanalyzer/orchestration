@@ -466,73 +466,6 @@
             }
           }
         }
-      },
-      "delete": {
-        "tags": [
-          "Statement Formats"
-        ],
-        "summary": "Disable a statement format",
-        "description": "Disables a statement format (soft delete). Disabled formats will not be available for file imports but can be re-enabled by updating the format.",
-        "operationId": "disableFormat",
-        "parameters": [
-          {
-            "name": "formatKey",
-            "in": "path",
-            "description": "Unique format identifier",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "capital-one"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Format successfully disabled"
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                },
-                "example": {
-                  "type": "NOT_FOUND",
-                  "message": "Not Found"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                },
-                "example": {
-                  "type": "INTERNAL_ERROR",
-                  "message": "Internal Server Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                },
-                "example": {
-                  "type": "SERVICE_UNAVAILABLE",
-                  "message": "Service Unavailable"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/v1/views": {
@@ -2084,7 +2017,7 @@
                     "summary": "Unsupported sort field requested",
                     "description": "Invalid Sort Field",
                     "value": {
-                      "type": "VALIDATION_ERROR",
+                      "type": "INVALID_REQUEST",
                       "message": "Unsupported sort field: invalid. Allowed sort fields: id, ownerId, accountId, bankName, date, currencyIsoCode, amount, type, description, createdAt, updatedAt"
                     }
                   }
@@ -3007,7 +2940,7 @@
           "200": {
             "description": "User deactivated successfully",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserDeactivationResponse"
                 }
@@ -3017,7 +2950,7 @@
           "403": {
             "description": "Insufficient permissions",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiErrorResponse"
                 }
@@ -3027,7 +2960,7 @@
           "404": {
             "description": "User not found",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiErrorResponse"
                 }
@@ -3072,6 +3005,320 @@
                 "example": {
                   "type": "INTERNAL_ERROR",
                   "message": "Internal Server Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "tags": [
+          "User Administration"
+        ],
+        "summary": "Search users",
+        "description": "Lists users with filtering, sorting, and pagination.",
+        "operationId": "getUsers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Unique identifier for the user",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Unique identifier for the user",
+              "example": "usr_abc123"
+            },
+            "example": "usr_abc123"
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "description": "Email address (case-insensitive LIKE, multi-word OR)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Email address (case-insensitive LIKE, multi-word OR)",
+              "example": "admin@example.com"
+            },
+            "example": "admin@example.com"
+          },
+          {
+            "name": "displayName",
+            "in": "query",
+            "description": "Display name (case-insensitive LIKE, multi-word OR)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Display name (case-insensitive LIKE, multi-word OR)",
+              "example": "Admin User"
+            },
+            "example": "Admin User"
+          },
+          {
+            "name": "idpSub",
+            "in": "query",
+            "description": "Identity provider subject identifier (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Identity provider subject identifier (exact match)",
+              "example": "auth0|67fd70c38eb9d43f1c93ea44"
+            },
+            "example": "auth0|67fd70c38eb9d43f1c93ea44"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Current user status",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Current user status",
+              "enum": [
+                "ACTIVE",
+                "DEACTIVATED",
+                "ACTIVE",
+                "DEACTIVATED"
+              ],
+              "example": "ACTIVE"
+            },
+            "example": "ACTIVE"
+          },
+          {
+            "name": "createdAfter",
+            "in": "query",
+            "description": "Start of creation timestamp range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Start of creation timestamp range",
+              "example": "2026-04-01T00:00:00Z"
+            },
+            "example": "2026-04-01T00:00:00Z"
+          },
+          {
+            "name": "createdBefore",
+            "in": "query",
+            "description": "End of creation timestamp range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "End of creation timestamp range",
+              "example": "2026-04-08T00:00:00Z"
+            },
+            "example": "2026-04-08T00:00:00Z"
+          },
+          {
+            "name": "updatedAfter",
+            "in": "query",
+            "description": "Start of last update timestamp range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Start of last update timestamp range",
+              "example": "2026-04-01T00:00:00Z"
+            },
+            "example": "2026-04-01T00:00:00Z"
+          },
+          {
+            "name": "updatedBefore",
+            "in": "query",
+            "description": "End of last update timestamp range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "End of last update timestamp range",
+              "example": "2026-04-08T00:00:00Z"
+            },
+            "example": "2026-04-08T00:00:00Z"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Zero-based page index (0..N)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "The size of the page to be returned",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "default": [
+                "createdAt,DESC",
+                "id,DESC"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResponseUserSummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{id}": {
+      "get": {
+        "tags": [
+          "User Administration"
+        ],
+        "summary": "Get user",
+        "description": "Returns a single user's details and assigned roles.",
+        "operationId": "getUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "usr_abc123"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
                 }
               }
             }
@@ -3406,8 +3653,33 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the statement format was created",
+            "example": "2026-04-08T10:30:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the statement format was last updated",
+            "example": "2026-04-08T10:45:00Z"
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "User ID that created this statement format",
+            "example": "usr_admin123"
+          },
+          "updatedBy": {
+            "type": "string",
+            "description": "User ID that last updated this statement format",
+            "example": "usr_admin456"
           }
-        }
+        },
+        "required": [
+          "createdAt"
+        ]
       },
       "CreateSavedViewRequest": {
         "type": "object",
@@ -4241,6 +4513,169 @@
           },
           "sessionsRevoked": {
             "type": "boolean"
+          }
+        }
+      },
+      "PagedResponseUserSummaryResponse": {
+        "type": "object",
+        "description": "Stable paged API response wrapper",
+        "properties": {
+          "content": {
+            "type": "array",
+            "description": "Items included in the current page",
+            "items": {
+              "$ref": "#/components/schemas/UserSummaryResponse"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/PageMetadataResponse",
+            "description": "Pagination metadata for the current result set"
+          }
+        },
+        "required": [
+          "content",
+          "metadata"
+        ]
+      },
+      "UserSummaryResponse": {
+        "type": "object",
+        "description": "Summary representation of a user for list views",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Internal user ID",
+            "example": "usr_abc123"
+          },
+          "idpSub": {
+            "type": "string",
+            "description": "Identity provider subject identifier",
+            "example": "auth0|67fd70c38eb9d43f1c93ea44"
+          },
+          "email": {
+            "type": "string",
+            "description": "User email address",
+            "example": "admin@example.com"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display name",
+            "example": "Admin User"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current user status",
+            "enum": [
+              "ACTIVE",
+              "DEACTIVATED"
+            ],
+            "example": "ACTIVE"
+          },
+          "roleIds": {
+            "type": "array",
+            "description": "Assigned role IDs",
+            "example": [
+              "ADMIN"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp",
+            "example": "2026-04-01T12:00:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp",
+            "example": "2026-04-08T12:00:00Z"
+          },
+          "deactivatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Deactivation timestamp",
+            "example": "2026-04-08T12:00:00Z"
+          }
+        }
+      },
+      "UserDetailResponse": {
+        "type": "object",
+        "description": "Detailed representation of a user",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Internal user ID",
+            "example": "usr_abc123"
+          },
+          "idpSub": {
+            "type": "string",
+            "description": "Identity provider subject identifier",
+            "example": "auth0|67fd70c38eb9d43f1c93ea44"
+          },
+          "email": {
+            "type": "string",
+            "description": "User email address",
+            "example": "admin@example.com"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display name",
+            "example": "Admin User"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current user status",
+            "enum": [
+              "ACTIVE",
+              "DEACTIVATED"
+            ],
+            "example": "ACTIVE"
+          },
+          "roleIds": {
+            "type": "array",
+            "description": "Assigned role IDs",
+            "example": [
+              "ADMIN"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp",
+            "example": "2026-04-01T12:00:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp",
+            "example": "2026-04-08T12:00:00Z"
+          },
+          "deactivatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Deactivation timestamp",
+            "example": "2026-04-08T12:00:00Z"
+          },
+          "deactivatedBy": {
+            "type": "string",
+            "description": "User ID that deactivated the user",
+            "example": "usr_admin456"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Soft-delete timestamp",
+            "example": "2026-04-09T12:00:00Z"
+          },
+          "deletedBy": {
+            "type": "string",
+            "description": "User ID that soft-deleted the user",
+            "example": "usr_admin456"
           }
         }
       }

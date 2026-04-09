@@ -3306,15 +3306,29 @@ components:
           description: Deactivation timestamp
           example: '2026-04-08T12:00:00Z'
         deactivatedBy:
-          type: string
-          description: User ID that deactivated the user
-          example: usr_admin456
+          $ref: '#/components/schemas/UserReference'
+          description: User that deactivated the user
         deletedAt:
           type: string
           format: date-time
           description: Soft-delete timestamp
           example: '2026-04-09T12:00:00Z'
         deletedBy:
+          $ref: '#/components/schemas/UserReference'
+          description: User that soft-deleted the user
+    UserReference:
+      type: object
+      description: Dereferenced user identity for audit fields
+      properties:
+        id:
           type: string
-          description: User ID that soft-deleted the user
+          description: Internal user ID
           example: usr_admin456
+        displayName:
+          type: string
+          description: Display name
+          example: Admin User
+        email:
+          type: string
+          description: User email address
+          example: admin@example.com

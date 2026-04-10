@@ -283,7 +283,8 @@ Grafana ships with two pre-provisioned dashboards (no manual import needed):
 
 Both dashboards are declaratively provisioned from
 `kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
-pod restarts.
+pod restarts. See [Observability Architecture](../architecture/observability.md)
+for scrape topology details, security compliance, and debugging guidance.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you

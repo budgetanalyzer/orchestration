@@ -19,6 +19,8 @@
 | 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
+| 9090 | Prometheus | HTTP | Metrics query and UI | Internal (port-forward only) |
+| 80 | Grafana | HTTP | Dashboard visualization | Internal (Istio ingress route) |
 
 ## Port Ranges by Layer
 
@@ -65,6 +67,11 @@ kubectl describe svc session-gateway
 kubectl get svc -n infrastructure
 ```
 
+**List all monitoring services**:
+```bash
+kubectl get svc -n monitoring
+```
+
 **View pod port bindings**:
 ```bash
 kubectl get pods -o wide
@@ -99,6 +106,10 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 - 6379: Redis (standard)
 - 5671: RabbitMQ AMQPS (TLS-enabled standard secure listener)
 - 15672: RabbitMQ Management (standard)
+
+**Monitoring (monitoring namespace)**:
+- 9090: Prometheus (port-forward only, no ingress route)
+- 80: Grafana (exposed at `https://grafana.budgetanalyzer.localhost` via Istio ingress)
 
 ## Adding a New Service
 

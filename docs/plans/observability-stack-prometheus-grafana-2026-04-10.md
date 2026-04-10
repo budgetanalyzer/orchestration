@@ -344,61 +344,66 @@ development only.
 For OCI production, consider whether Grafana should be publicly accessible or
 restricted to VPN/bastion access. Local dev exposes it freely.
 
-### Phase 5: Infrastructure Exporters (Optional)
+### Phase 5: Infrastructure Exporters (skipped)
 
-Add metrics collection for PostgreSQL, Redis, and RabbitMQ.
+Skipped by decision. Spring Boot and Istio metrics alone cover the intended
+observability story for this portfolio demo. Infrastructure exporters
+(PostgreSQL, Redis, RabbitMQ) add operational complexity without materially
+improving the learning-resource value.
 
-**Files to create:**
-- `kubernetes/infrastructure/postgresql/exporter.yaml` (sidecar or standalone)
-- `kubernetes/infrastructure/redis/exporter.yaml`
-- `kubernetes/monitoring/servicemonitor-infrastructure.yaml`
+### Phase 6: Documentation (complete)
 
-**Required outcomes:**
-- PostgreSQL metrics visible (connections, query stats, replication lag)
-- Redis metrics visible (memory, keys, commands/sec)
-- RabbitMQ metrics visible (queue depth, message rates) - note: RabbitMQ 3.8+
-  has built-in Prometheus endpoint at `:15692/metrics`
+Documentation updated incrementally as each phase landed, then final sweep.
 
-**Complexity note:**
-This phase adds operational complexity. Defer if time-constrained. Spring Boot
-metrics alone demonstrate observability competence for portfolio purposes.
+**Files created:**
+- `docs/architecture/observability.md` - full observability architecture doc
+  covering components, scrape topology, dashboards, debugging scenarios,
+  access instructions, security compliance, and discovery commands
 
-### Phase 6: Documentation
+**Files modified:**
+- `AGENTS.md` - monitoring namespace in service architecture, discovery
+  commands, entry points (updated in earlier phases)
+- `docs/development/local-environment.md` - monitoring access section with
+  Grafana URL, Prometheus port-forward, admin password retrieval, target
+  verification, and pre-provisioned dashboard descriptions (updated in
+  earlier phases)
+- `docs/development/getting-started.md` - Grafana URL in URL list (updated
+  in earlier phases)
+- `docs/architecture/port-reference.md` - added Prometheus and Grafana ports,
+  monitoring service discovery commands
+- `docs/architecture/system-overview.md` - added monitoring services section,
+  updated production parity note
+- `docs/architecture/security-architecture.md` - updated Monitoring and
+  Observability section to reflect actual deployed stack
+- `README.md` - monitoring access commands and Prometheus target guidance
+  (updated in earlier phases)
 
-Update documentation continuously as each phase lands, then do a final sweep.
-
-**Files to modify:**
-- `AGENTS.md` - add monitoring namespace to service architecture, discovery commands
-- `docs/development/local-environment.md` - add Grafana/Prometheus access instructions
-- `docs/architecture/` - consider adding `observability.md` if architecture
-  documentation warrants it
-
-**Required outcomes:**
+**Required outcomes (all met):**
 - Discovery commands for monitoring resources documented
 - Grafana access URL (`https://grafana.budgetanalyzer.localhost`) documented
 - Prometheus port-forward command documented (internal access only)
 - Dashboard navigation guidance for common debugging scenarios
-- Grafana credential retrieval or `existingSecret` workflow documented
+- Grafana credential retrieval workflow documented
 
 ## Execution Order
 
 Implement in phases that allow incremental verification:
 
-1. **Phase 1** - Stack installation. Can proceed immediately. Pin the chart
-   version, harden the rendered workloads, pin all third-party images by digest,
-   and verify the rendered manifests against current admission policies.
-   Includes Istio metrics scraping configuration, but **not** the Gateway
-   `allowedRoutes` change.
-2. **Phase 2** - Labels and ServiceMonitors. No external blockers (service-common
-   already exposes `/actuator/prometheus`). Add `app.kubernetes.io/framework:
-   spring-boot` labels to deployment and service manifests, then verify scraping.
-3. **Phase 3** - Dashboards. Depends on Phase 2 producing metrics.
-4. **Phase 4** - Grafana ingress route. Can proceed after Phase 1,
-   independent of Phase 2/3. Applies the Gateway `allowedRoutes` update and
-   exposes Grafana at `grafana.budgetanalyzer.localhost` for local development.
-5. **Phase 5** - Infrastructure exporters. Optional, defer if time-constrained.
-6. **Phase 6** - Documentation final sweep. Documentation still updates incrementally
-   in each earlier phase to satisfy repo workflow.
+1. **Phase 1** - Stack installation. **Complete.** Pinned chart version,
+   hardened rendered workloads, pinned all third-party images by digest,
+   verified rendered manifests against admission policies. Includes Istio
+   metrics scraping configuration.
+2. **Phase 2** - Labels and ServiceMonitors. **Complete.** Added
+   `app.kubernetes.io/framework: spring-boot` labels and ServiceMonitor.
+3. **Phase 3** - Dashboards. **Complete.** JVM and Spring Boot dashboards
+   provisioned via file provider.
+4. **Phase 4** - Grafana ingress route. **Complete.** Grafana exposed at
+   `grafana.budgetanalyzer.localhost` via label-based Gateway `allowedRoutes`.
+5. **Phase 5** - Infrastructure exporters. **Skipped.** Spring Boot and Istio
+   metrics sufficient for portfolio demo.
+6. **Phase 6** - Documentation final sweep. **Complete.** Created
+   `docs/architecture/observability.md` and updated port-reference,
+   system-overview, and security-architecture docs.
 
 **Parallelization opportunity:** Phases 2-3 (Spring Boot metrics path) and
 Phase 4 (Grafana ingress) can proceed in parallel after Phase 1 completes.

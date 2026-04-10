@@ -493,17 +493,27 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 
 ### Monitoring and Observability
 
-**Metrics to Track:**
-- Session Gateway: Active sessions, token refresh rate, OAuth flow success/failure
-- ext_authz: Validation latency, hit/miss ratio, rejection rate
-- NGINX: Request rate, error rate, latency percentiles
-- Services: Authorization failures, data access patterns
+The observability stack (Prometheus, Grafana, kube-state-metrics) runs in the
+`monitoring` namespace and meets the same security requirements as all other
+workloads — no namespace exceptions. All images are digest-pinned, all pods
+disable `automountServiceAccountToken`, and workloads that need Kubernetes API
+access use explicit projected service-account token volumes. See
+[Observability Architecture](observability.md) for full details.
 
-**Alerting Thresholds:**
-- ext_authz rejection rate spike > 5% (may indicate session store issues)
-- Session Gateway error rate > 0.5%
-- Redis connection failures
-- Unauthorized data access attempts
+**Metrics currently collected:**
+- Spring Boot JVM metrics (memory, GC, threads) via `/actuator/prometheus`
+- Spring Boot HTTP metrics (request rates, latencies, error rates) via Micrometer
+- Istio control plane metrics via istiod ServiceMonitor
+- Envoy sidecar metrics (per-service traffic) via PodMonitor on `:15090`
+- Kubernetes resource metrics via kube-state-metrics
+
+**Security-relevant metrics to watch:**
+- `http_server_requests_seconds_count{status="401"}` — authorization failures
+- `http_server_requests_seconds_count{status="429"}` — rate limiting triggers
+- `up{job="spring-boot-services"}` — service availability
+
+**Alerting**: Not yet configured. Dashboards are the current observability
+surface; alerting rules are a future follow-up.
 
 ### Logging Strategy
 

@@ -63,11 +63,12 @@ Current local platform baseline:
 - After `tilt up`, run `./scripts/dev/verify-clean-tilt-deployment-admission.sh` first to prove the clean-start admission path for the seven app deployments in `default`, then `./scripts/dev/verify-security-prereqs.sh` for the Phase 0 platform baseline, `./scripts/dev/verify-phase-1-credentials.sh` for Phase 1 credential isolation, `./scripts/dev/verify-phase-4-transport-encryption.sh` as the Phase 4 transport-TLS completion gate, `./scripts/dev/verify-phase-3-istio-ingress.sh` as the Phase 3 Istio ingress/egress completion gate, `./scripts/dev/verify-phase-5-runtime-hardening.sh` as the Phase 5 runtime-hardening and final PSA completion gate, `./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` for the Phase 6 Session 7 API rate-limit identity proof, `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the Phase 6 completion gate, and `./scripts/dev/verify-phase-7-security-guardrails.sh` as the final local Phase 7 completion gate.
 
 Monitoring access after `tilt up`:
-- Prometheus: `kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`
-- Grafana: `kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80`
+- Grafana: `https://grafana.budgetanalyzer.localhost` (via Istio ingress, no port-forward needed)
 - Grafana admin password: `kubectl get secret -n monitoring prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode; echo`
-- Prometheus targets to expect after Phase 2: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
-- Example Prometheus queries: `up{job=\"spring-boot-services\"}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`
+- Prometheus: `kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` (then open `http://localhost:9090`)
+- Prometheus targets to expect: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
+- Example Prometheus queries: `up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`
+- See [Observability Architecture](docs/architecture/observability.md) for scrape topology, dashboards, and debugging guidance
 
 Treat Phase 5 as complete only after `./scripts/dev/verify-phase-5-runtime-hardening.sh` passes. Treat Phase 4 as complete only after `./scripts/dev/verify-phase-4-transport-encryption.sh` passes, and treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` plus the live validation checklist pass. Treat Phase 6 as complete only after `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` passes and the manual browser-console validation on `/_prod-smoke/` is done; `/api-docs` probes now stay visible as warnings instead of blocking completion. Treat Phase 7 as complete only after `./scripts/dev/verify-phase-7-security-guardrails.sh` passes on the current cluster. The static script remains the CI/local reproducer for Session 6, and `./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted live-cluster Session 7 proof when you only need the runtime half.
 
@@ -78,6 +79,7 @@ The local `/_prod-smoke/` verification path is a separate Tilt `local_resource`:
 
 - [Getting Started](docs/development/getting-started.md)
 - [Architecture Overview](docs/architecture/system-overview.md)
+- [Observability Architecture](docs/architecture/observability.md)
 - [Development Guide](AGENTS.md)
 
 ## Service Repositories

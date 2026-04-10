@@ -254,12 +254,13 @@ Prometheus under their servlet context paths, so the monitored paths are
 `/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
 Session Gateway.
 
-```bash
-# Prometheus UI
-kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
+Grafana is exposed via Istio ingress at
+https://grafana.budgetanalyzer.localhost (TLS terminated at the gateway, same
+wildcard cert as the main app). No port-forward needed.
 
-# Grafana UI
-kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
+```bash
+# Prometheus UI (port-forward only — no ingress route)
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
 
 # Grafana admin password
 kubectl get secret -n monitoring prometheus-stack-grafana \

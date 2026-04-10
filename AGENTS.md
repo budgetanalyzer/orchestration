@@ -126,7 +126,7 @@ Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:808
 Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
 ```
 
-**Single entry point**: `app.budgetanalyzer.localhost`
+**Entry points**: `app.budgetanalyzer.localhost` (application), `grafana.budgetanalyzer.localhost` (monitoring)
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)

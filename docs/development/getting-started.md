@@ -143,6 +143,7 @@ for the OAuth2 round-trip.
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs
 - **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
 - **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
+- **Grafana**: https://grafana.budgetanalyzer.localhost
 - **Tilt UI**: http://localhost:10350 (logs and status)
 
 ### Stopping

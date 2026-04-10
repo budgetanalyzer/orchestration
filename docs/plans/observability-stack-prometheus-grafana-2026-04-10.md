@@ -307,26 +307,30 @@ pod restart. No k8s API access, no extra container, no security exception.
 If this repo later moves to multi-team dashboard ownership, re-evaluate in
 favor of the sidecar at that point.
 
-### Phase 4: Grafana Ingress Route
+### Phase 4: Grafana Ingress Route (complete)
 
 Expose Grafana via Istio ingress at `grafana.budgetanalyzer.localhost` for local
 development only.
 
-**Files to create:**
+**Files created:**
 - `kubernetes/monitoring/grafana-httproute.yaml`
 
-**Files to modify:**
-- `kubernetes/istio/istio-gateway.yaml` - change `allowedRoutes` from
+**Files modified:**
+- `kubernetes/istio/istio-gateway.yaml` - changed `allowedRoutes` from
   `matchLabels: kubernetes.io/metadata.name: default` to a label-based selector:
   `matchLabels: budgetanalyzer.io/ingress-routes: "true"`. This allows any
   namespace with that label to attach routes, without editing the Gateway each time.
-- `kubernetes/monitoring/namespace.yaml` - add `budgetanalyzer.io/ingress-routes: "true"` label
-- DNS/hosts configuration for local development
-
-**Existing namespace update:**
-The `default` namespace must also be labeled `budgetanalyzer.io/ingress-routes: "true"`
-to preserve existing HTTPRoute attachment. Add a `kubectl label` step to the Tiltfile
-or to `kubernetes/monitoring/namespace.yaml` setup sequence.
+- `kubernetes/monitoring/namespace.yaml` - added `budgetanalyzer.io/ingress-routes: "true"` label
+- `Tiltfile` - added `kubectl label` for `default` namespace with
+  `budgetanalyzer.io/ingress-routes=true` in the `istio-ingress-config` resource;
+  added `grafana-ingress-route` local_resource to apply the HTTPRoute
+- `setup.sh` - added `grafana.budgetanalyzer.localhost` to DNS entries
+- `tests/setup-flow/test-setup-flow.sh` - added `grafana.budgetanalyzer.localhost`
+  to DNS entries
+- `docs/development/local-environment.md` - documented Grafana ingress URL,
+  removed port-forward instructions for Grafana
+- `docs/development/getting-started.md` - added Grafana URL to URL list
+- `AGENTS.md` - updated entry points to include Grafana
 
 **Required outcomes:**
 - Grafana accessible at `https://grafana.budgetanalyzer.localhost`

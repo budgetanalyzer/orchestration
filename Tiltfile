@@ -903,6 +903,15 @@ k8s_resource(
     labels=['monitoring'],
 )
 
+# Grafana ingress route (grafana.budgetanalyzer.localhost)
+local_resource(
+    'grafana-ingress-route',
+    cmd='kubectl apply -f kubernetes/monitoring/grafana-httproute.yaml',
+    deps=['kubernetes/monitoring/grafana-httproute.yaml'],
+    resource_deps=['prometheus-stack', 'istio-ingress-config'],
+    labels=['monitoring'],
+)
+
 # ============================================================================
 # NETWORK POLICIES (Phase 2 Security Hardening)
 # ============================================================================
@@ -979,6 +988,7 @@ local_resource(
 local_resource(
     'istio-ingress-config',
     cmd='''
+        kubectl label namespace default budgetanalyzer.io/ingress-routes=true --overwrite
         kubectl apply -f kubernetes/istio/ingress-namespace.yaml
         kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
         kubectl apply -f kubernetes/istio/ingress-gateway-config.yaml

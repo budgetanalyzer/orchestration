@@ -41,21 +41,24 @@ This orchestration repository coordinates the deployment and development environ
 
 **Purpose**: Manages cross-service concerns, local development setup, and deployment coordination. Individual service code lives in separate repositories.
 
-## Project Status: Reference Architecture Complete
+## Production Deployment Target
 
-This project has reached its intended scope. We are no longer actively developing Budget Analyzer features - we're interested in discussing these patterns with other architects.
+**Oracle Cloud Infrastructure (OCI) Free Tier**
 
-**What's implemented:**
-- Authentication: OAuth2/OIDC with Auth0, session-based edge authorization, opaque session tokens + ext_authz
-- API Gateway: Istio ext_authz for session validation and auth-path throttling, NGINX for API routing and backend/API rate limiting
-- Microservices patterns: Spring Boot, Kubernetes, Tilt
+| Attribute | Value |
+|-----------|-------|
+| **Shape** | VM.Standard.A1.Flex (ARM/aarch64) |
+| **OCPUs** | 4 |
+| **Memory** | 24 GB |
+| **Network** | 4 Gbps |
+| **OS** | Ubuntu 22.04 Minimal aarch64 |
+| **Region** | Phoenix (phx) |
+| **Public IP** | 152.70.145.68 |
 
-**What's intentionally left unsolved:**
-- **Data ownership**: Which transactions belong to which user?
-- **Cross-service user scoping**: How does transaction-service filter by owner?
-- **Multi-tenancy**: Organization-level data isolation
-
-This boundary is deliberate. Data ownership is domain-specific and opinionated. Propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
+**Architecture implications:**
+- All container images must support `linux/arm64`
+- 24GB RAM is sufficient for full stack + observability (Prometheus/Grafana)
+- Single-node deployment (no HA, acceptable for portfolio demo)
 
 ## Development Environment
 

@@ -240,7 +240,68 @@ Set calendar reminders for these:
 
 - **Log into the OCI console once a month.** Free Tier accounts inactive for 30 days are eligible for suspension. One login per month is enough to keep it alive.
 - **Do not touch "Upgrade to PAYG"** even if Oracle emails promotional offers.
-- **Watch for the idle-reclamation policy** (95th-percentile CPU below 20% over 7 days). If you're running the full Budget Analyzer architecture plus the observability bundle, Prometheus scraping and Istio's control loop should keep you above the threshold as documented in [`single-instance-demo-hosting.md`](./single-instance-demo-hosting.md) §5 — but check once a week for the first month to be sure.
+- **Monitor the idle-reclamation policy** — see [§12](#12-idle-reclamation-policy-details) below.
+
+---
+
+## 12. Idle reclamation policy details
+
+Oracle reclaims idle Always Free compute instances to free up capacity. Understanding this policy is critical to keeping your instance.
+
+### What triggers reclamation
+
+Your instance is considered **idle** if ALL THREE of the following are below 20% (measured as the 95th percentile over a rolling 7-day window):
+
+| Metric | Threshold | Applies to |
+|--------|-----------|------------|
+| CPU utilization | < 20% | All Always Free instances |
+| Network utilization | < 20% | All Always Free instances |
+| Memory utilization | < 20% | **A1 Ampere instances only** |
+
+For a 4 OCPU / 24 GB A1 instance, the memory threshold means you need **~4.8 GB consistently in use** to stay above 20%.
+
+### Warning and grace period
+
+1. **Day 7:** If your instance has been idle for 7 consecutive days, Oracle sends an email notification and displays a warning in the console.
+2. **Day 14:** One week after the warning, the instance is **stopped** (not deleted).
+
+This gives you a full week to take action after the warning.
+
+### What "reclaimed" means
+
+- The instance is **stopped, not terminated**
+- All data, configuration, and boot volumes are preserved
+- You can restart the instance anytime — subject to capacity availability
+- No data loss occurs
+
+The risk is that if capacity is tight when you try to restart, you may hit "Out of host capacity" again.
+
+### Why the Budget Analyzer stack should be safe
+
+If you're running the full architecture (k3s + Istio + services + Prometheus/Grafana/Loki), you'll comfortably exceed all thresholds:
+
+- **Memory:** k3s, Istio control plane, Prometheus, and even a modest workload will easily use 5+ GB
+- **CPU:** Prometheus scraping, Istio sidecar proxies, and background reconciliation loops generate continuous CPU activity
+- **Network:** Prometheus scrapes, log shipping, and health checks create steady network traffic
+
+### Monitoring your utilization
+
+Check your metrics in the OCI console:
+
+1. Compute → Instances → click your instance
+2. Scroll to "Metrics" section
+3. Review CPU, Memory, and Network charts
+4. Look at the 7-day view to see if you're consistently above 20%
+
+Do this weekly for the first month after deployment to confirm your workload keeps the instance active.
+
+### If you're not running workloads yet
+
+If your instance will sit idle while you prepare deployment:
+
+- You have **14 days minimum** before any action (7 days idle + 7 days grace)
+- Restart the instance after receiving a warning email to reset the idle counter
+- Don't leave it idle for extended periods — deploy something or accept the risk of needing to fight the capacity lottery again to restart
 
 ---
 

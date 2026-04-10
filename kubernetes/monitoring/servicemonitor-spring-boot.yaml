@@ -1,0 +1,47 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spring-boot-services
+  namespace: default
+  labels:
+    app.kubernetes.io/component: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: session-gateway
+    - port: http
+      path: /transaction-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: transaction-service
+    - port: http
+      path: /currency-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: currency-service
+    - port: http
+      path: /permission-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: permission-service

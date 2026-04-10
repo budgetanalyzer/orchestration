@@ -5,6 +5,7 @@ metadata:
   namespace: default
   labels:
     app: session-gateway
+    app.kubernetes.io/framework: spring-boot
 spec:
   type: ClusterIP
   selector:

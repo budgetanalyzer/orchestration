@@ -82,6 +82,39 @@ spec:
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
+  name: spring-boot-metrics-prometheus-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus"
+      to:
+        - operation:
+            methods: ["GET"]
+            ports: ["8081"]
+            paths: ["/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8082"]
+            paths: ["/transaction-service/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8084"]
+            paths: ["/currency-service/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8086"]
+            paths: ["/permission-service/actuator/prometheus"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
   name: envoy-metrics-prometheus-policy
   namespace: default
 spec:

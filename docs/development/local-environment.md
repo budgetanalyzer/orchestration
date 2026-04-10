@@ -246,6 +246,13 @@ part of the default local environment.
 The Prometheus server pod is also injected into the Istio mesh so the checked-in
 Envoy `PodMonitor` can scrape sidecar metrics in `default` without bypassing the
 repo's STRICT mTLS, `AuthorizationPolicy`, or `NetworkPolicy` posture.
+The checked-in Spring Boot `ServiceMonitor` also scrapes the four actuator
+metrics endpoints in `default`; note that three of those services expose
+Prometheus under their servlet context paths, so the monitored paths are
+`/transaction-service/actuator/prometheus`,
+`/currency-service/actuator/prometheus`,
+`/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
+Session Gateway.
 
 ```bash
 # Prometheus UI
@@ -259,6 +266,12 @@ kubectl get secret -n monitoring prometheus-stack-grafana \
   -o jsonpath="{.data.admin-password}" | base64 --decode
 echo
 ```
+
+After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
+`spring-boot-services` job shows `currency-service`, `transaction-service`,
+`permission-service`, and `session-gateway` as `UP`. Useful first queries:
+`up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, and
+`jvm_gc_pause_seconds_count`.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you

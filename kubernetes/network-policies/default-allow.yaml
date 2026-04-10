@@ -241,6 +241,36 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-spring-boot-metrics-ingress-from-prometheus
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+              operator.prometheus.io/name: prometheus-stack-kube-prom-prometheus
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8082
+        - protocol: TCP
+          port: 8084
+        - protocol: TCP
+          port: 8086
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-envoy-metrics-ingress-from-prometheus
   namespace: default
 spec:

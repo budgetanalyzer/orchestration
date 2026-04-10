@@ -892,6 +892,15 @@ local_resource(
     labels=['monitoring'],
 )
 
+k8s_yaml('kubernetes/monitoring/servicemonitor-spring-boot.yaml')
+
+k8s_resource(
+    'servicemonitor-spring-boot',
+    objects=['spring-boot-services:servicemonitor'],
+    resource_deps=['prometheus-stack'],
+    labels=['monitoring'],
+)
+
 # ============================================================================
 # NETWORK POLICIES (Phase 2 Security Hardening)
 # ============================================================================

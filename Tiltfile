@@ -878,6 +878,7 @@ local_resource(
     'prometheus-stack',
     cmd='''
         ./scripts/dev/verify-monitoring-rendered-manifests.sh
+        kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
         helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --version 83.4.0 \
@@ -886,6 +887,7 @@ local_resource(
     ''',
     deps=[
         'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
         'scripts/dev/verify-monitoring-rendered-manifests.sh',
     ],
     resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],

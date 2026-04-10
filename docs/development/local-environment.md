@@ -272,6 +272,17 @@ After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
 `permission-service`, and `session-gateway` as `UP`. Useful first queries:
 `up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, and
 `jvm_gc_pause_seconds_count`.
+
+Grafana ships with two pre-provisioned dashboards (no manual import needed):
+
+- **JVM (Micrometer)** - memory pools, GC pauses, threads, classloading per
+  service. Use the `application` dropdown to switch between services.
+- **Spring Boot 3.x Statistics** - HTTP request rates, latencies, and error
+  rates. Use the `application` and `instance` dropdowns to filter.
+
+Both dashboards are declaratively provisioned from
+`kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
+pod restarts.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you

@@ -132,7 +132,8 @@ Implementation consequence:
 - If a subfeature cannot be made compliant cleanly, disable that subfeature
   rather than adding a namespace exception
 - Phase 1 should use static Grafana datasource provisioning and keep Grafana's
-  API-watching sidecars disabled until Phase 3 dashboards need them
+  API-watching sidecars disabled until Phase 3 dashboards need them (Phase 3
+  evaluated this and chose the file provider instead — see Phase 3 notes)
 - Phase 1 should also disable Prometheus Operator admission-webhook jobs rather
   than carrying extra hook-time token plumbing just to validate rule objects
 
@@ -256,13 +257,18 @@ Add common label to Spring Boot deployments and configure Prometheus scraping.
 **Note:** The `/actuator/prometheus` endpoint is already exposed by service-common's
 `PrometheusEndpointPostProcessor`. No service-side changes needed.
 
-### Phase 3: Grafana Dashboards
+### Phase 3: Grafana Dashboards (complete)
 
 Import or configure useful dashboards for Spring Boot and JVM monitoring.
 
-**Files to create:**
-- `kubernetes/monitoring/grafana-dashboards-configmap.yaml` (optional, if
-  embedding dashboards as code)
+**Files created:**
+- `kubernetes/monitoring/grafana-dashboards-configmap.yaml`
+
+**Files modified:**
+- `kubernetes/monitoring/prometheus-stack-values.yaml` - added `dashboardProviders`
+  and `extraConfigmapMounts`
+- `Tiltfile` - apply ConfigMap before Helm install, added as dependency
+- `docs/development/local-environment.md` - documented pre-provisioned dashboards
 
 **Required outcomes:**
 - JVM dashboard showing memory, GC, threads per service
@@ -273,9 +279,33 @@ Import or configure useful dashboards for Spring Boot and JVM monitoring.
   `existingSecret`; do not hardcode `adminPassword: admin` in Git
 
 **Dashboard sources:**
-- JVM Micrometer: Grafana dashboard ID 4701
-- Spring Boot 3.x Statistics: Grafana dashboard ID 19004 (use 19004 over 12464,
-  which targets older Spring Boot versions and may not work with Micrometer 2.x)
+- JVM Micrometer: Grafana dashboard ID 4701 (uid: `jvm-micrometer`)
+- Spring Boot 3.x Statistics: Grafana dashboard ID 19004 (uid: `spring-boot-3x`);
+  use 19004 over 12464, which targets older Spring Boot versions and may not work
+  with Micrometer 2.x
+
+**Provisioning approach — file provider, not sidecar:**
+
+Phase 1 deferred the sidecar decision: "keep Grafana's API-watching sidecars
+disabled until Phase 3 dashboards need them." Phase 3 evaluated and chose the
+Grafana file provider (`dashboardProviders` + `extraConfigmapMounts`) over the
+sidecar (`sidecar.dashboards.enabled: true`).
+
+The sidecar watches the Kubernetes API for labeled ConfigMaps and auto-discovers
+dashboards from any namespace. That solves a coordination problem —
+decentralized dashboard ownership across teams — that this repo does not have.
+Enabling it would add a container and grant Grafana k8s API access (projected
+token volume) solely to watch a single ConfigMap that is already mounted as a
+volume. That conflicts with the Phase 7 stance of not granting API access
+unless a workload genuinely needs it.
+
+The file provider mounts the ConfigMap directly. Grafana rescans the provider
+path on a polling interval (default 10s), and kubelet propagates ConfigMap
+updates to mounted volumes (~60s), so dashboard changes take effect without a
+pod restart. No k8s API access, no extra container, no security exception.
+
+If this repo later moves to multi-team dashboard ownership, re-evaluate in
+favor of the sidecar at that point.
 
 ### Phase 4: Grafana Ingress Route
 
@@ -598,9 +628,10 @@ cardinality. If Prometheus memory usage becomes a concern, reduce scrape interva
 or add metric relabeling to drop high-cardinality labels.
 
 **Note on API access**: Prometheus, Prometheus Operator, and kube-state-metrics
-need Kubernetes API access in Phase 1. Grafana does not, because the Phase 1
-implementation uses static datasource provisioning with the API-watching
-sidecars disabled. Under the repo's current policies, the acceptable patterns are:
+need Kubernetes API access. Grafana does not — Phase 1 used static datasource
+provisioning with sidecars disabled, and Phase 3 chose the file provider for
+dashboards (see Phase 3 notes), so Grafana never needs k8s API access. Under
+the repo's current policies, the acceptable patterns are:
 - explicit projected service-account token volumes with pod automount disabled
 - disabling the API-watching subfeature if it is not required
 

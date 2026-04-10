@@ -48,6 +48,23 @@ grafana:
       enabled: false
     datasources:
       enabled: false
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/default
+  extraConfigmapMounts:
+    - name: grafana-dashboards
+      mountPath: /var/lib/grafana/dashboards/default
+      configMap: grafana-dashboards
+      readOnly: true
   datasources:
     datasources.yaml:
       apiVersion: 1

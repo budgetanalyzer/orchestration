@@ -864,6 +864,35 @@ local_resource(
 )
 
 # ============================================================================
+# MONITORING (Prometheus + Grafana)
+# ============================================================================
+
+local_resource(
+    'monitoring-namespace',
+    cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
+    deps=['kubernetes/monitoring/namespace.yaml'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'prometheus-stack',
+    cmd='''
+        ./scripts/dev/verify-monitoring-rendered-manifests.sh
+        helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --version 83.4.0 \
+            --values kubernetes/monitoring/prometheus-stack-values.yaml \
+            --wait --timeout 5m
+    ''',
+    deps=[
+        'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'scripts/dev/verify-monitoring-rendered-manifests.sh',
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+# ============================================================================
 # NETWORK POLICIES (Phase 2 Security Hardening)
 # ============================================================================
 

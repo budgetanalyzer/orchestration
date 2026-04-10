@@ -270,6 +270,21 @@ else
 fi
 
 # =============================================================================
+# Step 6b: Install Prometheus Community Helm repository
+# =============================================================================
+print_step "Setting up Prometheus Community Helm repository..."
+
+if helm repo list 2>/dev/null | grep -q "^prometheus-community"; then
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+    helm repo update prometheus-community >/dev/null
+    print_success "Prometheus Community Helm repository refreshed"
+else
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
+    helm repo update prometheus-community >/dev/null
+    print_success "Prometheus Community Helm repository added and refreshed"
+fi
+
+# =============================================================================
 # Step 7: Generate TLS certificates
 # =============================================================================
 print_step "Setting up TLS certificates..."

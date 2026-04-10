@@ -140,6 +140,7 @@ Key scripts:
 - `scripts/dev/seed-ext-authz-session.sh` - Seeds a test ext-authz session in Redis using the TLS-only in-cluster Redis listener.
 - `scripts/dev/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
 - `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio readiness, and the retained Kyverno smoke-policy bootstrap check that now runs alongside the broader Phase 7 admission suite).
+- `scripts/dev/verify-monitoring-rendered-manifests.sh` - Re-renders the pinned `prometheus-community/kube-prometheus-stack` `83.4.0` chart with the checked-in monitoring values, fails on any non-digest image or host-level monitoring workload shape, and server-dry-runs the rendered Deployment/StatefulSet/DaemonSet/Job objects against the current cluster after the repo-managed `monitoring` namespace exists.
 - `scripts/dev/verify-phase-1-credentials.sh` - Phase 1 runtime proof for PostgreSQL, RabbitMQ, Redis ACLs, and ext-authz over Redis TLS.
 - `scripts/dev/verify-phase-2-network-policies.sh` - Phase 2 runtime proof for current NetworkPolicy allowlists across Istio ingress, service-to-service, infrastructure, and Istio egress gateway paths.
 - `scripts/dev/verify-phase-3-istio-ingress.sh` - Phase 3 runtime proof for Istio ingress/egress hardening, ext_authz integration, ingress path ownership, forwarded-header behavior, and `AUTH0_ISSUER_URI` to egress-host alignment.

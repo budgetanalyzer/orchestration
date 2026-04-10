@@ -24,11 +24,15 @@ After this work:
 - Do not add distributed tracing (Jaeger) in this plan. That's a separate effort.
 - Do not add centralized logging (Loki) in this plan. `kubectl logs` suffices
   for a portfolio demo.
-- Do not expose Grafana publicly. Local port-forward or internal Istio route only.
+- Do not expose Grafana publicly on OCI in this plan. Local development may use
+  port-forward or a local-only Istio route, but production needs private access
+  or additional auth in a follow-up.
 - Do not tune Prometheus retention policies or configure remote storage backends.
   Basic PVC persistence is acceptable for demo purposes.
 - Do not add application-specific custom metrics. Focus on out-of-box Spring
   Boot and JVM metrics.
+- Do not create Kyverno or Pod Security Admission exceptions for the `monitoring`
+  namespace. The stack must comply with existing guardrails.
 
 ## Prerequisites
 
@@ -37,6 +41,12 @@ After this work:
 - `PrometheusEndpointPostProcessor` auto-adds `prometheus` to exposed actuator
   endpoints regardless of per-service configuration
 - `/actuator/prometheus` endpoint verified via unit tests
+
+**Repository guardrails (already enforced):**
+- Existing Phase 7 Kyverno policies and namespace Pod Security Admission labels
+  remain authoritative
+- Monitoring workloads must satisfy digest pinning, `automountServiceAccountToken: false`,
+  and explicit pod/container hardening with no namespace carve-outs
 
 No blocking prerequisites remain. All phases can proceed.
 
@@ -64,6 +74,19 @@ Rationale:
 - Batteries-included alerting infrastructure (even if we defer using it)
 - Single Helm release manages the full stack
 
+### Chart Version Pinning
+
+Pin the Helm chart to an explicit version in Tilt.
+
+Rationale:
+- This repo already pins infrastructure chart versions elsewhere
+- The chart changes generated object names and defaults over time
+- Hardening and digest pinning must be reviewed against a fixed render
+
+As of **April 10, 2026**, pin `prometheus-community/kube-prometheus-stack`
+to **`83.4.0`**. Any future upgrade requires re-rendering the chart and
+re-validating the hardening and image inventory.
+
 ### Namespace Strategy
 
 Create dedicated `monitoring` namespace, consistent with `infrastructure` pattern.
@@ -73,32 +96,89 @@ Rationale:
 - Allows namespace-scoped RBAC if needed later
 - Matches production deployment patterns
 
+### Security Compliance
+
+Do not exempt `monitoring` from existing repository guardrails.
+
+Rationale:
+- This repo explicitly freezes third-party image pinning and workload hardening
+- Adding exceptions for a third-party chart would undermine the Phase 7 contract
+- A compliant rendered manifest is a better long-term baseline than chart-specific carve-outs
+
+Implementation consequence:
+- Every steady-state and hook workload rendered by the chart must use digest-pinned
+  images
+- Every pod must set `automountServiceAccountToken: false`
+- Every container and init container must explicitly set `runAsNonRoot: true`,
+  `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, and
+  `seccompProfile.type: RuntimeDefault`
+
+### Kubernetes API Access Under Phase 7
+
+Some monitoring components legitimately need Kubernetes API access:
+- Prometheus for ServiceMonitor/PodMonitor discovery
+- Prometheus Operator for CRD reconciliation
+- kube-state-metrics for resource listing
+- Grafana sidecars if they watch ConfigMaps/Secrets dynamically
+
+Rationale:
+- `automountServiceAccountToken: false` alone is not sufficient for these workloads
+- The compliant pattern is an explicit projected service-account token volume at
+  the standard in-cluster path, or disabling the API-watching subfeature
+
+Implementation consequence:
+- If a workload needs Kubernetes API access, mount a projected token volume
+  intentionally rather than relying on implicit automount
+- If a subfeature cannot be made compliant cleanly, disable that subfeature
+  rather than adding a namespace exception
+- Phase 1 should use static Grafana datasource provisioning and keep Grafana's
+  API-watching sidecars disabled until Phase 3 dashboards need them
+- Phase 1 should also disable Prometheus Operator admission-webhook jobs rather
+  than carrying extra hook-time token plumbing just to validate rule objects
+
+### Minimal Monitoring Footprint
+
+Disable `nodeExporter`.
+
+Rationale:
+- The chart's node-exporter DaemonSet uses host namespaces and `hostPath` mounts
+- That pattern conflicts with the repo's no-exceptions stance and does not
+  materially improve the portfolio-demo observability story
+- Spring Boot, Istio, Prometheus, Grafana, and optional infrastructure exporters
+  already cover the intended learning goals
+
 ### Scrape Configuration
 
-Use ServiceMonitor CRDs rather than static scrape configs.
+Use ServiceMonitor CRDs for service-backed targets and PodMonitor CRDs for pod-only
+targets such as Envoy sidecars.
 
 Rationale:
 - Declarative, version-controlled
 - Automatically discovers new services matching labels
 - Standard Prometheus Operator pattern
 - Each service owns its ServiceMonitor definition
+- Envoy sidecar metrics are exposed from pods, not Services, so they require a PodMonitor
+- The Prometheus server must be mesh-participating and explicitly allowed to
+  reach `:15090`, otherwise STRICT mTLS plus the repo's `AuthorizationPolicy`
+  and `NetworkPolicy` posture will leave the Envoy PodMonitor down
 
 ### Resource Constraints
 
 Configure explicit resource requests/limits for OCI deployment.
 
-Estimated footprint (with Istio metrics and persistence):
+Estimated steady-state footprint (with Istio metrics and persistence):
 | Component | Memory Request | Memory Limit | Storage |
 |-----------|---------------|--------------|---------|
 | Prometheus | 512Mi | 1Gi | 10Gi PVC |
 | Prometheus Operator | 128Mi | 256Mi | - |
 | Grafana | 128Mi | 256Mi | - |
 | kube-state-metrics | 64Mi | 128Mi | - |
-| node-exporter | 64Mi | 128Mi | - |
-| **Total** | ~896Mi | ~1.75Gi | 10Gi |
+| **Total (steady-state)** | ~832Mi | ~1.625Gi | 10Gi |
 
 This fits comfortably in the 24GB OCI instance alongside the application stack.
 Istio/Envoy metrics add cardinality; Prometheus memory increased accordingly.
+Phase 1 disables Prometheus Operator admission-webhook jobs, so they do not
+contribute to the steady-state total.
 
 ### ARM64 Compatibility
 
@@ -107,25 +187,46 @@ needed, but values file should not pin to amd64-only image variants.
 
 ## Work Plan
 
-### Phase 1: Stack Installation
+### Phase 1: Security-Compliant Stack Installation
 
-Install kube-prometheus-stack via Helm in Tilt, following the Istio pattern.
+Install kube-prometheus-stack via Helm in Tilt, following the Istio pattern and
+meeting the repo's current admission requirements.
 
 **Files to create:**
 - `kubernetes/monitoring/namespace.yaml`
 - `kubernetes/monitoring/prometheus-stack-values.yaml`
+- `scripts/dev/verify-monitoring-rendered-manifests.sh`
 
 **Files to modify:**
 - `setup.sh` - add prometheus-community Helm repo
-- `Tiltfile` - add `local_resource()` for Helm installation
+- `Tiltfile` - add `local_resource()` for Helm installation, pin chart version,
+  and make the monitoring install depend on `kyverno-policies`
 
 **Required outcomes:**
-- `monitoring` namespace exists with appropriate labels
-- Prometheus, Grafana, and supporting components deploy successfully
-- Prometheus UI accessible via `kubectl port-forward svc/prometheus-stack-kube-prometheus-prometheus 9090:9090 -n monitoring`
-- Istio metrics (istiod, envoy sidecars) appearing in Prometheus targets
+- `monitoring` namespace exists with baseline Pod Security labels
+- Helm installs `prometheus-community/kube-prometheus-stack` at pinned version
+  `83.4.0`
+- Every rendered third-party image is digest-pinned
+- Rendered Deployments, StatefulSets, DaemonSets, and Jobs pass
+  `kubectl apply --dry-run=server` against the current cluster with no namespace
+  exceptions
+- Every rendered pod sets `automountServiceAccountToken: false`
+- Any workload that still needs Kubernetes API access uses an explicit projected
+  service-account token volume or disables the API-watching subfeature
+- `nodeExporter.enabled: false`; no host-namespace or `hostPath` monitoring
+  workload remains in the final chart render
+- The Prometheus server pod joins the mesh and default-namespace workloads
+  explicitly allow Prometheus scrapes to `:15090`
+- Prometheus, Grafana, Prometheus Operator, and kube-state-metrics deploy successfully
+- Prometheus UI accessible via `kubectl port-forward svc/prometheus-stack-kube-prom-prometheus 9090:9090 -n monitoring`
+- Istio metrics wiring is present: `istiod` via ServiceMonitor and Envoy via PodMonitor
 - Stack appears in Tilt UI with proper resource dependencies
 - PersistentVolumeClaim created and bound for Prometheus storage
+
+**Scope note:**
+Phase 1 does **not** change the Istio Gateway `allowedRoutes` selector. That is
+Phase 4 work because it changes ingress attachment policy rather than monitoring
+installation.
 
 ### Phase 2: Spring Boot Labels and ServiceMonitors
 
@@ -168,6 +269,8 @@ Import or configure useful dashboards for Spring Boot and JVM monitoring.
 - Spring Boot dashboard showing HTTP request rates, latencies, error rates
 - Dashboard provisioning is declarative (survives pod restart)
 - Dashboards work without manual import steps
+- Grafana admin credentials come from a Helm-generated Secret or an
+  `existingSecret`; do not hardcode `adminPassword: admin` in Git
 
 **Dashboard sources:**
 - JVM Micrometer: Grafana dashboard ID 4701
@@ -176,7 +279,8 @@ Import or configure useful dashboards for Spring Boot and JVM monitoring.
 
 ### Phase 4: Grafana Ingress Route
 
-Expose Grafana via Istio ingress at `grafana.budgetanalyzer.localhost`.
+Expose Grafana via Istio ingress at `grafana.budgetanalyzer.localhost` for local
+development only.
 
 **Files to create:**
 - `kubernetes/monitoring/grafana-httproute.yaml`
@@ -227,7 +331,7 @@ metrics alone demonstrate observability competence for portfolio purposes.
 
 ### Phase 6: Documentation
 
-Update documentation to reflect the observability stack.
+Update documentation continuously as each phase lands, then do a final sweep.
 
 **Files to modify:**
 - `AGENTS.md` - add monitoring namespace to service architecture, discovery commands
@@ -240,24 +344,27 @@ Update documentation to reflect the observability stack.
 - Grafana access URL (`https://grafana.budgetanalyzer.localhost`) documented
 - Prometheus port-forward command documented (internal access only)
 - Dashboard navigation guidance for common debugging scenarios
-- Default Grafana credentials documented
+- Grafana credential retrieval or `existingSecret` workflow documented
 
 ## Execution Order
 
 Implement in phases that allow incremental verification:
 
-1. **Phase 1** - Stack installation and Gateway `allowedRoutes` update. Can
-   proceed immediately. Includes Istio metrics scraping configuration and the
-   label-based `allowedRoutes` selector change on the Gateway (required for Phase 4).
+1. **Phase 1** - Stack installation. Can proceed immediately. Pin the chart
+   version, harden the rendered workloads, pin all third-party images by digest,
+   and verify the rendered manifests against current admission policies.
+   Includes Istio metrics scraping configuration, but **not** the Gateway
+   `allowedRoutes` change.
 2. **Phase 2** - Labels and ServiceMonitors. No external blockers (service-common
    already exposes `/actuator/prometheus`). Add `app.kubernetes.io/framework:
    spring-boot` labels to deployment and service manifests, then verify scraping.
 3. **Phase 3** - Dashboards. Depends on Phase 2 producing metrics.
-4. **Phase 4** - Grafana ingress route. Can proceed after Phase 1 (needs the
-   `allowedRoutes` update), independent of Phase 2/3. Exposes Grafana at
-   `grafana.budgetanalyzer.localhost`.
+4. **Phase 4** - Grafana ingress route. Can proceed after Phase 1,
+   independent of Phase 2/3. Applies the Gateway `allowedRoutes` update and
+   exposes Grafana at `grafana.budgetanalyzer.localhost` for local development.
 5. **Phase 5** - Infrastructure exporters. Optional, defer if time-constrained.
-6. **Phase 6** - Documentation. Update incrementally as each phase completes.
+6. **Phase 6** - Documentation final sweep. Documentation still updates incrementally
+   in each earlier phase to satisfy repo workflow.
 
 **Parallelization opportunity:** Phases 2-3 (Spring Boot metrics path) and
 Phase 4 (Grafana ingress) can proceed in parallel after Phase 1 completes.
@@ -268,20 +375,29 @@ Following the established Istio pattern:
 
 ```python
 # Monitoring namespace
-k8s_yaml('kubernetes/monitoring/namespace.yaml')
+local_resource(
+    'monitoring-namespace',
+    cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
+    deps=['kubernetes/monitoring/namespace.yaml'],
+    labels=['monitoring'],
+)
 
 # kube-prometheus-stack
 local_resource(
     'prometheus-stack',
     cmd='''
+        ./scripts/dev/verify-monitoring-rendered-manifests.sh
         helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
-            --create-namespace \
+            --version 83.4.0 \
             --values kubernetes/monitoring/prometheus-stack-values.yaml \
             --wait
     ''',
-    deps=['kubernetes/monitoring/prometheus-stack-values.yaml'],
-    resource_deps=['monitoring-namespace'],
+    deps=[
+        'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'scripts/dev/verify-monitoring-rendered-manifests.sh',
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
     labels=['monitoring'],
 )
 
@@ -300,11 +416,16 @@ k8s_resource(
 Key configurations for `prometheus-stack-values.yaml`:
 
 ```yaml
+nodeExporter:
+  enabled: false
+
 prometheus:
   prometheusSpec:
     # Scrape all ServiceMonitors regardless of namespace
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
+    # Phase 7 requires explicit API-access intent; do not rely on implicit token mounts
+    automountServiceAccountToken: false
     # Persistent storage for metrics retention
     storageSpec:
       volumeClaimTemplate:
@@ -319,7 +440,39 @@ prometheus:
         memory: 512Mi
       limits:
         memory: 1Gi
-  # Istio/Envoy metrics scraping (merged under same prometheus: key)
+    # If Prometheus still needs Kubernetes API discovery, mount an explicit
+    # projected service-account token bundle at the standard path
+    volumes:
+      - name: k8s-api-access
+        projected:
+          sources:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 3600
+            - configMap:
+                name: kube-root-ca.crt
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+            - downwardAPI:
+                items:
+                  - path: namespace
+                    fieldRef:
+                      fieldPath: metadata.namespace
+    volumeMounts:
+      - name: k8s-api-access
+        mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        readOnly: true
+    image:
+      registry: quay.io
+      repository: prometheus/prometheus
+      tag: v3.11.1
+      sha: <resolved-prometheus-digest>
+
+  serviceAccount:
+    automountServiceAccountToken: false
+
+  # Istio service-backed metrics scraping
   additionalServiceMonitors:
     - name: istio-mesh
       selector:
@@ -331,6 +484,9 @@ prometheus:
       endpoints:
         - port: http-monitoring
           interval: 15s
+
+  # Istio sidecar metrics scraping
+  additionalPodMonitors:
     - name: envoy-stats
       selector:
         matchExpressions:
@@ -338,14 +494,46 @@ prometheus:
             operator: Exists
       namespaceSelector:
         any: true
-      endpoints:
+      podMetricsEndpoints:
         - path: /stats/prometheus
           targetPort: 15090  # Istio sidecar metrics port
           interval: 15s
 
 grafana:
-  # Disable default password prompt, set admin password
-  adminPassword: admin  # Change for production
+  # Do not hardcode adminPassword in Git. Use an existing Secret or the
+  # Helm-generated Secret and document how to retrieve it.
+  automountServiceAccountToken: false
+  defaultDashboardsEnabled: false
+  serviceAccount:
+    autoMount: false
+    automountServiceAccountToken: false
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  image:
+    repository: grafana/grafana
+    sha: <resolved-grafana-digest>
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus-stack-kube-prom-prometheus.monitoring.svc:9090
+          isDefault: true
+          editable: false
+  sidecar:
+    dashboards:
+      enabled: false
+    datasources:
+      enabled: false
   resources:
     requests:
       memory: 128Mi
@@ -367,32 +555,88 @@ kubeControllerManager:
 
 kubeScheduler:
   enabled: false  # Not accessible in Kind
+
+prometheusOperator:
+  automountServiceAccountToken: false
+  tls:
+    enabled: false
+  image:
+    repository: prometheus-operator/prometheus-operator
+    sha: <resolved-prometheus-operator-digest>
+  containerSecurityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  prometheusConfigReloader:
+    image:
+      repository: prometheus-operator/prometheus-config-reloader
+      sha: <resolved-config-reloader-digest>
+  admissionWebhooks:
+    enabled: false
+
+kube-state-metrics:
+  automountServiceAccountToken: false
+  serviceAccount:
+    automountServiceAccountToken: false
+  image:
+    repository: kube-state-metrics/kube-state-metrics
+    sha: <resolved-kube-state-metrics-digest>
+  containerSecurityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      memory: 64Mi
+    limits:
+      memory: 128Mi
 ```
 
 **Note on Istio metrics**: The Envoy sidecar metrics significantly increase
 cardinality. If Prometheus memory usage becomes a concern, reduce scrape interval
 or add metric relabeling to drop high-cardinality labels.
 
-**Note on Envoy port**: The envoy-stats ServiceMonitor uses `targetPort: 15090`
-(Istio's standard sidecar metrics port) rather than a named port. Verify this
-against Istio 1.29.1's actual sidecar configuration and `meshConfig.enablePrometheusMerge`
-setting, as port conventions can vary between Istio versions.
+**Note on API access**: Prometheus, Prometheus Operator, and kube-state-metrics
+need Kubernetes API access in Phase 1. Grafana does not, because the Phase 1
+implementation uses static datasource provisioning with the API-watching
+sidecars disabled. Under the repo's current policies, the acceptable patterns are:
+- explicit projected service-account token volumes with pod automount disabled
+- disabling the API-watching subfeature if it is not required
+
+**Note on Envoy port**: The envoy-stats PodMonitor uses `targetPort: 15090`
+(Istio's standard sidecar metrics port). In this repo that path only works if
+Prometheus is injected into the mesh and default-namespace workloads explicitly
+allow the Prometheus service account to reach `:15090`. Verify the port itself
+against Istio 1.29.1's actual sidecar configuration and
+`meshConfig.enablePrometheusMerge` setting, as port conventions can vary between
+Istio versions.
 
 ## Decisions
 
 1. **Istio integration**: YES - Include Istio/Envoy sidecar metrics. Adds
    request-level visibility (latency, error rates, traffic volume per service
    pair). Higher cardinality but valuable for understanding service mesh behavior.
+   Use ServiceMonitor for `istiod` and PodMonitor for Envoy sidecars.
 
-2. **Grafana ingress**: YES - Expose via Istio ingress route at
-   `grafana.budgetanalyzer.localhost`. Industry standard for production setups.
-   Will require HTTPRoute configuration similar to existing app routes.
+2. **Chart pinning**: YES - Pin `kube-prometheus-stack` to `83.4.0` as of
+   April 10, 2026. Do not install an unversioned chart in Tilt.
 
-3. **Persistence**: YES - Use PersistentVolumeClaim for Prometheus. Metrics
+3. **Security compliance**: YES - No `monitoring` namespace exceptions. Meet the
+   current Kyverno and PSA requirements through values-file hardening and digest pinning.
+
+4. **Persistence**: YES - Use PersistentVolumeClaim for Prometheus. Metrics
    survive pod restarts, important for OCI deployment where we want historical
    data. Local Kind cluster supports dynamic provisioning via standard storage class.
 
-4. **ServiceMonitor label strategy**: Add `app.kubernetes.io/framework: spring-boot`
+5. **node-exporter**: NO - Disable it in this repo. Its host-level DaemonSet
+   shape is not worth the exception pressure for this demo environment.
+
+6. **Grafana ingress**: YES - Expose via Istio ingress route at
+   `grafana.budgetanalyzer.localhost` for local development only. Do not treat
+   that as approval for public OCI exposure.
+
+7. **ServiceMonitor label strategy**: Add `app.kubernetes.io/framework: spring-boot`
    label to all Spring Boot deployments and services. This is semantic (describes
    what the service is) and follows Kubernetes labeling conventions. New services
    automatically discovered when they include this label.

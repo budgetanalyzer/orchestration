@@ -87,11 +87,13 @@ For containerized development environment setup, see the [workspace](https://git
 # List all running resources
 tilt get uiresources
 
-# View pod status (services run in default namespace)
+# View pod status
 kubectl get pods
+kubectl get pods -n monitoring
 
 # View service endpoints
 kubectl get svc
+kubectl get svc -n monitoring
 ```
 
 **Service Types**:
@@ -100,6 +102,7 @@ kubectl get svc
 - **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
 - **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
+- **Monitoring**: Prometheus, Grafana, and kube-state-metrics (in monitoring namespace)
 - **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
 - **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing

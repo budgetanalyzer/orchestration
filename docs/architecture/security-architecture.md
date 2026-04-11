@@ -72,7 +72,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 ┌─────────────────────────────────────────────────────────────────┐
 │              Istio Ingress Gateway (Port 443, HTTPS)             │
 │                    • SSL Termination (all traffic)               │
-│                    • ext_authz enforcement on /api/* paths       │
+│                    • ext_authz on app host /api/* paths only     │
 │                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
 │                      /logout, /auth/v1/* → Session Gateway       │
 │                    • Routes /api/*, /* → NGINX                   │
@@ -165,7 +165,7 @@ The Session Gateway implements session-based edge authorization specifically for
 
 **Why HTTP mode over gRPC:** Istio's `meshConfig.extensionProviders` with `envoyExtAuthzHttp` provides `headersToUpstreamOnAllow` — an infrastructure-level allowlist that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the ingress layer: even if a client sends `X-User-Id` in the original request, the Envoy ext_authz filter overwrites it with the value from ext_authz's response. Only headers listed in `headersToUpstreamOnAllow` are forwarded upstream.
 
-**Integration:** Called by the Istio ingress gateway on every request to `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
+**Integration:** Called by the Istio ingress gateway on requests to `app.budgetanalyzer.localhost` `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`. The policy is host-scoped so that other ingress hosts (e.g. `grafana.budgetanalyzer.localhost`) are not intercepted by application session auth.
 
 ---
 

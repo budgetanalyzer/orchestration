@@ -897,8 +897,8 @@ local_resource(
 k8s_yaml('kubernetes/monitoring/servicemonitor-spring-boot.yaml')
 
 k8s_resource(
-    'servicemonitor-spring-boot',
     objects=['spring-boot-services:servicemonitor'],
+    new_name='servicemonitor-spring-boot',
     resource_deps=['prometheus-stack'],
     labels=['monitoring'],
 )

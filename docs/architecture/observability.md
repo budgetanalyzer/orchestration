@@ -60,6 +60,32 @@ New Spring Boot services require a new `endpoints` entry in
 `kubernetes/monitoring/servicemonitor-spring-boot.yaml` with the correct
 servlet context path and a `relabelings` keep-regex for the service name.
 
+#### Dashboard Label Contract
+
+The JVM (Micrometer) and Spring Boot 3.x dashboards select a workload via
+the `application` template variable, populated from
+`label_values(jvm_info, application)`. For a new endpoint to show up in
+those dropdowns, its `relabelings` block must:
+
+1. Rewrite `__address__` to the stable service DNS name so scrapes land on
+   the sidecar-accepting Service VIP instead of a pod IP (required under
+   STRICT mTLS).
+2. Copy `__meta_kubernetes_service_name` to the `application` target label.
+
+```yaml
+relabelings:
+  - sourceLabels: [__meta_kubernetes_service_name]
+    action: keep
+    regex: new-service
+  - targetLabel: __address__
+    replacement: new-service.default.svc.cluster.local:8080
+  - sourceLabels: [__meta_kubernetes_service_name]
+    targetLabel: application
+```
+
+The `namespace` target label comes for free from the Prometheus Operator
+and is used by the Spring Boot 3.x dashboard's `Namespace` variable.
+
 ### Istio Metrics
 
 - **istiod**: scraped via `ServiceMonitor` on the `http-monitoring` port in
@@ -131,6 +157,12 @@ for the full evaluation.
 
 Exposed via Istio ingress at `https://grafana.budgetanalyzer.localhost`.
 No port-forward needed for local development.
+
+Grafana owns its own `/api/*` namespace and is **not** subject to Budget
+Analyzer's ext_authz session enforcement. The `ext-authz-at-ingress`
+AuthorizationPolicy is scoped to `app.budgetanalyzer.localhost` so it does
+not intercept requests to the Grafana host. Grafana manages its own
+authentication (admin user with Helm-generated password).
 
 ```bash
 # Retrieve admin password

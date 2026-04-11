@@ -366,6 +366,16 @@ Each microservice is maintained in its own repository:
 
 If a fix requires code changes in a service repo, describe the needed changes and let the user handle it (or switch to that repo's context).
 
+**Do not hide sibling-repo contract failures with orchestration workarounds.**
+When the root cause belongs to another repo's shared code or service logic, do
+not add compensating environment variables, manifests, routing rules, or other
+deployment tweaks in this repo just to make the symptom disappear. Stop and
+call out the owning repo instead. Example: if Spring Boot services do not expose
+`/actuator/prometheus` even though service-common is supposed to provide that
+default, fix or rebuild `service-common`; do not add
+`MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` to each
+orchestration deployment as a workaround.
+
 ### Planning Transparency
 
 **Write plans to `docs/plans/`, not hidden locations.** When planning work:

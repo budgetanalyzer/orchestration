@@ -1068,6 +1068,26 @@ main() {
         fail "ext-authz-at-ingress selector is ${ext_authz_selector:-missing} (expected ${INGRESS_GATEWAY_LABEL_SELECTOR})"
     fi
 
+    local ext_authz_hosts
+    ext_authz_hosts=$(kubectl get authorizationpolicy.security.istio.io ext-authz-at-ingress -n istio-ingress \
+        -o jsonpath='{.spec.rules[0].to[0].operation.hosts[0]}' 2>/dev/null || true)
+    if [[ "$ext_authz_hosts" == "app.budgetanalyzer.localhost" ]]; then
+        pass "ext-authz-at-ingress is scoped to app.budgetanalyzer.localhost"
+    else
+        fail "ext-authz-at-ingress hosts is ${ext_authz_hosts:-missing} (expected app.budgetanalyzer.localhost; unscoped policy intercepts all ingress hosts)"
+    fi
+
+    if kubectl get pod -n monitoring -l app.kubernetes.io/name=grafana --no-headers 2>/dev/null | grep -q Running; then
+        local grafana_health_status
+        grafana_health_status=$(kubectl exec -n monitoring deploy/prometheus-stack-grafana -- \
+            wget -q -O /dev/null -S http://127.0.0.1:3000/api/health 2>&1 | awk '/HTTP\//{print $2}' || true)
+        if [[ "$grafana_health_status" == "200" ]]; then
+            pass "Grafana /api/health returns 200 (not intercepted by app ext_authz)"
+        else
+            fail "Grafana /api/health returned ${grafana_health_status:-no response} (expected 200)"
+        fi
+    fi
+
     nginx_principal=$(kubectl get authorizationpolicy.security.istio.io nginx-gateway-policy -n default \
         -o jsonpath='{.spec.rules[0].from[0].source.principals[0]}' 2>/dev/null || true)
     if [[ "$nginx_principal" == "$INGRESS_GATEWAY_PRINCIPAL" ]]; then

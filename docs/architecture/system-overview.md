@@ -35,7 +35,7 @@ Backend Services ─── business logic, data authorization
 - ext_authz validates every API request
 - Session revocation is instant (Redis key delete)
 
-Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/dev/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
 
 ## Architecture Overview
 
@@ -292,7 +292,7 @@ This reference architecture deliberately stops before solving data ownership. Un
 - Kind uses `disableDefaultCNI` with pinned Calico in local development so `NetworkPolicy` is enforceable
 - Namespace Pod Security Admission labels are explicit per namespace: application namespaces enforce `restricted`, `infrastructure` enforces `baseline`, and `istio-system` enforces `privileged` because the `istio-cni` DaemonSet runs there
 - Tilt installs Istio CNI so meshed workloads can run without injected `istio-init`
-- Kyverno applies the checked-in Phase 7 admission suite plus the retained smoke policy bootstrap check, and `scripts/dev/verify-security-prereqs.sh` still proves the smoke path is alive
+- Kyverno applies the checked-in Phase 7 admission suite plus the retained smoke policy bootstrap check, and `scripts/smoketest/verify-security-prereqs.sh` still proves the smoke path is alive
 - ext_authz reads session hashes for per-request validation
 
 **Gateway Patterns:**

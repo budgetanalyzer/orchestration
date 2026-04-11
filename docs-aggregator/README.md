@@ -28,7 +28,10 @@ The generated unified downloads remain checked in here:
 - `docs-aggregator/openapi.json`
 - `docs-aggregator/openapi.yaml`
 
-Those files are refreshed by `./scripts/generate-unified-api-docs.sh`.
+Those files are refreshed by `./scripts/repo/generate-unified-api-docs.sh`.
+That generator lives under `scripts/repo/` because it coordinates live-cluster
+OpenAPI fetches with optional sibling-repo docs updates rather than acting as a
+service-local verifier.
 
 ## Public Outputs
 
@@ -64,8 +67,8 @@ main app or `/api/*` posture.
 
 ## Adding a New Microservice
 
-1. Update `./scripts/generate-unified-api-docs.sh` so it fetches and merges the new service spec into the unified output.
-2. Rerun `./scripts/generate-unified-api-docs.sh` to refresh the checked-in `openapi.json` and `openapi.yaml` artifacts.
+1. Update `./scripts/repo/generate-unified-api-docs.sh` so it fetches and merges the new service spec into the unified output.
+2. Rerun `./scripts/repo/generate-unified-api-docs.sh` to refresh the checked-in `openapi.json` and `openapi.yaml` artifacts.
 3. Only update NGINX docs routing if you intentionally want to expose that service's raw live `v3/api-docs` endpoint for some separate non-browser use case.
 
 ## Dependencies

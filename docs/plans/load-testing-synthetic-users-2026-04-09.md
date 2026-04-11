@@ -71,7 +71,7 @@ After this work:
 - `session-gateway` writes Redis session hashes on real logins. `ext-authz`
   reads those hashes per request and does not care how they were written —
   confirmed by the existing
-  [`scripts/dev/seed-ext-authz-session.sh`](/workspace/orchestration/scripts/dev/seed-ext-authz-session.sh)
+  [`scripts/ops/seed-ext-authz-session.sh`](../../scripts/ops/seed-ext-authz-session.sh)
   which bypasses Auth0 entirely for a single test session.
 - The session data path depends on a companion `user_sessions:{userId}` Redis
   set used by `DELETE /internal/v1/sessions/users/{userId}` for bulk
@@ -84,7 +84,7 @@ After this work:
 - Session TTL defaults to 15 minutes. Long test runs must either refresh via
   `GET /auth/v1/session` heartbeat or accept session churn.
 - `scripts/dev/teardown-loadtest.sh` now provides surgical teardown for the
-  synthetic fixture set, while `scripts/dev/reset-databases.sh` still exists
+  synthetic fixture set, while `scripts/ops/reset-databases.sh` still exists
   for wholesale resets of the three local databases.
 - Auth0 free tier Management API is capped at 2 req/s with burst 10. Paid
   tenants get 15 req/s with burst 50. Bulk import jobs are limited to two
@@ -140,7 +140,7 @@ stress different parts of the system and neither subsumes the other.
 
 Implemented in orchestration:
 
-- `scripts/dev/lib/loadtest-common.sh` — shared kind-only guard, PostgreSQL
+- `scripts/lib/loadtest-common.sh` — shared kind-only guard, PostgreSQL
   helpers, Redis helpers, and loadtest constants
 - `scripts/dev/seed-loadtest-users.sh` — synthetic users, roles, Redis session
   hashes, Redis `user_sessions:{userId}` indexes, and `.loadtest/session-pool.txt`
@@ -164,7 +164,7 @@ Redis session hashes in one pass.
 Files to change:
 
 - `scripts/dev/seed-loadtest-users.sh` (new)
-- `scripts/dev/lib/` — a shared helper for the permission-service psql exec
+- `scripts/lib/` — a shared helper for the permission-service psql exec
   and for redis `HSET` writes in a loop, if one does not already exist
 - `scripts/README.md`
 
@@ -344,7 +344,7 @@ deferred traffic-generation work.
   — session hash shape, `ext-authz` contract, bulk revocation index
 - [`docs/setup/auth0-setup.md`](../setup/auth0-setup.md) — real tenant setup,
   which this plan explicitly does not modify
-- [`scripts/dev/seed-ext-authz-session.sh`](../../scripts/dev/seed-ext-authz-session.sh)
+- [`scripts/ops/seed-ext-authz-session.sh`](../../scripts/ops/seed-ext-authz-session.sh)
   — single-session seeder that proves the direct-to-Redis pattern works
 - [`permission-service/src/main/java/.../UserSyncService.java`](/workspace/permission-service/src/main/java/org/budgetanalyzer/permission/service/UserSyncService.java)
   — authoritative user id / role shape

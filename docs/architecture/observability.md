@@ -249,7 +249,7 @@ watcher is needed.
 
 ```bash
 # Re-render and verify the monitoring stack against current admission policies
-./scripts/dev/verify-monitoring-rendered-manifests.sh
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh
 ```
 
 This script re-renders the pinned chart, verifies every image is
@@ -307,5 +307,5 @@ kubectl get secret -n monitoring prometheus-stack-grafana \
   -o jsonpath="{.data.admin-password}" | base64 --decode; echo
 
 # Verify rendered manifests against admission policies
-./scripts/dev/verify-monitoring-rendered-manifests.sh
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh
 ```

@@ -877,7 +877,7 @@ local_resource(
 local_resource(
     'prometheus-stack',
     cmd='''
-        ./scripts/dev/verify-monitoring-rendered-manifests.sh
+        ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
         kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
         helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
@@ -888,7 +888,7 @@ local_resource(
     deps=[
         'kubernetes/monitoring/prometheus-stack-values.yaml',
         'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
-        'scripts/dev/verify-monitoring-rendered-manifests.sh',
+        'scripts/smoketest/verify-monitoring-rendered-manifests.sh',
     ],
     resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
     labels=['monitoring'],
@@ -962,7 +962,7 @@ local_resource(
 # This runs on the HOST machine to install the CA in browser trust stores
 local_resource(
     'mkcert-tls-secret',
-    cmd='./scripts/dev/setup-k8s-tls.sh',
+    cmd='./scripts/bootstrap/setup-k8s-tls.sh',
     labels=['infrastructure'],
 )
 
@@ -1071,9 +1071,9 @@ local_resource(
 # ServiceEntries and egress routing (Gateway, DestinationRule, VirtualServices)
 local_resource(
     'istio-egress-config',
-    cmd='./scripts/dev/render-istio-egress-config.sh --apply --auth0-issuer-uri "' + os.getenv('AUTH0_ISSUER_URI', '') + '"',
+    cmd='./scripts/ops/render-istio-egress-config.sh --apply --auth0-issuer-uri "' + os.getenv('AUTH0_ISSUER_URI', '') + '"',
     deps=[
-        'scripts/dev/render-istio-egress-config.sh',
+        'scripts/ops/render-istio-egress-config.sh',
         'kubernetes/istio/egress-service-entries.yaml',
         'kubernetes/istio/egress-routing.yaml',
     ],

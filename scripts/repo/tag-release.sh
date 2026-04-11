@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# tag-release.sh - Tag all Budget Analyzer repositories with a common version
+#
+# Usage: ./scripts/repo/tag-release.sh <version>
+# Example: ./scripts/repo/tag-release.sh v1.2.1
+#
+# This script will:
+# 1. Validate the version format
+# 2. Check that all repositories exist and are clean
+# 3. Tag each repository with the specified version
+# 4. Push all tags to remote
+
+set -e  # Exit on error
+
+# Get script directory and source shared configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/repo-config.sh"
+
+# Exclude non-release repositories
+EXCLUDE_FROM_RELEASE=("architecture-conversations")
+RELEASE_REPOS=()
+for REPO in "${REPOS[@]}"; do
+    SKIP=0
+    for EXCLUDED in "${EXCLUDE_FROM_RELEASE[@]}"; do
+        if [ "$REPO" = "$EXCLUDED" ]; then
+            SKIP=1
+            break
+        fi
+    done
+    if [ $SKIP -eq 0 ]; then
+        RELEASE_REPOS+=("$REPO")
+    fi
+done
+REPOS=("${RELEASE_REPOS[@]}")
+
+# Check if version argument is provided
+if [ $# -eq 0 ]; then
+    print_error "No version specified"
+    echo "Usage: $0 <version>"
+    echo "Example: $0 v1.2.1"
+    exit 1
+fi
+
+VERSION=$1
+
+# Validate version format (should be vX.Y.Z)
+if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    print_warning "Version doesn't match standard format (vX.Y.Z)"
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Aborted"
+        exit 0
+    fi
+fi
+
+print_info "Preparing to tag all repositories with version: $VERSION"
+echo
+
+# Phase 1: Validation - check all repos exist and are clean
+print_info "Phase 1: Validating repositories..."
+
+# Run the validation script (pass exclusions so it validates the same repo set)
+if ! EXCLUDE_REPOS="$(IFS=','; echo "${EXCLUDE_FROM_RELEASE[*]}")" "$SCRIPT_DIR/validate-repos.sh"; then
+    print_error "Repository validation failed. Please fix the issues above before tagging."
+    exit 1
+fi
+
+# Additional validation: Check if tag already exists in any repository
+VALIDATION_FAILED=0
+for REPO in "${REPOS[@]}"; do
+    REPO_PATH="$PARENT_DIR/$REPO"
+    cd "$REPO_PATH"
+
+    if git rev-parse "$VERSION" >/dev/null 2>&1; then
+        print_warning "Tag $VERSION already exists in $REPO"
+        VALIDATION_FAILED=1
+    fi
+done
+
+echo
+
+if [ $VALIDATION_FAILED -eq 1 ]; then
+    print_error "Tag already exists in one or more repositories. Aborting."
+    exit 1
+fi
+
+# Phase 2: Confirmation
+print_info "The following repositories will be tagged with $VERSION and pushed:"
+for REPO in "${REPOS[@]}"; do
+    echo "  - $REPO"
+done
+echo
+
+read -p "Continue with tagging and pushing? (y/N) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    print_info "Aborted"
+    exit 0
+fi
+
+echo
+
+# Phase 3: Tagging
+print_info "Phase 2: Tagging repositories..."
+
+TAGGED_REPOS=()
+FAILED_REPOS=()
+
+for REPO in "${REPOS[@]}"; do
+    REPO_PATH="$PARENT_DIR/$REPO"
+    cd "$REPO_PATH"
+
+    if git tag -a "$VERSION" -m "Release $VERSION"; then
+        print_success "✓ Tagged $REPO with $VERSION"
+        TAGGED_REPOS+=("$REPO")
+    else
+        print_error "✗ Failed to tag $REPO"
+        FAILED_REPOS+=("$REPO")
+    fi
+done
+
+echo
+
+# Phase 4: Pushing tags
+if [ ${#TAGGED_REPOS[@]} -gt 0 ]; then
+    print_info "Phase 3: Pushing tags to remote..."
+
+    PUSHED_REPOS=()
+    PUSH_FAILED_REPOS=()
+
+    for REPO in "${TAGGED_REPOS[@]}"; do
+        REPO_PATH="$PARENT_DIR/$REPO"
+        cd "$REPO_PATH"
+
+        if git push origin "$VERSION"; then
+            print_success "✓ Pushed tag from $REPO"
+            PUSHED_REPOS+=("$REPO")
+        else
+            print_error "✗ Failed to push tag from $REPO"
+            PUSH_FAILED_REPOS+=("$REPO")
+        fi
+    done
+
+    echo
+fi
+
+# Summary
+print_info "=== Summary ==="
+
+if [ ${#PUSHED_REPOS[@]} -gt 0 ]; then
+    echo -e "${GREEN}Successfully tagged and pushed ${#PUSHED_REPOS[@]} repositories:${NC}"
+    for REPO in "${PUSHED_REPOS[@]}"; do
+        echo "  ✓ $REPO"
+    done
+fi
+
+if [ ${#PUSH_FAILED_REPOS[@]} -gt 0 ]; then
+    echo
+    echo -e "${YELLOW}Tagged but failed to push ${#PUSH_FAILED_REPOS[@]} repositories:${NC}"
+    for REPO in "${PUSH_FAILED_REPOS[@]}"; do
+        echo "  ! $REPO (tag exists locally)"
+    done
+fi
+
+if [ ${#FAILED_REPOS[@]} -gt 0 ]; then
+    echo
+    echo -e "${RED}Failed to tag ${#FAILED_REPOS[@]} repositories:${NC}"
+    for REPO in "${FAILED_REPOS[@]}"; do
+        echo "  ✗ $REPO"
+    done
+fi
+
+if [ ${#PUSHED_REPOS[@]} -eq ${#REPOS[@]} ]; then
+    echo
+    print_success "All repositories successfully tagged with $VERSION and pushed!"
+    exit 0
+else
+    echo
+    print_warning "Some repositories were not fully processed. Please review the summary above."
+    exit 1
+fi

@@ -17,11 +17,15 @@ The Phase 7 static gate wraps those fixtures together with schema validation,
 `kube-linter`, and repo-specific guardrail scans:
 
 ```bash
-./scripts/dev/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
+That script stays under `scripts/guardrails/` because it is CI-safe. The
+live-cluster runtime proof stays separate under
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh`.
+
 That static gate also generates a small Kyverno replay from
-`scripts/dev/lib/phase-7-allowed-latest.txt` so representative approved local
+`scripts/lib/phase-7-allowed-latest.txt` so representative approved local
 Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures
 stop matching the live apply path.
 

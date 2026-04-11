@@ -42,7 +42,7 @@ sudo mv ./kind /usr/local/bin/kind
 
 ```bash
 # From the orchestration repo root
-./scripts/dev/install-verified-tool.sh kubectl
+./scripts/bootstrap/install-verified-tool.sh kubectl
 ```
 
 This repo pins `kubectl` to `v1.30.8` so the client matches the local Kind node
@@ -51,7 +51,7 @@ image baseline (`kindest/node:v1.30.8`).
 ### Helm
 
 ```bash
-./scripts/dev/install-verified-tool.sh helm
+./scripts/bootstrap/install-verified-tool.sh helm
 ```
 
 Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo now uses
@@ -63,7 +63,7 @@ gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
 ### Tilt
 
 ```bash
-./scripts/dev/install-verified-tool.sh tilt
+./scripts/bootstrap/install-verified-tool.sh tilt
 ```
 
 ### mkcert
@@ -71,7 +71,7 @@ gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
 ```bash
 # Linux
 sudo apt-get install -y libnss3-tools
-./scripts/dev/install-verified-tool.sh mkcert
+./scripts/bootstrap/install-verified-tool.sh mkcert
 
 # macOS
 brew install mkcert nss
@@ -125,7 +125,7 @@ If you want the supported happy path, run `./setup.sh` from the orchestration ro
 
 ```bash
 cd /path/to/orchestration
-./scripts/dev/check-tilt-prerequisites.sh
+./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
 This verifies all dependencies and repositories are properly configured.
@@ -150,7 +150,7 @@ cd /path/to/service-common
 ```bash
 cd /path/to/orchestration
 kind create cluster --config kind-cluster-config.yaml
-./scripts/dev/install-calico.sh
+./scripts/bootstrap/install-calico.sh
 ```
 
 This creates a cluster with port mappings:
@@ -185,7 +185,7 @@ echo '127.0.0.1  app.budgetanalyzer.localhost grafana.budgetanalyzer.localhost' 
 ### 5. Generate Browser TLS Certificates
 
 ```bash
-./scripts/dev/setup-k8s-tls.sh
+./scripts/bootstrap/setup-k8s-tls.sh
 ```
 
 This creates:
@@ -197,7 +197,7 @@ This creates:
 `setup.sh` handles this automatically. To regenerate standalone:
 
 ```bash
-./scripts/dev/setup-infra-tls.sh
+./scripts/bootstrap/setup-infra-tls.sh
 ```
 
 This creates:
@@ -229,8 +229,8 @@ Access the Tilt UI at http://localhost:10350
 After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
 
 ```bash
-./scripts/dev/verify-security-prereqs.sh
-./scripts/dev/verify-phase-4-transport-encryption.sh
+./scripts/smoketest/verify-security-prereqs.sh
+./scripts/smoketest/verify-phase-4-transport-encryption.sh
 ```
 
 These provide deterministic runtime proof for the Phase 0 platform baseline and
@@ -334,7 +334,7 @@ After all services are healthy:
 
 Run the check script and address each error:
 ```bash
-./scripts/dev/check-tilt-prerequisites.sh
+./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
 ### Pods in CrashLoopBackOff
@@ -380,13 +380,13 @@ Common causes:
 Regenerate browser-facing wildcard certificates:
 ```bash
 rm -rf nginx/certs/k8s
-./scripts/dev/setup-k8s-tls.sh
+./scripts/bootstrap/setup-k8s-tls.sh
 ```
 
 Regenerate internal transport-TLS material:
 ```bash
 rm -rf nginx/certs/infra
-./scripts/dev/setup-infra-tls.sh
+./scripts/bootstrap/setup-infra-tls.sh
 ```
 
 ### Kind Cluster Issues
@@ -395,7 +395,7 @@ Delete and recreate with the config file:
 ```bash
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
-./scripts/dev/install-calico.sh
+./scripts/bootstrap/install-calico.sh
 docker inspect kind-control-plane --format '{{.Config.Image}}'
 ```
 

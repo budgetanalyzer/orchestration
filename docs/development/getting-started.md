@@ -38,21 +38,29 @@ From your **host terminal** (not the devcontainer):
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 vim .env          # Review infra password defaults; add Auth0 config/client secret and FRED API key
-./scripts/dev/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
+./scripts/guardrails/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
 tilt up           # Start everything
-./scripts/dev/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
-./scripts/dev/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
-./scripts/dev/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
-./scripts/dev/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the shared session contract and full Session Gateway auth-route contract
-./scripts/dev/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
-./scripts/dev/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
-./scripts/dev/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
-./scripts/dev/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
-./scripts/dev/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended Phase 6 completion gate
-./scripts/dev/verify-phase-7-security-guardrails.sh  # Optional but recommended final local Phase 7 completion gate
+./scripts/smoketest/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
+./scripts/smoketest/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
+./scripts/smoketest/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
+./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the shared session contract and full Session Gateway auth-route contract
+./scripts/smoketest/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
+./scripts/smoketest/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
+./scripts/smoketest/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
+./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended Phase 6 completion gate
+./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local Phase 7 completion gate
+./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
+
+The script tree is now purpose-split: `scripts/bootstrap/` for host and
+cluster setup, `scripts/guardrails/` for CI-safe static checks,
+`scripts/smoketest/` for live-cluster verifiers, `scripts/ops/` for
+interactive maintenance, `scripts/loadtest/` for synthetic fixtures, and
+`scripts/repo/` for cross-repo maintenance. See [`scripts/README.md`](../../scripts/README.md)
+for the full map and the `smoketest.sh` execution order.
 
 Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
 The repo also ships a checked-in fallback
@@ -69,24 +77,24 @@ a pinned verified release if the current Helm binary is missing or unsupported.
 It also refreshes the existing `istio` Helm repo index on every run so the host
 does not reuse stale chart metadata after an Istio version bump.
 `setup.sh` now generates the internal transport-TLS secrets automatically.
-To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the host.
-`./scripts/dev/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
+To regenerate them standalone, run `./scripts/bootstrap/setup-infra-tls.sh` from the host.
+`./scripts/bootstrap/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
 three `infra-tls-*` secrets exist.
-`./scripts/dev/verify-phase-4-transport-encryption.sh` is the transport-TLS
+`./scripts/smoketest/verify-phase-4-transport-encryption.sh` is the transport-TLS
 completion gate for Redis, PostgreSQL, and RabbitMQ.
-`./scripts/dev/verify-phase-5-runtime-hardening.sh` is the final Pod Security
+`./scripts/smoketest/verify-phase-5-runtime-hardening.sh` is the final Pod Security
 and runtime-hardening gate; it reruns the earlier phase verifiers as
 regressions.
-`./scripts/dev/verify-phase-7-static-manifests.sh` is the local static
+`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the local static
 Session 6 guardrail gate and matches the dedicated CI workflow closely enough
 for local reproduction without a cluster. It now also replays representative
 approved local Tilt `:tilt-<hash>` refs through Kyverno so the deploy-time
 admission contract stays aligned with the manifest-literal inventory.
-`./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side
+`./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side
 clean-start proof for the seven app deployments in `default`; run it after
 `tilt up` when you want the specific admission-regression check from the clean
 rebuild workflow.
-`./scripts/dev/verify-session-architecture-phase-5.sh --static-only` is the
+`./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only` is the
 repo-level proof that the Session Gateway cutover still matches orchestration:
 Redis ACL bootstrap uses `session:*` and `oauth2:state:*`, ext-authz and
 Session Gateway share the `session:` key prefix contract plus the
@@ -96,17 +104,17 @@ Session Gateway share the `session:` key prefix contract plus the
 Session Gateway with no standalone `/user` ingress route.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
-`./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local Phase
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local Phase
 7 completion command; it runs the Session 6 static gate and then the Session 7
 live runtime proof in order. The narrower
-`./scripts/dev/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful
+`./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful
 when you only need the live-cluster Phase 7 runtime half.
 All verification scripts run against the current `kubectl` context. If a
 verifier says pods or network policies are missing while Tilt looks healthy,
 check `kubectl config current-context` and `tilt get uiresources` from the same
 host shell before debugging the verifier itself.
 
-> **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and points Linux/macOS hosts at the checked-in verified installer flow for `kubectl`, Helm, Tilt, and `mkcert`.
+> **Setup failing?** Run `./scripts/bootstrap/check-tilt-prerequisites.sh` — it tells you exactly what's missing and points Linux/macOS hosts at the checked-in verified installer flow for `kubectl`, Helm, Tilt, and `mkcert`.
 
 ## External Services (~10 min one-time setup)
 

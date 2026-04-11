@@ -129,8 +129,12 @@ curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.json
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 
 # Run the full Phase 6 completion gate
-./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ```
+
+The surrounding script layout is purpose-split: gateway day-two helpers such as
+Redis/session maintenance live under `scripts/ops/`, while route and browser
+contract proofs live under `scripts/smoketest/`.
 
 ## Frontend Configuration
 
@@ -244,7 +248,7 @@ The Kubernetes access log now includes the derived `remote_addr`, the trusted pr
 Phase 6 Session 7 adds a dedicated runtime proof:
 
 ```bash
-./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
 ```
 
 That verifier creates two temporary no-sidecar probe pods, sends authenticated API traffic through the live ingress gateway, confirms NGINX derives distinct client identities from the ingress-appended downstream hop, proves a forged external `X-Forwarded-For` value cannot pick a new bucket, and checks that separate real clients do not share one API limiter bucket.
@@ -252,7 +256,7 @@ That verifier creates two temporary no-sidecar probe pods, sends authenticated A
 The full Phase 6 completion gate is:
 
 ```bash
-./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ```
 
 It verifies the dev/strict CSP split on the real app paths, warning-only docs visibility,

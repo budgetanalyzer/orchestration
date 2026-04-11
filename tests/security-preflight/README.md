@@ -11,6 +11,10 @@ Containerized runtime test harness for Security Hardening v2 Phase 0.
 
 This suite validates runtime platform security prerequisites after minimal control-plane bootstrapping.
 
+It depends on the reorganized script tree: bootstrap helpers live under
+`scripts/bootstrap/`, while the runtime verifier it exercises lives under
+`scripts/smoketest/`.
+
 It provisions only what the verifier needs:
 
 1. Kind cluster with `disableDefaultCNI`
@@ -19,7 +23,7 @@ It provisions only what the verifier needs:
 4. Istio base + `istiod`
 5. Namespace baseline labels (Istio + Pod Security warn/audit)
 6. Kyverno + smoke policy
-7. `scripts/dev/verify-security-prereqs.sh`
+7. `scripts/smoketest/verify-security-prereqs.sh`
 
 ## Usage
 

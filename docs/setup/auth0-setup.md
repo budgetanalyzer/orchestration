@@ -35,7 +35,7 @@ AUTH0_ISSUER_URI=https://dev-abc123.us.auth0.com/
 ```
 
 That same `AUTH0_ISSUER_URI` value also drives the Istio Auth0 egress allowlist
-through `scripts/dev/render-istio-egress-config.sh`. If you change tenants,
+through `scripts/ops/render-istio-egress-config.sh`. If you change tenants,
 re-render or reapply the egress config so `session-gateway-idp-config` and the
 Istio allowlist stay aligned.
 

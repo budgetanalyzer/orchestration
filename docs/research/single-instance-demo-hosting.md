@@ -212,7 +212,7 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 - All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis Deployment
 - All `kubernetes/istio/*` — `peer-authentication.yaml` (mesh-wide STRICT mTLS), `authorization-policies.yaml`, `ext-authz-policy.yaml`, the istiod extension provider for `ext-authz-http`, the istio ingress gateway, the egress gateway, the egress `REGISTRY_ONLY` outbound traffic policy and `ServiceEntry`s
 - `kubernetes/network-policies/*` — the default-deny baseline plus the per-namespace allow rules for `istio-ingress`, `istio-egress`, and infrastructure
-- `kubernetes/kyverno/*` — the Phase 7 ClusterPolicies and the static gate (`scripts/dev/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.
+- `kubernetes/kyverno/*` — the Phase 7 ClusterPolicies and the static gate (`scripts/guardrails/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.
 - `kubernetes/gateway/*` — the Gateway API HTTPRoutes that fan traffic from the Istio ingress gateway into `nginx-gateway` (and onward to the services)
 - The ext_authz session-edge pattern, complete with `cookie` request-header passthrough and `x-user-id`/`x-roles`/`x-permissions` upstream injection
 - mTLS between sidecars (Istio handles this — it does not care that all sidecars happen to live on one node)

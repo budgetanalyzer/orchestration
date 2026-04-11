@@ -28,30 +28,30 @@ kubectl cluster-info --context kind-kind
 docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 # Validate Phase 0 security prerequisites
-./scripts/dev/verify-security-prereqs.sh
+./scripts/smoketest/verify-security-prereqs.sh
 
 # Validate Phase 1 credential isolation
-./scripts/dev/verify-phase-1-credentials.sh
+./scripts/smoketest/verify-phase-1-credentials.sh
 
 # Validate the Session Architecture Rethink Phase 5 contract
-./scripts/dev/verify-session-architecture-phase-5.sh --static-only
+./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only
 
 # Validate Phase 2 network policy enforcement
-./scripts/dev/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-phase-2-network-policies.sh
 
 # Validate Phase 3 ingress/egress hardening
-./scripts/dev/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-phase-3-istio-ingress.sh
 ```
 
-`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform
-baseline. `./scripts/dev/verify-session-architecture-phase-5.sh` proves the
+`./scripts/smoketest/verify-security-prereqs.sh` proves the Phase 0 platform
+baseline. `./scripts/smoketest/verify-session-architecture-phase-5.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
 deployment, and the full Session Gateway auth-route ownership contract for
 `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`, with no standalone
 `/user` match.
-`./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
+`./scripts/smoketest/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
 gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/v1/session`. The browser only
@@ -272,10 +272,10 @@ curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/aut
 kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
 
 # Verify the full Session Architecture Rethink Phase 5 contract
-./scripts/dev/verify-session-architecture-phase-5.sh
+./scripts/smoketest/verify-session-architecture-phase-5.sh
 
 # Flush all Redis data (clears all sessions)
-./scripts/dev/flush-redis.sh
+./scripts/ops/flush-redis.sh
 ```
 
 **Log Patterns to Watch**:
@@ -557,7 +557,7 @@ kubectl get authorizationpolicy -n default -o yaml | rg 'cluster.local/ns/istio-
 
 **Cause**: The ingress-facing `AuthorizationPolicy` principals no longer match the rendered ingress gateway ServiceAccount. The current auto-provisioned identity is `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`; older manifests that allow `.../sa/istio-ingress-gateway` deny the real ingress workload.
 
-**Fix**: Update the principals in `kubernetes/istio/authorization-policies.yaml` to `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`, then re-apply and rerun `./scripts/dev/verify-phase-3-istio-ingress.sh`.
+**Fix**: Update the principals in `kubernetes/istio/authorization-policies.yaml` to `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`, then re-apply and rerun `./scripts/smoketest/verify-phase-3-istio-ingress.sh`.
 
 ### Missing Istiod Egress
 
@@ -597,7 +597,7 @@ kubectl patch felixconfiguration default --type=merge -p '{"spec":{"defaultEndpo
 
 Run the Phase 2 verifier to confirm policies are enforced (not just present):
 ```bash
-./scripts/dev/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-phase-2-network-policies.sh
 ```
 
 This script uses disposable probe pods to test both positive (allowed) and negative (blocked) connectivity paths. Allowed paths pass within a bounded retry window; blocked paths must fail consistently across repeated attempts.
@@ -648,7 +648,7 @@ kind delete cluster
 kind create cluster --config kind-cluster-config.yaml
 
 # Install Calico (required for NetworkPolicy enforcement)
-./scripts/dev/install-calico.sh
+./scripts/bootstrap/install-calico.sh
 
 # Confirm the recreated cluster matches kind-cluster-config.yaml
 docker inspect kind-control-plane --format '{{.Config.Image}}'
@@ -657,10 +657,10 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 tilt up
 
 # Verify the Phase 0 platform baseline once platform resources are healthy
-./scripts/dev/verify-security-prereqs.sh
+./scripts/smoketest/verify-security-prereqs.sh
 
 # Verify the Phase 3 completion gate after ingress resources are ready
-./scripts/dev/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-phase-3-istio-ingress.sh
 ```
 
 ### Reset Single Service
@@ -676,5 +676,5 @@ tilt trigger transaction-service
 ### Clear Redis Sessions
 
 ```bash
-./scripts/dev/flush-redis.sh
+./scripts/ops/flush-redis.sh
 ```

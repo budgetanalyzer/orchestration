@@ -188,7 +188,7 @@ kubectl get networkpolicies -n istio-egress
 
 # Run the Phase 2 verifier for runtime proof of the current Istio ingress,
 # service-to-service, infrastructure, and Istio egress gateway allowlists
-./scripts/dev/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-phase-2-network-policies.sh
 ```
 
 **Verify service is not exposed publicly**:

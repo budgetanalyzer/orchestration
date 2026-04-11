@@ -13,7 +13,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-session-architecture-phase-5.sh [options]
+Usage: ./scripts/smoketest/verify-session-architecture-phase-5.sh [options]
 
 Verifies the Session Architecture Rethink Phase 5 contract:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
@@ -260,6 +260,7 @@ parse_auth_route_rules() {
             current_rule = 0
             path_indent = -1
             backend_refs_indent = -1
+            backend_ref_item_indent = -1
             current_path_type = ""
         }
 
@@ -277,18 +278,19 @@ parse_auth_route_rules() {
                 in_rules = 0
                 path_indent = -1
                 backend_refs_indent = -1
+                backend_ref_item_indent = -1
                 current_path_type = ""
             }
         }
 
         !in_rules { next }
 
-        /^[[:space:]]*-[[:space:]]*matches:[[:space:]]*$/ {
+        /^[[:space:]]*-[[:space:]]*(matches|backendRefs|filters):[[:space:]]*$/ {
             current_rule++
             path_indent = -1
             backend_refs_indent = -1
+            backend_ref_item_indent = -1
             current_path_type = ""
-            next
         }
 
         path_indent >= 0 {
@@ -303,8 +305,10 @@ parse_auth_route_rules() {
             current_indent = indent_of($0)
             if ($0 !~ /^[[:space:]]*$/ \
                 && (current_indent < backend_refs_indent \
-                || (current_indent == backend_refs_indent && $0 !~ /^[[:space:]]*-/))) {
+                || (current_indent == backend_refs_indent && $0 !~ /^[[:space:]]*-/) \
+                || (backend_ref_item_indent >= 0 && current_indent <= backend_ref_item_indent && $0 !~ /^[[:space:]]*-/))) {
                 backend_refs_indent = -1
+                backend_ref_item_indent = -1
             }
         }
 
@@ -329,14 +333,27 @@ parse_auth_route_rules() {
             next
         }
 
-        /^[[:space:]]*backendRefs:[[:space:]]*$/ {
+        /^[[:space:]]*(-[[:space:]]*)?backendRefs:[[:space:]]*$/ {
             backend_refs_indent = indent_of($0)
+            backend_ref_item_indent = -1
             next
+        }
+
+        backend_refs_indent >= 0 && /^[[:space:]]*-[[:space:]]*/ {
+            backend_ref_item_indent = indent_of($0)
         }
 
         backend_refs_indent >= 0 && /^[[:space:]]*-[[:space:]]*name:[[:space:]]*/ {
             backend_name = $0
             sub(/^[[:space:]]*-[[:space:]]*name:[[:space:]]*/, "", backend_name)
+            gsub(/"/, "", backend_name)
+            print "BACKEND\t" current_rule "\t" backend_name
+            next
+        }
+
+        backend_ref_item_indent >= 0 && indent_of($0) > backend_ref_item_indent && /^[[:space:]]*name:[[:space:]]*/ {
+            backend_name = $0
+            sub(/^[[:space:]]*name:[[:space:]]*/, "", backend_name)
             gsub(/"/, "", backend_name)
             print "BACKEND\t" current_rule "\t" backend_name
         }
@@ -441,6 +458,7 @@ assert_ready_deployment() {
     fi
 }
 
+# shellcheck disable=SC2329 # Invoked indirectly through capture_command_output.
 redis_exec() {
     kubectl exec -n infrastructure "$REDIS_POD" -- \
         redis-cli \
@@ -470,10 +488,12 @@ run_static_checks() {
     session_gateway_application_file="${REPO_ROOT}/../session-gateway/src/main/resources/application.yml"
     session_gateway_cookie_helper_file="${REPO_ROOT}/../session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session/SessionCookieHelper.java"
 
+    # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
     assert_file_contains \
         "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
         'user session-gateway reset on >${REDIS_SESSION_GATEWAY_PASSWORD} ~session:* ~user_sessions:* ~oauth2:state:* &* +@all' \
         "Redis ACL bootstrap grants session-gateway access to session:* and oauth2:state:*"
+    # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
     assert_file_contains \
         "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
         'user ext-authz reset on >${REDIS_EXT_AUTHZ_PASSWORD} ~session:* +hgetall +ping +auth +hello +info' \

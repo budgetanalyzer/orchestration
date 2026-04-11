@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/dev/seed-loadtest-users.sh
+# scripts/loadtest/seed-loadtest-users.sh
 #
 # Bulk-creates synthetic Budget Analyzer users for Track 1 (data-path) load
 # testing, then writes matching Redis session hashes plus the per-user
@@ -8,7 +8,7 @@
 # so later traffic-replay tooling can reuse the seeded sessions.
 #
 # Usage:
-#   ./scripts/dev/seed-loadtest-users.sh [options]
+#   ./scripts/loadtest/seed-loadtest-users.sh [options]
 #
 # Options:
 #   --count N          Number of synthetic users/sessions (default: 10)

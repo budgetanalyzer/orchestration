@@ -46,7 +46,8 @@ require_cluster_access() {
 
 new_temp_namespace() {
     local prefix="$1"
-    local ns="${prefix}-$(date +%s)-$RANDOM"
+    local ns
+    ns="${prefix}-$(date +%s)-$RANDOM"
     cat <<MANIFEST | kubectl apply -f - >/dev/null
 apiVersion: v1
 kind: Namespace
@@ -113,7 +114,7 @@ spec:
       command:
         - sh
         - -c
-        - mkdir -p /www && echo ok >/www/index.html && exec httpd -f -p 8080 -h /www
+        - mkdir -p /tmp/www && echo ok >/tmp/www/index.html && exec httpd -f -p 8080 -h /tmp/www
       ports:
         - containerPort: 8080
       securityContext:
@@ -232,6 +233,10 @@ kind: Pod
 metadata:
   name: insecure-psa-smoke
 spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: app
       image: ${BUSYBOX_IMAGE}
@@ -282,9 +287,8 @@ prove_istio_readiness_and_injection() {
     local pod_name="istio-sidecar-smoke"
     kubectl delete pod "$pod_name" -n default --ignore-not-found >/dev/null 2>&1 || true
 
-    # PodSecurity warning expected: Istio's injected istio-init container needs
-    # NET_ADMIN/NET_RAW and runs as root. Fixed properly in Phase 5 (manifest
-    # hardening + Istio CNI or ambient mode to eliminate istio-init).
+    # Keep this probe compatible with restricted PSA and Phase 7 admission so
+    # the check proves sidecar injection rather than an outdated pod shape.
     cat <<MANIFEST | kubectl apply -n default -f - >/dev/null
 apiVersion: v1
 kind: Pod
@@ -293,6 +297,10 @@ metadata:
   labels:
     app: ${pod_name}
 spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: app
       image: ${BUSYBOX_IMAGE}

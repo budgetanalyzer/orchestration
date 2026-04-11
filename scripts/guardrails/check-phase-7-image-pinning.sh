@@ -145,7 +145,7 @@ print_approved_local_tilt_refs() {
 
 usage() {
     cat <<'EOF'
-Usage: scripts/dev/check-phase-7-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
+Usage: scripts/guardrails/check-phase-7-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
 
 Without flags, scans the Phase 7 image-pinning inventory for unexpected
 checked-in :latest refs and missing third-party @sha256 digests.

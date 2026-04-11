@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/dev/teardown-loadtest.sh
+# scripts/loadtest/teardown-loadtest.sh
 #
 # Removes every synthetic Track 1 artifact created by the loadtest fixture
 # scripts: Redis session hashes, per-user session indexes, transaction-service
@@ -7,8 +7,8 @@
 # the generated `.loadtest/session-pool.txt` file.
 #
 # Usage:
-#   ./scripts/dev/teardown-loadtest.sh
-#   ./scripts/dev/teardown-loadtest.sh --help
+#   ./scripts/loadtest/teardown-loadtest.sh
+#   ./scripts/loadtest/teardown-loadtest.sh --help
 #
 # Safety:
 #   Refuses to run against any kubectl context that does not start with

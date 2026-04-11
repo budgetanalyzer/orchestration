@@ -2,7 +2,7 @@
 
 # generate-unified-api-docs.sh - Generate unified OpenAPI spec for all microservices
 #
-# Usage: ./scripts/generate-unified-api-docs.sh
+# Usage: ./scripts/repo/generate-unified-api-docs.sh
 #
 # This script will:
 # 1. Fetch OpenAPI specs from running services through the Kubernetes service proxy,
@@ -135,7 +135,7 @@ fetch_service_spec() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/docs-aggregator"
 
 trap 'handle_unexpected_error "$?" "$LINENO"' ERR

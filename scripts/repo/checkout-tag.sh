@@ -2,7 +2,7 @@
 
 # checkout-tag.sh - Checkout a specific tag across all Budget Analyzer repositories
 #
-# Usage: ./checkout-tag.sh <tag-name>
+# Usage: ./scripts/repo/checkout-tag.sh <tag-name>
 #
 # This script will:
 # 1. Verify all repositories are on main branch

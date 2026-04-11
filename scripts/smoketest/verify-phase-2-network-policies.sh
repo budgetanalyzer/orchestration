@@ -14,7 +14,7 @@
 # Prerequisites: Tilt running with all services and network policies applied.
 #
 # Usage:
-#   ./scripts/dev/verify-phase-2-network-policies.sh
+#   ./scripts/smoketest/verify-phase-2-network-policies.sh
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ LAST_FAILURE_ATTEMPTS=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-2-network-policies.sh
+Usage: ./scripts/smoketest/verify-phase-2-network-policies.sh
 
 Options:
   -h, --help                    Show this help text.

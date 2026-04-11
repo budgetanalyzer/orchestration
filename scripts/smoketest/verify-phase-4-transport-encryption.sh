@@ -12,7 +12,7 @@
 # host via ./scripts/bootstrap/setup-infra-tls.sh.
 #
 # Usage:
-#   ./scripts/dev/verify-phase-4-transport-encryption.sh
+#   ./scripts/smoketest/verify-phase-4-transport-encryption.sh
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-4-transport-encryption.sh
+Usage: ./scripts/smoketest/verify-phase-4-transport-encryption.sh
 
 Options:
   -h, --help                    Show this help text.

@@ -133,7 +133,7 @@ kubectl apply -f "$ORCHESTRATION_DIR/kubernetes/kyverno/policies/00-smoke-disall
 print_success "Kyverno smoke policy applied"
 
 print_step "Running runtime verifier"
-"$ORCHESTRATION_DIR/scripts/dev/verify-security-prereqs.sh"
+"$ORCHESTRATION_DIR/scripts/smoketest/verify-security-prereqs.sh"
 print_success "Runtime verifier passed"
 
 echo

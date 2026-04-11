@@ -38,7 +38,7 @@ PROMETHEUS_POD=""
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-monitoring-runtime.sh [options]
+Usage: ./scripts/smoketest/verify-monitoring-runtime.sh [options]
 
 Verifies that Prometheus is scraping the four Spring Boot services and that the
 JVM/Spring Boot Grafana dashboards have the labels and metrics they depend on.

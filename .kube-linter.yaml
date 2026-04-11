@@ -2,7 +2,7 @@
 #
 # These excludes are intentional:
 # - `latest-tag` conflicts with the narrower Session 1/2 contract implemented
-#   in scripts/dev/check-phase-7-image-pinning.sh, which allows only the seven
+#   in scripts/guardrails/check-phase-7-image-pinning.sh, which allows only the seven
 #   documented local Tilt-built `:latest` images.
 # - `no-read-only-root-fs` is not yet a universal repo baseline; Phase 5 proves
 #   the workloads that are intentionally hardened there.

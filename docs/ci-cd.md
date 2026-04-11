@@ -69,8 +69,8 @@ the workflow when a new file path is added to the static scope.
 
 What it runs:
 
-- `./scripts/dev/verify-phase-7-static-manifests.sh`
-- `./scripts/dev/verify-phase-7-static-manifests.sh --self-test`
+- `./scripts/guardrails/verify-phase-7-static-manifests.sh`
+- `./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test`
 
 The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 `kyverno` binaries through `scripts/bootstrap/install-verified-tool.sh`, then runs:
@@ -88,14 +88,14 @@ The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 Use the same command locally to reproduce workflow failures without a cluster:
 
 ```bash
-./scripts/dev/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
 For full local Phase 7 completion on a live cluster, use the separate final
 gate:
 
 ```bash
-./scripts/dev/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
 That wrapper intentionally stays out of GitHub Actions because the runtime
@@ -125,13 +125,13 @@ To run the same checks locally:
 For orchestration static security guardrails:
 
 ```bash
-./scripts/dev/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
 For the full local Phase 7 completion gate on a running cluster:
 
 ```bash
-./scripts/dev/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
 ## Future Enhancements

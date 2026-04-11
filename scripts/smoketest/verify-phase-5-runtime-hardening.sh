@@ -9,9 +9,9 @@
 # earlier phase verifiers unless explicitly skipped.
 #
 # Usage:
-#   ./scripts/dev/verify-phase-5-runtime-hardening.sh
-#   ./scripts/dev/verify-phase-5-runtime-hardening.sh --skip-regressions
-#   ./scripts/dev/verify-phase-5-runtime-hardening.sh --regression-timeout 10m
+#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
+#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh --skip-regressions
+#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh --regression-timeout 10m
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-5-runtime-hardening.sh
+Usage: ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
 
 Options:
   --skip-regressions          Skip Phase 1 through Phase 4 regression verifiers.

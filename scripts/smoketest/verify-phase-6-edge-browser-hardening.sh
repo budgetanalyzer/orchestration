@@ -11,9 +11,9 @@
 # are warning-only and do not block Phase 6 completion.
 #
 # Usage:
-#   ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
-#   ./scripts/dev/verify-phase-6-edge-browser-hardening.sh --subverifier-timeout 20m
-#   ./scripts/dev/verify-phase-6-edge-browser-hardening.sh --phase5-regression-timeout 10m
+#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh --subverifier-timeout 20m
+#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh --phase5-regression-timeout 10m
 
 set -euo pipefail
 
@@ -53,7 +53,7 @@ WARNED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+Usage: ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 
 Options:
   --subverifier-timeout <dur>         Timeout for each nested verifier

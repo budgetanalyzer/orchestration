@@ -2,8 +2,8 @@
 
 # tag-release.sh - Tag all Budget Analyzer repositories with a common version
 #
-# Usage: ./scripts/tag-release.sh <version>
-# Example: ./scripts/tag-release.sh v1.2.1
+# Usage: ./scripts/repo/tag-release.sh <version>
+# Example: ./scripts/repo/tag-release.sh v1.2.1
 #
 # This script will:
 # 1. Validate the version format

@@ -1,258 +1,144 @@
 # Scripts Directory
 
-This directory contains automation and tooling scripts for the Budget Analyzer orchestration repository.
+This directory contains automation for the Budget Analyzer orchestration
+repository. Scripts are grouped by purpose so setup, validation, operational,
+loadtest, and repository-management tasks have stable entry points.
 
-## Documentation Validation Scripts
+## Layout
 
-### validate-claude-context.sh
-
-Validates AGENTS.md files for broken references and documentation issues.
-
-**Usage:**
-```bash
-# From repository root
-./scripts/validate-claude-context.sh
-
-# Or from scripts directory
-cd scripts && ./validate-claude-context.sh
-
-# Or from anywhere with full path
-/path/to/orchestration/scripts/validate-claude-context.sh
-```
-
-**Note:** The script automatically changes to the repository root directory, so it works correctly regardless of where you call it from.
-
-**What it checks:**
-- `@references` point to existing files (e.g., `@nginx/nginx.k8s.conf`)
-- AGENTS.md files are not too large (< 200 lines recommended for pattern-based docs)
-- Common commands referenced (docker compose, mvnw) are available
-
-**Exit codes:**
-- `0` - All checks passed (with or without warnings)
-- `1` - Validation failed (broken references found)
-
-**Recommended usage:**
-- Run before committing changes to AGENTS.md files
-- Add to CI/CD pipeline to catch drift early
-- Run after reorganizing documentation structure
-
-### doc-coverage-report.sh
-
-Reports on documentation coverage across the Budget Analyzer project.
-
-**Usage:**
-```bash
-# From repository root
-./scripts/doc-coverage-report.sh
-
-# Or from scripts directory
-cd scripts && ./doc-coverage-report.sh
-
-# Or from anywhere with full path
-/path/to/orchestration/scripts/doc-coverage-report.sh
-```
-
-**Note:** The script automatically changes to the repository root directory, so it works correctly regardless of where you call it from.
-
-**What it reports:**
-- AGENTS.md files presence and size
-- Documentation structure (docs/architecture, docs/decisions, etc.)
-- Architecture Decision Records (ADRs)
-- NGINX gateway configuration
-- Docker Compose configuration
-- Service-common documentation
-- Service API documentation (OpenAPI specs)
-
-**Output:**
-- Summary with pass/fail status for each category
-- Overall coverage percentage
-- Color-coded status (Excellent/Good/Fair/Poor)
-
-**Recommended usage:**
-- Run quarterly to assess documentation health
-- Use to identify gaps in documentation
-- Track improvement over time
-
-## Repository Management Scripts
-
-### repo-config.sh
-
-Configuration for repository structure and service locations.
-
-### validate-repos.sh
-
-Validates repository structure and checks for common issues.
-
-**Usage:**
-```bash
-./scripts/validate-repos.sh
-```
-
-## Release Management Scripts
-
-### tag-release.sh
-
-Creates and pushes release tags for services.
-
-**Usage:**
-```bash
-./scripts/tag-release.sh v1.2.3
-```
-
-## API Documentation Scripts
-
-### generate-unified-api-docs.sh
-
-Generates the checked-in unified OpenAPI artifacts used by `/api-docs`.
-
-The script fetches live `v3/api-docs` payloads from the in-cluster services via
-the Kubernetes service proxy and falls back to an in-pod localhost fetch when
-the proxy path is unavailable, then merges them and writes
-`docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and keeps
-the browser-facing docs page decoupled from per-service runtime docs routes.
-
-**Usage:**
-```bash
-./scripts/generate-unified-api-docs.sh
-```
-
-The script exits non-zero and prints the underlying `kubectl` error to stderr if
-any service spec cannot be fetched or returns invalid OpenAPI JSON. YAML output
-uses `yq` when available and otherwise falls back to Python PyYAML or `node`.
-Override the default proxy timeout with `KUBECTL_REQUEST_TIMEOUT`, for example:
-
-```bash
-KUBECTL_REQUEST_TIMEOUT=30s ./scripts/generate-unified-api-docs.sh
-```
-
-## Development Scripts
-
-Development scripts are split by purpose. Host setup and prerequisite scripts
-live in `scripts/bootstrap/`, day-to-day cluster operations live in
-`scripts/ops/`, and the remaining security and smoke verification scripts stay
-in `scripts/dev/` until the broader scripts reorganization is complete.
-
-Key scripts:
-
-- `scripts/bootstrap/install-verified-tool.sh` - Host-side installer for the repo-pinned `kubectl`, Helm, Tilt, `mkcert`, `kubeconform`, `kube-linter`, and `kyverno` releases. It verifies checked-in SHA-256 values before installing.
-- `scripts/bootstrap/check-tilt-prerequisites.sh` - Tooling/repo preflight checks and optional runtime security verification.
-- `scripts/bootstrap/setup-k8s-tls.sh` - Host-only bootstrap for the browser-facing wildcard certificate and TLS secret.
-- `scripts/bootstrap/setup-infra-tls.sh` - Host-only bootstrap for the internal `infra-ca` plus the Redis/PostgreSQL/RabbitMQ TLS secrets. `setup.sh` calls it during the standard local platform bootstrap.
-- `scripts/ops/render-istio-egress-config.sh` - Renders or applies the checked-in Auth0/FRED Istio egress manifests. The Auth0 host is derived from `AUTH0_ISSUER_URI` so the egress allowlist can stay aligned with `ConfigMap/session-gateway-idp-config` in both local Tilt and production config-sourcing flows.
-- `scripts/dev/check-secrets-only-handling.sh` - Static inventory check for the local Tilt-generated secret payloads. It fails if non-secret config keys drift back into Kubernetes `Secret` objects without an explicit inventory update.
-- `scripts/ops/seed-ext-authz-session.sh` - Seeds a test ext-authz session in Redis using the TLS-only in-cluster Redis listener.
-- `scripts/bootstrap/install-calico.sh` - Installs pinned Calico CNI for Kind clusters created with `disableDefaultCNI`.
-- `scripts/dev/verify-security-prereqs.sh` - Deterministic Phase 0 runtime proof (NetworkPolicy, PSA, Istio readiness, and the retained Kyverno smoke-policy bootstrap check that now runs alongside the broader Phase 7 admission suite).
-- `scripts/dev/verify-monitoring-rendered-manifests.sh` - Re-renders the pinned `prometheus-community/kube-prometheus-stack` `83.4.0` chart with the checked-in monitoring values, fails on any non-digest image or host-level monitoring workload shape, and server-dry-runs the rendered Deployment/StatefulSet/DaemonSet/Job objects against the current cluster after the repo-managed `monitoring` namespace exists.
-- `scripts/dev/verify-phase-1-credentials.sh` - Phase 1 runtime proof for PostgreSQL, RabbitMQ, Redis ACLs, and ext-authz over Redis TLS.
-- `scripts/dev/verify-phase-2-network-policies.sh` - Phase 2 runtime proof for current NetworkPolicy allowlists across Istio ingress, service-to-service, infrastructure, and Istio egress gateway paths.
-- `scripts/dev/verify-phase-3-istio-ingress.sh` - Phase 3 runtime proof for Istio ingress/egress hardening, ext_authz integration, ingress path ownership, forwarded-header behavior, and `AUTH0_ISSUER_URI` to egress-host alignment.
-- `scripts/dev/verify-phase-4-transport-encryption.sh` - Phase 4 runtime proof for Redis/PostgreSQL/RabbitMQ client TLS verification, secondary RabbitMQ listener-state checks, and Phase 1/2 regression coverage.
-- `scripts/dev/verify-phase-5-runtime-hardening.sh` - Phase 5 runtime proof for PSA enforcement targets, Istio CNI sidecar compatibility, service-account token hardening, repo-managed workload runtime security contexts, the Session 4 `nginx-gateway` specifics (UID/GID `101`, read-only config/docs mounts, and the explicit `/tmp` writable mount), the Session 5 `budget-analyzer-web` UID/GID `1001` contract, the Redis Session 6 specifics (`runAsUser`/`runAsGroup` plus the explicit `/tmp` and `/data` writable mounts), the PostgreSQL Session 7 specifics (main-container `runAsUser`/`runAsGroup`, explicit `/tmp` and `/var/run/postgresql` writable mounts, plus the hardened `fix-tls-perms` init-container baseline including `readOnlyRootFilesystem: true`), the RabbitMQ Session 8 specifics (`fsGroup`, `runAsUser`/`runAsGroup`, read-only config/TLS mounts, and the explicit `/var/lib/rabbitmq` PVC mount), and Phase 1 through Phase 4 regression coverage. The regression reruns are bounded per script with `--regression-timeout` (default `10m`) so the final Phase 5 gate fails instead of hanging indefinitely.
-- `scripts/dev/verify-session-architecture-phase-5.sh` - Session Architecture Rethink Phase 5 proof for the unified Redis session namespace and shared browser-session contract. It verifies the checked-in Redis ACL bootstrap, the shared `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults across `orchestration/ext-authz` and the sibling `session-gateway` repo, the explicit `SESSION_COOKIE_NAME=BA_SESSION` deployment wiring for `ext-authz`, the absence of a deployment-time `SESSION_KEY_PREFIX` override in `ext-authz`, the checked-in `/auth/*` HTTPRoute ownership, the removal of any standalone `/user` auth-route match, and, against a live cluster, the `auth-route`, `ext-authz`, and Redis ACL/keyspace state. Use `--static-only` when you only want repo-level validation, or `--require-live-session` after creating a real session if you want the verifier to insist on at least one live `session:*` key.
-- `scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` - Phase 6 Session 7 runtime proof that NGINX trusts only the pod-local sidecar hop for `real_ip_*`, preserves the forwarded-header chain, rejects forged external `X-Forwarded-For` bucket selection, and gives distinct downstream clients separate API limiter buckets. The burst step now uses controlled in-pod parallelism so the verifier can reliably trigger the current `limit_req` contract instead of depending on a sequential loop being fast enough.
-- `scripts/dev/verify-phase-6-edge-browser-hardening.sh` - Phase 6 completion gate. It proves the checked-in dev/strict CSP split on the real app paths, the local-production route contract, direct auth-edge throttling coverage for `/login`, `/auth/v1/user`, `/logout`, and `/login/oauth2/*`, reruns the Session 3 CSP audit and Session 7 API identity verifier, and then reruns the Phase 5 runtime-hardening cascade. It still probes `/api-docs`, but docs-route problems are warning-only so breakage stays visible without blocking Phase 6 completion. It does not replace the manual browser-console validation still required on `/_prod-smoke/`.
-- `scripts/dev/check-phase-7-image-pinning.sh` - Static Phase 7 Session 2 scan for orchestration-owned image refs. It reads the maintained inventories in `scripts/lib/phase-7-image-pinning-targets.txt` and `scripts/lib/phase-7-allowed-latest.txt`, validates that the approved local-image list still matches the checked-in `repo:latest` contract, fails if an orchestration-owned third-party `image:`/`FROM`/verifier image constant is missing `@sha256:`, and fails if any unexpected checked-in `:latest` appears outside the approved local Tilt image repos. It prefers `rg` for the inventory scan but falls back to standard `grep` so CI and local reproductions do not depend on ripgrep being preinstalled. It also exposes the approved repo list and representative `:tilt-<hash>` refs for the static replay guard.
-- `scripts/dev/verify-phase-7-static-manifests.sh` - Phase 7 Session 6 local static guardrail gate. It bootstraps pinned `kubeconform`, `kube-linter`, and `kyverno` binaries into a repo-local cache, validates checked-in manifests while allowing the explicitly tracked missing kubeconform schemas for repo-managed CRDs, runs the checked-in Kyverno fixture suite, runs a generated Kyverno replay for representative approved local Tilt `:tilt-<hash>` deploy refs using the current Tilt `imagePullPolicy: IfNotPresent` contract, reuses the image-pinning check, scans active setup guidance for forbidden pipe-to-shell patterns, verifies namespace PSA labels, and ships `--self-test` to prove the workflow rejects intentional bad fixtures. Its repo-pattern scans also fall back to `grep` when `rg` is unavailable.
-- `scripts/dev/verify-clean-tilt-deployment-admission.sh` - Host-side clean-start proof for the app workloads after `./setup.sh` and `tilt up`. It waits for the seven expected default-namespace deployments, checks their rollouts, prints deployment/pod/event summaries, and fails if `phase7-require-third-party-image-digests` still reports `PolicyViolation` events in `default`.
-- `scripts/dev/verify-phase-7-runtime-guardrails.sh` - Phase 7 Session 7 live-cluster guardrail proof. It creates pinned, policy-compliant Redis, PostgreSQL, and RabbitMQ probe pods plus self-cleaning temporary `NetworkPolicy` rules, proves Redis ACL command/key-pattern denials, proves PostgreSQL cross-database denials, proves RabbitMQ least-privilege denials over the live AMQPS path used by workloads, explicitly verifies the temporary probe resources and forbidden RabbitMQ vhost are cleaned up, and then reruns `scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused runtime regression umbrella for the intended Phase 2 through Phase 6 coverage.
-- `scripts/dev/verify-phase-7-security-guardrails.sh` - Final local Phase 7 completion gate. It runs `scripts/dev/verify-phase-7-static-manifests.sh` first and `scripts/dev/verify-phase-7-runtime-guardrails.sh` second, keeping CI intentionally static-only while giving contributors one clear local command for full Phase 7 completion. It accepts only the narrow runtime timeout passthrough flags `--runtime-wait-timeout` and `--runtime-regression-timeout`.
-- `scripts/lib/redis-cli.sh` - Shared shell helper for Redis TLS commands executed inside the Redis pod.
-
-All verification scripts execute against the current `kubectl` context. If they
-report missing pods, secrets, or policies while Tilt appears healthy, confirm
-the active context and Tilt resource state from the same host shell first.
-
-### Synthetic loadtest data scripts
-
-Track 1 is currently the synthetic data-fixture path only. Use these scripts
-when you want realistic local users, sessions, and transaction volume for
-flows like user deactivation and session revocation, without generating local
-traffic.
-
-- `scripts/dev/seed-loadtest-users.sh` - Seeds `permission-service.users`,
-  `user_roles`, Redis `session:*` hashes, and Redis `user_sessions:{userId}`
-  sets for deterministic synthetic users. Supports `--count`,
-  `--admin-count`, and `--session-ttl`.
-- `scripts/dev/seed-loadtest-transactions.sh` - Adds deterministic synthetic
-  transactions for the seeded users. Supports `--per-user` and `--shape`
-  (`uniform`, `heavy-tail`, `sparse`).
-- `scripts/dev/teardown-loadtest.sh` - Removes all synthetic Redis and
-  PostgreSQL artifacts by the checked-in `loadtest` markers and deletes the
-  generated `.loadtest/session-pool.txt` file.
-
-Typical sequence:
-
-```bash
-./scripts/dev/seed-loadtest-users.sh --count 500 --admin-count 20 --session-ttl 86400
-./scripts/dev/seed-loadtest-transactions.sh --per-user 200 --shape heavy-tail
-
-# Later, when finished with the fixture set
-./scripts/dev/teardown-loadtest.sh
-```
-
-`seed-loadtest-users.sh` still emits `.loadtest/session-pool.txt`, but that is
-only a reusable fixture artifact for any later traffic-replay work. No local
-load driver is part of the active Track 1 flow.
-
-## Adding New Scripts
-
-When adding a new script:
-
-1. **Create script** in appropriate directory
-2. **Make executable**: `chmod +x scripts/path/to/script.sh`
-3. **Add documentation** to this README
-4. **Test thoroughly** before committing
-5. **Add usage examples** in comments at top of script
-6. **Follow conventions**:
-   - Use `#!/usr/bin/env bash` shebang
-   - Use `set -e` for error handling
-   - Include clear echo messages
-   - Document exit codes
-   - Add description as second comment
-
-**Example script header:**
-```bash
-#!/usr/bin/env bash
-# scripts/my-new-script.sh
-# Brief description of what this script does
-
-set -e
-
-# Your code here
-```
-
-## Script Organization
-
-Current structure:
 ```
 scripts/
-├── README.md                          # This file
-├── validate-claude-context.sh         # AGENTS.md validation
-├── doc-coverage-report.sh             # Documentation coverage report
-├── validate-repos.sh                  # Repository validation
-├── repo-config.sh                     # Repository configuration
-├── tag-release.sh                     # Release tagging
-├── generate-unified-api-docs.sh       # API documentation generation
-└── dev/                               # Development environment scripts
-    └── (development scripts)
+├── bootstrap/   # Host and cluster bootstrap helpers
+├── guardrails/  # CI-safe static security and manifest checks
+├── lib/         # Shared shell helpers and maintained inventories
+├── loadtest/    # Synthetic local fixture data helpers
+├── ops/         # Day-to-day local cluster operations
+├── repo/        # Cross-repository management helpers
+└── smoketest/   # Local live-cluster validation gates
 ```
 
-## Best Practices
+## Canonical Entry Points
 
-1. **Make scripts idempotent** - safe to run multiple times
-2. **Provide clear feedback** - use echo statements
-3. **Handle errors gracefully** - check prerequisites
-4. **Document exit codes** - make scripts CI-friendly
-5. **Test in clean environment** - don't assume state
-6. **Keep scripts focused** - one script, one purpose
+- `../setup.sh` - Standard local platform bootstrap from the repository root.
+- `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
+- `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
+  Tilt cluster.
+- `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
+  security guardrail gate used by CI and local preflight.
+- `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
+  OpenAPI artifacts used by `/api-docs`.
 
-## CI/CD Integration
+## Bootstrap
 
-These scripts are designed to be run in CI/CD pipelines:
+- `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
+  Tilt, `mkcert`, `kubeconform`, `kube-linter`, and `kyverno` releases after
+  verifying checked-in SHA-256 values.
+- `bootstrap/check-tilt-prerequisites.sh` validates local tools, certificates,
+  DNS, Docker/Kind prerequisites, and optional runtime security state.
+- `bootstrap/install-calico.sh` installs pinned Calico CNI for Kind clusters
+  created with `disableDefaultCNI`.
+- `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
+  certificate bootstrap scripts. Do not run them from an AI container because
+  the browser must trust the host mkcert CA.
 
-- **validate-claude-context.sh** - Run on PRs that touch documentation
-- **doc-coverage-report.sh** - Run periodically (weekly/monthly)
-- **validate-repos.sh** - Run on all PRs
+## Guardrails
 
-See `.github/workflows/` (if using GitHub Actions) for integration examples.
+- `guardrails/check-phase-7-image-pinning.sh` verifies the Phase 7 image-pinning
+  contract using `lib/phase-7-image-pinning-targets.txt` and
+  `lib/phase-7-allowed-latest.txt`.
+- `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
+  secret payload inventory in `lib/secrets-only-expected-keys.txt`.
+- `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
+  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay,
+  image pinning, secrets-only checks, namespace PSA checks, and active setup
+  guidance scans.
+
+CI should call the static guardrail directly:
+
+```bash
+./scripts/guardrails/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
+```
+
+## Smoketest
+
+`smoketest/smoketest.sh` is a thin dispatcher for live local validation. It runs:
+
+1. `guardrails/verify-phase-7-static-manifests.sh`
+2. `smoketest/verify-security-prereqs.sh`
+3. `smoketest/verify-clean-tilt-deployment-admission.sh`
+4. `smoketest/verify-monitoring-rendered-manifests.sh`
+5. `smoketest/verify-monitoring-runtime.sh`
+6. `smoketest/verify-session-architecture-phase-5.sh`
+7. `smoketest/verify-phase-7-security-guardrails.sh`
+
+Use targeted verifiers when debugging one phase, and the umbrella when proving
+the current cluster:
+
+```bash
+./scripts/smoketest/smoketest.sh
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
+```
+
+All live verifiers execute against the current `kubectl` context. If a verifier
+reports missing pods, secrets, or policies while Tilt appears healthy, confirm
+the active context and Tilt resource state from the same host shell first.
+
+## Ops
+
+- `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
+  egress manifests from `.env`.
+- `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
+  the TLS-only in-cluster listener.
+- `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.
+- `ops/reset-databases.sh` resets local PostgreSQL databases.
+
+## Loadtest Fixtures
+
+Track 1 loadtest support is synthetic fixture data only. It creates local users,
+sessions, and transactions for workflows like user deactivation and session
+revocation without driving traffic.
+
+```bash
+./scripts/loadtest/seed-loadtest-users.sh --count 500 --admin-count 20 --session-ttl 86400
+./scripts/loadtest/seed-loadtest-transactions.sh --per-user 200 --shape heavy-tail
+
+# Later, when finished with the fixture set
+./scripts/loadtest/teardown-loadtest.sh
+```
+
+`seed-loadtest-users.sh` writes `.loadtest/session-pool.txt`, which is
+gitignored and reserved for future traffic-replay tooling.
+
+## Repo Management
+
+- `repo/validate-repos.sh` validates the sibling repository layout and branch
+  state.
+- `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
+- `repo/tag-release.sh` creates release tags across configured repositories.
+- `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
+  writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
+  copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`
+  when that sibling repo is present.
+- `repo/github/add-repo-topics.sh` manages GitHub repository topics.
+
+The repo-management scripts source `repo/repo-config.sh`, which derives the
+orchestration root from `scripts/repo/` and then resolves sibling repos from
+the common parent directory.
+
+## Shared Lib
+
+Shared shell helpers and inventories live in `lib/`. Scripts should source them
+with a path relative to their own directory, for example:
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
+```
+
+## Adding Scripts
+
+When adding a script, place it in the purpose-specific directory, include a
+usage comment or `--help`, make it executable, and update this README in the
+same change.

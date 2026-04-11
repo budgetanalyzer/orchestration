@@ -4,7 +4,7 @@
 # Clears all Redis data including sessions
 #
 # Usage:
-#   ./flush-redis.sh
+#   ./scripts/ops/flush-redis.sh
 
 set -euo pipefail
 

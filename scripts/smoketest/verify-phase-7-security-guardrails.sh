@@ -6,19 +6,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-STATIC_GATE="${REPO_DIR}/scripts/dev/verify-phase-7-static-manifests.sh"
-RUNTIME_GATE="${REPO_DIR}/scripts/dev/verify-phase-7-runtime-guardrails.sh"
+STATIC_GATE="${REPO_DIR}/scripts/guardrails/verify-phase-7-static-manifests.sh"
+RUNTIME_GATE="${REPO_DIR}/scripts/smoketest/verify-phase-7-runtime-guardrails.sh"
 
 runtime_wait_timeout="${PHASE7_WAIT_TIMEOUT:-}"
 runtime_regression_timeout="${PHASE7_REGRESSION_TIMEOUT:-}"
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-7-security-guardrails.sh [options]
+Usage: ./scripts/smoketest/verify-phase-7-security-guardrails.sh [options]
 
 Runs the local final Phase 7 completion gate in this order:
-  1. ./scripts/dev/verify-phase-7-static-manifests.sh
-  2. ./scripts/dev/verify-phase-7-runtime-guardrails.sh
+  1. ./scripts/guardrails/verify-phase-7-static-manifests.sh
+  2. ./scripts/smoketest/verify-phase-7-runtime-guardrails.sh
 
 Options:
   --runtime-wait-timeout <duration>
@@ -37,7 +37,7 @@ Environment:
 Notes:
   - This is the local Phase 7 completion command.
   - CI remains intentionally static-only via
-    ./scripts/dev/verify-phase-7-static-manifests.sh.
+    ./scripts/guardrails/verify-phase-7-static-manifests.sh.
 EOF
 }
 

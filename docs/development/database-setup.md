@@ -120,9 +120,9 @@ Tilt will:
 Run the Phase 1 verifier after `tilt up`:
 
 ```bash
-./scripts/dev/verify-phase-1-credentials.sh
-./scripts/dev/verify-phase-4-transport-encryption.sh
-./scripts/dev/verify-phase-5-runtime-hardening.sh
+./scripts/smoketest/verify-phase-1-credentials.sh
+./scripts/smoketest/verify-phase-4-transport-encryption.sh
+./scripts/smoketest/verify-phase-5-runtime-hardening.sh
 ```
 
 For targeted PostgreSQL checks:

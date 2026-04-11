@@ -145,59 +145,66 @@ curl https://app.budgetanalyzer.localhost/health
 open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 0 platform prerequisites
-./scripts/dev/verify-security-prereqs.sh
+./scripts/smoketest/verify-security-prereqs.sh
 
 # Optional but recommended: re-render and dry-run the monitoring stack inputs
-./scripts/dev/verify-monitoring-rendered-manifests.sh
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh
 
 # Optional but recommended: prove the Phase 1 credential split
-./scripts/dev/verify-phase-1-credentials.sh
+./scripts/smoketest/verify-phase-1-credentials.sh
 
 # Optional but recommended: prove the Session Architecture Rethink Phase 5
 # contract from orchestration before you log in
-./scripts/dev/verify-session-architecture-phase-5.sh --static-only
+./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only
 
 # Optional but recommended: prove the Phase 2 network policy enforcement
-./scripts/dev/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-phase-2-network-policies.sh
 
 # Optional but recommended: prove the Phase 4 transport-TLS cutover
-./scripts/dev/verify-phase-4-transport-encryption.sh
+./scripts/smoketest/verify-phase-4-transport-encryption.sh
 
 # Optional but recommended: prove the Phase 3 Istio ingress/egress migration
-./scripts/dev/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-phase-3-istio-ingress.sh
 
 # Optional but recommended: prove the Phase 5 runtime hardening and final PSA labels
-./scripts/dev/verify-phase-5-runtime-hardening.sh
+./scripts/smoketest/verify-phase-5-runtime-hardening.sh
 
 # Optional but recommended: prove the Phase 6 edge/browser hardening gate
-./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 
 # Optional but recommended anytime: prove the Phase 7 static guardrails
-./scripts/dev/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
 
 # Optional but recommended right after tilt up on a clean rebuild: prove the app deployments were admitted cleanly
-./scripts/dev/verify-clean-tilt-deployment-admission.sh
+./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 
 # Optional but recommended after the Phase 6 gate: run the final local Phase 7 completion gate
-./scripts/dev/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
+
+# Optional aggregate local smoke pass after Tilt is healthy
+./scripts/smoketest/smoketest.sh
 ```
 
-`./scripts/dev/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6
+`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6
 local static guardrail gate; it matches the dedicated `security-guardrails.yml`
 workflow closely enough for local reproduction and does not require a running
 cluster. It now also generates a Kyverno replay for representative approved
 local Tilt `:tilt-<hash>` refs so the live deploy-time admission path stays
 covered by the static guardrail suite.
-`./scripts/dev/verify-clean-tilt-deployment-admission.sh` is the host-side
+`./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side
 clean-start proof for the seven expected app deployments in `default`. Run it
 after `tilt up` when you want the specific admission regression check from the
 fresh-cluster workflow.
-`./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
-`./scripts/dev/verify-monitoring-rendered-manifests.sh` re-renders the pinned
+`./scripts/smoketest/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/smoketest/smoketest.sh` is the aggregate local smoke entry point.
+It runs the static guardrails, Phase 0 baseline, clean Tilt admission proof,
+monitoring render/runtime checks, Session Architecture Phase 5 verifier, and
+the final Phase 7 security umbrella in order.
+`./scripts/smoketest/verify-monitoring-rendered-manifests.sh` re-renders the pinned
 `kube-prometheus-stack` chart, proves every rendered workload image is
 digest-pinned, proves the render still avoids host-level node-exporter shapes,
 and server-dry-runs the rendered workload objects against the current cluster.
-`./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
+`./scripts/smoketest/verify-session-architecture-phase-5.sh` proves the Session
 Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
 uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
 `session:` key prefix contract plus the `BA_SESSION` cookie-name default,
@@ -208,15 +215,15 @@ Use `--static-only` for repo-level validation before login. After a browser
 login, rerun it without that flag when you want the live Redis ACL/keyspace
 proof too, or add `--require-live-session` to insist on at least one real
 `session:*` key.
-`./scripts/dev/verify-phase-4-transport-encryption.sh` is the Phase 4
+`./scripts/smoketest/verify-phase-4-transport-encryption.sh` is the Phase 4
 transport-TLS completion gate, and
-`./scripts/dev/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
-`./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh` is the
+`./scripts/smoketest/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate.
+`./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh` is the
 scoped Phase 6 Session 7 gate for NGINX client-identity derivation and API
 rate-limit bucket correctness.
-`./scripts/dev/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
+`./scripts/smoketest/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion
 gate and reruns the earlier phase verifiers as regressions.
-`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
+`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh` is the Phase 6
 completion gate: it checks the live dev/strict CSP split on the real app
 paths, keeps `/api-docs` probes visible as warning-only checks, runs a real
 syntax check of the checked-in
@@ -226,17 +233,17 @@ docs paths, final auth-edge throttling coverage,
 reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
 then reruns the Phase 5 gate as the regression cascade. It still does not
 replace the manual browser-console validation required on `/_prod-smoke/`.
-`./scripts/dev/verify-phase-7-security-guardrails.sh` is the final local
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local
 Phase 7 completion gate. It runs the Phase 7 Session 6 static gate first and
 then the Phase 7 Session 7 runtime gate so contributors do not have to stitch
 those commands together manually. CI intentionally remains static-only through
 `security-guardrails.yml`.
-`./scripts/dev/verify-phase-7-runtime-guardrails.sh` remains the targeted
+`./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` remains the targeted
 Phase 7 Session 7 live-cluster guardrail proof. It adds the missing Redis ACL,
 PostgreSQL cross-database, and RabbitMQ permission-boundary denials, uses
 pinned temporary probe images plus self-cleaning temporary `NetworkPolicy`
 rules, and then reruns
-`./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
+`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
 through Phase 6 runtime regression umbrella.
 
 ### 5a. Access Monitoring
@@ -305,13 +312,13 @@ driver.
 # Seed synthetic users plus Redis-backed sessions. The first 25 users become
 # ADMIN so admin-path flows are available; the 24h TTL keeps sessions alive for
 # manual testing.
-./scripts/dev/seed-loadtest-users.sh --count 1000 --admin-count 25 --session-ttl 86400
+./scripts/loadtest/seed-loadtest-users.sh --count 1000 --admin-count 25 --session-ttl 86400
 
 # Amplify per-user transaction volume after the users exist.
-./scripts/dev/seed-loadtest-transactions.sh --per-user 100 --shape heavy-tail
+./scripts/loadtest/seed-loadtest-transactions.sh --per-user 100 --shape heavy-tail
 
 # Remove every synthetic user/session/transaction artifact when finished.
-./scripts/dev/teardown-loadtest.sh
+./scripts/loadtest/teardown-loadtest.sh
 ```
 
 The synthetic identities are deterministic: user `n` is
@@ -410,7 +417,7 @@ built frontend bundle directly and the Vite-only public paths plus
 The Phase 6 Session 3 stop-gate is now repeatable from this repo with:
 
 ```bash
-./scripts/dev/audit-phase-6-session-3-frontend-csp.sh
+./scripts/smoketest/audit-phase-6-session-3-frontend-csp.sh
 ```
 
 That audit rebuilds the sibling smoke bundle and proves the repo-owned
@@ -421,7 +428,7 @@ Phase 6 plan.
 The Phase 6 Session 7 runtime proof is also repeatable from this repo:
 
 ```bash
-./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
 ```
 
 That verifier creates two temporary no-sidecar probe pods, sends authenticated
@@ -433,7 +440,7 @@ the same NGINX API rate-limit bucket.
 The full Phase 6 completion gate is now:
 
 ```bash
-./scripts/dev/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ```
 
 That verifier checks the checked-in dev/strict CSP split on the real app

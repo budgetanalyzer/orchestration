@@ -9,8 +9,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
-IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/dev/check-phase-7-image-pinning.sh"
-SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/dev/check-secrets-only-handling.sh"
+IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-phase-7-image-pinning.sh"
+SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
@@ -36,7 +36,13 @@ ACTIVE_GUIDANCE_PATHS=(
     "${REPO_DIR}/docs/development"
     "${REPO_DIR}/docs/tilt-kind-setup-guide.md"
     "${REPO_DIR}/scripts/README.md"
-    "${REPO_DIR}/scripts/dev"
+    "${REPO_DIR}/scripts/bootstrap"
+    "${REPO_DIR}/scripts/ops"
+    "${REPO_DIR}/scripts/guardrails"
+    "${REPO_DIR}/scripts/smoketest"
+    "${REPO_DIR}/scripts/loadtest"
+    "${REPO_DIR}/scripts/repo"
+    "${REPO_DIR}/scripts/lib"
     "${REPO_DIR}/setup.sh"
     "${REPO_DIR}/tests/shared/Dockerfile.test-env"
 )
@@ -49,7 +55,7 @@ ACTIVE_NAMESPACE_MANIFESTS=(
 
 usage() {
     cat <<'EOF'
-Usage: scripts/dev/verify-phase-7-static-manifests.sh [--self-test]
+Usage: scripts/guardrails/verify-phase-7-static-manifests.sh [--self-test]
 
 Runs the Phase 7 static guardrail suite:
 - kubeconform schema validation for checked-in manifests

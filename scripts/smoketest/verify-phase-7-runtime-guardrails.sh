@@ -39,7 +39,7 @@ RABBITMQ_TEMP_VHOST_CREATED=false
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-7-runtime-guardrails.sh
+Usage: ./scripts/smoketest/verify-phase-7-runtime-guardrails.sh
 
 Options:
   -h, --help                    Show this help text.

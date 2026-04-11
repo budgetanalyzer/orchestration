@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/dev/seed-loadtest-transactions.sh
+# scripts/loadtest/seed-loadtest-transactions.sh
 #
 # Bulk-creates per-user transaction fixtures on top of the synthetic users
 # that `seed-loadtest-users.sh` already seeded. This is Track 1 item 2 from
 # docs/plans/load-testing-synthetic-users-2026-04-09.md.
 #
 # Usage:
-#   ./scripts/dev/seed-loadtest-transactions.sh [options]
+#   ./scripts/loadtest/seed-loadtest-transactions.sh [options]
 #
 # Options:
 #   --per-user N    Target number of transactions per synthetic user (default: 10)
@@ -96,7 +96,7 @@ USER_LIST=$(postgres_query_in_pod "$POSTGRES_POD" permission \
 
 if [ -z "$USER_LIST" ]; then
     echo "ERROR: No synthetic users found in permission-service.users." >&2
-    echo "Run ./scripts/dev/seed-loadtest-users.sh first." >&2
+    echo "Run ./scripts/loadtest/seed-loadtest-users.sh first." >&2
     exit 1
 fi
 

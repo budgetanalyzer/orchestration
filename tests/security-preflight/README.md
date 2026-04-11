@@ -19,7 +19,7 @@ It provisions only what the verifier needs:
 4. Istio base + `istiod`
 5. Namespace baseline labels (Istio + Pod Security warn/audit)
 6. Kyverno + smoke policy
-7. `scripts/dev/verify-security-prereqs.sh`
+7. `scripts/smoketest/verify-security-prereqs.sh`
 
 ## Usage
 

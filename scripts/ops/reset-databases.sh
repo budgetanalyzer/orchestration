@@ -4,8 +4,8 @@
 # Drops and recreates all databases, or truncates all tables (--data-only)
 #
 # Usage:
-#   ./reset-databases.sh            # Full reset: drop and recreate databases
-#   ./reset-databases.sh --data-only # Keep schema, delete all rows
+#   ./scripts/ops/reset-databases.sh             # Full reset: drop and recreate databases
+#   ./scripts/ops/reset-databases.sh --data-only # Keep schema, delete all rows
 
 set -e
 

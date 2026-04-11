@@ -2,7 +2,7 @@
 
 # checkout-main.sh - Switch all Budget Analyzer repositories from tags to main branch
 #
-# Usage: ./scripts/checkout-main.sh [--pull]
+# Usage: ./scripts/repo/checkout-main.sh [--pull]
 #
 # This script will:
 # 1. Check that all repositories exist

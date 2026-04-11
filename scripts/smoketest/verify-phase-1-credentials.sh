@@ -9,7 +9,7 @@
 # Prerequisites: Tilt running with all infrastructure pods healthy.
 #
 # Usage:
-#   ./scripts/dev/verify-phase-1-credentials.sh
+#   ./scripts/smoketest/verify-phase-1-credentials.sh
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ REDIS_CS_USER="currency-service"
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-1-credentials.sh
+Usage: ./scripts/smoketest/verify-phase-1-credentials.sh
 
 Options:
   -h, --help                    Show this help text.

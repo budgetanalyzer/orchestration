@@ -361,7 +361,7 @@ claude --dangerously-skip-permissions
 # 3. Agent executes plan (human monitors but doesn't interrupt)
 
 # 4. Human verifies success criteria
-./scripts/dev/verify-security-prereqs.sh
+./scripts/smoketest/verify-security-prereqs.sh
 # Should prove NetworkPolicy, PSA, Istio, and Kyverno prerequisites
 ```
 

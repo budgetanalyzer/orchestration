@@ -18,7 +18,7 @@ EXPECTED_DEPLOYMENTS=(
 
 usage() {
     cat <<'EOF'
-Usage: scripts/dev/verify-clean-tilt-deployment-admission.sh [--wait-seconds <n>] [--event-tail <n>]
+Usage: scripts/smoketest/verify-clean-tilt-deployment-admission.sh [--wait-seconds <n>] [--event-tail <n>]
 
 Run this from the host after:
   1. ./setup.sh

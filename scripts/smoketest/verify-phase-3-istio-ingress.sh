@@ -25,7 +25,7 @@ TEMP_PODS=()
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-3-istio-ingress.sh
+Usage: ./scripts/smoketest/verify-phase-3-istio-ingress.sh
 
 Options:
   -h, --help    Show this help text.

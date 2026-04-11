@@ -2,7 +2,7 @@
 
 # validate-repos.sh - Validate all Budget Analyzer repositories are on main and up to date
 #
-# Usage: ./scripts/validate-repos.sh [--fix]
+# Usage: ./scripts/repo/validate-repos.sh [--fix]
 #
 # This script will:
 # 1. Check that all repositories exist and are git repositories

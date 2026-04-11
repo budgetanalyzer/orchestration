@@ -30,7 +30,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/verify-phase-6-session-7-api-rate-limit-identity.sh
+Usage: ./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
 
 Options:
   -h, --help    Show this help text.

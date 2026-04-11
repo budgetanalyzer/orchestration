@@ -399,7 +399,7 @@ echo
 echo "11. Verifying runtime security prerequisites..."
 echo "---------------------------------------------"
 
-VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/dev/verify-security-prereqs.sh"
+VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/smoketest/verify-security-prereqs.sh"
 
 if [ "$CLUSTER_CONNECTED" = true ]; then
     if [ ! -x "$VERIFY_SCRIPT" ]; then

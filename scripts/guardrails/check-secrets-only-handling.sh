@@ -10,7 +10,7 @@ INVENTORY_FILE="${SCRIPT_DIR}/../lib/secrets-only-expected-keys.txt"
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/check-secrets-only-handling.sh
+Usage: ./scripts/guardrails/check-secrets-only-handling.sh
 
 Checks the Tilt-generated secret payload inventory against the checked-in
 allowed key list. Fails if a secret gains an undocumented key or if an

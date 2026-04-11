@@ -229,8 +229,8 @@ Access the Tilt UI at http://localhost:10350
 After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
 
 ```bash
-./scripts/dev/verify-security-prereqs.sh
-./scripts/dev/verify-phase-4-transport-encryption.sh
+./scripts/smoketest/verify-security-prereqs.sh
+./scripts/smoketest/verify-phase-4-transport-encryption.sh
 ```
 
 These provide deterministic runtime proof for the Phase 0 platform baseline and

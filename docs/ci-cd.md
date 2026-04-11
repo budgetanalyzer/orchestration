@@ -75,7 +75,9 @@ What it runs:
 The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 `kyverno` binaries through `scripts/dev/install-verified-tool.sh`, then runs:
 
-- schema validation for checked-in manifests
+- schema validation for checked-in manifests, with explicit missing-schema
+  allowances for checked-in CRD resources such as Istio, Gateway API, Kyverno,
+  and Prometheus Operator `ServiceMonitor` objects
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt

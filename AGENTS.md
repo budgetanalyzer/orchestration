@@ -41,21 +41,24 @@ This orchestration repository coordinates the deployment and development environ
 
 **Purpose**: Manages cross-service concerns, local development setup, and deployment coordination. Individual service code lives in separate repositories.
 
-## Project Status: Reference Architecture Complete
+## Production Deployment Target
 
-This project has reached its intended scope. We are no longer actively developing Budget Analyzer features - we're interested in discussing these patterns with other architects.
+**Oracle Cloud Infrastructure (OCI) Free Tier**
 
-**What's implemented:**
-- Authentication: OAuth2/OIDC with Auth0, session-based edge authorization, opaque session tokens + ext_authz
-- API Gateway: Istio ext_authz for session validation and auth-path throttling, NGINX for API routing and backend/API rate limiting
-- Microservices patterns: Spring Boot, Kubernetes, Tilt
+| Attribute | Value |
+|-----------|-------|
+| **Shape** | VM.Standard.A1.Flex (ARM/aarch64) |
+| **OCPUs** | 4 |
+| **Memory** | 24 GB |
+| **Network** | 4 Gbps |
+| **OS** | Ubuntu 22.04 Minimal aarch64 |
+| **Region** | Phoenix (phx) |
+| **Public IP** | 152.70.145.68 |
 
-**What's intentionally left unsolved:**
-- **Data ownership**: Which transactions belong to which user?
-- **Cross-service user scoping**: How does transaction-service filter by owner?
-- **Multi-tenancy**: Organization-level data isolation
-
-This boundary is deliberate. Data ownership is domain-specific and opinionated. Propagating user ownership to domain services is the next architectural challenge - one we're surfacing, not prescribing.
+**Architecture implications:**
+- All container images must support `linux/arm64`
+- 24GB RAM is sufficient for full stack + observability (Prometheus/Grafana)
+- Single-node deployment (no HA, acceptable for portfolio demo)
 
 ## Development Environment
 
@@ -84,11 +87,13 @@ For containerized development environment setup, see the [workspace](https://git
 # List all running resources
 tilt get uiresources
 
-# View pod status (services run in default namespace)
+# View pod status
 kubectl get pods
+kubectl get pods -n monitoring
 
 # View service endpoints
 kubectl get svc
+kubectl get svc -n monitoring
 ```
 
 **Service Types**:
@@ -97,6 +102,7 @@ kubectl get svc
 - **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
 - **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
+- **Monitoring**: Prometheus, Grafana, and kube-state-metrics (in monitoring namespace)
 - **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
 - **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
@@ -120,7 +126,7 @@ Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:808
 Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
 ```
 
-**Single entry point**: `app.budgetanalyzer.localhost`
+**Entry points**: `app.budgetanalyzer.localhost` (application), `grafana.budgetanalyzer.localhost` (monitoring)
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
@@ -359,6 +365,16 @@ Each microservice is maintained in its own repository:
 - Configuration files (e.g., `application.yml`, manifests, env/config wiring) in sibling repos when fixing deployment/config issues
 
 If a fix requires code changes in a service repo, describe the needed changes and let the user handle it (or switch to that repo's context).
+
+**Do not hide sibling-repo contract failures with orchestration workarounds.**
+When the root cause belongs to another repo's shared code or service logic, do
+not add compensating environment variables, manifests, routing rules, or other
+deployment tweaks in this repo just to make the symptom disappear. Stop and
+call out the owning repo instead. Example: if Spring Boot services do not expose
+`/actuator/prometheus` even though service-common is supposed to provide that
+default, fix or rebuild `service-common`; do not add
+`MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` to each
+orchestration deployment as a workaround.
 
 ### Planning Transparency
 

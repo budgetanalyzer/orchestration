@@ -13,4 +13,5 @@ spec:
   rules:
     - to:
         - operation:
+            hosts: ["app.budgetanalyzer.localhost"]
             paths: ["/api/*"]

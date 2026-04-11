@@ -144,7 +144,6 @@ Use port-forwards to bypass the gateway and test services directly:
 ```bash
 # Test transaction-service directly
 curl http://localhost:8082/actuator/health
-curl http://localhost:8082/actuator/info
 ```
 
 Authenticated API behavior must be tested through the ingress path, not a

@@ -25,6 +25,7 @@ KUBECONFORM_ALLOWED_MISSING_KINDS=(
     PeerAuthentication
     ReferenceGrant
     ServiceEntry
+    ServiceMonitor
     Test
     VirtualService
 )
@@ -131,7 +132,9 @@ run_kubeconform() {
     fi
 
     output_file="$(mktemp)"
-    if ! "${STATIC_TOOLS_BIN}/kubeconform" -strict -summary "${manifest_files[@]}" >"${output_file}" 2>&1; then
+    if "${STATIC_TOOLS_BIN}/kubeconform" -strict -summary "${manifest_files[@]}" >"${output_file}" 2>&1; then
+        :
+    else
         kubeconform_rc=$?
     fi
 

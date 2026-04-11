@@ -179,7 +179,7 @@ kubectl get daemonset calico-node -n kube-system
 Add entries to `/etc/hosts`:
 
 ```bash
-echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
+echo '127.0.0.1  app.budgetanalyzer.localhost grafana.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
 ### 5. Generate Browser TLS Certificates

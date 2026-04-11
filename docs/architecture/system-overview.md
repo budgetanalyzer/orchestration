@@ -152,6 +152,24 @@ Operational note: `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 
 - Async messaging between services
 - Event-driven architecture (Spring Modulith)
 
+### Monitoring Services
+
+**Prometheus** (Port 9090, `monitoring` namespace)
+- Metrics scraping and storage (10Gi PVC)
+- Scrapes Spring Boot actuator endpoints, istiod, and Envoy sidecars
+- Mesh-injected for STRICT mTLS compliance
+- Access via port-forward only
+
+**Grafana** (Port 80, `monitoring` namespace)
+- Dashboard visualization
+- Pre-provisioned JVM and Spring Boot dashboards
+- Exposed at `https://grafana.budgetanalyzer.localhost` via Istio ingress
+
+**kube-state-metrics** (`monitoring` namespace)
+- Kubernetes resource metrics for Prometheus
+
+See [Observability Architecture](observability.md) for details.
+
 ## Key Architectural Principles
 
 ### 1. Resource-Based Routing
@@ -178,7 +196,7 @@ Local development environment mirrors production architecture:
 - Same services
 - Same infrastructure (PostgreSQL, Redis, RabbitMQ)
 - Same gateway routing
-- Different: Resource limits, replication, monitoring
+- Different: Resource limits, replication
 
 ### 5. Event-Driven Communication
 Services communicate asynchronously where possible:

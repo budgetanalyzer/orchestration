@@ -136,6 +136,7 @@ tilt up
 # Check all pods are running
 kubectl get pods -n default
 kubectl get pods -n infrastructure
+kubectl get pods -n monitoring
 
 # Test gateway
 curl https://app.budgetanalyzer.localhost/health
@@ -145,6 +146,9 @@ open https://app.budgetanalyzer.localhost
 
 # Optional but recommended: prove the Phase 0 platform prerequisites
 ./scripts/dev/verify-security-prereqs.sh
+
+# Optional but recommended: re-render and dry-run the monitoring stack inputs
+./scripts/dev/verify-monitoring-rendered-manifests.sh
 
 # Optional but recommended: prove the Phase 1 credential split
 ./scripts/dev/verify-phase-1-credentials.sh
@@ -189,6 +193,10 @@ clean-start proof for the seven expected app deployments in `default`. Run it
 after `tilt up` when you want the specific admission regression check from the
 fresh-cluster workflow.
 `./scripts/dev/verify-security-prereqs.sh` proves the Phase 0 platform baseline.
+`./scripts/dev/verify-monitoring-rendered-manifests.sh` re-renders the pinned
+`kube-prometheus-stack` chart, proves every rendered workload image is
+digest-pinned, proves the render still avoids host-level node-exporter shapes,
+and server-dry-runs the rendered workload objects against the current cluster.
 `./scripts/dev/verify-session-architecture-phase-5.sh` proves the Session
 Architecture Rethink Phase 5 contract from orchestration: Redis ACL bootstrap
 uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
@@ -230,6 +238,53 @@ pinned temporary probe images plus self-cleaning temporary `NetworkPolicy`
 rules, and then reruns
 `./scripts/dev/verify-phase-6-edge-browser-hardening.sh` as the reused Phase 2
 through Phase 6 runtime regression umbrella.
+
+### 5a. Access Monitoring
+
+Tilt now installs the observability stack into the `monitoring` namespace as
+part of the default local environment.
+The Prometheus server pod is also injected into the Istio mesh so the checked-in
+Envoy `PodMonitor` can scrape sidecar metrics in `default` without bypassing the
+repo's STRICT mTLS, `AuthorizationPolicy`, or `NetworkPolicy` posture.
+The checked-in Spring Boot `ServiceMonitor` also scrapes the four actuator
+metrics endpoints in `default`; note that three of those services expose
+Prometheus under their servlet context paths, so the monitored paths are
+`/transaction-service/actuator/prometheus`,
+`/currency-service/actuator/prometheus`,
+`/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
+Session Gateway.
+
+Grafana is exposed via Istio ingress at
+https://grafana.budgetanalyzer.localhost (TLS terminated at the gateway, same
+wildcard cert as the main app). No port-forward needed.
+
+```bash
+# Prometheus UI (port-forward only — no ingress route)
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
+
+# Grafana admin password
+kubectl get secret -n monitoring prometheus-stack-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 --decode
+echo
+```
+
+After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
+`spring-boot-services` job shows `currency-service`, `transaction-service`,
+`permission-service`, and `session-gateway` as `UP`. Useful first queries:
+`up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, and
+`jvm_gc_pause_seconds_count`.
+
+Grafana ships with two pre-provisioned dashboards (no manual import needed):
+
+- **JVM (Micrometer)** - memory pools, GC pauses, threads, classloading per
+  service. Use the `application` dropdown to switch between services.
+- **Spring Boot 3.x Statistics** - HTTP request rates, latencies, and error
+  rates. Use the `application` and `instance` dropdowns to filter.
+
+Both dashboards are declaratively provisioned from
+`kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
+pod restarts. See [Observability Architecture](../architecture/observability.md)
+for scrape topology details, security compliance, and debugging guidance.
 `./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you

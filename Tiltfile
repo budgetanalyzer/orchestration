@@ -864,6 +864,55 @@ local_resource(
 )
 
 # ============================================================================
+# MONITORING (Prometheus + Grafana)
+# ============================================================================
+
+local_resource(
+    'monitoring-namespace',
+    cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
+    deps=['kubernetes/monitoring/namespace.yaml'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'prometheus-stack',
+    cmd='''
+        ./scripts/dev/verify-monitoring-rendered-manifests.sh
+        kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
+        helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --version 83.4.0 \
+            --values kubernetes/monitoring/prometheus-stack-values.yaml \
+            --wait --timeout 5m
+    ''',
+    deps=[
+        'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
+        'scripts/dev/verify-monitoring-rendered-manifests.sh',
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+k8s_yaml('kubernetes/monitoring/servicemonitor-spring-boot.yaml')
+
+k8s_resource(
+    objects=['spring-boot-services:servicemonitor'],
+    new_name='servicemonitor-spring-boot',
+    resource_deps=['prometheus-stack'],
+    labels=['monitoring'],
+)
+
+# Grafana ingress route (grafana.budgetanalyzer.localhost)
+local_resource(
+    'grafana-ingress-route',
+    cmd='kubectl apply -f kubernetes/monitoring/grafana-httproute.yaml',
+    deps=['kubernetes/monitoring/grafana-httproute.yaml'],
+    resource_deps=['prometheus-stack', 'istio-ingress-config'],
+    labels=['monitoring'],
+)
+
+# ============================================================================
 # NETWORK POLICIES (Phase 2 Security Hardening)
 # ============================================================================
 
@@ -939,6 +988,7 @@ local_resource(
 local_resource(
     'istio-ingress-config',
     cmd='''
+        kubectl label namespace default budgetanalyzer.io/ingress-routes=true --overwrite
         kubectl apply -f kubernetes/istio/ingress-namespace.yaml
         kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
         kubectl apply -f kubernetes/istio/ingress-gateway-config.yaml

@@ -15,7 +15,7 @@ Current repository state:
 - The ingress/session/routing topology described here is implemented.
 - Local platform hardening Phase 0 is implemented: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy still proves admission is alive, and the checked-in Phase 7 suite now enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Phase 1 credential isolation is implemented: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
-- Phase 2 network policies are enforced: `default`, `infrastructure`, `istio-ingress`, and `istio-egress` namespaces have deny-by-default ingress and egress with explicit allowlists. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists.
+- Phase 2 network policies are enforced: `default`, `infrastructure`, `istio-ingress`, and `istio-egress` namespaces have deny-by-default ingress and egress with explicit allowlists. The `istio-ingress` egress rules also allow traffic to Grafana in the `monitoring` namespace. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the Phase 2 allowlists.
 - Phase 3 manifests now describe the intended Istio ingress/egress topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, with one documented exception: `permission-service` may call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
 - Phase 5 Session 1 is implemented in-repo: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods no longer require `istio-init`.
 - Phase 5 Session 2 is implemented in-repo for the non-root application workloads: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
@@ -72,7 +72,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 ┌─────────────────────────────────────────────────────────────────┐
 │              Istio Ingress Gateway (Port 443, HTTPS)             │
 │                    • SSL Termination (all traffic)               │
-│                    • ext_authz enforcement on /api/* paths       │
+│                    • ext_authz on app host /api/* paths only     │
 │                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
 │                      /logout, /auth/v1/* → Session Gateway       │
 │                    • Routes /api/*, /* → NGINX                   │
@@ -165,7 +165,7 @@ The Session Gateway implements session-based edge authorization specifically for
 
 **Why HTTP mode over gRPC:** Istio's `meshConfig.extensionProviders` with `envoyExtAuthzHttp` provides `headersToUpstreamOnAllow` — an infrastructure-level allowlist that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the ingress layer: even if a client sends `X-User-Id` in the original request, the Envoy ext_authz filter overwrites it with the value from ext_authz's response. Only headers listed in `headersToUpstreamOnAllow` are forwarded upstream.
 
-**Integration:** Called by the Istio ingress gateway on every request to `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
+**Integration:** Called by the Istio ingress gateway on requests to `app.budgetanalyzer.localhost` `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`. The policy is host-scoped so that other ingress hosts (e.g. `grafana.budgetanalyzer.localhost`) are not intercepted by application session auth.
 
 ---
 
@@ -493,17 +493,27 @@ The CSP include files are checked in at `nginx/includes/security-headers-{strict
 
 ### Monitoring and Observability
 
-**Metrics to Track:**
-- Session Gateway: Active sessions, token refresh rate, OAuth flow success/failure
-- ext_authz: Validation latency, hit/miss ratio, rejection rate
-- NGINX: Request rate, error rate, latency percentiles
-- Services: Authorization failures, data access patterns
+The observability stack (Prometheus, Grafana, kube-state-metrics) runs in the
+`monitoring` namespace and meets the same security requirements as all other
+workloads — no namespace exceptions. All images are digest-pinned, all pods
+disable `automountServiceAccountToken`, and workloads that need Kubernetes API
+access use explicit projected service-account token volumes. See
+[Observability Architecture](observability.md) for full details.
 
-**Alerting Thresholds:**
-- ext_authz rejection rate spike > 5% (may indicate session store issues)
-- Session Gateway error rate > 0.5%
-- Redis connection failures
-- Unauthorized data access attempts
+**Metrics currently collected:**
+- Spring Boot JVM metrics (memory, GC, threads) via `/actuator/prometheus`
+- Spring Boot HTTP metrics (request rates, latencies, error rates) via Micrometer
+- Istio control plane metrics via istiod ServiceMonitor
+- Envoy sidecar metrics (per-service traffic) via PodMonitor on `:15090`
+- Kubernetes resource metrics via kube-state-metrics
+
+**Security-relevant metrics to watch:**
+- `http_server_requests_seconds_count{status="401"}` — authorization failures
+- `http_server_requests_seconds_count{status="429"}` — rate limiting triggers
+- `up{job="spring-boot-services"}` — service availability
+
+**Alerting**: Not yet configured. Dashboards are the current observability
+surface; alerting rules are a future follow-up.
 
 ### Logging Strategy
 

@@ -1,0 +1,299 @@
+# kube-prometheus-stack Helm values for Budget Analyzer
+# Chart: prometheus-community/kube-prometheus-stack 83.4.0
+
+alertmanager:
+  enabled: false
+
+defaultRules:
+  rules:
+    alertmanager: false
+    etcd: false
+    kubeControllerManager: false
+    kubeScheduler: false
+    node: false
+    nodeExporterAlerting: false
+    nodeExporterRecording: false
+
+grafana:
+  automountServiceAccountToken: false
+  defaultDashboardsEnabled: false
+  service:
+    type: ClusterIP
+  serviceAccount:
+    autoMount: false
+    automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 472
+    runAsGroup: 472
+    fsGroup: 472
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  image:
+    registry: docker.io
+    repository: grafana/grafana
+    tag: 12.4.2
+    sha: 83749231c3835e390a3144e5e940203e42b9589761f20ef3169c716e734ad505
+  sidecar:
+    dashboards:
+      enabled: false
+    datasources:
+      enabled: false
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/default
+  extraConfigmapMounts:
+    - name: grafana-dashboards
+      mountPath: /var/lib/grafana/dashboards/default
+      configMap: grafana-dashboards
+      readOnly: true
+  grafana.ini:
+    server:
+      domain: grafana.budgetanalyzer.localhost
+      root_url: https://grafana.budgetanalyzer.localhost
+    security:
+      cookie_secure: true
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus-stack-kube-prom-prometheus.monitoring.svc:9090
+          isDefault: true
+          editable: false
+  resources:
+    requests:
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+kube-state-metrics:
+  automountServiceAccountToken: false
+  serviceAccount:
+    automountServiceAccountToken: false
+  image:
+    registry: registry.k8s.io
+    repository: kube-state-metrics/kube-state-metrics
+    tag: v2.18.0
+    sha: sha256:1545919b72e3ae035454fc054131e8d0f14b42ef6fc5b2ad5c751cafa6b2130e
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  volumeMounts:
+    - name: k8s-api-access
+      mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      readOnly: true
+  volumes:
+    - name: k8s-api-access
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+                - key: ca.crt
+                  path: ca.crt
+          - downwardAPI:
+              items:
+                - path: namespace
+                  fieldRef:
+                    fieldPath: metadata.namespace
+  resources:
+    requests:
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+kubeControllerManager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+prometheus:
+  serviceAccount:
+    automountServiceAccountToken: false
+  additionalServiceMonitors:
+    - name: istio-mesh
+      selector:
+        matchLabels:
+          app: istiod
+      namespaceSelector:
+        matchNames:
+          - istio-system
+      endpoints:
+        - port: http-monitoring
+          interval: 15s
+  additionalPodMonitors:
+    - name: envoy-stats
+      namespaceSelector:
+        any: true
+      selector:
+        matchExpressions:
+          - key: security.istio.io/tlsMode
+            operator: Exists
+      podMetricsEndpoints:
+        - path: /stats/prometheus
+          targetPort: 15090
+          interval: 15s
+  prometheusSpec:
+    automountServiceAccountToken: false
+    podMetadata:
+      labels:
+        sidecar.istio.io/inject: "true"
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    disableAlerting: true
+    image:
+      registry: quay.io
+      repository: prometheus/prometheus
+      tag: v3.11.1
+      sha: b90bb266161f865086537611c6c3199cedf41dea470d8ba71ce20ba0fad79ea9
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    containers:
+      - name: prometheus
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+      - name: config-reloader
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+    initContainers:
+      - name: init-config-reloader
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+    volumes:
+      - name: k8s-api-access
+        projected:
+          defaultMode: 420
+          sources:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 3600
+            - configMap:
+                name: kube-root-ca.crt
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+            - downwardAPI:
+                items:
+                  - path: namespace
+                    fieldRef:
+                      fieldPath: metadata.namespace
+    volumeMounts:
+      - name: k8s-api-access
+        mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        readOnly: true
+
+prometheusOperator:
+  automountServiceAccountToken: false
+  tls:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+  serviceAccount:
+    automountServiceAccountToken: false
+  image:
+    registry: quay.io
+    repository: prometheus-operator/prometheus-operator
+    tag: v0.90.1
+    sha: 52a6a92d915ea2fa94314748d99db7a94922e3fe63274f6182fc033b9126b573
+    pullPolicy: IfNotPresent
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  extraVolumeMounts:
+    - name: k8s-api-access
+      mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      readOnly: true
+  extraVolumes:
+    - name: k8s-api-access
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+                - key: ca.crt
+                  path: ca.crt
+          - downwardAPI:
+              items:
+                - path: namespace
+                  fieldRef:
+                    fieldPath: metadata.namespace
+  prometheusConfigReloader:
+    image:
+      registry: quay.io
+      repository: prometheus-operator/prometheus-config-reloader
+      tag: v0.90.1
+      sha: 693faa0b87243cddca2cffb13586e4e2778b0cdf319cb2e601ba7af3fd19ef7d
+  resources:
+    requests:
+      memory: 128Mi
+    limits:
+      memory: 256Mi

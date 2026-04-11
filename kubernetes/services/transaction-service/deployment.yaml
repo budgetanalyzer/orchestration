@@ -5,6 +5,7 @@ metadata:
   namespace: default
   labels:
     app: transaction-service
+    app.kubernetes.io/framework: spring-boot
 spec:
   replicas: 1
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: transaction-service
+        app.kubernetes.io/framework: spring-boot
     spec:
       automountServiceAccountToken: false
       serviceAccountName: transaction-service

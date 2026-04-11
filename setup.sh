@@ -220,18 +220,26 @@ print_success "Calico and CoreDNS are ready"
 # =============================================================================
 print_step "Checking DNS configuration..."
 
-if grep -q "budgetanalyzer.localhost" /etc/hosts 2>/dev/null; then
+REQUIRED_HOSTS=("app.budgetanalyzer.localhost" "grafana.budgetanalyzer.localhost")
+MISSING_HOSTS=()
+for host in "${REQUIRED_HOSTS[@]}"; do
+    if ! grep -q "$host" /etc/hosts 2>/dev/null; then
+        MISSING_HOSTS+=("$host")
+    fi
+done
+
+if [ ${#MISSING_HOSTS[@]} -eq 0 ]; then
     print_success "DNS entries already configured in /etc/hosts"
 else
-    print_warning "DNS entries not found in /etc/hosts"
+    print_warning "Missing DNS entries: ${MISSING_HOSTS[*]}"
     echo ""
-    echo "  Add the following line to /etc/hosts:"
-    echo "  127.0.0.1  app.budgetanalyzer.localhost"
+    echo "  Add the following to /etc/hosts:"
+    echo "  127.0.0.1  ${MISSING_HOSTS[*]}"
     echo ""
     read -p "  Add automatically? (requires sudo) [y/N] " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "127.0.0.1  app.budgetanalyzer.localhost" | sudo tee -a /etc/hosts > /dev/null
+        echo "127.0.0.1  ${MISSING_HOSTS[*]}" | sudo tee -a /etc/hosts > /dev/null
         print_success "DNS entries added to /etc/hosts"
     else
         print_warning "Skipped. Please add DNS entries manually before running tilt up"
@@ -267,6 +275,21 @@ else
     helm repo add istio https://istio-release.storage.googleapis.com/charts >/dev/null
     helm repo update istio >/dev/null
     print_success "Istio Helm repository added and refreshed"
+fi
+
+# =============================================================================
+# Step 6b: Install Prometheus Community Helm repository
+# =============================================================================
+print_step "Setting up Prometheus Community Helm repository..."
+
+if helm repo list 2>/dev/null | grep -q "^prometheus-community"; then
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+    helm repo update prometheus-community >/dev/null
+    print_success "Prometheus Community Helm repository refreshed"
+else
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
+    helm repo update prometheus-community >/dev/null
+    print_success "Prometheus Community Helm repository added and refreshed"
 fi
 
 # =============================================================================

@@ -211,5 +211,7 @@ LOADTEST_ADMIN_PERMISSIONS="transactions:read,transactions:write,transactions:de
 loadtest_repo_root() {
     local lib_dir
     lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-    cd "${lib_dir}/../../.." && pwd
+    (
+        cd "${lib_dir}/../.." && pwd
+    )
 }

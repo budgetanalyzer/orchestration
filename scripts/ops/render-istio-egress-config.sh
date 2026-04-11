@@ -66,6 +66,7 @@ extract_host_from_uri() {
 render_templates() {
     local auth0_host="$1"
     local template_file
+    local first_file=true
 
     for template_file in "${TEMPLATE_FILES[@]}"; do
         if [[ ! -f "${template_file}" ]]; then
@@ -73,8 +74,13 @@ render_templates() {
             exit 1
         fi
 
+        if [[ "${first_file}" == false ]]; then
+            printf -- '---\n'
+        fi
+
         sed "s|${AUTH0_HOST_PLACEHOLDER}|${auth0_host}|g" "${template_file}"
         printf '\n'
+        first_file=false
     done
 }
 

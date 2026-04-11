@@ -118,7 +118,10 @@ revocation without driving traffic.
 ```
 
 `seed-loadtest-users.sh` writes `.loadtest/session-pool.txt`, which is
-gitignored and reserved for future traffic-replay tooling.
+gitignored and reserved for future traffic-replay tooling. The shared
+`lib/loadtest-common.sh` helper resolves that pool path from the orchestration
+repo root, so callers can run the loadtest scripts from any current working
+directory without writing outside the repository.
 
 ## Repo Management
 

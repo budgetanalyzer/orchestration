@@ -252,8 +252,8 @@ retry_external_status() {
     local path="$1"
     shift
 
-    local attempt status
-    for attempt in 1 2 3 4 5; do
+    local status
+    for _ in 1 2 3 4 5; do
         status=$(external_status "$path" "$@")
         if [[ "$status" != "000" ]]; then
             printf '%s\n' "$status"
@@ -692,15 +692,38 @@ spec:
       ports:
         - protocol: TCP
           port: 15012
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: p3-mtls-echo-allow
+  namespace: default
+  labels:
+    verify-phase3-temp: "true"
+spec:
+  selector:
+    matchLabels:
+      app: p3-mtls-echo
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/default/sa/default
+      to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/"]
+            ports: ["8080"]
 MANIFEST
 
     kubectl wait --for=condition=Available deployment/p3-mtls-echo -n default --timeout=180s >/dev/null 2>&1
 }
 
 find_nginx_log_line() {
-    local probe_id="$1" attempt nginx_log_line
+    local probe_id="$1" nginx_log_line
 
-    for attempt in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5; do
         nginx_log_line=$(kubectl logs deployment/nginx-gateway --tail=800 2>/dev/null | grep "$probe_id" | tail -n 1 || true)
         if [[ -n "$nginx_log_line" ]]; then
             printf '%s\n' "$nginx_log_line"
@@ -809,6 +832,7 @@ main() {
     fi
 
     local ingress_service_selector ingress_service_account ingress_https_target_port
+    # shellcheck disable=SC2016
     ingress_service_selector=$(kubectl get svc -n istio-ingress "${INGRESS_GATEWAY_WORKLOAD_NAME}" \
         -o go-template='{{ range $k, $v := .spec.selector }}{{ $k }}={{ $v }}{{ end }}' 2>/dev/null || true)
     if [[ "$ingress_service_selector" == *"${INGRESS_GATEWAY_LABEL_SELECTOR}"* ]]; then
@@ -1060,6 +1084,7 @@ main() {
     require_named_resources authorizationpolicy istio-ingress ext-authz-at-ingress
 
     local ext_authz_selector nginx_principal ext_authz_principal session_principal
+    # shellcheck disable=SC2016
     ext_authz_selector=$(kubectl get authorizationpolicy.security.istio.io ext-authz-at-ingress -n istio-ingress \
         -o go-template='{{ range $k, $v := .spec.selector.matchLabels }}{{ $k }}={{ $v }}{{ end }}' 2>/dev/null || true)
     if [[ "$ext_authz_selector" == *"${INGRESS_GATEWAY_LABEL_SELECTOR}"* ]]; then

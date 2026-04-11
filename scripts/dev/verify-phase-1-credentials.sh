@@ -553,7 +553,7 @@ else
 fi
 
 EXT_AUTHZ_SESSION_ID="phase1-verify-$RANDOM-$RANDOM"
-"${SCRIPT_DIR}/seed-ext-authz-session.sh" "$EXT_AUTHZ_SESSION_ID" >/dev/null
+"${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "$EXT_AUTHZ_SESSION_ID" >/dev/null
 
 AUTH_HEADERS=$(mktemp)
 TMP_FILES+=("$AUTH_HEADERS")

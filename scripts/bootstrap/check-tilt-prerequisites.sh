@@ -276,12 +276,12 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
                 echo -e "${GREEN}✓${NC} Calico daemonset ready (${CALICO_READY}/${CALICO_DESIRED})"
             else
                 echo -e "${RED}✗${NC} Calico daemonset not ready (${CALICO_READY}/${CALICO_DESIRED})"
-                echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/dev/install-calico.sh"
+                echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
                 ((ERRORS++))
             fi
         else
             echo -e "${RED}✗${NC} Calico is not installed"
-            echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/dev/install-calico.sh"
+            echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
             ((ERRORS++))
         fi
     fi
@@ -386,7 +386,7 @@ if [ "$CLUSTER_CONNECTED" = true ]; then
         for missing in "${PHASE4_MISSING[@]}"; do
             echo "  Missing: $missing"
         done
-        echo "  Run ./scripts/dev/setup-infra-tls.sh on your host, then rerun the prerequisite check."
+        echo "  Run ./scripts/bootstrap/setup-infra-tls.sh on your host, then rerun the prerequisite check."
         ((ERRORS++))
     fi
 else

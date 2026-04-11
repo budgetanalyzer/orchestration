@@ -69,8 +69,8 @@ a pinned verified release if the current Helm binary is missing or unsupported.
 It also refreshes the existing `istio` Helm repo index on every run so the host
 does not reuse stale chart metadata after an Istio version bump.
 `setup.sh` now generates the internal transport-TLS secrets automatically.
-To regenerate them standalone, run `./scripts/dev/setup-infra-tls.sh` from the host.
-`./scripts/dev/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
+To regenerate them standalone, run `./scripts/bootstrap/setup-infra-tls.sh` from the host.
+`./scripts/bootstrap/check-tilt-prerequisites.sh` fails until `infra-ca` plus the
 three `infra-tls-*` secrets exist.
 `./scripts/dev/verify-phase-4-transport-encryption.sh` is the transport-TLS
 completion gate for Redis, PostgreSQL, and RabbitMQ.
@@ -106,7 +106,7 @@ verifier says pods or network policies are missing while Tilt looks healthy,
 check `kubectl config current-context` and `tilt get uiresources` from the same
 host shell before debugging the verifier itself.
 
-> **Setup failing?** Run `./scripts/dev/check-tilt-prerequisites.sh` — it tells you exactly what's missing and points Linux/macOS hosts at the checked-in verified installer flow for `kubectl`, Helm, Tilt, and `mkcert`.
+> **Setup failing?** Run `./scripts/bootstrap/check-tilt-prerequisites.sh` — it tells you exactly what's missing and points Linux/macOS hosts at the checked-in verified installer flow for `kubectl`, Helm, Tilt, and `mkcert`.
 
 ## External Services (~10 min one-time setup)
 

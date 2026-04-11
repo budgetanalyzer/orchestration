@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
     cat <<'EOF'
-Usage: scripts/dev/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno> [--install-dir DIR]
+Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno> [--install-dir DIR]
 
 Installs the repo-pinned tool release for the current OS/architecture after
 verifying the checked-in SHA-256 checksum.

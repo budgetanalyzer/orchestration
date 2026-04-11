@@ -275,7 +275,7 @@ kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls
 ./scripts/dev/verify-session-architecture-phase-5.sh
 
 # Flush all Redis data (clears all sessions)
-./scripts/dev/flush-redis.sh
+./scripts/ops/flush-redis.sh
 ```
 
 **Log Patterns to Watch**:
@@ -648,7 +648,7 @@ kind delete cluster
 kind create cluster --config kind-cluster-config.yaml
 
 # Install Calico (required for NetworkPolicy enforcement)
-./scripts/dev/install-calico.sh
+./scripts/bootstrap/install-calico.sh
 
 # Confirm the recreated cluster matches kind-cluster-config.yaml
 docker inspect kind-control-plane --format '{{.Config.Image}}'
@@ -676,5 +676,5 @@ tilt trigger transaction-service
 ### Clear Redis Sessions
 
 ```bash
-./scripts/dev/flush-redis.sh
+./scripts/ops/flush-redis.sh
 ```

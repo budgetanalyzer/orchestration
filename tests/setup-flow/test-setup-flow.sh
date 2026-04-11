@@ -175,7 +175,7 @@ fi
 
 print_test "Installing Calico CNI..."
 
-if "$ORCHESTRATION_DIR/scripts/dev/install-calico.sh"; then
+if "$ORCHESTRATION_DIR/scripts/bootstrap/install-calico.sh"; then
     pass_test "Calico install script completed"
 else
     fail_test "Calico install script failed"

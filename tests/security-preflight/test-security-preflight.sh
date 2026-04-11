@@ -65,7 +65,7 @@ kubectl get nodes >/dev/null
 print_success "Kind cluster is ready"
 
 print_step "Installing Calico"
-"$ORCHESTRATION_DIR/scripts/dev/install-calico.sh"
+"$ORCHESTRATION_DIR/scripts/bootstrap/install-calico.sh"
 print_success "Calico is installed"
 
 print_step "Installing Gateway API CRDs"

@@ -222,7 +222,7 @@ phase7_install_hint() {
 
     tool="$1"
     repo_root="${2:-.}"
-    installer_path="${repo_root%/}/scripts/dev/install-verified-tool.sh"
+    installer_path="${repo_root%/}/scripts/bootstrap/install-verified-tool.sh"
 
     case "$tool" in
         mkcert)

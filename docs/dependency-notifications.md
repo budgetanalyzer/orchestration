@@ -137,7 +137,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | v1.4.0 |
 | **Watch** | https://github.com/kubernetes-sigs/gateway-api |
-| **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/dev/check-tilt-prerequisites.sh` |
+| **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
 
 **Why important**: Gateway API is graduating features from beta to GA. API changes affect HTTPRoute manifests, Gateway resources, and how Istio consumes them. Istio's support for specific Gateway API versions is documented in each Istio release.
 
@@ -149,7 +149,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | v3.29.3 |
 | **Watch** | https://github.com/projectcalico/calico |
-| **Defined in** | `orchestration/scripts/dev/install-calico.sh` |
+| **Defined in** | `orchestration/scripts/bootstrap/install-calico.sh` |
 
 **Why important**: CNI plugin that enforces NetworkPolicies. Must be compatible with the Kubernetes version running in Kind. Security-relevant because it's the enforcement layer for all network segmentation.
 
@@ -303,7 +303,7 @@ Test infrastructure. Usually backward compatible within major version.
 |---|---|
 | **Current version** | 3.20.x (tested v3.20.1) |
 | **Releases** | https://github.com/helm/helm |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile`, `orchestration/scripts/dev/check-tilt-prerequisites.sh` |
+| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile`, `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
 
 Helm 4 is explicitly blocked in this repo. Watch only to monitor the Helm 4 GA timeline and plan accordingly.
 
@@ -456,10 +456,10 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
 | kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
 | Istio | 1.29.1 | `orchestration/Tiltfile` |
-| Calico | v3.29.3 | `orchestration/scripts/dev/install-calico.sh` |
+| Calico | v3.29.3 | `orchestration/scripts/bootstrap/install-calico.sh` |
 | Kyverno | 3.7.1 | `orchestration/Tiltfile` |
 | Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
-| mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/dev/install-verified-tool.sh` |
+| mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/bootstrap/install-verified-tool.sh` |
 | kubeconform | v0.7.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kube-linter | v0.8.3 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | Kyverno CLI | v1.17.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |

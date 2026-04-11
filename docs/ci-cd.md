@@ -73,7 +73,7 @@ What it runs:
 - `./scripts/dev/verify-phase-7-static-manifests.sh --self-test`
 
 The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
-`kyverno` binaries through `scripts/dev/install-verified-tool.sh`, then runs:
+`kyverno` binaries through `scripts/bootstrap/install-verified-tool.sh`, then runs:
 
 - schema validation for checked-in manifests, with explicit missing-schema
   allowances for checked-in CRD resources such as Istio, Gateway API, Kyverno,

@@ -315,7 +315,7 @@ main() {
 
     local identity_session identity_probe_a identity_probe_b identity_status_a identity_status_b
     identity_session="phase6-session7-identity-$(date +%s)"
-    "${SCRIPT_DIR}/seed-ext-authz-session.sh" "${identity_session}" >/dev/null
+    "${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "${identity_session}" >/dev/null
 
     identity_probe_a="${identity_session}-a"
     identity_status_a=$(pod_api_status "${PROBE_POD_A}" "${identity_session}" "${FORGED_XFF_PRIMARY}" "${identity_probe_a}")
@@ -341,7 +341,7 @@ main() {
 
     local rate_session burst_prefix burst_statuses burst_429s burst_summary other_client_status
     rate_session="phase6-session7-rate-$(date +%s)"
-    "${SCRIPT_DIR}/seed-ext-authz-session.sh" "${rate_session}" >/dev/null
+    "${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "${rate_session}" >/dev/null
     burst_prefix="${rate_session}-burst-a"
     burst_statuses=$(pod_api_burst "${PROBE_POD_A}" "${rate_session}" "${FORGED_XFF_PRIMARY}" "${burst_prefix}" "${API_BURST_REQUESTS}" "${API_BURST_PARALLELISM}")
     burst_429s=$(printf '%s\n' "${burst_statuses}" | count_status 429)

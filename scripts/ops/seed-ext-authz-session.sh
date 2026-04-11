@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ./scripts/dev/seed-ext-authz-session.sh [session-id]
+# Usage: ./scripts/ops/seed-ext-authz-session.sh [session-id]
 # Creates a test session in Redis for ext-authz development/testing.
 
 set -euo pipefail

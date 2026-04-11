@@ -43,7 +43,7 @@ assert_host_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
         error "This script must be run from your host machine, not from the devcontainer or Tilt."
         echo "        Open a host terminal in $ORCHESTRATION_DIR and run:" >&2
-        echo "        ./scripts/dev/setup-infra-tls.sh" >&2
+        echo "        ./scripts/bootstrap/setup-infra-tls.sh" >&2
         exit 1
     fi
 }
@@ -230,5 +230,5 @@ echo "  $(service_cert_path postgresql)"
 echo "  $(service_cert_path rabbitmq)"
 echo
 echo "Next steps:"
-echo "  ./scripts/dev/check-tilt-prerequisites.sh"
+echo "  ./scripts/bootstrap/check-tilt-prerequisites.sh"
 echo "  tilt up"

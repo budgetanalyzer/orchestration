@@ -29,7 +29,7 @@
 
 ```bash
 # Run the check script
-./scripts/dev/check-tilt-prerequisites.sh
+./scripts/bootstrap/check-tilt-prerequisites.sh
 
 # Or check manually:
 docker --version
@@ -51,7 +51,7 @@ now flow through Gateway `spec.infrastructure.parametersRef` via
 `kubernetes/istio/ingress-gateway-config.yaml`.
 
 For host-side binary installs, prefer the checked-in verified installer:
-`./scripts/dev/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>`.
+`./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>`.
 It uses pinned release artifacts with checked-in SHA-256 values instead of
 floating installer endpoints.
 
@@ -285,9 +285,9 @@ Both dashboards are declaratively provisioned from
 `kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
 pod restarts. See [Observability Architecture](../architecture/observability.md)
 for scrape topology details, security compliance, and debugging guidance.
-`./scripts/dev/check-tilt-prerequisites.sh` also blocks on the
+`./scripts/bootstrap/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
-`./setup.sh` on the host. Use `./scripts/dev/setup-infra-tls.sh` only when you
+`./setup.sh` on the host. Use `./scripts/bootstrap/setup-infra-tls.sh` only when you
 need to regenerate just the internal transport-TLS secrets.
 All verification scripts use the current `kubectl` context. If one reports
 missing pods, secrets, or network policies while Tilt appears healthy, verify
@@ -323,7 +323,7 @@ also writes `.loadtest/session-pool.txt` for any future traffic-replay tooling,
 but no local k6 step is currently required.
 
 Tilt now renders the Auth0 Istio egress manifests through
-`./scripts/dev/render-istio-egress-config.sh`, using the same
+`./scripts/ops/render-istio-egress-config.sh`, using the same
 `AUTH0_ISSUER_URI` contract that populates `ConfigMap/session-gateway-idp-config`.
 Production config sourcing should keep that same seam: the value that creates
 the Session Gateway IDP config must also drive the Auth0 egress render/apply
@@ -799,13 +799,13 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 
 ```bash
 # Re-run browser-facing wildcard certificate setup on HOST
-./scripts/dev/setup-k8s-tls.sh
+./scripts/bootstrap/setup-k8s-tls.sh
 
 # Verify wildcard secret exists
 kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 
 # Re-run internal transport-TLS setup on HOST
-./scripts/dev/setup-infra-tls.sh
+./scripts/bootstrap/setup-infra-tls.sh
 
 # Verify infra secrets exist
 kubectl get secret -n default infra-ca

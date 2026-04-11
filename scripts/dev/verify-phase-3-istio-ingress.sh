@@ -945,7 +945,7 @@ main() {
 
     local session_id echo_response echo_status echo_body
     session_id="phase3-echo-$(date +%s)"
-    "${SCRIPT_DIR}/seed-ext-authz-session.sh" "$session_id" >/dev/null
+    "${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "$session_id" >/dev/null
 
     echo_response=$(curl -sk --max-time "$CURL_TIMEOUT" \
         -H 'X-User-Id: forged-user-999' \
@@ -1222,7 +1222,7 @@ main() {
     fi
 
     session_id="phase3-xff-api-$(date +%s)"
-    "${SCRIPT_DIR}/seed-ext-authz-session.sh" "$session_id" >/dev/null
+    "${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "$session_id" >/dev/null
     api_probe_id="phase3-xff-api-$(date +%s)"
     api_probe_status=$(retry_external_status "/api/v1/transactions?phase3_client_ip_test=${api_probe_id}" \
         -H "X-Forwarded-For: ${FORGED_XFF_SENTINEL}" \

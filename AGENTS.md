@@ -203,7 +203,7 @@ directly from Helm. Ingress gateway hardening is declared through
 
 Check prerequisites:
 ```bash
-./scripts/dev/check-tilt-prerequisites.sh
+./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
 **First-time setup**:

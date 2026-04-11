@@ -21,7 +21,7 @@ The Phase 7 static gate wraps those fixtures together with schema validation,
 ```
 
 That static gate also generates a small Kyverno replay from
-`scripts/dev/lib/phase-7-allowed-latest.txt` so representative approved local
+`scripts/lib/phase-7-allowed-latest.txt` so representative approved local
 Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures
 stop matching the live apply path.
 

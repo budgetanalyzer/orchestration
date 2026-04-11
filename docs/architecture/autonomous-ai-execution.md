@@ -389,7 +389,7 @@ This constraint applies to the developer container and the real local setup flow
 mkcert "*.budgetanalyzer.localhost"
 openssl genrsa -out server.key 2048
 openssl req -new -key server.key -out server.csr
-./scripts/dev/setup-k8s-tls.sh  # (generates certificates)
+./scripts/bootstrap/setup-k8s-tls.sh  # (generates certificates)
 ```
 
 #### Allowed Operations (Read-Only)
@@ -408,7 +408,7 @@ When SSL issues occur, guide the user to run certificate generation scripts **on
 ```bash
 # User runs on host (outside container):
 cd /path/to/orchestration
-./scripts/dev/setup-k8s-tls.sh
+./scripts/bootstrap/setup-k8s-tls.sh
 ```
 
 ## Configuration Files
@@ -632,7 +632,7 @@ STOP. SSL certificates must be generated on the host machine, not in this contai
 The browser trusts the host's mkcert CA, not this container's CA.
 
 Please guide me to run:
-./scripts/dev/setup-k8s-tls.sh
+./scripts/bootstrap/setup-k8s-tls.sh
 
 on my host machine (outside the container).
 ```

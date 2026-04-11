@@ -1,5 +1,5 @@
 # Auth0 IdP (used by session-gateway)
-# Rendered by scripts/dev/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
+# Rendered by scripts/ops/render-istio-egress-config.sh from AUTH0_ISSUER_URI.
 apiVersion: networking.istio.io/v1
 kind: ServiceEntry
 metadata:

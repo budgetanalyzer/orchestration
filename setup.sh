@@ -60,7 +60,7 @@ version_lt() {
 
 install_supported_helm() {
     print_step "Installing Helm ${TESTED_HELM_VERSION}..."
-    if ! "$SCRIPT_DIR/scripts/dev/install-verified-tool.sh" helm; then
+    if ! "$SCRIPT_DIR/scripts/bootstrap/install-verified-tool.sh" helm; then
         print_error "Automatic Helm installation failed"
         echo "Install Helm ${TESTED_HELM_VERSION} manually, then rerun ./setup.sh"
         exit 1
@@ -172,7 +172,7 @@ if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
     print_error "Missing required tools: ${MISSING_TOOLS[*]}"
     echo ""
     echo "Please install missing tools first. See docs/development/prerequisites.md"
-    echo "Or run: ./scripts/dev/check-tilt-prerequisites.sh for installation hints"
+    echo "Or run: ./scripts/bootstrap/check-tilt-prerequisites.sh for installation hints"
     exit 1
 fi
 
@@ -212,7 +212,7 @@ check_kind_cluster_network_model
 # Step 3: Install Calico CNI
 # =============================================================================
 print_step "Installing/validating Calico CNI..."
-"$SCRIPT_DIR/scripts/dev/install-calico.sh"
+"$SCRIPT_DIR/scripts/bootstrap/install-calico.sh"
 print_success "Calico and CoreDNS are ready"
 
 # =============================================================================
@@ -297,14 +297,14 @@ fi
 # =============================================================================
 print_step "Setting up TLS certificates..."
 
-"$SCRIPT_DIR/scripts/dev/setup-k8s-tls.sh"
+"$SCRIPT_DIR/scripts/bootstrap/setup-k8s-tls.sh"
 
 # =============================================================================
 # Step 8: Generate infrastructure TLS certificates
 # =============================================================================
 print_step "Setting up infrastructure TLS certificates..."
 
-"$SCRIPT_DIR/scripts/dev/setup-infra-tls.sh"
+"$SCRIPT_DIR/scripts/bootstrap/setup-infra-tls.sh"
 
 # =============================================================================
 # Step 9: Create .env file

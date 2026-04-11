@@ -9,7 +9,7 @@
 # transport-encrypted client pods.
 #
 # Prerequisites: Tilt running with infrastructure TLS secrets created from the
-# host via ./scripts/dev/setup-infra-tls.sh.
+# host via ./scripts/bootstrap/setup-infra-tls.sh.
 #
 # Usage:
 #   ./scripts/dev/verify-phase-4-transport-encryption.sh

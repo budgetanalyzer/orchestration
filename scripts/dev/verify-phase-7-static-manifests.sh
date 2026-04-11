@@ -80,7 +80,7 @@ ensure_static_tool() {
     tool="$1"
     version="$(phase7_tool_version "$tool")"
     stamp="${STATIC_TOOLS_DIR}/.${tool}-${version}.installed"
-    installer="${REPO_DIR}/scripts/dev/install-verified-tool.sh"
+    installer="${REPO_DIR}/scripts/bootstrap/install-verified-tool.sh"
 
     mkdir -p "${STATIC_TOOLS_BIN}"
 

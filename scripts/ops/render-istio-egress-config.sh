@@ -17,7 +17,7 @@ TEMPLATE_FILES=(
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/dev/render-istio-egress-config.sh [options]
+Usage: ./scripts/ops/render-istio-egress-config.sh [options]
 
 Renders the checked-in Istio egress manifests with the Auth0 issuer hostname
 derived from AUTH0_ISSUER_URI.

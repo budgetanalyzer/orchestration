@@ -28,6 +28,15 @@ scripts/
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
+Choose scripts by runtime boundary:
+
+- `bootstrap/` changes or checks the host and cluster prerequisites.
+- `guardrails/` stays CI-safe and cluster-independent.
+- `smoketest/` assumes a live `kubectl` context and a running local stack.
+- `ops/` is for interactive local maintenance.
+- `loadtest/` manages synthetic local fixtures.
+- `repo/` coordinates cross-repo maintenance tasks.
+
 ## Bootstrap
 
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,

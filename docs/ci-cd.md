@@ -85,6 +85,12 @@ The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 - pattern scans for image pinning, namespace PSA labels, and lingering
   pipe-to-shell guidance in active setup docs/scripts
 
+That directory split is intentional: CI-safe checks live under
+`scripts/guardrails/`, shared installer/bootstrap helpers live under
+`scripts/bootstrap/`, and the live-cluster proof remains in
+`scripts/smoketest/` so GitHub Actions cannot silently drift into a
+static-only substitute for the local runtime gate.
+
 Use the same command locally to reproduce workflow failures without a cluster:
 
 ```bash

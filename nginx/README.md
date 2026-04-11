@@ -132,6 +132,10 @@ curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ```
 
+The surrounding script layout is purpose-split: gateway day-two helpers such as
+Redis/session maintenance live under `scripts/ops/`, while route and browser
+contract proofs live under `scripts/smoketest/`.
+
 ## Frontend Configuration
 
 NGINX serves two frontend modes on the same origin:

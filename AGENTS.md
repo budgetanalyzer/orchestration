@@ -307,7 +307,8 @@ tree -L 2 -I 'node_modules|target'
 
 **Key directories**:
 - [nginx/](nginx/) - Gateway configuration (dev and prod)
-- [scripts/](scripts/) - Automation and tooling
+- [scripts/](scripts/) - Automation and tooling, organized by purpose under `bootstrap/`, `guardrails/`, `smoketest/`, `ops/`, `loadtest/`, `repo/`, and `lib/`
+- [scripts/README.md](scripts/README.md) - Script directory map and canonical entry points
 - [docs/](docs/) - Architecture and cross-service documentation
 - [kubernetes/](kubernetes/) - Production deployment manifests
 

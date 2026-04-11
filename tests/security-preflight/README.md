@@ -11,6 +11,10 @@ Containerized runtime test harness for Security Hardening v2 Phase 0.
 
 This suite validates runtime platform security prerequisites after minimal control-plane bootstrapping.
 
+It depends on the reorganized script tree: bootstrap helpers live under
+`scripts/bootstrap/`, while the runtime verifier it exercises lives under
+`scripts/smoketest/`.
+
 It provisions only what the verifier needs:
 
 1. Kind cluster with `disableDefaultCNI`

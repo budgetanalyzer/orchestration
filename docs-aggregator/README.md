@@ -29,6 +29,9 @@ The generated unified downloads remain checked in here:
 - `docs-aggregator/openapi.yaml`
 
 Those files are refreshed by `./scripts/repo/generate-unified-api-docs.sh`.
+That generator lives under `scripts/repo/` because it coordinates live-cluster
+OpenAPI fetches with optional sibling-repo docs updates rather than acting as a
+service-local verifier.
 
 ## Public Outputs
 

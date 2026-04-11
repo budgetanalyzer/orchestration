@@ -20,6 +20,10 @@ The Phase 7 static gate wraps those fixtures together with schema validation,
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
+That script stays under `scripts/guardrails/` because it is CI-safe. The
+live-cluster runtime proof stays separate under
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh`.
+
 That static gate also generates a small Kyverno replay from
 `scripts/lib/phase-7-allowed-latest.txt` so representative approved local
 Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures

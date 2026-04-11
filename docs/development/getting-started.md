@@ -50,9 +50,17 @@ tilt up           # Start everything
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended Phase 6 completion gate
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local Phase 7 completion gate
+./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass
 ```
 
 Open https://app.budgetanalyzer.localhost when services are green.
+
+The script tree is now purpose-split: `scripts/bootstrap/` for host and
+cluster setup, `scripts/guardrails/` for CI-safe static checks,
+`scripts/smoketest/` for live-cluster verifiers, `scripts/ops/` for
+interactive maintenance, `scripts/loadtest/` for synthetic fixtures, and
+`scripts/repo/` for cross-repo maintenance. See [`scripts/README.md`](../../scripts/README.md)
+for the full map and the `smoketest.sh` execution order.
 
 Tilt now generates the local PostgreSQL, RabbitMQ, and Redis secrets from `.env`.
 The repo also ships a checked-in fallback

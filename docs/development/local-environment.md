@@ -200,6 +200,11 @@ fresh-cluster workflow.
 It runs the static guardrails, Phase 0 baseline, clean Tilt admission proof,
 monitoring render/runtime checks, Session Architecture Phase 5 verifier, and
 the final Phase 7 security umbrella in order.
+The surrounding `scripts/` tree is split by purpose: `bootstrap/` for setup,
+`guardrails/` for CI-safe static checks, `smoketest/` for live-cluster
+validation, `ops/` for day-two helpers, `loadtest/` for synthetic fixtures,
+and `repo/` for cross-repo maintenance. See
+[`scripts/README.md`](../../scripts/README.md) for the directory map.
 `./scripts/smoketest/verify-monitoring-rendered-manifests.sh` re-renders the pinned
 `kube-prometheus-stack` chart, proves every rendered workload image is
 digest-pinned, proves the render still avoids host-level node-exporter shapes,

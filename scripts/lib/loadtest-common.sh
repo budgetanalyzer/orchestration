@@ -11,6 +11,8 @@
 #
 # Source this file from seed-loadtest-users.sh,
 # seed-loadtest-transactions.sh, and teardown-loadtest.sh.
+#
+# shellcheck disable=SC2034,SC2016
 
 set -euo pipefail
 

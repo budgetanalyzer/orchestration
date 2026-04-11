@@ -460,9 +460,9 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Kyverno | 3.7.1 | `orchestration/Tiltfile` |
 | Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
 | mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/dev/install-verified-tool.sh` |
-| kubeconform | v0.7.0 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
-| kube-linter | v0.8.3 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
-| Kyverno CLI | v1.17.1 | `orchestration/scripts/dev/lib/pinned-tool-versions.sh` |
+| kubeconform | v0.7.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| kube-linter | v0.8.3 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| Kyverno CLI | v1.17.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 
 ### Container Images
 

@@ -6,8 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
-# shellcheck source=./lib/pinned-tool-versions.sh
-. "$SCRIPT_DIR/lib/pinned-tool-versions.sh"
+# shellcheck source=../lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -326,7 +326,7 @@ echo "---------------------------------------------"
 
 if grep -q "budgetanalyzer.localhost" /etc/hosts 2>/dev/null; then
     echo -e "${GREEN}✓${NC} budgetanalyzer.localhost entries found in /etc/hosts"
-    grep "budgetanalyzer.localhost" /etc/hosts | while read line; do
+    grep "budgetanalyzer.localhost" /etc/hosts | while read -r line; do
         echo "  $line"
     done
 else

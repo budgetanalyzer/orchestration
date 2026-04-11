@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TILTFILE="${REPO_DIR}/Tiltfile"
-INVENTORY_FILE="${SCRIPT_DIR}/lib/secrets-only-expected-keys.txt"
+INVENTORY_FILE="${SCRIPT_DIR}/../lib/secrets-only-expected-keys.txt"
 
 usage() {
     cat <<'EOF'
@@ -34,16 +34,14 @@ if [[ ! -f "${INVENTORY_FILE}" ]]; then
 fi
 
 declare -A allowed_keys=()
-declare -A allowed_notes=()
 declare -A actual_keys=()
 unexpected=()
 missing=()
 
-while IFS=$'\t' read -r secret_name key classification note; do
+while IFS=$'\t' read -r secret_name key classification _note; do
     [[ -n "${secret_name}" ]] || continue
     [[ "${secret_name}" == \#* ]] && continue
     allowed_keys["${secret_name}|${key}"]="${classification}"
-    allowed_notes["${secret_name}|${key}"]="${note}"
 done < "${INVENTORY_FILE}"
 
 current_secret=""
@@ -95,7 +93,7 @@ fi
 printf 'Secrets-only handling inventory passed'
 if grep -Fq $'\tmixed_required\t' "${INVENTORY_FILE}"; then
     printf ' (includes documented mixed-required payloads:'
-    while IFS=$'\t' read -r secret_name key classification note; do
+    while IFS=$'\t' read -r secret_name key classification _note; do
         [[ "${classification}" == "mixed_required" ]] || continue
         printf ' %s[%s]' "${secret_name}" "${key}"
     done < "${INVENTORY_FILE}"

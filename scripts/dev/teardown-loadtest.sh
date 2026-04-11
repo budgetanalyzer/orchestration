@@ -22,8 +22,8 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=lib/loadtest-common.sh
-source "${SCRIPT_DIR}/lib/loadtest-common.sh"
+# shellcheck source=../lib/loadtest-common.sh
+source "${SCRIPT_DIR}/../lib/loadtest-common.sh"
 
 usage() {
     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'

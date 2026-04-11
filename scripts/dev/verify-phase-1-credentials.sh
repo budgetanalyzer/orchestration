@@ -16,7 +16,7 @@ set -euo pipefail
 PASSED=0
 FAILED=0
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "${SCRIPT_DIR}/lib/redis-cli.sh"
+source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
@@ -244,6 +244,7 @@ pg_query() {
     local database="$3"
     local sql="${4:-SELECT 1;}"
 
+    # shellcheck disable=SC2016
     kubectl exec -n infrastructure "$POSTGRES_POD" -- \
         /bin/sh -ceu 'PGPASSWORD="$1" psql -X -tA -U "$2" -d "$3" -c "$4"' \
         sh "$password" "$user" "$database" "$sql" 2>&1 || true

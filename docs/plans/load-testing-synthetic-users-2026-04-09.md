@@ -140,7 +140,7 @@ stress different parts of the system and neither subsumes the other.
 
 Implemented in orchestration:
 
-- `scripts/dev/lib/loadtest-common.sh` — shared kind-only guard, PostgreSQL
+- `scripts/lib/loadtest-common.sh` — shared kind-only guard, PostgreSQL
   helpers, Redis helpers, and loadtest constants
 - `scripts/dev/seed-loadtest-users.sh` — synthetic users, roles, Redis session
   hashes, Redis `user_sessions:{userId}` indexes, and `.loadtest/session-pool.txt`
@@ -164,7 +164,7 @@ Redis session hashes in one pass.
 Files to change:
 
 - `scripts/dev/seed-loadtest-users.sh` (new)
-- `scripts/dev/lib/` — a shared helper for the permission-service psql exec
+- `scripts/lib/` — a shared helper for the permission-service psql exec
   and for redis `HSET` writes in a loop, if one does not already exist
 - `scripts/README.md`
 

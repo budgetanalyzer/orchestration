@@ -8,8 +8,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./scripts/dev/lib/pinned-tool-versions.sh
-. "$SCRIPT_DIR/scripts/dev/lib/pinned-tool-versions.sh"
+# shellcheck source=./scripts/lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/scripts/lib/pinned-tool-versions.sh"
 
 # Colors for output
 RED='\033[0;31m'

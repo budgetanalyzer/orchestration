@@ -339,8 +339,8 @@ Each microservice is maintained in its own repository:
   source of truth for Phase 7 image-pinning scope, local `:latest`
   exceptions, installer-hardening targets, and explicit exclusions.
 - The executable Phase 7 image inventories live in
-  `scripts/dev/lib/phase-7-image-pinning-targets.txt` and
-  `scripts/dev/lib/phase-7-allowed-latest.txt`; keep them aligned with that
+  `scripts/lib/phase-7-image-pinning-targets.txt` and
+  `scripts/lib/phase-7-allowed-latest.txt`; keep them aligned with that
   contract doc.
 - Only the seven documented local image repos may remain on `:latest` in
   checked-in manifests. Live Tilt deploys rewrite those same repos to immutable

@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "${SCRIPT_DIR}/lib/redis-cli.sh"
+source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,7 +19,8 @@ NC='\033[0m'
 echo -e "${YELLOW}Redis Flush Script (Kubernetes)${NC}"
 echo ""
 
-read -p "$(echo -e ${RED}WARNING: This will delete ALL Redis data including sessions. Continue? [y/N]:${NC} )" -n 1 -r
+printf -v confirm_prompt "%bWARNING: This will delete ALL Redis data including sessions. Continue? [y/N]:%b " "$RED" "$NC"
+read -r -p "$confirm_prompt" -n 1
 echo
 [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Aborted." && exit 0
 

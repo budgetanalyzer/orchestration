@@ -5,8 +5,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# shellcheck source=./lib/pinned-tool-versions.sh
-. "$SCRIPT_DIR/lib/pinned-tool-versions.sh"
+# shellcheck source=../lib/pinned-tool-versions.sh
+. "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
 
 usage() {
     cat <<'EOF'

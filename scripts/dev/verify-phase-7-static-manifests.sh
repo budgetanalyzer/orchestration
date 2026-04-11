@@ -12,8 +12,8 @@ KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/dev/check-phase-7-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/dev/check-secrets-only-handling.sh"
 
-# shellcheck source=./lib/pinned-tool-versions.sh
-. "${SCRIPT_DIR}/lib/pinned-tool-versions.sh"
+# shellcheck source=../lib/pinned-tool-versions.sh
+. "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
 
 KUBECONFORM_ALLOWED_MISSING_KINDS=(
     AuthorizationPolicy
@@ -465,7 +465,7 @@ scan_namespace_psa_labels_in_files() {
 
         for label in "${required_labels[@]}"; do
             if ! grep -Fq "${label}" "${file}"; then
-                failures+=("${file#${REPO_DIR}/}: missing ${label}")
+                failures+=("${file#"${REPO_DIR}"/}: missing ${label}")
             fi
         done
     done
@@ -568,7 +568,7 @@ scan_image_pinning_in_files() {
         fi
 
         if [[ "${ref}" == *":latest"* ]]; then
-            failures+=("${file#${REPO_DIR}/}:${line}: unexpected :latest image ref: ${ref}")
+            failures+=("${file#"${REPO_DIR}"/}:${line}: unexpected :latest image ref: ${ref}")
             continue
         fi
 
@@ -576,7 +576,7 @@ scan_image_pinning_in_files() {
             continue
         fi
 
-        failures+=("${file#${REPO_DIR}/}:${line}: missing @sha256 digest: ${ref}")
+        failures+=("${file#"${REPO_DIR}"/}:${line}: missing @sha256 digest: ${ref}")
     done < <(extract_image_refs_from_files "${files[@]}")
 
     if (( refs_checked == 0 )); then

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "${SCRIPT_DIR}/lib/redis-cli.sh"
+source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$REDIS_POD" ]; then

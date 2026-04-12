@@ -281,9 +281,11 @@ echo
 ```
 
 After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
-`spring-boot-services` job shows `currency-service`, `transaction-service`,
-`permission-service`, and `session-gateway` as `UP`. Useful first queries:
-`up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, and
+Spring Boot targets for `currency-service`, `transaction-service`,
+`permission-service`, and `session-gateway` are `UP`. Prometheus labels each
+target with the service name as `job`; use the `application` label for
+cross-service checks. Useful first queries:
+`up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, and
 `jvm_gc_pause_seconds_count`.
 
 Grafana ships with two pre-provisioned dashboards (no manual import needed):
@@ -295,8 +297,20 @@ Grafana ships with two pre-provisioned dashboards (no manual import needed):
 
 Both dashboards are declaratively provisioned from
 `kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
-pod restarts. See [Observability Architecture](../architecture/observability.md)
+pod restarts. Reference dashboard exports live under
+`kubernetes/monitoring/dashboards-src/`, but Tilt applies the ConfigMap
+directly. See [Observability Architecture](../architecture/observability.md)
 for scrape topology details, security compliance, and debugging guidance.
+When dashboard behavior needs browser-side evidence, run:
+
+```bash
+./scripts/ops/grafana-ui-playwright-debug.sh
+```
+
+That helper logs into `https://grafana.budgetanalyzer.localhost` with the
+admin password from the Kubernetes secret and stores ignored screenshots,
+dashboard inventory, panel-state summaries, console errors, request failures,
+and a Grafana datasource query response under `tmp/grafana-ui-debug/`.
 `./scripts/bootstrap/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/bootstrap/setup-infra-tls.sh` only when you

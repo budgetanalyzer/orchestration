@@ -510,7 +510,7 @@ access use explicit projected service-account token volumes. See
 **Security-relevant metrics to watch:**
 - `http_server_requests_seconds_count{status="401"}` — authorization failures
 - `http_server_requests_seconds_count{status="429"}` — rate limiting triggers
-- `up{job="spring-boot-services"}` — service availability
+- `up{namespace="default", application!=""}` — Spring service availability
 
 **Alerting**: Not yet configured. Dashboards are the current observability
 surface; alerting rules are a future follow-up.

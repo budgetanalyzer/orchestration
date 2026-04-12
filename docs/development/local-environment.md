@@ -281,9 +281,11 @@ echo
 ```
 
 After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
-`spring-boot-services` job shows `currency-service`, `transaction-service`,
-`permission-service`, and `session-gateway` as `UP`. Useful first queries:
-`up{job="spring-boot-services"}`, `jvm_memory_used_bytes`, and
+Spring Boot targets for `currency-service`, `transaction-service`,
+`permission-service`, and `session-gateway` are `UP`. Prometheus labels each
+target with the service name as `job`; use the `application` label for
+cross-service checks. Useful first queries:
+`up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, and
 `jvm_gc_pause_seconds_count`.
 
 Grafana ships with two pre-provisioned dashboards (no manual import needed):

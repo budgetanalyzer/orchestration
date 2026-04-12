@@ -149,14 +149,16 @@ for the full evaluation.
 
 **Service target down in Prometheus:**
 1. Open `http://localhost:9090/targets` (after port-forward)
-2. Find the `spring-boot-services` job
+2. Find the Spring Boot targets for `currency-service`, `transaction-service`,
+   `permission-service`, and `session-gateway`. The `ServiceMonitor` is named
+   `spring-boot-services`, but the Prometheus `job` label is the service name.
 3. If a target shows `DOWN`, check:
    - Pod is running: `kubectl get pods -l app.kubernetes.io/framework=spring-boot`
    - Actuator endpoint responds (use the service's context path):
-     - session-gateway: `kubectl exec <pod> -- curl -s localhost:8080/actuator/prometheus | head`
-     - transaction-service: `kubectl exec <pod> -- curl -s localhost:8080/transaction-service/actuator/prometheus | head`
-     - currency-service: `kubectl exec <pod> -- curl -s localhost:8080/currency-service/actuator/prometheus | head`
-     - permission-service: `kubectl exec <pod> -- curl -s localhost:8080/permission-service/actuator/prometheus | head`
+     - session-gateway: `kubectl exec <pod> -- curl -s localhost:8081/actuator/prometheus | head`
+     - transaction-service: `kubectl exec <pod> -- curl -s localhost:8082/transaction-service/actuator/prometheus | head`
+     - currency-service: `kubectl exec <pod> -- curl -s localhost:8084/currency-service/actuator/prometheus | head`
+     - permission-service: `kubectl exec <pod> -- curl -s localhost:8086/permission-service/actuator/prometheus | head`
    - NetworkPolicy allows Prometheus access: `kubectl get networkpolicy -n default`
 
 **Envoy metrics missing:**
@@ -213,7 +215,7 @@ kubectl port-forward -n monitoring \
 ```
 
 Then open `http://localhost:9090`. Useful first queries:
-- `up{job="spring-boot-services"}` — are all four services being scraped?
+- `up{namespace="default", application!=""}` — are all four Spring services being scraped?
 - `jvm_memory_used_bytes` — JVM memory usage across services
 - `jvm_gc_pause_seconds_count` — GC pause frequency
 

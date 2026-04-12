@@ -24,6 +24,15 @@ ls -d /workspace/*-service /workspace/session-gateway /workspace/budget-analyzer
 
 NEVER use Agent/subagent tools for code exploration. Use Grep, Glob, and Read directly.
 
+## Shell Script Validation
+
+When adding or modifying shell scripts (`.sh` files) in this repo, always validate them before considering the work complete:
+
+1. **Syntax check**: `bash -n <script>` — catches syntax errors without executing
+2. **Lint**: `shellcheck <script>` — catches common bugs, quoting issues, and portability problems
+
+Fix all errors and warnings before committing. Do not suppress shellcheck warnings without a justifying `# shellcheck disable=SC####` comment.
+
 ## Documentation Discipline
 
 Always keep documentation up to date after any configuration or code change.

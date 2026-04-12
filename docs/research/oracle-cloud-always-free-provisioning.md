@@ -300,8 +300,14 @@ Do this weekly for the first month after deployment to confirm your workload kee
 If your instance will sit idle while you prepare deployment:
 
 - You have **14 days minimum** before any action (7 days idle + 7 days grace)
-- Restart the instance after receiving a warning email to reset the idle counter
+- Rebooting or restarting the instance does **not** reset the 7-day metrics window — the idle determination is based on rolling utilization metrics, not instance state changes
 - Don't leave it idle for extended periods — deploy something or accept the risk of needing to fight the capacity lottery again to restart
+
+### Recommended: set up UptimeRobot during the setup phase
+
+Before the full stack is running, set up a free [UptimeRobot](https://uptimerobot.com/) HTTP check hitting the instance every 5 minutes. This generates steady network traffic that contributes to keeping the network utilization metric above the 20% threshold. Once k3s and the application stack are deployed, Prometheus scraping (~20 targets every 15 seconds) and Istio sidecar telemetry will keep all three metrics well above threshold permanently — but UptimeRobot covers the gap during the setup phase when the box is mostly idle between SSH sessions.
+
+UptimeRobot also serves a second purpose once the demo is live: it keeps the JVMs warm so the first visitor after an idle period doesn't hit a 30+ second cold-start (see [`single-instance-demo-hosting.md` §7](./single-instance-demo-hosting.md#7-is-this-a-bad-idea-honest-assessment)).
 
 ---
 

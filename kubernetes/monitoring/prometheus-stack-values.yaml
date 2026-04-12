@@ -69,6 +69,8 @@ grafana:
     server:
       domain: grafana.budgetanalyzer.localhost
       root_url: https://grafana.budgetanalyzer.localhost
+    feature_toggles:
+      newPanelPadding: false
     security:
       cookie_secure: true
   datasources:

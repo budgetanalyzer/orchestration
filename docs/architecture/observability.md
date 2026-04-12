@@ -103,13 +103,21 @@ Grafana ships with two pre-provisioned dashboards (no manual import):
 
 | Dashboard | Source | UID | Use For |
 |-----------|--------|-----|---------|
-| JVM (Micrometer) | Grafana ID 4701 | `jvm-micrometer` | Memory pools, GC pauses, threads, classloading |
+| JVM (Micrometer) | Grafana ID 4701, locally modernized | `jvm-micrometer` | Memory pools, GC pauses, threads, classloading |
 | Spring Boot 3.x Statistics | Grafana ID 19004 | `spring-boot-3x` | HTTP request rates, latencies, error rates |
 
-The vendored upstream dashboard exports live under
-`kubernetes/monitoring/dashboards-src/`. The provisioned ConfigMap embeds
-locally adapted copies with import metadata removed, the Prometheus datasource
-rewired to `uid: prometheus`, and stable local dashboard UIDs assigned.
+The provisioned ConfigMap,
+`kubernetes/monitoring/grafana-dashboards-configmap.yaml`, is the canonical
+deployment artifact. It embeds locally adapted dashboard JSON with import
+metadata removed, the Prometheus datasource rewired to `uid: prometheus`, and
+stable local dashboard UIDs assigned. The JVM dashboard entry is locally
+modernized from Grafana 4701 rev10: it removes legacy top-level `rows`,
+replaces the old Quick Facts `singlestat` panels with native `stat` panels,
+and scopes the workload variables to `jvm_info`.
+
+Reference dashboard exports live under
+`kubernetes/monitoring/dashboards-src/` for provenance and comparison only.
+Tilt does not consume those source files directly.
 
 Dashboards are provisioned via the Grafana file provider: a ConfigMap
 (`grafana-dashboards`) is mounted directly into the Grafana pod. Grafana

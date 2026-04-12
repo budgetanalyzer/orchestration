@@ -295,7 +295,9 @@ Grafana ships with two pre-provisioned dashboards (no manual import needed):
 
 Both dashboards are declaratively provisioned from
 `kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
-pod restarts. See [Observability Architecture](../architecture/observability.md)
+pod restarts. Reference dashboard exports live under
+`kubernetes/monitoring/dashboards-src/`, but Tilt applies the ConfigMap
+directly. See [Observability Architecture](../architecture/observability.md)
 for scrape topology details, security compliance, and debugging guidance.
 When dashboard behavior needs browser-side evidence, run:
 

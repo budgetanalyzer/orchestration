@@ -6,6 +6,39 @@ Investigate why setting `feature_toggles.newPanelPadding: false` fixed the
 Spring Boot dashboard layout but caused the JVM Micrometer dashboard to show
 `N/A`, without making dashboard/config changes during the investigation.
 
+Follow-up implementation scope is JVM-only. The Spring Boot dashboard JSON is a
+known-good reference and regression baseline; do not change it as part of this
+plan unless later evidence proves it is independently broken.
+
+## Implementation Attempt
+
+The first implementation pass keeps the scope JVM-only:
+
+- Added a reference modernized JVM dashboard source at
+  `kubernetes/monitoring/dashboards-src/jvm-micrometer-grafana-4701-rev10.modernized.json`.
+- Kept the original Grafana 4701 rev10 export in place for provenance.
+- Removed the provisioned JVM dashboard's legacy top-level `rows` layout by
+  flattening it into top-level Grafana row/panel entries.
+- Converted the Quick Facts `singlestat` panels to native `stat` panels while
+  preserving their existing panel PromQL.
+- Changed the active JVM dashboard's `application` and `instance` variables to
+  resolve from `jvm_info`, matching the documented dashboard label contract.
+- Removed two obsolete JVM graph panels that rendered visible `No data` for the
+  current Micrometer metric set: the Tomcat/Jetty thread-utilisation panel and
+  the old `process_memory_*` process-memory panel. Prometheus exposes the
+  existing JVM thread, file descriptor, CPU, and JVM memory metrics for the
+  selected services, but not those older metric families.
+- Kept `kubernetes/monitoring/grafana-dashboards-configmap.yaml` as the
+  canonical deployment artifact. The dashboard source files under
+  `kubernetes/monitoring/dashboards-src/` are reference/provenance only, and
+  Tilt does not consume them directly.
+- Browser verification for
+  `tmp/grafana-ui-debug/jvm-modernized-attempt-2` opened both dashboards,
+  confirmed the Grafana backend query for the selected JVM metric returned
+  rows, and reported no visible JVM `N/A`, no visible JVM `No data`, and no
+  JVM panel errors. One Grafana date-parsing console warning remains; it does
+  not correspond to a panel error or failed request in that run.
+
 ## What I Checked
 
 1. The toggle is wired exactly where expected in
@@ -39,6 +72,8 @@ Spring Boot dashboard layout but caused the JVM Micrometer dashboard to show
    - explicit `pluginVersion":"9.5.1"`
    - see
      [kubernetes/monitoring/grafana-dashboards-configmap.yaml](/workspace/orchestration/kubernetes/monitoring/grafana-dashboards-configmap.yaml:141)
+   - this dashboard should be used as the model for the JVM Micrometer update,
+     not edited as part of the fix
 
 6. This is not a scrape or datasource failure.
    I verified at runtime that:
@@ -48,6 +83,16 @@ Spring Boot dashboard layout but caused the JVM Micrometer dashboard to show
      that same query
 
 7. Grafana did not log dashboard parse/provisioning failures during startup.
+
+8. A repeatable browser-side verification helper now exists:
+   `./scripts/ops/grafana-ui-playwright-debug.sh`. The first verified run
+   authenticated through `https://grafana.budgetanalyzer.localhost`, opened both
+   provisioned dashboards, captured screenshots, and confirmed Grafana's backend
+   datasource query for
+   `jvm_info{namespace="default", application="currency-service"}` returned
+   rows. In that run the JVM dashboard rendered visible `No data` states rather
+   than visible `N/A` states, which still points at dashboard rendering or
+   templating because the backend query had data.
 
 ## Working Theory
 
@@ -93,18 +138,46 @@ This is the cleanest path.
 
 Approach:
 
-1. Open the JVM dashboard in Grafana 12.
-2. Save a modernized export from the UI after converting the legacy top row to
-   native `stat` panels and preserving the existing PromQL.
-3. Replace the dashboard source file under `kubernetes/monitoring/dashboards-src/`
-   and regenerate/update the provisioned dashboard from that source, instead of
-   hand-editing the embedded ConfigMap blob.
+1. Capture a Playwright baseline before editing:
+   ```bash
+   ./scripts/ops/grafana-ui-playwright-debug.sh \
+     --artifact-dir tmp/grafana-ui-debug/baseline
+   ```
+2. Open the JVM dashboard in Grafana 12.
+3. Save a modernized JVM Micrometer export from the UI after converting the
+   legacy top row to native `stat` panels and preserving the existing PromQL.
+   Use the working Spring Boot dashboard as the shape/model for current
+   Grafana panel JSON, but do not change the Spring Boot dashboard source.
+4. Replace the dashboard source file under `kubernetes/monitoring/dashboards-src/`
+   for the JVM Micrometer dashboard only, then regenerate/update only the JVM
+   provisioned dashboard entry from that source instead of hand-editing the
+   embedded ConfigMap blob.
+5. Let Tilt apply the monitoring manifest change, or apply the updated
+   `grafana-dashboards` ConfigMap directly during a local debugging iteration.
+   Wait for Grafana's file provider to reload the mounted dashboard
+   configuration.
+6. Re-run Playwright against a new artifact directory:
+   ```bash
+   ./scripts/ops/grafana-ui-playwright-debug.sh \
+     --artifact-dir tmp/grafana-ui-debug/jvm-modernized-attempt-1
+   ```
+7. Inspect `summary.json`, `jvm-panel-states.json`, `spring-boot-panel-states.json`,
+   `jvm-query.json`, `jvm-dashboard.png`, `spring-boot-dashboard.png`,
+   `console-errors.json`, and `request-failures.json`.
+8. If the JVM dashboard still shows visible `N/A`, visible `No data`, panel
+   errors, or empty JVM frames while the backend query has rows, adjust the
+   dashboard JSON/export and repeat with
+   `tmp/grafana-ui-debug/jvm-modernized-attempt-2`, then `attempt-3`, until the
+   browser evidence passes.
 
 Why this is preferable:
 
 - Removes the dependency on Grafana's legacy migration path.
-- Keeps the change focused to one dashboard.
+- Keeps the change focused to the JVM Micrometer dashboard.
 - Avoids piecemeal JSON surgery in the ConfigMap.
+- Produces browser screenshots and machine-readable panel state for every
+  candidate fix, so the work can be iterated instead of judged by manual visual
+  inspection alone.
 
 Cost:
 
@@ -181,15 +254,93 @@ toggles can produce weird breakage.
 If the team wants a lower-risk proving step first, do Option 2, then converge
 to Option 1.
 
+## Playwright Verification Loop
+
+Use `./scripts/ops/grafana-ui-playwright-debug.sh` as the acceptance gate for
+this plan. Manual Grafana inspection is still useful for editing dashboards, but
+a fix is not complete until the script proves the browser behavior.
+
+Baseline command:
+
+```bash
+./scripts/ops/grafana-ui-playwright-debug.sh \
+  --application currency-service \
+  --namespace default \
+  --instance currency-service.default.svc.cluster.local:8084 \
+  --artifact-dir tmp/grafana-ui-debug/baseline
+```
+
+After each JVM dashboard candidate fix:
+
+```bash
+./scripts/ops/grafana-ui-playwright-debug.sh \
+  --application currency-service \
+  --namespace default \
+  --instance currency-service.default.svc.cluster.local:8084 \
+  --artifact-dir tmp/grafana-ui-debug/attempt-N
+```
+
+Use `--with-deps` only if Playwright reports missing Chromium OS dependencies in
+the current container. Do not generate or rewrite TLS certificates from the
+container; the helper is already configured to tolerate the local mkcert trust
+boundary.
+
+For each run, treat these artifacts as the decision record:
+
+- `summary.json`: high-level dashboard result, visible flags, and query status.
+- `jvm-panel-states.json`: visible JVM panel text and detected `N/A`,
+  `No data`, or panel error states.
+- `spring-boot-panel-states.json`: regression check only. It proves the known
+  working dashboard still behaves correctly; it is not evidence that the Spring
+  Boot dashboard JSON should be edited.
+- `jvm-query.json`: proof that Grafana's backend datasource path returns rows
+  for the selected JVM metric.
+- `jvm-dashboard.png` and `spring-boot-dashboard.png`: visual evidence for the
+  current candidate.
+- `console-errors.json` and `request-failures.json`: browser/runtime failure
+  evidence.
+
+Acceptance criteria:
+
+- The script authenticates to Grafana and opens both provisioned dashboards.
+- `jvm-query.json` shows rows for the selected JVM metric.
+- The JVM dashboard screenshot and panel-state JSON do not show visible `N/A`,
+  visible `No data`, panel plugin errors, query errors, or datasource errors
+  for panels that should have data.
+- The Spring Boot dashboard still opens cleanly and does not regress to broken
+  layout, visible panel errors, or obvious `No data` states for the same
+  workload.
+- Browser console errors and request failures are either empty or unrelated to
+  the dashboard candidate and documented in the run notes.
+
+Iteration rule:
+
+1. Run the baseline and keep its artifacts under a named directory.
+2. Apply one small JVM Micrometer dashboard/config candidate.
+3. Wait for Grafana to reload the provisioned dashboard.
+4. Run Playwright into a fresh artifact directory.
+5. Compare the new `summary.json`, panel-state JSON, screenshots, and error
+   artifacts against baseline.
+6. If the acceptance criteria fail, use the artifacts to choose the next
+   JVM dashboard change and repeat. Do not broaden into Spring Boot dashboard
+   edits, Grafana upgrades, or ingress changes until the artifacts show the JVM
+   dashboard JSON path is exhausted.
+
 ## Minimal Next Probe
 
-Before changing repo files, the smallest useful confirmation step is:
+Before committing to broad dashboard replacement, the smallest useful
+confirmation step is:
 
-1. In Grafana UI, duplicate the JVM dashboard.
-2. Replace only the four legacy `Quick Facts` `singlestat` panels with native
+1. Run the Playwright baseline command above.
+2. In Grafana UI, duplicate the JVM dashboard.
+3. Replace only the four legacy `Quick Facts` `singlestat` panels with native
    `stat` panels using the same PromQL.
-3. Leave `newPanelPadding: false`.
-4. If the duplicate renders correctly, treat that as confirmation that the
-   issue is legacy panel migration/rendering, not Prometheus data.
+4. Leave `newPanelPadding: false`.
+5. Export/apply the duplicate or candidate dashboard in a local-only iteration.
+6. Re-run the Playwright helper into `tmp/grafana-ui-debug/canary-attempt-1`.
+7. If the candidate renders correctly while `jvm-query.json` still shows rows,
+   treat that as confirmation that the issue is legacy panel
+   migration/rendering, not Prometheus data. If it still fails, iterate using
+   the Playwright artifacts before changing unrelated platform settings.
 
 That gives a clear go/no-go signal without committing to broad JSON edits.

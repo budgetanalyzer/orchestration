@@ -98,6 +98,10 @@ the active context and Tilt resource state from the same host shell first.
 
 - `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
   egress manifests from `.env`.
+- `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
+  runner under `tmp/grafana-ui-debug/`, logs into the local Grafana ingress
+  route, opens the provisioned dashboards, and captures browser-side debugging
+  artifacts without committing Node dependency files.
 - `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
   the TLS-only in-cluster listener.
 - `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.

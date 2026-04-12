@@ -297,6 +297,16 @@ Both dashboards are declaratively provisioned from
 `kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
 pod restarts. See [Observability Architecture](../architecture/observability.md)
 for scrape topology details, security compliance, and debugging guidance.
+When dashboard behavior needs browser-side evidence, run:
+
+```bash
+./scripts/ops/grafana-ui-playwright-debug.sh
+```
+
+That helper logs into `https://grafana.budgetanalyzer.localhost` with the
+admin password from the Kubernetes secret and stores ignored screenshots,
+dashboard inventory, panel-state summaries, console errors, request failures,
+and a Grafana datasource query response under `tmp/grafana-ui-debug/`.
 `./scripts/bootstrap/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/bootstrap/setup-infra-tls.sh` only when you

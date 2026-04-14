@@ -202,31 +202,34 @@ The human owns the actions that require production or package credentials. Work 
 
 #### Chunk 1: GitHub Org & Repo Package Permissions
 
-Nothing else works until the `budgetanalyzer` GitHub org allows package publishing.
+Nothing else works until the `budgetanalyzer` GitHub org allows the Actions policies and package settings this release flow depends on.
 
-1. **Enable GitHub Actions for the org.** Go to `https://github.com/organizations/budgetanalyzer/settings/actions` and confirm Actions is enabled for all repositories (or at least the repos listed in this plan).
-2. **Allow package creation for the needed visibilities.** Go to `https://github.com/organizations/budgetanalyzer/settings/packages`. Under "Package creation", select **Public** and **Private**. Public is needed for this demo's unauthenticated OCI pulls after package visibility is changed; Private is useful for first-publish verification and rollback. Do not rely on **Internal** for the Maven/Gradle package path because GitHub Packages does not support internal visibility for Maven/Gradle packages.
-3. **Keep default package access inheritance enabled.** Same page (`/settings/packages`), under "Default package settings", keep **Inherit access from source repository** selected. This lets packages linked to their source repository inherit repository access for Actions publishing and package management. For this public reference demo, Chunk 3 still explicitly makes the published Maven packages and GHCR images public before OCI pulls them without `imagePullSecrets`. If private is chosen, Chunk 3 adds an extra pull-token step.
-4. **Set repo-level Actions workflow permissions for `service-common`.** Go to `https://github.com/budgetanalyzer/service-common/settings/actions`. Under "Workflow permissions", select **"Read and write permissions"**. This lets the automatic `GITHUB_TOKEN` inside workflows perform `packages: write`.
-5. **Repeat step 4 for every repo that will push images:**
+1. **Confirm org-level Actions policy allows the release workflows to run.** Go to `https://github.com/organizations/budgetanalyzer/settings/actions`, open **General**, and under **Policies** either keep **Allow all actions and reusable workflows** enabled or make sure the allowlist includes the GitHub-authored and Docker actions the release workflows will use. A policy that only allows local organization actions will block `actions/checkout` and the Docker publishing actions.
+2. **Keep the org-level `GITHUB_TOKEN` default restricted.** On the same page, under **Workflow permissions**, keep **Read repository contents and packages permissions** selected. The workflow YAML can still request the narrower write scopes it needs, such as `packages: write`.
+3. **Allow package creation for the visibilities this plan uses.** Go to `https://github.com/organizations/budgetanalyzer/settings/packages`. Under **Package Creation**, enable **Public** and **Private**. Do not rely on **Internal** for Maven/Gradle; GitHub still documents Maven and Gradle as public/private only.
+4. **Keep default package access inheritance enabled for new org-scoped packages.** On the same page, under **Default Package Settings**, keep **Inherit access from source repository** enabled. This mainly matters for GHCR packages linked to a repository. Maven/Gradle packages remain repository-scoped, so this setting does not replace the explicit visibility changes in Chunks 3 and 4d.
+5. **Check repo-level Actions settings in `service-common`.** Go to `https://github.com/budgetanalyzer/service-common/settings/actions`, open **General**, and confirm Actions is enabled there too. Under **Workflow permissions**, the restricted default is acceptable and preferred. If **Read and write permissions** is greyed out, leave it greyed out; the workflow file will request only the required extra scopes.
+6. **Repeat step 5 for every repo that will push images:**
    - `transaction-service`
    - `currency-service`
    - `permission-service`
    - `session-gateway`
    - `budget-analyzer-web`
    - `orchestration` (for `ext-authz`, if its workflow lives here)
-6. **Verify.** Go to any repo's Actions tab and confirm "Run workflow" is visible on manual-dispatch workflows. No workflows to run yet -- just confirm Actions is not disabled.
+7. **Verify.** Open the Actions tab in any one of those repos. You should not see an "Actions are disabled for this repository" banner. If a repo already has a `workflow_dispatch` workflow, `Run workflow` should be available there.
 
 #### Chunk 2: Publish `service-common` to GitHub Packages Maven
 
 `service-common` produces two Maven artifacts: `org.budgetanalyzer:service-core` and `org.budgetanalyzer:service-web`. For production they will be published as version `0.0.8` (no `-SNAPSHOT`, no `v` prefix).
 
-##### 2a. Create a PAT for the one-time local publish test
+##### 2a. Create a classic PAT for the one-time local publish test
 
-1. Go to `https://github.com/settings/tokens` (classic) or `https://github.com/settings/personal-access-tokens` (fine-grained).
-   - **Classic PAT**: scopes needed: `write:packages`, `read:packages`.
-   - **Fine-grained PAT** (preferred): scope to the `budgetanalyzer` org, repository `service-common`, permission "Packages: Read and write".
-2. Copy the token value. It will be used for the local publish test and can be revoked after CI takes over.
+1. Go to `https://github.com/settings/tokens`, or use the current UI path: avatar menu -> **Settings** -> **Developer settings** -> **Personal access tokens** -> **Tokens (classic)** -> **Generate new token (classic)**.
+2. Create a short-lived token with `read:packages` and `write:packages`.
+3. Do not use a fine-grained PAT for this manual step. GitHub's current docs still list Packages as a classic-PAT-only capability.
+4. If `budgetanalyzer` blocks classic PAT access, stop here and have an org owner allow classic PAT access before doing the manual publish test. Otherwise this step will fail with `403`.
+5. If the org uses SSO, authorize the new classic PAT for the org before using it.
+6. Copy the token value. It is only for the local publish test and should be revoked after CI takes over.
 
 ##### 2b. Set credentials as environment variables
 
@@ -248,7 +251,7 @@ cd /workspace/service-common
 
 1. Go to `https://github.com/orgs/budgetanalyzer/packages`.
 2. Confirm two Maven packages appear: `org.budgetanalyzer.service-core` and `org.budgetanalyzer.service-web`.
-3. Click into one and confirm version `0.0.8` is listed and the POM file is present.
+3. Open each package, use the package landing page to confirm version `0.0.8` exists, and verify the published POM is present.
 
 ##### 2e. Verify a consumer can resolve it (after AI Assistant updates consumer Gradle configs)
 
@@ -270,24 +273,19 @@ After the manual test succeeds, the AI Assistant will write a tag-triggered GitH
    ```
 3. Watch the workflow at `https://github.com/budgetanalyzer/service-common/actions` and confirm the publish succeeds as Maven version `0.0.8`.
 
-#### Chunk 3: Package Visibility Decision
+#### Chunk 3: Make `service-common` Packages Public
 
-**Option A -- Public packages (recommended for this public demo):**
+Use the public-package path only. There is no private-package fallback in this plan anymore.
 
-After packages appear at `https://github.com/orgs/budgetanalyzer/packages`, click into each package -> "Package settings" -> "Danger Zone" -> "Change visibility" -> "Public". Do this for both Maven packages and for each GHCR container image after they are first pushed. OCI cluster can pull without authentication -- no `imagePullSecret` needed.
+1. Go to `https://github.com/orgs/budgetanalyzer/packages`, or open the `budgetanalyzer` org page and click **Packages**.
+2. Open `org.budgetanalyzer.service-core`.
+3. On the package landing page, click **Package settings** on the right-hand side.
+4. Under **Danger Zone**, click **Change visibility**, choose **Public**, type the package name to confirm, and submit the change.
+5. Repeat steps 2-4 for `org.budgetanalyzer.service-web`.
+6. Treat this as irreversible. GitHub's current docs say that once a package is public, it cannot be made private again.
+7. Keep the Maven/Gradle auth wiring anyway. Public GHCR images can be pulled anonymously, but public Maven/Gradle package consumption should still assume authenticated access through a classic PAT or a workflow token.
 
-**Option B -- Private packages:**
-
-Leave packages private. Create a read-only PAT with `read:packages` scope. On the OCI instance, create a Kubernetes secret:
-
-```bash
-kubectl create secret docker-registry ghcr-pull-secret \
-  --docker-server=ghcr.io \
-  --docker-username=<your-github-username> \
-  --docker-password=<read-only-pat>
-```
-
-Every Deployment/Pod spec will need `imagePullSecrets: [{name: ghcr-pull-secret}]`.
+OCI deploys in this repo now assume public GHCR images and no `imagePullSecrets`.
 
 #### Chunk 4: Build, Push & Verify Production Images
 
@@ -304,7 +302,7 @@ For each service:
    git tag v0.0.8
    git push origin v0.0.8
    ```
-3. Watch the Actions run at `https://github.com/budgetanalyzer/<service-name>/actions`. The workflow will strip the leading `v` from the Git tag, pull `service-common:0.0.8` from GitHub Packages Maven, build a `linux/arm64` image, push the GHCR image tag `0.0.8`, and print the digest.
+3. Watch the Actions run at `https://github.com/budgetanalyzer/<service-name>/actions`. The workflow will strip the leading `v` from the Git tag, resolve `service-common` version `0.0.8` from GitHub Packages Maven using the workflow credentials wired by the AI Assistant, build a `linux/arm64` image, push the GHCR image tag `0.0.8`, and print the digest.
 4. Record the digest from the workflow output:
    ```
    ghcr.io/budgetanalyzer/<service-name>:0.0.8@sha256:<digest>
@@ -318,24 +316,28 @@ Same tag-and-push pattern. Uses Node/Vite, no `service-common` dependency.
 
 Same tag-and-push pattern. Uses Go, no `service-common` dependency.
 
-##### 4d. Make GHCR images public (if Option A was chosen in Chunk 3)
+##### 4d. Make GHCR images public
 
-Go to `https://github.com/orgs/budgetanalyzer/packages`. For each of the 6 container images, click in -> "Package settings" -> make public.
+1. Go to `https://github.com/orgs/budgetanalyzer/packages`, or open the `budgetanalyzer` org page and click **Packages**.
+2. For each container image package, open the package, click **Package settings** on the right-hand side, then use **Danger Zone** -> **Change visibility** -> **Public**.
+3. Type the package name to confirm each change.
+4. Repeat for all published app images: `transaction-service`, `currency-service`, `permission-service`, `session-gateway`, `budget-analyzer-web`, and `ext-authz` (or whatever exact package name the workflow pushed for the Go service).
+5. Treat these changes as irreversible too. GitHub's current docs say public packages cannot be made private again.
 
 ##### 4e. Final verification
 
-From any machine (not the dev box), confirm images are pullable without authentication:
+From any machine that has not authenticated to GHCR, confirm a public image is pullable without authentication:
 
 ```bash
 docker pull ghcr.io/budgetanalyzer/transaction-service:0.0.8
 ```
 
-If public, this works without `docker login`. If private, `docker login ghcr.io` is required first.
+This should work without `docker login ghcr.io`.
 
 #### Credential Safety Rules
 
 - Never place package tokens in the repo, `.env`, shell history snippets committed to docs, or the shared workspace.
-- Revoke the manual-test PAT from Chunk 2a after CI publishing is confirmed working.
+- Revoke the manual-test classic PAT from Chunk 2a after CI publishing is confirmed working.
 - Review the generated production image inventory before it is consumed by the OCI overlay.
 
 ### AI Assistant Responsibilities
@@ -346,7 +348,7 @@ AI Assistant can do the non-secret implementation work:
 2. Update Java service Gradle config so `mavenLocal()` stays first for local dev and GitHub Packages Maven is available for release and isolated Docker builds.
 3. Add a release-time `serviceCommonVersion` override so production builds do not require hand-editing `gradle/libs.versions.toml` for every release.
 4. Update Java service Dockerfiles or build workflows to pass Maven credentials through BuildKit secrets or CI environment. Tokens must not be copied into images, layers, logs, or checked-in files.
-5. Add GitHub Actions workflow templates for:
+5. Add GitHub Actions workflow templates with explicit least-privilege `permissions:` blocks for:
    - publishing `service-common` to GitHub Packages Maven
    - building `linux/arm64` or multi-arch app images
    - pushing to GHCR
@@ -424,25 +426,25 @@ AI Assistant can do the non-secret implementation work:
 | Order | Human does | Then AI Assistant does |
 |---|---|---|
 | 1 | Chunk 1: Enable Actions + package permissions on GitHub org and repos | -- |
-| 2 | Chunk 2a-2b: Create PAT and set env vars for local publish test | Update `service-common` Gradle config to add GitHub Packages target |
+| 2 | Chunk 2a-2b: Create a classic PAT and set env vars for local publish test | Update `service-common` Gradle config to add GitHub Packages target |
 | 3 | Chunk 2c-2d: Run `./gradlew publish -Pversion=0.0.8` and verify on GitHub | Write tag-triggered CI publish workflow for `service-common` |
 | 4 | Chunk 2f: Merge PR, tag `v0.0.8`, push tag, confirm CI publish | Update consumer Gradle configs, Dockerfiles, and release workflows |
-| 5 | Chunk 3: Decide public vs private packages | Adjust manifests if `imagePullSecret` is needed |
-| 6 | Chunk 4: Tag each service repo, watch CI, collect digests, set visibility | Write production image inventory and overlay files |
+| 5 | Chunk 3: Make the published `service-common` packages public | -- |
+| 6 | Chunk 4: Tag each service repo, watch CI, collect digests, and make GHCR images public | Write production image inventory and overlay files |
 
 #### Detailed Handoff
 
 | Step | Human does | AI Assistant does | Output |
 |---|---|---|---|
-| Org & repo permissions (Chunk 1) | Enable Actions, GHCR, workflow write permissions on org and all repos | -- | Actions can run and publish packages |
-| Create test credential (Chunk 2a-2b) | Create PAT with `write:packages`, set `GITHUB_ACTOR`/`GITHUB_TOKEN` env vars | -- | Local env can authenticate to GitHub Packages |
+| Org & repo permissions (Chunk 1) | Enable Actions, allow required GitHub/Docker actions, keep restricted `GITHUB_TOKEN` defaults, and enable public/private package creation | -- | Actions can run and publish packages |
+| Create test credential (Chunk 2a-2b) | Create a short-lived classic PAT with `write:packages` and `read:packages`, then set `GITHUB_ACTOR`/`GITHUB_TOKEN` env vars | -- | Local env can authenticate to GitHub Packages |
 | Publish `service-common` (Chunk 2c-2d) | Run `./gradlew publish -Pversion=0.0.8`, verify packages at github.com | Add Gradle publishing config and workflow template | Immutable Maven packages `0.0.8` |
 | CI publish (Chunk 2f) | Merge PR, `git tag v0.0.8 && git push origin v0.0.8`, confirm Actions run | Write tag-triggered publish workflow | Automated Maven publishing |
 | Update consumers | Review service repo config changes | Add remote Maven repository, local-first behavior, and `serviceCommonVersion` override | Services build locally and for release |
-| Package visibility (Chunk 3) | Decide public vs private, change visibility in GitHub UI | Adjust manifests if `imagePullSecret` needed | Registry access decision |
+| Package visibility (Chunk 3) | Make the two published `service-common` packages public in the GitHub UI | -- | Public Maven package pages for `service-common` |
 | Prove Docker builds | Trigger CI or run local release build commands with env-provided tokens | Add BuildKit/CI wiring and document verification commands | Java images build without sibling source trees |
 | Push GHCR images (Chunk 4a-4c) | Tag each repo `v0.0.8`, push tags, watch CI | Add workflow/image naming templates and digest collection | GHCR images with ARM64 support |
-| Set image visibility (Chunk 4d) | Make each GHCR image public (if Option A) | -- | Images pullable without auth |
+| Set image visibility (Chunk 4d) | Make each GHCR image public | -- | Images pullable without auth |
 | Record inventory | Review generated refs before deployment | Update non-secret production image inventory/overlays | Digest-pinned production refs |
 | Deploy to OCI | Run host/cluster commands that require production access | Prepare manifests, scripts, and verification docs | Phase 4 can begin |
 

@@ -320,6 +320,7 @@ tree -L 2 -I 'node_modules|target'
 - [scripts/README.md](scripts/README.md) - Script directory map and canonical entry points
 - [docs/](docs/) - Architecture and cross-service documentation
 - [kubernetes/](kubernetes/) - Production deployment manifests
+- [.github/workflows/](.github/workflows/) - Repo-local CI plus the tag-driven `ext-authz` GHCR release workflow
 
 ## Service Repositories
 

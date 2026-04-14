@@ -57,17 +57,52 @@ Typical examples:
 When a workflow intentionally resolves `service-common` remotely from GitHub
 Packages, Gradle needs both a token and a package username.
 
-In GitHub Actions, set:
+For cross-repo private Maven/Gradle consumption, do not assume the workflow
+repo's own `GITHUB_TOKEN` can read `service-common`. GitHub still treats these
+packages as repository-scoped, so the consuming workflow needs an explicit
+GitHub Packages credential.
+
+In GitHub Actions, the current repo wiring expects:
 
 ```yaml
 env:
-  GITHUB_ACTOR: ${{ github.actor }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_ACTOR: ${{ secrets.SERVICE_COMMON_PACKAGES_USERNAME }}
+  GITHUB_TOKEN: ${{ secrets.SERVICE_COMMON_PACKAGES_READ_TOKEN }}
 ```
 
-Without `GITHUB_ACTOR`, the remote-resolution path is incomplete even if
-`GITHUB_TOKEN` exists. This requirement applies only to the remote
-GitHub-Packages path, not to the normal `tilt up` contributor flow.
+`GITHUB_ACTOR` here means the username that owns the GitHub Packages credential,
+not necessarily `${{ github.actor }}`. `GITHUB_TOKEN` here means the secret used
+for remote package reads, not necessarily the workflow repo's default token.
+This requirement applies only to the remote GitHub-Packages path, not to the
+normal `tilt up` contributor flow.
+
+## Containerized Release Builds
+
+The Java service Dockerfiles now support remote `service-common` resolution for
+release and isolated CI builds without copying host `.m2` state into the build
+context and without checking out sibling source trees.
+
+Pass the workflow credentials into BuildKit as secrets:
+
+```bash
+docker build \
+  --secret id=github_actor,env=GITHUB_ACTOR \
+  --secret id=github_token,env=GITHUB_TOKEN \
+  -f Dockerfile .
+```
+
+In GitHub Actions, the release job should still expose those same credential
+values under the env names the current Gradle builds read:
+
+```yaml
+env:
+  GITHUB_ACTOR: ${{ secrets.SERVICE_COMMON_PACKAGES_USERNAME }}
+  GITHUB_TOKEN: ${{ secrets.SERVICE_COMMON_PACKAGES_READ_TOKEN }}
+```
+
+The Dockerfiles read those values only inside the Gradle builder-stage `RUN`
+steps, so the credentials are not written into the image, filesystem layers, or
+checked-in repo files.
 
 ## Why Public Package Visibility Does Not Remove This
 

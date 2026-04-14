@@ -134,7 +134,7 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 
 **Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution. [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md) is supporting background for why Maven Local is insufficient for isolated Docker builds; it is not a separate deployment plan.
 **Owner:** Human for org/package settings and release approval; AI Assistant for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
-**Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; updated on 2026-04-14 to treat GitHub Packages as CI-only infrastructure for `service-common`; implementation checkpoint reached through Chunk 2 Step 14 from the previous draft.
+**Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; updated on 2026-04-14 to treat GitHub Packages as CI-only infrastructure for `service-common`; corrected on 2026-04-14 after verifying that GitHub Packages Maven/Gradle packages remain repository-scoped and do not expose per-package **Manage Actions access** for cross-repo workflow grants; implementation checkpoint reached through Chunk 2 Step 14 from the previous draft.
 **Estimated time:** Remaining work is roughly 0.5-1 day after the Chunk 2 Step 14 checkpoint, assuming the initial `service-common` workflow publish is already proven.
 
 This phase must complete before any production Kubernetes manifests are applied.
@@ -150,7 +150,7 @@ Use GitHub registries under the `budgetanalyzer` organization, but keep the two 
 
 GHCR does not solve `service-common` resolution by itself. The Java service Docker builds need `org.budgetanalyzer:service-web` and `org.budgetanalyzer:service-core` from a Maven repository before they can produce images to push to GHCR.
 
-For this repo, GitHub Packages Maven is a CI/release mechanism, not a public library distribution channel. The supported remote-consumption path is GitHub Actions with `GITHUB_TOKEN` plus package access granted to the consuming repos. Do not design the contributor workflow around local PAT-based package pulls.
+For this repo, GitHub Packages Maven is a CI/release mechanism, not a public library distribution channel. As of 2026-04-14, GitHub still documents Maven and Gradle packages as repository-scoped packages, so the cross-repo consuming workflow path cannot rely on per-package **Manage Actions access** grants. For the current plan, the supported remote-consumption path is a dedicated GitHub Packages credential stored in GitHub Actions secrets for the consuming repos. Do not design the contributor workflow around local token-based package pulls.
 
 ### GitHub Setup References
 
@@ -158,9 +158,10 @@ Use the official GitHub docs as the setup source for registry behavior:
 
 1. [Working with the Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) - GHCR authentication, pushing, pulling by digest, labels, and package behavior.
 2. [Publishing Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) - GitHub Actions workflow pattern for logging in to `ghcr.io`, building, pushing, and generating image digests/attestations.
-3. [Configuring a package's access control and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility) - package visibility, repository inheritance, and workflow access.
-4. [Working with the Gradle registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-gradle-registry) - Gradle publishing and dependency resolution through GitHub Packages.
-5. [Use `GITHUB_TOKEN` for authentication in workflows](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) - workflow token permissions and least-privilege configuration.
+3. [About permissions for GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages) - registry-specific permission models, including repository-scoped Maven/Gradle behavior.
+4. [Configuring a package's access control and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility) - package visibility, repository inheritance, and when granular package permissions are available.
+5. [Working with the Gradle registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-gradle-registry) - Gradle publishing and dependency resolution through GitHub Packages, including the current token constraints for private packages in other repositories.
+6. [Use `GITHUB_TOKEN` for authentication in workflows](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) - workflow token permissions and least-privilege configuration.
 
 ### Development Contract
 
@@ -187,7 +188,7 @@ Production releases use immutable artifacts and keep version naming explicit:
 3. Before tagging, bump the checked-in version literals to the numeric release version. The source of truth is the literal `version = "..."` in `service-common/build.gradle.kts` plus the `serviceCommon = "..."` entry in each consumer's `gradle/libs.versions.toml`.
 4. CI workflows may validate that the pushed tag matches the checked-in numeric version after stripping the leading `v`, but they must not derive or override the publish version from the tag at release time.
 5. Publish `service-common` to GitHub Packages Maven with the checked-in numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`. The steady-state publish path is the `service-common` GitHub Actions workflow using `GITHUB_TOKEN`, not a manually managed maintainer PAT.
-6. Build each Java service image with that exact numeric `service-common` version. The supported remote-resolution path is GitHub Actions with `GITHUB_TOKEN` and package-access grants for the consuming repos.
+6. Build each Java service image with that exact numeric `service-common` version. Because GitHub Packages Maven/Gradle packages are repository-scoped, the current supported remote-resolution path for cross-repo consuming workflows is a dedicated GitHub Packages credential stored in Actions secrets, not the workflow repo's default `GITHUB_TOKEN`.
 7. Push application images to GHCR with the numeric version as the human-readable image tag.
 8. Resolve and record the pushed image digest.
 9. Deploy only digest-pinned image refs, preferably retaining the readable tag:
@@ -207,7 +208,7 @@ This is the exact execution order for Phase 3. Follow the steps in order. Each s
 - Git release tag: `v0.0.8`
 - Version source of truth: the literal `version = "..."` in `service-common/build.gradle.kts` and the `serviceCommon` entry in each consumer's `gradle/libs.versions.toml`. Bumped in lockstep by `orchestration/scripts/repo/update-service-common-version.sh`. No `-P` override, no CI tag-derivation.
 - `service-common` Maven version: `0.0.8` (no `-SNAPSHOT`, no `v` prefix)
-- Supported remote package consumer: GitHub Actions workflows in the consuming repos using `GITHUB_TOKEN` plus package-access grants
+- Supported remote package consumer: GitHub Actions workflows in the consuming repos using a dedicated GitHub Packages username/token secret pair until artifact distribution changes
 - Production image names:
   - `ghcr.io/budgetanalyzer/transaction-service`
   - `ghcr.io/budgetanalyzer/currency-service`
@@ -251,19 +252,19 @@ Original Steps 1-14 from the 2026-04-13 draft are already implemented and
 verified. Do not reintroduce those completed bootstrap steps into contributor
 documentation. The remaining work starts here.
 
-15. **[Human]** If a one-time bootstrap classic PAT was created during the completed validation work, revoke it now. Ongoing publishing and workflow-based package consumption should use `GITHUB_TOKEN`, not a stored maintainer PAT.
+15. **[Human]** If a one-time bootstrap classic PAT was created during the completed validation work, revoke it now. If the cross-repo consuming workflow path still requires GitHub Packages credentials after that cleanup, replace the bootstrap token with a dedicated, least-privilege GitHub Packages read credential stored only in GitHub Actions secrets; do not keep using an ad-hoc maintainer token.
 16. **[AI Assistant]** While `service-common` and the Java consumer repos are still on the release version `0.0.8`, update the `service-common` docs so they say:
    - local workspace development uses `publishToMavenLocal`
    - normal remote publishing is tag-driven via GitHub Actions
    - GitHub Packages consumption is a CI/release concern, not a contributor prerequisite
-   - the remote-resolution path needs both `GITHUB_TOKEN` and `GITHUB_ACTOR`
-   - completed bootstrap PAT instructions, if any exist in docs, are removed
+   - the remote-resolution path needs a GitHub Packages username plus token, and cross-repo consuming workflows cannot rely on package-access grants because Maven/Gradle packages are repository-scoped
+   - completed bootstrap PAT instructions, if any exist in docs, are removed or replaced with the dedicated secret-based workflow credential model
 17. **[AI Assistant]** While those same repos are still on `0.0.8`, update the sibling Java consumer docs (`transaction-service`, `currency-service`, `permission-service`, and `session-gateway`) so their setup/build docs state:
    - local development stays local-first with `mavenLocal()` and orchestration/Tilt
    - the supported contributor onboarding path is the orchestration getting-started flow
    - GitHub Packages remote resolution is for GitHub Actions/release or intentional isolated builds, not for routine local setup
    - repo-local docs should link back to orchestration's `docs/development/getting-started.md` and `docs/development/service-common-artifact-resolution.md` instead of duplicating token setup
-18. **[Human]** Review, commit, and push the `0.0.8` documentation/config state in `service-common`, `transaction-service`, `currency-service`, `permission-service`, and `session-gateway` before moving any repo to `0.0.9-SNAPSHOT`. Do not create an ordering gap where the pushed release-version repos still imply the old PAT-era setup or leave the `GITHUB_ACTOR` requirement undocumented.
+18. **[Human]** Review, commit, and push the `0.0.8` documentation/config state in `service-common`, `transaction-service`, `currency-service`, `permission-service`, and `session-gateway` before moving any repo to `0.0.9-SNAPSHOT`. Do not create an ordering gap where the pushed release-version repos still imply the old package-grant model or leave the required GitHub Packages workflow credential shape undocumented.
 19. **[Human]** After the release-version doc/config state is pushed, and only when all consumer repos are ready to move in lockstep, return to the orchestration repo root and bump the source back to the next snapshot for ongoing development across `service-common` plus every consumer repo together. Do not move only a subset of repos to the next snapshot if that would leave the side-by-side workspace unable to follow the getting-started flow. Then commit each touched repo:
     ```bash
     cd ../orchestration
@@ -276,19 +277,78 @@ documentation. The remaining work starts here.
     ```
     This confirms the side-by-side workspace and Tilt path still resolve `service-common` locally without a PAT.
 
-#### Chunk 3: Lock the CI-Only Package Model
+#### Chunk 3: Lock the Repository-Scoped Package Model
 
 GitHub Packages Maven is no longer treated as a public-consumption channel for
 `service-common`. This chunk locks the steady-state model to private/CI-only
-workflow access after the release-version docs are already in sync.
+workflow access after the release-version docs are already in sync, while
+explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 1. **[Human]** Open the `org.budgetanalyzer.service-core` and `org.budgetanalyzer.service-web` package settings and confirm the package visibility matches the CI-only intent. Do not make the Maven packages public just for convenience; public visibility does not remove the Maven/Gradle auth requirement anyway.
-2. **[Human]** In each `service-common` package's **Manage Actions access** settings, grant read access to the consuming workflow repos: `transaction-service`, `currency-service`, `permission-service`, and `session-gateway`. Add any future Java consumer repo here as part of its setup.
-3. **[Human]** Run one package-consuming GitHub Actions workflow in a Java service repo and confirm it resolves `service-common` using `GITHUB_TOKEN` plus `GITHUB_ACTOR` with the configured package-access grant. This is the steady-state proof that replaces any assumption of PAT-based consumer setup.
+   - Visit `https://github.com/budgetanalyzer/service-common/packages`.
+   - If the repo landing page does not show the packages immediately, open the repo root first at `https://github.com/budgetanalyzer/service-common` and click **Packages** in the right sidebar.
+   - Click `org.budgetanalyzer.service-core`.
+   - On the package page, click **Package settings** on the right side.
+   - Confirm the page is the package options/settings page for that package.
+   - Check whether the package exposes any visibility control beyond the current minimal options page. For repository-scoped Maven packages, GitHub may show only a limited options page.
+   - Repeat the same clicks for `org.budgetanalyzer.service-web`.
+2. **[Human]** On those same package pages, confirm the UI reflects repository-scoped package behavior: there is no per-package **Manage Actions access** control to grant cross-repo workflow reads. Treat that absence as an expected platform constraint, not as a misconfiguration in this repo.
+   - On each package page's settings/options screen, look for a section or sidebar entry named **Manage Actions access**.
+   - Expected result for this repo as of 2026-04-14: that control does not exist for these Maven packages.
+   - If the only destructive control you see is something like **Delete Package**, treat that as confirmation that this package is following the repository-scoped model rather than the granular-permissions model.
+   - Do not spend more time trying to find a hidden org-level package grant UI for these Maven packages; the absence of that control is the point this step is recording.
+3. **[Human]** Create or confirm a dedicated GitHub Packages read credential for cross-repo consuming workflows, store it as Actions secrets available to `transaction-service`, `currency-service`, `permission-service`, and `session-gateway`, and record the secret names in private maintainer runbooks only. Do not reuse a broad maintainer personal token if a narrower dedicated credential can be issued.
+   - Recommended secret names in workflows:
+     - `SERVICE_COMMON_PACKAGES_USERNAME`
+     - `SERVICE_COMMON_PACKAGES_READ_TOKEN`
+   - Recommended first choice: organization-level Actions secrets limited to the four consuming repos.
+   - Visit `https://github.com/organizations/budgetanalyzer/settings/secrets/actions`.
+   - In the left sidebar under **Security**, click **Secrets and variables**, then **Actions** if you are not already on the Actions secrets page.
+   - Stay on the **Secrets** tab.
+   - Click **New organization secret**.
+   - Create `SERVICE_COMMON_PACKAGES_USERNAME`.
+   - In **Repository access**, choose **Selected repositories**.
+   - Select exactly these repos:
+     - `transaction-service`
+     - `currency-service`
+     - `permission-service`
+     - `session-gateway`
+   - Click **Add secret**.
+   - Click **New organization secret** again.
+   - Create `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
+   - Again choose **Selected repositories**.
+   - Select the same four consuming repos.
+   - Click **Add secret**.
+   - After both secrets are created, confirm they appear in the org Actions secrets list with restricted repository access rather than broad org-wide exposure.
+   - If organization secrets are not available on the current GitHub plan or org policy, fall back to repo-level secrets in each consumer repo:
+     - `https://github.com/budgetanalyzer/transaction-service/settings/secrets/actions`
+     - `https://github.com/budgetanalyzer/currency-service/settings/secrets/actions`
+     - `https://github.com/budgetanalyzer/permission-service/settings/secrets/actions`
+     - `https://github.com/budgetanalyzer/session-gateway/settings/secrets/actions`
+   - In each repo:
+     - click **New repository secret**
+     - add `SERVICE_COMMON_PACKAGES_USERNAME`
+     - click **New repository secret** again
+     - add `SERVICE_COMMON_PACKAGES_READ_TOKEN`
+   - Do not record the token value in this repo. Only the secret names belong in docs.
+4. **[Human]** Verify secret visibility before spending time on release wiring.
+   - If you used organization secrets, return to `https://github.com/organizations/budgetanalyzer/settings/secrets/actions`.
+   - Click `SERVICE_COMMON_PACKAGES_USERNAME`.
+   - Confirm the repository access policy shows only the four intended consuming repos.
+   - Repeat for `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
+   - If you used repo-level secrets, open each repo secrets URL listed above and confirm both secret names appear.
+5. **[Human]** Run one package-consuming GitHub Actions workflow in a Java service repo and confirm it resolves `service-common` with the dedicated secret-based GitHub Packages credential. This is the steady-state proof that replaces the removed package-grant assumption.
+   - This proof is only valid after at least one consumer workflow is actually wired to use the new secrets. If no such workflow exists yet, do not fake this step; complete Chunk 4 Step 1 and Step 2 first, then come back and record this proof.
+   - Recommended first repo for the proof: `transaction-service`.
+   - Visit `https://github.com/budgetanalyzer/transaction-service/actions`.
+   - Click the workflow that builds or releases the Java image using remote `service-common` resolution.
+   - Click **Run workflow** and select the intended branch or tag.
+   - Open the job logs and confirm the build resolves `org.budgetanalyzer:service-core` / `service-web` from GitHub Packages without cloning `service-common` and without relying on host Maven Local state.
+   - If the job fails with a package-auth error, stop and fix the secret names, secret scope, or credential value before proceeding to the image-publish steps in Chunk 4.
 
 #### Chunk 4: Build, Push & Verify Production Images
 
-1. **[AI Assistant]** Update the Java service repos so GitHub Actions release builds can resolve `service-common:0.0.8` without sibling source trees or host-only Maven Local state. Prefer workflow-driven resolution with `GITHUB_TOKEN` plus package-access grants over PAT-based manual setup. If Dockerfile or workflow changes are needed, pass credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files. Do not let this release-build wiring become a getting-started prerequisite for the side-by-side workspace or `tilt up`. The version itself is already pinned in `gradle/libs.versions.toml` by the Chunk 2 bump script — no `-P` override needed at release time.
+1. **[AI Assistant]** Update the Java service repos so GitHub Actions release builds can resolve `service-common:0.0.8` without sibling source trees or host-only Maven Local state. Because Maven/Gradle packages are repository-scoped, do not assume the consuming repo's default `GITHUB_TOKEN` can read `service-common`; wire the release build around the dedicated GitHub Packages credential from Chunk 3 instead. If Dockerfile or workflow changes are needed, pass credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files. Do not let this release-build wiring become a getting-started prerequisite for the side-by-side workspace or `tilt up`. The version itself is already pinned in `gradle/libs.versions.toml` by the Chunk 2 bump script — no `-P` override needed at release time.
 2. **[AI Assistant]** Add or update the Java service release workflows so each workflow builds at least `linux/arm64`, pushes a GHCR image tagged `0.0.8`, and prints the digest-pinned image reference. Do not publish `latest`.
 3. **[AI Assistant]** Add or update the release workflows for `budget-analyzer-web` and `ext-authz` so they also build at least `linux/arm64`, push `0.0.8`, and print digests.
 4. **[Human]** Review and merge the release-workflow and Dockerfile changes in each affected repo.
@@ -310,14 +370,14 @@ workflow access after the release-version docs are already in sync.
 #### Credential Safety Rules
 
 - Never place package tokens in the repo, `.env`, shell history snippets committed to docs, or the shared workspace.
-- If a bootstrap classic PAT was created during the already-complete Chunk 2 validation work, revoke it. Ongoing workflow publishing and consumption should rely on `GITHUB_TOKEN` plus package-access grants.
+- If a bootstrap classic PAT was created during the already-complete Chunk 2 validation work, revoke it. Ongoing workflow publishing may still use `GITHUB_TOKEN` in `service-common`, but cross-repo Maven consumption must use the dedicated secret-based credential until artifact distribution changes.
 - Review the generated production image inventory before it is consumed by the OCI overlay.
 - Keep service-repo top-level docs concise: local development should point to the orchestration getting-started and artifact-resolution docs, while GitHub Packages CI/release details stay in orchestration release/build documentation instead of dominating each service repo's main README or AGENTS file.
 
 ### Phase 3 Outputs
 
 - `service-common` production artifact published to GitHub Packages Maven
-- Java service release workflows can resolve `service-common` with `GITHUB_TOKEN` and package-access grants, without host-only Maven Local state
+- Java service release workflows can resolve `service-common` with the dedicated secret-based GitHub Packages credential, without host-only Maven Local state
 - Sibling Java consumer docs point local contributors back to orchestration's local-first setup docs
 - GHCR contains ARM64-compatible images for every app component
 - Production image inventory records digest-pinned refs

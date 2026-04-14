@@ -149,6 +149,10 @@ Required work in consuming services:
 - add the remote repository to `repositories {}`
 - keep `mavenLocal()` first if you still want fast local iteration
 - ensure Docker builds can authenticate, likely via build secrets or CI env
+- do not assume the consuming repo's default `GITHUB_TOKEN` can read
+  `service-common`; GitHub still treats Maven/Gradle packages as
+  repository-scoped, so cross-repo consumers need an explicit GitHub Packages
+  credential unless artifact distribution changes
 
 ### Phase 3: Define Snapshot/Version Discipline
 
@@ -240,6 +244,16 @@ For Oracle Cloud production releases, the concrete repository choices are:
 1. GitHub Packages Maven registry for `service-common` artifacts.
 2. GHCR for app container images.
 3. Maven Local only for local development and Tilt's host-side build flow.
+
+Current credential constraint:
+
+- publishing from `service-common` can use the source repo workflow token
+- consuming `service-common` from other private repos cannot rely on a
+  per-package **Manage Actions access** grant because Maven/Gradle packages are
+  repository-scoped
+- until artifact distribution changes, cross-repo consuming workflows need an
+  explicit GitHub Packages credential passed through Actions secrets and, if
+  applicable, BuildKit secrets
 
 Recommended if you do **not** want that scope right now:
 

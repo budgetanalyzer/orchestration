@@ -14,7 +14,7 @@ Deploy the full Budget Analyzer architecture - k3s, Istio service mesh, applicat
 
 These gates are non-negotiable. Do not deploy the public demo until all are true.
 
-1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable SemVer tag retained: `ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>`.
+1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable numeric SemVer tag retained: `ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>`.
 2. **`service-common` must be resolvable by isolated image builds.** Local `publishToMavenLocal` remains a dev convenience only. Production Java service Docker builds must resolve `service-common` from a real remote Maven repository (recommended: GitHub Packages) using build secrets or CI credentials. Do not copy host `.m2` into Docker contexts and do not expand service Docker contexts to include sibling repos.
 3. **Production builds must use immutable dependency versions.** Local development can keep snapshot workflows. Production image builds should consume an immutable `service-common` release/prerelease version and produce versioned application image tags plus digests.
 4. **Kyverno image policy must be split by environment.** Local Tilt may keep the approved local-image exception. Production must use a separate production image policy variant that rejects all approved-local `:latest` and `:tilt-<hash>` refs.
@@ -132,7 +132,7 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 ## Phase 3: Production Image & Build Contract
 
 **Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution. [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md) is supporting background for why Maven Local is insufficient for isolated Docker builds; it is not a separate deployment plan.
-**Owner:** Human for credentials, package visibility, and release approval; Codex for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
+**Owner:** Human for credentials, package visibility, and release approval; AI Assistant for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
 **Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; implementation still required.
 **Estimated time:** 1-2 days if `service-common` remote publishing is not implemented yet
 
@@ -144,7 +144,7 @@ Use GitHub registries under the `budgetanalyzer` organization, but keep the two 
 
 | Artifact | Registry | Example |
 |---|---|---|
-| Container images | GitHub Container Registry (GHCR) | `ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>` |
+| Container images | GitHub Container Registry (GHCR) | `ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>` |
 | Java library artifacts | GitHub Packages Maven registry | `https://maven.pkg.github.com/budgetanalyzer/service-common` |
 
 GHCR does not solve `service-common` resolution by itself. The Java service Docker builds need `org.budgetanalyzer:service-web` and `org.budgetanalyzer:service-core` from a Maven repository before they can produce images to push to GHCR.
@@ -176,19 +176,25 @@ This means `publishToMavenLocal` remains the correct dev answer, but it is inten
 
 ### Release Contract
 
-Production releases use immutable artifacts:
+Production releases use immutable artifacts and keep version naming explicit:
 
-1. Pick one SemVer release id for the stack, for example `v0.0.8`.
-2. Publish `service-common` to GitHub Packages Maven with the matching Maven version, for example `0.0.8`. Maven artifact versions normally do not include the leading `v`.
-3. Build each Java service image with that exact `service-common` version.
-4. Push application images to GHCR with the release id tag.
-5. Resolve and record the pushed image digest.
-6. Deploy only digest-pinned image refs, preferably retaining the readable tag:
+1. Pick one numeric SemVer release version for build and artifact metadata, for example `0.0.8`.
+2. Use a `v`-prefixed Git tag as the human release ref, for example `v0.0.8`.
+3. CI workflows must derive the numeric version from the Git tag before passing values into Gradle, Maven, Docker build args, or dependency overrides:
+   ```bash
+   RELEASE_TAG="${GITHUB_REF_NAME}"      # v0.0.8
+   RELEASE_VERSION="${RELEASE_TAG#v}"    # 0.0.8
+   ```
+4. Publish `service-common` to GitHub Packages Maven with the numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`.
+5. Build each Java service image with that exact numeric `service-common` version.
+6. Push application images to GHCR with the numeric version as the human-readable image tag.
+7. Resolve and record the pushed image digest.
+8. Deploy only digest-pinned image refs, preferably retaining the readable tag:
    ```text
-   ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>
+   ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>
    ```
 
-Use SemVer (`v0.0.8`, `v0.0.9`, `v0.1.0`) for intentional releases. Date-plus-SHA tags such as `v2026.04.13-<shortsha>` are useful for CI snapshots or nightly builds, but they are noisier than necessary for this public demo's release tags. The digest is what makes the deployed image immutable.
+Use numeric SemVer (`0.0.8`, `0.0.9`, `0.1.0`) for build inputs, Maven artifacts, Docker image tags, and manifest inventory refs. Use matching `v`-prefixed Git tags (`v0.0.8`, `v0.0.9`, `v0.1.0`) only for intentional Git release refs. Date-plus-SHA Git tags such as `v2026.04.13-<shortsha>` are useful for CI snapshots or nightly builds, but they are noisier than necessary for this public demo's release tags. The digest is what makes the deployed image immutable.
 
 ### Human Responsibilities (Detailed)
 
@@ -253,7 +259,7 @@ cd /workspace/transaction-service
 
 ##### 2f. Set up CI publishing (replaces manual publish)
 
-After the manual test succeeds, the AI Assistant will write a tag-triggered GitHub Actions workflow so publishing is automated.
+After the manual test succeeds, the AI Assistant will write a tag-triggered GitHub Actions workflow so publishing is automated. The workflow trigger uses the `v0.0.8` Git tag, strips the leading `v`, and publishes Maven artifacts as `0.0.8`.
 
 1. Merge the PR that adds the publish workflow to `service-common`.
 2. Create and push the tag:
@@ -262,7 +268,7 @@ After the manual test succeeds, the AI Assistant will write a tag-triggered GitH
    git tag v0.0.8
    git push origin v0.0.8
    ```
-3. Watch the workflow at `https://github.com/budgetanalyzer/service-common/actions` and confirm the publish succeeds.
+3. Watch the workflow at `https://github.com/budgetanalyzer/service-common/actions` and confirm the publish succeeds as Maven version `0.0.8`.
 
 #### Chunk 3: Package Visibility Decision
 
@@ -298,10 +304,10 @@ For each service:
    git tag v0.0.8
    git push origin v0.0.8
    ```
-3. Watch the Actions run at `https://github.com/budgetanalyzer/<service-name>/actions`. The workflow will pull `service-common:0.0.8` from GitHub Packages Maven, build a `linux/arm64` image, push to GHCR, and print the digest.
+3. Watch the Actions run at `https://github.com/budgetanalyzer/<service-name>/actions`. The workflow will strip the leading `v` from the Git tag, pull `service-common:0.0.8` from GitHub Packages Maven, build a `linux/arm64` image, push the GHCR image tag `0.0.8`, and print the digest.
 4. Record the digest from the workflow output:
    ```
-   ghcr.io/budgetanalyzer/<service-name>:v0.0.8@sha256:<digest>
+   ghcr.io/budgetanalyzer/<service-name>:0.0.8@sha256:<digest>
    ```
 
 ##### 4b. `budget-analyzer-web` (frontend)
@@ -321,7 +327,7 @@ Go to `https://github.com/orgs/budgetanalyzer/packages`. For each of the 6 conta
 From any machine (not the dev box), confirm images are pullable without authentication:
 
 ```bash
-docker pull ghcr.io/budgetanalyzer/transaction-service:v0.0.8
+docker pull ghcr.io/budgetanalyzer/transaction-service:0.0.8
 ```
 
 If public, this works without `docker login`. If private, `docker login ghcr.io` is required first.
@@ -351,7 +357,9 @@ AI Assistant can do the non-secret implementation work:
 ### Step-by-Step Phase 3 Work
 
 1. **Freeze naming.**
-   - Stack release id: `v0.0.8`
+   - Release version for build files, Gradle properties, Maven artifacts, and Docker build args: `0.0.8`
+   - Git release tag: `v0.0.8`
+   - CI derivation rule: `RELEASE_VERSION="${GITHUB_REF_NAME#v}"`
    - `service-common` Maven version: `0.0.8` (no `-SNAPSHOT`, no `v` prefix)
    - Image names:
      - `ghcr.io/budgetanalyzer/transaction-service`
@@ -387,7 +395,7 @@ AI Assistant can do the non-secret implementation work:
        --platform linux/arm64 \
        --secret id=github_packages_token,env=GITHUB_PACKAGES_TOKEN \
        --build-arg SERVICE_COMMON_VERSION=0.0.8 \
-       -t ghcr.io/budgetanalyzer/transaction-service:v0.0.8 \
+       -t ghcr.io/budgetanalyzer/transaction-service:0.0.8 \
        .
      ```
    - The final implementation may use CI instead of a local command, but it must prove the same contract.
@@ -397,7 +405,7 @@ AI Assistant can do the non-secret implementation work:
    - Do not publish or deploy `latest`.
 6. **Capture digests.**
    ```bash
-   docker buildx imagetools inspect ghcr.io/budgetanalyzer/transaction-service:v0.0.8
+   docker buildx imagetools inspect ghcr.io/budgetanalyzer/transaction-service:0.0.8
    ```
    - Expect `linux/arm64`.
    - Record the `sha256` digest in the production image inventory.

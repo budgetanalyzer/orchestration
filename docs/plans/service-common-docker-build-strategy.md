@@ -139,8 +139,9 @@ Preferred target:
 Required work in `service-common`:
 
 - add a real Maven publish target alongside `mavenLocal()`
-- decide snapshot/version behavior instead of relying purely on
-  `0.0.1-SNAPSHOT` in local-only workflows
+- keep the version in checked-in build files and add a local bump step for
+  release and next-snapshot transitions instead of relying on publish-time
+  overrides
 - document credentials and repository URL requirements
 
 Required work in consuming services:
@@ -153,24 +154,27 @@ Required work in consuming services:
 
 Use two different rules for two different workflows:
 
-1. Local development keeps `0.0.1-SNAPSHOT` and `publishToMavenLocal`.
+1. Local development keeps the current checked-in `-SNAPSHOT` version and
+   `publishToMavenLocal`.
 2. Production image builds use immutable release or prerelease versions
    published to the remote Maven repository.
 
 The Oracle Cloud deployment plan chooses the second rule for public demo
-releases. That means `0.0.1-SNAPSHOT` remains a local convenience for the
-Tilt/host-Gradle loop, but a production GHCR image must not be built against
-that snapshot.
+releases. That means the checked-in snapshot version remains a local
+convenience for the Tilt/host-Gradle loop, but a production GHCR image must
+not be built against that snapshot.
 
 Required release rule:
 
+- use a repo-local script to bump `service-common/build.gradle.kts` and the
+  consumer version catalogs to the release version before tagging
 - when `service-common` changes for a release, publish an immutable
   `service-common` version first
 - build every consuming Java service image with that exact version
 - record the `service-common` version alongside the GHCR image tag/digest in
   the release inventory
-- do not require hand-editing every service's version catalog for each release;
-  add a release-time override such as `-PserviceCommonVersion=<version>`
+- after the release succeeds, use the same script to bump everything to the
+  next `-SNAPSHOT` version for ongoing development
 
 ### Phase 4: Make Docker Builds Consume The Same Contract
 

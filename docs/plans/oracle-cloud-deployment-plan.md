@@ -168,7 +168,7 @@ Local development stays fast and local-first:
    cd ../service-common
    ./gradlew clean build publishToMavenLocal
    ```
-2. Java service Gradle builds keep `mavenLocal()` first, so `./gradlew build`, `./gradlew bootJar`, and the Tilt live-update path can consume the locally published `0.0.1-SNAPSHOT`.
+2. Java service Gradle builds keep `mavenLocal()` first, so `./gradlew build`, `./gradlew bootJar`, and the Tilt live-update path can consume the locally published checked-in snapshot version, for example `0.0.9-SNAPSHOT`.
 3. Tilt remains the supported local image path. It publishes `service-common` locally, builds service JARs on the host, and creates thin runtime images without requiring a remote Maven package or GHCR push.
 4. Raw service-repo `docker build` is not the primary dev loop. It becomes a release-candidate verification path after the remote Maven package contract exists.
 
@@ -180,16 +180,13 @@ Production releases use immutable artifacts and keep version naming explicit:
 
 1. Pick one numeric SemVer release version for build and artifact metadata, for example `0.0.8`.
 2. Use a `v`-prefixed Git tag as the human release ref, for example `v0.0.8`.
-3. CI workflows must derive the numeric version from the Git tag before passing values into Gradle, Maven, Docker build args, or dependency overrides:
-   ```bash
-   RELEASE_TAG="${GITHUB_REF_NAME}"      # v0.0.8
-   RELEASE_VERSION="${RELEASE_TAG#v}"    # 0.0.8
-   ```
-4. Publish `service-common` to GitHub Packages Maven with the numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`.
-5. Build each Java service image with that exact numeric `service-common` version.
-6. Push application images to GHCR with the numeric version as the human-readable image tag.
-7. Resolve and record the pushed image digest.
-8. Deploy only digest-pinned image refs, preferably retaining the readable tag:
+3. Before tagging, bump the checked-in version literals to the numeric release version. The source of truth is the literal `version = "..."` in `service-common/build.gradle.kts` plus the `serviceCommon = "..."` entry in each consumer's `gradle/libs.versions.toml`.
+4. CI workflows may validate that the pushed tag matches the checked-in numeric version after stripping the leading `v`, but they must not derive or override the publish version from the tag at release time.
+5. Publish `service-common` to GitHub Packages Maven with the checked-in numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`.
+6. Build each Java service image with that exact numeric `service-common` version.
+7. Push application images to GHCR with the numeric version as the human-readable image tag.
+8. Resolve and record the pushed image digest.
+9. Deploy only digest-pinned image refs, preferably retaining the readable tag:
    ```text
    ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>
    ```
@@ -204,7 +201,7 @@ This is the exact execution order for Phase 3. Follow the steps in order. Each s
 
 - Release version for build files, Gradle properties, Maven artifacts, and Docker tags: `0.0.8`
 - Git release tag: `v0.0.8`
-- CI derivation rule: `RELEASE_VERSION="${GITHUB_REF_NAME#v}"`
+- Version source of truth: the literal `version = "..."` in `service-common/build.gradle.kts` and the `serviceCommon` entry in each consumer's `gradle/libs.versions.toml`. Bumped in lockstep by `orchestration/scripts/repo/update-service-common-version.sh`. No `-P` override, no CI tag-derivation.
 - `service-common` Maven version: `0.0.8` (no `-SNAPSHOT`, no `v` prefix)
 - Production image names:
   - `ghcr.io/budgetanalyzer/transaction-service`
@@ -228,35 +225,51 @@ This is the exact execution order for Phase 3. Follow the steps in order. Each s
 
 `service-common` produces `org.budgetanalyzer:service-core` and `org.budgetanalyzer:service-web`.
 
-1. **[AI Assistant]** Update `service-common` Gradle publishing config so `mavenLocal()` still works for local development and `./gradlew publish -Pversion=0.0.8` can publish to GitHub Packages Maven using `GITHUB_ACTOR` and `GITHUB_TOKEN`.
-2. **[Human]** Create a short-lived classic PAT at `https://github.com/settings/tokens` with `read:packages` and `write:packages`. Use the current UI path if needed: avatar menu -> **Settings** -> **Developer settings** -> **Personal access tokens** -> **Tokens (classic)** -> **Generate new token (classic)**.
-3. **[Human]** If `budgetanalyzer` blocks classic PAT access, stop and have an org owner allow classic PAT access before continuing. If the org uses SSO, authorize the token for the org before using it.
-4. **[Human]** Export the manual test credentials in your shell. Do not put them in the repo, `.env`, or checked-in docs.
+The version is a plain literal in `service-common/build.gradle.kts` and in each consumer's `gradle/libs.versions.toml`. A helper script bumps it across all repos in lockstep — no `-P` override, no CI tag-derivation. Standard Maven flow: bump to release version, commit, tag, publish, then bump back to the next `-SNAPSHOT` for ongoing development.
+
+1. **[AI Assistant]** Create `orchestration/scripts/repo/update-service-common-version.sh <target-version>` that rewrites:
+   - the `version = "..."` literal in `service-common/build.gradle.kts`
+   - the `serviceCommon = "..."` entry in `gradle/libs.versions.toml` for each consumer (`transaction-service`, `currency-service`, `permission-service`, `session-gateway`)
+
+   Edits files only. No git commands. Validates the target version format and reports which files were changed.
+2. **[AI Assistant]** Update `service-common` Gradle publishing config so `publishToMavenLocal` keeps working for local development and `./gradlew publish` publishes to GitHub Packages Maven using `GITHUB_ACTOR` and `GITHUB_TOKEN`. The version comes from the literal in `build.gradle.kts`; do not wire any `-P` override.
+3. **[Human]** From the orchestration repo root, bump every repo to the release version, then commit each touched repo:
+   ```bash
+   ./scripts/repo/update-service-common-version.sh 0.0.8
+   ```
+4. **[Human]** Create a short-lived classic PAT at `https://github.com/settings/tokens` with `read:packages` and `write:packages`. Use the current UI path if needed: avatar menu -> **Settings** -> **Developer settings** -> **Personal access tokens** -> **Tokens (classic)** -> **Generate new token (classic)**.
+5. **[Human]** If `budgetanalyzer` blocks classic PAT access, stop and have an org owner allow classic PAT access before continuing. If the org uses SSO, authorize the token for the org before using it.
+6. **[Human]** Export the manual test credentials in your shell. Do not put them in the repo, `.env`, or checked-in docs.
    ```bash
    export GITHUB_ACTOR=<your-github-username>
    export GITHUB_TOKEN=<the-classic-pat>
    ```
-5. **[Human]** Run the first manual publish from `/workspace/service-common`.
+7. **[Human]** Run the first manual publish from the `service-common` repo root.
    ```bash
-   cd /workspace/service-common
-   ./gradlew publish -Pversion=0.0.8
+   cd ../service-common
+   ./gradlew publish
    ```
-6. **[Human]** Go to `https://github.com/orgs/budgetanalyzer/packages` and verify both Maven packages exist: `org.budgetanalyzer.service-core` and `org.budgetanalyzer.service-web`. Open each package and confirm version `0.0.8` exists and the published POM is present.
-7. **[AI Assistant]** Update the Java consumer build configs (`transaction-service`, `currency-service`, `permission-service`, and `session-gateway`) so `mavenLocal()` stays first for local development, GitHub Packages Maven is available for release and isolated Docker builds, and a `serviceCommonVersion` override can be passed at release time.
-8. **[Human]** Verify one consumer can resolve the published package remotely.
-   ```bash
-   cd /workspace/transaction-service
-   ./gradlew dependencies --configuration runtimeClasspath | grep service
-   ```
-9. **[AI Assistant]** Add a tag-triggered GitHub Actions workflow to `service-common` that publishes Maven version `${GITHUB_REF_NAME#v}` with explicit least-privilege `permissions:`.
-10. **[Human]** Review and merge the `service-common` publish workflow change.
-11. **[Human]** Create and push the release tag from `/workspace/service-common`.
-   ```bash
-   cd /workspace/service-common
-   git tag v0.0.8
-   git push origin v0.0.8
-   ```
-12. **[Human]** Watch `https://github.com/budgetanalyzer/service-common/actions` and confirm the workflow publishes Maven version `0.0.8`.
+8. **[Human]** Go to `https://github.com/orgs/budgetanalyzer/packages` and verify both Maven packages exist: `org.budgetanalyzer.service-core` and `org.budgetanalyzer.service-web`. Open each package and confirm version `0.0.8` exists and the published POM is present.
+9. **[AI Assistant]** Update the Java consumer build configs (`transaction-service`, `currency-service`, `permission-service`, and `session-gateway`) so `mavenLocal()` stays first for local development and GitHub Packages Maven is available for release and isolated Docker builds. Version pinning is already handled by the bump script in step 1; do not add a `serviceCommonVersion` override.
+10. **[Human]** Verify one consumer can resolve the published package remotely.
+    ```bash
+    cd ../transaction-service
+    ./gradlew dependencies --configuration runtimeClasspath | grep service
+    ```
+11. **[AI Assistant]** Add a tag-triggered GitHub Actions workflow to `service-common` that runs `./gradlew publish` (which uses the version literal from `build.gradle.kts`) with explicit least-privilege `permissions:`. The workflow must fail if the tag stripped of its `v` prefix does not match the version in `build.gradle.kts`, to catch drift between the bumped file and the pushed tag.
+12. **[Human]** Review and merge the `service-common` publish workflow change.
+13. **[Human]** Create and push the release tag from the `service-common` repo root.
+    ```bash
+    cd ../service-common
+    git tag v0.0.8
+    git push origin v0.0.8
+    ```
+14. **[Human]** Watch `https://github.com/budgetanalyzer/service-common/actions` and confirm the workflow publishes Maven version `0.0.8`.
+15. **[Human]** After the release publishes, return to the orchestration repo root, bump the source back to the next snapshot for ongoing development, then commit each touched repo:
+    ```bash
+    cd ../orchestration
+    ./scripts/repo/update-service-common-version.sh 0.0.9-SNAPSHOT
+    ```
 
 #### Chunk 3: Make `service-common` Packages Public
 
@@ -270,7 +283,7 @@ Use the public-package path only. There is no private-package fallback in this p
 
 #### Chunk 4: Build, Push & Verify Production Images
 
-1. **[AI Assistant]** Update the Java service repos so release builds can resolve `service-common:0.0.8` without sibling source trees or host-only Maven Local state. That includes the remote Maven repository wiring, release-time `serviceCommonVersion` override, and Dockerfile or workflow support for passing Maven credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files.
+1. **[AI Assistant]** Update the Java service repos so release builds can resolve `service-common:0.0.8` without sibling source trees or host-only Maven Local state. That includes the remote Maven repository wiring and Dockerfile or workflow support for passing Maven credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files. The version itself is already pinned in `gradle/libs.versions.toml` by the Chunk 2 bump script — no `-P` override needed at release time.
 2. **[AI Assistant]** Add or update the Java service release workflows so each workflow builds at least `linux/arm64`, pushes a GHCR image tagged `0.0.8`, and prints the digest-pinned image reference. Do not publish `latest`.
 3. **[AI Assistant]** Add or update the release workflows for `budget-analyzer-web` and `ext-authz` so they also build at least `linux/arm64`, push `0.0.8`, and print digests.
 4. **[Human]** Review and merge the release-workflow and Dockerfile changes in each affected repo.

@@ -133,6 +133,9 @@ directory without writing outside the repository.
   state.
 - `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
 - `repo/tag-release.sh` creates release tags across configured repositories.
+- `repo/update-service-common-version.sh` bumps the checked-in
+  `service-common` version literal in `../service-common/build.gradle.kts` and
+  the matching `serviceCommon` catalog entry in each Java consumer repo.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

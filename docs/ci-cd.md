@@ -156,7 +156,8 @@ To improve build times and dependency management:
 
 - Publish service-common to GitHub Packages
 - Remove git clone step from service workflows
-- Version service-common properly for releases
+- Keep service-common versions in checked-in build files and automate the
+  post-release bump back to the next `-SNAPSHOT`
 
 ## Troubleshooting
 

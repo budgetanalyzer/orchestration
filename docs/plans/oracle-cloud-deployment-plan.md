@@ -14,7 +14,7 @@ Deploy the full Budget Analyzer architecture - k3s, Istio service mesh, applicat
 
 These gates are non-negotiable. Do not deploy the public demo until all are true.
 
-1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable version tag retained: `registry.example.com/budgetanalyzer/transaction-service:v2026.04.12-<gitsha>@sha256:<digest>`.
+1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable SemVer tag retained: `ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>`.
 2. **`service-common` must be resolvable by isolated image builds.** Local `publishToMavenLocal` remains a dev convenience only. Production Java service Docker builds must resolve `service-common` from a real remote Maven repository (recommended: GitHub Packages) using build secrets or CI credentials. Do not copy host `.m2` into Docker contexts and do not expand service Docker contexts to include sibling repos.
 3. **Production builds must use immutable dependency versions.** Local development can keep snapshot workflows. Production image builds should consume an immutable `service-common` release/prerelease version and produce versioned application image tags plus digests.
 4. **Kyverno image policy must be split by environment.** Local Tilt may keep the approved local-image exception. Production must use a separate production image policy variant that rejects all approved-local `:latest` and `:tilt-<hash>` refs.
@@ -26,6 +26,7 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 ## Phase 1: OCI Account & Instance Provisioning
 
 **Owner:** Human (manual - involves credit card, region selection, SSH keys)
+**Status:** Complete as of 2026-04-13. Verified A1/aarch64 instance with 4 OCPU, 23 GiB RAM, and a 194G root filesystem, which is the expected Linux view of the 200 GB OCI boot volume.
 **Estimated time:** 1-7 days (capacity lottery)
 
 ### Pre-requisites
@@ -62,7 +63,7 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
    uname -m      # expect: aarch64
    nproc         # expect: 4
    free -h       # expect: ~24 GB total
-   df -h /       # expect: ~200 GB
+   df -h /       # expect: roughly 190-200G; 194G is normal for the 200 GB boot volume
    ```
 
 ### Outputs
@@ -76,14 +77,23 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 ## Phase 2: Host Hardening & Firewall
 
 **Owner:** Human (SSH session on instance)
+**Status:** Complete as of 2026-04-13. Verified external 80/443 reachability reaches the host and returns `connection refused` before a listener exists; effective SSH config reports `passwordauthentication no` and root password login disabled via `permitrootlogin without-password`.
 **Estimated time:** 15-30 minutes
 
 ### Steps
 
 1. **Fix host-level iptables.** Ubuntu on OCI can ship iptables rules that block 80/443 even after the VCN allows them.
    ```bash
-   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+   while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null; do
+     sudo iptables -D INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT
+   done
+   while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null; do
+     sudo iptables -D INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT
+   done
+   reject_line="$(sudo iptables -L INPUT --line-numbers -n | awk '$2 == "REJECT" {print $1; exit}')"
+   sudo iptables -I INPUT "${reject_line:-1}" -m state --state NEW -p tcp --dport 80 -j ACCEPT
+   sudo iptables -I INPUT "${reject_line:-1}" -m state --state NEW -p tcp --dport 443 -j ACCEPT
+   sudo iptables -L INPUT --line-numbers -n | sed -n '1,20p'
    sudo apt install -y iptables-persistent
    sudo netfilter-persistent save
    ```
@@ -91,8 +101,10 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
    ```bash
    curl -v http://<public-ip>
    # "connection refused" = good before a listener exists
-   # "connection timed out" = iptables or VCN still blocking
+   # "No route to host" = host iptables is probably still rejecting before the 80/443 allow rules
+   # "connection timed out" = OCI VCN security list/NSG/routing is probably still blocking
    ```
+   Run this from your workstation, not from the SSH session on the instance. If `No route to host` persists, verify the port 80 and 443 `ACCEPT` rules appear before any broad `REJECT` rule in the `iptables -L INPUT --line-numbers -n` output. Rules after the broad `REJECT` are dead code and will not open the ports.
 3. **System updates and unattended upgrades.**
    ```bash
    sudo apt update && sudo apt upgrade -y
@@ -101,9 +113,13 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
    ```
 4. **Verify SSH hardening** (should be default on OCI Ubuntu):
    ```bash
-   sudo grep -E '^(PasswordAuthentication|PermitRootLogin)' /etc/ssh/sshd_config
-   # Expect: PasswordAuthentication no, PermitRootLogin prohibit-password or no
+   ssh -V
+   apt-cache policy openssh-server
+   sudo sshd -T | grep -E '^(passwordauthentication|permitrootlogin) '
+   # Expect: passwordauthentication no
+   # Expect: permitrootlogin prohibit-password, without-password, or no
    ```
+   No output from grepping only `/etc/ssh/sshd_config` is not enough to prove the setting either way; Ubuntu cloud images can use included files under `/etc/ssh/sshd_config.d/` and compiled defaults. `sshd -T` prints the effective server configuration. `without-password` is the older spelling for `prohibit-password` and is acceptable here because it still disables root password login.
 
 ### Outputs
 
@@ -115,58 +131,320 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 
 ## Phase 3: Production Image & Build Contract
 
-**Owner:** Service repo maintainers + CI/release workflow
-**Estimated time:** 1-2 days if service-common remote publishing is not implemented yet
+**Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution. [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md) is supporting background for why Maven Local is insufficient for isolated Docker builds; it is not a separate deployment plan.
+**Owner:** Human for credentials, package visibility, and release approval; Codex for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
+**Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; implementation still required.
+**Estimated time:** 1-2 days if `service-common` remote publishing is not implemented yet
 
-This phase folds in [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md). It must complete before any production Kubernetes manifests are applied.
+This phase must complete before any production Kubernetes manifests are applied.
 
-### Decisions
+### Registry Decision
 
-1. **Registry:** Use a real registry reachable by the OCI host. Recommended: GHCR under the `budgetanalyzer` organization.
-2. **Image version scheme:** Use immutable version tags derived from releases or commits, for example `v2026.04.12-<gitsha>`. Do not publish or deploy production `latest`.
-3. **Manifest image format:** Production manifests use digest-pinned refs. Recommended shape:
-   ```text
-   ghcr.io/budgetanalyzer/transaction-service:v2026.04.12-<gitsha>@sha256:<digest>
-   ```
-4. **Java dependency source:** Production Docker builds resolve `org.budgetanalyzer:service-common` from a remote Maven repository. Local `mavenLocal()` may remain first for developer workflows, but it is not the production build source.
-5. **Production `service-common` version:** Use immutable release/prerelease versions for production. Do not build production images against `0.0.1-SNAPSHOT`; snapshot dependencies are a local-development convenience, not a public demo release contract.
+Use GitHub registries under the `budgetanalyzer` organization, but keep the two package types separate:
 
-### Steps
+| Artifact | Registry | Example |
+|---|---|---|
+| Container images | GitHub Container Registry (GHCR) | `ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>` |
+| Java library artifacts | GitHub Packages Maven registry | `https://maven.pkg.github.com/budgetanalyzer/service-common` |
 
-1. **Publish `service-common` to a remote Maven repository.**
-   - Add a remote publish target in `service-common`.
-   - Publish an immutable version.
-   - Document credentials outside the workspace.
-2. **Update Java service builds to resolve remote `service-common`.**
-   - `transaction-service`
-   - `currency-service`
-   - `permission-service`
-   - `session-gateway`
-   - Keep `mavenLocal()` for local host builds only.
-   - Docker builds must authenticate via build secrets or CI env, never hardcoded tokens.
-3. **Build and push production images for all local app repos.**
-   - `transaction-service`
-   - `currency-service`
-   - `permission-service`
-   - `session-gateway`
-   - `ext-authz`
-   - `budget-analyzer-web` production static asset image or an equivalent NGINX-served web bundle image
-   - Any repo-owned NGINX/config image if the production overlay chooses to bake config/assets instead of mounting ConfigMaps
-4. **Verify ARM64 support.**
+GHCR does not solve `service-common` resolution by itself. The Java service Docker builds need `org.budgetanalyzer:service-web` and `org.budgetanalyzer:service-core` from a Maven repository before they can produce images to push to GHCR.
+
+### GitHub Setup References
+
+Use the official GitHub docs as the setup source for registry behavior:
+
+1. [Working with the Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) - GHCR authentication, pushing, pulling by digest, labels, and package behavior.
+2. [Publishing Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) - GitHub Actions workflow pattern for logging in to `ghcr.io`, building, pushing, and generating image digests/attestations.
+3. [Configuring a package's access control and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility) - package visibility, repository inheritance, and workflow access.
+4. [Working with the Gradle registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-gradle-registry) - Gradle publishing and dependency resolution through GitHub Packages.
+5. [Use `GITHUB_TOKEN` for authentication in workflows](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) - workflow token permissions and least-privilege configuration.
+
+### Development Contract
+
+Local development stays fast and local-first:
+
+1. Developers can continue to change `service-common` and run:
    ```bash
-   docker buildx imagetools inspect ghcr.io/budgetanalyzer/transaction-service:<version>
-   # Expect linux/arm64 in the manifest list, or a single linux/arm64 image.
+   cd ../service-common
+   ./gradlew clean build publishToMavenLocal
    ```
-5. **Record immutable image refs in a production inventory.**
-   - Store non-secret refs in a committed template or generated manifest.
-   - Do not store registry tokens in the repo or workspace.
+2. Java service Gradle builds keep `mavenLocal()` first, so `./gradlew build`, `./gradlew bootJar`, and the Tilt live-update path can consume the locally published `0.0.1-SNAPSHOT`.
+3. Tilt remains the supported local image path. It publishes `service-common` locally, builds service JARs on the host, and creates thin runtime images without requiring a remote Maven package or GHCR push.
+4. Raw service-repo `docker build` is not the primary dev loop. It becomes a release-candidate verification path after the remote Maven package contract exists.
 
-### Outputs
+This means `publishToMavenLocal` remains the correct dev answer, but it is intentionally not the production image answer.
 
-- `service-common` production artifact published remotely
-- Java service Docker builds no longer depend on host-only Maven Local state
-- All production app images are versioned and digest-pinned
-- No production manifest path uses `:latest`, `:tilt-<hash>`, or `imagePullPolicy: Never`
+### Release Contract
+
+Production releases use immutable artifacts:
+
+1. Pick one SemVer release id for the stack, for example `v0.0.8`.
+2. Publish `service-common` to GitHub Packages Maven with the matching Maven version, for example `0.0.8`. Maven artifact versions normally do not include the leading `v`.
+3. Build each Java service image with that exact `service-common` version.
+4. Push application images to GHCR with the release id tag.
+5. Resolve and record the pushed image digest.
+6. Deploy only digest-pinned image refs, preferably retaining the readable tag:
+   ```text
+   ghcr.io/budgetanalyzer/transaction-service:v0.0.8@sha256:<digest>
+   ```
+
+Use SemVer (`v0.0.8`, `v0.0.9`, `v0.1.0`) for intentional releases. Date-plus-SHA tags such as `v2026.04.13-<shortsha>` are useful for CI snapshots or nightly builds, but they are noisier than necessary for this public demo's release tags. The digest is what makes the deployed image immutable.
+
+### Human Responsibilities (Detailed)
+
+The human owns the actions that require production or package credentials. Work is broken into four sequential chunks; each chunk unblocks the next.
+
+#### Chunk 1: GitHub Org & Repo Package Permissions
+
+Nothing else works until the `budgetanalyzer` GitHub org allows package publishing.
+
+1. **Enable GitHub Actions for the org.** Go to `https://github.com/organizations/budgetanalyzer/settings/actions` and confirm Actions is enabled for all repositories (or at least the repos listed in this plan).
+2. **Enable GHCR for the org.** Go to `https://github.com/organizations/budgetanalyzer/settings/packages`. Under "Packages", confirm Container images are enabled.
+3. **Set default package visibility.** Same page (`/settings/packages`), under "Default Package Settings", choose the default visibility for new packages. For this public reference demo, "Public" is simplest -- OCI can pull without `imagePullSecrets`. If private is chosen, Chunk 3 adds an extra pull-token step.
+4. **Set repo-level Actions workflow permissions for `service-common`.** Go to `https://github.com/budgetanalyzer/service-common/settings/actions`. Under "Workflow permissions", select **"Read and write permissions"**. This lets the automatic `GITHUB_TOKEN` inside workflows perform `packages: write`.
+5. **Repeat step 4 for every repo that will push images:**
+   - `transaction-service`
+   - `currency-service`
+   - `permission-service`
+   - `session-gateway`
+   - `budget-analyzer-web`
+   - `orchestration` (for `ext-authz`, if its workflow lives here)
+6. **Verify.** Go to any repo's Actions tab and confirm "Run workflow" is visible on manual-dispatch workflows. No workflows to run yet -- just confirm Actions is not disabled.
+
+#### Chunk 2: Publish `service-common` to GitHub Packages Maven
+
+`service-common` produces two Maven artifacts: `org.budgetanalyzer:service-core` and `org.budgetanalyzer:service-web`. For production they will be published as version `0.0.8` (no `-SNAPSHOT`, no `v` prefix).
+
+##### 2a. Create a PAT for the one-time local publish test
+
+1. Go to `https://github.com/settings/tokens` (classic) or `https://github.com/settings/personal-access-tokens` (fine-grained).
+   - **Classic PAT**: scopes needed: `write:packages`, `read:packages`.
+   - **Fine-grained PAT** (preferred): scope to the `budgetanalyzer` org, repository `service-common`, permission "Packages: Read and write".
+2. Copy the token value. It will be used for the local publish test and can be revoked after CI takes over.
+
+##### 2b. Set credentials as environment variables
+
+Do NOT put tokens in a file in the repo, `.env`, or shell history committed to docs.
+
+```bash
+export GITHUB_ACTOR=<your-github-username>
+export GITHUB_TOKEN=<the-token-from-step-2a>
+```
+
+##### 2c. Run the local publish (after AI Assistant updates Gradle config)
+
+```bash
+cd /workspace/service-common
+./gradlew publish -Pversion=0.0.8
+```
+
+##### 2d. Verify the publish succeeded
+
+1. Go to `https://github.com/orgs/budgetanalyzer/packages`.
+2. Confirm two Maven packages appear: `org.budgetanalyzer.service-core` and `org.budgetanalyzer.service-web`.
+3. Click into one and confirm version `0.0.8` is listed and the POM file is present.
+
+##### 2e. Verify a consumer can resolve it (after AI Assistant updates consumer Gradle configs)
+
+```bash
+cd /workspace/transaction-service
+./gradlew dependencies --configuration runtimeClasspath | grep service
+```
+
+##### 2f. Set up CI publishing (replaces manual publish)
+
+After the manual test succeeds, the AI Assistant will write a tag-triggered GitHub Actions workflow so publishing is automated.
+
+1. Merge the PR that adds the publish workflow to `service-common`.
+2. Create and push the tag:
+   ```bash
+   cd /workspace/service-common
+   git tag v0.0.8
+   git push origin v0.0.8
+   ```
+3. Watch the workflow at `https://github.com/budgetanalyzer/service-common/actions` and confirm the publish succeeds.
+
+#### Chunk 3: Package Visibility Decision
+
+**Option A -- Public packages (recommended for this public demo):**
+
+After packages appear at `https://github.com/orgs/budgetanalyzer/packages`, click into each package -> "Package settings" -> "Danger Zone" -> "Change visibility" -> "Public". Do this for both Maven packages and for each GHCR container image after they are first pushed. OCI cluster can pull without authentication -- no `imagePullSecret` needed.
+
+**Option B -- Private packages:**
+
+Leave packages private. Create a read-only PAT with `read:packages` scope. On the OCI instance, create a Kubernetes secret:
+
+```bash
+kubectl create secret docker-registry ghcr-pull-secret \
+  --docker-server=ghcr.io \
+  --docker-username=<your-github-username> \
+  --docker-password=<read-only-pat>
+```
+
+Every Deployment/Pod spec will need `imagePullSecrets: [{name: ghcr-pull-secret}]`.
+
+#### Chunk 4: Build, Push & Verify Production Images
+
+This chunk happens after the AI Assistant writes CI workflows and updates Dockerfiles.
+
+##### 4a. Java services (transaction, currency, permission, session-gateway)
+
+For each service:
+
+1. Merge the PR that adds the release workflow and updated Dockerfile.
+2. Tag the release:
+   ```bash
+   cd /workspace/<service-name>
+   git tag v0.0.8
+   git push origin v0.0.8
+   ```
+3. Watch the Actions run at `https://github.com/budgetanalyzer/<service-name>/actions`. The workflow will pull `service-common:0.0.8` from GitHub Packages Maven, build a `linux/arm64` image, push to GHCR, and print the digest.
+4. Record the digest from the workflow output:
+   ```
+   ghcr.io/budgetanalyzer/<service-name>:v0.0.8@sha256:<digest>
+   ```
+
+##### 4b. `budget-analyzer-web` (frontend)
+
+Same tag-and-push pattern. Uses Node/Vite, no `service-common` dependency.
+
+##### 4c. `ext-authz` (Go service)
+
+Same tag-and-push pattern. Uses Go, no `service-common` dependency.
+
+##### 4d. Make GHCR images public (if Option A was chosen in Chunk 3)
+
+Go to `https://github.com/orgs/budgetanalyzer/packages`. For each of the 6 container images, click in -> "Package settings" -> make public.
+
+##### 4e. Final verification
+
+From any machine (not the dev box), confirm images are pullable without authentication:
+
+```bash
+docker pull ghcr.io/budgetanalyzer/transaction-service:v0.0.8
+```
+
+If public, this works without `docker login`. If private, `docker login ghcr.io` is required first.
+
+#### Credential Safety Rules
+
+- Never place package tokens in the repo, `.env`, shell history snippets committed to docs, or the shared workspace.
+- Revoke the manual-test PAT from Chunk 2a after CI publishing is confirmed working.
+- Review the generated production image inventory before it is consumed by the OCI overlay.
+
+### AI Assistant Responsibilities
+
+AI Assistant can do the non-secret implementation work:
+
+1. Update `service-common` Gradle publishing config to keep `mavenLocal()` and add the GitHub Packages Maven target.
+2. Update Java service Gradle config so `mavenLocal()` stays first for local dev and GitHub Packages Maven is available for release and isolated Docker builds.
+3. Add a release-time `serviceCommonVersion` override so production builds do not require hand-editing `gradle/libs.versions.toml` for every release.
+4. Update Java service Dockerfiles or build workflows to pass Maven credentials through BuildKit secrets or CI environment. Tokens must not be copied into images, layers, logs, or checked-in files.
+5. Add GitHub Actions workflow templates for:
+   - publishing `service-common` to GitHub Packages Maven
+   - building `linux/arm64` or multi-arch app images
+   - pushing to GHCR
+   - printing digest-pinned image refs
+6. Add or update orchestration production inventory files and overlays with non-secret image refs.
+7. Update documentation in this repo and affected service repos.
+
+### Step-by-Step Phase 3 Work
+
+1. **Freeze naming.**
+   - Stack release id: `v0.0.8`
+   - `service-common` Maven version: `0.0.8` (no `-SNAPSHOT`, no `v` prefix)
+   - Image names:
+     - `ghcr.io/budgetanalyzer/transaction-service`
+     - `ghcr.io/budgetanalyzer/currency-service`
+     - `ghcr.io/budgetanalyzer/permission-service`
+     - `ghcr.io/budgetanalyzer/session-gateway`
+     - `ghcr.io/budgetanalyzer/budget-analyzer-web`
+     - `ghcr.io/budgetanalyzer/ext-authz`
+2. **Add remote Maven publishing in `service-common`.**
+   - Keep local publishing:
+     ```bash
+     ./gradlew publishToMavenLocal
+     ```
+   - Add remote publishing for releases:
+     ```bash
+     ./gradlew publish -Pversion=0.0.8
+     ```
+   - Credentials come from GitHub Actions or local environment only.
+3. **Teach consumers to resolve `service-common` remotely.**
+   - Repos:
+     - `transaction-service`
+     - `currency-service`
+     - `permission-service`
+     - `session-gateway`
+   - Required behavior:
+     - local build with only Maven Local still works
+     - release build can pass `-PserviceCommonVersion=<service-common-release-version>`
+     - Docker build can resolve the same version without sibling source trees or host `.m2`
+4. **Add isolated Java image build proof.**
+   - From each Java service repo, verify release-candidate Docker builds can run after `service-common` is published remotely:
+     ```bash
+     docker buildx build \
+       --platform linux/arm64 \
+       --secret id=github_packages_token,env=GITHUB_PACKAGES_TOKEN \
+       --build-arg SERVICE_COMMON_VERSION=0.0.8 \
+       -t ghcr.io/budgetanalyzer/transaction-service:v0.0.8 \
+       .
+     ```
+   - The final implementation may use CI instead of a local command, but it must prove the same contract.
+5. **Build and push all production app images.**
+   - Push Java services, frontend, and `ext-authz` to GHCR.
+   - Build at least `linux/arm64`; multi-arch is acceptable but not required for OCI A1.
+   - Do not publish or deploy `latest`.
+6. **Capture digests.**
+   ```bash
+   docker buildx imagetools inspect ghcr.io/budgetanalyzer/transaction-service:v0.0.8
+   ```
+   - Expect `linux/arm64`.
+   - Record the `sha256` digest in the production image inventory.
+7. **Update production manifests or overlays.**
+   - Replace local image refs with digest-pinned GHCR refs.
+   - Production paths must not contain `:latest`, `:tilt-<hash>`, unqualified app image names, or `imagePullPolicy: Never`.
+8. **Verify the production image policy.**
+   - Run the production Kyverno/static manifest checks once the overlay exists.
+   - Confirm the local Tilt image exceptions are not present in production policy.
+9. **Hand off to Phase 4 only after the inventory is complete.**
+
+### Execution Handoff
+
+#### Sequencing Summary
+
+| Order | Human does | Then AI Assistant does |
+|---|---|---|
+| 1 | Chunk 1: Enable Actions + package permissions on GitHub org and repos | -- |
+| 2 | Chunk 2a-2b: Create PAT and set env vars for local publish test | Update `service-common` Gradle config to add GitHub Packages target |
+| 3 | Chunk 2c-2d: Run `./gradlew publish -Pversion=0.0.8` and verify on GitHub | Write tag-triggered CI publish workflow for `service-common` |
+| 4 | Chunk 2f: Merge PR, tag `v0.0.8`, push tag, confirm CI publish | Update consumer Gradle configs, Dockerfiles, and release workflows |
+| 5 | Chunk 3: Decide public vs private packages | Adjust manifests if `imagePullSecret` is needed |
+| 6 | Chunk 4: Tag each service repo, watch CI, collect digests, set visibility | Write production image inventory and overlay files |
+
+#### Detailed Handoff
+
+| Step | Human does | AI Assistant does | Output |
+|---|---|---|---|
+| Org & repo permissions (Chunk 1) | Enable Actions, GHCR, workflow write permissions on org and all repos | -- | Actions can run and publish packages |
+| Create test credential (Chunk 2a-2b) | Create PAT with `write:packages`, set `GITHUB_ACTOR`/`GITHUB_TOKEN` env vars | -- | Local env can authenticate to GitHub Packages |
+| Publish `service-common` (Chunk 2c-2d) | Run `./gradlew publish -Pversion=0.0.8`, verify packages at github.com | Add Gradle publishing config and workflow template | Immutable Maven packages `0.0.8` |
+| CI publish (Chunk 2f) | Merge PR, `git tag v0.0.8 && git push origin v0.0.8`, confirm Actions run | Write tag-triggered publish workflow | Automated Maven publishing |
+| Update consumers | Review service repo config changes | Add remote Maven repository, local-first behavior, and `serviceCommonVersion` override | Services build locally and for release |
+| Package visibility (Chunk 3) | Decide public vs private, change visibility in GitHub UI | Adjust manifests if `imagePullSecret` needed | Registry access decision |
+| Prove Docker builds | Trigger CI or run local release build commands with env-provided tokens | Add BuildKit/CI wiring and document verification commands | Java images build without sibling source trees |
+| Push GHCR images (Chunk 4a-4c) | Tag each repo `v0.0.8`, push tags, watch CI | Add workflow/image naming templates and digest collection | GHCR images with ARM64 support |
+| Set image visibility (Chunk 4d) | Make each GHCR image public (if Option A) | -- | Images pullable without auth |
+| Record inventory | Review generated refs before deployment | Update non-secret production image inventory/overlays | Digest-pinned production refs |
+| Deploy to OCI | Run host/cluster commands that require production access | Prepare manifests, scripts, and verification docs | Phase 4 can begin |
+
+### Phase 3 Outputs
+
+- `service-common` production artifact published to GitHub Packages Maven
+- Java service release builds can resolve `service-common` without host-only Maven Local state
+- GHCR contains ARM64-compatible images for every app component
+- Production image inventory records digest-pinned refs
+- No production manifest path uses `:latest`, `:tilt-<hash>`, unqualified local image names, or `imagePullPolicy: Never`
 
 ---
 
@@ -824,3 +1102,35 @@ If Oracle does not work out (capacity lottery >1 week, account flagging, reclama
 - EU-only (120-160 ms to US is fine for this HTTP demo)
 
 Do not spend more than a week trying to save $40/mo.
+
+---
+
+## Optional Hardening
+
+### Disable Root SSH Login Completely
+
+The Phase 2 baseline accepts `permitrootlogin without-password` because it disables root password login and preserves the default OCI Ubuntu key-based access model through the `ubuntu` user. For stricter hardening, disable root SSH login entirely only after key-based `ubuntu` login is proven working.
+
+Keep the current SSH session open while making this change:
+
+```bash
+sudo tee /etc/ssh/sshd_config.d/99-budgetanalyzer-hardening.conf >/dev/null <<'EOF'
+PermitRootLogin no
+EOF
+sudo sshd -t
+sudo systemctl reload ssh
+```
+
+Before closing the original session, open a second terminal from your workstation and verify a fresh login still works:
+
+```bash
+ssh -i ~/.ssh/oci-budgetanalyzer ubuntu@<public-ip>
+```
+
+If the second login fails, keep the original session open and revert immediately:
+
+```bash
+sudo rm /etc/ssh/sshd_config.d/99-budgetanalyzer-hardening.conf
+sudo sshd -t
+sudo systemctl reload ssh
+```

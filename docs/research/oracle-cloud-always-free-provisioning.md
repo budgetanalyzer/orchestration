@@ -186,10 +186,10 @@ Verify you got what you asked for:
 uname -m      # expect: aarch64
 nproc         # expect: 4
 free -h       # total should show ~24 GB
-df -h /       # should show ~200 GB available
+df -h /       # should show roughly 190-200G; 194G is normal for the 200 GB boot volume
 ```
 
-If any of those don't match, you provisioned the wrong shape — delete and retry with the correct settings.
+`df -h` reports binary-sized units and filesystem capacity after partition/filesystem overhead, while OCI labels the boot volume as 200 GB. A default unexpanded boot volume would be around 47-50 GB, not 194G. If CPU, memory, or disk are materially lower than these expectations, you provisioned the wrong shape or boot volume size - delete and retry with the correct settings.
 
 ---
 

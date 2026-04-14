@@ -55,6 +55,12 @@ tilt up           # Start everything
 
 Open https://app.budgetanalyzer.localhost when services are green.
 
+This local startup flow should not require `GITHUB_ACTOR`, `GITHUB_TOKEN`, or a
+personal access token for `service-common`. Tilt publishes `service-common`
+locally before the downstream Java builds run. For the local-vs-release
+artifact contract, see
+[service-common-artifact-resolution.md](service-common-artifact-resolution.md).
+
 The script tree is now purpose-split: `scripts/bootstrap/` for host and
 cluster setup, `scripts/guardrails/` for CI-safe static checks,
 `scripts/smoketest/` for live-cluster verifiers, `scripts/ops/` for

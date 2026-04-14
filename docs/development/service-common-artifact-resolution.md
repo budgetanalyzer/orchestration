@@ -49,8 +49,15 @@ You need GitHub Packages credentials when all of these are true:
 Typical examples:
 
 - release-version Docker builds
+- CI builds that intentionally resolve the latest published snapshot from
+  `service-common` instead of using Maven Local
 - isolated CI or clean-builder image builds
 - manual clean-shell verification of remote published artifacts
+
+`service-common` itself now refreshes the current checked-in snapshot from
+`main` through its `publish-snapshot.yml` workflow. That remote snapshot path
+exists to support isolated CI/release builds; it does not change the local
+contributor contract.
 
 ## GitHub Actions Environment
 

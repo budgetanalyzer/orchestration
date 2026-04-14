@@ -158,6 +158,9 @@ contributor flow on `mavenLocal()` plus orchestration/Tilt.
 
 Current contract:
 
+- `service-common` publishes checked-in `-SNAPSHOT` versions from `main` to
+  GitHub Packages Maven for CI consumption, while numeric releases remain
+  tag-driven
 - Java release and isolated Docker builds resolve published `service-common`
   artifacts from GitHub Packages
 - because Maven/Gradle packages are repository-scoped, consuming workflows

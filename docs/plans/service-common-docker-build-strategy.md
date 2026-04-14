@@ -1,5 +1,11 @@
 # Service-Common Docker Build Strategy
 
+**Status:** Supporting rationale, not the Oracle Cloud deployment source of truth.
+For Oracle Cloud Phase 3 execution, use
+[`oracle-cloud-deployment-plan.md`](./oracle-cloud-deployment-plan.md#phase-3-production-image--build-contract).
+This document explains the `service-common` Docker build problem and the
+artifact-repository options behind that plan.
+
 ## Goal
 
 Define how Java service Docker builds should resolve `service-common`
@@ -133,8 +139,9 @@ Preferred target:
 Required work in `service-common`:
 
 - add a real Maven publish target alongside `mavenLocal()`
-- decide snapshot/version behavior instead of relying purely on
-  `0.0.1-SNAPSHOT` in local-only workflows
+- keep the version in checked-in build files and add a local bump step for
+  release and next-snapshot transitions instead of relying on publish-time
+  overrides
 - document credentials and repository URL requirements
 
 Required work in consuming services:
@@ -145,21 +152,29 @@ Required work in consuming services:
 
 ### Phase 3: Define Snapshot/Version Discipline
 
-Pick one of these, explicitly:
+Use two different rules for two different workflows:
 
-1. Keep `0.0.1-SNAPSHOT` and publish snapshots to the remote repository.
-2. Publish immutable prerelease versions per merge or commit.
+1. Local development keeps the current checked-in `-SNAPSHOT` version and
+   `publishToMavenLocal`.
+2. Production image builds use immutable release or prerelease versions
+   published to the remote Maven repository.
 
-Recommendation:
+The Oracle Cloud deployment plan chooses the second rule for public demo
+releases. That means the checked-in snapshot version remains a local
+convenience for the Tilt/host-Gradle loop, but a production GHCR image must
+not be built against that snapshot.
 
-- keep snapshots for now, because the project already uses lockstep local
-  development and is not trying to establish a full semver release train here
+Required release rule:
 
-But the rule must be written down:
-
-- when `service-common` changes, where the new snapshot is published
-- which workflow republishes it
-- when consumers are expected to refresh it
+- use a repo-local script to bump `service-common/build.gradle.kts` and the
+  consumer version catalogs to the release version before tagging
+- when `service-common` changes for a release, publish an immutable
+  `service-common` version first
+- build every consuming Java service image with that exact version
+- record the `service-common` version alongside the GHCR image tag/digest in
+  the release inventory
+- after the release succeeds, use the same script to bump everything to the
+  next `-SNAPSHOT` version for ongoing development
 
 ### Phase 4: Make Docker Builds Consume The Same Contract
 
@@ -219,6 +234,12 @@ Recommended if you want standalone `docker build` to work:
 1. Publish `service-common` to a real Maven repository.
 2. Teach consuming services to resolve it there.
 3. Add image-build verification once that contract exists.
+
+For Oracle Cloud production releases, the concrete repository choices are:
+
+1. GitHub Packages Maven registry for `service-common` artifacts.
+2. GHCR for app container images.
+3. Maven Local only for local development and Tilt's host-side build flow.
 
 Recommended if you do **not** want that scope right now:
 

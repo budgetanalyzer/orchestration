@@ -193,6 +193,9 @@ workflows:
 - the workflows publish only the numeric SemVer tag from the pushed `v*`
   release ref and print a digest-pinned image reference for the production
   inventory step; they do not publish `latest`
+- each workflow also supports `workflow_dispatch` with a `release_ref` input so
+  an already-existing tag such as `v0.0.8` can still be published even if the
+  workflow file was added later on `main`
 
 ## Troubleshooting
 

@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repo-config.sh"
 
 # Exclude non-release repositories
-EXCLUDE_FROM_RELEASE=("service-common")
+EXCLUDE_FROM_RELEASE=("architecture-conversations")
 RELEASE_REPOS=()
 for REPO in "${REPOS[@]}"; do
     SKIP=0

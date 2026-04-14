@@ -148,16 +148,57 @@ Planned improvements include:
 
 - **Semantic versioning** with [release-please](https://github.com/googleapis/release-please)
 - **Automated changelog** generation from conventional commits
-- **Docker image publishing** to GitHub Container Registry on release
+- **Release orchestration around the existing GHCR publish workflows**
 
 ### GitHub Packages
 
-To improve build times and dependency management:
+`service-common` publishing is no longer a future idea. Phase 3 uses GitHub
+Packages Maven as CI/release infrastructure while keeping the local
+contributor flow on `mavenLocal()` plus orchestration/Tilt.
 
-- Publish service-common to GitHub Packages
-- Remove git clone step from service workflows
-- Keep service-common versions in checked-in build files and automate the
-  post-release bump back to the next `-SNAPSHOT`
+Current contract:
+
+- `service-common` publishes checked-in `-SNAPSHOT` versions from `main` to
+  GitHub Packages Maven for CI consumption, while numeric releases remain
+  tag-driven
+- Java release and isolated Docker builds resolve published `service-common`
+  artifacts from GitHub Packages
+- because Maven/Gradle packages are repository-scoped, consuming workflows
+  cannot rely on per-package **Manage Actions access** grants or assume the
+  workflow repo's own `GITHUB_TOKEN` can read `service-common`
+- release jobs must provide a dedicated GitHub Packages username/token secret
+  pair under the env names the Gradle builds expect
+- Java service Dockerfiles consume those credentials through BuildKit secrets
+  instead of host Maven Local state or sibling repo checkouts
+- checked-in `gradle/libs.versions.toml` values remain the source of truth for
+  the `service-common` version
+
+The detailed local-vs-release resolution rules live in
+[docs/development/service-common-artifact-resolution.md](development/service-common-artifact-resolution.md).
+
+### Release Images
+
+Phase 3 release image publishing is now wired as tag-driven repo-local
+workflows:
+
+- `transaction-service`, `currency-service`, `permission-service`, and
+  `session-gateway` publish `linux/arm64` GHCR images from
+  `.github/workflows/publish-release.yml`
+- those Java workflows pass the dedicated
+  `SERVICE_COMMON_PACKAGES_USERNAME` / `SERVICE_COMMON_PACKAGES_READ_TOKEN`
+  secret pair into Docker BuildKit so the release build can resolve
+  `service-common` without sibling checkouts or host Maven Local state
+- `budget-analyzer-web` keeps `Dockerfile` for the local Vite/Tilt path and
+  uses `Dockerfile.production` for the GHCR release image built by its own
+  `.github/workflows/publish-release.yml`
+- orchestration publishes `ext-authz` from
+  `.github/workflows/publish-ext-authz-release.yml`
+- the workflows publish only the numeric SemVer tag from the pushed `v*`
+  release ref and print a digest-pinned image reference for the production
+  inventory step; they do not publish `latest`
+- each workflow also supports `workflow_dispatch` with a `release_ref` input so
+  an already-existing tag such as `v0.0.8` can still be published even if the
+  workflow file was added later on `main`
 
 ## Troubleshooting
 

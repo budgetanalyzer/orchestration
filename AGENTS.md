@@ -41,6 +41,7 @@ Update the nearest affected documentation in the same work:
 - `AGENTS.md` when instructions, guardrails, discovery commands, or repository-specific workflow changes
 - `README.md` when setup, usage, or repository purpose changes
 - `docs/` when architecture, configuration, APIs, behaviors, or operational workflows change
+- If you find yourself copying the same detailed documentation across repos, stop and ask the user whether they would prefer a single centralized source of truth with links from the other repos
 
 Do not leave documentation updates as follow-up work.
 

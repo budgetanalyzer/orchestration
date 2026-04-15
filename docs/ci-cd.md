@@ -19,6 +19,7 @@ All backend services use GitHub Actions for continuous integration. Each service
 | session-gateway | [![Build](https://github.com/budgetanalyzer/session-gateway/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/session-gateway/actions/workflows/build.yml) |
 | transaction-service | [![Build](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml) |
 | currency-service | [![Build](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml) |
+| permission-service | [![Build](https://github.com/budgetanalyzer/permission-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/permission-service/actions/workflows/build.yml) |
 
 ## Workflow Details
 
@@ -35,14 +36,20 @@ All workflows trigger on:
 1. **Checkout**: Clone the repository
 2. **Setup JDK 24**: Install Temurin JDK 24
 3. **Setup Gradle**: Configure Gradle with caching
-4. **Build service-common**: Clone and build the shared library (for services that depend on it)
-5. **Build with Gradle**: Run `./gradlew build` which includes:
+4. **Resolve pinned `serviceCommon` version**: Read `gradle/libs.versions.toml`
+5. **Validate GitHub Packages access**: Fail fast if
+   `SERVICE_COMMON_PACKAGES_USERNAME` /
+   `SERVICE_COMMON_PACKAGES_READ_TOKEN` are missing or cannot read the pinned
+   `service-core` / `service-web` POMs
+6. **Build with Gradle**: Run `./gradlew build` with
+   `GITHUB_ACTOR` / `GITHUB_TOKEN` exported from those same secrets, which
+   includes:
    - Compile Java source
    - Run Spotless formatting check
    - Run Checkstyle validation
    - Execute all tests
    - Package JAR
-6. **Upload artifacts**: Save test results and JARs
+7. **Upload artifacts**: Save test results and JARs
 
 ### Code Quality
 
@@ -53,7 +60,19 @@ The build enforces code quality via:
 
 ### Dependencies
 
-Backend services depend on `service-common`. Each workflow clones and builds service-common to Maven Local before building the service itself.
+The Java service repos depend on `service-common`, but local development and
+GitHub Actions intentionally use different resolution paths:
+
+- local contributor builds stay `mavenLocal()`-first and rely on
+  `publishToMavenLocal` plus orchestration/Tilt
+- default GitHub Actions `build.yml` workflows resolve the pinned published
+  `service-common` artifact version from GitHub Packages
+- release workflows use the same GitHub Packages credential pair and the same
+  remote artifact source
+
+The checked-in `serviceCommon` entry in each consumer repo's
+`gradle/libs.versions.toml` remains the source of truth for the version that CI
+expects to exist remotely.
 
 ## Orchestration Workflows
 
@@ -161,13 +180,18 @@ Current contract:
 - `service-common` publishes checked-in `-SNAPSHOT` versions from `main` to
   GitHub Packages Maven for CI consumption, while numeric releases remain
   tag-driven
+- default Java `build.yml` workflows resolve published pinned `service-common`
+  artifacts from GitHub Packages instead of cloning sibling source
 - Java release and isolated Docker builds resolve published `service-common`
-  artifacts from GitHub Packages
+  artifacts from GitHub Packages through the same credential model
 - because Maven/Gradle packages are repository-scoped, consuming workflows
   cannot rely on per-package **Manage Actions access** grants or assume the
   workflow repo's own `GITHUB_TOKEN` can read `service-common`
-- release jobs must provide a dedicated GitHub Packages username/token secret
-  pair under the env names the Gradle builds expect
+- Java build and release jobs must provide a dedicated GitHub Packages
+  username/token secret pair under the env names the Gradle builds expect
+- Java build workflows now read `serviceCommon` from the checked-in version
+  catalog and preflight the remote `service-core` / `service-web` POM URLs
+  before starting the slower Gradle build
 - Java service Dockerfiles consume those credentials through BuildKit secrets
   instead of host Maven Local state or sibling repo checkouts
 - checked-in `gradle/libs.versions.toml` values remain the source of truth for
@@ -238,7 +262,10 @@ issues that cannot be reproduced through the CI workflows.
 1. **Spotless check failed**: Run `./gradlew spotlessApply` locally to fix formatting
 2. **Checkstyle violations**: Fix style issues reported in the build log
 3. **Test failures**: Check test output in the uploaded artifacts
-4. **service-common build failed**: Ensure service-common has no breaking changes
+4. **GitHub Packages preflight failed**: Confirm
+   `SERVICE_COMMON_PACKAGES_USERNAME` /
+   `SERVICE_COMMON_PACKAGES_READ_TOKEN` are configured and that the pinned
+   `serviceCommon` version in `gradle/libs.versions.toml` has been published
 
 ### Viewing Results
 

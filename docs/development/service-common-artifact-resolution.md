@@ -1,7 +1,7 @@
 # Service-Common Artifact Resolution
 
-This document explains when Budget Analyzer services resolve `service-common`
-from Maven Local and when they need GitHub Packages credentials.
+This document explains the split between local `mavenLocal()` resolution and
+the GitHub Packages path used by GitHub Actions and release builds.
 
 ## Local Contributor Flow
 
@@ -36,8 +36,8 @@ cd ../service-common
 
 ## When GitHub Packages Credentials Are Required
 
-GitHub Packages credentials are a release and isolated-build concern, not a
-getting-started prerequisite.
+GitHub Packages credentials are a CI/release concern, not a getting-started
+prerequisite.
 
 You need GitHub Packages credentials when all of these are true:
 
@@ -48,9 +48,9 @@ You need GitHub Packages credentials when all of these are true:
 
 Typical examples:
 
+- default GitHub Actions `build.yml` runs in `transaction-service`,
+  `currency-service`, `permission-service`, and `session-gateway`
 - release-version Docker builds
-- CI builds that intentionally resolve the latest published snapshot from
-  `service-common` instead of using Maven Local
 - isolated CI or clean-builder image builds
 - manual clean-shell verification of remote published artifacts
 
@@ -58,6 +58,16 @@ Typical examples:
 `main` through its `publish-snapshot.yml` workflow. That remote snapshot path
 exists to support isolated CI/release builds; it does not change the local
 contributor contract.
+
+For the Java consumer repos, the default build workflow contract is now:
+
+- read the pinned `serviceCommon` version from `gradle/libs.versions.toml`
+- fail fast if `SERVICE_COMMON_PACKAGES_USERNAME` or
+  `SERVICE_COMMON_PACKAGES_READ_TOKEN` is missing
+- preflight the versioned `service-core` and `service-web` POM URLs in GitHub
+  Packages
+- run `./gradlew build` with `GITHUB_ACTOR` / `GITHUB_TOKEN` exported from
+  that same secret pair
 
 ## GitHub Actions Environment
 
@@ -80,8 +90,9 @@ env:
 `GITHUB_ACTOR` here means the username that owns the GitHub Packages credential,
 not necessarily `${{ github.actor }}`. `GITHUB_TOKEN` here means the secret used
 for remote package reads, not necessarily the workflow repo's default token.
-This requirement applies only to the remote GitHub-Packages path, not to the
-normal `tilt up` contributor flow.
+This requirement applies to the remote GitHub Packages path used by default
+`build.yml` and release workflows. It does not apply to the normal `tilt up`
+contributor flow.
 
 ## Containerized Release Builds
 

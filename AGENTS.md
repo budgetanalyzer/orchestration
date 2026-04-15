@@ -46,6 +46,12 @@ Do not leave documentation updates as follow-up work.
 
 ## GitHub Actions Baseline
 
+This orchestration repo is the coordination point for GitHub Actions
+workflow standards and upgrade planning across the relevant Budget Analyzer
+repositories. When workflow changes span multiple repos, coordinate the
+policy here and then apply repo-local workflow edits in the owning
+repositories as needed.
+
 Keep repository workflows on Node 24-ready action majors. For this repo that
 means `actions/checkout@v6` for first-party checkout steps and the Docker
 release stack on `docker/setup-qemu-action@v4`,

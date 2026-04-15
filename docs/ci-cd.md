@@ -188,17 +188,28 @@ workflows:
   `SERVICE_COMMON_PACKAGES_USERNAME` / `SERVICE_COMMON_PACKAGES_READ_TOKEN`
   secret pair into Docker BuildKit so the release build can resolve
   `service-common` without sibling checkouts or host Maven Local state
+- those same Java workflows also run an explicit GitHub Packages preflight
+  against the versioned `service-core` / `service-web` POM URLs before the
+  Docker build, so secret-scope or credential failures surface before the
+  slower image build step starts
 - `budget-analyzer-web` keeps `Dockerfile` for the local Vite/Tilt path and
   uses `Dockerfile.production` for the GHCR release image built by its own
   `.github/workflows/publish-release.yml`
 - orchestration publishes `ext-authz` from
   `.github/workflows/publish-ext-authz-release.yml`
-- the workflows publish only the numeric SemVer tag from the pushed `v*`
-  release ref and print a digest-pinned image reference for the production
+- on `push` of a `v*` tag, the workflows publish the stripped numeric SemVer
+  image tag and print a digest-pinned image reference for the production
   inventory step; they do not publish `latest`
-- each workflow also supports `workflow_dispatch` with a `release_ref` input so
-  an already-existing tag such as `v0.0.8` can still be published even if the
-  workflow file was added later on `main`
+- on `workflow_dispatch`, `release_ref` selects the existing Git tag to check
+  out and optional `image_tag` selects the published container tag; if
+  `release_ref` is `v*` and `image_tag` is omitted the workflows strip the
+  leading `v`, otherwise they use the raw tag name
+- the Java workflows read `serviceCommon` from the checked-out
+  `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
+  Docker dependency resolution, and do not require `release_ref` to equal the
+  checked-in `serviceCommon` version
+- manual release-image rebuilds are supported only for tags created under the
+  `v0.0.12`-forward contract; older tags remain intentionally unsupported
 
 ## Troubleshooting
 

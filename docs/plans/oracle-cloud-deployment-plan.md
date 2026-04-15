@@ -186,10 +186,10 @@ Production releases use immutable artifacts and keep version naming explicit:
 1. Pick one numeric SemVer release version for build and artifact metadata, for example `0.0.8`.
 2. Use a `v`-prefixed Git tag as the human release ref, for example `v0.0.8`.
 3. Before tagging, bump the checked-in version literals to the numeric release version. The source of truth is the literal `version = "..."` in `service-common/build.gradle.kts` plus the `serviceCommon = "..."` entry in each consumer's `gradle/libs.versions.toml`.
-4. CI workflows may validate that the pushed tag matches the checked-in numeric version after stripping the leading `v`, but they must not derive or override the publish version from the tag at release time.
+4. From the `v0.0.12`-forward contract, CI workflows treat the checked-out ref as source selection only, keep the checked-in files as the source of truth for `service-common`, and allow the published image tag to be selected separately.
 5. Publish `service-common` to GitHub Packages Maven with the checked-in numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`. The steady-state publish path is the `service-common` GitHub Actions workflow using `GITHUB_TOKEN`, not a manually managed maintainer PAT.
 6. Build each Java service image with that exact numeric `service-common` version. Because GitHub Packages Maven/Gradle packages are repository-scoped, the current supported remote-resolution path for cross-repo consuming workflows is a dedicated GitHub Packages credential stored in Actions secrets, not the workflow repo's default `GITHUB_TOKEN`.
-7. Push application images to GHCR with the numeric version as the human-readable image tag.
+7. Push application images to GHCR with an intentionally selected human-readable image tag. Standard `v*` releases still strip the leading `v`; manual dispatch may either use that default or override it explicitly.
 8. Resolve and record the pushed image digest.
 9. Deploy only digest-pinned image refs, preferably retaining the readable tag:
    ```text
@@ -353,6 +353,8 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 3. **[AI Assistant]** Add or update the release workflows for `budget-analyzer-web` and `ext-authz` so they also build at least `linux/arm64`, push `0.0.8`, and print digests.
 4. **[Human]** Review and merge the release-workflow and Dockerfile changes in each affected repo.
 5. **[Human]** Create and push the release tag `v0.0.8` in each service repo: `transaction-service`, `currency-service`, `permission-service`, `session-gateway`, `budget-analyzer-web`, and the repo that owns `ext-authz`.
+
+
 6. **[Human]** Watch each Actions run and record the digest it prints. Each final reference should look like:
    ```
    ghcr.io/budgetanalyzer/<service-name>:0.0.8@sha256:<digest>

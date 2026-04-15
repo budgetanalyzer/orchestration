@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       release_ref:
-        description: "Existing release tag or commit to build"
+        description: "Existing release tag to build"
         required: true
+        type: string
+      image_tag:
+        description: "Published image tag override"
+        required: false
         type: string
 
 permissions:
@@ -27,23 +31,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_ref || github.ref }}
+          ref: ${{ inputs.release_ref || github.ref_name }}
+          fetch-depth: 0
 
-      - name: Extract release version
+      - name: Resolve release inputs
         id: release
         shell: bash
         run: |
           set -euo pipefail
 
+          event_name="${GITHUB_EVENT_NAME}"
           release_ref="${{ inputs.release_ref || github.ref_name }}"
-          release_name="${release_ref##refs/tags/}"
-          version="${release_name#v}"
-          if [[ -z "${version}" || "${version}" == "${release_name}" ]]; then
-            echo "Expected a v-prefixed release ref, got ${release_ref}." >&2
+          requested_image_tag="${{ inputs.image_tag || '' }}"
+
+          if [[ -z "${release_ref}" ]]; then
+            echo "release_ref is required." >&2
             exit 1
           fi
 
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          if [[ "${event_name}" == "workflow_dispatch" ]]; then
+            if ! git show-ref --verify --quiet "refs/tags/${release_ref}"; then
+              echo "workflow_dispatch release_ref must be an existing Git tag, got ${release_ref}." >&2
+              exit 1
+            fi
+          fi
+
+          if [[ -n "${requested_image_tag}" ]]; then
+            image_tag="${requested_image_tag}"
+          elif [[ "${release_ref}" == v* ]]; then
+            image_tag="${release_ref#v}"
+          else
+            image_tag="${release_ref}"
+          fi
+
+          if [[ -z "${image_tag}" ]]; then
+            echo "Resolved image_tag is empty." >&2
+            exit 1
+          fi
+
+          echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve checked-out revision
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit_sha="$(git rev-parse HEAD)"
+          echo "commit_sha=${commit_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -69,13 +104,13 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.version }}
+            ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.commit_sha }}
+            org.opencontainers.image.version=${{ steps.release.outputs.image_tag }}
 
       - name: Print digest-pinned reference
         shell: bash
         run: |
-          echo "${IMAGE_NAME}:${{ steps.release.outputs.version }}@${{ steps.build.outputs.digest }}"
+          echo "${IMAGE_NAME}:${{ steps.release.outputs.image_tag }}@${{ steps.build.outputs.digest }}"

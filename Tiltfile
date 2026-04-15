@@ -526,18 +526,22 @@ k8s_resource(
 # ============================================================================
 
 frontend_repo = get_repo_path('budget-analyzer-web')
+frontend_smoke_staging_dir = config.main_dir + '/.tilt/budget-analyzer-web-prod-smoke'
 
-def frontend_smoke_build_command(repo_path):
-    """Build the local production-smoke bundle with an explicit npm preflight."""
+def frontend_smoke_build_command(repo_path, staging_dir):
+    """Build and stage the local production-smoke bundle with an explicit npm preflight."""
     return (
-        'cd ' + shell_single_quote(repo_path) + ' && '
+        'rm -rf ' + shell_single_quote(staging_dir) + ' && '
+        + 'mkdir -p ' + shell_single_quote(staging_dir) + ' && '
+        + 'cd ' + shell_single_quote(repo_path) + ' && '
         + 'if [ ! -d node_modules ]; then '
         + "printf '%s\\n' " + shell_single_quote(
             'budget-analyzer-web-prod-smoke-build requires local npm dependencies in the sibling budget-analyzer-web repo. Run "npm install" there before re-running Tilt. This preflight only applies to the local /_prod-smoke/ build path; the normal frontend pod still installs its dependencies inside its image.'
         ) + ' >&2; '
         + 'exit 1; '
         + 'fi && '
-        + 'npm run build:prod-smoke'
+        + 'npm run build:prod-smoke && '
+        + 'cp -R dist/. ' + shell_single_quote(staging_dir) + '/'
     )
 
 def frontend_smoke_build_deps(repo_path):
@@ -563,21 +567,20 @@ def frontend_smoke_build_deps(repo_path):
 # /_prod-smoke/ without replacing the live Vite/HMR frontend route at /.
 local_resource(
     'budget-analyzer-web-prod-smoke-build',
-    cmd=frontend_smoke_build_command(frontend_repo),
+    cmd=frontend_smoke_build_command(frontend_repo, frontend_smoke_staging_dir),
     deps=frontend_smoke_build_deps(frontend_repo),
     labels=['frontend'],
 )
 
 docker_build(
     'budget-analyzer-web-prod-smoke',
-    context=frontend_repo,
+    context=frontend_smoke_staging_dir,
     dockerfile_contents='''
 FROM alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
 
 WORKDIR /prod-smoke
-COPY dist/ ./
+COPY . ./
 ''',
-    only=['dist'],
 )
 
 # Create ConfigMap from NGINX configuration with auto-reload

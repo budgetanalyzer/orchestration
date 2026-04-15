@@ -108,6 +108,7 @@ coverage/
 .eslintcache
 .stylelintcache
 .cache
+.tilt/
 .parcel-cache
 .next/cache
 

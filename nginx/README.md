@@ -143,11 +143,13 @@ NGINX serves two frontend modes on the same origin:
 - `/_prod-smoke/` serves the sibling repo's `npm run build:prod-smoke` output as static files for CSP and browser-policy verification.
 
 The `budget-analyzer-web-prod-smoke-build` Tilt resource runs that smoke build
-locally in the sibling repo, not inside the frontend container. Keep local npm
-dependencies installed there (`cd ../budget-analyzer-web && npm install`) if
-you expect `/_prod-smoke/` to build or refresh. The normal frontend pod remains
-separate and still installs its own dependencies inside its image. Tilt also
-watches the smoke build's `.env`, `.env.local`, `.env.production`, and
+locally in the sibling repo, not inside the frontend container, then stages the
+built files under orchestration-owned `.tilt/budget-analyzer-web-prod-smoke/`
+before building the tiny static asset image. Keep local npm dependencies
+installed there (`cd ../budget-analyzer-web && npm install`) if you expect
+`/_prod-smoke/` to build or refresh. The normal frontend pod remains separate
+and still installs its own dependencies inside its image. Tilt also watches the
+smoke build's `.env`, `.env.local`, `.env.production`, and
 `.env.production.local` inputs so relevant env changes retrigger the static
 bundle path.
 
@@ -370,8 +372,9 @@ This is the power of resource-based routing!
 1. Check the Tilt resource: `tilt get uiresources | grep budget-analyzer-web-prod-smoke-build`
 2. Ensure the sibling repo has local npm dependencies: `cd ../budget-analyzer-web && npm install`
 3. Re-run the build directly if needed: `cd ../budget-analyzer-web && npm run build:prod-smoke`
-4. Inspect the init container: `kubectl logs deployment/nginx-gateway -c web-prod-smoke-assets --previous`
-5. Verify the copied files exist: `kubectl exec deployment/nginx-gateway -- ls -R /usr/share/nginx/html/_prod-smoke`
+4. Verify the orchestration staging directory was refreshed: `ls -R .tilt/budget-analyzer-web-prod-smoke`
+5. Inspect the init container: `kubectl logs deployment/nginx-gateway -c web-prod-smoke-assets --previous`
+6. Verify the copied files exist: `kubectl exec deployment/nginx-gateway -- ls -R /usr/share/nginx/html/_prod-smoke`
 
 ### API requests fail (404 or 502)
 

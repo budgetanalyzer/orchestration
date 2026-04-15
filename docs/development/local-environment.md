@@ -416,7 +416,7 @@ Tilt builds from the Dockerfile in `budget-analyzer-web/` — installs dependenc
 When you edit React code, Tilt syncs `src/`, `public/`, and `index.html` into the running pod. Vite's HMR detects the change and hot-patches the browser — no container restart, no page reload. If `package.json` changes, Tilt triggers `npm install` inside the pod.
 
 **Production-smoke build (`local_resource` + init container):**
-Tilt also runs `npm run build:prod-smoke` from the sibling repo, builds a tiny static-asset image from `dist/`, and has `nginx-gateway` copy that bundle into an internal volume during pod startup. NGINX serves that bundle at `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other browser-security checks while `/` and `/login` stay on the live Vite route.
+Tilt also runs `npm run build:prod-smoke` from the sibling repo, stages the built bundle into orchestration-owned `.tilt/budget-analyzer-web-prod-smoke/`, builds a tiny static-asset image from that staging directory, and has `nginx-gateway` copy that bundle into an internal volume during pod startup. NGINX serves that bundle at `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other browser-security checks while `/` and `/login` stay on the live Vite route.
 
 That local smoke-build path depends on host/devcontainer npm state in the
 sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
@@ -426,7 +426,9 @@ from the normal frontend pod, which still installs and runs inside its own
 image. Tilt now watches the sibling smoke-build inputs plus the Vite env files
 that affect the build (`.env`, `.env.local`, `.env.production`, and
 `.env.production.local`) so those local config changes retrigger the smoke
-asset path.
+asset path. The staging directory is orchestration-owned local plumbing; this
+fix does not change the frontend release-image workflow or the production NGINX
+cutover.
 
 That seam is deliberately local-only. The checked-in production cutover now
 lives in `nginx/nginx.production.k8s.conf`, where `/` and `/login` serve the

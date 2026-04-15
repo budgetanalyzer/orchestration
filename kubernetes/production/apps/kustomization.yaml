@@ -1,0 +1,123 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - image-inventory.yaml
+  - ../../services/transaction-service/serviceaccount.yaml
+  - ../../services/transaction-service/deployment.yaml
+  - ../../services/transaction-service/service.yaml
+  - ../../services/currency-service/serviceaccount.yaml
+  - ../../services/currency-service/deployment.yaml
+  - ../../services/currency-service/service.yaml
+  - ../../services/permission-service/serviceaccount.yaml
+  - ../../services/permission-service/configmap.yaml
+  - ../../services/permission-service/deployment.yaml
+  - ../../services/permission-service/service.yaml
+  - ../../services/session-gateway/serviceaccount.yaml
+  - ../../services/session-gateway/configmap.yaml
+  - ../../services/session-gateway/idp-configmap.yaml
+  - ../../services/session-gateway/deployment.yaml
+  - ../../services/session-gateway/service.yaml
+  - ../../services/ext-authz/serviceaccount.yaml
+  - ../../services/ext-authz/deployment.yaml
+  - ../../services/ext-authz/service.yaml
+  - ../../services/nginx-gateway/serviceaccount.yaml
+  - ../../services/nginx-gateway/deployment.yaml
+  - ../../services/nginx-gateway/service.yaml
+
+configMapGenerator:
+  - name: nginx-gateway-config
+    namespace: default
+    files:
+      - nginx.conf=../../../nginx/nginx.production.k8s.conf
+  - name: nginx-gateway-includes
+    namespace: default
+    files:
+      - backend-headers.conf=../../../nginx/includes/backend-headers.conf
+      - security-headers-docs-csp.conf=../../../nginx/includes/security-headers-docs-csp.conf
+      - security-headers-strict-csp.conf=../../../nginx/includes/security-headers-strict-csp.conf
+  - name: nginx-gateway-docs
+    namespace: default
+    files:
+      - index.html=../../../docs-aggregator/index.html
+      - swagger-initializer.js=../../../docs-aggregator/swagger-initializer.js
+      - swagger-ui-overrides.css=../../../docs-aggregator/swagger-ui-overrides.css
+      - openapi.json=../../../docs-aggregator/openapi.json
+      - openapi.yaml=../../../docs-aggregator/openapi.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+patches:
+  - target:
+      kind: Deployment
+      name: transaction-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:835e31a29b73c41aaed7a5a4f70703921978b3f4effd1a770cf3d4d0ebf2d4d7
+      - op: remove
+        path: /spec/template/spec/containers/0/imagePullPolicy
+  - target:
+      kind: Deployment
+      name: currency-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/budgetanalyzer/currency-service:0.0.12@sha256:7315de56adc51d4887b3d51284c4291f22e520998e16cad43cf93527c1e3403f
+      - op: remove
+        path: /spec/template/spec/containers/0/imagePullPolicy
+  - target:
+      kind: Deployment
+      name: permission-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/budgetanalyzer/permission-service:0.0.12@sha256:d4b4e9c58a391a7bbb0e25bb64dfb6ed8fc69b8400f196f7d7b791735f5445a3
+      - op: remove
+        path: /spec/template/spec/containers/0/imagePullPolicy
+  - target:
+      kind: Deployment
+      name: session-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/budgetanalyzer/session-gateway:0.0.12@sha256:0cd9a1af8bff10410125155bbad2c4db0e3d7312655f658e30a79ee5f2b4fbd7
+      - op: remove
+        path: /spec/template/spec/containers/0/imagePullPolicy
+  - target:
+      kind: Deployment
+      name: ext-authz
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/budgetanalyzer/ext-authz:0.0.12@sha256:4a116b9d9598bb23551c6403570bef4310b8b812d1606d27b95a8b7e15d4196d
+      - op: remove
+        path: /spec/template/spec/containers/0/imagePullPolicy
+  - target:
+      kind: Deployment
+      name: nginx-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/1/name
+        value: web-assets
+      - op: replace
+        path: /spec/template/spec/initContainers/1/image
+        value: ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.12@sha256:3299d088121fcfca8dc69f0d9de92944b311cc408ccbcb08e1bb5243523eb03e
+      - op: remove
+        path: /spec/template/spec/initContainers/1/imagePullPolicy
+      - op: replace
+        path: /spec/template/spec/initContainers/1/command/2
+        value: cp -R /usr/share/nginx/html/. /workdir/
+      - op: replace
+        path: /spec/template/spec/initContainers/1/volumeMounts/0/name
+        value: nginx-web-assets
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/3/name
+        value: nginx-web-assets
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/3/mountPath
+        value: /usr/share/nginx/html
+      - op: replace
+        path: /spec/template/spec/volumes/4/name
+        value: nginx-web-assets

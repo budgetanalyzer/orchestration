@@ -234,6 +234,13 @@ workflows:
   checked-in `serviceCommon` version
 - manual release-image rebuilds are supported only for tags created under the
   `v0.0.12`-forward contract; older tags remain intentionally unsupported
+- the Phase 3 production image inventory lives in
+  `kubernetes/production/apps/image-inventory.yaml`, and
+  `kubernetes/production/apps` renders the digest-pinned app image overlay
+  using those `0.0.12` GHCR refs
+- `./scripts/guardrails/verify-production-image-overlay.sh` verifies that
+  rendered production image path and applies the production image Kyverno policy
+  from `kubernetes/kyverno/policies/production/`
 
 ### Manual validation from a clean environment
 

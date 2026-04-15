@@ -1,0 +1,71 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: phase7-require-third-party-image-digests
+  annotations:
+    policies.kyverno.io/title: Require Production Image Digests
+    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Production workload images must be immutable digest references. This
+      production variant intentionally has no local development image
+      exceptions.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-digest-pinned-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - local-path-storage
+                - kyverno
+                - istio-system
+                - istio-ingress
+                - istio-egress
+      preconditions:
+        all:
+          - key: "{{ request.operation || 'BACKGROUND' }}"
+            operator: NotEquals
+            value: DELETE
+          - key: "{{ request.object.metadata.annotations.\"sidecar.istio.io/status\" || '' }}"
+            operator: Equals
+            value: ""
+      validate:
+        message: >-
+          Production images must be pinned by digest.
+        foreach:
+          - list: request.object.spec.containers[]
+            preconditions:
+              all:
+                - key: "{{ element.image || '' }}"
+                  operator: NotEquals
+                  value: ""
+            deny:
+              conditions:
+                all:
+                  - key: "{{ regex_match('^[^@]+@sha256:[a-f0-9]{64}$', element.image || '') || (regex_match('^istio-(proxy|init|validation)$', element.name || '') && (regex_match('^(docker\\.io/)?istio/proxyv2:[^@]+$', element.image || '') || regex_match('^auto$', element.image || ''))) }}"
+                    operator: Equals
+                    value: false
+          - list: request.object.spec.initContainers[]
+            preconditions:
+              all:
+                - key: "{{ element.image || '' }}"
+                  operator: NotEquals
+                  value: ""
+            deny:
+              conditions:
+                all:
+                  - key: "{{ regex_match('^[^@]+@sha256:[a-f0-9]{64}$', element.image || '') || (regex_match('^istio-(proxy|init|validation)$', element.name || '') && (regex_match('^(docker\\.io/)?istio/proxyv2:[^@]+$', element.image || '') || regex_match('^auto$', element.image || ''))) }}"
+                    operator: Equals
+                    value: false

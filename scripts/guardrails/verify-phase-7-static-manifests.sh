@@ -12,6 +12,7 @@ KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-phase-7-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
 
@@ -22,6 +23,7 @@ KUBECONFORM_ALLOWED_MISSING_KINDS=(
     EnvoyFilter
     Gateway
     HTTPRoute
+    Kustomization
     PeerAuthentication
     ReferenceGrant
     ServiceEntry

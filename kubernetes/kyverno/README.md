@@ -2,7 +2,11 @@
 
 This directory holds the Phase 7 admission-policy baseline.
 
-- `policies/` contains the ClusterPolicies Tilt applies to the local cluster.
+- `policies/*.yaml` contains the ClusterPolicies Tilt applies to the local cluster.
+- `policies/production/` contains production-only policy variants. The Phase 3
+  image overlay verifier applies `production/50-require-third-party-image-digests.yaml`
+  against the rendered production app overlay to prove the production image path
+  has no local Tilt image exceptions.
 - `tests/pass/` contains fixtures that must be admitted or intentionally skipped
   by documented system exceptions.
 - `tests/fail/` contains fixtures that must be rejected.

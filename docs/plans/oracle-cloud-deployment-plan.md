@@ -14,7 +14,7 @@ Deploy the full Budget Analyzer architecture - k3s, Istio service mesh, applicat
 
 These gates are non-negotiable. Do not deploy the public demo until all are true.
 
-1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable numeric SemVer tag retained: `ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>`.
+1. **No mutable/local production images.** Production manifests must not use `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, or unqualified local image names such as `transaction-service:latest`. Production image refs should be immutable digest refs, preferably with the human-readable numeric SemVer tag retained: `ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:<digest>`.
 2. **`service-common` must be resolvable by isolated image builds.** Local `publishToMavenLocal` remains a dev convenience only. Production Java service Docker builds must resolve `service-common` from a real remote Maven repository (recommended: GitHub Packages) using build secrets or CI credentials. Do not copy host `.m2` into Docker contexts and do not expand service Docker contexts to include sibling repos.
 3. **Production builds must use immutable dependency versions.** Local development can keep snapshot workflows. Production image builds should consume an immutable `service-common` release/prerelease version and produce versioned application image tags plus digests.
 4. **Kyverno image policy must be split by environment.** Local Tilt may keep the approved local-image exception. Production must use a separate production image policy variant that rejects all approved-local `:latest` and `:tilt-<hash>` refs.
@@ -145,7 +145,7 @@ Use GitHub registries under the `budgetanalyzer` organization, but keep the two 
 
 | Artifact | Registry | Example |
 |---|---|---|
-| Container images | GitHub Container Registry (GHCR) | `ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>` |
+| Container images | GitHub Container Registry (GHCR) | `ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:<digest>` |
 | Java library artifacts | GitHub Packages Maven registry | `https://maven.pkg.github.com/budgetanalyzer/service-common` |
 
 GHCR does not solve `service-common` resolution by itself. The Java service Docker builds need `org.budgetanalyzer:service-web` and `org.budgetanalyzer:service-core` from a Maven repository before they can produce images to push to GHCR.
@@ -172,7 +172,7 @@ Local development stays fast and local-first:
    cd ../service-common
    ./gradlew clean build publishToMavenLocal
    ```
-2. Java service Gradle builds keep `mavenLocal()` first, so `./gradlew build`, `./gradlew bootJar`, and the Tilt live-update path can consume the locally published checked-in snapshot version, for example `0.0.9-SNAPSHOT`.
+2. Java service Gradle builds keep `mavenLocal()` first, so `./gradlew build`, `./gradlew bootJar`, and the Tilt live-update path can consume the locally published checked-in snapshot version, for example `0.0.13-SNAPSHOT`.
 3. Tilt remains the supported local image path. It publishes `service-common` locally, builds service JARs on the host, and creates thin runtime images without requiring a remote Maven package or GHCR push.
 4. Raw service-repo `docker build` is not the primary dev loop. It becomes a release-candidate verification path after the remote Maven package contract exists.
 5. The side-by-side workspace plus `tilt up` path remains the source of truth for contributor onboarding. Do not make GitHub Packages credentials a prerequisite for the getting-started flow.
@@ -183,20 +183,20 @@ This means `publishToMavenLocal` remains the correct dev answer, but it is inten
 
 Production releases use immutable artifacts and keep version naming explicit:
 
-1. Pick one numeric SemVer release version for build and artifact metadata, for example `0.0.8`.
-2. Use a `v`-prefixed Git tag as the human release ref, for example `v0.0.8`.
+1. Pick one numeric SemVer release version for build and artifact metadata, for example `0.0.12`.
+2. Use a `v`-prefixed Git tag as the human release ref, for example `v0.0.12`.
 3. Before tagging, bump the checked-in version literals to the numeric release version. The source of truth is the literal `version = "..."` in `service-common/build.gradle.kts` plus the `serviceCommon = "..."` entry in each consumer's `gradle/libs.versions.toml`.
 4. From the `v0.0.12`-forward contract, CI workflows treat the checked-out ref as source selection only, keep the checked-in files as the source of truth for `service-common`, and allow the published image tag to be selected separately.
-5. Publish `service-common` to GitHub Packages Maven with the checked-in numeric Maven version, for example `0.0.8`. Maven artifact versions must not include the leading `v`. The steady-state publish path is the `service-common` GitHub Actions workflow using `GITHUB_TOKEN`, not a manually managed maintainer PAT.
+5. Publish `service-common` to GitHub Packages Maven with the checked-in numeric Maven version, for example `0.0.12`. Maven artifact versions must not include the leading `v`. The steady-state publish path is the `service-common` GitHub Actions workflow using `GITHUB_TOKEN`, not a manually managed maintainer PAT.
 6. Build each Java service image with that exact numeric `service-common` version. Because GitHub Packages Maven/Gradle packages are repository-scoped, the current supported remote-resolution path for cross-repo consuming workflows is a dedicated GitHub Packages credential stored in Actions secrets, not the workflow repo's default `GITHUB_TOKEN`.
 7. Push application images to GHCR with an intentionally selected human-readable image tag. Standard `v*` releases still strip the leading `v`; manual dispatch may either use that default or override it explicitly.
 8. Resolve and record the pushed image digest.
 9. Deploy only digest-pinned image refs, preferably retaining the readable tag:
    ```text
-   ghcr.io/budgetanalyzer/transaction-service:0.0.8@sha256:<digest>
+   ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:<digest>
    ```
 
-Use numeric SemVer (`0.0.8`, `0.0.9`, `0.1.0`) for build inputs, Maven artifacts, Docker image tags, and manifest inventory refs. Use matching `v`-prefixed Git tags (`v0.0.8`, `v0.0.9`, `v0.1.0`) only for intentional Git release refs. Date-plus-SHA Git tags such as `v2026.04.13-<shortsha>` are useful for CI snapshots or nightly builds, but they are noisier than necessary for this public demo's release tags. The digest is what makes the deployed image immutable.
+Use numeric SemVer (`0.0.12`, `0.0.13`, `0.1.0`) for build inputs, Maven artifacts, Docker image tags, and manifest inventory refs. Use matching `v`-prefixed Git tags (`v0.0.12`, `v0.0.13`, `v0.1.0`) only for intentional Git release refs. Date-plus-SHA Git tags such as `v2026.04.13-<shortsha>` are useful for CI snapshots or nightly builds, but they are noisier than necessary for this public demo's release tags. The digest is what makes the deployed image immutable.
 
 ### Phase 3 Execution Order (Detailed)
 
@@ -204,10 +204,10 @@ This is the exact execution order for Phase 3. Follow the steps in order. Each s
 
 #### Phase 3 Constants
 
-- Release version for build files, Gradle properties, Maven artifacts, and Docker tags: `0.0.8`
-- Git release tag: `v0.0.8`
+- Release version for build files, Gradle properties, Maven artifacts, and Docker tags: `0.0.12`
+- Git release tag: `v0.0.12`
 - Version source of truth: the literal `version = "..."` in `service-common/build.gradle.kts` and the `serviceCommon` entry in each consumer's `gradle/libs.versions.toml`. Bumped in lockstep by `orchestration/scripts/repo/update-service-common-version.sh`. No `-P` override, no CI tag-derivation.
-- `service-common` Maven version: `0.0.8` (no `-SNAPSHOT`, no `v` prefix)
+- `service-common` Maven version: `0.0.12` (no `-SNAPSHOT`, no `v` prefix)
 - Supported remote package consumer: GitHub Actions workflows in the consuming repos using a dedicated GitHub Packages username/token secret pair until artifact distribution changes
 - Production image names:
   - `ghcr.io/budgetanalyzer/transaction-service`
@@ -226,7 +226,7 @@ previous draft of this plan. That checkpoint covers:
 - `service-common` GitHub Packages publishing configuration
 - Java consumer remote-fallback repository wiring
 - the tag-triggered `service-common` publish workflow
-- the first successful workflow publish proof for Maven version `0.0.8`
+- the first successful workflow publish proof for Maven version `0.0.12`
 
 Remaining work starts after that checkpoint. The remaining steps below align the
 steady-state model to GitHub Packages for CI only, not for contributor-facing
@@ -253,22 +253,22 @@ verified. Do not reintroduce those completed bootstrap steps into contributor
 documentation. The remaining work starts here.
 
 15. **[Human]** If a one-time bootstrap classic PAT was created during the completed validation work, revoke it now. If the cross-repo consuming workflow path still requires GitHub Packages credentials after that cleanup, replace the bootstrap token with a dedicated, least-privilege GitHub Packages read credential stored only in GitHub Actions secrets; do not keep using an ad-hoc maintainer token.
-16. **[AI Assistant]** While `service-common` and the Java consumer repos are still on the release version `0.0.8`, update the `service-common` docs so they say:
+16. **[AI Assistant]** While `service-common` and the Java consumer repos are still on the release version `0.0.12`, update the `service-common` docs so they say:
    - local workspace development uses `publishToMavenLocal`
    - normal remote publishing is tag-driven via GitHub Actions
    - GitHub Packages consumption is a CI/release concern, not a contributor prerequisite
    - the remote-resolution path needs a GitHub Packages username plus token, and cross-repo consuming workflows cannot rely on package-access grants because Maven/Gradle packages are repository-scoped
    - completed bootstrap PAT instructions, if any exist in docs, are removed or replaced with the dedicated secret-based workflow credential model
-17. **[AI Assistant]** While those same repos are still on `0.0.8`, update the sibling Java consumer docs (`transaction-service`, `currency-service`, `permission-service`, and `session-gateway`) so their setup/build docs state:
+17. **[AI Assistant]** While those same repos are still on `0.0.12`, update the sibling Java consumer docs (`transaction-service`, `currency-service`, `permission-service`, and `session-gateway`) so their setup/build docs state:
    - local development stays local-first with `mavenLocal()` and orchestration/Tilt
    - the supported contributor onboarding path is the orchestration getting-started flow
    - GitHub Packages remote resolution is for GitHub Actions/release or intentional isolated builds, not for routine local setup
    - repo-local docs should link back to orchestration's `docs/development/getting-started.md` and `docs/development/service-common-artifact-resolution.md` instead of duplicating token setup
-18. **[Human]** Review, commit, and push the `0.0.8` documentation/config state in `service-common`, `transaction-service`, `currency-service`, `permission-service`, and `session-gateway` before moving any repo to `0.0.9-SNAPSHOT`. Do not create an ordering gap where the pushed release-version repos still imply the old package-grant model or leave the required GitHub Packages workflow credential shape undocumented.
+18. **[Human]** Review, commit, and push the `0.0.12` documentation/config state in `service-common`, `transaction-service`, `currency-service`, `permission-service`, and `session-gateway` before moving any repo to `0.0.13-SNAPSHOT`. Do not create an ordering gap where the pushed release-version repos still imply the old package-grant model or leave the required GitHub Packages workflow credential shape undocumented.
 19. **[Human]** After the release-version doc/config state is pushed, and only when all consumer repos are ready to move in lockstep, return to the orchestration repo root and bump the source back to the next snapshot for ongoing development across `service-common` plus every consumer repo together. Do not move only a subset of repos to the next snapshot if that would leave the side-by-side workspace unable to follow the getting-started flow. Then commit each touched repo:
     ```bash
     cd ../orchestration
-    ./scripts/repo/update-service-common-version.sh 0.0.9-SNAPSHOT
+    ./scripts/repo/update-service-common-version.sh 0.0.13-SNAPSHOT
     ```
 20. **[Human]** After the lockstep snapshot bump lands across the touched repos, verify the local contributor path from a clean shell without `GITHUB_ACTOR` or `GITHUB_TOKEN`. The expected proof is the orchestration getting-started flow, not a release build:
     ```bash
@@ -348,25 +348,37 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 #### Chunk 4: Build, Push & Verify Production Images
 
-1. **[AI Assistant]** Update the Java service repos so GitHub Actions release builds can resolve `service-common:0.0.8` without sibling source trees or host-only Maven Local state. Because Maven/Gradle packages are repository-scoped, do not assume the consuming repo's default `GITHUB_TOKEN` can read `service-common`; wire the release build around the dedicated GitHub Packages credential from Chunk 3 instead. If Dockerfile or workflow changes are needed, pass credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files. Do not let this release-build wiring become a getting-started prerequisite for the side-by-side workspace or `tilt up`. The version itself is already pinned in `gradle/libs.versions.toml` by the Chunk 2 bump script — no `-P` override needed at release time.
-2. **[AI Assistant]** Add or update the Java service release workflows so each workflow builds at least `linux/arm64`, pushes a GHCR image tagged `0.0.8`, and prints the digest-pinned image reference. Do not publish `latest`.
-3. **[AI Assistant]** Add or update the release workflows for `budget-analyzer-web` and `ext-authz` so they also build at least `linux/arm64`, push `0.0.8`, and print digests.
+1. **[AI Assistant]** Update the Java service repos so GitHub Actions release builds can resolve `service-common:0.0.12` without sibling source trees or host-only Maven Local state. Because Maven/Gradle packages are repository-scoped, do not assume the consuming repo's default `GITHUB_TOKEN` can read `service-common`; wire the release build around the dedicated GitHub Packages credential from Chunk 3 instead. If Dockerfile or workflow changes are needed, pass credentials through BuildKit secrets or CI environment without leaking tokens into images, layers, logs, or checked-in files. Do not let this release-build wiring become a getting-started prerequisite for the side-by-side workspace or `tilt up`. The version itself is already pinned in `gradle/libs.versions.toml` by the Chunk 2 bump script — no `-P` override needed at release time.
+2. **[AI Assistant]** Add or update the Java service release workflows so each workflow builds at least `linux/arm64`, pushes a GHCR image tagged `0.0.12`, and prints the digest-pinned image reference. Do not publish `latest`.
+3. **[AI Assistant]** Add or update the release workflows for `budget-analyzer-web` and `ext-authz` so they also build at least `linux/arm64`, push `0.0.12`, and print digests.
 4. **[Human]** Review and merge the release-workflow and Dockerfile changes in each affected repo.
-5. **[Human]** Create and push the release tag `v0.0.8` in each service repo: `transaction-service`, `currency-service`, `permission-service`, `session-gateway`, `budget-analyzer-web`, and the repo that owns `ext-authz`.
+5. **[Human]** Create and push the release tag `v0.0.12` in each service repo: `transaction-service`, `currency-service`, `permission-service`, `session-gateway`, `budget-analyzer-web`, and the repo that owns `ext-authz`.
 
 
 6. **[Human]** Watch each Actions run and record the digest it prints. Each final reference should look like:
    ```
-   ghcr.io/budgetanalyzer/<service-name>:0.0.8@sha256:<digest>
+   ghcr.io/budgetanalyzer/<service-name>:0.0.12@sha256:<digest>
    ```
 7. **[Human]** Go to `https://github.com/orgs/budgetanalyzer/packages`. For each published container image package, open **Package settings**, then under **Danger Zone** use **Change visibility** -> **Public** and type the package name to confirm.
 8. **[Human]** Repeat step 7 for all app images: `transaction-service`, `currency-service`, `permission-service`, `session-gateway`, `budget-analyzer-web`, and `ext-authz` (or whatever exact package name the workflow pushed for the Go service).
-9. **[Human]** From any machine that has not authenticated to GHCR, verify that a public image can be pulled without `docker login ghcr.io`.
+9. **[Human]** From any machine that has not authenticated to GHCR, verify that the public ARM64 production image can be pulled without `docker login ghcr.io`. The OCI target is ARM64, and release workflows in this phase only have to publish `linux/arm64`; an AMD64 workstation must request that platform explicitly or Docker will fail with `no matching manifest for linux/amd64`.
    ```bash
-   docker pull ghcr.io/budgetanalyzer/transaction-service:0.0.8
+   docker pull --platform linux/arm64 ghcr.io/budgetanalyzer/transaction-service:0.0.12
    ```
-10. **[AI Assistant]** Update the production image inventory and overlay files with the digest-pinned GHCR refs collected in step 6. Production paths must not contain `:latest`, `:tilt-<hash>`, unqualified app image names, or `imagePullPolicy: Never`.
-11. **[AI Assistant]** Run the production Kyverno/static manifest checks once the overlay exists and confirm the local Tilt image exceptions are not present in production policy.
+   To prove anonymous access even on a machine that may already have GHCR credentials, use a temporary Docker config:
+   ```bash
+   tmpdir="$(mktemp -d)"
+   DOCKER_CONFIG="${tmpdir}" docker pull --platform linux/arm64 ghcr.io/budgetanalyzer/transaction-service:0.0.12
+   rm -rf "${tmpdir}"
+   ```
+10. **[AI Assistant] Complete as of 2026-04-15.** Update the production image inventory and overlay files with the digest-pinned GHCR refs collected in step 6. Production paths must not contain `:latest`, `:tilt-<hash>`, unqualified app image names, or `imagePullPolicy: Never`.
+    - Inventory: `kubernetes/production/apps/image-inventory.yaml`
+    - Overlay: `kubernetes/production/apps/kustomization.yaml`
+    - Production frontend bundle source: `ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.12@sha256:3299d088121fcfca8dc69f0d9de92944b311cc408ccbcb08e1bb5243523eb03e` copied into the production NGINX document root by the `nginx-gateway` init container.
+11. **[AI Assistant] Complete as of 2026-04-15.** Run the production Kyverno/static manifest checks once the overlay exists and confirm the local Tilt image exceptions are not present in production policy.
+    - Verifier: `./scripts/guardrails/verify-production-image-overlay.sh`
+    - Production image policy: `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
+    - Regression gate also run: `./scripts/guardrails/verify-phase-7-static-manifests.sh`
 12. **[Human]** Review the generated production image inventory and verification results, then hand off to Phase 4.
 
 #### Credential Safety Rules

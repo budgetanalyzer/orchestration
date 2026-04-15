@@ -44,6 +44,16 @@ Update the nearest affected documentation in the same work:
 
 Do not leave documentation updates as follow-up work.
 
+## GitHub Actions Baseline
+
+Keep repository workflows on Node 24-ready action majors. For this repo that
+means `actions/checkout@v6` for first-party checkout steps and the Docker
+release stack on `docker/setup-qemu-action@v4`,
+`docker/setup-buildx-action@v4`, `docker/login-action@v4`, and
+`docker/build-push-action@v7`. Set
+`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope so this repo stays
+opted into the Node 24 runner transition before GitHub flips the default.
+
 ## Project Overview
 
 This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.

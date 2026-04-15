@@ -211,6 +211,26 @@ workflows:
 - manual release-image rebuilds are supported only for tags created under the
   `v0.0.12`-forward contract; older tags remain intentionally unsupported
 
+### Manual validation from a clean environment
+
+The snapshot and tag-driven workflows cover every remote publish path that
+contributors consume. For a one-off manual validation that the remote publish
+path still works from a clean environment (for example, reproducing a CI
+failure without sibling-repo state), check out `service-common`, export
+GitHub Packages credentials, and run `./gradlew publish`:
+
+```bash
+export GITHUB_ACTOR=<your-github-username>
+export GITHUB_TOKEN=<token-with-packages-write-access>
+./gradlew publish
+```
+
+This uses the checked-in version literal from `build.gradle.kts` (for example,
+`0.0.1-SNAPSHOT`) and publishes both `service-core` and `service-web`. It is
+not part of the standard contributor workflow — GitHub Packages publishing
+is a CI/release concern — and should only be used to diagnose remote-publish
+issues that cannot be reproduced through the CI workflows.
+
 ## Troubleshooting
 
 ### Build Failures

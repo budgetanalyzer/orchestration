@@ -102,16 +102,16 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
 
 ## Chunk 4 Checkpoint
 
-If you are resuming at Phase 4 Chunk 4, use this checkpoint before moving to Phase 5:
+If you are resuming at Phase 4 Chunk 4, the repo is already complete through Step 12. The next open step is Step 13.
 
-1. Reconfirm the Chunk 3 ingress state and review the detailed Chunk 4 plan in `docs/plans/oracle-cloud-deployment-plan.md`.
+1. Reconfirm the Chunk 3 ingress state before starting Step 13.
    ```bash
    test -f ~/.config/budget-analyzer/instance.env
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    kubectl get gateway -n istio-ingress
    kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
    ```
-2. Install the supporting controllers with the checked-in script.
+2. Step 13 and Step 14: run the shared controller-install script once, then verify both controllers.
    ```bash
    ./deploy/scripts/05-install-platform-controllers.sh
    helm list -n external-secrets
@@ -119,21 +119,21 @@ If you are resuming at Phase 4 Chunk 4, use this checkpoint before moving to Pha
    kubectl get pods -n external-secrets
    kubectl get pods -n cert-manager
    ```
-3. Add the host redirects only after the ingress NodePorts are present.
+3. Step 15: add the host redirects only after the ingress NodePorts are present.
    ```bash
    ./deploy/scripts/06-configure-host-redirects.sh
    sudo iptables -t nat -S PREROUTING
    ```
-4. Apply the checked-in NetworkPolicy manifests.
+4. Step 16a: apply the checked-in NetworkPolicy manifests.
    ```bash
    ./deploy/scripts/07-apply-network-policies.sh
    kubectl get networkpolicy -A
    ```
-5. Run the runtime NetworkPolicy verifier before Phase 5.
+5. Step 16b: run the runtime NetworkPolicy verifier.
    ```bash
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
-6. Stop if the verifier reports any unexpected allow or deny result. Do not move to Phase 5 until the live k3s NetworkPolicy implementation matches the checked-in contract.
+6. Stop if any step above fails. Do not move to Phase 5 until Step 16b passes.
 
 ## Phase Boundary Notes
 

@@ -71,14 +71,14 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 
 - Running A1 instance with public IP
 - SSH access confirmed
-- Ports 22, 80, and 443 open in OCI networking
+- Initial OCI networking opened ports 22, 80, and 443 for the original host-direct ingress path; Chunk 4 Step 17 later removes the direct public instance rules for 80/443 when the design pivots to an OCI NLB
 
 ---
 
 ## Phase 2: Host Hardening & Firewall
 
 **Owner:** Human (SSH session on instance)
-**Status:** Complete as of 2026-04-13. Verified external 80/443 reachability reaches the host and returns `connection refused` before a listener exists; effective SSH config reports `passwordauthentication no` and root password login disabled via `permitrootlogin without-password`.
+**Status:** Complete as of 2026-04-13. Verified external 80/443 reachability reached the host and returned `connection refused` before a listener existed; effective SSH config reports `passwordauthentication no` and root password login disabled via `permitrootlogin without-password`. Chunk 4 Step 16 later removes the direct host `INPUT` accepts for 80/443 when the public ingress path moves behind the OCI NLB.
 **Estimated time:** 15-30 minutes
 
 ### Steps
@@ -403,7 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
-**Status:** Chunks 1, 2, and 3 are complete as of 2026-04-16. The next open work starts at Chunk 4 Step 13, and all preceding Phase 4 work is complete through the mesh-install checkpoint.
+**Status:** Chunks 1, 2, and 3 are complete as of 2026-04-16. The next open work starts at Chunk 4 Step 13, and all preceding Phase 4 work is complete through the mesh-install checkpoint. Step 15 is retained only as the documented 2026-04-16 host-redirect experiment; do not rerun it on the forward path. After any remaining Step 13-14 controller work, the first ingress-transition step is Step 16 host cleanup, followed by Step 17 OCI networking rollback, Step 18-20 OCI Network Load Balancer adoption, and the Step 21 NetworkPolicy verification gate.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -507,8 +507,9 @@ Pattern B here does not mean "AI executes Phase 4." It means the AI assistant ma
       --values deploy/helm-values/cert-manager.values.yaml \
       --wait
     ```
-11. **Set up host port redirects after NodePorts exist.**
+11. **Keep the rejected host redirect experiment as historical context only, then clean up its host mutations before adopting the OCI Network Load Balancer ingress path.**
     ```bash
+    # Historical experiment reference only; do not rerun on the forward path
     sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 30443
     # Only if the production ingress gateway service exposes nodePort 30080:
     sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 30080
@@ -581,7 +582,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - `02-bootstrap-cluster.sh`: install Gateway API CRDs and label `default`, `infrastructure`, `monitoring`, `istio-system`, `istio-ingress`, `istio-egress`, `external-secrets`, and `cert-manager`.
    - `04-install-istio.sh`: install `istio-base`, `istio-cni`, `istiod`, and the chart-managed egress gateway, then apply the mesh security policy manifests.
    - `05-install-platform-controllers.sh`: install External Secrets Operator and cert-manager from pinned charts using checked-in values.
-   - `06-configure-host-redirects.sh`: add idempotent `iptables` redirects only after the ingress NodePorts exist.
+   - `06-configure-host-redirects.sh`: capture the rejected host-redirect experiment as a reviewed, idempotent script; Step 16 later removes any host mutations from that experiment before the OCI NLB path begins.
    - `07-apply-network-policies.sh`: apply `kubernetes/network-policies/` without adding production-only workaround policies.
    - Complete as of 2026-04-16; those mutations now live in reviewed scripts instead of copy-paste command history.
 6. **Check in the missing non-secret manifests and values needed by Phase 4.**
@@ -593,7 +594,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - Phase 4 prepares the ingress install path and port `80` ACME reachability.
    - Public certificate issuance and the final HTTPS listener secret wiring remain in Phase 11.
    - Do not invent an AI-generated certificate, self-signed fallback, or certificate private-key workaround.
-   - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only host-agnostic `Gateway`, and `06-configure-host-redirects.sh` only redirects ports the current ingress Service actually exposes.
+   - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only host-agnostic `Gateway`, and `06-configure-host-redirects.sh` remains available only to reproduce the rejected host-redirect experiment against whatever ports the current ingress Service exposes.
 8. **Document the operator handoff in the repo.**
    - `deploy/README.md` must show the exact review/run order, expected inputs, and which later phase reuses each script.
    - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague “generate scripts” placeholder.
@@ -813,8 +814,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - `PeerAuthentication/default-strict` exists in `default` with `mtls.mode: STRICT`
    - the default namespace shows the checked-in AuthorizationPolicies for ingress-facing services, backend services, and Prometheus scraping
 10. **Record the completion point and advance to Chunk 4 only after the mesh checks pass.**
-    - If Steps 4-9 succeeded, Chunk 3 is complete and the next human work is Chunk 4 Steps 13-16.
-    - Do not move on to host redirects or network policies until the ingress Service and mesh policies are verified.
+    - If Steps 4-9 succeeded, Chunk 3 is complete and the next human work is Chunk 4 Steps 13-14 plus Steps 16-21. Step 15 is historical only.
+    - Do not move on to the Step 16 cleanup, the OCI NLB ingress path, or network policies until the ingress Service and mesh policies are verified.
     ```bash
     kubectl get gateway -n istio-ingress
     kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
@@ -839,7 +840,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
-**Current checkpoint:** Complete through Step 12 as of 2026-04-16. The next open step is Step 13. Start there on the OCI host.
+**Current checkpoint:** Complete through Step 12 as of 2026-04-16. The next open step is Step 13. Start there on the OCI host. After Step 14, the forward path resumes at Step 16 cleanup; Step 15 is retained only as historical context from the rejected host-redirect design.
 
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
     - **Status:** Complete as of 2026-04-16.
@@ -883,19 +884,97 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Stop if the `cert-manager` release is missing, if the cert-manager pods are not ready, or if `config.enableGatewayAPI=true` is not present in the Helm values output.
 15. **[Human]** Add the host `iptables` redirects after the ingress NodePorts exist.
-    - **Status:** Open.
-    - Run:
+    - **Status:** Complete as part of the 2026-04-16 OCI debugging thread. Keep this step only as historical context; do not rerun `./deploy/scripts/06-configure-host-redirects.sh` on the forward path unless you are explicitly reproducing the rejected design.
+    - Commands used during the recorded experiment:
       ```bash
       kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway -o wide
       ./deploy/scripts/06-configure-host-redirects.sh
       ```
-    - Verify:
+    - Verification captured during the experiment:
       ```bash
       sudo iptables -t nat -S PREROUTING
       curl -I --max-time 5 http://127.0.0.1:30080/ || true
       ```
-    - Stop if host port `80` is not redirected to the current ingress nodePort in `PREROUTING`, if a stale `443` redirect remains, or if the ingress NodePort itself is connection-refused at `http://127.0.0.1:30080/`. The redirect must be inserted before kube-proxy's `KUBE-SERVICES` jump in `nat/PREROUTING`; appending it after that jump rewrites external traffic too late for the NodePort path to match. If you want to prove the host redirect path end to end, run `curl -I http://<public-ip>/` from your workstation rather than from the SSH session.
-16. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
+    - Recorded outcome: host port `80` was redirected to the current ingress nodePort in `PREROUTING`, but the redirected public flow still did not become a working NodePort service path on this OCI host. The redirect had to be inserted before kube-proxy's `KUBE-SERVICES` jump in `nat/PREROUTING`, and even with that fix the forward path still moved to Step 16 cleanup plus the OCI NLB design. If you ever reproduce this failure on purpose, use `curl -I http://<public-ip>/` from your workstation rather than treating `curl` from the SSH session as an end-to-end proof.
+16. **[Human]** Remove the Step 15 host-redirect experiment and the older host-direct firewall rules before introducing the replacement public-ingress path.
+    - **Status:** Open.
+    - Run:
+      ```bash
+      while sudo iptables -C INPUT -p tcp --dport 30080 -j ACCEPT 2>/dev/null; do
+        sudo iptables -D INPUT -p tcp --dport 30080 -j ACCEPT
+      done
+      while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null; do
+        sudo iptables -D INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT
+      done
+      while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null; do
+        sudo iptables -D INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT
+      done
+      while read -r rule; do
+        [[ -n "${rule}" ]] || continue
+        sudo iptables -t nat ${rule}
+      done < <(
+        sudo iptables -t nat -S PREROUTING | awk '
+          $1 == "-A" && $2 == "PREROUTING" &&
+          ($0 ~ /--dport 80 / || $0 ~ /--dport 443 /) &&
+          $0 ~ /-j REDIRECT/ {
+            sub(/^-A /, "-D ")
+            print
+          }
+        '
+      )
+      sudo netfilter-persistent save
+      ```
+    - Verify:
+      ```bash
+      sudo iptables -L INPUT --line-numbers -n | sed -n '1,20p'
+      sudo iptables -t nat -S PREROUTING
+      ```
+    - Stop if the temporary `INPUT dpt:30080 ACCEPT` rule remains, if any Step 15 `PREROUTING REDIRECT` rule remains for `80` or `443`, if the older direct-instance `INPUT` accepts for `80` or `443` remain in place, or if the host baseline is ambiguous. Do not continue with both exposure mechanisms configured at the same time.
+17. **[Human]** Roll back the earlier direct-to-instance OCI ingress exposure and replace it with an NLB-oriented frontend/backend network model before creating the public load balancer.
+    - **Status:** Open.
+    - In OCI, remove the earlier `0.0.0.0/0` TCP `80` and `443` ingress rules that were added for direct host ingress to the instance.
+    - Do not continue with a shared-subnet security-list design that still exposes the instance itself on public `80` or `443`. Introduce NSGs or an equivalent OCI control boundary so the public listener belongs to the future NLB and the instance backend path is separate.
+    - Recommended target shape:
+      - frontend NSG on the public NLB allowing `0.0.0.0/0` to listener `80` during Phase 4
+      - backend NSG on the instance VNIC allowing only the NLB path to backend `30080`
+      - no direct public ingress rule to the instance on `80` or `443`
+    - Keep Phase 4 HTTP-only. Reserve the equivalent `443 -> 30443` backend pattern for Phase 11.
+    - Verify in OCI:
+      - the instance is no longer directly reachable from the internet on `80` or `443`
+      - the planned backend path to `30080` is not open to `0.0.0.0/0`
+    - Stop if the instance still depends on public `0.0.0.0/0` rules for `80` or `443`, or if the backend `30080` rule is broader than the future NLB path requires.
+18. **[AI Assistant]** Update the checked-in ingress gateway service config and operator docs for OCI Network Load Balancer exposure with preserved client IP.
+    - **Status:** Open.
+    - Set `externalTrafficPolicy: Local` on the auto-provisioned ingress Service via the checked-in Gateway infrastructure ConfigMap.
+    - Keep Phase 4 HTTP-only; Phase 11 is still responsible for adding the HTTPS listener, the `30443` backend path, and the matching NLB listener.
+    - Record the rationale in [`docs/decisions/008-oci-public-ingress-via-nlb.md`](../decisions/008-oci-public-ingress-via-nlb.md).
+    - Stop if the checked-in config still treats host `iptables` redirects as the steady-state public ingress design or if the service would hide the original client IP from the ingress gateway.
+19. **[Human]** Expose the Phase 4 ingress listener through a public OCI Network Load Balancer instead of host `iptables`.
+    - **Status:** Open.
+    - In OCI, create a public layer-4 Network Load Balancer in the application VCN.
+    - For Phase 4, configure one TCP listener on port `80` and point it at a backend set that targets the instance on ingress NodePort `30080`.
+    - Configure the backend set in source-IP-preserving mode, register compute-instance backends rather than a machine-specific host workaround, and attach the frontend/backend NSGs from Step 17.
+    - Add a TCP health check against `30080`.
+    - Verify:
+      ```bash
+      curl -I --max-time 5 http://<nlb-public-ip>/ || true
+      curl -I --max-time 5 -H 'Host: app.budgetanalyzer.localhost' http://<nlb-public-ip>/ || true
+      ```
+    - Stop if the public ingress path still depends on host `REDIRECT` rules, if the OCI resource is configured as an HTTP proxy instead of a TCP load balancer, or if the backend registration model would block future multi-node ingress scale-out.
+20. **[Human]** Prove the NLB-only backend path and preserved client IP before moving on.
+    - **Status:** Open.
+    - Confirm the OCI security boundary now matches the target state from Step 17: the instance accepts backend traffic from the NLB path to `30080` during Phase 4 and does not expose ingress NodePorts or host ports to `0.0.0.0/0`.
+    - When Phase 11 adds HTTPS, repeat the same pattern for `30443`.
+    - Verify on the instance:
+      ```bash
+      sudo tcpdump -ni any 'tcp port 30080'
+      ```
+      Then from the workstation:
+      ```bash
+      curl -v -H 'Host: app.budgetanalyzer.localhost' http://<nlb-public-ip>/
+      ```
+    - Stop if the backend sees only an OCI load balancer address instead of the workstation client IP, if the instance is still directly reachable on public `80` or `443`, or if the security rule is broader than the NLB path requires.
+21. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
     - **Status:** Open.
     - Run:
       ```bash
@@ -913,17 +992,21 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 - Run Chunk 4 on the OCI instance from the checked-out repo root.
 - Chunk 3 must already be complete before you start Chunk 4.
 - Step 13 and Step 14 share the same install script: `deploy/scripts/05-install-platform-controllers.sh`.
-- Step 16 requires two commands:
+- Step 15 is retained only as the recorded host-redirect experiment from 2026-04-16. Do not rerun it on the forward path. If the OCI host still carries any Step 15 redirects or debug-only rules, Step 16 cleanup is the first ingress-transition action before Step 17.
+- Step 21 requires two commands:
   - `deploy/scripts/07-apply-network-policies.sh` creates the policy objects.
   - `deploy/scripts/08-verify-network-policy-enforcement.sh` proves the live CNI enforces them.
-- If any deny check unexpectedly succeeds during Step 16, stop. Fix the k3s network-policy implementation before moving to Phase 5.
-- Once Step 16 passes, Chunk 4 is complete and Phase 5 is the next open phase.
+- If any deny check unexpectedly succeeds during Step 21, stop. Fix the k3s network-policy implementation before moving to Phase 5.
+- Once Step 21 passes, Chunk 4 is complete and Phase 5 is the next open phase.
 
 **Chunk 4 exit criteria**
 
 - `external-secrets` is installed in namespace `external-secrets` at the pinned chart version from `deploy/scripts/lib/phase-4-version-contract.sh`, and its controller/webhook/cert-controller pods are ready.
 - `cert-manager` is installed in namespace `cert-manager` at the pinned chart version, and the live Helm values still show `config.enableGatewayAPI=true`.
-- Host NAT redirect rules persist across reboot and currently expose only the reviewed Phase 4 HTTP ingress path on port `80`; no stale `443` redirect remains.
+- The Step 15 host redirect experiment has been fully removed from the OCI host; no stale `PREROUTING REDIRECT` rules, no debug `INPUT dpt:30080 ACCEPT` rules, and no leftover direct-instance `INPUT` accepts for public `80` or `443` remain.
+- The earlier direct-to-instance OCI public `80`/`443` exposure has been removed; the NLB frontend and the instance backend path now use separate OCI controls.
+- The checked-in ingress service configuration is compatible with OCI NLB exposure and preserves client IP at the ingress gateway via `externalTrafficPolicy: Local`.
+- The reviewed Phase 4 HTTP listener is reachable through a public OCI Network Load Balancer, and packet capture on the instance proves the ingress path preserves the workstation client IP.
 - The checked-in NetworkPolicy manifests are present in `default`, `infrastructure`, `istio-ingress`, and `istio-egress`.
 - A runtime probe-based verification proves the selected k3s network-policy implementation actually enforces the repo's allow/deny contract. Without that proof, do not claim Chunk 4 complete and do not move to Phase 5.
 

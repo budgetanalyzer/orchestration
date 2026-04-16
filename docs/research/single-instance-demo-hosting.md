@@ -196,7 +196,7 @@ For Oracle (and any provider without an integrated backup add-on) you're on your
 
 **Honest verdict on Oracle:** It is genuinely free, the resources are real, and the catch list above is the entire reason it is still free in 2026. If you can tolerate the operational fragility and a one-time provisioning struggle, run on Oracle. If anything in §5 makes you want to close the tab, pay Hetzner ~$40/month for a CAX41 and never think about it again.
 
-**Ready to try it?** The concrete step-by-step walkthrough — home region selection, account signup, networking prep, the `Out of host capacity` retry script, the iptables gotcha, and basic hardening — is in [`oracle-cloud-always-free-provisioning.md`](./oracle-cloud-always-free-provisioning.md). Read that after you've decided based on the asterisks above.
+**Ready to try it?** The concrete step-by-step walkthrough — home region selection, account signup, networking prep, the `Out of host capacity` retry script, the OCI NLB/frontend-backend security split, and basic hardening — is in [`oracle-cloud-always-free-provisioning.md`](./oracle-cloud-always-free-provisioning.md). Read that after you've decided based on the asterisks above.
 
 ---
 
@@ -223,7 +223,11 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 - **No HA anywhere.** One Postgres pod, one Redis pod, one RabbitMQ pod, one of every service. Box dies → restore from snapshot (Hetzner) or `pg_dump` (Oracle). This is documented and accepted in [§7](#7-is-this-a-bad-idea-honest-assessment).
 - **External TLS terminates at the Istio ingress gateway** with `cert-manager` + Let's Encrypt (HTTP-01 challenge through the ingress gateway listener on port 80). The cert-manager controller is small (~100 MiB) and is the standard pattern; the alternative is to run Caddy on the host as a reverse proxy and lose the Istio-native termination.
 - **Persistent volumes use the k3s `local-path` provisioner** (the default). No CSI driver, no networked storage. Daily snapshot of the underlying VM disk via Hetzner backups, plus a daily `pg_dump` to a free Backblaze B2 / Cloudflare R2 bucket as a belt-and-braces backup.
-- **NodePort is the cluster ingress path.** The Istio ingress gateway is already configured as `type: NodePort` on `nodePort: 30443` per `kubernetes/istio/ingress-gateway-config.yaml`. Front it with host-level `iptables -t nat` redirects from 443 → 30443 (and 80 → the cert-manager challenge port), or run a tiny userspace proxy. No external load balancer is needed because there is no second node to balance to.
+- **NodePort is the cluster ingress path, but public ingress should terminate on an OCI Network Load Balancer.** Keep the Istio ingress gateway as `type: NodePort`, put an OCI public layer-4 NLB in front of it, set `externalTrafficPolicy: Local` on the ingress Service to preserve client IP, and use separate OCI controls for the public frontend and the instance backend path. In practice that means:
+  - the NLB owns public `80` and later `443`
+  - the instance does not stay directly exposed on public `80/443`
+  - the instance accepts only the backend path to `30080` during Phase 4 and later `30443` in Phase 11
+  - a future multi-node deployment keeps the same architecture; it just adds more ingress-node backends
 - **Auth0 callback URL** points to whatever public hostname the box has — one config edit in the Auth0 tenant.
 - **DNS:** point a subdomain you own at the box's IPv4. Hetzner gives you a free reverse-DNS entry; both Hetzner and Oracle give you a stable public IP.
 
@@ -321,7 +325,7 @@ The point of putting the URL on a resume is "click here, see the thing work *and
 ### Concrete next steps
 
 1. **Validate the 9.7 GiB working-set estimate locally.** Bring up the existing Tilt environment, then `kubectl apply` the Istio addon bundle (`prometheus-community/kube-prometheus-stack`, `grafana/grafana`, `jaegertracing/jaeger`, `kiali/kiali-server`). Exercise the demo flow for an hour and check `kubectl top pods` to confirm the totals match this doc within ±20%. Iterate the sizing tables in [§1](#1-workload-sizing--what-you-actually-need-to-host) if reality disagrees.
-2. **Create the Oracle Cloud free account and provision the A1 instance** — see [`oracle-cloud-always-free-provisioning.md`](./oracle-cloud-always-free-provisioning.md) for the concrete walkthrough: home region selection (Phoenix vs Frankfurt), networking setup, capacity-retry script, first-SSH verification, and the iptables gotcha.
+2. **Create the Oracle Cloud free account and provision the A1 instance** — see [`oracle-cloud-always-free-provisioning.md`](./oracle-cloud-always-free-provisioning.md) for the concrete walkthrough: home region selection (Phoenix vs Frankfurt), networking setup, capacity-retry script, first-SSH verification, and the OCI NLB/frontend-backend security split.
 3. **If Oracle provisioning fails after a day of retries**, sign up for Hetzner Cloud and provision a CAX41 in Helsinki or Falkenstein.
 4. **Install k3s** with `--disable=traefik --disable=servicelb --disable=metrics-server`; install Istio with the existing `istiod-values.yaml` and `cni-values.yaml`; apply the existing manifests under `kubernetes/`; install the four observability addons; configure the istiod tracing extension provider to point at the Jaeger collector.
 5. **Front Kiali, Grafana, and Jaeger with read-only authentication.** Basic auth at nginx-gateway is the minimum bar; an Istio AuthorizationPolicy that allows GET-only is the more architecturally consistent option.

@@ -64,7 +64,7 @@ Phase 4 assumes the host already has `kubectl`, `helm`, and the standard shell t
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the Phase 4 ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before Phase 11 adds the TLS listener or whenever the reviewed ingress render output changes. |
 | `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, `istio-cni`, `istiod`, the egress gateway, then applies the rendered ingress manifests plus mesh security policies. | Re-run after changing Istio pins, values, or the rendered ingress manifests. |
 | `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. | Re-run when Phase 5 or Phase 11 needs controller value changes. |
-| `deploy/scripts/06-configure-host-redirects.sh` | Adds persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. | Re-run if the gateway service ports change, especially when Phase 11 adds or removes HTTPS. |
+| `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before claiming Phase 4 complete. |
 
@@ -119,27 +119,63 @@ If you are resuming at Phase 4 Chunk 4, the repo is already complete through Ste
    kubectl get pods -n external-secrets
    kubectl get pods -n cert-manager
    ```
-3. Step 15: add the host redirects only after the ingress NodePorts are present.
+3. Step 15 is historical only. Do not rerun `./deploy/scripts/06-configure-host-redirects.sh` on the forward path unless you are explicitly reproducing the rejected host-redirect design from the 2026-04-16 OCI debugging thread.
+4. Step 16: if this OCI host still carries any Step 15 redirects, the temporary debug allow rule, or the older host-direct `INPUT` rules for `80/443`, remove them before continuing to the OCI NLB path.
    ```bash
-   ./deploy/scripts/06-configure-host-redirects.sh
+   while sudo iptables -C INPUT -p tcp --dport 30080 -j ACCEPT 2>/dev/null; do
+     sudo iptables -D INPUT -p tcp --dport 30080 -j ACCEPT
+   done
+   while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null; do
+     sudo iptables -D INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT
+   done
+   while sudo iptables -C INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null; do
+     sudo iptables -D INPUT -m state --state NEW -p tcp --dport 443 -j ACCEPT
+   done
+   while read -r rule; do
+     [[ -n "${rule}" ]] || continue
+     sudo iptables -t nat ${rule}
+   done < <(
+     sudo iptables -t nat -S PREROUTING | awk '
+       $1 == "-A" && $2 == "PREROUTING" &&
+       ($0 ~ /--dport 80 / || $0 ~ /--dport 443 /) &&
+       $0 ~ /-j REDIRECT/ {
+         sub(/^-A /, "-D ")
+         print
+       }
+     '
+   )
+   sudo netfilter-persistent save
    sudo iptables -t nat -S PREROUTING
    ```
-4. Step 16a: apply the checked-in NetworkPolicy manifests.
+5. Step 17: remove the earlier direct-to-instance OCI public `80/443` exposure and replace it with an NLB-oriented frontend/backend security model.
+   - Do not keep public `0.0.0.0/0 -> instance:80/443` rules.
+   - Prefer NSGs so the public listener belongs to the future NLB and the instance backend rule is limited to `30080`.
+6. Step 18 prerequisite: do not continue until the checked-in ingress gateway config includes `externalTrafficPolicy: Local` and the rationale is recorded in [ADR 008](../docs/decisions/008-oci-public-ingress-via-nlb.md).
+7. Step 19: create the public OCI Network Load Balancer for the current ingress NodePort.
+   - For Phase 4, create one TCP listener on `80`, point it at the instance backend on `30080`, and configure the backend set in source-IP-preserving mode.
+   - Add a TCP health check against `30080`.
+8. Step 20: prove only the NLB path can reach the ingress NodePort and that the backend still sees the real workstation client IP.
+   ```bash
+   sudo tcpdump -ni any 'tcp port 30080'
+   ```
+9. Step 21a: apply the checked-in NetworkPolicy manifests.
    ```bash
    ./deploy/scripts/07-apply-network-policies.sh
    kubectl get networkpolicy -A
    ```
-5. Step 16b: run the runtime NetworkPolicy verifier.
+10. Step 21b: run the runtime NetworkPolicy verifier.
    ```bash
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
-6. Stop if any step above fails. Do not move to Phase 5 until Step 16b passes.
+11. Stop if any step above fails. Do not move to Phase 5 until Step 21b passes.
 
 ## Phase Boundary Notes
 
 `deploy/scripts/03-render-phase-4-istio-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single host-agnostic listener and omits `spec.listeners[].hostname`. That keeps the checked-in localhost `HTTPRoute` manifests attachable during Phase 4 while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in Phase 11.
 
-`deploy/scripts/06-configure-host-redirects.sh` only redirects the ports that the auto-provisioned ingress Service actually exposes. On the initial Phase 4 run that is expected to be port `80` only. The script programs `nat/PREROUTING`, which is the chain used for incoming host traffic, and it inserts those redirects ahead of kube-proxy's `KUBE-SERVICES` jump so external traffic is rewritten to the ingress NodePort early enough for the NodePort service path to match. Re-run the same script after Phase 11 if the ingress service later exposes `443`; rerunning also removes stale redirects if a previously exposed listener disappears.
+`deploy/scripts/06-configure-host-redirects.sh` is kept in the repo because Step 15 is still recorded as the original host-redirect experiment. The 2026-04-16 OCI debugging thread proved that `nat/PREROUTING REDIRECT` to the ingress NodePort did not become a real NodePort service flow on this host, and it did not satisfy the requirement to preserve the original client IP at the ingress gateway. Do not rerun that experiment during the normal forward path. If the host still carries any Step 15 mutations, Step 16 host cleanup and Step 17 OCI-networking rollback are mandatory before the steady-state OCI Network Load Balancer plus `externalTrafficPolicy: Local` path begins.
+
+Phase 4 stays HTTP-only even after the NLB pivot. For this phase the public NLB needs only the listener and backend path for port `80 -> 30080`. The instance itself should no longer accept direct public `80/443` traffic once the NLB path exists. Phase 11 is still where the repo adds the HTTPS listener, the `30443` backend path, and the matching certificate/TLS wiring.
 
 The checked-in ingress NetworkPolicy allow list must continue to admit that Phase 4 HTTP listener so ACME HTTP-01 reachability is not cut off when `deploy/scripts/07-apply-network-policies.sh` runs.
 

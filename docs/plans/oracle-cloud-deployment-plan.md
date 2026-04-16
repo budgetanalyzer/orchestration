@@ -839,7 +839,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
-**Status:** Planned as of 2026-04-16. Human execution on the OCI host is still open. Step 12 no longer blocks the chunk because the hardened Helm values already exist under `deploy/helm-values/`, but the runtime NetworkPolicy enforcement proof is still an open execution requirement before Phase 5.
+**Status:** Ready for human execution as of 2026-04-16. Step 12 no longer blocks the chunk because the hardened Helm values already exist under `deploy/helm-values/`, and the repo-owned runtime verifier now exists at `deploy/scripts/08-verify-network-policy-enforcement.sh`. Human execution on the OCI host is still open.
 
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
 13. **[Human]** Install External Secrets Operator with pinned values.
@@ -849,13 +849,12 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 **Chunk 4 implementation plan**
 
-1. **Close the remaining repo-owned verification gap before calling this chunk complete.**
+1. **Close the repo-owned verification gap before the human run.**
    - Step 12 is already satisfied by the checked-in hardened values at `deploy/helm-values/external-secrets.values.yaml` and `deploy/helm-values/cert-manager.values.yaml`.
-   - `deploy/scripts/05-install-platform-controllers.sh`, `deploy/scripts/06-configure-host-redirects.sh`, and `deploy/scripts/07-apply-network-policies.sh` are already the canonical human-run path for Steps 13-16.
-   - What is still missing is a repeatable production-safe enforcement proof. `deploy/scripts/07-apply-network-policies.sh` only applies manifests and explicitly warns that runtime NetworkPolicy validation still remains.
-   - Before marking Chunk 4 complete, add a repo-owned verifier script or equivalent committed probe-manifest path for OCI production use. Preferred shape: `deploy/scripts/08-verify-network-policy-enforcement.sh`, modeled on `scripts/smoketest/verify-phase-2-network-policies.sh`, but rewritten so it does not depend on Tilt or already-deployed application workloads.
-   - That verifier should create disposable listener and probe pods with `sidecar.istio.io/inject: "false"` and labels matching the checked-in NetworkPolicy selectors, then clean them up after the proof run.
-   - Validate any new shell surface with `bash -n` and `shellcheck` before handing it to the human operator.
+   - `deploy/scripts/05-install-platform-controllers.sh`, `deploy/scripts/06-configure-host-redirects.sh`, and `deploy/scripts/07-apply-network-policies.sh` remain the canonical human-run path for Steps 13-16.
+   - The runtime enforcement proof now lives in `deploy/scripts/08-verify-network-policy-enforcement.sh`.
+   - That verifier uses disposable probe and listener pods with `sidecar.istio.io/inject: "false"` and label sets that match the checked-in NetworkPolicy selectors, so it does not depend on Tilt or already-deployed application workloads.
+   - Complete as of 2026-04-16 with the reviewed verifier script under `deploy/scripts/` plus `bash -n` and `shellcheck` validation.
 2. **Run this chunk on the OCI instance from the checked-out repo root.**
    - Chunk 3 must already be complete on this host and cluster.
    - Export the k3s kubeconfig in the interactive shell before running manual verification commands; unlike the repo scripts, your shell will not auto-populate `KUBECONFIG`.
@@ -940,7 +939,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    ```
 10. **Prove actual NetworkPolicy enforcement on the selected k3s network-policy path before moving to Phase 5.**
    - Resource existence is not proof. `kubectl get networkpolicy` only shows that the API objects were accepted.
-   - Preferred path: run the repo-owned verifier from Step 1 after it is added.
+   - Canonical path: run `./deploy/scripts/08-verify-network-policy-enforcement.sh`.
    - Minimum assertions for that verifier:
      - an unlabeled probe pod in `default` gets DNS egress only and cannot reach protected ports in `default`, `infrastructure`, or `istio-egress`
      - a probe pod in `istio-ingress` labeled `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` can reach temporary listener pods in `default` labeled `app=nginx-gateway`, `app=ext-authz`, and `app=session-gateway` on ports `8080`, `9002`, and `8081`
@@ -950,12 +949,13 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - If any deny check unexpectedly succeeds, stop. The current k3s network-policy path is not enforcing the repo contract correctly, and the fix belongs before Phase 5. If the built-in path is insufficient, install a supported CNI such as Calico rather than weakening the policy set.
 11. **Record the completion point and advance to Phase 5 only after the runtime proof passes.**
    - Chunk 4 is not complete when the Helm installs succeed but the CNI enforcement proof is still missing.
-   - Once the controller installs, host redirects, manifest apply, and runtime enforcement proof all pass, mark Phase 4 complete and move to the OCI Vault / External Secrets work in Phase 5.
+   - Once the controller installs, host redirects, manifest apply, and `./deploy/scripts/08-verify-network-policy-enforcement.sh` all pass, mark Phase 4 complete and move to the OCI Vault / External Secrets work in Phase 5.
    ```bash
    helm list -n external-secrets
    helm list -n cert-manager
    kubectl get networkpolicy -A
    sudo iptables -t nat -S PREROUTING
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
 
 **Chunk 4 exit criteria**

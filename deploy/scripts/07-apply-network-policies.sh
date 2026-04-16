@@ -16,4 +16,4 @@ kubectl apply -f "$(phase4_repo_path "kubernetes/network-policies")" >/dev/null
 
 phase4_info "network policy snapshot"
 kubectl get networkpolicy -A
-phase4_warn "runtime NetworkPolicy enforcement still needs human validation on the k3s CNI before Phase 5"
+phase4_warn "runtime NetworkPolicy enforcement still needs proof on the k3s CNI; run deploy/scripts/08-verify-network-policy-enforcement.sh before Phase 5"

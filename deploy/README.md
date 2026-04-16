@@ -32,6 +32,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `./deploy/scripts/05-install-platform-controllers.sh`
    - `./deploy/scripts/06-configure-host-redirects.sh`
    - `./deploy/scripts/07-apply-network-policies.sh`
+   - `./deploy/scripts/08-verify-network-policy-enforcement.sh`
 
 ## Expected Inputs
 
@@ -65,6 +66,7 @@ Phase 4 assumes the host already has `kubectl`, `helm`, and the standard shell t
 | `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. | Re-run when Phase 5 or Phase 11 needs controller value changes. |
 | `deploy/scripts/06-configure-host-redirects.sh` | Adds persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. | Re-run if the gateway service ports change, especially when Phase 11 adds or removes HTTPS. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
+| `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before claiming Phase 4 complete. |
 
 ## Chunk 3 Checkpoint
 
@@ -127,9 +129,11 @@ If you are resuming at Phase 4 Chunk 4, use this checkpoint before moving to Pha
    ./deploy/scripts/07-apply-network-policies.sh
    kubectl get networkpolicy -A
    ```
-5. Stop here until the runtime NetworkPolicy enforcement proof also passes.
-   - The current checked-in scripts install the controllers, redirects, and policy objects, but they do not yet provide the final probe-based CNI enforcement proof by themselves.
-   - Use the detailed Chunk 4 implementation plan in `docs/plans/oracle-cloud-deployment-plan.md` as the source of truth for that final verification requirement before Phase 5.
+5. Run the runtime NetworkPolicy verifier before Phase 5.
+   ```bash
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
+   ```
+6. Stop if the verifier reports any unexpected allow or deny result. Do not move to Phase 5 until the live k3s NetworkPolicy implementation matches the checked-in contract.
 
 ## Phase Boundary Notes
 

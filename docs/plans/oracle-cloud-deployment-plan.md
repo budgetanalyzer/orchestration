@@ -403,7 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
-**Status:** Chunk 1 is complete as of 2026-04-16. The next open work starts at Chunk 2, and all preceding Phase 4 work is complete through the checked-in `deploy/` install path.
+**Status:** Chunks 1 and 2 are complete as of 2026-04-16. The next open work starts at Chunk 3 Step 7, and all preceding Phase 4 work is complete through the base-cluster bootstrap checkpoint.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -611,7 +611,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 2: Bootstrap the Base Cluster
 
-**Status:** Ready for human execution. When the runbook below passes, mark Phase 4 complete through Chunk 2 and move to Chunk 3.
+**Status:** Complete as of 2026-04-16. Chunk 3 Step 7 is the next open work item.
 
 3. **[Human]** Install the pinned k3s version with the documented Istio-friendly flags.
 4. **[Human]** Verify the k3s node, system pods, and storage class.
@@ -688,6 +688,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 8. **Record the completion point and advance the plan.**
    - If Steps 4-7 succeeded, Chunk 2 is complete.
    - At that point, mark Phase 4 complete through Chunk 2 and leave Chunk 3 Step 7 as the next open work item.
+   - Marked complete as of 2026-04-16.
    ```bash
    kubectl cluster-info
    kubectl get namespace \

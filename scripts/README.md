@@ -105,6 +105,10 @@ the active context and Tilt resource state from the same host shell first.
 
 - `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
   egress manifests from `.env`.
+- `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
+  production Auth0 config exists, but in that pre-Auth0 state the two positive
+  `istio-egress-gateway:443` checks are deferred until the real egress routing
+  is rendered and applied later in the production plan.
 - `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
   runner under `tmp/grafana-ui-debug/`, logs into the local Grafana ingress
   route, opens the provisioned dashboards, and captures browser-side debugging

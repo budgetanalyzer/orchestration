@@ -403,7 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
-**Status:** Chunks 1, 2, and 3 are complete, and Chunk 4 is complete through Step 18 as of 2026-04-16. The next open work starts at Chunk 4 Step 19. Step 15 is retained only as the documented 2026-04-16 host-redirect experiment; do not rerun it on the forward path. The remaining Phase 4 work is Step 19-20 OCI Network Load Balancer execution plus the Step 21 NetworkPolicy verification gate.
+**Status:** Complete as of 2026-04-16. Chunks 1, 2, 3, and 4 are complete on the OCI host. Step 15 remains only as the documented 2026-04-16 host-redirect experiment and is not part of the forward path. Phase 4 closed with the OCI NLB in place for `80 -> 30080`, preserved client IP proven at the backend, and the Step 21 NetworkPolicy verifier passing all current Phase 4 checks except the two documented pre-Auth0 `istio-egress-gateway:443` positives that are intentionally deferred until Phase 9 Step 2 renders and applies the real egress config.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -840,7 +840,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
-**Current checkpoint:** Complete through Step 18 as of 2026-04-16. The next open step is Step 19. Human Steps 13, 14, 16, and 17 are complete on the OCI host, and the Step 18 ingress-service config/docs update is checked in. Step 15 remains historical context from the rejected host-redirect design.
+**Current checkpoint:** Chunk 4 is complete as of 2026-04-16. Human Steps 13, 14, 16, 17, 19, 20, and 21 are complete on the OCI host, and the Step 18 ingress-service config/docs update is checked in. Step 15 remains historical context from the rejected host-redirect design. The only remaining follow-up tied to this chunk is the already-documented rerun of `deploy/scripts/08-verify-network-policy-enforcement.sh` after Phase 9 Step 2 applies the real Auth0-derived egress config.
 
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
     - **Status:** Complete as of 2026-04-16.
@@ -950,10 +950,11 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
     - The rationale is already recorded in [`docs/decisions/008-oci-public-ingress-via-nlb.md`](../decisions/008-oci-public-ingress-via-nlb.md).
     - Companion operator docs updated in `deploy/README.md` and this plan now treat the OCI Network Load Balancer path, not host `iptables` redirects, as the steady-state public ingress design.
 19. **[Human]** Expose the Phase 4 ingress listener through a public OCI Network Load Balancer instead of host `iptables`.
-    - **Status:** Open.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16.
     - In OCI, create a public layer-4 Network Load Balancer in the application VCN.
     - For Phase 4, configure one TCP listener on port `80` and point it at a backend set that targets the instance on ingress NodePort `30080`.
     - Configure the backend set in source-IP-preserving mode, register compute-instance backends rather than a machine-specific host workaround, and attach the frontend/backend NSGs from Step 17.
+    - OCI note from the 2026-04-16 operator run: the frontend NSG also needed an explicit stateful egress rule to the backend NSG on TCP `30080`. Without that frontend-NSG egress path, the NLB backend health check stayed critical and the public listener never forwarded traffic.
     - Add a TCP health check against `30080`.
     - Verify:
       ```bash
@@ -962,7 +963,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Stop if the public ingress path still depends on host `REDIRECT` rules, if the OCI resource is configured as an HTTP proxy instead of a TCP load balancer, or if the backend registration model would block future multi-node ingress scale-out.
 20. **[Human]** Prove the NLB-only backend path and preserved client IP before moving on.
-    - **Status:** Open.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16.
     - Confirm the OCI security boundary now matches the target state from Step 17: the instance accepts backend traffic from the NLB path to `30080` during Phase 4 and does not expose ingress NodePorts or host ports to `0.0.0.0/0`.
     - When Phase 11 adds HTTPS, repeat the same pattern for `30443`.
     - Verify on the instance:
@@ -975,7 +976,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Stop if the backend sees only an OCI load balancer address instead of the workstation client IP, if the instance is still directly reachable on public `80` or `443`, or if the security rule is broader than the NLB path requires.
 21. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
-    - **Status:** Open.
+    - **Status:** Complete as of 2026-04-16 with the documented pre-Auth0 caveat.
     - Run:
       ```bash
       ./deploy/scripts/07-apply-network-policies.sh
@@ -985,7 +986,10 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```bash
       kubectl get networkpolicy -A
       ```
-    - Stop if the verifier reports any unexpected allow or deny result. `kubectl get networkpolicy` only proves the API objects exist; the verifier is the actual enforcement proof.
+    - Known ordering caveat: before production Auth0 config exists, the repo intentionally does **not** apply the rendered Istio egress Gateway/VirtualService/ServiceEntry path. In that pre-Auth0 state, the verifier's two positive checks for `session-gateway probe -> istio-egress-gateway:443` and `currency-service probe -> istio-egress-gateway:443` can fail even when the rest of the NetworkPolicy contract is correct.
+    - If those are the **only** failures, record the output and continue to Phase 5. Do **not** treat any other failure as acceptable at this step.
+    - Rerun `./deploy/scripts/08-verify-network-policy-enforcement.sh` after Phase 9 Step 2 applies the rendered egress config from the real production `AUTH0_ISSUER_URI`. At that point, the two `istio-egress-gateway:443` positive checks must pass.
+    - Stop if the verifier reports any other unexpected allow or deny result. `kubectl get networkpolicy` only proves the API objects exist; the verifier is the actual enforcement proof.
 
 **Operator notes**
 
@@ -995,7 +999,9 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 - Step 15 is retained only as the recorded host-redirect experiment from 2026-04-16. Do not rerun it on the forward path. If the OCI host still carries any Step 15 redirects or debug-only rules, Step 16 cleanup is the first ingress-transition action before Step 17.
 - Step 21 requires two commands:
   - `deploy/scripts/07-apply-network-policies.sh` creates the policy objects.
-  - `deploy/scripts/08-verify-network-policy-enforcement.sh` proves the live CNI enforces them.
+  - `deploy/scripts/08-verify-network-policy-enforcement.sh` proves the live CNI enforces them for the currently rendered Phase 4 resources.
+- Step 19's OCI NLB run required one frontend-NSG egress rule in addition to the expected public listener ingress rule: allow the frontend NSG to reach the backend NSG on TCP `30080`. Record that as part of the normal OCI NLB backend-health path rather than as an ad hoc workaround.
+- Before production Auth0 config exists, the verifier's two positive checks to `istio-egress-gateway:443` are deferred because Step 8 intentionally avoids applying placeholder egress routing. If those are the only failures, continue to Phase 5 and rerun the verifier after Phase 9 Step 2 renders and applies the real egress config.
 - If any deny check unexpectedly succeeds during Step 21, stop. Fix the k3s network-policy implementation before moving to Phase 5.
 - Once Step 21 passes, Chunk 4 is complete and Phase 5 is the next open phase.
 
@@ -1005,10 +1011,11 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 - `cert-manager` is installed in namespace `cert-manager` at the pinned chart version, and the live Helm values still show `config.enableGatewayAPI=true`.
 - The Step 15 host redirect experiment has been fully removed from the OCI host; no stale `PREROUTING REDIRECT` rules, no debug `INPUT dpt:30080 ACCEPT` rules, and no leftover direct-instance `INPUT` accepts for public `80` or `443` remain.
 - The earlier direct-to-instance OCI public `80`/`443` exposure has been removed; the NLB frontend and the instance backend path now use separate OCI controls.
+- The OCI NLB frontend NSG allows public ingress on TCP `80` and explicit stateful egress to the backend NSG on TCP `30080`, which the operator run needed for backend health checks to pass.
 - The checked-in ingress service configuration is compatible with OCI NLB exposure and preserves client IP at the ingress gateway via `externalTrafficPolicy: Local`.
 - The reviewed Phase 4 HTTP listener is reachable through a public OCI Network Load Balancer, and packet capture on the instance proves the ingress path preserves the workstation client IP.
 - The checked-in NetworkPolicy manifests are present in `default`, `infrastructure`, `istio-ingress`, and `istio-egress`.
-- A runtime probe-based verification proves the selected k3s network-policy implementation actually enforces the repo's allow/deny contract. Without that proof, do not claim Chunk 4 complete and do not move to Phase 5.
+- A runtime probe-based verification proves the selected k3s network-policy implementation actually enforces the repo's allow/deny contract for the currently rendered Phase 4 resources. The two positive `istio-egress-gateway:443` checks are deferred until Phase 9 Step 2 applies the real egress config from production `AUTH0_ISSUER_URI`; rerun the verifier there and require them to pass before claiming the egress branch proven.
 
 ### Outputs
 
@@ -1296,6 +1303,10 @@ kubernetes/kyverno/policies/production/
 2. **Render and apply Istio egress config from production Auth0 issuer.**
    ```bash
    ./scripts/ops/render-istio-egress-config.sh --apply --auth0-issuer-uri "<production-auth0-issuer-uri>"
+   ```
+   Then rerun the Phase 4 runtime NetworkPolicy verifier. At this point, the previously deferred positive checks for `session-gateway probe -> istio-egress-gateway:443` and `currency-service probe -> istio-egress-gateway:443` must pass.
+   ```bash
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
 3. **Apply app production overlays.**
    ```bash

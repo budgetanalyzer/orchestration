@@ -102,7 +102,7 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
 
 ## Chunk 4 Checkpoint
 
-If you are resuming at Phase 4 Chunk 4, the repo is already complete through Step 18. The next open step is Step 19.
+If you are resuming at Phase 4 Chunk 4, the OCI-host checkpoint recorded on 2026-04-16 has all steps complete. The only deferred follow-up is rerunning `./deploy/scripts/08-verify-network-policy-enforcement.sh` after Phase 9 Step 2 applies the real Auth0-derived egress config.
 
 1. Reconfirm the Chunk 3 ingress state and the shared controller-install result before starting Step 19.
    ```bash
@@ -150,6 +150,7 @@ If you are resuming at Phase 4 Chunk 4, the repo is already complete through Ste
 5. Step 18 is already checked in: the reviewed Phase 4 ingress gateway config now sets `externalTrafficPolicy: Local`, and the rationale remains documented in [ADR 008](../docs/decisions/008-oci-public-ingress-via-nlb.md).
 6. Step 19: create the public OCI Network Load Balancer for the current ingress NodePort.
    - For Phase 4, create one TCP listener on `80`, point it at the instance backend on `30080`, and configure the backend set in source-IP-preserving mode.
+   - OCI operator note: the frontend NSG also needs a stateful egress rule to the backend NSG on TCP `30080`; otherwise the NLB backend health check stays critical and the listener never forwards traffic.
    - Add a TCP health check against `30080`.
 7. Step 20: prove only the NLB path can reach the ingress NodePort and that the backend still sees the real workstation client IP.
    ```bash
@@ -164,7 +165,8 @@ If you are resuming at Phase 4 Chunk 4, the repo is already complete through Ste
    ```bash
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
-10. Stop if any step above fails. Do not move to Phase 5 until Step 21b passes.
+10. Before production Auth0 config exists, the verifier's two positive checks to `istio-egress-gateway:443` may fail because Phase 4 intentionally does not apply placeholder egress routing. If those are the only failures, record the output and continue to Phase 5. Do not accept any other failure at this step.
+11. After Phase 9 Step 2 renders and applies the real egress config from the production `AUTH0_ISSUER_URI`, rerun `./deploy/scripts/08-verify-network-policy-enforcement.sh` and require those two `istio-egress-gateway:443` checks to pass.
 
 ## Phase Boundary Notes
 
@@ -174,7 +176,11 @@ If you are resuming at Phase 4 Chunk 4, the repo is already complete through Ste
 
 Phase 4 stays HTTP-only even after the NLB pivot. For this phase the public NLB needs only the listener and backend path for port `80 -> 30080`. The instance itself should no longer accept direct public `80/443` traffic once the NLB path exists. Phase 11 is still where the repo adds the HTTPS listener, the `30443` backend path, and the matching certificate/TLS wiring.
 
+On OCI, the public listener path also needs the frontend NSG to egress to the backend NSG on TCP `30080`. The 2026-04-16 operator run needed that explicit rule before the backend health check on `30080` would turn healthy.
+
 The checked-in ingress NetworkPolicy allow list must continue to admit that Phase 4 HTTP listener so ACME HTTP-01 reachability is not cut off when `deploy/scripts/07-apply-network-policies.sh` runs.
+
+The Phase 4 runtime NetworkPolicy verifier intentionally runs before production Auth0 config exists. Because Step 8 of the main plan explicitly defers applying placeholder Istio egress routing, a pre-Auth0 OCI host can legitimately miss the verifier's two positive `istio-egress-gateway:443` checks while still proving the rest of the CNI contract. Treat those two checks as deferred only, and rerun the verifier after Phase 9 Step 2 applies the rendered egress config from the real `AUTH0_ISSUER_URI`.
 
 ## Validation Standard
 

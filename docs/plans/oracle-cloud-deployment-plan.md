@@ -541,6 +541,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - Add `deploy/README.md`, `deploy/instance.env.template`, `deploy/scripts/`, `deploy/helm-values/`, and `deploy/manifests/phase-4/`.
    - Keep runtime render output in `tmp/`, not under `deploy/`.
    - Treat `deploy/` as the committed operator-facing surface for Pattern B scripts only.
+   - Complete as of 2026-04-16 with the scaffold and operator handoff doc under `deploy/`.
 2. **Define the Phase 4 version contract in one place.**
    - Current target pins for this plan revision, as of **April 15, 2026**, using the **latest stable/supported** choice for production rather than the newest available release:
      - k3s `v1.34.6+k3s1`
@@ -555,11 +556,13 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
      - do **not** automatically follow a project's `latest` channel or a freshly published minor release
    - Gateway API intentionally stays on `v1.4.0` until the repo validates a newer CRD bundle against the current Istio/Gateway baseline.
    - External Secrets intentionally stays on `2.2.0` for now because the project's published stability/support page still identifies `2.2` as the current supported minor; do not jump to `2.3.0` until the support docs catch up or the project explicitly marks `2.3` supported.
+   - Complete as of 2026-04-16 in `deploy/scripts/lib/phase-4-version-contract.sh`.
 3. **Add a shared deploy helper library.**
    - Resolve the repo root without hardcoding `/workspace`.
    - Load `~/.config/budget-analyzer/instance.env`.
    - Fall back to `/etc/rancher/k3s/k3s.yaml` for `KUBECONFIG` after k3s install.
    - Centralize common logging, required-command checks, and `sudo`/root wrappers for host mutations.
+   - Complete as of 2026-04-16 in `deploy/scripts/lib/common.sh`.
 4. **Add the human-run Phase 4 scripts in execution order.**
    - `deploy/scripts/01-install-k3s.sh`
    - `deploy/scripts/02-bootstrap-cluster.sh`
@@ -569,6 +572,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - `deploy/scripts/06-configure-host-redirects.sh`
    - `deploy/scripts/07-apply-network-policies.sh`
    - Each script must be idempotent, non-secret, and safe to review before execution.
+   - Complete as of 2026-04-16 with the seven reviewed scripts under `deploy/scripts/`.
 5. **Make the raw Kubernetes host mutations explicit instead of embedded shell history.**
    - `01-install-k3s.sh`: install pinned k3s with `--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644`.
    - `02-bootstrap-cluster.sh`: install Gateway API CRDs and label `default`, `infrastructure`, `monitoring`, `istio-system`, `istio-ingress`, `istio-egress`, `external-secrets`, and `cert-manager`.
@@ -576,25 +580,31 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - `05-install-platform-controllers.sh`: install External Secrets Operator and cert-manager from pinned charts using checked-in values.
    - `06-configure-host-redirects.sh`: add idempotent `iptables` redirects only after the ingress NodePorts exist.
    - `07-apply-network-policies.sh`: apply `kubernetes/network-policies/` without adding production-only workaround policies.
+   - Complete as of 2026-04-16; those mutations now live in reviewed scripts instead of copy-paste command history.
 6. **Check in the missing non-secret manifests and values needed by Phase 4.**
    - Add hardened values files for External Secrets Operator and cert-manager under `deploy/helm-values/`.
    - Add a production-phase ingress gateway infrastructure template and `Gateway` template under `deploy/manifests/phase-4/`.
    - Render those templates from `instance.env`; do not leave raw copy-paste placeholders in the human install path.
+   - Complete as of 2026-04-16 in `deploy/helm-values/` plus `deploy/manifests/phase-4/`, rendered by `deploy/scripts/03-render-phase-4-istio-manifests.sh`.
 7. **Keep TLS scope explicit for Phase 4.**
    - Phase 4 prepares the ingress install path and port `80` ACME reachability.
    - Public certificate issuance and the final HTTPS listener secret wiring remain in Phase 11.
    - Do not invent an AI-generated certificate, self-signed fallback, or certificate private-key workaround.
+   - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only `Gateway`, and `06-configure-host-redirects.sh` only redirects ports the current ingress Service actually exposes.
 8. **Document the operator handoff in the repo.**
    - `deploy/README.md` must show the exact review/run order, expected inputs, and which later phase reuses each script.
    - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague “generate scripts” placeholder.
+   - Complete as of 2026-04-16 in `deploy/README.md` plus the concrete artifact references in this section.
 9. **Validate the install-path artifacts before calling Chunk 1 complete.**
    - Run `bash -n` and `shellcheck` on every new or modified `deploy/scripts/*.sh`.
    - If a render helper exists, run it locally with sample non-secret inputs and confirm it produces reviewable YAML under `tmp/`.
    - Do not call Chunk 1 complete with unvalidated shell scripts or placeholder-only manifest templates.
+   - Complete as of 2026-04-16 with `bash -n`, `shellcheck`, and a local sample render pass over the new Phase 4 scripts and templates.
 10. **Chunk 1 exit criteria.**
    - A reviewer can clone the repo, inspect `deploy/README.md`, copy `deploy/instance.env.template`, and see the exact Phase 4 execution order without consulting shell history.
    - All Phase 4 version pins are explicit and centralized.
    - No secret values, OCI private keys, or certificate private keys enter the repo or AI workspace.
+   - Complete as of 2026-04-16 through the checked-in deploy path under `deploy/`, the shared version contract in `deploy/scripts/lib/phase-4-version-contract.sh`, and the non-secret render-only operator inputs in `deploy/instance.env.template`.
 
 #### Chunk 2: Bootstrap the Base Cluster
 
@@ -645,7 +655,8 @@ AI agents work with secret names and vault paths, never secret values. Templates
    ```bash
    mkdir -p ~/.config/budget-analyzer
    cp deploy/instance.env.template ~/.config/budget-analyzer/instance.env
-   # Fill in OCIDs, public IP, domain, release version, and image inventory refs.
+   # Fill in the instance-specific, non-secret OCI, routing, and contact values.
+   # Production image refs stay in kubernetes/production/apps/image-inventory.yaml.
    ```
 2. **Create OCI Vault resources.**
    - Use an Always Free-compatible OCI Vault setup.

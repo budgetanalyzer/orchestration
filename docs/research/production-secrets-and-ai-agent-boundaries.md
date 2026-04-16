@@ -139,6 +139,8 @@ These live at **`~/.config/budget-analyzer/instance.env`** on the project owner'
 
 OCI_TENANCY_OCID=
 OCI_COMPARTMENT_OCID=
+OCI_REGION=us-phoenix-1
+OCI_AVAILABILITY_DOMAIN=
 OCI_VAULT_OCID=
 OCI_VAULT_KEY_OCID=
 OCI_INSTANCE_OCID=
@@ -146,6 +148,11 @@ OCI_SUBNET_OCID=
 INSTANCE_PUBLIC_IP=
 INSTANCE_SSH_KEY_PATH=~/.ssh/oci-budgetanalyzer
 DEMO_DOMAIN=
+GRAFANA_DOMAIN=
+KIALI_DOMAIN=
+JAEGER_DOMAIN=
+LETSENCRYPT_EMAIL=
+PRODUCTION_RELEASE_VERSION=0.0.12
 ```
 
 AI agents can read the template (it's in the repo) and write deployment scripts that reference `$OCI_VAULT_OCID`, but they never see the actual OCID value.
@@ -181,13 +188,13 @@ deploy/
   instance.env.template              # committed — documents expected keys
   vault-bootstrap.sh.template        # committed — OCI Vault population (Pattern A)
   scripts/
-    01-setup-k3s.sh                  # committed — sources instance.env (Pattern B)
-    02-install-istio.sh              # committed — idempotent Helm install
-    03-install-external-secrets.sh   # committed — ESO Helm install
-    04-deploy-infrastructure.sh      # committed — kubectl apply infrastructure
-    05-deploy-services.sh            # committed — kubectl apply services
-    06-setup-tls.sh                  # committed — cert-manager + Let's Encrypt
-    07-deploy-observability.sh       # committed — Prometheus, Grafana, Jaeger, Kiali
+    01-install-k3s.sh                # committed — pinned k3s install
+    02-bootstrap-cluster.sh          # committed — Gateway API CRDs + namespaces
+    03-render-phase-4-istio-manifests.sh
+    04-install-istio.sh              # committed — Istio + mesh policy install
+    05-install-platform-controllers.sh
+    06-configure-host-redirects.sh
+    07-apply-network-policies.sh
 ```
 
 ---

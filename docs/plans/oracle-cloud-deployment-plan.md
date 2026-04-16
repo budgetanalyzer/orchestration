@@ -593,7 +593,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - Phase 4 prepares the ingress install path and port `80` ACME reachability.
    - Public certificate issuance and the final HTTPS listener secret wiring remain in Phase 11.
    - Do not invent an AI-generated certificate, self-signed fallback, or certificate private-key workaround.
-   - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only `Gateway`, and `06-configure-host-redirects.sh` only redirects ports the current ingress Service actually exposes.
+   - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only host-agnostic `Gateway`, and `06-configure-host-redirects.sh` only redirects ports the current ingress Service actually exposes.
 8. **Document the operator handoff in the repo.**
    - `deploy/README.md` must show the exact review/run order, expected inputs, and which later phase reuses each script.
    - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague “generate scripts” placeholder.
@@ -750,7 +750,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    ls -la tmp/phase-4
    ```
 5. **Review the rendered ingress manifests before applying them.**
-   - In Phase 4 the `Gateway` is intentionally HTTP-only and wildcard-scoped so the checked-in localhost `HTTPRoute` manifests can still attach.
+   - In Phase 4 the `Gateway` is intentionally HTTP-only and host-agnostic, with the listener hostname omitted so the checked-in localhost `HTTPRoute` manifests can still attach.
    - The ingress infrastructure ConfigMap should expose NodePort `30080` for service port `80`.
    ```bash
    sed -n '1,220p' tmp/phase-4/ingress-gateway-config.yaml

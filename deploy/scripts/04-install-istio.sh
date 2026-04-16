@@ -22,6 +22,8 @@ require_rendered_manifests() {
 phase4_load_instance_env
 phase4_require_commands helm kubectl
 phase4_require_cluster_access
+phase4_info "refreshing the rendered Phase 4 ingress manifests"
+"${SCRIPT_DIR}/03-render-phase-4-istio-manifests.sh" --output-dir "${RENDERED_OUTPUT_DIR}" >/dev/null
 require_rendered_manifests
 
 phase4_info "installing Istio charts ${PHASE4_ISTIO_CHART_VERSION}"

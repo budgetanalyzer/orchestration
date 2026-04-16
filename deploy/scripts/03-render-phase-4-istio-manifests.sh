@@ -17,8 +17,9 @@ Renders the Phase 4 production ingress ConfigMap and Gateway manifests into
 tmp/phase-4/ for operator review.
 
 The rendered Gateway is intentionally HTTP-only in Phase 4 and keeps a single
-wildcard listener so the checked-in localhost HTTPRoutes still attach until the
-production host-specific HTTPRoutes are rendered in lockstep in a later phase.
+host-agnostic listener with the hostname omitted so the checked-in localhost
+HTTPRoutes still attach until the production host-specific HTTPRoutes are
+rendered in lockstep in a later phase.
 Phase 11 adds the public TLS listener and certificate secret wiring after
 certificate issuance is in place.
 EOF

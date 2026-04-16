@@ -502,7 +502,7 @@ Pattern B here does not mean "AI executes Phase 4." It means the AI assistant ma
       -n cert-manager \
       --create-namespace \
       --version v1.20.2 \
-      --set installCRDs=true \
+      --set crds.enabled=true \
       --set config.enableGatewayAPI=true \
       --values deploy/helm-values/cert-manager.values.yaml \
       --wait

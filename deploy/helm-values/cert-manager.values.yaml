@@ -2,7 +2,8 @@
 # Gateway API support stays enabled here so Phase 4 and Phase 11 share the same
 # controller install contract.
 
-installCRDs: true
+crds:
+  enabled: true
 
 config:
   enableGatewayAPI: true

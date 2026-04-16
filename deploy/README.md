@@ -46,6 +46,14 @@ Do not put secret payloads in `instance.env`. Secret values stay in OCI Vault an
 
 Do not duplicate production image refs in `instance.env`. Production image inventory stays in `kubernetes/production/apps/image-inventory.yaml`.
 
+## Host Tooling Prerequisites
+
+Phase 4 assumes the host already has `kubectl`, `helm`, and the standard shell tools used by the scripts.
+
+- `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
+- On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
+- Verify the install before rerunning the Phase 4 scripts: `helm version`
+
 ## Script Map
 
 | Script | Purpose | Reused Later |

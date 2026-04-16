@@ -7,6 +7,8 @@ readonly PHASE4_REPO_ROOT
 
 # shellcheck source=deploy/scripts/lib/phase-4-version-contract.sh
 source "${PHASE4_COMMON_DIR}/phase-4-version-contract.sh"
+# shellcheck source=scripts/lib/pinned-tool-versions.sh
+source "${PHASE4_REPO_ROOT}/scripts/lib/pinned-tool-versions.sh"
 
 PHASE4_INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE:-${HOME}/.config/budget-analyzer/instance.env}"
 readonly PHASE4_INSTANCE_ENV_FILE
@@ -34,11 +36,29 @@ phase4_die() {
     exit 1
 }
 
+phase4_command_install_hint() {
+    local command_name="$1"
+
+    case "${command_name}" in
+        kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno)
+            phase7_install_hint "${command_name}" "${PHASE4_REPO_ROOT}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 phase4_require_commands() {
     local command_name
+    local install_hint
 
     for command_name in "$@"; do
         if ! command -v "${command_name}" >/dev/null 2>&1; then
+            if install_hint="$(phase4_command_install_hint "${command_name}")"; then
+                phase4_die "required command not found: ${command_name}. Install with: ${install_hint}"
+            fi
+
             phase4_die "required command not found: ${command_name}"
         fi
     done

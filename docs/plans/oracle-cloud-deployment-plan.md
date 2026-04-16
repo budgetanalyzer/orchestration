@@ -403,7 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
-**Status:** Chunks 1 and 2 are complete as of 2026-04-16. The next open work starts at Chunk 3 Step 7, and all preceding Phase 4 work is complete through the base-cluster bootstrap checkpoint.
+**Status:** Chunks 1, 2, and 3 are complete as of 2026-04-16. The next open work starts at Chunk 4 Step 13, and all preceding Phase 4 work is complete through the mesh-install checkpoint.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -611,7 +611,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 2: Bootstrap the Base Cluster
 
-**Status:** Complete as of 2026-04-16. Chunk 3 Step 7 is the next open work item.
+**Status:** Complete as of 2026-04-16. Chunk 4 Step 13 is the next open work item.
 
 3. **[Human]** Install the pinned k3s version with the documented Istio-friendly flags.
 4. **[Human]** Verify the k3s node, system pods, and storage class.
@@ -705,6 +705,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 - Once those checks pass, mark all preceding work complete through Phase 4 Chunk 2.
 
 #### Chunk 3: Install the Mesh
+
+**Status:** Complete as of 2026-04-16. Verified on the OCI host with `gateway/istio-ingress-gateway` `Programmed=True`, the auto-provisioned `istio-ingress-gateway-istio` `NodePort` Service exposing `80:30080`, `PeerAuthentication/default-strict` in `default`, and the checked-in `AuthorizationPolicy` set present in `default`.
 
 7. **[Human]** Install `istio-base`, `istio-cni`, and `istiod` with the pinned chart version and checked-in values.
 8. **[Human]** Install the chart-managed egress gateway in `istio-egress`.
@@ -818,6 +820,11 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
     kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
     kubectl get peerauthentication,authorizationpolicy -n default
     ```
+    Verified on 2026-04-16:
+    - `gateway/istio-ingress-gateway` in `istio-ingress` showed `Programmed=True` with address `istio-ingress-gateway-istio.istio-ingress.svc.cluster.local`
+    - the auto-provisioned Service exposed `15021:32143/TCP` and `80:30080/TCP`
+    - `PeerAuthentication/default-strict` showed `MODE STRICT`
+    - the default namespace contained the checked-in `AuthorizationPolicy` set for `budget-analyzer-web`, `currency-service`, `envoy-metrics-prometheus`, `ext-authz`, `nginx-gateway`, `permission-service`, `session-gateway`, `spring-boot-metrics-prometheus`, and `transaction-service`
 
 **Chunk 3 exit criteria**
 
@@ -827,7 +834,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 - `istio-egress-gateway` is installed and rolled out in `istio-egress`.
 - `gateway/istio-ingress-gateway` in `istio-ingress` is `Programmed`, and its auto-provisioned Service exposes the Phase 4 HTTP listener on port `80` via nodePort `30080`.
 - `PeerAuthentication/default-strict` and the checked-in `AuthorizationPolicy` set are present in `default`.
-- Once those checks pass, mark Phase 4 complete through Chunk 3 and continue with Chunk 4.
+- Complete as of 2026-04-16 from OCI-host verification output.
+- Continue with Chunk 4.
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 

@@ -82,9 +82,6 @@ set_topics "checkstyle-config" \
 set_topics "basic-repository-template" \
     template spring-boot ai-native ai-assisted-development
 
-set_topics "architecture-conversations" \
-    architecture documentation claude-code ai-native ai-assisted-development
-
 set_topics "claude-discovery" \
     claude-code ai-native ai-assisted-development
 

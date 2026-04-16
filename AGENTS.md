@@ -8,11 +8,10 @@
 
 ### Relationships
 - **Coordinates**: All service repos (via patterns and selective documentation/configuration updates, not sibling code changes)
-- **Observed by**: architecture-conversations
 
 ### Permissions
 - **Read**: All siblings via `../`
-- **Write**: This repository; capture conversations to `../architecture-conversations/`; documentation and configuration in sibling repos (no sibling code)
+- **Write**: This repository; documentation and configuration in sibling repos (no sibling code)
 
 ### Discovery
 ```bash
@@ -317,7 +316,6 @@ All repositories should be cloned side-by-side in a common parent directory:
 ├── budget-analyzer-web/        # React frontend
 ├── service-common/             # Shared Java library
 ├── checkstyle-config/          # Shared checkstyle rules
-├── architecture-conversations/ # Architectural discourse and patterns
 └── claude-discovery/           # Experimental discovery tool
 ```
 

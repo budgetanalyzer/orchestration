@@ -14,17 +14,6 @@ You're now in the devcontainer. You'll see all repos in the sidebar, but don't j
 
 ---
 
-## Talk to Architecture Claude
-
-Want to discuss AI-native architecture patterns, explore how this system is designed, or understand the decisions behind it?
-
-1. File → Open Folder → `/workspace/architecture-conversations`
-2. Start a Claude Code conversation
-
-Claude has full context on the architectural patterns and the relationships between repos.
-
----
-
 ## Run the Budget Analyzer App
 
 Want to see the microservices architecture running locally? Useful for understanding how the pieces connect or making changes to services.

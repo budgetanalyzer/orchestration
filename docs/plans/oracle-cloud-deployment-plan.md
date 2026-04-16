@@ -839,11 +839,132 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
+**Status:** Planned as of 2026-04-16. Human execution on the OCI host is still open. Step 12 no longer blocks the chunk because the hardened Helm values already exist under `deploy/helm-values/`, but the runtime NetworkPolicy enforcement proof is still an open execution requirement before Phase 5.
+
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
 13. **[Human]** Install External Secrets Operator with pinned values.
 14. **[Human]** Install cert-manager with Gateway API support enabled and pinned values.
 15. **[Human]** Add the host `iptables` redirects after the ingress NodePorts exist.
 16. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
+
+**Chunk 4 implementation plan**
+
+1. **Close the remaining repo-owned verification gap before calling this chunk complete.**
+   - Step 12 is already satisfied by the checked-in hardened values at `deploy/helm-values/external-secrets.values.yaml` and `deploy/helm-values/cert-manager.values.yaml`.
+   - `deploy/scripts/05-install-platform-controllers.sh`, `deploy/scripts/06-configure-host-redirects.sh`, and `deploy/scripts/07-apply-network-policies.sh` are already the canonical human-run path for Steps 13-16.
+   - What is still missing is a repeatable production-safe enforcement proof. `deploy/scripts/07-apply-network-policies.sh` only applies manifests and explicitly warns that runtime NetworkPolicy validation still remains.
+   - Before marking Chunk 4 complete, add a repo-owned verifier script or equivalent committed probe-manifest path for OCI production use. Preferred shape: `deploy/scripts/08-verify-network-policy-enforcement.sh`, modeled on `scripts/smoketest/verify-phase-2-network-policies.sh`, but rewritten so it does not depend on Tilt or already-deployed application workloads.
+   - That verifier should create disposable listener and probe pods with `sidecar.istio.io/inject: "false"` and labels matching the checked-in NetworkPolicy selectors, then clean them up after the proof run.
+   - Validate any new shell surface with `bash -n` and `shellcheck` before handing it to the human operator.
+2. **Run this chunk on the OCI instance from the checked-out repo root.**
+   - Chunk 3 must already be complete on this host and cluster.
+   - Export the k3s kubeconfig in the interactive shell before running manual verification commands; unlike the repo scripts, your shell will not auto-populate `KUBECONFIG`.
+   - Stop here if the ingress `Gateway` is no longer `Programmed`, if the auto-provisioned ingress Service no longer exposes service port `80`, or if `~/.config/budget-analyzer/instance.env` is missing.
+   ```bash
+   cd /path/to/orchestration
+   test -f ~/.config/budget-analyzer/instance.env
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   kubectl get gateway -n istio-ingress
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+   ```
+3. **Review the exact controller, redirect, and policy contract before mutating the live host.**
+   - This is the human review gate for the pinned chart versions, checked-in values, and the current host-wiring scripts.
+   ```bash
+   sed -n '1,200p' deploy/scripts/lib/phase-4-version-contract.sh
+   sed -n '1,220p' deploy/scripts/05-install-platform-controllers.sh
+   sed -n '1,240p' deploy/scripts/06-configure-host-redirects.sh
+   sed -n '1,220p' deploy/scripts/07-apply-network-policies.sh
+   sed -n '1,220p' deploy/helm-values/external-secrets.values.yaml
+   sed -n '1,240p' deploy/helm-values/cert-manager.values.yaml
+   ```
+4. **Install External Secrets Operator and cert-manager with the repo-owned script.**
+   - `deploy/scripts/05-install-platform-controllers.sh` is the canonical path for Human Steps 13 and 14 together; do not bypass it with ad hoc Helm commands unless you are debugging a failure.
+   - The script installs the pinned chart versions from `deploy/scripts/lib/phase-4-version-contract.sh` and waits for both releases.
+   ```bash
+   ./deploy/scripts/05-install-platform-controllers.sh
+   ```
+5. **Verify the External Secrets Operator installation before moving on.**
+   - Stop here if the release is missing, if the controller/webhook pods are not ready, or if the expected CRDs are absent.
+   ```bash
+   helm list -n external-secrets
+   kubectl get pods -n external-secrets
+   kubectl get crd \
+     clustersecretstores.external-secrets.io \
+     secretstores.external-secrets.io \
+     externalsecrets.external-secrets.io
+   ```
+   Expect:
+   - `external-secrets` release present in namespace `external-secrets`
+   - the controller, webhook, and cert-controller pods ready
+   - ESO CRDs installed before Phase 5 creates the `ClusterSecretStore` and `ExternalSecret` resources
+6. **Verify the cert-manager installation and the Gateway API setting.**
+   - Stop here if `cert-manager`, `cert-manager-cainjector`, or `cert-manager-webhook` is not `Ready`.
+   - Verify the release values still show `config.enableGatewayAPI=true`; do not assume that from chart defaults.
+   ```bash
+   helm list -n cert-manager
+   helm get values cert-manager -n cert-manager
+   kubectl get pods -n cert-manager
+   kubectl get crd \
+     certificates.cert-manager.io \
+     certificaterequests.cert-manager.io \
+     clusterissuers.cert-manager.io \
+     issuers.cert-manager.io
+   ```
+   Expect:
+   - `cert-manager` release present in namespace `cert-manager`
+   - `config.enableGatewayAPI: true` visible in the Helm values output
+   - cert-manager CRDs installed before Phase 11 introduces the public certificate flow
+7. **Add persistent host redirects only after the ingress NodePorts are confirmed.**
+   - Phase 4 remains HTTP-only. The expected live redirect after Chunk 3 is `80 -> 30080`.
+   - Do not keep a stale `443` redirect in place; HTTPS listener wiring is still Phase 11 work.
+   ```bash
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway -o wide
+   ./deploy/scripts/06-configure-host-redirects.sh
+   ```
+8. **Verify the redirect result on the host.**
+   - Stop here if the NAT table does not contain a port `80` redirect to the current ingress nodePort, or if a stale `443` redirect remains with no live ingress port `443` nodePort.
+   ```bash
+   sudo iptables -t nat -S PREROUTING
+   sudo netfilter-persistent save
+   curl -I --max-time 5 http://127.0.0.1/ || true
+   ```
+   Expect:
+   - a `PREROUTING` redirect from host port `80` to the current ingress nodePort, which is `30080` in the current reviewed render
+   - no `443` redirect yet
+   - an HTTP response or Envoy-generated 404 from `127.0.0.1:80`, not a connection refusal
+9. **Apply the checked-in NetworkPolicy manifests only after the controller namespaces and ingress service are stable.**
+   - This is the canonical path for the first half of Human Step 16.
+   ```bash
+   ./deploy/scripts/07-apply-network-policies.sh
+   kubectl get networkpolicy -A
+   ```
+10. **Prove actual NetworkPolicy enforcement on the selected k3s network-policy path before moving to Phase 5.**
+   - Resource existence is not proof. `kubectl get networkpolicy` only shows that the API objects were accepted.
+   - Preferred path: run the repo-owned verifier from Step 1 after it is added.
+   - Minimum assertions for that verifier:
+     - an unlabeled probe pod in `default` gets DNS egress only and cannot reach protected ports in `default`, `infrastructure`, or `istio-egress`
+     - a probe pod in `istio-ingress` labeled `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` can reach temporary listener pods in `default` labeled `app=nginx-gateway`, `app=ext-authz`, and `app=session-gateway` on ports `8080`, `9002`, and `8081`
+     - appropriately labeled default-namespace probe pods can reach only the approved infrastructure listeners labeled `app=postgresql`, `app=redis`, and `app=rabbitmq` on ports `5432`, `6379`, and `5671`
+     - denied cross-edges stay denied, especially unlabeled `default` traffic, `transaction-service -> redis`, `ext-authz -> postgresql`, and unauthorized access to `istio-egress-gateway:443`
+     - labeled probes that should reach `istiod.istio-system:15012` and the approved callers for `istio-egress-gateway.istio-egress:443` can do so
+   - If any deny check unexpectedly succeeds, stop. The current k3s network-policy path is not enforcing the repo contract correctly, and the fix belongs before Phase 5. If the built-in path is insufficient, install a supported CNI such as Calico rather than weakening the policy set.
+11. **Record the completion point and advance to Phase 5 only after the runtime proof passes.**
+   - Chunk 4 is not complete when the Helm installs succeed but the CNI enforcement proof is still missing.
+   - Once the controller installs, host redirects, manifest apply, and runtime enforcement proof all pass, mark Phase 4 complete and move to the OCI Vault / External Secrets work in Phase 5.
+   ```bash
+   helm list -n external-secrets
+   helm list -n cert-manager
+   kubectl get networkpolicy -A
+   sudo iptables -t nat -S PREROUTING
+   ```
+
+**Chunk 4 exit criteria**
+
+- `external-secrets` is installed in namespace `external-secrets` at the pinned chart version from `deploy/scripts/lib/phase-4-version-contract.sh`, and its controller/webhook/cert-controller pods are ready.
+- `cert-manager` is installed in namespace `cert-manager` at the pinned chart version, and the live Helm values still show `config.enableGatewayAPI=true`.
+- Host NAT redirect rules persist across reboot and currently expose only the reviewed Phase 4 HTTP ingress path on port `80`; no stale `443` redirect remains.
+- The checked-in NetworkPolicy manifests are present in `default`, `infrastructure`, `istio-ingress`, and `istio-egress`.
+- A runtime probe-based verification proves the selected k3s network-policy implementation actually enforces the repo's allow/deny contract. Without that proof, do not claim Chunk 4 complete and do not move to Phase 5.
 
 ### Outputs
 

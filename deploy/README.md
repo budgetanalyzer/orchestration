@@ -98,6 +98,39 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
    ```
 5. Stop if the ingress `Gateway` is not `Programmed`, if the auto-provisioned Service does not expose port `80`/nodePort `30080`, or if `PeerAuthentication/default-strict` is missing from `default`.
 
+## Chunk 4 Checkpoint
+
+If you are resuming at Phase 4 Chunk 4, use this checkpoint before moving to Phase 5:
+
+1. Reconfirm the Chunk 3 ingress state and review the detailed Chunk 4 plan in `docs/plans/oracle-cloud-deployment-plan.md`.
+   ```bash
+   test -f ~/.config/budget-analyzer/instance.env
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   kubectl get gateway -n istio-ingress
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+   ```
+2. Install the supporting controllers with the checked-in script.
+   ```bash
+   ./deploy/scripts/05-install-platform-controllers.sh
+   helm list -n external-secrets
+   helm list -n cert-manager
+   kubectl get pods -n external-secrets
+   kubectl get pods -n cert-manager
+   ```
+3. Add the host redirects only after the ingress NodePorts are present.
+   ```bash
+   ./deploy/scripts/06-configure-host-redirects.sh
+   sudo iptables -t nat -S PREROUTING
+   ```
+4. Apply the checked-in NetworkPolicy manifests.
+   ```bash
+   ./deploy/scripts/07-apply-network-policies.sh
+   kubectl get networkpolicy -A
+   ```
+5. Stop here until the runtime NetworkPolicy enforcement proof also passes.
+   - The current checked-in scripts install the controllers, redirects, and policy objects, but they do not yet provide the final probe-based CNI enforcement proof by themselves.
+   - Use the detailed Chunk 4 implementation plan in `docs/plans/oracle-cloud-deployment-plan.md` as the source of truth for that final verification requirement before Phase 5.
+
 ## Phase Boundary Notes
 
 `deploy/scripts/03-render-phase-4-istio-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single host-agnostic listener and omits `spec.listeners[].hostname`. That keeps the checked-in localhost `HTTPRoute` manifests attachable during Phase 4 while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in Phase 11.

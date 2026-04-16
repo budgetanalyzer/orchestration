@@ -712,6 +712,119 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 10. **[Human]** Apply the ingress namespace, ingress infrastructure config, and production `Gateway` resources, then wait for `Programmed` and rollout success.
 11. **[Human]** Apply `kubernetes/istio/peer-authentication.yaml` and `kubernetes/istio/authorization-policies.yaml`. Do not apply placeholder egress routing until the production Auth0 issuer config exists.
 
+**Chunk 3 implementation plan**
+
+1. **Run this chunk on the OCI instance from the checked-out repo root.**
+   - Chunk 2 must already be complete on this host and cluster.
+   - The current checked-in render templates under `deploy/manifests/phase-4/` are the reviewed ingress inputs for this chunk; no extra AI-generated placeholder cleanup is pending before the human run.
+   ```bash
+   cd /path/to/orchestration
+   pwd
+   ```
+2. **Confirm the required non-secret operator input still exists.**
+   - `deploy/scripts/03-render-phase-4-istio-manifests.sh` and `deploy/scripts/04-install-istio.sh` both load `~/.config/budget-analyzer/instance.env`.
+   - Stop here if the file is missing or stale.
+   ```bash
+   test -f ~/.config/budget-analyzer/instance.env
+   sed -n '1,220p' ~/.config/budget-analyzer/instance.env
+   ```
+3. **Review the exact Chunk 3 contract and inputs before mutating the live cluster.**
+   - This is the human review gate for the pinned Istio version, Helm values, and rendered-ingress source templates.
+   ```bash
+   sed -n '1,200p' deploy/scripts/lib/phase-4-version-contract.sh
+   sed -n '1,260p' deploy/scripts/03-render-phase-4-istio-manifests.sh
+   sed -n '1,320p' deploy/scripts/04-install-istio.sh
+   sed -n '1,220p' deploy/manifests/phase-4/ingress-gateway-config.yaml.template
+   sed -n '1,220p' deploy/manifests/phase-4/istio-gateway.yaml.template
+   sed -n '1,220p' kubernetes/istio/cni-values.yaml
+   sed -n '1,260p' kubernetes/istio/istiod-values.yaml
+   sed -n '1,220p' kubernetes/istio/egress-gateway-values.yaml
+   ```
+4. **Render the reviewed Phase 4 ingress manifests into `tmp/phase-4/`.**
+   - This is the concrete operator step that closes Human Step 10's "ingress infrastructure config and production `Gateway` resources" preparation path.
+   - Stop here if the render fails or leaves unresolved placeholders.
+   ```bash
+   ./deploy/scripts/03-render-phase-4-istio-manifests.sh
+   ls -la tmp/phase-4
+   ```
+5. **Review the rendered ingress manifests before applying them.**
+   - In Phase 4 the `Gateway` is intentionally HTTP-only and wildcard-scoped so the checked-in localhost `HTTPRoute` manifests can still attach.
+   - The ingress infrastructure ConfigMap should expose NodePort `30080` for service port `80`.
+   ```bash
+   sed -n '1,220p' tmp/phase-4/ingress-gateway-config.yaml
+   sed -n '1,220p' tmp/phase-4/istio-gateway.yaml
+   grep -n "nodePort" tmp/phase-4/ingress-gateway-config.yaml
+   grep -n "protocol: HTTP" tmp/phase-4/istio-gateway.yaml
+   ```
+6. **Install the mesh and apply the rendered ingress resources with the repo-owned script.**
+   - This single script covers Human Steps 7, 8, 10, and 11 in the correct order:
+     - installs `istio-base`, `istio-cni`, and `istiod`
+     - installs the chart-managed egress gateway
+     - applies the rendered ingress namespace, ConfigMap, and `Gateway`
+     - waits for the `Gateway` to become `Programmed`
+     - applies `kubernetes/istio/peer-authentication.yaml` and `kubernetes/istio/authorization-policies.yaml`
+   ```bash
+   ./deploy/scripts/04-install-istio.sh
+   ```
+7. **Verify the Istio control plane and egress gateway state before moving on.**
+   - Stop here if any Helm release is missing, if `istiod` is not `Available`, or if the egress gateway deployment is not rolled out.
+   ```bash
+   helm list -n istio-system
+   helm list -n istio-egress
+   kubectl get pods -n istio-system
+   kubectl get pods -n istio-egress
+   kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=180s
+   kubectl rollout status deployment/istiod -n istio-system --timeout=180s
+   kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=180s
+   ```
+   Expect:
+   - `istio-base`, `istio-cni`, and `istiod` releases present in `istio-system`
+   - `istio-egress-gateway` release present in `istio-egress`
+   - `istio-cni-node`, `istiod`, and `istio-egress-gateway` healthy after rollout
+8. **Verify the ingress gateway was auto-provisioned from Gateway API and is serving the Phase 4 HTTP listener.**
+   - Stop here if the `Gateway` is not `Programmed`, if the ingress deployment did not roll out, or if the Service does not expose port `80`.
+   ```bash
+   kubectl get gateway -n istio-ingress
+   kubectl describe gateway istio-ingress-gateway -n istio-ingress
+   kubectl get deploy -n istio-ingress
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+   kubectl get pods -n istio-ingress
+   ```
+   Expect:
+   - `gateway/istio-ingress-gateway` shows `Programmed=True`
+   - `deployment/istio-ingress-gateway-istio` is `Available`
+   - the auto-provisioned Service exposes port `80` with nodePort `30080`
+   - no Phase 4 expectation for `443` yet; HTTPS listener wiring remains Phase 11 work
+9. **Verify the mesh security policies landed in the cluster.**
+   - This is the completion proof for Human Step 11.
+   - Do not apply placeholder egress routing in this chunk; only the checked-in peer authentication and authorization policies belong here.
+   ```bash
+   kubectl get peerauthentication -n default
+   kubectl get authorizationpolicy -n default
+   kubectl get peerauthentication default-strict -n default -o yaml
+   ```
+   Expect:
+   - `PeerAuthentication/default-strict` exists in `default` with `mtls.mode: STRICT`
+   - the default namespace shows the checked-in AuthorizationPolicies for ingress-facing services, backend services, and Prometheus scraping
+10. **Record the completion point and advance to Chunk 4 only after the mesh checks pass.**
+    - If Steps 4-9 succeeded, Chunk 3 is complete and the next human work is Chunk 4 Steps 13-16.
+    - Do not move on to host redirects or network policies until the ingress Service and mesh policies are verified.
+    ```bash
+    kubectl get gateway -n istio-ingress
+    kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+    kubectl get peerauthentication,authorizationpolicy -n default
+    ```
+
+**Chunk 3 exit criteria**
+
+- `deploy/scripts/03-render-phase-4-istio-manifests.sh` ran successfully and produced reviewed YAML under `tmp/phase-4/`.
+- `deploy/scripts/04-install-istio.sh` completed without Helm or rollout failures.
+- `istio-base`, `istio-cni`, and `istiod` are installed at the pinned version from `deploy/scripts/lib/phase-4-version-contract.sh`.
+- `istio-egress-gateway` is installed and rolled out in `istio-egress`.
+- `gateway/istio-ingress-gateway` in `istio-ingress` is `Programmed`, and its auto-provisioned Service exposes the Phase 4 HTTP listener on port `80` via nodePort `30080`.
+- `PeerAuthentication/default-strict` and the checked-in `AuthorizationPolicy` set are present in `default`.
+- Once those checks pass, mark Phase 4 complete through Chunk 3 and continue with Chunk 4.
+
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.

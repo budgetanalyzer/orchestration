@@ -58,6 +58,36 @@ Do not duplicate production image refs in `instance.env`. Production image inven
 | `deploy/scripts/06-configure-host-redirects.sh` | Adds persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. | Re-run if the gateway service ports change, especially when Phase 11 adds or removes HTTPS. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 
+## Chunk 3 Checkpoint
+
+If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-reading shell history:
+
+1. Confirm Chunk 2 is already complete and `~/.config/budget-analyzer/instance.env` still exists.
+   ```bash
+   test -f ~/.config/budget-analyzer/instance.env
+   kubectl get namespace \
+     default infrastructure monitoring istio-system istio-ingress istio-egress external-secrets cert-manager
+   ```
+2. Render the reviewed ingress manifests into `tmp/phase-4/`.
+   ```bash
+   ./deploy/scripts/03-render-phase-4-istio-manifests.sh
+   sed -n '1,220p' tmp/phase-4/ingress-gateway-config.yaml
+   sed -n '1,220p' tmp/phase-4/istio-gateway.yaml
+   ```
+3. Run the mesh install script. It covers the remaining human-owned Chunk 3 work in order.
+   ```bash
+   ./deploy/scripts/04-install-istio.sh
+   ```
+4. Verify the control plane, egress gateway, and ingress gateway before moving to Chunk 4.
+   ```bash
+   helm list -n istio-system
+   helm list -n istio-egress
+   kubectl get gateway -n istio-ingress
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+   kubectl get peerauthentication,authorizationpolicy -n default
+   ```
+5. Stop if the ingress `Gateway` is not `Programmed`, if the auto-provisioned Service does not expose port `80`/nodePort `30080`, or if `PeerAuthentication/default-strict` is missing from `default`.
+
 ## Phase Boundary Notes
 
 `deploy/scripts/03-render-phase-4-istio-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single wildcard listener. That keeps the checked-in localhost `HTTPRoute` manifests attachable during Phase 4 while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in Phase 11.

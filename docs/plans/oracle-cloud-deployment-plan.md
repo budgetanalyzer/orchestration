@@ -723,9 +723,11 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    ```
 2. **Confirm the required non-secret operator input still exists.**
    - `deploy/scripts/03-render-phase-4-istio-manifests.sh` and `deploy/scripts/04-install-istio.sh` both load `~/.config/budget-analyzer/instance.env`.
+   - Export the k3s kubeconfig into your shell before running manual `helm` verification commands; unlike the repo scripts, your interactive shell will not auto-populate `KUBECONFIG`.
    - Stop here if the file is missing or stale.
    ```bash
    test -f ~/.config/budget-analyzer/instance.env
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    sed -n '1,220p' ~/.config/budget-analyzer/instance.env
    ```
 3. **Review the exact Chunk 3 contract and inputs before mutating the live cluster.**
@@ -769,6 +771,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 7. **Verify the Istio control plane and egress gateway state before moving on.**
    - Stop here if any Helm release is missing, if `istiod` is not `Available`, or if the egress gateway deployment is not rolled out.
    ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    helm list -n istio-system
    helm list -n istio-egress
    kubectl get pods -n istio-system
@@ -784,6 +787,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 8. **Verify the ingress gateway was auto-provisioned from Gateway API and is serving the Phase 4 HTTP listener.**
    - Stop here if the `Gateway` is not `Programmed`, if the ingress deployment did not roll out, or if the Service does not expose port `80`.
    ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    kubectl get gateway -n istio-ingress
    kubectl describe gateway istio-ingress-gateway -n istio-ingress
    kubectl get deploy -n istio-ingress

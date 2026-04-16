@@ -73,6 +73,7 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
 1. Confirm Chunk 2 is already complete and `~/.config/budget-analyzer/instance.env` still exists.
    ```bash
    test -f ~/.config/budget-analyzer/instance.env
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    kubectl get namespace \
      default infrastructure monitoring istio-system istio-ingress istio-egress external-secrets cert-manager
    ```
@@ -88,6 +89,7 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
    ```
 4. Verify the control plane, egress gateway, and ingress gateway before moving to Chunk 4.
    ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    helm list -n istio-system
    helm list -n istio-egress
    kubectl get gateway -n istio-ingress

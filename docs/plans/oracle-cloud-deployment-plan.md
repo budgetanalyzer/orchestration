@@ -892,9 +892,9 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
     - Verify:
       ```bash
       sudo iptables -t nat -S PREROUTING
-      curl -I --max-time 5 http://127.0.0.1/ || true
+      curl -I --max-time 5 http://127.0.0.1:30080/ || true
       ```
-    - Stop if host port `80` is not redirected to the current ingress nodePort, if a stale `443` redirect remains, or if `http://127.0.0.1/` is connection-refused.
+    - Stop if host port `80` is not redirected to the current ingress nodePort in `PREROUTING`, if a stale `443` redirect remains, or if the ingress NodePort itself is connection-refused at `http://127.0.0.1:30080/`. If you want to prove the host redirect path end to end, run `curl -I http://<public-ip>/` from your workstation rather than from the SSH session.
 16. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
     - **Status:** Open.
     - Run:

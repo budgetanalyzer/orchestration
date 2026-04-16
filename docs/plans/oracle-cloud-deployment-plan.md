@@ -404,17 +404,19 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
 
+Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
+
 ### Steps
 
 1. **Install a pinned k3s version** with Istio-friendly flags.
    ```bash
-   curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<pinned-supported-version> INSTALL_K3S_EXEC="\
+   curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<pinned-stable-version> INSTALL_K3S_EXEC="\
      --disable=traefik \
      --disable=servicelb \
      --disable=metrics-server \
      --write-kubeconfig-mode=644" sh -
    ```
-   Use a k3s version compatible with the repo's Istio baseline. Do not leave the install unpinned.
+   Use the current **K3s stable-channel** release that is compatible with the repo's Istio baseline, not the K3s `latest` channel. Do not leave the install unpinned.
 2. **Verify k3s.**
    ```bash
    kubectl get nodes
@@ -441,18 +443,18 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
    helm upgrade --install istio-base istio/base \
      --namespace istio-system \
      --create-namespace \
-     --version 1.29.1 \
+     --version 1.29.2 \
      --wait
 
    helm upgrade --install istio-cni istio/cni \
      --namespace istio-system \
-     --version 1.29.1 \
+     --version 1.29.2 \
      --values kubernetes/istio/cni-values.yaml \
      --wait
 
    helm upgrade --install istiod istio/istiod \
      --namespace istio-system \
-     --version 1.29.1 \
+     --version 1.29.2 \
      --values kubernetes/istio/istiod-values.yaml \
      --wait
    ```
@@ -461,7 +463,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
    kubectl apply -f kubernetes/istio/egress-namespace.yaml
    helm upgrade --install istio-egress-gateway istio/gateway \
      --namespace istio-egress \
-     --version 1.29.1 \
+     --version 1.29.2 \
      --values kubernetes/istio/egress-gateway-values.yaml \
      --wait
    ```
@@ -488,8 +490,8 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
    helm repo add external-secrets https://charts.external-secrets.io
    helm upgrade --install external-secrets external-secrets/external-secrets \
      -n external-secrets \
-     --version <pinned-version> \
-     --values <production-external-secrets-values.yaml> \
+     --version 2.2.0 \
+     --values deploy/helm-values/external-secrets.values.yaml \
      --wait
    ```
 10. **Install cert-manager with Gateway API support enabled and pinned/hardened chart values.**
@@ -498,10 +500,10 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
     helm upgrade --install cert-manager jetstack/cert-manager \
       -n cert-manager \
       --create-namespace \
-      --version <pinned-version> \
+      --version v1.20.2 \
       --set installCRDs=true \
       --set config.enableGatewayAPI=true \
-      --values <production-cert-manager-values.yaml> \
+      --values deploy/helm-values/cert-manager.values.yaml \
       --wait
     ```
 11. **Set up host port redirects after NodePorts exist.**
@@ -516,6 +518,106 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
     kubectl apply -f kubernetes/network-policies/
     ```
     Validate enforcement on k3s. If the selected k3s CNI does not enforce the repo's NetworkPolicy contract correctly, install a supported CNI such as Calico before continuing.
+
+### Phase 4 Execution Order (Detailed)
+
+This is the exact execution order for Phase 4. Follow the steps in order. Each step names the owner so there is no hidden handoff.
+
+#### Phase 4 Script Boundary
+
+- Reusable Phase 4 deployment scripts belong under `deploy/scripts/`.
+- Temporary draft helpers, scratch scripts, or debug probes may live under `tmp/` while they are being iterated.
+- Do not treat `tmp/` as the long-term deployment path. If the command becomes part of the repeatable install flow, promote it into a committed `deploy/scripts/` artifact before calling Phase 4 complete.
+- Not every short one-time command needs its own script, but anything long, stateful, or likely to be re-run should stop living as copy-paste shell history and move into a reviewed Pattern B script.
+
+#### Chunk 1: Prepare the Install Path
+
+1. **[AI Assistant]** Convert the raw Phase 4 command sequence into a reviewed, repeatable, repo-owned install path before the human touches the OCI host.
+2. **[Human]** Review the generated artifacts, confirm the pins, and only then run them on the OCI instance.
+
+**Chunk 1 implementation plan**
+
+1. **Create the deployment scaffold in-repo.**
+   - Add `deploy/README.md`, `deploy/instance.env.template`, `deploy/scripts/`, `deploy/helm-values/`, and `deploy/manifests/phase-4/`.
+   - Keep runtime render output in `tmp/`, not under `deploy/`.
+   - Treat `deploy/` as the committed operator-facing surface for Pattern B scripts only.
+2. **Define the Phase 4 version contract in one place.**
+   - Current target pins for this plan revision, as of **April 15, 2026**, using the **latest stable/supported** choice for production rather than the newest available release:
+     - k3s `v1.34.6+k3s1`
+     - Gateway API CRDs `v1.4.0`
+     - Istio charts `1.29.2`
+     - External Secrets Operator chart `2.2.0`
+     - cert-manager chart `v1.20.2`
+   - Keep those pins in a shared shell include so every Phase 4 script reads the same contract.
+   - Selection rule:
+     - prefer the upstream **stable** or explicitly **supported** release line
+     - then take the latest patch in that line
+     - do **not** automatically follow a project's `latest` channel or a freshly published minor release
+   - Gateway API intentionally stays on `v1.4.0` until the repo validates a newer CRD bundle against the current Istio/Gateway baseline.
+   - External Secrets intentionally stays on `2.2.0` for now because the project's published stability/support page still identifies `2.2` as the current supported minor; do not jump to `2.3.0` until the support docs catch up or the project explicitly marks `2.3` supported.
+3. **Add a shared deploy helper library.**
+   - Resolve the repo root without hardcoding `/workspace`.
+   - Load `~/.config/budget-analyzer/instance.env`.
+   - Fall back to `/etc/rancher/k3s/k3s.yaml` for `KUBECONFIG` after k3s install.
+   - Centralize common logging, required-command checks, and `sudo`/root wrappers for host mutations.
+4. **Add the human-run Phase 4 scripts in execution order.**
+   - `deploy/scripts/01-install-k3s.sh`
+   - `deploy/scripts/02-bootstrap-cluster.sh`
+   - `deploy/scripts/03-render-phase-4-istio-manifests.sh`
+   - `deploy/scripts/04-install-istio.sh`
+   - `deploy/scripts/05-install-platform-controllers.sh`
+   - `deploy/scripts/06-configure-host-redirects.sh`
+   - `deploy/scripts/07-apply-network-policies.sh`
+   - Each script must be idempotent, non-secret, and safe to review before execution.
+5. **Make the raw Kubernetes host mutations explicit instead of embedded shell history.**
+   - `01-install-k3s.sh`: install pinned k3s with `--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644`.
+   - `02-bootstrap-cluster.sh`: install Gateway API CRDs and label `default`, `infrastructure`, `monitoring`, `istio-system`, `istio-ingress`, `istio-egress`, `external-secrets`, and `cert-manager`.
+   - `04-install-istio.sh`: install `istio-base`, `istio-cni`, `istiod`, and the chart-managed egress gateway, then apply the mesh security policy manifests.
+   - `05-install-platform-controllers.sh`: install External Secrets Operator and cert-manager from pinned charts using checked-in values.
+   - `06-configure-host-redirects.sh`: add idempotent `iptables` redirects only after the ingress NodePorts exist.
+   - `07-apply-network-policies.sh`: apply `kubernetes/network-policies/` without adding production-only workaround policies.
+6. **Check in the missing non-secret manifests and values needed by Phase 4.**
+   - Add hardened values files for External Secrets Operator and cert-manager under `deploy/helm-values/`.
+   - Add a production-phase ingress gateway infrastructure template and `Gateway` template under `deploy/manifests/phase-4/`.
+   - Render those templates from `instance.env`; do not leave raw copy-paste placeholders in the human install path.
+7. **Keep TLS scope explicit for Phase 4.**
+   - Phase 4 prepares the ingress install path and port `80` ACME reachability.
+   - Public certificate issuance and the final HTTPS listener secret wiring remain in Phase 11.
+   - Do not invent an AI-generated certificate, self-signed fallback, or certificate private-key workaround.
+8. **Document the operator handoff in the repo.**
+   - `deploy/README.md` must show the exact review/run order, expected inputs, and which later phase reuses each script.
+   - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague “generate scripts” placeholder.
+9. **Validate the install-path artifacts before calling Chunk 1 complete.**
+   - Run `bash -n` and `shellcheck` on every new or modified `deploy/scripts/*.sh`.
+   - If a render helper exists, run it locally with sample non-secret inputs and confirm it produces reviewable YAML under `tmp/`.
+   - Do not call Chunk 1 complete with unvalidated shell scripts or placeholder-only manifest templates.
+10. **Chunk 1 exit criteria.**
+   - A reviewer can clone the repo, inspect `deploy/README.md`, copy `deploy/instance.env.template`, and see the exact Phase 4 execution order without consulting shell history.
+   - All Phase 4 version pins are explicit and centralized.
+   - No secret values, OCI private keys, or certificate private keys enter the repo or AI workspace.
+
+#### Chunk 2: Bootstrap the Base Cluster
+
+3. **[Human]** Install the pinned k3s version with the documented Istio-friendly flags.
+4. **[Human]** Verify the k3s node, system pods, and storage class.
+5. **[Human]** Install the Gateway API CRDs.
+6. **[Human]** Create and label the namespaces before admission policies or Helm installs.
+
+#### Chunk 3: Install the Mesh
+
+7. **[Human]** Install `istio-base`, `istio-cni`, and `istiod` with the pinned chart version and checked-in values.
+8. **[Human]** Install the chart-managed egress gateway in `istio-egress`.
+9. **[AI Assistant]** If the production ingress overlay or ingress-gateway infrastructure config is still placeholder-only, prepare the non-secret manifest updates in-repo for human review.
+10. **[Human]** Apply the ingress namespace, ingress infrastructure config, and production `Gateway` resources, then wait for `Programmed` and rollout success.
+11. **[Human]** Apply `kubernetes/istio/peer-authentication.yaml` and `kubernetes/istio/authorization-policies.yaml`. Do not apply placeholder egress routing until the production Auth0 issuer config exists.
+
+#### Chunk 4: Install Supporting Controllers and Host Wiring
+
+12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
+13. **[Human]** Install External Secrets Operator with pinned values.
+14. **[Human]** Install cert-manager with Gateway API support enabled and pinned values.
+15. **[Human]** Add the host `iptables` redirects after the ingress NodePorts exist.
+16. **[Human]** Apply the network policies and verify the selected k3s CNI actually enforces the repo's NetworkPolicy contract before moving to Phase 5.
 
 ### Outputs
 

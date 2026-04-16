@@ -164,7 +164,7 @@ For one-time operations touching IAM, vault creation, and secret population. AI 
 
 ### Pattern B: Idempotent scripts sourcing external config
 
-For repeatable deployment operations. Scripts live in `deploy/scripts/`, source `~/.config/budget-analyzer/instance.env`, and are safe to re-run. Human reviews and executes.
+For repeatable deployment operations. Scripts live in `deploy/scripts/`, source `~/.config/budget-analyzer/instance.env`, and are safe to re-run. Human reviews and executes. Temporary drafts or debug probes may live under `tmp/` while they are being iterated, but the repeatable deployment path belongs in `deploy/scripts/`, not `tmp/`.
 
 **Used for:** k3s installation, Helm chart installs (Istio, ESO, cert-manager, observability), application deployment, certificate renewal.
 

@@ -235,35 +235,22 @@ phase4_add_nat_redirect() {
     local redirect_rules=()
     local rule
     local rule_parts=()
-    local exact_rule_present=false
     local stale_rule_removed=false
 
     mapfile -t redirect_rules < <(phase4_list_nat_redirect_delete_rules "${public_port}")
 
     for rule in "${redirect_rules[@]}"; do
-        if [[ "${rule}" =~ (--to-ports|--to-port)[[:space:]]+${node_port}([[:space:]]|$) ]] && [[ "${exact_rule_present}" == false ]]; then
-            exact_rule_present=true
-            continue
-        fi
-
         read -r -a rule_parts <<< "${rule}"
         phase4_run_sudo iptables -t nat "${rule_parts[@]}"
         stale_rule_removed=true
     done
 
-    if [[ "${exact_rule_present}" == true ]]; then
-        if [[ "${stale_rule_removed}" == true ]]; then
-            phase4_info "reconciled iptables redirect ${public_port} -> ${node_port}"
-        else
-            phase4_info "iptables redirect ${public_port} -> ${node_port} already present"
-        fi
-        return
-    fi
-
-    phase4_run_sudo iptables -t nat -A PREROUTING -p tcp --dport "${public_port}" -j REDIRECT --to-port "${node_port}"
+    # Insert before kube-proxy's KUBE-SERVICES jump so external traffic is
+    # rewritten to the NodePort before kube-proxy evaluates service rules.
+    phase4_run_sudo iptables -t nat -I PREROUTING 1 -p tcp --dport "${public_port}" -j REDIRECT --to-port "${node_port}"
     if [[ "${stale_rule_removed}" == true ]]; then
-        phase4_info "replaced iptables redirect ${public_port} -> ${node_port}"
+        phase4_info "reconciled iptables redirect ${public_port} -> ${node_port} at the top of PREROUTING"
     else
-        phase4_info "added iptables redirect ${public_port} -> ${node_port}"
+        phase4_info "added iptables redirect ${public_port} -> ${node_port} at the top of PREROUTING"
     fi
 }

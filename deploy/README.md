@@ -102,25 +102,25 @@ If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-readin
 
 ## Chunk 4 Checkpoint
 
-If you are resuming at Phase 4 Chunk 4, the repo is already complete through Step 12. The next open step is Step 13.
+If you are resuming at Phase 4 Chunk 4, the repo is already complete through Step 18. The next open step is Step 19.
 
-1. Reconfirm the Chunk 3 ingress state before starting Step 13.
+1. Reconfirm the Chunk 3 ingress state and the shared controller-install result before starting Step 19.
    ```bash
    test -f ~/.config/budget-analyzer/instance.env
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    kubectl get gateway -n istio-ingress
    kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
-   ```
-2. Step 13 and Step 14: run the shared controller-install script once, then verify both controllers.
-   ```bash
-   ./deploy/scripts/05-install-platform-controllers.sh
    helm list -n external-secrets
    helm list -n cert-manager
+   ```
+2. Step 13 and Step 14 are already complete on the current OCI host. If you are rebuilding or reconciling the host, rerun the shared controller-install script once and verify both controllers before continuing.
+   ```bash
+   ./deploy/scripts/05-install-platform-controllers.sh
    kubectl get pods -n external-secrets
    kubectl get pods -n cert-manager
    ```
 3. Step 15 is historical only. Do not rerun `./deploy/scripts/06-configure-host-redirects.sh` on the forward path unless you are explicitly reproducing the rejected host-redirect design from the 2026-04-16 OCI debugging thread.
-4. Step 16: if this OCI host still carries any Step 15 redirects, the temporary debug allow rule, or the older host-direct `INPUT` rules for `80/443`, remove them before continuing to the OCI NLB path.
+4. Step 16 and Step 17 are already complete on the current OCI host. If you are rebuilding or reconciling the environment, make sure any stale host redirects, debug-only `INPUT` rules, and direct-instance public `80/443` exposure are gone before creating the NLB.
    ```bash
    while sudo iptables -C INPUT -p tcp --dport 30080 -j ACCEPT 2>/dev/null; do
      sudo iptables -D INPUT -p tcp --dport 30080 -j ACCEPT
@@ -147,27 +147,24 @@ If you are resuming at Phase 4 Chunk 4, the repo is already complete through Ste
    sudo netfilter-persistent save
    sudo iptables -t nat -S PREROUTING
    ```
-5. Step 17: remove the earlier direct-to-instance OCI public `80/443` exposure and replace it with an NLB-oriented frontend/backend security model.
-   - Do not keep public `0.0.0.0/0 -> instance:80/443` rules.
-   - Prefer NSGs so the public listener belongs to the future NLB and the instance backend rule is limited to `30080`.
-6. Step 18 prerequisite: do not continue until the checked-in ingress gateway config includes `externalTrafficPolicy: Local` and the rationale is recorded in [ADR 008](../docs/decisions/008-oci-public-ingress-via-nlb.md).
-7. Step 19: create the public OCI Network Load Balancer for the current ingress NodePort.
+5. Step 18 is already checked in: the reviewed Phase 4 ingress gateway config now sets `externalTrafficPolicy: Local`, and the rationale remains documented in [ADR 008](../docs/decisions/008-oci-public-ingress-via-nlb.md).
+6. Step 19: create the public OCI Network Load Balancer for the current ingress NodePort.
    - For Phase 4, create one TCP listener on `80`, point it at the instance backend on `30080`, and configure the backend set in source-IP-preserving mode.
    - Add a TCP health check against `30080`.
-8. Step 20: prove only the NLB path can reach the ingress NodePort and that the backend still sees the real workstation client IP.
+7. Step 20: prove only the NLB path can reach the ingress NodePort and that the backend still sees the real workstation client IP.
    ```bash
    sudo tcpdump -ni any 'tcp port 30080'
    ```
-9. Step 21a: apply the checked-in NetworkPolicy manifests.
+8. Step 21a: apply the checked-in NetworkPolicy manifests.
    ```bash
    ./deploy/scripts/07-apply-network-policies.sh
    kubectl get networkpolicy -A
    ```
-10. Step 21b: run the runtime NetworkPolicy verifier.
+9. Step 21b: run the runtime NetworkPolicy verifier.
    ```bash
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
-11. Stop if any step above fails. Do not move to Phase 5 until Step 21b passes.
+10. Stop if any step above fails. Do not move to Phase 5 until Step 21b passes.
 
 ## Phase Boundary Notes
 

@@ -403,7 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
-**Status:** Chunks 1, 2, and 3 are complete as of 2026-04-16. The next open work starts at Chunk 4 Step 13, and all preceding Phase 4 work is complete through the mesh-install checkpoint. Step 15 is retained only as the documented 2026-04-16 host-redirect experiment; do not rerun it on the forward path. After any remaining Step 13-14 controller work, the first ingress-transition step is Step 16 host cleanup, followed by Step 17 OCI networking rollback, Step 18-20 OCI Network Load Balancer adoption, and the Step 21 NetworkPolicy verification gate.
+**Status:** Chunks 1, 2, and 3 are complete, and Chunk 4 is complete through Step 18 as of 2026-04-16. The next open work starts at Chunk 4 Step 19. Step 15 is retained only as the documented 2026-04-16 host-redirect experiment; do not rerun it on the forward path. The remaining Phase 4 work is Step 19-20 OCI Network Load Balancer execution plus the Step 21 NetworkPolicy verification gate.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -840,7 +840,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 4: Install Supporting Controllers and Host Wiring
 
-**Current checkpoint:** Complete through Step 12 as of 2026-04-16. The next open step is Step 13. Start there on the OCI host. After Step 14, the forward path resumes at Step 16 cleanup; Step 15 is retained only as historical context from the rejected host-redirect design.
+**Current checkpoint:** Complete through Step 18 as of 2026-04-16. The next open step is Step 19. Human Steps 13, 14, 16, and 17 are complete on the OCI host, and the Step 18 ingress-service config/docs update is checked in. Step 15 remains historical context from the rejected host-redirect design.
 
 12. **[AI Assistant]** If hardened production Helm values for External Secrets Operator or cert-manager are missing, prepare them in-repo for human review before install.
     - **Status:** Complete as of 2026-04-16.
@@ -849,7 +849,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       - `deploy/helm-values/cert-manager.values.yaml`
       - `deploy/scripts/08-verify-network-policy-enforcement.sh`
 13. **[Human]** Install External Secrets Operator with pinned values.
-    - **Status:** Open. This is the first step you should run.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16. This shared script run also closed Step 14.
     - Run:
       ```bash
       cd /path/to/orchestration
@@ -868,7 +868,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Stop if the `external-secrets` release is missing, if its pods are not ready, or if the ESO CRDs are absent.
 14. **[Human]** Install cert-manager with Gateway API support enabled and pinned values.
-    - **Status:** Open.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16.
     - Run:
       - No second install command is needed. Step 14 is completed by the same `./deploy/scripts/05-install-platform-controllers.sh` run from Step 13.
     - Verify:
@@ -897,7 +897,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Recorded outcome: host port `80` was redirected to the current ingress nodePort in `PREROUTING`, but the redirected public flow still did not become a working NodePort service path on this OCI host. The redirect had to be inserted before kube-proxy's `KUBE-SERVICES` jump in `nat/PREROUTING`, and even with that fix the forward path still moved to Step 16 cleanup plus the OCI NLB design. If you ever reproduce this failure on purpose, use `curl -I http://<public-ip>/` from your workstation rather than treating `curl` from the SSH session as an end-to-end proof.
 16. **[Human]** Remove the Step 15 host-redirect experiment and the older host-direct firewall rules before introducing the replacement public-ingress path.
-    - **Status:** Open.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16.
     - Run:
       ```bash
       while sudo iptables -C INPUT -p tcp --dport 30080 -j ACCEPT 2>/dev/null; do
@@ -931,7 +931,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       ```
     - Stop if the temporary `INPUT dpt:30080 ACCEPT` rule remains, if any Step 15 `PREROUTING REDIRECT` rule remains for `80` or `443`, if the older direct-instance `INPUT` accepts for `80` or `443` remain in place, or if the host baseline is ambiguous. Do not continue with both exposure mechanisms configured at the same time.
 17. **[Human]** Roll back the earlier direct-to-instance OCI ingress exposure and replace it with an NLB-oriented frontend/backend network model before creating the public load balancer.
-    - **Status:** Open.
+    - **Status:** Complete per OCI-operator handoff as of 2026-04-16.
     - In OCI, remove the earlier `0.0.0.0/0` TCP `80` and `443` ingress rules that were added for direct host ingress to the instance.
     - Do not continue with a shared-subnet security-list design that still exposes the instance itself on public `80` or `443`. Introduce NSGs or an equivalent OCI control boundary so the public listener belongs to the future NLB and the instance backend path is separate.
     - Recommended target shape:
@@ -944,11 +944,11 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
       - the planned backend path to `30080` is not open to `0.0.0.0/0`
     - Stop if the instance still depends on public `0.0.0.0/0` rules for `80` or `443`, or if the backend `30080` rule is broader than the future NLB path requires.
 18. **[AI Assistant]** Update the checked-in ingress gateway service config and operator docs for OCI Network Load Balancer exposure with preserved client IP.
-    - **Status:** Open.
-    - Set `externalTrafficPolicy: Local` on the auto-provisioned ingress Service via the checked-in Gateway infrastructure ConfigMap.
-    - Keep Phase 4 HTTP-only; Phase 11 is still responsible for adding the HTTPS listener, the `30443` backend path, and the matching NLB listener.
-    - Record the rationale in [`docs/decisions/008-oci-public-ingress-via-nlb.md`](../decisions/008-oci-public-ingress-via-nlb.md).
-    - Stop if the checked-in config still treats host `iptables` redirects as the steady-state public ingress design or if the service would hide the original client IP from the ingress gateway.
+    - **Status:** Complete as of 2026-04-16.
+    - The checked-in Gateway infrastructure ConfigMap now sets `externalTrafficPolicy: Local` on the auto-provisioned ingress Service via `deploy/manifests/phase-4/ingress-gateway-config.yaml.template`.
+    - Phase 4 remains HTTP-only; Phase 11 still owns the HTTPS listener, the `30443` backend path, and the matching NLB listener.
+    - The rationale is already recorded in [`docs/decisions/008-oci-public-ingress-via-nlb.md`](../decisions/008-oci-public-ingress-via-nlb.md).
+    - Companion operator docs updated in `deploy/README.md` and this plan now treat the OCI Network Load Balancer path, not host `iptables` redirects, as the steady-state public ingress design.
 19. **[Human]** Expose the Phase 4 ingress listener through a public OCI Network Load Balancer instead of host `iptables`.
     - **Status:** Open.
     - In OCI, create a public layer-4 Network Load Balancer in the application VCN.

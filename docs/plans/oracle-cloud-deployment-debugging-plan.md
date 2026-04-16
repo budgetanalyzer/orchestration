@@ -184,7 +184,7 @@ The debugging thread itself is done. The forward work now lives in the main plan
 
 1. Run the Step 16 cleanup in [`oracle-cloud-deployment-plan.md`](./oracle-cloud-deployment-plan.md#16-human-remove-the-step-15-host-redirect-experiment-and-the-older-host-direct-firewall-rules-before-introducing-the-replacement-public-ingress-path).
 2. Run the Step 17 OCI-networking rollback so the instance is no longer directly exposed on public `80` or `443`.
-3. Add the checked-in `externalTrafficPolicy: Local` change and the companion documentation updates from Step 18.
+3. Step 18 is now complete in-repo: the checked-in ingress gateway config sets `externalTrafficPolicy: Local`, and the companion operator docs were updated.
 4. Replace the host redirect exposure path with a public OCI Network Load Balancer as described in Steps 19-20.
 5. Keep Step 15 only as the recorded experiment; do not revive it as the steady-state ingress design.
 

@@ -403,6 +403,7 @@ explicitly acknowledging that Maven/Gradle packages are repository-scoped.
 
 **Owner:** Human executes scripts (Pattern B - idempotent, sources external config)
 **Estimated time:** 45-75 minutes
+**Status:** Chunk 1 is complete as of 2026-04-16. The next open work starts at Chunk 2, and all preceding Phase 4 work is complete through the checked-in `deploy/` install path.
 
 Pattern B here does not mean "AI executes Phase 4." It means the AI assistant may prepare or refine the repeatable scripts and non-secret manifests, while the human runs anything that changes the OCI host or live cluster.
 
@@ -532,6 +533,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 1: Prepare the Install Path
 
+**Status:** Complete as of 2026-04-16.
+
 1. **[AI Assistant]** Convert the raw Phase 4 command sequence into a reviewed, repeatable, repo-owned install path before the human touches the OCI host.
 2. **[Human]** Review the generated artifacts, confirm the pins, and only then run them on the OCI instance.
 
@@ -608,10 +611,97 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 #### Chunk 2: Bootstrap the Base Cluster
 
+**Status:** Ready for human execution. When the runbook below passes, mark Phase 4 complete through Chunk 2 and move to Chunk 3.
+
 3. **[Human]** Install the pinned k3s version with the documented Istio-friendly flags.
 4. **[Human]** Verify the k3s node, system pods, and storage class.
 5. **[Human]** Install the Gateway API CRDs.
 6. **[Human]** Create and label the namespaces before admission policies or Helm installs.
+
+**Chunk 2 implementation plan**
+
+1. **Run this chunk on the OCI instance, not in the AI container.**
+   - Use a sudo-capable shell on the Oracle Cloud VM.
+   - Run from the checked-out `orchestration` repo root on that host.
+   ```bash
+   cd /path/to/orchestration
+   pwd
+   ```
+2. **Confirm the required non-secret instance config exists before mutating the host.**
+   - `deploy/scripts/01-install-k3s.sh` and `deploy/scripts/02-bootstrap-cluster.sh` both load `~/.config/budget-analyzer/instance.env`.
+   - If it does not exist yet, create it from the checked-in template now.
+   ```bash
+   test -f ~/.config/budget-analyzer/instance.env || {
+     mkdir -p ~/.config/budget-analyzer
+     cp deploy/instance.env.template ~/.config/budget-analyzer/instance.env
+     echo "Populate ~/.config/budget-analyzer/instance.env before continuing."
+     exit 1
+   }
+   ```
+3. **Review the exact pinned contract and human-run scripts one last time.**
+   - This is the last review gate before the VM and cluster change.
+   - Verify that the pinned versions and flags still match the intended Phase 4 contract.
+   ```bash
+   sed -n '1,200p' deploy/scripts/lib/phase-4-version-contract.sh
+   sed -n '1,220p' deploy/scripts/01-install-k3s.sh
+   sed -n '1,260p' deploy/scripts/02-bootstrap-cluster.sh
+   ```
+4. **Install or reconcile k3s with the repo-owned script.**
+   - This installs the pinned k3s release with `--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644`.
+   - The script also prints the immediate cluster snapshot after install.
+   ```bash
+   ./deploy/scripts/01-install-k3s.sh
+   ```
+5. **Verify the base k3s state before continuing.**
+   - Stop here if the node is not `Ready`, if core pods are crash-looping, or if no default storage class exists.
+   ```bash
+   sudo systemctl status k3s --no-pager
+   sudo k3s --version | head -n 1
+   kubectl get nodes -o wide
+   kubectl get pods -A
+   kubectl get storageclass
+   ```
+   Expect:
+   - one node in `Ready`
+   - core `kube-system` workloads up
+   - a default storage class such as `local-path`
+6. **Bootstrap the cluster with Gateway API CRDs and namespace labels.**
+   - This is the canonical path for Human Steps 5-6.
+   - The script installs Gateway API `v1.4.0`, applies the checked-in namespace manifests, and labels the namespaces used by later Phase 4 installs.
+   ```bash
+   ./deploy/scripts/02-bootstrap-cluster.sh
+   ```
+7. **Verify the Gateway API CRDs and namespace labeling result.**
+   - Stop here if the Gateway CRDs are not `Established` or if any namespace is missing the expected labels.
+   ```bash
+   kubectl get crd gateways.gateway.networking.k8s.io
+   kubectl get crd httproutes.gateway.networking.k8s.io
+   kubectl get namespace \
+     default infrastructure monitoring istio-system istio-ingress istio-egress external-secrets cert-manager \
+     --show-labels
+   ```
+   Expect:
+   - `gateways.gateway.networking.k8s.io` present and established
+   - `default` labeled with `istio-injection=enabled`, `budgetanalyzer.io/ingress-routes=true`, and PSA `restricted`
+   - `istio-system` labeled with PSA `privileged`
+   - `infrastructure`, `monitoring`, `istio-ingress`, `istio-egress`, `external-secrets`, and `cert-manager` present before Helm installs begin
+8. **Record the completion point and advance the plan.**
+   - If Steps 4-7 succeeded, Chunk 2 is complete.
+   - At that point, mark Phase 4 complete through Chunk 2 and leave Chunk 3 Step 7 as the next open work item.
+   ```bash
+   kubectl cluster-info
+   kubectl get namespace \
+     default infrastructure monitoring istio-system istio-ingress istio-egress external-secrets cert-manager
+   ```
+
+**Chunk 2 exit criteria**
+
+- The OCI host is running the pinned k3s version from `deploy/scripts/lib/phase-4-version-contract.sh`.
+- `kubectl get nodes` shows the single node `Ready`.
+- The cluster has a usable default storage class.
+- Gateway API CRDs from `v1.4.0` are installed and established.
+- `default`, `infrastructure`, `monitoring`, `istio-system`, `istio-ingress`, `istio-egress`, `external-secrets`, and `cert-manager` all exist with the expected labels for the next Phase 4 installs.
+- Once those checks pass, mark all preceding work complete through Phase 4 Chunk 2.
 
 #### Chunk 3: Install the Mesh
 

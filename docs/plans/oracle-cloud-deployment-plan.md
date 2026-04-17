@@ -1031,7 +1031,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 ## Phase 5: OCI Vault, External Secrets, and Internal TLS
 
 **Owner:** Human for OCI/IAM/secret values; AI may write templates only
-**Current checkpoint:** Phase 4 is complete as of 2026-04-16. Phase 5 is the next open phase.
+**Current checkpoint:** Phase 4 is complete as of 2026-04-16. Phase 5 Chunk 4 Step 11 is now implemented in-repo via `deploy/scripts/11-generate-phase-5-infra-tls.sh`; the next open Phase 5 work remains the human-owned OCI/Vault/TLS execution steps.
 **Estimated time:** 2-4 hours if the secret values already exist outside the workspace.
 
 ### Principle
@@ -1264,8 +1264,8 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 
 #### Chunk 4: Create the internal infrastructure TLS secrets
 
-11. **[AI Assistant]** Replace the current "pick one mechanism later" branch with one explicit human-run path.
-    - Recommended first iteration: a repo-owned host/instance script that generates a private `infra-ca` plus service certificates for PostgreSQL, Redis, and RabbitMQ, then applies them as Kubernetes secrets.
+11. **[AI Assistant] Complete as of 2026-04-17.** Replace the current "pick one mechanism later" branch with one explicit human-run path.
+    - Implemented path: `./deploy/scripts/11-generate-phase-5-infra-tls.sh`, a repo-owned host/instance script that generates a private `infra-ca` plus service certificates for PostgreSQL, Redis, and RabbitMQ outside the repo, refuses container/AI-workspace execution, and applies them as Kubernetes secrets.
     - Keep this aligned with the existing secret-name contract:
       - `infra-ca` in `default`
       - `infra-ca` in `infrastructure`
@@ -1273,7 +1273,7 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
       - `infra-tls-redis` in `infrastructure`
       - `infra-tls-rabbitmq` in `infrastructure`
     - Do not move certificate private keys through the AI workspace or check them into the repo.
-12. **[Human]** Review and run the chosen internal TLS generation/apply path on the OCI host or another trusted machine outside AI sessions.
+12. **[Human]** Review and run the repo-owned internal TLS generation/apply script on the OCI host or another trusted machine outside AI sessions.
     - This is intentionally not an OCI Console flow. It is certificate-generation work, and the repo rules already require humans to own key material.
     - Run:
       ```bash

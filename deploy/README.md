@@ -353,6 +353,11 @@ kubectl get namespace kyverno --show-labels
 kubectl get deployments,pods -n kyverno
 ```
 
+Expected install output:
+- the upstream chart warns when `admissionController.replicas=1`; that is intentional for the current single-node OCI target and does not require a repo change
+- the upstream chart warns that PolicyExceptions are disabled; that is also intentional unless you plan to manage explicit `PolicyException` resources
+- Kubernetes unknown-field warnings are not expected; treat them as a values/render issue that should be fixed before treating the install output as clean
+
 Before applying the production policy set, rerun the repo-owned production
 verifier against the checked-in image/render baseline. The Phase 7 apply script
 does this automatically and then applies exactly the shared `00` through `40`

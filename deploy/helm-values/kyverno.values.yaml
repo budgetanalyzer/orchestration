@@ -99,8 +99,8 @@ backgroundController:
     capabilities:
       drop:
         - ALL
-      seccompProfile:
-        type: RuntimeDefault
+    seccompProfile:
+      type: RuntimeDefault
 
 cleanupController:
   image:
@@ -130,8 +130,8 @@ cleanupController:
     capabilities:
       drop:
         - ALL
-      seccompProfile:
-        type: RuntimeDefault
+    seccompProfile:
+      type: RuntimeDefault
 
 reportsController:
   image:

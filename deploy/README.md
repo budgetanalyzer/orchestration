@@ -210,19 +210,28 @@ use this checkpoint instead of reconstructing the next commands from the plan:
 1. Confirm the non-secret operator config is populated and the reviewed Phase 5 artifacts are present.
    ```bash
    test -f ~/.config/budget-analyzer/instance.env
-   grep -E '^(OCI_REGION|OCI_COMPARTMENT_OCID|OCI_VAULT_OCID|AUTH0_CLIENT_ID|AUTH0_ISSUER_URI|IDP_AUDIENCE|IDP_LOGOUT_RETURN_TO)=' \
+   grep -E '^(OCI_REGION|OCI_COMPARTMENT_OCID|AUTH0_CLIENT_ID|AUTH0_ISSUER_URI|IDP_AUDIENCE|IDP_LOGOUT_RETURN_TO)=' \
      ~/.config/budget-analyzer/instance.env
    ls deploy/manifests/phase-5 deploy/scripts/09-render-phase-5-secrets.sh \
      deploy/scripts/10-apply-phase-5-secrets.sh deploy/scripts/11-generate-phase-5-infra-tls.sh
    ```
-2. Render the reviewed Phase 5 secret-sync artifacts before touching the live cluster.
+2. Review the checked-in Phase 5 artifacts first. Do not run the render step yet if the OCI vault/key work is still pending.
+   ```bash
+   sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template
+   sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
+   sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
+   sed -n '1,220p' deploy/scripts/09-render-phase-5-secrets.sh
+   sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
+   sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
+   ```
+3. After the OCI vault/key exists and `~/.config/budget-analyzer/instance.env` includes `OCI_VAULT_OCID`, render the reviewed Phase 5 secret-sync artifacts.
    ```bash
    ./deploy/scripts/09-render-phase-5-secrets.sh
    sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
    sed -n '1,260p' tmp/phase-5/external-secrets.yaml
    sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
    ```
-3. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
+4. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ./deploy/scripts/10-apply-phase-5-secrets.sh
@@ -230,12 +239,12 @@ use this checkpoint instead of reconstructing the next commands from the plan:
    kubectl get externalsecret -A
    kubectl get configmap -n default session-gateway-idp-config -o yaml
    ```
-4. Generate and apply the internal TLS secrets from the OCI host or another trusted machine outside AI sessions.
+5. Generate and apply the internal TLS secrets from the OCI host or another trusted machine outside AI sessions.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ./deploy/scripts/11-generate-phase-5-infra-tls.sh
    ```
-5. Stop if any `ExternalSecret` reports sync errors, if `session-gateway-idp-config` still shows placeholder/localhost values, or if any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or `infra-tls-rabbitmq` are missing.
+6. Stop if any `ExternalSecret` reports sync errors, if `session-gateway-idp-config` still shows placeholder/localhost values, or if any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or `infra-tls-rabbitmq` are missing.
 
 ## Validation Standard
 

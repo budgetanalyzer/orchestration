@@ -1075,13 +1075,9 @@ AI agents work with secret names and vault paths, never secret values. Templates
      sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
      sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
      ```
-   - Before the live apply step later in Chunk 3, do one local render review from the populated operator config:
-     ```bash
-     ./deploy/scripts/09-render-phase-5-secrets.sh
-     sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
-     sed -n '1,260p' tmp/phase-5/external-secrets.yaml
-     sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
-     ```
+   - Do not run `./deploy/scripts/09-render-phase-5-secrets.sh` yet. That
+     render path requires `OCI_VAULT_OCID`, which only exists after Chunk 2
+     Step 4 creates the vault and key.
 
 The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `Secret` objects:
 
@@ -1190,6 +1186,15 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
      - `budget-analyzer/redis-ext-authz`
      - `budget-analyzer/redis-currency-svc`
    - Stop if you are about to paste a secret value into the repo, terminal history inside the AI workspace, or any checked-in file. Secret entry happens only in OCI or a trusted local CLI session outside AI.
+   - After Step 4 has populated `OCI_VAULT_OCID` and `OCI_VAULT_KEY_OCID` in
+     `~/.config/budget-analyzer/instance.env`, the first local render review is
+     now valid:
+     ```bash
+     ./deploy/scripts/09-render-phase-5-secrets.sh
+     sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
+     sed -n '1,260p' tmp/phase-5/external-secrets.yaml
+     sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
+     ```
 
 #### Chunk 3: Render and apply the Kubernetes secret-sync resources
 

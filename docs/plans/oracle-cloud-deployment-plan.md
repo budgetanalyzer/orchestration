@@ -1178,7 +1178,8 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
    cd /path/to/orchestration
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    test -f ~/.config/budget-analyzer/instance.env
-   # Run the reviewed Phase 5 render/apply path here.
+   ./deploy/scripts/09-render-phase-5-secrets.sh
+   ./deploy/scripts/10-apply-phase-5-secrets.sh
    ```
    - Recommended first iteration: one `ClusterSecretStore` so the `ExternalSecret` objects in both `default` and `infrastructure` can reference the same OCI Vault integration.
    - A `SecretStore` only in `infrastructure` is not enough for `ExternalSecret` resources in `default`.
@@ -1217,6 +1218,11 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
     - Do not move certificate private keys through the AI workspace or check them into the repo.
 12. **[Human]** Review and run the chosen internal TLS generation/apply path on the OCI host or another trusted machine outside AI sessions.
     - This is intentionally not an OCI Console flow. It is certificate-generation work, and the repo rules already require humans to own key material.
+    - Run:
+      ```bash
+      export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+      ./deploy/scripts/11-generate-phase-5-infra-tls.sh
+      ```
     - Do not proceed to Phase 8 until all five TLS-related secrets exist in the cluster.
 13. **[Human]** Verify the internal TLS secrets exist before any infrastructure pods start.
     ```bash

@@ -1,12 +1,16 @@
-# Phase 4 Deployment Path
+# Oracle Cloud Deployment Path
 
-This directory is the committed, operator-facing install surface for Oracle Cloud Phase 4. The goal is straightforward: a human should be able to review the exact host and cluster mutations in-repo before touching the OCI instance.
+This directory is the committed, operator-facing install surface for the Oracle
+Cloud deployment plan. Phase 4 and Phase 5 now both have first-class,
+reviewable artifacts here so a human can inspect the exact cluster mutations
+before touching the OCI instance or Vault.
 
 `deploy/` contains only repeatable Pattern B artifacts:
 
 - reviewed scripts under `deploy/scripts/`
 - checked-in Helm values under `deploy/helm-values/`
 - checked-in non-secret render templates under `deploy/manifests/phase-4/`
+- checked-in non-secret Phase 5 templates and manifests under `deploy/manifests/phase-5/`
 - the non-secret instance config template at `deploy/instance.env.template`
 
 Runtime render output still belongs under `tmp/`, not under `deploy/`.
@@ -21,10 +25,17 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 4. Review the pinned Helm values:
    - `deploy/helm-values/external-secrets.values.yaml`
    - `deploy/helm-values/cert-manager.values.yaml`
-5. Review the non-secret render templates:
+5. Review the Phase 4 render templates:
    - `deploy/manifests/phase-4/ingress-gateway-config.yaml.template`
    - `deploy/manifests/phase-4/istio-gateway.yaml.template`
-6. Run the human-owned scripts in this exact order:
+6. Review the Phase 5 artifacts:
+   - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
+   - `deploy/manifests/phase-5/external-secrets.yaml`
+   - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
+   - `deploy/scripts/09-render-phase-5-secrets.sh`
+   - `deploy/scripts/10-apply-phase-5-secrets.sh`
+   - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
+7. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -36,7 +47,8 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 
 ## Expected Inputs
 
-`~/.config/budget-analyzer/instance.env` is the only required Phase 4 input file outside the repo. It holds non-secret deployment metadata:
+`~/.config/budget-analyzer/instance.env` is the only required deployment input
+file outside the repo. It holds non-secret deployment metadata:
 
 - OCI tenancy, compartment, vault, instance, subnet, and region identifiers
 - the instance public IP and SSH key path
@@ -52,9 +64,11 @@ Do not duplicate production image refs in `instance.env`. Production image inven
 
 ## Host Tooling Prerequisites
 
-Phase 4 assumes the host already has `kubectl`, `helm`, and the standard shell tools used by the scripts.
+The deployment scripts assume the host already has `kubectl`, `helm`, OpenSSL,
+and the standard shell tools used by the scripts.
 
 - `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
+- `./deploy/scripts/11-generate-phase-5-infra-tls.sh` requires `openssl`.
 - On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
 - Verify the install before rerunning the Phase 4 scripts: `helm version`
 
@@ -70,6 +84,9 @@ Phase 4 assumes the host already has `kubectl`, `helm`, and the standard shell t
 | `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before claiming Phase 4 complete. |
+| `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values. |
+| `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the Phase 5 render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, or any `instance.env` change that affects the rendered resources. |
+| `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, then applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
 
 ## Chunk 3 Checkpoint
 
@@ -185,6 +202,41 @@ The checked-in ingress NetworkPolicy allow list must continue to admit that Phas
 
 The Phase 4 runtime NetworkPolicy verifier intentionally runs before production Auth0 config exists. Because Step 8 of the main plan explicitly defers applying placeholder Istio egress routing, a pre-Auth0 OCI host can legitimately miss the verifier's two positive `istio-egress-gateway:443` checks while still proving the rest of the CNI contract. Treat those two checks as deferred only, and rerun the verifier after Phase 9 Step 2 applies the rendered egress config from the real `AUTH0_ISSUER_URI`.
 
+## Phase 5 Checkpoint
+
+If you are moving directly from the completed Phase 4 OCI host into Phase 5,
+use this checkpoint instead of reconstructing the next commands from the plan:
+
+1. Confirm the non-secret operator config is populated and the reviewed Phase 5 artifacts are present.
+   ```bash
+   test -f ~/.config/budget-analyzer/instance.env
+   grep -E '^(OCI_REGION|OCI_COMPARTMENT_OCID|OCI_VAULT_OCID|AUTH0_CLIENT_ID|AUTH0_ISSUER_URI|IDP_AUDIENCE|IDP_LOGOUT_RETURN_TO)=' \
+     ~/.config/budget-analyzer/instance.env
+   ls deploy/manifests/phase-5 deploy/scripts/09-render-phase-5-secrets.sh \
+     deploy/scripts/10-apply-phase-5-secrets.sh deploy/scripts/11-generate-phase-5-infra-tls.sh
+   ```
+2. Render the reviewed Phase 5 secret-sync artifacts before touching the live cluster.
+   ```bash
+   ./deploy/scripts/09-render-phase-5-secrets.sh
+   sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
+   sed -n '1,260p' tmp/phase-5/external-secrets.yaml
+   sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
+   ```
+3. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
+   ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   ./deploy/scripts/10-apply-phase-5-secrets.sh
+   kubectl get clustersecretstore budget-analyzer-oci-vault
+   kubectl get externalsecret -A
+   kubectl get configmap -n default session-gateway-idp-config -o yaml
+   ```
+4. Generate and apply the internal TLS secrets from the OCI host or another trusted machine outside AI sessions.
+   ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   ./deploy/scripts/11-generate-phase-5-infra-tls.sh
+   ```
+5. Stop if any `ExternalSecret` reports sync errors, if `session-gateway-idp-config` still shows placeholder/localhost values, or if any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or `infra-tls-rabbitmq` are missing.
+
 ## Validation Standard
 
 Every committed `deploy/scripts/*.sh` file must pass:
@@ -192,4 +244,5 @@ Every committed `deploy/scripts/*.sh` file must pass:
 - `bash -n <script>`
 - `shellcheck -x <script>`
 
-The render path must also be provable locally with sample non-secret input so reviewers can inspect generated YAML under `tmp/phase-4/`.
+The render paths must also be provable locally with sample non-secret input so
+reviewers can inspect generated YAML under `tmp/phase-4/` and `tmp/phase-5/`.

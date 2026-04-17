@@ -373,8 +373,9 @@ Once the tenant and DNS are ready:
    `~/.config/budget-analyzer/instance.env`.
 2. Store `AUTH0_CLIENT_SECRET` in OCI Vault as
    `budget-analyzer/auth0-client-secret`.
-3. In Phase 5, render the production `session-gateway-idp-config` from those
-   non-secret values.
+3. In Phase 5, run `./deploy/scripts/09-render-phase-5-secrets.sh`, review the
+   rendered `session-gateway-idp-config`, then apply it with
+   `./deploy/scripts/10-apply-phase-5-secrets.sh`.
 4. In Phase 9 Step 2, render and apply Istio egress from the same
    `AUTH0_ISSUER_URI`.
 

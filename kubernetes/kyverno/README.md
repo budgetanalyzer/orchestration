@@ -33,6 +33,37 @@ That static gate also generates a small Kyverno replay from
 Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures
 stop matching the live apply path.
 
+## Production Path
+
+The OCI production path does not reuse the full local `policies/*.yaml`
+directory verbatim. It keeps the shared `00` through `40` policies, but swaps
+the local image-admission rule for the production-only variant under
+`policies/production/`.
+
+Use the checked-in operator surface for that path:
+
+- `deploy/helm-values/kyverno.values.yaml` pins the production controller
+  replica counts, runtime-hardening values, and immutable digests for every
+  rendered Kyverno controller and hook image.
+- `deploy/scripts/14-install-phase-7-kyverno.sh` installs the pinned chart
+  version into the `kyverno` namespace with those reviewed values.
+- `deploy/scripts/15-apply-phase-7-policies.sh` runs
+  `./scripts/guardrails/verify-production-image-overlay.sh` first, then applies:
+  - `policies/00-smoke-disallow-privileged.yaml`
+  - `policies/10-require-namespace-pod-security-labels.yaml`
+  - `policies/20-require-workload-automount-disabled.yaml`
+  - `policies/30-require-workload-security-context.yaml`
+  - `policies/40-disallow-obvious-default-credentials.yaml`
+  - `policies/production/50-require-third-party-image-digests.yaml`
+  It then checks the live `phase7-require-third-party-image-digests` resource
+  for the production-only rule name and fails if the local Tilt/latest
+  exception rules are still present.
+
+The production apply path intentionally does not apply
+`policies/50-require-third-party-image-digests.yaml`. The shared local `50`
+rule accepts the approved local `:latest` and `:tilt-<hash>` exceptions needed
+for Tilt, which must never be active on the OCI cluster.
+
 Current exception boundaries are intentionally narrow:
 
 - `istio-ingress` keeps service-account token automount enabled for the ingress

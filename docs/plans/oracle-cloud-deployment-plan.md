@@ -1567,6 +1567,9 @@ kubernetes/kyverno/policies/production/
      --values <production-kyverno-values.yaml> \
      --wait
    ```
+   Repo-owned implementation:
+   - `deploy/helm-values/kyverno.values.yaml`
+   - `deploy/scripts/14-install-phase-7-kyverno.sh`
 5. **Apply the production image policy only for the production path.**
    ```bash
    kubectl apply -f kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml
@@ -1576,6 +1579,8 @@ kubernetes/kyverno/policies/production/
    kubectl apply -f kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml
    kubectl apply -f kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml
    ```
+   Repo-owned implementation:
+   - `deploy/scripts/15-apply-phase-7-policies.sh`
 6. **Run production policy verification before deploying repo-managed workloads.**
 
 ### Outputs
@@ -1583,6 +1588,10 @@ kubernetes/kyverno/policies/production/
 - Local and production image-admission contracts are separate
 - Production admission cannot accept `transaction-service:latest` or Tilt deploy tags
 - Static guardrails prevent local exceptions from leaking into production policy
+
+**Implementation status:** Repo-owned Phase 7 install/apply artifacts are
+checked in as of 2026-04-17. Human review and execution on the OCI host are
+still required before treating Phase 7 as live.
 
 ---
 

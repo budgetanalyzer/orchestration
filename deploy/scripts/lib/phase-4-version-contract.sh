@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Phase 4 version contract for the Oracle Cloud production install path.
+# Shared version contract for the Oracle Cloud production install path.
 # Source this file from deploy/scripts/*.sh instead of duplicating version pins.
 
 export PHASE4_VERSION_CONTRACT_EFFECTIVE_DATE="2026-04-15"
@@ -32,6 +32,10 @@ export PHASE4_CERT_MANAGER_CHART_VERSION="v1.20.2"
 readonly PHASE4_CERT_MANAGER_CHART_VERSION
 export PHASE4_CERT_MANAGER_HELM_REPO_URL="https://charts.jetstack.io"
 readonly PHASE4_CERT_MANAGER_HELM_REPO_URL
+export PHASE7_KYVERNO_CHART_VERSION="3.7.1"
+readonly PHASE7_KYVERNO_CHART_VERSION
+export PHASE7_KYVERNO_HELM_REPO_URL="https://kyverno.github.io/kyverno/"
+readonly PHASE7_KYVERNO_HELM_REPO_URL
 export PHASE4_POD_SECURITY_VERSION="v1.32"
 readonly PHASE4_POD_SECURITY_VERSION
 

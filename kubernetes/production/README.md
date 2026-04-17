@@ -57,6 +57,24 @@ That verifier now:
 - applies the production image Kyverno policy at
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
+## Phase 7 Production Admission Path
+
+Phase 7 now has a repo-owned production admission path under `deploy/`:
+
+- `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
+  instead of relying on mutable chart defaults.
+- `deploy/scripts/14-install-phase-7-kyverno.sh` creates or relabels the
+  `kyverno` namespace for baseline Pod Security admission, then installs the
+  pinned Kyverno chart version with those checked-in values.
+- `deploy/scripts/15-apply-phase-7-policies.sh` reruns
+  `./scripts/guardrails/verify-production-image-overlay.sh` and then applies
+  the shared Phase 7 policies plus the production-only `50` variant.
+
+That split is intentional: the checked-in production verifier stays the static
+gate for the production image/render baseline, while the Phase 7 apply script
+is the operator-owned live-cluster step that activates the same production-only
+image policy on OCI.
+
 ## Production NGINX ConfigMap Inputs
 
 The production overlay now owns the NGINX ConfigMap source files directly under
@@ -160,7 +178,9 @@ Recorded verifier output:
 Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure/redis
 ```
 
-The next open implementation phase in the plan is Phase 7.
+The Phase 7 repo-owned install/apply surface is now checked in under `deploy/`.
+Once a human operator has reviewed and run that path on the OCI host, the next
+live deployment phase is Phase 8.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the

@@ -1,9 +1,10 @@
 # Oracle Cloud Deployment Path
 
 This directory is the committed, operator-facing install surface for the Oracle
-Cloud deployment plan. Phase 4, Phase 5, and the Phase 6 production render path
-now all have first-class, reviewable artifacts here so a human can inspect the
-exact cluster mutations before touching the OCI instance or Vault.
+Cloud deployment plan. Phase 4, Phase 5, the Phase 6 production render path,
+and the Phase 7 production Kyverno install/apply path now all have first-class,
+reviewable artifacts here so a human can inspect the exact cluster mutations
+before touching the OCI instance or Vault.
 
 `deploy/` contains only repeatable Pattern B artifacts:
 
@@ -12,6 +13,7 @@ exact cluster mutations before touching the OCI instance or Vault.
 - checked-in non-secret render templates under `deploy/manifests/phase-4/`
 - checked-in non-secret Phase 5 templates and manifests under `deploy/manifests/phase-5/`
 - the Phase 6 production render entry point under `deploy/scripts/`
+- the Phase 7 production Kyverno install/apply entry points under `deploy/scripts/`
 - the non-secret instance config template at `deploy/instance.env.template`
 
 Runtime render output still belongs under `tmp/`, not under `deploy/`.
@@ -26,6 +28,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 4. Review the pinned Helm values:
    - `deploy/helm-values/external-secrets.values.yaml`
    - `deploy/helm-values/cert-manager.values.yaml`
+   - `deploy/helm-values/kyverno.values.yaml`
 5. Review the Phase 4 render templates:
    - `deploy/manifests/phase-4/ingress-gateway-config.yaml.template`
    - `deploy/manifests/phase-4/istio-gateway.yaml.template`
@@ -44,7 +47,17 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
    - `kubernetes/production/infrastructure/redis/kustomization.yaml`
    - `deploy/scripts/13-render-phase-6-production-manifests.sh`
-8. Run the human-owned Phase 4 scripts in this exact order:
+8. Review the Phase 7 production admission inputs:
+   - `kubernetes/kyverno/README.md`
+   - `kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml`
+   - `kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml`
+   - `kubernetes/kyverno/policies/20-require-workload-automount-disabled.yaml`
+   - `kubernetes/kyverno/policies/30-require-workload-security-context.yaml`
+   - `kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml`
+   - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
+   - `deploy/scripts/14-install-phase-7-kyverno.sh`
+   - `deploy/scripts/15-apply-phase-7-policies.sh`
+9. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -77,6 +90,7 @@ The deployment scripts assume the host already has `kubectl`, `helm`, OpenSSL,
 and the standard shell tools used by the scripts.
 
 - `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
+- `./deploy/scripts/14-install-phase-7-kyverno.sh` requires `helm`.
 - `./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` requires the OCI CLI plus `openssl`.
 - `./deploy/scripts/11-generate-phase-5-infra-tls.sh` requires `openssl`.
 - On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
@@ -99,6 +113,8 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
 | `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the Phase 5 OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, and Redis, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated infrastructure passwords are written to an operator-only file outside the repo so the RabbitMQ definitions JSON can be assembled once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated password receipt file is reused on subsequent runs. |
 | `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed Phase 6 production gateway routes, ingress policies, monitoring hostname override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before Phase 9 applies them. | Re-run after changing the reviewed Phase 6 production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
+| `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
+| `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared Phase 7 policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
 
 ## Chunk 3 Checkpoint
 
@@ -312,6 +328,47 @@ installs kube-prometheus-stack. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
 assumes that release name so Grafana stays reachable through the existing
 `prometheus-stack-grafana` Service referenced by the checked-in `HTTPRoute`.
+
+## Phase 7 Checkpoint
+
+Phase 7 now has a repo-owned production install/apply path. Review the
+checked-in Kyverno values and policy inventory first. The production values now
+pin every rendered Kyverno controller and hook image by digest rather than
+inheriting chart-default tags:
+
+```bash
+sed -n '1,240p' deploy/helm-values/kyverno.values.yaml
+sed -n '1,220p' deploy/scripts/14-install-phase-7-kyverno.sh
+sed -n '1,220p' deploy/scripts/15-apply-phase-7-policies.sh
+sed -n '1,220p' kubernetes/kyverno/README.md
+find kubernetes/kyverno/policies -maxdepth 2 -type f | sort
+```
+
+Then install the controller with the pinned chart and checked-in values:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+./deploy/scripts/14-install-phase-7-kyverno.sh
+kubectl get namespace kyverno --show-labels
+kubectl get deployments,pods -n kyverno
+```
+
+Before applying the production policy set, rerun the repo-owned production
+verifier against the checked-in image/render baseline. The Phase 7 apply script
+does this automatically and then applies exactly the shared `00` through `40`
+policies plus `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`, then verifies the live
+`phase7-require-third-party-image-digests` resource no longer contains the
+local Tilt/latest exception rules:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+./deploy/scripts/15-apply-phase-7-policies.sh
+kubectl get clusterpolicy
+```
+
+Stop if the production verifier fails, if any Kyverno controller deployment is
+unavailable, or if `phase7-require-third-party-image-digests` in the live
+cluster does not come from the production variant.
 
 ## Validation Standard
 

@@ -61,9 +61,10 @@ Choose scripts by runtime boundary:
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
   secret payload inventory in `lib/secrets-only-expected-keys.txt`.
 - `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
-  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay,
-  image pinning, secrets-only checks, namespace PSA checks, and active setup
-  guidance scans.
+  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
+  rendered production Kyverno Helm check that rejects mutable controller/hook
+  image refs, image pinning, secrets-only checks, namespace PSA checks, and
+  active setup guidance scans.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure/redis`,
   and the reviewed Phase 6 production route/ingress/monitoring/egress output,

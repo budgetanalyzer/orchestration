@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-12
 **Status:** Revised plan
-**Based on:** [`single-instance-demo-hosting.md`](../research/single-instance-demo-hosting.md), [`oracle-cloud-always-free-provisioning.md`](../research/oracle-cloud-always-free-provisioning.md), [`production-secrets-and-ai-agent-boundaries.md`](../research/production-secrets-and-ai-agent-boundaries.md), [`split-local-and-production-kyverno-image-policy-2026-03-27.md`](./split-local-and-production-kyverno-image-policy-2026-03-27.md), [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md)
+**Based on:** [`single-instance-demo-hosting.md`](../research/single-instance-demo-hosting.md), [`oracle-cloud-always-free-provisioning.md`](../research/oracle-cloud-always-free-provisioning.md), [`production-secrets-and-ai-agent-boundaries.md`](../research/production-secrets-and-ai-agent-boundaries.md)
 
 Deploy the full Budget Analyzer architecture - k3s, Istio service mesh, application services, infrastructure (PostgreSQL/Redis/RabbitMQ), and the observability bundle (Prometheus/Grafana/Jaeger/Kiali) - to an Oracle Cloud Always Free Ampere A1 instance (4 OCPU / 24 GB RAM / 200 GB disk). Cost: $0/mo.
 
@@ -132,7 +132,7 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 
 ## Phase 3: Production Image & Build Contract
 
-**Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution. [`service-common-docker-build-strategy.md`](./service-common-docker-build-strategy.md) is supporting background for why Maven Local is insufficient for isolated Docker builds; it is not a separate deployment plan.
+**Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution, including the `service-common` remote-resolution contract for isolated image builds.
 **Owner:** Human for org/package settings and release approval; AI Assistant for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
 **Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; updated on 2026-04-14 to treat GitHub Packages as CI-only infrastructure for `service-common`; corrected on 2026-04-14 after verifying that GitHub Packages Maven/Gradle packages remain repository-scoped and do not expose per-package **Manage Actions access** for cross-repo workflow grants; implementation checkpoint reached through Chunk 2 Step 14 from the previous draft.
 **Estimated time:** Remaining work is roughly 0.5-1 day after the Chunk 2 Step 14 checkpoint, assuming the initial `service-common` workflow publish is already proven.
@@ -1310,19 +1310,15 @@ This phase turns the local repo manifests into a production deployment artifact.
 **Owner:** AI agent may write manifests/tests; human reviews
 **Estimated time:** 4-8 hours
 
-This phase folds in [`split-local-and-production-kyverno-image-policy-2026-03-27.md`](./split-local-and-production-kyverno-image-policy-2026-03-27.md).
-
 ### Required policy layout
 
 ```text
-kubernetes/kyverno/policies/shared/
+kubernetes/kyverno/policies/
   00-smoke-disallow-privileged.yaml
   10-require-namespace-pod-security-labels.yaml
   20-require-workload-automount-disabled.yaml
   30-require-workload-security-context.yaml
   40-disallow-obvious-default-credentials.yaml
-
-kubernetes/kyverno/policies/local/
   50-require-third-party-image-digests.yaml
 
 kubernetes/kyverno/policies/production/
@@ -1336,13 +1332,17 @@ kubernetes/kyverno/policies/production/
 - Rejects all approved local `:latest` refs.
 - Rejects all approved local `:tilt-<hash>` refs.
 - Rejects unapproved mutable refs.
-- Uses the same policy name as the local variant, but production applies exactly one variant: `shared + production`.
+- Uses the same policy name as the local variant, but production applies exactly one variant: checked-in local `policies/*.yaml` for Tilt or `policies/production/50...` for production image verification, never both at once.
 
 ### Steps
 
-1. **Restructure Kyverno policy directories.**
-2. **Update Tilt to apply `shared + local` only.**
-3. **Add production Kyverno tests.**
+1. **Keep the local and production image policies separate.**
+   - local Tilt continues to use `kubernetes/kyverno/policies/*.yaml`
+   - production image verification uses `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
+2. **Keep local and production verification distinct.**
+   - local fixtures plus generated Tilt-tag replay stay under `./scripts/guardrails/verify-phase-7-static-manifests.sh`
+   - production overlay verification stays under `./scripts/guardrails/verify-production-image-overlay.sh`
+3. **Preserve the production rejection cases.**
    - local `:latest` fails
    - local `:tilt-<hash>` fails
    - digest-pinned third-party passes
@@ -1357,10 +1357,14 @@ kubernetes/kyverno/policies/production/
      --values <production-kyverno-values.yaml> \
      --wait
    ```
-5. **Apply production policies only.**
+5. **Apply the production image policy only for the production path.**
    ```bash
-   kubectl apply -f kubernetes/kyverno/policies/shared/
-   kubectl apply -f kubernetes/kyverno/policies/production/
+   kubectl apply -f kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml
+   kubectl apply -f kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml
+   kubectl apply -f kubernetes/kyverno/policies/20-require-workload-automount-disabled.yaml
+   kubectl apply -f kubernetes/kyverno/policies/30-require-workload-security-context.yaml
+   kubectl apply -f kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml
+   kubectl apply -f kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml
    ```
 6. **Run production policy verification before deploying repo-managed workloads.**
 

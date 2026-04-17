@@ -1068,6 +1068,7 @@ AI agents work with secret names and vault paths, never secret values. Templates
      - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
      - `deploy/manifests/phase-5/external-secrets.yaml`
      - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
+     - `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh`
      - `deploy/scripts/09-render-phase-5-secrets.sh`
      - `deploy/scripts/10-apply-phase-5-secrets.sh`
      - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
@@ -1076,6 +1077,7 @@ AI agents work with secret names and vault paths, never secret values. Templates
      sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template
      sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
      sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
+     sed -n '1,260p' deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
      sed -n '1,220p' deploy/scripts/09-render-phase-5-secrets.sh
      sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
      sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
@@ -1171,7 +1173,7 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
      10. Click **Create**.
    - Do not write `in compartment <tenancy-name>` for a root-compartment deployment. In the OCI Console, `<tenancy-name> (root)` is UI labeling, not policy syntax.
    - Start with the statement set above that matches your layout. If you later want tighter scope, add a `where target.vault.id = '<vault-ocid>'` condition after the first successful sync proves the path works.
-7. **[Human]** Populate the vault secrets through the OCI Console. Do this outside AI sessions.
+7. **[Human]** Populate the vault secrets outside AI sessions, either through the OCI Console or the reviewed helper script.
    - Reusable click flow for each secret:
      1. Open the navigation menu.
      2. Click **Identity & Security**.
@@ -1188,6 +1190,13 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
      13. For `budget-analyzer-rabbitmq-definitions`, paste the full JSON definitions document as the secret contents.
      14. Leave cross-region replication and auto-rotation off for the first pass.
      15. Click **Create secret**.
+   - Reviewed CLI helper path for all non-JSON secrets:
+     ```bash
+     ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+     ```
+     - This script prompts for `AUTH0_CLIENT_SECRET` and the FRED API key only if those OCI secrets are still missing.
+     - It generates the PostgreSQL, RabbitMQ, and Redis passwords, writes them to `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env` with `0600` permissions, and creates every OCI Vault secret except `budget-analyzer-rabbitmq-definitions`.
+     - It is intentionally rerunnable: existing OCI secrets stay unchanged and the generated password receipt file is reused on subsequent runs.
    - Required OCI Vault secret names:
      - `budget-analyzer-auth0-client-secret`
      - `budget-analyzer-fred-api-key`
@@ -1203,11 +1212,13 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
      - `budget-analyzer-redis-session-gateway`
      - `budget-analyzer-redis-ext-authz`
      - `budget-analyzer-redis-currency-svc`
+   - `budget-analyzer-rabbitmq-definitions` remains the one intentional manual follow-up because its JSON payload must incorporate the generated RabbitMQ passwords. Build that JSON from the operator-only receipt file outside the repo, then create the final OCI secret through the Console or OCI CLI.
    - Stop if you are about to paste a secret value into the repo, terminal history inside the AI workspace, or any checked-in file. Secret entry happens only in OCI or a trusted local CLI session outside AI.
    - After Step 4 has populated `OCI_VAULT_OCID` and `OCI_VAULT_KEY_OCID` in
      `~/.config/budget-analyzer/instance.env`, the first local render review is
      now valid:
      ```bash
+     ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
      ./deploy/scripts/09-render-phase-5-secrets.sh
      sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
      sed -n '1,260p' tmp/phase-5/external-secrets.yaml

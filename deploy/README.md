@@ -32,6 +32,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
    - `deploy/manifests/phase-5/external-secrets.yaml`
    - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
+   - `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh`
    - `deploy/scripts/09-render-phase-5-secrets.sh`
    - `deploy/scripts/10-apply-phase-5-secrets.sh`
    - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
@@ -68,6 +69,7 @@ The deployment scripts assume the host already has `kubectl`, `helm`, OpenSSL,
 and the standard shell tools used by the scripts.
 
 - `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
+- `./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` requires the OCI CLI plus `openssl`.
 - `./deploy/scripts/11-generate-phase-5-infra-tls.sh` requires `openssl`.
 - On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
 - Verify the install before rerunning the Phase 4 scripts: `helm version`
@@ -87,6 +89,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values. |
 | `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the Phase 5 render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, or any `instance.env` change that affects the rendered resources. |
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, then applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
+| `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the Phase 5 OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, and Redis, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated infrastructure passwords are written to an operator-only file outside the repo so the RabbitMQ definitions JSON can be assembled once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated password receipt file is reused on subsequent runs. |
 
 ## Chunk 3 Checkpoint
 
@@ -223,17 +226,20 @@ use this checkpoint instead of reconstructing the next commands from the plan:
    sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template
    sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
    sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
+   sed -n '1,260p' deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
    sed -n '1,220p' deploy/scripts/09-render-phase-5-secrets.sh
    sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
    sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
    ```
-3. After the OCI vault/key exists and `~/.config/budget-analyzer/instance.env` includes `OCI_VAULT_OCID`, render the reviewed Phase 5 secret-sync artifacts.
+3. After the OCI vault/key exists and `~/.config/budget-analyzer/instance.env` includes `OCI_VAULT_OCID`, populate the plain-text vault secrets and then render the reviewed Phase 5 secret-sync artifacts.
    ```bash
+   ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh
    sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
    sed -n '1,260p' tmp/phase-5/external-secrets.yaml
    sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
    ```
+   The script intentionally stops short of `budget-analyzer-rabbitmq-definitions`. Build that JSON with the generated RabbitMQ passwords from `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`, then create the final OCI secret manually.
 4. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml

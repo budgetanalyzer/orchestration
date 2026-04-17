@@ -1517,7 +1517,7 @@ This phase turns the local repo manifests into a production deployment artifact.
 
 ## Phase 7: Production Kyverno Admission Policy
 
-**Owner:** AI agent may write manifests/tests; human reviews
+**Owner:** Split between AI-owned repo work and human-owned OCI execution
 **Estimated time:** 4-8 hours
 
 ### Required policy layout
@@ -1544,7 +1544,7 @@ kubernetes/kyverno/policies/production/
 - Rejects unapproved mutable refs.
 - Uses the same policy name as the local variant, but production applies exactly one variant: checked-in local `policies/*.yaml` for Tilt or `policies/production/50...` for production image verification, never both at once.
 
-### Steps
+### AI Tasks
 
 1. **Keep the local and production image policies separate.**
    - local Tilt continues to use `kubernetes/kyverno/policies/*.yaml`
@@ -1557,31 +1557,48 @@ kubernetes/kyverno/policies/production/
    - local `:tilt-<hash>` fails
    - digest-pinned third-party passes
    - unapproved mutable refs fail
-4. **Install Kyverno with pinned chart version and hardened values.**
-   ```bash
-   helm repo add kyverno https://kyverno.github.io/kyverno/
-   helm upgrade --install kyverno kyverno/kyverno \
-     -n kyverno \
-     --create-namespace \
-     --version 3.7.1 \
-     --values <production-kyverno-values.yaml> \
-     --wait
-   ```
-   Repo-owned implementation:
+4. **Maintain the repo-owned Kyverno production install surface.**
    - `deploy/helm-values/kyverno.values.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
-5. **Apply the production image policy only for the production path.**
-   ```bash
-   kubectl apply -f kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml
-   kubectl apply -f kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml
-   kubectl apply -f kubernetes/kyverno/policies/20-require-workload-automount-disabled.yaml
-   kubectl apply -f kubernetes/kyverno/policies/30-require-workload-security-context.yaml
-   kubectl apply -f kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml
-   kubectl apply -f kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml
-   ```
-   Repo-owned implementation:
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-6. **Run production policy verification before deploying repo-managed workloads.**
+5. **Keep the production Kyverno path immutable.**
+   - digest-pin every rendered Kyverno controller and hook image
+   - keep the static render check in `./scripts/guardrails/verify-phase-7-static-manifests.sh`
+6. **Keep the operator docs aligned with the checked-in Phase 7 path.**
+   - `deploy/README.md`
+   - `kubernetes/kyverno/README.md`
+   - `kubernetes/production/README.md`
+
+### Human Tasks
+
+1. **Review the checked-in Phase 7 artifacts before touching OCI.**
+   ```bash
+   sed -n '1,240p' deploy/helm-values/kyverno.values.yaml
+   sed -n '1,220p' deploy/scripts/14-install-phase-7-kyverno.sh
+   sed -n '1,220p' deploy/scripts/15-apply-phase-7-policies.sh
+   find kubernetes/kyverno/policies -maxdepth 2 -type f | sort
+   ```
+2. **Run the production verifier against the checked-in baseline before live apply.**
+   ```bash
+   ./scripts/guardrails/verify-production-image-overlay.sh
+   ```
+3. **Install Kyverno on the OCI cluster with the pinned chart and checked-in values.**
+   ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   ./deploy/scripts/14-install-phase-7-kyverno.sh
+   kubectl get namespace kyverno --show-labels
+   kubectl get deployments,pods -n kyverno
+   ```
+4. **Apply the production Phase 7 policy set on the OCI cluster.**
+   ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   ./deploy/scripts/15-apply-phase-7-policies.sh
+   kubectl get clusterpolicy
+   ```
+5. **Treat Phase 7 as live only after the OCI run is complete.**
+   - stop if the production verifier fails
+   - stop if any Kyverno controller deployment is unavailable
+   - stop if the live `phase7-require-third-party-image-digests` policy still contains local Tilt/latest exception rules
 
 ### Outputs
 

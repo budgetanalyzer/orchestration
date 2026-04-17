@@ -12,10 +12,7 @@ Budget Analyzer is a reference architecture for enterprise architects and senior
 
 **Out of scope:**
 - New features or services
-- Data ownership implementation ("which transactions belong to which user?")
 - Multi-tenancy / organization isolation
-
-The data ownership boundary is intentional - see [system-overview.md](docs/architecture/system-overview.md#intentional-boundaries) for why we stopped there.
 
 ## Philosophy
 

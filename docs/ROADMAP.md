@@ -15,13 +15,6 @@ This project has reached its intended scope as a reference architecture. We are 
 - Architectural discussions
 - Bug fixes in existing functionality
 
-**Out of scope (intentionally left as exercises):**
-- Data ownership: "Which transactions belong to which user?"
-- Cross-service user scoping
-- Multi-tenancy / organization isolation
-
-See [system-overview.md](architecture/system-overview.md#intentional-boundaries) for why this boundary exists.
-
 The items below remain as reference for what a production system might need - but we're not actively implementing them.
 
 ---

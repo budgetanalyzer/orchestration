@@ -12,14 +12,6 @@ This project demonstrates production-grade patterns:
 - **API Gateway**: Session validation (ext_authz), auth-path throttling at Istio ingress, API routing and API-path throttling at NGINX
 - **Microservices**: Spring Boot, Kubernetes, Tilt local development
 
-It intentionally leaves unsolved:
-
-- **Data ownership**: Which transactions belong to which user?
-- **Cross-service user scoping**: How does transaction-service know to filter by owner?
-- **Multi-tenancy**: Organization-level data isolation
-
-This boundary is deliberate. Data ownership is domain-specific and opinionated - we surface the problem rather than prescribing a solution. We're more interested in discussing these patterns with other architects than generating more code.
-
 ## Live Development in Kubernetes
 
 Edit code locally. Changes reach the running Kubernetes pod in seconds — without image rebuilds or pod restarts — while the full production stack (Istio mTLS, network policies, ext_authz, TLS infrastructure) stays active.

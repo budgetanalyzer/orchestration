@@ -45,7 +45,7 @@ IDP_LOGOUT_RETURN_TO=https://demo.budgetanalyzer.org/peace
 Notes:
 
 - `AUTH0_CLIENT_SECRET` does not belong in `instance.env`; it stays in OCI Vault
-  as `budget-analyzer/auth0-client-secret`.
+  as `budget-analyzer-auth0-client-secret`.
 - `AUTH0_ISSUER_URI` must be the same value later used by
   `scripts/ops/render-istio-egress-config.sh` in Phase 9 Step 2.
 - `IDP_AUDIENCE` stays `https://api.budgetanalyzer.org`. The audience does not
@@ -372,7 +372,7 @@ Once the tenant and DNS are ready:
 1. Put the chosen non-secret values into
    `~/.config/budget-analyzer/instance.env`.
 2. Store `AUTH0_CLIENT_SECRET` in OCI Vault as
-   `budget-analyzer/auth0-client-secret`.
+   `budget-analyzer-auth0-client-secret`.
 3. In Phase 5, after the OCI vault/key exists and `instance.env` includes
    `OCI_VAULT_OCID`, run `./deploy/scripts/09-render-phase-5-secrets.sh`,
    review the rendered `session-gateway-idp-config`, then apply it with

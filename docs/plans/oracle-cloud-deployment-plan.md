@@ -1088,18 +1088,18 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
 
 | Namespace | Native Secret | Keys | OCI Vault secret name(s) |
 |---|---|---|---|
-| `default` | `auth0-credentials` | `AUTH0_CLIENT_SECRET` | `budget-analyzer/auth0-client-secret` |
-| `default` | `fred-api-credentials` | `api-key` | `budget-analyzer/fred-api-key` |
-| `default` | `transaction-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-transaction-svc` |
-| `default` | `currency-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-currency-svc` |
-| `default` | `permission-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-permission-svc` |
-| `default` | `currency-service-rabbitmq-credentials` | `password` | `budget-analyzer/rabbitmq-currency-svc` |
-| `default` | `session-gateway-redis-credentials` | `password` | `budget-analyzer/redis-session-gateway` |
-| `default` | `ext-authz-redis-credentials` | `password` | `budget-analyzer/redis-ext-authz` |
-| `default` | `currency-service-redis-credentials` | `password` | `budget-analyzer/redis-currency-svc` |
-| `infrastructure` | `postgresql-bootstrap-credentials` | `password`, `transaction-service-password`, `currency-service-password`, `permission-service-password` | `budget-analyzer/postgres-admin-password`, `budget-analyzer/postgres-transaction-svc`, `budget-analyzer/postgres-currency-svc`, `budget-analyzer/postgres-permission-svc` |
-| `infrastructure` | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` | `budget-analyzer/rabbitmq-admin-password`, `budget-analyzer/rabbitmq-definitions` |
-| `infrastructure` | `redis-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password`, `currency-service-password` | `budget-analyzer/redis-default-password`, `budget-analyzer/redis-ops-password`, `budget-analyzer/redis-session-gateway`, `budget-analyzer/redis-ext-authz`, `budget-analyzer/redis-currency-svc` |
+| `default` | `auth0-credentials` | `AUTH0_CLIENT_SECRET` | `budget-analyzer-auth0-client-secret` |
+| `default` | `fred-api-credentials` | `api-key` | `budget-analyzer-fred-api-key` |
+| `default` | `transaction-service-postgresql-credentials` | `password` | `budget-analyzer-postgres-transaction-svc` |
+| `default` | `currency-service-postgresql-credentials` | `password` | `budget-analyzer-postgres-currency-svc` |
+| `default` | `permission-service-postgresql-credentials` | `password` | `budget-analyzer-postgres-permission-svc` |
+| `default` | `currency-service-rabbitmq-credentials` | `password` | `budget-analyzer-rabbitmq-currency-svc` |
+| `default` | `session-gateway-redis-credentials` | `password` | `budget-analyzer-redis-session-gateway` |
+| `default` | `ext-authz-redis-credentials` | `password` | `budget-analyzer-redis-ext-authz` |
+| `default` | `currency-service-redis-credentials` | `password` | `budget-analyzer-redis-currency-svc` |
+| `infrastructure` | `postgresql-bootstrap-credentials` | `password`, `transaction-service-password`, `currency-service-password`, `permission-service-password` | `budget-analyzer-postgres-admin-password`, `budget-analyzer-postgres-transaction-svc`, `budget-analyzer-postgres-currency-svc`, `budget-analyzer-postgres-permission-svc` |
+| `infrastructure` | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` | `budget-analyzer-rabbitmq-admin-password`, `budget-analyzer-rabbitmq-definitions` |
+| `infrastructure` | `redis-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password`, `currency-service-password` | `budget-analyzer-redis-default-password`, `budget-analyzer-redis-ops-password`, `budget-analyzer-redis-session-gateway`, `budget-analyzer-redis-ext-authz`, `budget-analyzer-redis-currency-svc` |
 
 #### Chunk 2: Create the OCI Vault and IAM bindings
 
@@ -1179,30 +1179,30 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
      4. Set the compartment filter to the target vault compartment.
      5. Set the vault filter to the new Budget Analyzer vault.
      6. Click **Create secret**.
-     7. Enter the exact secret name from the checklist below.
+     7. Enter the exact secret name from the checklist below. OCI Vault secret names cannot contain `/`; use hyphen-delimited names exactly as listed.
      8. Keep the same compartment.
      9. Select the Budget Analyzer vault.
      10. Select the Budget Analyzer AES key.
      11. Choose **Manual secret generation**.
      12. For normal passwords, API keys, and client secrets, keep the plain-text template and paste the value.
-     13. For `budget-analyzer/rabbitmq-definitions`, paste the full JSON definitions document as the secret contents.
+     13. For `budget-analyzer-rabbitmq-definitions`, paste the full JSON definitions document as the secret contents.
      14. Leave cross-region replication and auto-rotation off for the first pass.
      15. Click **Create secret**.
    - Required OCI Vault secret names:
-     - `budget-analyzer/auth0-client-secret`
-     - `budget-analyzer/fred-api-key`
-     - `budget-analyzer/postgres-admin-password`
-     - `budget-analyzer/postgres-transaction-svc`
-     - `budget-analyzer/postgres-currency-svc`
-     - `budget-analyzer/postgres-permission-svc`
-     - `budget-analyzer/rabbitmq-admin-password`
-     - `budget-analyzer/rabbitmq-definitions`
-     - `budget-analyzer/rabbitmq-currency-svc`
-     - `budget-analyzer/redis-default-password`
-     - `budget-analyzer/redis-ops-password`
-     - `budget-analyzer/redis-session-gateway`
-     - `budget-analyzer/redis-ext-authz`
-     - `budget-analyzer/redis-currency-svc`
+     - `budget-analyzer-auth0-client-secret`
+     - `budget-analyzer-fred-api-key`
+     - `budget-analyzer-postgres-admin-password`
+     - `budget-analyzer-postgres-transaction-svc`
+     - `budget-analyzer-postgres-currency-svc`
+     - `budget-analyzer-postgres-permission-svc`
+     - `budget-analyzer-rabbitmq-admin-password`
+     - `budget-analyzer-rabbitmq-definitions`
+     - `budget-analyzer-rabbitmq-currency-svc`
+     - `budget-analyzer-redis-default-password`
+     - `budget-analyzer-redis-ops-password`
+     - `budget-analyzer-redis-session-gateway`
+     - `budget-analyzer-redis-ext-authz`
+     - `budget-analyzer-redis-currency-svc`
    - Stop if you are about to paste a secret value into the repo, terminal history inside the AI workspace, or any checked-in file. Secret entry happens only in OCI or a trusted local CLI session outside AI.
    - After Step 4 has populated `OCI_VAULT_OCID` and `OCI_VAULT_KEY_OCID` in
      `~/.config/budget-analyzer/instance.env`, the first local render review is
@@ -1282,7 +1282,7 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 
 - Phase 4 already installed External Secrets Operator and cert-manager. Phase 5 is configuration and secret-material work, not controller-install work.
 - The first clean pass should prefer one `ClusterSecretStore` over namespace-specific stores unless there is a concrete isolation requirement.
-- Keep the OCI Vault secret names exact. The `ExternalSecret.remoteRef.key` values depend on those names matching the checklist above.
+- Keep the OCI Vault secret names exact. The `ExternalSecret.remoteRef.key` values depend on those names matching the checklist above, and OCI Vault secret names must stay within OCI's supported character set.
 - `rabbitmq-definitions` is the only intentionally mixed-content secret. It must carry the full JSON definitions document that RabbitMQ imports at bootstrap.
 - If the `rabbitmq-definitions` document becomes awkward to enter or update in the Console, switch that one secret to OCI CLI outside AI sessions instead of editing JSON in the workspace.
 

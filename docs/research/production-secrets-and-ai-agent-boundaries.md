@@ -52,20 +52,20 @@ Every value currently listed in `docs/development/secrets-only-handling.md` as a
 
 | Vault secret path | Corresponds to K8s Secret | Keys |
 |---|---|---|
-| `budget-analyzer/auth0-client-secret` | `auth0-credentials` | AUTH0_CLIENT_SECRET |
-| `budget-analyzer/fred-api-key` | `fred-api-credentials` | api-key |
-| `budget-analyzer/postgres-admin-password` | `postgresql-bootstrap-credentials` | password |
-| `budget-analyzer/postgres-transaction-svc` | `transaction-service-postgresql-credentials` | password |
-| `budget-analyzer/postgres-currency-svc` | `currency-service-postgresql-credentials` | password |
-| `budget-analyzer/postgres-permission-svc` | `permission-service-postgresql-credentials` | password |
-| `budget-analyzer/rabbitmq-admin-password` | `rabbitmq-bootstrap-credentials` | password |
-| `budget-analyzer/rabbitmq-definitions` | `rabbitmq-bootstrap-credentials` | definitions.json |
-| `budget-analyzer/rabbitmq-currency-svc` | `currency-service-rabbitmq-credentials` | password |
-| `budget-analyzer/redis-default-password` | `redis-bootstrap-credentials` | default-password |
-| `budget-analyzer/redis-ops-password` | `redis-bootstrap-credentials` | ops-password |
-| `budget-analyzer/redis-session-gateway` | `redis-bootstrap-credentials` | session-gateway-password |
-| `budget-analyzer/redis-ext-authz` | `redis-bootstrap-credentials` | ext-authz-password |
-| `budget-analyzer/redis-currency-svc` | `redis-bootstrap-credentials` | currency-service-password |
+| `budget-analyzer-auth0-client-secret` | `auth0-credentials` | AUTH0_CLIENT_SECRET |
+| `budget-analyzer-fred-api-key` | `fred-api-credentials` | api-key |
+| `budget-analyzer-postgres-admin-password` | `postgresql-bootstrap-credentials` | password |
+| `budget-analyzer-postgres-transaction-svc` | `transaction-service-postgresql-credentials` | password |
+| `budget-analyzer-postgres-currency-svc` | `currency-service-postgresql-credentials` | password |
+| `budget-analyzer-postgres-permission-svc` | `permission-service-postgresql-credentials` | password |
+| `budget-analyzer-rabbitmq-admin-password` | `rabbitmq-bootstrap-credentials` | password |
+| `budget-analyzer-rabbitmq-definitions` | `rabbitmq-bootstrap-credentials` | definitions.json |
+| `budget-analyzer-rabbitmq-currency-svc` | `currency-service-rabbitmq-credentials` | password |
+| `budget-analyzer-redis-default-password` | `redis-bootstrap-credentials` | default-password |
+| `budget-analyzer-redis-ops-password` | `redis-bootstrap-credentials` | ops-password |
+| `budget-analyzer-redis-session-gateway` | `redis-bootstrap-credentials` | session-gateway-password |
+| `budget-analyzer-redis-ext-authz` | `redis-bootstrap-credentials` | ext-authz-password |
+| `budget-analyzer-redis-currency-svc` | `redis-bootstrap-credentials` | currency-service-password |
 
 This is ~14 vault secrets. The free tier allows 150.
 
@@ -112,7 +112,7 @@ spec:
   data:
     - secretKey: password
       remoteRef:
-        key: budget-analyzer/postgres-admin-password
+        key: budget-analyzer-postgres-admin-password
 ```
 
 3. ESO creates the native `Secret` object. Pods reference it exactly as they do today — no application code changes.

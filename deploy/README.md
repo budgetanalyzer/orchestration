@@ -286,6 +286,19 @@ The production apps overlay no longer applies the checked-in fallback
 owned by the Phase 5 render/apply path, then apply the Phase 6 rendered route
 and egress output separately during Phase 9.
 
+Before any live Phase 7 or Phase 9 step, run the repo-owned Phase 6 production
+verifier against the checked-in baseline:
+
+```bash
+./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+That command renders the production app overlay, production Redis overlay, and
+the reviewed Phase 6 route/ingress/monitoring/egress output using the locked
+Phase 6 hostnames. It fails on localhost hosts, placeholder Auth0 values,
+mutable image refs, `imagePullPolicy: Never`, or a production route that falls
+back to `nginx/nginx.k8s.conf`.
+
 Phase 6 also adds the checked-in production Redis path at
 `kubernetes/production/infrastructure/redis/`. That overlay generates the
 `redis-acl-bootstrap` ConfigMap from the committed production-local

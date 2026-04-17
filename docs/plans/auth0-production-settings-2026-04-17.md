@@ -23,8 +23,9 @@ included. The practical layout on Free is:
 - Auth0 custom domain: `auth.budgetanalyzer.org`
 - API audience identifier: `https://api.budgetanalyzer.org`
 
-Leave the observability hostnames blank for now unless those UIs are being
-intentionally exposed in Phase 10/11.
+Phase 6 now locks the checked-in Grafana hostname to
+`grafana.budgetanalyzer.org`. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank
+until Phase 10/11 intentionally exposes those UIs.
 
 ## Recommended `instance.env` Values
 
@@ -32,7 +33,7 @@ Set these values in `~/.config/budget-analyzer/instance.env`:
 
 ```bash
 DEMO_DOMAIN=demo.budgetanalyzer.org
-GRAFANA_DOMAIN=
+GRAFANA_DOMAIN=grafana.budgetanalyzer.org
 KIALI_DOMAIN=
 JAEGER_DOMAIN=
 

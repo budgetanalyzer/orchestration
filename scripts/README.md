@@ -26,7 +26,8 @@ scripts/
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
-  Oracle production app image overlay and production image Kyverno policy.
+  full Phase 6 Oracle production baseline: app overlay, production render
+  output, Redis overlay, and the production image Kyverno policy.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -64,9 +65,12 @@ Choose scripts by runtime boundary:
   image pinning, secrets-only checks, namespace PSA checks, and active setup
   guidance scans.
 - `guardrails/verify-production-image-overlay.sh` renders
-  `kubernetes/production/apps`, verifies the `0.0.12` digest-pinned GHCR image
-  inventory, rejects local `:latest` / `:tilt-` image paths, and applies the
-  production image Kyverno policy to the rendered overlay.
+  `kubernetes/production/apps`, `kubernetes/production/infrastructure/redis`,
+  and the reviewed Phase 6 production route/ingress/monitoring/egress output,
+  verifies the `0.0.12` digest-pinned GHCR image inventory, rejects local
+  `:latest` / `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts,
+  and `imagePullPolicy: Never`, and applies the production image Kyverno policy
+  to the rendered app overlay.
 
 CI should call the static guardrail directly:
 

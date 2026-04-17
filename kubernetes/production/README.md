@@ -42,17 +42,25 @@ Render it with:
 kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
 ```
 
-Verify the current overlay slice with:
+Verify the current Phase 6 production baseline with:
 
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
 ```
 
-That verifier renders `apps/`, rejects local `:latest` refs, local
-`:tilt-<hash>` refs, unqualified local repos, and `imagePullPolicy: Never`,
-checks that production does not reference `budget-analyzer-web-prod-smoke` or
-`nginx/nginx.k8s.conf`, and applies the production image Kyverno policy at
-`../kyverno/policies/production/50-require-third-party-image-digests.yaml`.
+That verifier now:
+
+- renders `apps/`, the production Redis overlay, and the reviewed Phase 6
+  production route/ingress/monitoring/egress output
+- rejects `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`,
+  `budgetanalyzer.localhost`, and `auth0-issuer.placeholder.invalid` anywhere
+  in that checked-in production path
+- verifies the production NGINX/public-route contract is coming from
+  `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
+- verifies the production docs bundle, Grafana hostname override, Auth0 egress
+  render, and PVC-backed Redis path all stay present
+- applies the production image Kyverno policy at
+  `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
 ## Production NGINX ConfigMap Inputs
 
@@ -152,12 +160,12 @@ kubectl apply -k kubernetes/production/infrastructure/redis
 The checked-in production baseline is not complete yet. Remaining repo-owned
 production blockers are:
 
-- the current verifier only covers the app image overlay and not the broader
-  Phase 6 production render path
+- human Step 12: run `./scripts/guardrails/verify-production-image-overlay.sh`
+  and record the exact pass/fail output in the operator notes before moving to
+  Phase 7
 
-The next open implementation step in the plan is the human approval in Chunk 2
-Step 10 for the production monitoring baseline and Redis decision, followed by
-Chunk 3 Step 11 for the broader production verifier.
+The next open implementation step in the plan is the human run in Chunk 3
+Step 12, followed by the final file review in Chunk 3 Step 13.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the

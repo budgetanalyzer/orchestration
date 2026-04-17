@@ -134,8 +134,8 @@ Non-secret but deployment-specific values — OCIDs, compartment ID, public IP, 
 These live at **`~/.config/budget-analyzer/instance.env`** on the project owner's machine, outside `/workspace/` entirely. Deployment scripts source this file. The repo contains only a template documenting the expected keys:
 
 ```bash
-# deploy/instance.env.template — committed to repo, no values
-# Copy to ~/.config/budget-analyzer/instance.env and fill in.
+# deploy/instance.env.template — committed to repo
+# Copy to ~/.config/budget-analyzer/instance.env and fill in the blank values.
 
 OCI_TENANCY_OCID=
 OCI_COMPARTMENT_OCID=
@@ -147,8 +147,8 @@ OCI_INSTANCE_OCID=
 OCI_SUBNET_OCID=
 INSTANCE_PUBLIC_IP=
 INSTANCE_SSH_KEY_PATH=~/.ssh/oci-budgetanalyzer
-DEMO_DOMAIN=
-GRAFANA_DOMAIN=
+DEMO_DOMAIN=demo.budgetanalyzer.org
+GRAFANA_DOMAIN=grafana.budgetanalyzer.org
 KIALI_DOMAIN=
 JAEGER_DOMAIN=
 LETSENCRYPT_EMAIL=

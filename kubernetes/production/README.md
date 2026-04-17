@@ -11,15 +11,10 @@ work around it.
 `0.0.12` GHCR release images pinned by digest from
 `kubernetes/production/apps/image-inventory.yaml`.
 
-Status as of 2026-04-17: Phase 6 Chunk 1 is complete, Chunk 2 Step 4
-("Finish the production image and frontend overlay path" in the plan) is
-complete, Chunk 2 Step 5 ("Create or finish the production NGINX ConfigMap
-path") is encoded in the checked-in production assets below, and Chunk 2 Step 7
-("Add the production hostname and egress render path") is now implemented
-through the production gateway-route overlay, ingress-policy overlay,
-monitoring override, and Phase 6 render script. Chunk 2 Step 9 is now also
-implemented through the production Redis overlay and the explicit monitoring
-baseline notes below.
+Status as of 2026-04-17: Phase 6 is complete. Chunk 1 is complete, Chunk 2
+Steps 4 through 10 are complete, and Chunk 3 is complete with the broadened
+production verifier plus the recorded verifier pass and final file-review
+handoff.
 
 That overlay already:
 
@@ -155,17 +150,17 @@ kubectl kustomize kubernetes/production/infrastructure/redis
 kubectl apply -k kubernetes/production/infrastructure/redis
 ```
 
-## Still Open In Phase 6
+## Phase 6 Completion
 
-The checked-in production baseline is not complete yet. Remaining repo-owned
-production blockers are:
+The checked-in production baseline is now complete for Phase 6.
 
-- human Step 12: run `./scripts/guardrails/verify-production-image-overlay.sh`
-  and record the exact pass/fail output in the operator notes before moving to
-  Phase 7
+Recorded verifier output:
 
-The next open implementation step in the plan is the human run in Chunk 3
-Step 12, followed by the final file review in Chunk 3 Step 13.
+```text
+Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure/redis
+```
+
+The next open implementation phase in the plan is Phase 7.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the

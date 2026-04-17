@@ -1313,14 +1313,14 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17, so Phase 6 is now the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phase 6 is now also complete, so Phase 7 is the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, Chunk 2 Step 5 is implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`, Chunk 2 Step 7 is implemented with the production gateway-route overlay, ingress-policy overlay, and reviewed Phase 6 render script, Chunk 2 Step 9 is implemented with the production Redis overlay plus the explicit monitoring baseline notes, and Chunk 3 Step 11 is now implemented by the broadened Phase 6 production verifier. The next open work is the human run in Chunk 3 Step 12.
+**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17, and Phase 6 is now complete as of 2026-04-17. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, and the final operator file-review handoff. Phase 7 is the next open phase.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1415,7 +1415,7 @@ This phase turns the local repo manifests into a production deployment artifact.
      - `/api/*`, `/api-docs`, `/login`, and `/` remain NGINX-owned on the production overlay.
      - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` remain direct Gateway API routes to `session-gateway`; the production NGINX config now calls that out explicitly so the route split stays reviewable.
      - The production docs bundle now advertises the confirmed same-origin server URL `https://demo.budgetanalyzer.org/api` instead of localhost or the stale `api.budgetanalyzer.org` host.
-6. **[Human]** Review the production frontend and NGINX route cutover before the overlay is treated as deployable.
+6. **[Human] Complete per operator handoff as of 2026-04-17.** Review the production frontend and NGINX route cutover before the overlay is treated as deployable.
    - Verify that `/` and `/login` no longer depend on dev-server behavior.
    - Verify that `/api-docs` remains repo-owned and does not fall through to the frontend SPA.
    - Stop if the production path still depends on HMR/Vite-only behavior.
@@ -1436,7 +1436,7 @@ This phase turns the local repo manifests into a production deployment artifact.
      - The production hostname cutover is now encoded in production-only gateway-route and ingress-policy overlays, so the shared localhost manifests used by Tilt remain untouched.
      - The production apps overlay no longer applies the checked-in fallback `session-gateway-idp-config`; the Phase 5 render/apply path remains the owner of the production non-secret IDP ConfigMap.
      - `./deploy/scripts/13-render-phase-6-production-manifests.sh` renders `tmp/phase-6/gateway-routes.yaml`, `tmp/phase-6/istio-ingress-policies.yaml`, `tmp/phase-6/prometheus-stack-values.override.yaml`, and `tmp/phase-6/istio-egress.yaml`, and it fails if any rendered output still contains `budgetanalyzer.localhost` or `auth0-issuer.placeholder.invalid`.
-8. **[Human]** Review the hostname and egress render output before it becomes the production baseline.
+8. **[Human] Complete per operator handoff as of 2026-04-17.** Review the hostname and egress render output before it becomes the production baseline.
    - Verify:
      ```bash
      ./deploy/scripts/13-render-phase-6-production-manifests.sh
@@ -1465,13 +1465,13 @@ This phase turns the local repo manifests into a production deployment artifact.
    - Notes:
      - The checked-in production monitoring baseline remains Prometheus/Grafana only in Phase 6, and the production override explicitly preserves the `prometheus-stack` release-name contract that yields the `prometheus-stack-grafana` Service used by the Grafana `HTTPRoute`.
      - The production Redis path is now a first-class, self-contained overlay that generates `ConfigMap/redis-acl-bootstrap` from the committed `kubernetes/production/infrastructure/redis/start-redis.sh` input and replaces the local-dev `emptyDir` `redis-data` volume with `PersistentVolumeClaim/redis-data`.
-10. **[Human]** Approve the production monitoring baseline and Redis decision before Phase 6 sign-off.
+10. **[Human] Complete per operator handoff as of 2026-04-17.** Approve the production monitoring baseline and Redis decision before Phase 6 sign-off.
     - Stop if any Phase 6 manifest, route, or doc implies Jaeger/Kiali exposure before Phase 10 implements and hardens them.
     - Stop if Redis persistence behavior in production is still ambiguous or still depends on `emptyDir`.
 
 #### Chunk 3: Add production verification and sign-off
 
-11. **[AI Assistant]** Extend the production static/render verification so it covers the full Phase 6 production path, not just the image overlay.
+11. **[AI Assistant] Complete as of 2026-04-17.** Extend the production static/render verification so it covers the full Phase 6 production path, not just the image overlay.
     - Keep `scripts/guardrails/verify-production-image-overlay.sh` as the starting point.
     - Make the production verifier fail on:
       - `:latest`
@@ -1481,14 +1481,18 @@ This phase turns the local repo manifests into a production deployment artifact.
       - `auth0-issuer.placeholder.invalid`
       - `nginx.k8s.conf` on the production route
     - Keep the verifier repo-owned and runnable before any live Phase 7 or Phase 9 deployment step.
-12. **[Human]** Run the production verifier against the checked-in production overlay before moving to Phase 7.
+12. **[Human] Complete per operator handoff as of 2026-04-17.** Run the production verifier against the checked-in production overlay before moving to Phase 7.
     - Run:
       ```bash
       ./scripts/guardrails/verify-production-image-overlay.sh
       ```
     - If the verifier is expanded into a broader Phase 6 production render check, run that command instead and record the exact pass/fail output in the operator notes.
     - Stop on any failure. Do not treat leftover localhost hosts, placeholder Auth0 values, or mutable image refs as acceptable temporary production debt.
-13. **[Human]** Do the final file review for the Phase 6 production baseline.
+    - Recorded pass output:
+      ```text
+      Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure/redis
+      ```
+13. **[Human] Complete per operator handoff as of 2026-04-17.** Do the final file review for the Phase 6 production baseline.
     - Review the production overlay directory, the affected NGINX config path, the affected Gateway/Istio manifests, and the production verifier script.
     - Confirm the resulting production path is a committed artifact and does not rely on Tilt-only behavior or secret values in the repo.
 
@@ -1507,7 +1511,7 @@ This phase turns the local repo manifests into a production deployment artifact.
 - The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
 - No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
 - The production verifier passes on the current checked-in Phase 6 artifacts.
-- Once those checks pass, Phase 6 is complete and Phase 7 is the next open phase.
+- **Status:** Complete per operator handoff as of 2026-04-17. Phase 7 is the next open phase.
 
 ---
 
@@ -1938,3 +1942,13 @@ sudo rm /etc/ssh/sshd_config.d/99-budgetanalyzer-hardening.conf
 sudo sshd -t
 sudo systemctl reload ssh
 ```
+
+---
+
+## TODO
+
+- Revisit local-development Redis storage parity. PostgreSQL and RabbitMQ
+  already use PVC-backed storage in dev, while local Redis still uses
+  `emptyDir`. Replace the local Redis `emptyDir` data volume with a PVC-backed
+  path and keep the "fresh Redis state" workflow explicit through a reset
+  command or overlay instead of making ephemeral storage the default.

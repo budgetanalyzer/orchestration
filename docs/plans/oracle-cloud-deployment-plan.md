@@ -597,7 +597,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    - Complete as of 2026-04-16: `03-render-phase-4-istio-manifests.sh` renders an HTTP-only host-agnostic `Gateway`, and `06-configure-host-redirects.sh` remains available only to reproduce the rejected host-redirect experiment against whatever ports the current ingress Service exposes.
 8. **Document the operator handoff in the repo.**
    - `deploy/README.md` must show the exact review/run order, expected inputs, and which later phase reuses each script.
-   - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague “generate scripts” placeholder.
+   - This plan document must point to the new deploy artifacts instead of leaving Chunk 1 as a vague "generate scripts" placeholder.
    - Complete as of 2026-04-16 in `deploy/README.md` plus the concrete artifact references in this section.
 9. **Validate the install-path artifacts before calling Chunk 1 complete.**
    - Run `bash -n` and `shellcheck` on every new or modified `deploy/scripts/*.sh`.
@@ -1031,86 +1031,208 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 ## Phase 5: OCI Vault, External Secrets, and Internal TLS
 
 **Owner:** Human for OCI/IAM/secret values; AI may write templates only
-**Estimated time:** 1-2 hours
+**Current checkpoint:** Phase 4 is complete as of 2026-04-16. Phase 5 is the next open phase.
+**Estimated time:** 2-4 hours if the secret values already exist outside the workspace.
 
 ### Principle
 
 AI agents work with secret names and vault paths, never secret values. Templates and manifests are committed; populated values never enter the repo or workspace.
 
-### Steps
+### Phase 5 Execution Order (Detailed)
 
-1. **Create instance config directory** on the project owner's local machine.
+#### Chunk 1: Prepare the reviewed Phase 5 inputs
+
+1. **[Human]** Confirm the operator-owned non-secret config file exists outside the workspace.
    ```bash
    mkdir -p ~/.config/budget-analyzer
    cp deploy/instance.env.template ~/.config/budget-analyzer/instance.env
-   # Fill in the instance-specific, non-secret OCI, routing, and contact values.
-   # Production image refs stay in kubernetes/production/apps/image-inventory.yaml.
    ```
-2. **Create OCI Vault resources.**
-   - Use an Always Free-compatible OCI Vault setup.
-   - Do not choose paid Virtual Private Vault features.
-   - Keep vault OCIDs outside the workspace.
-3. **Create IAM dynamic group** matching the compute instance.
-   ```text
-   instance.id = '<instance-ocid>'
-   ```
-4. **Create IAM policy** allowing the instance to read vault secrets.
-   ```text
-   Allow dynamic-group budgetanalyzer-instance to read secret-family in compartment <compartment-name>
-   ```
-5. **Populate vault secrets** via OCI Console or OCI CLI outside AI sessions.
-   - `budget-analyzer/auth0-client-secret`
-   - `budget-analyzer/fred-api-key`
-   - `budget-analyzer/postgres-admin-password`
-   - `budget-analyzer/postgres-transaction-svc`
-   - `budget-analyzer/postgres-currency-svc`
-   - `budget-analyzer/postgres-permission-svc`
-   - `budget-analyzer/rabbitmq-admin-password`
-   - `budget-analyzer/rabbitmq-definitions`
-   - `budget-analyzer/rabbitmq-currency-svc`
-   - `budget-analyzer/redis-default-password`
-   - `budget-analyzer/redis-ops-password`
-   - `budget-analyzer/redis-session-gateway`
-   - `budget-analyzer/redis-ext-authz`
-   - `budget-analyzer/redis-currency-svc`
-6. **Create a `ClusterSecretStore` or per-namespace `SecretStore`s.**
-   - A namespaced `SecretStore` in `infrastructure` is not enough for `ExternalSecret` resources in `default`.
-   - Recommended first iteration: one `ClusterSecretStore` with explicit namespace policy review.
-   ```yaml
-   apiVersion: external-secrets.io/v1beta1
-   kind: ClusterSecretStore
-   metadata:
-     name: oci-vault
-   spec:
-     provider:
-       oracle:
-         vault: <vault-ocid>
-         region: <home-region>
-         auth:
-           instancePrincipal: true
-   ```
-7. **Create `ExternalSecret` manifests** for native Kubernetes Secrets in the correct target namespaces.
-   - `auth0-credentials` in `default`
-   - `fred-api-credentials` in `default`
-   - service PostgreSQL/RabbitMQ/Redis credentials in `default`
-   - bootstrap PostgreSQL/RabbitMQ/Redis credentials in `infrastructure`
-8. **Create production non-secret ConfigMaps.**
-   - `session-gateway-idp-config` must contain production `AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, and `IDP_LOGOUT_RETURN_TO`.
-   - These are not secret values, but do not leave placeholder localhost values in production.
-9. **Create internal infrastructure TLS secrets.**
-   Current workloads require:
-   - `infra-ca` in `default`
-   - `infra-ca` in `infrastructure`
-   - `infra-tls-postgresql` in `infrastructure`
-   - `infra-tls-redis` in `infrastructure`
-   - `infra-tls-rabbitmq` in `infrastructure`
+   - Fill in the OCI, routing, and contact values already known from Phases 1-4.
+   - Production image refs still stay in `kubernetes/production/apps/image-inventory.yaml`, not in `instance.env`.
+   - If the checked-in template does not yet include the production non-secret IDP values (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`), stop and have the AI assistant add that render path before continuing. Phase 5 otherwise has no clean source of truth for the production `session-gateway-idp-config`.
+2. **[AI Assistant]** Prepare the checked-in non-secret Phase 5 artifacts before the human touches OCI.
+   - Add or update the repo-owned render/apply path for:
+     - the `ClusterSecretStore` or intentionally duplicated `SecretStore` set
+     - the full `ExternalSecret` set
+     - the production `session-gateway-idp-config`
+     - the internal TLS generation/apply path
+   - Keep OCI OCIDs and all secret payloads outside the repo by sourcing `~/.config/budget-analyzer/instance.env` or a similarly external operator-owned file at execution time.
+   - Do not hardcode secret values, vault OCIDs, or certificate private keys into checked-in manifests or scripts.
+3. **[Human]** Review those artifacts before any live OCI or cluster mutation.
 
-   Pick one explicit production mechanism before deploying infrastructure:
-   - human-run host/instance script that generates and applies these secrets, or
-   - cert-manager private CA resources, or
-   - OCI Vault-backed material synced through ESO.
+The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `Secret` objects:
 
-   Do not have AI agents generate or handle certificate private keys.
+| Namespace | Native Secret | Keys | OCI Vault secret name(s) |
+|---|---|---|---|
+| `default` | `auth0-credentials` | `AUTH0_CLIENT_SECRET` | `budget-analyzer/auth0-client-secret` |
+| `default` | `fred-api-credentials` | `api-key` | `budget-analyzer/fred-api-key` |
+| `default` | `transaction-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-transaction-svc` |
+| `default` | `currency-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-currency-svc` |
+| `default` | `permission-service-postgresql-credentials` | `password` | `budget-analyzer/postgres-permission-svc` |
+| `default` | `currency-service-rabbitmq-credentials` | `password` | `budget-analyzer/rabbitmq-currency-svc` |
+| `default` | `session-gateway-redis-credentials` | `password` | `budget-analyzer/redis-session-gateway` |
+| `default` | `ext-authz-redis-credentials` | `password` | `budget-analyzer/redis-ext-authz` |
+| `default` | `currency-service-redis-credentials` | `password` | `budget-analyzer/redis-currency-svc` |
+| `infrastructure` | `postgresql-bootstrap-credentials` | `password`, `transaction-service-password`, `currency-service-password`, `permission-service-password` | `budget-analyzer/postgres-admin-password`, `budget-analyzer/postgres-transaction-svc`, `budget-analyzer/postgres-currency-svc`, `budget-analyzer/postgres-permission-svc` |
+| `infrastructure` | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` | `budget-analyzer/rabbitmq-admin-password`, `budget-analyzer/rabbitmq-definitions` |
+| `infrastructure` | `redis-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password`, `currency-service-password` | `budget-analyzer/redis-default-password`, `budget-analyzer/redis-ops-password`, `budget-analyzer/redis-session-gateway`, `budget-analyzer/redis-ext-authz`, `budget-analyzer/redis-currency-svc` |
+
+#### Chunk 2: Create the OCI Vault and IAM bindings
+
+4. **[Human]** Create the Always Free-compatible OCI vault and symmetric encryption key in the OCI Console.
+   - Click flow:
+     1. Sign in to the OCI Console and switch to the correct home region and application compartment.
+     2. Open the navigation menu.
+     3. Click **Identity & Security**.
+     4. Click **Vault**.
+     5. On the vault list page, confirm the compartment selector is the application compartment.
+     6. Click **Create Vault**.
+     7. Enter a vault name such as `budget-analyzer-vault`.
+     8. Leave **Make it virtual private vault** unchecked. Phase 5 assumes the Always Free virtual vault, not a paid dedicated vault.
+     9. Skip tags unless you already use them consistently.
+     10. Click **Create Vault**.
+     11. Open the new vault details page.
+     12. Click **Master encryption keys**.
+     13. Click **Create Key**.
+     14. Keep the same compartment.
+     15. Choose an `AES` symmetric key. Do not choose `RSA` or `ECDSA`.
+     16. Enter a key name such as `budget-analyzer-secrets-key`.
+     17. Leave auto-rotation off for the first pass unless you are prepared to operationalize it now.
+     18. Click **Create Key**.
+     19. Copy the vault OCID and key OCID into `~/.config/budget-analyzer/instance.env` as `OCI_VAULT_OCID` and `OCI_VAULT_KEY_OCID`.
+   - Stop if you accidentally create a Virtual Private Vault or a non-symmetric key. Either choice is wrong for this plan.
+5. **[Human]** Create the OCI IAM dynamic group that represents the compute instance.
+   - Click flow:
+     1. Open the navigation menu.
+     2. Click **Identity & Security**.
+     3. Click **Domains**.
+     4. Open the tenancy's default identity domain.
+     5. Click **Dynamic groups**.
+     6. Click **Create dynamic group**.
+     7. Set **Name** to `budgetanalyzer-instance`.
+     8. Add a short description such as `Budget Analyzer OCI host instance principal`.
+     9. In **Matching rules**, use the text editor and enter:
+        ```text
+        instance.id = '<OCI_INSTANCE_OCID>'
+        ```
+     10. Click **Create dynamic group**.
+   - Use the exact instance OCID from `~/.config/budget-analyzer/instance.env`. Do not broaden this to the whole compartment unless you intentionally want every instance there to inherit vault access.
+6. **[Human]** Create the IAM policy that lets the instance read the vault metadata and secrets.
+   - Click flow:
+     1. Open the navigation menu.
+     2. Click **Identity & Security**.
+     3. Click **Policies**.
+     4. Select the tenancy root compartment or another parent compartment above the application compartment. The policy must be attached at or above the compartment it references.
+     5. Click **Create Policy**.
+     6. Set **Name** to `budgetanalyzer-instance-vault-read`.
+     7. Add a short description.
+     8. Click **Show manual editor**.
+     9. Paste these statements, replacing the compartment name:
+        ```text
+        Allow dynamic-group budgetanalyzer-instance to read vaults in compartment <application-compartment-name>
+        Allow dynamic-group budgetanalyzer-instance to read secret-family in compartment <application-compartment-name>
+        ```
+     10. Click **Create**.
+   - Start with the compartment-scoped policy above. If you later want tighter scope, add a `where target.vault.id = '<vault-ocid>'` condition after the first successful sync proves the path works.
+7. **[Human]** Populate the vault secrets through the OCI Console. Do this outside AI sessions.
+   - Reusable click flow for each secret:
+     1. Open the navigation menu.
+     2. Click **Identity & Security**.
+     3. Click **Secret Management**.
+     4. Set the compartment filter to the application compartment.
+     5. Set the vault filter to the new Budget Analyzer vault.
+     6. Click **Create secret**.
+     7. Enter the exact secret name from the checklist below.
+     8. Keep the same compartment.
+     9. Select the Budget Analyzer vault.
+     10. Select the Budget Analyzer AES key.
+     11. Choose **Manual secret generation**.
+     12. For normal passwords, API keys, and client secrets, keep the plain-text template and paste the value.
+     13. For `budget-analyzer/rabbitmq-definitions`, paste the full JSON definitions document as the secret contents.
+     14. Leave cross-region replication and auto-rotation off for the first pass.
+     15. Click **Create secret**.
+   - Required OCI Vault secret names:
+     - `budget-analyzer/auth0-client-secret`
+     - `budget-analyzer/fred-api-key`
+     - `budget-analyzer/postgres-admin-password`
+     - `budget-analyzer/postgres-transaction-svc`
+     - `budget-analyzer/postgres-currency-svc`
+     - `budget-analyzer/postgres-permission-svc`
+     - `budget-analyzer/rabbitmq-admin-password`
+     - `budget-analyzer/rabbitmq-definitions`
+     - `budget-analyzer/rabbitmq-currency-svc`
+     - `budget-analyzer/redis-default-password`
+     - `budget-analyzer/redis-ops-password`
+     - `budget-analyzer/redis-session-gateway`
+     - `budget-analyzer/redis-ext-authz`
+     - `budget-analyzer/redis-currency-svc`
+   - Stop if you are about to paste a secret value into the repo, terminal history inside the AI workspace, or any checked-in file. Secret entry happens only in OCI or a trusted local CLI session outside AI.
+
+#### Chunk 3: Render and apply the Kubernetes secret-sync resources
+
+8. **[Human]** Allow IAM propagation before testing instance principal access.
+   - Oracle documents that dynamic-group rule changes can take up to about one hour to take effect.
+   - Do not troubleshoot ESO against a brand-new dynamic group or policy before that propagation window has passed.
+9. **[Human]** On the OCI instance, render and apply the AI-prepared `ClusterSecretStore`, `ExternalSecret`, and production `session-gateway-idp-config` resources from the external operator config.
+   ```bash
+   cd /path/to/orchestration
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   test -f ~/.config/budget-analyzer/instance.env
+   # Run the reviewed Phase 5 render/apply path here.
+   ```
+   - Recommended first iteration: one `ClusterSecretStore` so the `ExternalSecret` objects in both `default` and `infrastructure` can reference the same OCI Vault integration.
+   - A `SecretStore` only in `infrastructure` is not enough for `ExternalSecret` resources in `default`.
+10. **[Human]** Verify ESO has synced the native Kubernetes secrets and the production non-secret IDP config.
+    - Verify:
+      ```bash
+      kubectl get clustersecretstore
+      kubectl get externalsecret -A
+      kubectl get secret -n default \
+        auth0-credentials fred-api-credentials \
+        transaction-service-postgresql-credentials \
+        currency-service-postgresql-credentials \
+        permission-service-postgresql-credentials \
+        currency-service-rabbitmq-credentials \
+        session-gateway-redis-credentials \
+        ext-authz-redis-credentials \
+        currency-service-redis-credentials
+      kubectl get secret -n infrastructure \
+        postgresql-bootstrap-credentials \
+        rabbitmq-bootstrap-credentials \
+        redis-bootstrap-credentials
+      kubectl get configmap -n default session-gateway-idp-config -o yaml
+      ```
+    - Stop if any `ExternalSecret` shows a sync error, if any expected native `Secret` is missing, or if `session-gateway-idp-config` still carries localhost or placeholder values.
+
+#### Chunk 4: Create the internal infrastructure TLS secrets
+
+11. **[AI Assistant]** Replace the current "pick one mechanism later" branch with one explicit human-run path.
+    - Recommended first iteration: a repo-owned host/instance script that generates a private `infra-ca` plus service certificates for PostgreSQL, Redis, and RabbitMQ, then applies them as Kubernetes secrets.
+    - Keep this aligned with the existing secret-name contract:
+      - `infra-ca` in `default`
+      - `infra-ca` in `infrastructure`
+      - `infra-tls-postgresql` in `infrastructure`
+      - `infra-tls-redis` in `infrastructure`
+      - `infra-tls-rabbitmq` in `infrastructure`
+    - Do not move certificate private keys through the AI workspace or check them into the repo.
+12. **[Human]** Review and run the chosen internal TLS generation/apply path on the OCI host or another trusted machine outside AI sessions.
+    - This is intentionally not an OCI Console flow. It is certificate-generation work, and the repo rules already require humans to own key material.
+    - Do not proceed to Phase 8 until all five TLS-related secrets exist in the cluster.
+13. **[Human]** Verify the internal TLS secrets exist before any infrastructure pods start.
+    ```bash
+    kubectl get secret -n default infra-ca
+    kubectl get secret -n infrastructure \
+      infra-ca infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
+    ```
+    - Stop if any TLS secret is missing or if the CA bundle exists in only one namespace.
+
+### Operator Notes
+
+- Phase 4 already installed External Secrets Operator and cert-manager. Phase 5 is configuration and secret-material work, not controller-install work.
+- The first clean pass should prefer one `ClusterSecretStore` over namespace-specific stores unless there is a concrete isolation requirement.
+- Keep the OCI Vault secret names exact. The `ExternalSecret.remoteRef.key` values depend on those names matching the checklist above.
+- `rabbitmq-definitions` is the only intentionally mixed-content secret. It must carry the full JSON definitions document that RabbitMQ imports at bootstrap.
+- If the `rabbitmq-definitions` document becomes awkward to enter or update in the Console, switch that one secret to OCI CLI outside AI sessions instead of editing JSON in the workspace.
 
 ### Outputs
 
@@ -1118,6 +1240,17 @@ AI agents work with secret names and vault paths, never secret values. Templates
 - ESO syncs vault secrets into native Kubernetes Secrets
 - Production Auth0 non-secret config exists
 - Internal TLS secrets exist before infrastructure pods start
+
+### Phase 5 Exit Criteria
+
+- `~/.config/budget-analyzer/instance.env` exists outside the workspace and includes every non-secret Phase 5 input that the reviewed render/apply path needs.
+- OCI Vault exists in the application compartment with the intended symmetric encryption key.
+- The `budgetanalyzer-instance` dynamic group and its read policy exist, and IAM propagation has been allowed to complete before ESO validation.
+- OCI Vault contains the full secret inventory listed in Chunk 2 Step 7.
+- ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
+- `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
+- `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
+- Once those checks pass, Phase 5 is complete and Phase 6 is the next open phase.
 
 ---
 

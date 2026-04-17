@@ -215,6 +215,9 @@ use this checkpoint instead of reconstructing the next commands from the plan:
    ls deploy/manifests/phase-5 deploy/scripts/09-render-phase-5-secrets.sh \
      deploy/scripts/10-apply-phase-5-secrets.sh deploy/scripts/11-generate-phase-5-infra-tls.sh
    ```
+   `OCI_COMPARTMENT_OCID` is the compartment that contains the Phase 5 vault,
+   key, and secrets. If you are using the tenancy root compartment for those
+   resources, `OCI_COMPARTMENT_OCID` should equal `OCI_TENANCY_OCID`.
 2. Review the checked-in Phase 5 artifacts first. Do not run the render step yet if the OCI vault/key work is still pending.
    ```bash
    sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template

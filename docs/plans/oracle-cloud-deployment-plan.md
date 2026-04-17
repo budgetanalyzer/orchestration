@@ -1048,6 +1048,11 @@ AI agents work with secret names and vault paths, never secret values. Templates
    cp deploy/instance.env.template ~/.config/budget-analyzer/instance.env
    ```
    - Fill in the OCI, routing, and contact values already known from Phases 1-4.
+   - `OCI_COMPARTMENT_OCID` means the OCI compartment that will contain the
+     Phase 5 vault, key, and secrets. If you are keeping those resources in the
+     tenancy root compartment, set `OCI_COMPARTMENT_OCID` to
+     `OCI_TENANCY_OCID`. If you created a dedicated child application
+     compartment, set it to that child compartment's OCID instead.
    - Production image refs still stay in `kubernetes/production/apps/image-inventory.yaml`, not in `instance.env`.
    - If the checked-in template does not yet include the production non-secret IDP values (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`), stop and have the AI assistant add that render path before continuing. Phase 5 otherwise has no clean source of truth for the production `session-gateway-idp-config`.
 2. **[AI Assistant]** Prepare the checked-in non-secret Phase 5 artifacts before the human touches OCI.
@@ -1098,13 +1103,19 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
 
 #### Chunk 2: Create the OCI Vault and IAM bindings
 
+For this chunk, use **target vault compartment** to mean the OCI compartment
+that will hold the vault, key, and secrets. Preferred layout: a dedicated child
+application compartment. Supported fallback: the tenancy root compartment. If
+you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
+<tenancy-name>`.
+
 4. **[Human]** Create the Always Free-compatible OCI vault and symmetric encryption key in the OCI Console.
    - Click flow:
-     1. Sign in to the OCI Console and switch to the correct home region and application compartment.
+     1. Sign in to the OCI Console and switch to the correct home region and target vault compartment.
      2. Open the navigation menu.
      3. Click **Identity & Security**.
      4. Click **Vault**.
-     5. On the vault list page, confirm the compartment selector is the application compartment.
+     5. On the vault list page, confirm the compartment selector is the target vault compartment.
      6. Click **Create Vault**.
      7. Enter a vault name such as `budget-analyzer-vault`.
      8. Leave **Make it virtual private vault** unchecked. Phase 5 assumes the Always Free virtual vault, not a paid dedicated vault.
@@ -1141,24 +1152,31 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
      1. Open the navigation menu.
      2. Click **Identity & Security**.
      3. Click **Policies**.
-     4. Select the tenancy root compartment or another parent compartment above the application compartment. The policy must be attached at or above the compartment it references.
+     4. Select the tenancy root compartment if the target vault compartment is the tenancy root or a direct child of root. If the target vault compartment is nested deeper, select another parent compartment above it. The policy must be attached at or above the compartment it references.
      5. Click **Create Policy**.
      6. Set **Name** to `budgetanalyzer-instance-vault-read`.
      7. Add a short description.
      8. Click **Show manual editor**.
-     9. Paste these statements, replacing the compartment name:
-        ```text
-        Allow dynamic-group budgetanalyzer-instance to read vaults in compartment <application-compartment-name>
-        Allow dynamic-group budgetanalyzer-instance to read secret-family in compartment <application-compartment-name>
-        ```
+     9. Paste exactly one of these statement sets:
+        - If the vault, key, and secrets live in a dedicated child compartment:
+          ```text
+          Allow dynamic-group budgetanalyzer-instance to read vaults in compartment <target-vault-compartment-name>
+          Allow dynamic-group budgetanalyzer-instance to read secret-family in compartment <target-vault-compartment-name>
+          ```
+        - If the vault, key, and secrets live in the tenancy root compartment:
+          ```text
+          Allow dynamic-group budgetanalyzer-instance to read vaults in tenancy
+          Allow dynamic-group budgetanalyzer-instance to read secret-family in tenancy
+          ```
      10. Click **Create**.
-   - Start with the compartment-scoped policy above. If you later want tighter scope, add a `where target.vault.id = '<vault-ocid>'` condition after the first successful sync proves the path works.
+   - Do not write `in compartment <tenancy-name>` for a root-compartment deployment. In the OCI Console, `<tenancy-name> (root)` is UI labeling, not policy syntax.
+   - Start with the statement set above that matches your layout. If you later want tighter scope, add a `where target.vault.id = '<vault-ocid>'` condition after the first successful sync proves the path works.
 7. **[Human]** Populate the vault secrets through the OCI Console. Do this outside AI sessions.
    - Reusable click flow for each secret:
      1. Open the navigation menu.
      2. Click **Identity & Security**.
      3. Click **Secret Management**.
-     4. Set the compartment filter to the application compartment.
+     4. Set the compartment filter to the target vault compartment.
      5. Set the vault filter to the new Budget Analyzer vault.
      6. Click **Create secret**.
      7. Enter the exact secret name from the checklist below.
@@ -1278,7 +1296,7 @@ The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `S
 ### Phase 5 Exit Criteria
 
 - `~/.config/budget-analyzer/instance.env` exists outside the workspace and includes every non-secret Phase 5 input that the reviewed render/apply path needs.
-- OCI Vault exists in the application compartment with the intended symmetric encryption key.
+- OCI Vault exists in the target vault compartment with the intended symmetric encryption key.
 - The `budgetanalyzer-instance` dynamic group and its read policy exist, and IAM propagation has been allowed to complete before ESO validation.
 - OCI Vault contains the full secret inventory listed in Chunk 2 Step 7.
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.

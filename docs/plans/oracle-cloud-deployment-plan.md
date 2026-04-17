@@ -1320,7 +1320,7 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, Chunk 2 Step 5 is implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`, and Chunk 2 Step 7 is now implemented with the production gateway-route overlay, ingress-policy overlay, and reviewed Phase 6 render script. The next open work is the human review in Chunk 2 Step 8 before AI resumes at Chunk 2 Step 9 for the monitoring/storage updates.
+**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, Chunk 2 Step 5 is implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`, Chunk 2 Step 7 is implemented with the production gateway-route overlay, ingress-policy overlay, and reviewed Phase 6 render script, and Chunk 2 Step 9 is now implemented with the production Redis overlay plus the explicit monitoring baseline notes. The next open work is the human approval in Chunk 2 Step 10 before Chunk 3 expands the production verifier.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1447,12 +1447,24 @@ This phase turns the local repo manifests into a production deployment artifact.
      sed -n '1,260p' tmp/phase-6/istio-egress.yaml
      ```
    - Stop if any rendered production route, monitoring override, or egress output still carries a localhost hostname or placeholder Auth0 issuer.
-9. **[AI Assistant]** Finish the production monitoring and storage posture in checked-in artifacts.
+9. **[AI Assistant] Complete as of 2026-04-17.** Finish the production monitoring and storage posture in checked-in artifacts.
    - Keep the kube-prometheus-stack release name aligned with `kubernetes/monitoring/grafana-httproute.yaml`; the current checked-in route expects `prometheus-stack-grafana`.
    - Keep the checked-in production path honest about the current observability baseline: Prometheus/Grafana are the existing repo-owned monitoring assets, while Jaeger/Kiali are added later in Phase 10.
    - Do not imply Jaeger/Kiali are already deployed, routable, or hardened in any Phase 6 artifact.
    - PostgreSQL and RabbitMQ already use PVCs.
    - Redis currently uses `emptyDir` only in local dev; Phase 6 must create a production PVC-backed Redis variant and remove ambiguity from the production path.
+   - Implemented with:
+     - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+     - `kubernetes/production/infrastructure/redis/kustomization.yaml`
+     - `kubernetes/production/infrastructure/redis/deployment.yaml`
+     - `kubernetes/production/infrastructure/redis/service.yaml`
+     - `kubernetes/production/infrastructure/redis/pvc.yaml`
+     - `kubernetes/production/infrastructure/redis/start-redis.sh`
+     - `kubernetes/production/README.md`
+     - `deploy/README.md`
+   - Notes:
+     - The checked-in production monitoring baseline remains Prometheus/Grafana only in Phase 6, and the production override explicitly preserves the `prometheus-stack` release-name contract that yields the `prometheus-stack-grafana` Service used by the Grafana `HTTPRoute`.
+     - The production Redis path is now a first-class, self-contained overlay that generates `ConfigMap/redis-acl-bootstrap` from the committed `kubernetes/production/infrastructure/redis/start-redis.sh` input and replaces the local-dev `emptyDir` `redis-data` volume with `PersistentVolumeClaim/redis-data`.
 10. **[Human]** Approve the production monitoring baseline and Redis decision before Phase 6 sign-off.
     - Stop if any Phase 6 manifest, route, or doc implies Jaeger/Kiali exposure before Phase 10 implements and hardens them.
     - Stop if Redis persistence behavior in production is still ambiguous or still depends on `emptyDir`.
@@ -1594,7 +1606,7 @@ kubernetes/kyverno/policies/production/
    ```
 4. **Deploy Redis.**
    ```bash
-   kubectl apply -f <production-pvc-backed-redis-manifest>
+   kubectl apply -k kubernetes/production/infrastructure/redis
    ```
 5. **Verify infrastructure pods.**
    ```bash
@@ -1605,7 +1617,7 @@ kubernetes/kyverno/policies/production/
 ### Outputs
 
 - PostgreSQL, RabbitMQ, and Redis running in `infrastructure`
-- PVC-backed data for PostgreSQL/RabbitMQ
+- PVC-backed data for PostgreSQL, RabbitMQ, and Redis
 - Redis persistence decision documented and implemented
 - Infrastructure TLS active
 
@@ -1693,6 +1705,7 @@ Prometheus/Grafana already have repo-owned manifests and values in the current t
      -n monitoring \
      --version 83.4.0 \
      --values kubernetes/monitoring/prometheus-stack-values.yaml \
+     --values kubernetes/production/monitoring/prometheus-stack-values.override.yaml \
      --wait --timeout 5m
 
    kubectl apply -f kubernetes/monitoring/servicemonitor-spring-boot.yaml

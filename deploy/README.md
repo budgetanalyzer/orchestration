@@ -42,6 +42,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/production/gateway-routes/kustomization.yaml`
    - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
    - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+   - `kubernetes/production/infrastructure/redis/kustomization.yaml`
    - `deploy/scripts/13-render-phase-6-production-manifests.sh`
 8. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
@@ -284,6 +285,20 @@ The production apps overlay no longer applies the checked-in fallback
 `session-gateway-idp-config`. Keep the production non-secret IDP ConfigMap
 owned by the Phase 5 render/apply path, then apply the Phase 6 rendered route
 and egress output separately during Phase 9.
+
+Phase 6 also adds the checked-in production Redis path at
+`kubernetes/production/infrastructure/redis/`. That overlay generates the
+`redis-acl-bootstrap` ConfigMap from the committed production-local
+`start-redis.sh`, replaces the shared local-dev `emptyDir` with
+`PersistentVolumeClaim/redis-data`, and is the reviewed artifact Phase 8 should
+apply with `kubectl apply -k
+kubernetes/production/infrastructure/redis`.
+
+For monitoring, keep the Helm release name `prometheus-stack` when Phase 10
+installs kube-prometheus-stack. The checked-in production override at
+`kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+assumes that release name so Grafana stays reachable through the existing
+`prometheus-stack-grafana` Service referenced by the checked-in `HTTPRoute`.
 
 ## Validation Standard
 

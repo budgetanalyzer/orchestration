@@ -1059,6 +1059,29 @@ AI agents work with secret names and vault paths, never secret values. Templates
    - Keep OCI OCIDs and all secret payloads outside the repo by sourcing `~/.config/budget-analyzer/instance.env` or a similarly external operator-owned file at execution time.
    - Do not hardcode secret values, vault OCIDs, or certificate private keys into checked-in manifests or scripts.
 3. **[Human]** Review those artifacts before any live OCI or cluster mutation.
+   - Review the exact files that now implement the Phase 5 path:
+     - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
+     - `deploy/manifests/phase-5/external-secrets.yaml`
+     - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
+     - `deploy/scripts/09-render-phase-5-secrets.sh`
+     - `deploy/scripts/10-apply-phase-5-secrets.sh`
+     - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
+   - Recommended review commands:
+     ```bash
+     sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template
+     sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
+     sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
+     sed -n '1,220p' deploy/scripts/09-render-phase-5-secrets.sh
+     sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
+     sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
+     ```
+   - Before the live apply step later in Chunk 3, do one local render review from the populated operator config:
+     ```bash
+     ./deploy/scripts/09-render-phase-5-secrets.sh
+     sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
+     sed -n '1,260p' tmp/phase-5/external-secrets.yaml
+     sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
+     ```
 
 The AI-owned `ExternalSecret` set must create exactly these native Kubernetes `Secret` objects:
 

@@ -1725,9 +1725,24 @@ and Redis, so Phase 9 is the next open phase.
    Every repo-owned app pod in `default` should have an Istio sidecar. No listed image may contain `:latest`, `:tilt-`, or a local-only repo ref.
 7. **Smoke test through ingress.**
    ```bash
-   curl -kisS https://<public-ip>/health
-   curl -kisS https://<production-app-domain>/health
+   curl -isS -H 'Host: demo.budgetanalyzer.org' http://<nlb-public-ip>/health
+   curl -isS --resolve demo.budgetanalyzer.org:80:<nlb-public-ip> http://demo.budgetanalyzer.org/health
    ```
+   - Phase 9 remains HTTP-only. Do not expect `https://...` to work here; the
+     HTTPS listener, public certificate, and TLS secret wiring stay in Phase
+     11.
+   - Use the public OCI Network Load Balancer frontend IP, not the instance
+     public IP. After the accepted NLB cutover, direct public ingress to the
+     instance on `80` or `443` is not part of the design.
+   - `demo.budgetanalyzer.org` may still fail to resolve at this point if Phase
+     11 DNS has not been completed yet.
+   - 2026-04-17 operator note: `curl` to the instance public IP hung for both
+     `https://152.70.145.68/health` and `http://152.70.145.68/health` with the
+     production `Host` header. Treat that as expected while the instance is no
+     longer directly exposed and DNS is still pending.
+   - If the NLB-based HTTP checks also hang, debug the OCI ingress path first:
+     listener `80`, backend set to instance `30080`, frontend-NSG egress to
+     backend NSG on TCP `30080`, and backend health-check status.
 
 ### Outputs
 

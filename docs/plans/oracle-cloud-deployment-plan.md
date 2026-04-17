@@ -1313,14 +1313,14 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phase 6 is now also complete, so Phase 7 is the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, and 8 are now also complete, so Phase 9 is the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17, and Phase 6 is now complete as of 2026-04-17. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, and the final operator file-review handoff. Phase 7 is the next open phase.
+**Current checkpoint:** Phases 5, 6, 7, and 8 are complete per operator handoff as of 2026-04-17. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, and the infrastructure deploy/verification. Phase 9 is the next open phase.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1511,13 +1511,14 @@ This phase turns the local repo manifests into a production deployment artifact.
 - The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
 - No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
 - The production verifier passes on the current checked-in Phase 6 artifacts.
-- **Status:** Complete per operator handoff as of 2026-04-17. Phase 7 is the next open phase.
+- **Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
 
 ---
 
 ## Phase 7: Production Kyverno Admission Policy
 
 **Owner:** Split between AI-owned repo work and human-owned OCI execution
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
 **Estimated time:** 4-8 hours
 
 ### Required policy layout
@@ -1571,31 +1572,40 @@ kubernetes/kyverno/policies/production/
 
 ### Human Tasks
 
-1. **Review the checked-in Phase 7 artifacts before touching OCI.**
+1. **[Human] Complete per operator handoff as of 2026-04-17.** Review the checked-in Phase 7 artifacts before touching OCI.
    ```bash
    sed -n '1,240p' deploy/helm-values/kyverno.values.yaml
    sed -n '1,220p' deploy/scripts/14-install-phase-7-kyverno.sh
    sed -n '1,220p' deploy/scripts/15-apply-phase-7-policies.sh
    find kubernetes/kyverno/policies -maxdepth 2 -type f | sort
    ```
-2. **Run the production verifier against the checked-in baseline before live apply.**
+2. **[Human] Complete per operator handoff as of 2026-04-17.** Run the production verifier against the checked-in baseline before live apply.
    ```bash
    ./scripts/guardrails/verify-production-image-overlay.sh
    ```
-3. **Install Kyverno on the OCI cluster with the pinned chart and checked-in values.**
+3. **[Human] Complete per operator handoff as of 2026-04-17.** Install Kyverno on the OCI cluster with the pinned chart and checked-in values.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ./deploy/scripts/14-install-phase-7-kyverno.sh
    kubectl get namespace kyverno --show-labels
    kubectl get deployments,pods -n kyverno
    ```
-4. **Apply the production Phase 7 policy set on the OCI cluster.**
+4. **[Human] Complete per operator handoff as of 2026-04-17.** Apply the production Phase 7 policy set on the OCI cluster.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ./deploy/scripts/15-apply-phase-7-policies.sh
    kubectl get clusterpolicy
    ```
-5. **Treat Phase 7 as live only after the OCI run is complete.**
+   - Recorded outcome:
+     ```text
+     [phase4] verifying the checked-in production image baseline before live policy apply
+     Phase 6 production verification passed: /home/ubuntu/orchestration/kubernetes/production/apps, /tmp/tmp.Hb02mhcm7X/phase-6, /home/ubuntu/orchestration/kubernetes/production/infrastructure/redis
+     [phase4] ensuring Kyverno admission controller is available
+     [phase4] applying Phase 7 production policy set
+     [phase4] Phase 7 ClusterPolicy snapshot
+     ```
+   - Verified live policy result: all six expected ClusterPolicies reported `READY=True`, including `phase7-require-third-party-image-digests`, and the apply script did not stop on the production-only policy-content check.
+5. **Complete per operator handoff as of 2026-04-17.** Treat Phase 7 as live only after the OCI run is complete.
    - stop if the production verifier fails
    - stop if any Kyverno controller deployment is unavailable
    - stop if the live `phase7-require-third-party-image-digests` policy still contains local Tilt/latest exception rules
@@ -1607,42 +1617,45 @@ kubernetes/kyverno/policies/production/
 - Static guardrails prevent local exceptions from leaking into production policy
 
 **Implementation status:** Repo-owned Phase 7 install/apply artifacts are
-checked in as of 2026-04-17. Human review and execution on the OCI host are
-still required before treating Phase 7 as live.
+checked in and were executed successfully on the OCI host per operator handoff
+as of 2026-04-17. The production Kyverno controller and policy set are now
+live, and Phase 8 is also complete, so Phase 9 is the next open phase.
 
 ---
 
 ## Phase 8: Deploy Infrastructure Services
 
 **Owner:** Human executes script (Pattern B)
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
 **Estimated time:** 15-30 minutes
 
 ### Steps
 
-1. **Verify namespace labels and required secrets.**
+1. **[Human] Complete per operator handoff as of 2026-04-17.** Verify namespace labels and required secrets.
    ```bash
    kubectl get namespace infrastructure --show-labels
    kubectl get secrets -n infrastructure
    kubectl get secret -n default infra-ca
    kubectl get secret -n infrastructure infra-ca infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
    ```
-2. **Deploy PostgreSQL.**
+2. **[Human] Complete per operator handoff as of 2026-04-17.** Deploy PostgreSQL.
    ```bash
    kubectl apply -f kubernetes/infrastructure/postgresql/
    ```
-3. **Deploy RabbitMQ.**
+3. **[Human] Complete per operator handoff as of 2026-04-17.** Deploy RabbitMQ.
    ```bash
    kubectl apply -f kubernetes/infrastructure/rabbitmq/
    ```
-4. **Deploy Redis.**
+4. **[Human] Complete per operator handoff as of 2026-04-17.** Deploy Redis.
    ```bash
    kubectl apply -k kubernetes/production/infrastructure/redis
    ```
-5. **Verify infrastructure pods.**
+5. **[Human] Complete per operator handoff as of 2026-04-17.** Verify infrastructure pods.
    ```bash
    kubectl get pods -n infrastructure
    ```
    Current repo design disables Istio sidecar injection for `infrastructure`; expect one app container per pod, not `2/2`. Infrastructure transport encryption is provided by PostgreSQL/Redis/RabbitMQ TLS plus mesh-protected app namespaces.
+   - Verified result: PostgreSQL, RabbitMQ, and Redis are running in `infrastructure` with the reviewed production Redis overlay and the required TLS secret baseline already in place from Phase 5.
 
 ### Outputs
 
@@ -1650,6 +1663,10 @@ still required before treating Phase 7 as live.
 - PVC-backed data for PostgreSQL, RabbitMQ, and Redis
 - Redis persistence decision documented and implemented
 - Infrastructure TLS active
+
+**Implementation status:** Phase 8 is complete per operator handoff as of
+2026-04-17. The infrastructure namespace is live with PostgreSQL, RabbitMQ,
+and Redis, so Phase 9 is the next open phase.
 
 ---
 
@@ -1663,6 +1680,7 @@ still required before treating Phase 7 as live.
 - Phase 3 production image inventory completed
 - Phase 6 production overlays completed
 - Phase 7 production Kyverno policy active
+- Phase 8 infrastructure services running in `infrastructure`
 - ESO-created service secrets ready in `default`
 - Production Auth0 callback/logout URLs configured in Auth0
 
@@ -1684,8 +1702,13 @@ still required before treating Phase 7 as live.
    ```
 3. **Apply app production overlays.**
    ```bash
-   kubectl apply -f <production-services-overlay-or-rendered-output>
+   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -
    ```
+   The production apps overlay references the shared service manifests under
+   `kubernetes/services/`, so direct `kubectl apply -k kubernetes/production/apps`
+   fails on kubectl's default load restrictor. Server-side apply is required
+   here because the generated `nginx-gateway-docs` ConfigMap is too large for
+   client-side apply's `last-applied-configuration` annotation.
 4. **Apply production HTTPRoutes.**
    ```bash
    kubectl apply -f tmp/phase-6/gateway-routes.yaml

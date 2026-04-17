@@ -323,6 +323,10 @@ Phase 6 also adds the checked-in production Redis path at
 apply with `kubectl apply -k
 kubernetes/production/infrastructure/redis`.
 
+Status as of 2026-04-17: Phase 8 is complete per operator handoff. Keep this
+Redis overlay as the reviewed production path for future infrastructure
+rebuilds.
+
 For monitoring, keep the Helm release name `prometheus-stack` when Phase 10
 installs kube-prometheus-stack. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
@@ -335,6 +339,10 @@ Phase 7 now has a repo-owned production install/apply path. Review the
 checked-in Kyverno values and policy inventory first. The production values now
 pin every rendered Kyverno controller and hook image by digest rather than
 inheriting chart-default tags:
+
+Status: complete per operator handoff as of 2026-04-17. Re-run the Phase 7
+install/apply steps when you change the Kyverno values, the Phase 7 policies,
+or rebuild the OCI cluster.
 
 ```bash
 sed -n '1,240p' deploy/helm-values/kyverno.values.yaml

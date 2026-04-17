@@ -37,6 +37,16 @@ Render it with:
 kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
 ```
 
+Apply it with server-side apply:
+
+```bash
+kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -
+```
+
+The generated `nginx-gateway-docs` ConfigMap is too large for client-side apply
+because `kubectl apply` would try to store the full manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation.
+
 Verify the current Phase 6 production baseline with:
 
 ```bash
@@ -60,6 +70,10 @@ That verifier now:
 ## Phase 7 Production Admission Path
 
 Phase 7 now has a repo-owned production admission path under `deploy/`:
+
+Status: complete per operator handoff as of 2026-04-17. The OCI cluster now
+runs the checked-in Kyverno controller values and the production-only Phase 7
+policy set.
 
 - `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
   instead of relying on mutable chart defaults.
@@ -179,8 +193,8 @@ Phase 6 production verification passed: /workspace/orchestration/kubernetes/prod
 ```
 
 The Phase 7 repo-owned install/apply surface is now checked in under `deploy/`.
-Once a human operator has reviewed and run that path on the OCI host, the next
-live deployment phase is Phase 8.
+Status as of 2026-04-17: Phase 8 is also complete per operator handoff, so the
+next live deployment phase is Phase 9.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the

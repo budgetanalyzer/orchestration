@@ -91,6 +91,29 @@ For the single free-tier tenant:
 
 Auth0 Free requires credit-card verification before custom domains can be used.
 
+### Custom domain verification note
+
+Auth0 custom domains are tenant-scoped, not application-scoped. The verification
+step is DNS ownership proof for `auth.budgetanalyzer.org`, not an application
+setting on the browser app.
+
+For `budgetanalyzer.org`, create the DNS record in Squarespace DNS:
+
+- Type: `CNAME`
+- Host / Name: `auth`
+- Target / Data: the exact Auth0 edge hostname shown in the custom-domain UI
+  such as
+  `dev-z425uzbzv67lffnt-cd-shdwsslf2x1abmsv.edge.tenants.us.auth0.com`
+
+Verification check:
+
+```bash
+dig auth.budgetanalyzer.org -t CNAME +short
+```
+
+Auth0 verification should succeed once that command returns the Auth0-provided
+target value.
+
 ## Recommended Demo Application Settings
 
 Create one regular web application for the demo browser flow and set:
@@ -104,6 +127,12 @@ Create one regular web application for the demo browser flow and set:
 - `Allowed Web Origins`:
   `https://demo.budgetanalyzer.org`
 - `ID Token Expiration`: `3600` seconds
+
+The greyed-out `Domain` field on the Auth0 application page is expected and is
+not where the custom domain is configured. Leave it alone. The application
+settings that matter here are the login/callback/logout/origin URLs above. The
+issuer used by the deployed app still needs to be
+`https://auth.budgetanalyzer.org/` through `AUTH0_ISSUER_URI`.
 
 Use this app's client ID in production `instance.env`.
 
@@ -140,16 +169,41 @@ Create one shared API registration in the same tenant and set:
 - `Name`: `Budget Analyzer API`
 - `Identifier`: `https://api.budgetanalyzer.org`
 - `Signing Algorithm`: `RS256`
+- `JSON Web Token (JWT) Profile`: `RFC 9068`
 - `Maximum Access Token Lifetime`: `900` seconds
+- `Implicit / Hybrid Flow Access Token Lifetime`: use the lowest value Auth0
+  allows in the UI; if `1` is accepted, use `1`
 - `Allow Offline Access`: off
+- `Enable RBAC`: off
+- `Add Permissions in the Access Token`: off
+- `Within User Access`: `Allow`
+- `Within Client Access`: `Deny`
 
 The API identifier is only an identifier. Auth0 does not call that URL.
+
+Rationale for the API choices:
+
+- `session-gateway` uses OAuth2 authorization code flow with PKCE and requests
+  the API audience so Auth0 returns a JWT access token.
+- The stack does not currently authorize requests from Auth0 API scopes or
+  Auth0 RBAC permissions. Runtime authorization comes from `permission-service`
+  into the Redis session and then into `X-Permissions` / `X-Roles` headers.
+- `RFC 9068` is the cleaner standards-based JWT profile and nothing in the
+  current code depends on Auth0-only access-token claims.
+- `Within User Access = Allow` matches the current browser flow because the app
+  does not use Auth0 client grants to request API permissions.
+- `Within Client Access = Deny` is the correct default until there is an actual
+  machine-to-machine caller for this API.
 
 Leave refresh-token and offline-access features off for now:
 
 - No refresh-token rotation
 - No refresh-token expiration configuration
 - No offline access requirement for the browser flow
+
+If the platform later introduces real machine-to-machine callers or starts
+enforcing Auth0 API permissions directly in services, revisit this API and move
+to explicit client-grant-based access policy plus documented scopes.
 
 ## Recommended Auth0 Session Settings
 
@@ -245,8 +299,12 @@ Operational caution:
 6. Choose `Auth0-managed certificates`.
 7. Save.
 8. Copy the CNAME target Auth0 shows.
-9. Create the matching DNS `CNAME` record for `auth.budgetanalyzer.org`.
-10. Return to Auth0 and verify the domain.
+9. In Squarespace DNS, create a `CNAME` record with host `auth` and the Auth0
+   target value.
+10. Wait for DNS to propagate, then run
+    `dig auth.budgetanalyzer.org -t CNAME +short` and confirm it returns the
+    Auth0 target.
+11. Return to Auth0 and verify the domain.
 
 ### Demo Browser Application
 
@@ -255,11 +313,13 @@ Operational caution:
 3. Name it `Budget Analyzer Demo`.
 4. Choose `Regular Web Applications`.
 5. Open `Settings`.
-6. Set the login, callback, logout, and web-origin values from this document.
-7. Set `ID Token Expiration` to `3600`.
-8. Save changes.
-9. Copy the generated `Client ID` into `instance.env`.
-10. Copy the generated `Client Secret` into OCI Vault, not into the repo or
+6. Ignore the greyed-out `Domain` field; it is read-only and not the custom
+   domain control.
+7. Set the login, callback, logout, and web-origin values from this document.
+8. Set `ID Token Expiration` to `3600`.
+9. Save changes.
+10. Copy the generated `Client ID` into `instance.env`.
+11. Copy the generated `Client Secret` into OCI Vault, not into the repo or
     `instance.env`.
 
 ### Local Dev Browser Application
@@ -285,9 +345,15 @@ Operational caution:
 4. Set the identifier to `https://api.budgetanalyzer.org`.
 5. Choose `RS256`.
 6. Save.
-7. Set `Maximum Access Token Lifetime` to `900`.
-8. Leave offline access off.
-9. Save changes.
+7. Set `JSON Web Token (JWT) Profile` to `RFC 9068`.
+8. Set `Maximum Access Token Lifetime` to `900`.
+9. Set `Implicit / Hybrid Flow Access Token Lifetime` to the lowest value the
+   Auth0 UI accepts.
+10. Leave offline access off.
+11. Keep `Enable RBAC` and `Add Permissions in the Access Token` off.
+12. Under application access policy, set `Within User Access` to `Allow`.
+13. Under application access policy, set `Within Client Access` to `Deny`.
+14. Save changes.
 
 ### Tenant Session Expiration
 

@@ -1,9 +1,9 @@
 # Oracle Cloud Deployment Path
 
 This directory is the committed, operator-facing install surface for the Oracle
-Cloud deployment plan. Phase 4 and Phase 5 now both have first-class,
-reviewable artifacts here so a human can inspect the exact cluster mutations
-before touching the OCI instance or Vault.
+Cloud deployment plan. Phase 4, Phase 5, and the Phase 6 production render path
+now all have first-class, reviewable artifacts here so a human can inspect the
+exact cluster mutations before touching the OCI instance or Vault.
 
 `deploy/` contains only repeatable Pattern B artifacts:
 
@@ -11,6 +11,7 @@ before touching the OCI instance or Vault.
 - checked-in Helm values under `deploy/helm-values/`
 - checked-in non-secret render templates under `deploy/manifests/phase-4/`
 - checked-in non-secret Phase 5 templates and manifests under `deploy/manifests/phase-5/`
+- the Phase 6 production render entry point under `deploy/scripts/`
 - the non-secret instance config template at `deploy/instance.env.template`
 
 Runtime render output still belongs under `tmp/`, not under `deploy/`.
@@ -36,7 +37,13 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/scripts/09-render-phase-5-secrets.sh`
    - `deploy/scripts/10-apply-phase-5-secrets.sh`
    - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
-7. Run the human-owned Phase 4 scripts in this exact order:
+7. Review the Phase 6 production render inputs:
+   - `kubernetes/production/README.md`
+   - `kubernetes/production/gateway-routes/kustomization.yaml`
+   - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
+   - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+   - `deploy/scripts/13-render-phase-6-production-manifests.sh`
+8. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -90,6 +97,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the Phase 5 render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, or any `instance.env` change that affects the rendered resources. |
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
 | `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the Phase 5 OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, and Redis, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated infrastructure passwords are written to an operator-only file outside the repo so the RabbitMQ definitions JSON can be assembled once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated password receipt file is reused on subsequent runs. |
+| `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed Phase 6 production gateway routes, ingress policies, monitoring hostname override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before Phase 9 applies them. | Re-run after changing the reviewed Phase 6 production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
 
 ## Chunk 3 Checkpoint
 
@@ -256,6 +264,27 @@ use this checkpoint instead of reconstructing the next commands from the plan:
    The script writes the CA and service keypairs under `~/.local/share/budget-analyzer/infra-tls` by default, keeps them outside the repo, and refuses to run from the containerized AI workspace.
 6. Stop if any `ExternalSecret` reports sync errors, if `session-gateway-idp-config` still shows placeholder/localhost values, or if any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or `infra-tls-rabbitmq` are missing.
 
+## Phase 6 Checkpoint
+
+Phase 6 Step 7 now has a repo-owned production render path. Before Phase 9
+applies any production gateway or egress objects, render and review the
+committed output first:
+
+```bash
+./deploy/scripts/13-render-phase-6-production-manifests.sh
+sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
+sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
+sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
+sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid' \
+  kubernetes/production tmp/phase-6
+```
+
+The production apps overlay no longer applies the checked-in fallback
+`session-gateway-idp-config`. Keep the production non-secret IDP ConfigMap
+owned by the Phase 5 render/apply path, then apply the Phase 6 rendered route
+and egress output separately during Phase 9.
+
 ## Validation Standard
 
 Every committed `deploy/scripts/*.sh` file must pass:
@@ -264,4 +293,5 @@ Every committed `deploy/scripts/*.sh` file must pass:
 - `shellcheck -x <script>`
 
 The render paths must also be provable locally with sample non-secret input so
-reviewers can inspect generated YAML under `tmp/phase-4/` and `tmp/phase-5/`.
+reviewers can inspect generated YAML under `tmp/phase-4/`, `tmp/phase-5/`, and
+`tmp/phase-6/`.

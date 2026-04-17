@@ -15,7 +15,6 @@ resources:
   - ../../services/permission-service/service.yaml
   - ../../services/session-gateway/serviceaccount.yaml
   - ../../services/session-gateway/configmap.yaml
-  - ../../services/session-gateway/idp-configmap.yaml
   - ../../services/session-gateway/deployment.yaml
   - ../../services/session-gateway/service.yaml
   - ../../services/ext-authz/serviceaccount.yaml

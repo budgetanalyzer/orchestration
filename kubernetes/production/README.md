@@ -13,8 +13,11 @@ work around it.
 
 Status as of 2026-04-17: Phase 6 Chunk 1 is complete, Chunk 2 Step 4
 ("Finish the production image and frontend overlay path" in the plan) is
-complete, and Chunk 2 Step 5 ("Create or finish the production NGINX ConfigMap
-path") is now encoded in the checked-in production assets below.
+complete, Chunk 2 Step 5 ("Create or finish the production NGINX ConfigMap
+path") is encoded in the checked-in production assets below, and Chunk 2 Step 7
+("Add the production hostname and egress render path") is now implemented
+through the production gateway-route overlay, ingress-policy overlay,
+monitoring override, and Phase 6 render script.
 
 That overlay already:
 
@@ -26,6 +29,10 @@ That overlay already:
 - patches `nginx-gateway` to serve the released `budget-analyzer-web` static
   bundle instead of the local `budget-analyzer-web-prod-smoke` image or the
   Vite dev server
+- intentionally does **not** manage `ConfigMap/session-gateway-idp-config`;
+  the production non-secret IDP config stays owned by the Phase 5 render/apply
+  path so the apps overlay cannot overwrite it with the checked-in fallback
+  localhost values
 
 Render it with:
 
@@ -68,24 +75,47 @@ The preserved public route contract is:
 - the docs/download surface stays same-origin and the production docs bundle
   now advertises `https://demo.budgetanalyzer.org/api`
 
+## Production Routing And Monitoring Inputs
+
+Phase 6 now keeps the production hostname cutover in reviewed, committed
+artifacts:
+
+- `gateway-routes/` renders the production `HTTPRoute` objects with
+  `demo.budgetanalyzer.org` and `grafana.budgetanalyzer.org`, while leaving the
+  shared localhost dev manifests untouched for Tilt
+- `istio-ingress-policies/` renders the production `AuthorizationPolicy` and
+  ingress local-rate-limit objects with the demo hostname, separately from the
+  gateway routes so Phase 9 can still defer those policy applies until
+  `ext-authz` is ready
+- `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
+  server domain and root URL to the production monitoring hostname
+- `../deploy/scripts/13-render-phase-6-production-manifests.sh` renders the
+  Phase 6 production outputs under `tmp/phase-6/`, including the Auth0/FRED
+  Istio egress manifests derived from the production `AUTH0_ISSUER_URI`
+
+Render and review the current production hostname/egress slice with:
+
+```bash
+./deploy/scripts/13-render-phase-6-production-manifests.sh
+sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
+sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
+sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
+sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+```
+
 ## Still Open In Phase 6
 
 The checked-in production baseline is not complete yet. Remaining repo-owned
 production blockers are:
 
-- localhost hostnames still appear in the gateway, Istio, monitoring, and
-  checked-in session-gateway fallback config paths
-- `kubernetes/istio/egress-service-entries.yaml` and
-  `kubernetes/istio/egress-routing.yaml` still carry the
-  `auth0-issuer.placeholder.invalid` placeholder
 - Redis still uses `emptyDir` for `/data` in the shared infrastructure
   deployment, so production persistence is not yet encoded
 - the current verifier only covers the app image overlay and not the broader
   Phase 6 production render path
 
 The next open implementation step in the plan is the human review in Chunk 2
-Step 6, followed by Chunk 2 Step 7 for the production hostname and Auth0
-egress render path.
+Step 8, followed by Chunk 2 Step 9 for the production monitoring/storage
+baseline.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the

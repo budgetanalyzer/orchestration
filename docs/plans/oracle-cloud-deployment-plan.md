@@ -1320,7 +1320,7 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, and Chunk 2 Step 5 is now implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`. The next open work is the human review in Chunk 2 Step 6 before AI resumes at Chunk 2 Step 7 for the hostname and Auth0 egress updates.
+**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, Chunk 2 Step 5 is implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`, and Chunk 2 Step 7 is now implemented with the production gateway-route overlay, ingress-policy overlay, and reviewed Phase 6 render script. The next open work is the human review in Chunk 2 Step 8 before AI resumes at Chunk 2 Step 9 for the monitoring/storage updates.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1419,21 +1419,34 @@ This phase turns the local repo manifests into a production deployment artifact.
    - Verify that `/` and `/login` no longer depend on dev-server behavior.
    - Verify that `/api-docs` remains repo-owned and does not fall through to the frontend SPA.
    - Stop if the production path still depends on HMR/Vite-only behavior.
-7. **[AI Assistant]** Add the production hostname and egress render path.
+7. **[AI Assistant] Complete as of 2026-04-17.** Add the production hostname and egress render path.
    - Replace `app.budgetanalyzer.localhost` with `demo.budgetanalyzer.org`.
    - Replace `grafana.budgetanalyzer.localhost` with `grafana.budgetanalyzer.org`.
    - Keep direct auth-path routing to Session Gateway.
    - Keep API/frontend routing through NGINX.
    - Render `kubernetes/istio/egress-service-entries.yaml` and `kubernetes/istio/egress-routing.yaml` from the production `AUTH0_ISSUER_URI`.
    - Do not apply or preserve the checked-in placeholder Auth0 host in the production path.
+   - Implemented with:
+     - `kubernetes/production/gateway-routes/kustomization.yaml`
+     - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
+     - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+     - `deploy/scripts/13-render-phase-6-production-manifests.sh`
+     - `kubernetes/production/apps/kustomization.yaml`
+   - Notes:
+     - The production hostname cutover is now encoded in production-only gateway-route and ingress-policy overlays, so the shared localhost manifests used by Tilt remain untouched.
+     - The production apps overlay no longer applies the checked-in fallback `session-gateway-idp-config`; the Phase 5 render/apply path remains the owner of the production non-secret IDP ConfigMap.
+     - `./deploy/scripts/13-render-phase-6-production-manifests.sh` renders `tmp/phase-6/gateway-routes.yaml`, `tmp/phase-6/istio-ingress-policies.yaml`, `tmp/phase-6/prometheus-stack-values.override.yaml`, and `tmp/phase-6/istio-egress.yaml`, and it fails if any rendered output still contains `budgetanalyzer.localhost` or `auth0-issuer.placeholder.invalid`.
 8. **[Human]** Review the hostname and egress render output before it becomes the production baseline.
    - Verify:
      ```bash
-     rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid' kubernetes/production kubernetes/gateway kubernetes/istio nginx deploy
-     sed -n '1,220p' kubernetes/istio/egress-service-entries.yaml
-     sed -n '1,260p' kubernetes/istio/egress-routing.yaml
+     ./deploy/scripts/13-render-phase-6-production-manifests.sh
+     rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid' kubernetes/production tmp/phase-6
+     sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
+     sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
+     sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
+     sed -n '1,260p' tmp/phase-6/istio-egress.yaml
      ```
-   - Stop if any production route still carries a localhost hostname or placeholder Auth0 issuer.
+   - Stop if any rendered production route, monitoring override, or egress output still carries a localhost hostname or placeholder Auth0 issuer.
 9. **[AI Assistant]** Finish the production monitoring and storage posture in checked-in artifacts.
    - Keep the kube-prometheus-stack release name aligned with `kubernetes/monitoring/grafana-httproute.yaml`; the current checked-in route expects `prometheus-stack-grafana`.
    - Keep the checked-in production path honest about the current observability baseline: Prometheus/Grafana are the existing repo-owned monitoring assets, while Jaeger/Kiali are added later in Phase 10.
@@ -1618,9 +1631,10 @@ kubernetes/kyverno/policies/production/
    kubectl get secrets -n default
    kubectl get configmap -n default session-gateway-idp-config -o yaml
    ```
-2. **Render and apply Istio egress config from production Auth0 issuer.**
+2. **Render and apply the reviewed Phase 6 hostname and egress output.**
    ```bash
-   ./scripts/ops/render-istio-egress-config.sh --apply --auth0-issuer-uri "<production-auth0-issuer-uri>"
+   ./deploy/scripts/13-render-phase-6-production-manifests.sh
+   kubectl apply -f tmp/phase-6/istio-egress.yaml
    ```
    Then rerun the Phase 4 runtime NetworkPolicy verifier. At this point, the previously deferred positive checks for `session-gateway probe -> istio-egress-gateway:443` and `currency-service probe -> istio-egress-gateway:443` must pass.
    ```bash
@@ -1632,12 +1646,11 @@ kubernetes/kyverno/policies/production/
    ```
 4. **Apply production HTTPRoutes.**
    ```bash
-   kubectl apply -f <production-gateway-routes-overlay-or-rendered-output>
+   kubectl apply -f tmp/phase-6/gateway-routes.yaml
    ```
 5. **Apply ext_authz policy and ingress rate-limit policy after ext-authz is ready.**
    ```bash
-   kubectl apply -f kubernetes/istio/ext-authz-policy.yaml
-   kubectl apply -f kubernetes/istio/ingress-rate-limit.yaml
+   kubectl apply -f tmp/phase-6/istio-ingress-policies.yaml
    ```
 6. **Verify app pods and image refs.**
    ```bash

@@ -1031,7 +1031,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 ## Phase 5: OCI Vault, External Secrets, and Internal TLS
 
 **Owner:** Human for OCI/IAM/secret values; AI may write templates only
-**Current checkpoint:** Phase 4 is complete as of 2026-04-16. Phase 5 Chunk 4 Step 11 is now implemented in-repo via `deploy/scripts/11-generate-phase-5-infra-tls.sh`; the next open Phase 5 work remains the human-owned OCI/Vault/TLS execution steps.
+**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. OCI Vault, ESO-backed secret sync, the production non-secret IDP config, and the internal infrastructure TLS secrets are now treated as the completed baseline for the remaining OCI deployment phases.
 **Estimated time:** 2-4 hours if the secret values already exist outside the workspace.
 
 ### Principle
@@ -1313,58 +1313,176 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete and Phase 6 is the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17, so Phase 6 is now the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
-**Owner:** AI agent may write manifests/scripts; human reviews
+**Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
+**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. Phase 6 Chunk 1 is complete, Chunk 2 Step 4 remains revalidated by `./scripts/guardrails/verify-production-image-overlay.sh`, and Chunk 2 Step 5 is now implemented with production-owned NGINX/docs ConfigMap inputs under `kubernetes/production/`. The next open work is the human review in Chunk 2 Step 6 before AI resumes at Chunk 2 Step 7 for the hostname and Auth0 egress updates.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
 
-### Required production overlay changes
+### Phase 6 Execution Order (Detailed)
 
-1. **Images**
-   - Replace every local app image with a versioned digest ref from Phase 3.
-   - Remove every `imagePullPolicy: Never` from production manifests.
-   - Remove `budget-analyzer-web-prod-smoke:latest` from the production NGINX path.
-   - Keep third-party images digest-pinned.
-2. **Frontend**
-   - Do not deploy the Vite dev server as the production frontend.
-   - Serve a production static bundle through NGINX or a production web image.
-   - Use `nginx/nginx.production.k8s.conf`, not `nginx/nginx.k8s.conf`, for the public app route.
-3. **NGINX ConfigMaps**
-   - Create production equivalents for `nginx-gateway-config`, `nginx-gateway-includes`, and `nginx-gateway-docs`.
-   - Make `/api/*`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/login`, `/`, and `/api-docs` match the current route contract.
-4. **Gateway API resources**
-   - Replace `app.budgetanalyzer.localhost` and `grafana.budgetanalyzer.localhost` with production hostnames.
-   - Keep direct auth-path routing to Session Gateway.
-   - Keep API/frontend routing through NGINX.
-5. **Istio egress config**
-   - Render `kubernetes/istio/egress-service-entries.yaml` and `kubernetes/istio/egress-routing.yaml` from the production `AUTH0_ISSUER_URI`.
-   - Do not apply the checked-in placeholder host.
-6. **Monitoring**
-   - Keep the kube-prometheus-stack release name aligned with `kubernetes/monitoring/grafana-httproute.yaml`; the current checked-in route expects `prometheus-stack-grafana`.
-   - Add committed, pinned, hardened values for Jaeger and Kiali before exposing them.
-7. **Storage**
-   - PostgreSQL and RabbitMQ already use PVCs.
-   - Redis currently uses `emptyDir`; either document intentional ephemeral session loss for the demo or create a production PVC-backed Redis variant.
-8. **Verification scripts**
-   - Add a production render/static verifier that fails on:
-     - `:latest`
-     - `:tilt-`
-     - `imagePullPolicy: Never`
+#### Chunk 1: Lock the production inputs and scope
+
+**Status:** Complete as of 2026-04-17 per the confirmed production inputs, the checked-in audit below, and the operator handoff that allowed implementation to continue into Chunk 2.
+
+1. **[Human]** Confirm the production inputs and decisions that the repo is allowed to encode.
+   - Application hostname confirmed: `demo.budgetanalyzer.org`.
+   - Monitoring hostname confirmed: `grafana.budgetanalyzer.org`.
+   - Keep production image refs sourced from `kubernetes/production/apps/image-inventory.yaml`, not from `instance.env`.
+   - Redis is **not** allowed to stay ephemeral in production. Phase 6 must produce a PVC-backed production Redis path.
+   - Jaeger and Kiali remain in scope for the overall deployment plan, but they are **not** a Phase 6 deliverable. Their pinned manifests, hardening, tracing integration, and public exposure belong to Phase 10.
+   - Stop if Phase 6 work starts implying Jaeger/Kiali already exist in the production path before Phase 10 implements them.
+2. **[AI Assistant]** Audit the current repo-owned production path and convert the Phase 6 requirements into concrete file work.
+   - Treat these existing assets as the current starting point, not as future work:
+     - `kubernetes/production/apps/kustomization.yaml`
+     - `kubernetes/production/apps/image-inventory.yaml`
+     - `kubernetes/production/README.md`
+     - `scripts/guardrails/verify-production-image-overlay.sh`
+   - Identify every remaining production blocker in checked-in manifests, scripts, and docs:
      - `budgetanalyzer.localhost`
      - `auth0-issuer.placeholder.invalid`
-     - `nginx.k8s.conf` on the production route
+     - local `:latest` refs
+     - local `:tilt-<hash>` refs
+     - `imagePullPolicy: Never`
+     - `nginx/nginx.k8s.conf` on any production route
+     - any production path that still depends on Tilt-only ConfigMap creation or the Vite dev server
+   - Update this plan or the nearby production docs if the discovered repo reality differs from the assumptions in this section.
+   - **Audit result as of 2026-04-17:**
+     - `kubernetes/production/apps/kustomization.yaml` already swaps the repo-managed workloads to the digest-pinned GHCR refs from `kubernetes/production/apps/image-inventory.yaml`, generates committed `nginx-gateway-config`, `nginx-gateway-includes`, and `nginx-gateway-docs` ConfigMaps, and patches `nginx-gateway` to copy the released `budget-analyzer-web` static bundle instead of the local `budget-analyzer-web-prod-smoke` image.
+     - `scripts/guardrails/verify-production-image-overlay.sh` already proves the rendered `kubernetes/production/apps` output contains no local `:latest`, no local `:tilt-<hash>`, no `imagePullPolicy: Never`, no unqualified local image repos, no `budget-analyzer-web-prod-smoke`, and no `nginx/nginx.k8s.conf` production reference. Those specific blockers are no longer open inside the current app overlay.
+     - The remaining checked-in production blockers are outside or broader than that overlay:
+       - Production hostnames still point at localhost in `kubernetes/gateway/app-httproute.yaml`, `kubernetes/gateway/api-httproute.yaml`, `kubernetes/gateway/auth-httproute.yaml`, `kubernetes/monitoring/grafana-httproute.yaml`, `kubernetes/monitoring/prometheus-stack-values.yaml`, `kubernetes/istio/istio-gateway.yaml`, `kubernetes/istio/ext-authz-policy.yaml`, `kubernetes/istio/ingress-rate-limit.yaml`, and the checked-in fallback `kubernetes/services/session-gateway/idp-configmap.yaml` (`IDP_LOGOUT_RETURN_TO`).
+       - `kubernetes/istio/egress-service-entries.yaml` and `kubernetes/istio/egress-routing.yaml` still carry `auth0-issuer.placeholder.invalid`. `scripts/ops/render-istio-egress-config.sh` already exists for `AUTH0_ISSUER_URI`, but Phase 6 still needs the reviewed production render/apply path and updated docs.
+       - `kubernetes/infrastructure/redis/deployment.yaml` still uses `emptyDir` for `/data` and explicitly documents that persistence is local-dev only. Phase 6 still needs a PVC-backed production Redis path and docs that make the production storage posture unambiguous.
+       - `kubernetes/production/README.md` and `scripts/guardrails/verify-production-image-overlay.sh` still describe and verify only the old Phase 3 image-overlay slice. Phase 6 still needs a broader production render/static verifier and matching operator-facing docs.
+     - Concrete Phase 6 file work derived from this audit:
+       - Chunk 2 Steps 4-5: keep `kubernetes/production/apps/image-inventory.yaml` as the image source of truth, preserve `nginx/nginx.production.k8s.conf`, and extend `kubernetes/production/` with any committed production ConfigMap/PVC assets needed so the production route cutover stays repo-owned and Vite-free.
+       - Chunk 2 Steps 7-9: update the gateway, Istio, monitoring, and session-gateway production hostname path to `demo.budgetanalyzer.org` and `grafana.budgetanalyzer.org`; render the Auth0 egress host from the production `AUTH0_ISSUER_URI`; and add the PVC-backed Redis production variant without implying Jaeger or Kiali already exist.
+       - Chunk 3 Step 11: replace or expand `scripts/guardrails/verify-production-image-overlay.sh` into a full Phase 6 production render verifier, then keep `kubernetes/production/README.md` and nearby operator docs aligned with that broader baseline.
+3. **[Human]** Review the scoped Phase 6 file/work list before implementation continues.
+   - Minimum review:
+     ```bash
+     sed -n '1,240p' kubernetes/production/apps/kustomization.yaml
+     sed -n '1,220p' kubernetes/production/README.md
+     sed -n '1,240p' scripts/guardrails/verify-production-image-overlay.sh
+     rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid|imagePullPolicy:[[:space:]]*Never|nginx\\.k8s\\.conf|:latest|:tilt-' kubernetes nginx deploy scripts
+     ```
+
+#### Chunk 2: Implement the production overlays
+
+4. **[AI Assistant] Complete as of 2026-04-17.** Finish the production image and frontend overlay path.
+   - Keep every repo-managed app image on the versioned digest refs from `kubernetes/production/apps/image-inventory.yaml`.
+   - Remove every `imagePullPolicy: Never` from the production path.
+   - Remove the local `budget-analyzer-web-prod-smoke:latest` path from production.
+   - Keep third-party images digest-pinned.
+   - Do not deploy the Vite dev server as the production frontend.
+   - Use `nginx/nginx.production.k8s.conf`, not `nginx/nginx.k8s.conf`, for the public production app route.
+   - Revalidated on 2026-04-17 with:
+     ```bash
+     ./scripts/guardrails/verify-production-image-overlay.sh
+     ```
+   - Result:
+     ```text
+     Production image overlay verification passed: /workspace/orchestration/kubernetes/production/apps
+     ```
+5. **[AI Assistant] Complete as of 2026-04-17.** Create or finish the production NGINX ConfigMap path.
+   - Ensure the production path owns committed equivalents for:
+     - `nginx-gateway-config`
+     - `nginx-gateway-includes`
+     - `nginx-gateway-docs`
+   - Preserve the current route contract for:
+     - `/api/*`
+     - `/auth/*`
+     - `/oauth2/*`
+     - `/login/oauth2/*`
+     - `/logout`
+     - `/login`
+     - `/`
+     - `/api-docs`
+   - Keep the production frontend on static assets served through NGINX or a production web image.
+   - Implemented with:
+     - `kubernetes/production/nginx/nginx.production.k8s.conf`
+     - `kubernetes/production/nginx/includes/`
+     - `kubernetes/production/docs-aggregator/`
+     - `kubernetes/production/apps/kustomization.yaml`
+   - Notes:
+     - `/api/*`, `/api-docs`, `/login`, and `/` remain NGINX-owned on the production overlay.
+     - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` remain direct Gateway API routes to `session-gateway`; the production NGINX config now calls that out explicitly so the route split stays reviewable.
+     - The production docs bundle now advertises the confirmed same-origin server URL `https://demo.budgetanalyzer.org/api` instead of localhost or the stale `api.budgetanalyzer.org` host.
+6. **[Human]** Review the production frontend and NGINX route cutover before the overlay is treated as deployable.
+   - Verify that `/` and `/login` no longer depend on dev-server behavior.
+   - Verify that `/api-docs` remains repo-owned and does not fall through to the frontend SPA.
+   - Stop if the production path still depends on HMR/Vite-only behavior.
+7. **[AI Assistant]** Add the production hostname and egress render path.
+   - Replace `app.budgetanalyzer.localhost` with `demo.budgetanalyzer.org`.
+   - Replace `grafana.budgetanalyzer.localhost` with `grafana.budgetanalyzer.org`.
+   - Keep direct auth-path routing to Session Gateway.
+   - Keep API/frontend routing through NGINX.
+   - Render `kubernetes/istio/egress-service-entries.yaml` and `kubernetes/istio/egress-routing.yaml` from the production `AUTH0_ISSUER_URI`.
+   - Do not apply or preserve the checked-in placeholder Auth0 host in the production path.
+8. **[Human]** Review the hostname and egress render output before it becomes the production baseline.
+   - Verify:
+     ```bash
+     rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid' kubernetes/production kubernetes/gateway kubernetes/istio nginx deploy
+     sed -n '1,220p' kubernetes/istio/egress-service-entries.yaml
+     sed -n '1,260p' kubernetes/istio/egress-routing.yaml
+     ```
+   - Stop if any production route still carries a localhost hostname or placeholder Auth0 issuer.
+9. **[AI Assistant]** Finish the production monitoring and storage posture in checked-in artifacts.
+   - Keep the kube-prometheus-stack release name aligned with `kubernetes/monitoring/grafana-httproute.yaml`; the current checked-in route expects `prometheus-stack-grafana`.
+   - Keep the checked-in production path honest about the current observability baseline: Prometheus/Grafana are the existing repo-owned monitoring assets, while Jaeger/Kiali are added later in Phase 10.
+   - Do not imply Jaeger/Kiali are already deployed, routable, or hardened in any Phase 6 artifact.
+   - PostgreSQL and RabbitMQ already use PVCs.
+   - Redis currently uses `emptyDir` only in local dev; Phase 6 must create a production PVC-backed Redis variant and remove ambiguity from the production path.
+10. **[Human]** Approve the production monitoring baseline and Redis decision before Phase 6 sign-off.
+    - Stop if any Phase 6 manifest, route, or doc implies Jaeger/Kiali exposure before Phase 10 implements and hardens them.
+    - Stop if Redis persistence behavior in production is still ambiguous or still depends on `emptyDir`.
+
+#### Chunk 3: Add production verification and sign-off
+
+11. **[AI Assistant]** Extend the production static/render verification so it covers the full Phase 6 production path, not just the image overlay.
+    - Keep `scripts/guardrails/verify-production-image-overlay.sh` as the starting point.
+    - Make the production verifier fail on:
+      - `:latest`
+      - `:tilt-`
+      - `imagePullPolicy: Never`
+      - `budgetanalyzer.localhost`
+      - `auth0-issuer.placeholder.invalid`
+      - `nginx.k8s.conf` on the production route
+    - Keep the verifier repo-owned and runnable before any live Phase 7 or Phase 9 deployment step.
+12. **[Human]** Run the production verifier against the checked-in production overlay before moving to Phase 7.
+    - Run:
+      ```bash
+      ./scripts/guardrails/verify-production-image-overlay.sh
+      ```
+    - If the verifier is expanded into a broader Phase 6 production render check, run that command instead and record the exact pass/fail output in the operator notes.
+    - Stop on any failure. Do not treat leftover localhost hosts, placeholder Auth0 values, or mutable image refs as acceptable temporary production debt.
+13. **[Human]** Do the final file review for the Phase 6 production baseline.
+    - Review the production overlay directory, the affected NGINX config path, the affected Gateway/Istio manifests, and the production verifier script.
+    - Confirm the resulting production path is a committed artifact and does not rely on Tilt-only behavior or secret values in the repo.
 
 ### Outputs
 
 - Production manifests or deploy scripts exist as first-class artifacts
 - No production path relies on Tilt-only ConfigMap creation
 - No production path relies on local dev image names or frontend dev server behavior
+
+### Phase 6 Exit Criteria
+
+- The production app/frontend overlay is committed under `kubernetes/production/` and uses the Phase 3 digest-pinned image inventory.
+- No checked-in production path retains `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`, `budgetanalyzer.localhost`, `auth0-issuer.placeholder.invalid`, or `nginx/nginx.k8s.conf` on the public production route.
+- The production NGINX ConfigMap path owns the public route contract for `/api/*`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/login`, `/`, and `/api-docs`.
+- The production Gateway/Istio path uses the approved production hostnames and the real production `AUTH0_ISSUER_URI`.
+- The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
+- No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
+- The production verifier passes on the current checked-in Phase 6 artifacts.
+- Once those checks pass, Phase 6 is complete and Phase 7 is the next open phase.
 
 ---
 
@@ -1463,7 +1581,7 @@ kubernetes/kyverno/policies/production/
    ```
 4. **Deploy Redis.**
    ```bash
-   kubectl apply -f <production-redis-manifest-or-current-ephemeral-redis.yaml>
+   kubectl apply -f <production-pvc-backed-redis-manifest>
    ```
 5. **Verify infrastructure pods.**
    ```bash
@@ -1548,6 +1666,7 @@ kubernetes/kyverno/policies/production/
 **Estimated time:** 45-90 minutes
 
 The observability surface is part of the demo. It should be live but read-only.
+Prometheus/Grafana already have repo-owned manifests and values in the current tree. Jaeger and Kiali do **not**; this phase is where they become real production artifacts instead of plan-only intent.
 
 ### Steps
 
@@ -1566,10 +1685,12 @@ The observability surface is part of the demo. It should be live but read-only.
    kubectl apply -f kubernetes/monitoring/servicemonitor-spring-boot.yaml
    ```
 2. **Install Jaeger with committed production values.**
+   - This is the first phase that should introduce Jaeger manifests/values into the production path.
    - Keep query UI enabled if Kiali or visitors need the UI.
    - Pin every chart image by digest.
    - Use Badger or another explicit storage backend.
 3. **Install Kiali with committed production values.**
+   - This is the first phase that should introduce Kiali manifests/values into the production path.
    - Configure Prometheus, Grafana, and Jaeger URLs to match actual release names.
    - Set view-only/public behavior deliberately.
    - Pin every chart image by digest.
@@ -1605,8 +1726,9 @@ The observability surface is part of the demo. It should be live but read-only.
 ### Steps
 
 1. **Point DNS** at the instance public IPv4.
-   - Example: `demo.yourdomain.com`
-   - Optional separate hosts: `grafana.demo.yourdomain.com`, `kiali.demo.yourdomain.com`, `jaeger.demo.yourdomain.com`
+   - Application host: `demo.budgetanalyzer.org`
+   - Monitoring host: `grafana.budgetanalyzer.org`
+   - Optional separate hosts if observability is split later: `kiali.budgetanalyzer.org`, `jaeger.budgetanalyzer.org`
 2. **Create Let's Encrypt ClusterIssuer.**
    - cert-manager must have Gateway API support enabled.
    - HTTP-01 requires an existing Gateway listener on port `80`.
@@ -1669,8 +1791,8 @@ The observability surface is part of the demo. It should be live but read-only.
    - Always Free includes a limited number of volume backups.
    - Cap retention so backup creation does not fail after the free allocation is exhausted.
 3. **Document Redis recovery behavior.**
-   - If Redis remains ephemeral, document that outages log users out.
-   - If Redis gets a PVC, include it in restore testing.
+   - Production Redis is PVC-backed, so include it in backup/restore testing.
+   - Session continuity assumptions must match the persisted Redis design, not the local-dev `emptyDir` behavior.
 4. **Build the demo landing page** that links to:
    - Budget Analyzer app
    - Kiali service mesh graph

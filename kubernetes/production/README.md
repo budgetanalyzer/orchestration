@@ -103,6 +103,9 @@ this directory:
 
 That keeps the production cutover reviewable without depending on Tilt-created
 ConfigMaps, the Vite dev server, or the mutable top-level local-dev docs path.
+The production overlay stages those docs assets into the same writable web
+assets volume as the frontend bundle during init-container startup rather than
+mounting a second volume beneath `/usr/share/nginx/html`.
 
 The preserved public route contract is:
 

@@ -41,9 +41,12 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 - OCI tenancy, compartment, vault, instance, subnet, and region identifiers
 - the instance public IP and SSH key path
 - the public demo hostname plus any optional observability hostnames for later phases
+- the production non-secret Auth0/IDP settings used later to render `session-gateway-idp-config` and the Auth0 Istio egress config
 - the Let's Encrypt contact email
 
 Do not put secret payloads in `instance.env`. Secret values stay in OCI Vault and later `ExternalSecret` resources.
+
+Only the non-secret IDP values belong here. `AUTH0_CLIENT_SECRET` still belongs in OCI Vault.
 
 Do not duplicate production image refs in `instance.env`. Production image inventory stays in `kubernetes/production/apps/image-inventory.yaml`.
 

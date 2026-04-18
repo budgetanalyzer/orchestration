@@ -2020,14 +2020,49 @@ open phase.
    - In the OCI Console:
      1. Open the public NLB.
      2. Open `Backend sets`.
-     3. Create a backend set for `30443` if it does not already exist.
-     4. Use a TCP health check on port `30443`.
-     5. Add the existing compute instance as the backend target on port `30443`.
-     6. Open `Listeners`.
-     7. Create a listener on port `443`.
-     8. Point that listener at the new `30443` backend set.
+     3. If a backend set for `30443` already exists, open it and confirm it still matches the reviewed Phase 11 contract. Otherwise click `Create backend set`.
+     4. Fill `Create backend set` with the same source-IP-preserving pattern used for the existing Phase 4 `30080` path:
+        - `Backend set name`: choose a stable name such as `app-30443-bs` or `https-30443-bs`
+        - `Mode`: `Default`
+        - `Preserve source ID`: enabled
+        - `Health check protocol`: `TCP`
+        - `Port`: `30443`
+        - `Interval in MS`: leave the default `10000` unless you already standardized a different value on the existing NLB
+        - `Timeout in MS`: leave the default `3000`
+        - `Number of retries`: leave the default `3`
+        - `Fail open`: leave unchecked
+        - `Enable instant failover`: leave the current default unless you already use it consistently on the existing app backend set
+        - `Load balancing policy`: match the existing app backend-set policy on the same NLB
+     5. Click `Create backend set`.
+     6. Open that backend set, then open `Backends`.
+     7. Click `Add backends`.
+     8. Fill `Add backends`:
+        - `Backend type`: `Compute instances`
+        - `Instance compartment`: the compartment containing the existing Budget Analyzer compute instance
+        - `Instance`: select the existing compute instance
+        - `IP address`: select the instance private VNIC IP
+        - `Port`: `30443`
+        - `Weight`: leave the default unless you intentionally changed weights on the existing app backend set
+     9. Click `Add backends`.
+     10. Wait on the backend-set page and confirm the `Overall health` and backend health indicators stop showing `Critical`.
+     11. Open `Listeners`.
+     12. Click `Create listener`.
+     13. Fill `Create listener`:
+        - `Name`: use a stable name such as `https-443`
+        - `Protocol`: `TCP`
+        - `IP protocol version`: keep the current NLB default unless you intentionally built the NLB around IPv6
+        - `Ingress traffic port`: `Select the port`
+        - `Port`: `443`
+        - `Backend set`: select the `30443` backend set you just verified
+        - `Timeout`: leave the default value unless you already standardized a different TCP timeout on the existing listener set
+     14. Click `Create listener`.
+     15. Confirm the public NLB now exposes both listeners:
+        - existing Phase 4 HTTP listener on `80`
+        - new Phase 11 TCP listener on `443`
+   - Do not upload or attach a certificate in OCI for this step. The reviewed Phase 11 design keeps TLS termination and the `budgetanalyzer-org-tls` secret in Kubernetes/Istio; the OCI public NLB remains a layer-4 TCP pass-through.
    - If the backend stays unhealthy, check:
      - the backend set health status in OCI
+     - whether `Preserve source ID` drifted away from the Phase 4 app-ingress pattern
      - the frontend NSG egress rule to the backend NSG on TCP `30443`
      - the backend NSG ingress rule allowing TCP `30443` from the frontend NSG
      - any instance-local firewall you configured outside the repo plan

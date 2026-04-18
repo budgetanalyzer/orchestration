@@ -1772,6 +1772,7 @@ Prometheus/Grafana already have repo-owned manifests and values in the current t
 
 1. **Install kube-prometheus-stack with the checked-in release name and values.**
    ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    kubectl apply -f kubernetes/monitoring/namespace.yaml
    kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
 
@@ -1785,29 +1786,118 @@ Prometheus/Grafana already have repo-owned manifests and values in the current t
 
    kubectl apply -f kubernetes/monitoring/servicemonitor-spring-boot.yaml
    ```
-2. **Install Jaeger with committed production values.**
+   If Helm reports `Kubernetes cluster unreachable: Get "http://localhost:8080/version"`,
+   your current shell is missing the k3s kubeconfig export. Re-export
+   `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` and rerun the step.
+
+  kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=prometheus-stack"
+
+  Get Grafana 'admin' user password by running:
+
+  kubectl --namespace monitoring get secrets prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+
+  Access Grafana local instance:
+
+  export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=prometheus-stack" -oname)
+  kubectl --namespace monitoring port-forward $POD_NAME 3000
+
+  Get your grafana admin user password by running:
+
+  kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
+
+**Current checkpoint:** Phase 10 Step 1 was executed on 2026-04-18. Step 3 is
+checked in as repo-owned Jaeger production input under
+`deploy/helm-values/jaeger.values.yaml`: chart `jaegertracing/jaeger` `4.7.0`,
+release `jaeger`, namespace `monitoring`, and Service `jaeger` with the query
+UI on `16686` plus collector ingress on `4317`, `4318`, `14250`, `14268`, and
+`9411`. Step 4 is now also checked in under
+`deploy/helm-values/kiali.values.yaml`: chart `kiali/kiali-server` `2.24.0`,
+release `kiali`, namespace `istio-system`, and Service `kiali` wired to the
+actual Prometheus, Grafana, and Jaeger in-cluster release names. The reviewed
+Kiali contract uses anonymous plus view-only mode and stays in `istio-system`
+because the current Phase 7 production automount policy remains enforced
+outside the excluded system namespaces, while Kiali still needs service-account
+token access to the Kubernetes API. Step 5 is now also checked in as of
+2026-04-18 via `kubernetes/istio/istiod-values.yaml`,
+`kubernetes/production/monitoring/prometheus-stack-values.override.yaml`,
+`kubernetes/production/observability-tracing/mesh-default-tracing.yaml`,
+`kubernetes/production/observability-routes/`, `deploy/scripts/16-*.sh`
+through `deploy/scripts/21-*.sh`, `deploy/README.md`, and
+`kubernetes/production/README.md`. The next open work is the human review in
+Step 6 followed by the live OCI execution steps below. Use dedicated
+production hostnames for the public observability UIs:
+`grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, and
+`jaeger.budgetanalyzer.org`. Do not put Kiali or Jaeger behind subpaths on the
+Grafana host for the first production iteration. Keep Prometheus internal-only.
+
+2. **[Human]** Lock the remaining Phase 10 inputs before any new manifests or host mutations.
+   - Populate `KIALI_DOMAIN` and `JAEGER_DOMAIN` in `~/.config/budget-analyzer/instance.env`.
+   - Confirm `GRAFANA_DOMAIN` still matches the Step 1 install.
+   - Reconfirm the plan choice that Prometheus remains cluster-internal only.
+   - Stop if the hostname plan is still undecided or if anyone intends to expose Prometheus publicly.
+3. **[AI Assistant]** Add the checked-in Jaeger production artifacts.
+   - Create committed Jaeger Helm values under `deploy/helm-values/` so the OCI operator is not inventing chart settings at runtime.
    - This is the first phase that should introduce Jaeger manifests/values into the production path.
-   - Keep query UI enabled if Kiali or visitors need the UI.
-   - Pin every chart image by digest.
-   - Use Badger or another explicit storage backend.
-3. **Install Kiali with committed production values.**
+   - Pin every Jaeger chart image by digest.
+   - Use an explicit storage backend. The first-pass single-node choice should be Jaeger all-in-one with Badger unless a reviewed alternative is chosen.
+   - Keep the query UI enabled so Kiali integration and public read-only viewing both work.
+   - Record the expected Jaeger release name and service names in the nearest operator docs.
+   - **Status:** Complete in-repo as of 2026-04-18 via `deploy/helm-values/jaeger.values.yaml`, `deploy/scripts/lib/phase-4-version-contract.sh`, `deploy/README.md`, and `kubernetes/production/README.md`. The reviewed install contract is Helm release `jaeger` in namespace `monitoring`, rendering a single Service `jaeger`.
+4. **[AI Assistant]** Add the checked-in Kiali production artifacts.
+   - Create committed Kiali Helm values under `deploy/helm-values/`.
    - This is the first phase that should introduce Kiali manifests/values into the production path.
-   - Configure Prometheus, Grafana, and Jaeger URLs to match actual release names.
-   - Set view-only/public behavior deliberately.
-   - Pin every chart image by digest.
-4. **Configure Istio tracing extension provider.**
-   - Add the Jaeger collector to `meshConfig.extensionProviders`.
-   - Keep the existing `ext-authz-http` provider.
-   - `helm upgrade` istiod with the updated production values.
-5. **Expose only read-only UIs.**
-   - Grafana: anonymous Viewer or shared read-only credentials.
-   - Kiali: anonymous/read-only mode or route-level protection.
-   - Jaeger: read-only UI.
-   - Prometheus: keep internal; do not expose the Prometheus admin/API surface publicly.
-6. **Apply production observability HTTPRoutes.**
-   ```bash
-   kubectl apply -f <production-observability-routes>
-   ```
+   - Pin every Kiali chart image by digest.
+   - Configure Prometheus, Grafana, and Jaeger URLs to match the actual in-cluster release names, not guessed defaults.
+   - Set view-only/public behavior deliberately. The first pass should prefer anonymous/view-only mode unless the chart forces a different non-mutating pattern.
+   - Record the expected Kiali release name and integration URLs in the nearest operator docs.
+   - **Status:** Complete in-repo as of 2026-04-18 via `deploy/helm-values/kiali.values.yaml`, `deploy/scripts/lib/phase-4-version-contract.sh`, `deploy/README.md`, and `kubernetes/production/README.md`. The reviewed install contract is Helm release `kiali` in namespace `istio-system`, rendering Service `kiali` and wiring Prometheus/Grafana/Jaeger to the actual checked-in release names.
+5. **[AI Assistant]** Add the tracing, routing, and operator-surface artifacts before the human touches the OCI host again.
+   - Update `kubernetes/istio/istiod-values.yaml` so `meshConfig.extensionProviders` keeps `ext-authz-http` and adds the Jaeger collector provider needed for tracing.
+   - Add checked-in production observability `HTTPRoute` manifests for Grafana, Kiali, and Jaeger under `kubernetes/production/`.
+   - Keep the existing Grafana production route and add dedicated routes for Kiali and Jaeger rather than relying on ad hoc path rewrites.
+   - If route-level protection is needed beyond application read-only settings, add the minimum repo-owned policy manifests in `kubernetes/production/` rather than relying on manual OCI console or host changes.
+   - Add reviewed Pattern B scripts in `deploy/scripts/` for Phase 10 render/apply flow so the human execution path stays consistent with earlier phases.
+   - Update `deploy/README.md`, `kubernetes/production/README.md`, and this plan in the same change.
+   - **Status:** Complete in-repo as of 2026-04-18 via `kubernetes/istio/istiod-values.yaml`, `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`, `kubernetes/production/observability-tracing/mesh-default-tracing.yaml`, `kubernetes/production/observability-routes/`, `deploy/scripts/16-reconcile-phase-10-prometheus-stack.sh`, `deploy/scripts/17-install-phase-10-jaeger.sh`, `deploy/scripts/18-install-phase-10-kiali.sh`, `deploy/scripts/19-apply-phase-10-tracing.sh`, `deploy/scripts/20-render-phase-10-observability-manifests.sh`, `deploy/scripts/21-apply-phase-10-observability-manifests.sh`, `deploy/README.md`, and `kubernetes/production/README.md`. Grafana now uses a checked-in anonymous `Viewer` contract, Kiali keeps anonymous plus view-only mode, Jaeger remains read-only by design, and the Kiali route uses a checked-in `ReferenceGrant` instead of an ad hoc namespace-label change.
+6. **[Human]** Review the checked-in Phase 10 artifacts before running anything on the OCI host.
+   - Review the new Jaeger values, Kiali values, `istiod` tracing config, production observability routes, and any new Phase 10 deploy scripts.
+   - Confirm the pinned image digests and release names match the intended chart versions.
+   - Stop if any public route still points at a mutable or administrative API surface rather than the intended UI service.
+7. **[Human]** Execute the original Step 2 by installing Jaeger with the checked-in production values.
+   - Export `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`.
+   - Run the reviewed Jaeger install path, preferably through `./deploy/scripts/17-install-phase-10-jaeger.sh` rather than an ad hoc shell history command.
+   - Verify the Jaeger pods are Ready and the query service exists.
+   - Stop if Jaeger is running with unpinned third-party images or if the chart creates a service shape that no longer matches the checked-in Kiali config.
+8. **[Human]** Execute the original Step 3 by installing Kiali with the checked-in production values.
+   - Run the reviewed Kiali install path only after Jaeger is healthy, preferably through `./deploy/scripts/18-install-phase-10-kiali.sh`.
+   - Verify the Kiali pods are Ready.
+   - Verify Kiali can resolve Prometheus, Grafana, and Jaeger using the release names configured in the checked-in values.
+   - Stop if Kiali falls back to broken links or empty integrations because the configured service names do not match reality.
+9. **[Human]** Execute the original Step 4 by upgrading `istiod` with the Jaeger tracing provider.
+   - Run the reviewed tracing-activation path after Jaeger and Kiali are healthy, preferably through `./deploy/scripts/19-apply-phase-10-tracing.sh`.
+   - Confirm the updated `meshConfig.extensionProviders` still contains `ext-authz-http` and now includes the Jaeger collector provider, and confirm `Telemetry/mesh-default-tracing` exists in `istio-system`.
+   - Generate a small amount of live app traffic and verify traces begin arriving in Jaeger.
+   - Stop if the `istiod` upgrade removes or breaks the existing `ext-authz-http` provider.
+10. **[Human]** Execute the original Step 5 by enforcing read-only public behavior before exposing any new routes.
+    - Grafana: reconcile the checked-in anonymous Viewer contract before route cutover, preferably through `./deploy/scripts/16-reconcile-phase-10-prometheus-stack.sh`.
+    - Kiali: anonymous/read-only mode or checked-in route-level protection.
+    - Jaeger: read-only UI.
+    - Prometheus: keep internal; do not expose the Prometheus admin/API surface publicly.
+    - If additional route-level protection was checked in, apply it now and verify it still permits the intended UI `GET` traffic.
+    - Stop if any public route can mutate dashboards, settings, or administrative data.
+11. **[Human]** Execute the original Step 6 by applying the production observability `HTTPRoute` set.
+    - Render the reviewed production observability routes, preferably through `./deploy/scripts/20-render-phase-10-observability-manifests.sh`.
+    - Apply the reviewed route set to the cluster, preferably through `./deploy/scripts/21-apply-phase-10-observability-manifests.sh`.
+    - Verify each route attaches to `istio-ingress-gateway`.
+    - Verify each public hostname returns the intended UI and does not fall through to the frontend SPA.
+    - Verify Prometheus remains internal-only with no public `HTTPRoute`.
+12. **[Human]** Run the final Phase 10 verification pass before calling the phase complete.
+    - Check pod readiness in `monitoring` and any Jaeger/Kiali namespaces used by the reviewed install path.
+    - Verify Grafana dashboards load publicly in read-only mode.
+    - Verify Kiali shows a live service mesh graph.
+    - Verify Jaeger shows a recent trace from live app traffic.
+    - Record the exact release names, namespaces, and public hostnames used so Phase 11 DNS/TLS work references the real Phase 10 outputs rather than plan assumptions.
 
 ### Outputs
 

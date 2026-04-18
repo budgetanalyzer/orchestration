@@ -1885,52 +1885,132 @@ open phase.
 
 ### Steps
 
-1. **Point DNS** at the instance public IPv4.
-   - Application host: `demo.budgetanalyzer.org`
-   - Monitoring host: `grafana.budgetanalyzer.org`
-   - Do not create public `kiali.budgetanalyzer.org` or `jaeger.budgetanalyzer.org` DNS while the post-Phase-10-Step-1 observability work remains deferred pending the redesign.
-2. **Create Let's Encrypt ClusterIssuer.**
-   - cert-manager must have Gateway API support enabled.
-   - HTTP-01 requires an existing Gateway listener on port `80`.
-   - Use the actual Gateway name: `istio-ingress-gateway`.
-   ```yaml
-   apiVersion: cert-manager.io/v1
-   kind: ClusterIssuer
-   metadata:
-     name: letsencrypt-prod
-   spec:
-     acme:
-       server: https://acme-v02.api.letsencrypt.org/directory
-       email: <your-email>
-       privateKeySecretRef:
-         name: letsencrypt-prod
-       solvers:
-         - http01:
-             gatewayHTTPRoute:
-               parentRefs:
-                 - name: istio-ingress-gateway
-                   namespace: istio-ingress
-                   kind: Gateway
-   ```
-3. **Create Certificate resource(s).**
-   - Prefer storing the public TLS secret in `istio-ingress` so the Gateway can reference it without a cross-namespace `ReferenceGrant`.
-   - If the secret remains in `default`, create a production `ReferenceGrant` matching the production secret name.
-4. **Update the production Gateway** to reference the cert-manager-managed TLS secret.
-5. **Verify certificate readiness and renewal path.**
+1. **Confirm the current forward-path hostname contract before touching DNS or TLS.**
+   - The current reviewed Phase 11 public hostname remains:
+     - app: `demo.budgetanalyzer.org`
+   - Grafana is intentionally out of scope for the Phase 11 public DNS/TLS cutover. Phase 10 already records that the remaining observability access work is deferred pending the internal-only redesign, and Phase 11 must not make public observability more permanent.
+   - Do not create or preserve new public Phase 11 DNS/TLS for `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`.
+   - Do not improvise an apex cutover to `budgetanalyzer.org` during Phase 11. The current repo-owned Phase 11 render path is locked to `demo.budgetanalyzer.org`.
+   - If you want the apex to work during the current forward path, use a registrar-level redirect or forwarding rule from `budgetanalyzer.org` to `demo.budgetanalyzer.org`.
+2. **Confirm the existing HTTP ingress path is healthy before adding DNS or cert-manager resources.**
+   - Use the public OCI Network Load Balancer frontend IP, not the instance public IP. After the accepted NLB cutover, direct public ingress to the instance on `80` or `443` is not part of the design.
+   - In the OCI Console:
+     1. Open `Networking`.
+     2. Open `Network Load Balancers`.
+     3. Open the public NLB for the app ingress path.
+     4. Record the frontend public IP address.
+   - Verify the current HTTP path before touching DNS:
+     ```bash
+     curl -isS -H 'Host: demo.budgetanalyzer.org' http://<nlb-public-ip>/health
+     ```
+   - Stop if HTTP through the NLB is not already healthy.
+3. **Point Squarespace DNS at the OCI public NLB frontend IP.**
+   - Use Squarespace DNS only if `budgetanalyzer.org` is still managed there and you are not using custom nameservers somewhere else.
+   - In Squarespace:
+     1. Open `Domains`.
+     2. Click `budgetanalyzer.org`.
+     3. Click `DNS Settings`.
+     4. Scroll to `Custom Records`.
+     5. Add an `A` record for `demo` pointing at `<nlb-public-ip>`.
+   - Do not add or preserve a public Phase 11 `A` record for `grafana` here. Keep Grafana off the new public DNS path while observability access remains unresolved.
+   - If you want the apex to be usable without changing the reviewed production hostname contract:
+     1. Open `Domains`.
+     2. Click `budgetanalyzer.org`.
+     3. Click `Website`.
+     4. Scroll to `Domain Forwarding Rules`.
+     5. Add a rule forwarding `@` to `demo.budgetanalyzer.org`.
+     6. Optionally add `www`.
+     7. Use `Permanent Redirect (301)` and `Maintain paths`.
+   - Verify propagation before continuing:
+     ```bash
+     dig +short demo.budgetanalyzer.org A
+     curl -isS --resolve demo.budgetanalyzer.org:80:<nlb-public-ip> http://demo.budgetanalyzer.org/health
+     ```
+4. **Render the reviewed Phase 11 Kubernetes manifests.**
+   - Ensure `LETSENCRYPT_EMAIL` is populated in `~/.config/budget-analyzer/instance.env`.
+   - Use the repo-owned render path:
+     ```bash
+     ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
+     ls -la tmp/phase-11
+     sed -n '1,220p' tmp/phase-11/cluster-issuer.yaml
+     sed -n '1,220p' tmp/phase-11/public-certificate.yaml
+     sed -n '1,220p' tmp/phase-11/reference-grant.yaml
+     sed -n '1,220p' tmp/phase-11/ingress-gateway-config.yaml
+     sed -n '1,260p' tmp/phase-11/istio-gateway.yaml
+     ```
+   - The render output intentionally keeps the current production contract:
+     - `ClusterIssuer/letsencrypt-prod`
+     - `Certificate/budgetanalyzer-org-public`
+     - `ReferenceGrant/allow-istio-ingress-public-tls-secret`
+     - ingress ConfigMap adding `443 -> 30443`
+     - a single public HTTPS listener for `demo.budgetanalyzer.org`
+   - The reviewed default path keeps the public TLS secret in `default`, not `istio-ingress`, and uses a `ReferenceGrant` so the `Gateway` in `istio-ingress` can read it. This avoids depending on `istio-ingress` for solver-route attachment while the current listener policy still selects namespaces labeled `budgetanalyzer.io/ingress-routes=true`.
+5. **Apply the Kubernetes TLS and Gateway resources in dependency order.**
+   - cert-manager must already be installed with Gateway API support enabled.
+   - HTTP-01 requires the existing Gateway listener on port `80`.
+   - Apply in this order:
+     ```bash
+     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+     kubectl apply -f tmp/phase-11/ingress-gateway-config.yaml
+     kubectl apply -f tmp/phase-11/istio-gateway.yaml
+     kubectl apply -f tmp/phase-11/reference-grant.yaml
+     kubectl apply -f tmp/phase-11/cluster-issuer.yaml
+     kubectl apply -f tmp/phase-11/public-certificate.yaml
+     ```
+   - Watch issuance:
+     ```bash
+     kubectl get gateway -n istio-ingress istio-ingress-gateway -o yaml
+     kubectl get clusterissuer letsencrypt-prod -o yaml
+     kubectl get certificate -n default budgetanalyzer-org-public -w
+     kubectl get certificaterequest -A
+     kubectl get challenge -A
+     kubectl get order -A
+     ```
+6. **Add the OCI HTTPS listener and backend path for `443 -> 30443`.**
+   - Phase 11 is not complete when the certificate is issued. The public NLB also needs the TLS listener/backend path.
+   - In the OCI Console:
+     1. Open the public NLB.
+     2. Open `Backend sets`.
+     3. Create a backend set for `30443` if it does not already exist.
+     4. Use a TCP health check on port `30443`.
+     5. Add the existing compute instance as the backend target on port `30443`.
+     6. Open `Listeners`.
+     7. Create a listener on port `443`.
+     8. Point that listener at the new `30443` backend set.
+   - If the backend stays unhealthy, check:
+     - the backend set health status in OCI
+     - the frontend NSG egress rule to the backend NSG on TCP `30443`
+     - the backend NSG ingress rule allowing TCP `30443` from the frontend NSG
+     - any instance-local firewall you configured outside the repo plan
+   - Useful host-side checks:
+     ```bash
+     kubectl get svc -n istio-ingress
+     kubectl get gateway -n istio-ingress istio-ingress-gateway -o yaml
+     kubectl get pods -n istio-ingress -o wide
+     ```
+7. **Verify certificate readiness, public HTTPS, and the renewal path.**
    ```bash
-   kubectl get certificate -A
-   kubectl describe certificate -n istio-ingress <certificate-name>
-   curl -Iv https://<production-app-domain>/health
+   kubectl get secret -n default budgetanalyzer-org-tls
+   kubectl describe certificate -n default budgetanalyzer-org-public
+   kubectl describe challenge -A
+
+   curl -Iv --resolve demo.budgetanalyzer.org:443:<nlb-public-ip> https://demo.budgetanalyzer.org/health
+   curl -Iv https://demo.budgetanalyzer.org/health
    ```
-6. **Set up UptimeRobot or equivalent.**
-   - HTTP check on `https://<production-app-domain>/health` every 5 minutes.
+   - Success means:
+     - `Certificate` shows `Ready=True`
+     - the TLS secret exists in `default`
+     - the HTTPS curls return a valid certificate chain and an HTTP response instead of timeout or handshake failure
+8. **Set up UptimeRobot or equivalent.**
+   - Create an `HTTP(s)` monitor for `https://demo.budgetanalyzer.org/health` every 5 minutes.
    - Purpose: catch outages and keep JVMs warm.
    - Do not rely on uptime checks to satisfy OCI idle policy; verify OCI 7-day CPU/memory/network metrics directly.
 
 ### Outputs
 
 - Valid HTTPS with auto-renewing Let's Encrypt certs
-- DNS points at the instance
+- DNS points at the OCI public NLB frontend IP
 - External uptime checks alert on failures
 
 ---

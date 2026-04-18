@@ -127,6 +127,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed Phase 6 production gateway routes, ingress policies, monitoring hostname override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before Phase 9 applies them. | Re-run after changing the reviewed Phase 6 production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
 | `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
 | `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared Phase 7 policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
+| `deploy/scripts/16-render-phase-11-public-tls-manifests.sh` | Renders the reviewed Phase 11 app-only public TLS artifacts into `tmp/phase-11/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the Phase 11 app TLS cutover or whenever the reviewed Phase 11 hostname/TLS contract changes. |
 
 ## Chunk 3 Checkpoint
 
@@ -344,6 +345,33 @@ installs kube-prometheus-stack. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
 assumes that release name so Grafana stays reachable through the existing
 `prometheus-stack-grafana` Service referenced by the checked-in `HTTPRoute`.
+
+## Phase 11 Checkpoint
+
+Phase 11 now has a repo-owned render path for the public TLS cutover:
+
+```bash
+./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
+sed -n '1,220p' tmp/phase-11/cluster-issuer.yaml
+sed -n '1,220p' tmp/phase-11/public-certificate.yaml
+sed -n '1,220p' tmp/phase-11/reference-grant.yaml
+sed -n '1,220p' tmp/phase-11/ingress-gateway-config.yaml
+sed -n '1,260p' tmp/phase-11/istio-gateway.yaml
+```
+
+The current forward-path Phase 11 public TLS contract remains locked to:
+
+- `demo.budgetanalyzer.org`
+
+Grafana, Kiali, and Jaeger do not belong on the Phase 11 public TLS surface.
+Keep observability off the new public DNS/TLS path while the internal-only
+redesign remains pending.
+
+Do not move the live app to the apex domain during Phase 11 unless the Phase 6
+and Phase 11 production hostname contract is reviewed and changed first. For
+the current repo state, the apex `budgetanalyzer.org` is best handled as an
+optional forwarding target to `demo.budgetanalyzer.org`, not as the direct app
+origin.
 
 ## Phase 10 Checkpoint
 

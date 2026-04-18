@@ -1313,14 +1313,14 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, and 8 are now also complete, so Phase 9 is the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, 8, and 9 are now also complete, so Phase 10 is the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phases 5, 6, 7, and 8 are complete per operator handoff as of 2026-04-17. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, and the infrastructure deploy/verification. Phase 9 is the next open phase.
+**Current checkpoint:** Phases 5, 6, 7, 8, and 9 are complete per operator handoff as of 2026-04-18. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, the infrastructure deploy/verification, and the application-service deploy/ingress smoke pass. Phase 10 is the next open phase.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1511,14 +1511,14 @@ This phase turns the local repo manifests into a production deployment artifact.
 - The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
 - No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
 - The production verifier passes on the current checked-in Phase 6 artifacts.
-- **Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
+- **Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
 
 ---
 
 ## Phase 7: Production Kyverno Admission Policy
 
 **Owner:** Split between AI-owned repo work and human-owned OCI execution
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
 **Estimated time:** 4-8 hours
 
 ### Required policy layout
@@ -1619,14 +1619,14 @@ kubernetes/kyverno/policies/production/
 **Implementation status:** Repo-owned Phase 7 install/apply artifacts are
 checked in and were executed successfully on the OCI host per operator handoff
 as of 2026-04-17. The production Kyverno controller and policy set are now
-live, and Phase 8 is also complete, so Phase 9 is the next open phase.
+live, and Phase 8 and Phase 9 are also complete, so Phase 10 is the next open phase.
 
 ---
 
 ## Phase 8: Deploy Infrastructure Services
 
 **Owner:** Human executes script (Pattern B)
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 9 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
 **Estimated time:** 15-30 minutes
 
 ### Steps
@@ -1666,13 +1666,14 @@ live, and Phase 8 is also complete, so Phase 9 is the next open phase.
 
 **Implementation status:** Phase 8 is complete per operator handoff as of
 2026-04-17. The infrastructure namespace is live with PostgreSQL, RabbitMQ,
-and Redis, so Phase 9 is the next open phase.
+and Redis, and Phase 9 is also complete, so Phase 10 is the next open phase.
 
 ---
 
 ## Phase 9: Deploy Application Services
 
 **Owner:** Human executes script (Pattern B)
+**Status:** Complete per operator handoff as of 2026-04-18. Phase 10 is the next open phase.
 **Estimated time:** 30-60 minutes
 
 ### Pre-requisites
@@ -1686,12 +1687,12 @@ and Redis, so Phase 9 is the next open phase.
 
 ### Steps
 
-1. **Verify service secrets and production non-secret IDP config.**
+1. **[Human] Complete per operator handoff as of 2026-04-18.** Verify service secrets and production non-secret IDP config.
    ```bash
    kubectl get secrets -n default
    kubectl get configmap -n default session-gateway-idp-config -o yaml
    ```
-2. **Render and apply the reviewed Phase 6 hostname and egress output.**
+2. **[Human] Complete per operator handoff as of 2026-04-18.** Render and apply the reviewed Phase 6 hostname and egress output.
    ```bash
    ./deploy/scripts/13-render-phase-6-production-manifests.sh
    kubectl apply -f tmp/phase-6/istio-egress.yaml
@@ -1700,7 +1701,7 @@ and Redis, so Phase 9 is the next open phase.
    ```bash
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
-3. **Apply app production overlays.**
+3. **[Human] Complete per operator handoff as of 2026-04-18.** Apply app production overlays.
    ```bash
    kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -
    ```
@@ -1709,21 +1710,21 @@ and Redis, so Phase 9 is the next open phase.
    fails on kubectl's default load restrictor. Server-side apply is required
    here because the generated `nginx-gateway-docs` ConfigMap is too large for
    client-side apply's `last-applied-configuration` annotation.
-4. **Apply production HTTPRoutes.**
+4. **[Human] Complete per operator handoff as of 2026-04-18.** Apply production HTTPRoutes.
    ```bash
    kubectl apply -f tmp/phase-6/gateway-routes.yaml
    ```
-5. **Apply ext_authz policy and ingress rate-limit policy after ext-authz is ready.**
+5. **[Human] Complete per operator handoff as of 2026-04-18.** Apply ext_authz policy and ingress rate-limit policy after ext-authz is ready.
    ```bash
    kubectl apply -f tmp/phase-6/istio-ingress-policies.yaml
    ```
-6. **Verify app pods and image refs.**
+6. **[Human] Complete per operator handoff as of 2026-04-18.** Verify app pods and image refs.
    ```bash
    kubectl get pods -n default
    kubectl get pods -n default -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
    ```
    Every repo-owned app pod in `default` should have an Istio sidecar. No listed image may contain `:latest`, `:tilt-`, or a local-only repo ref.
-7. **Smoke test through ingress.**
+7. **[Human] Complete per operator handoff as of 2026-04-18.** Smoke test through ingress.
    ```bash
    curl -isS -H 'Host: demo.budgetanalyzer.org' http://<nlb-public-ip>/health
    curl -isS --resolve demo.budgetanalyzer.org:80:<nlb-public-ip> http://demo.budgetanalyzer.org/health
@@ -1750,6 +1751,12 @@ and Redis, so Phase 9 is the next open phase.
 - ext_authz session-edge pattern active
 - Traffic routing through Istio ingress -> Session Gateway or NGINX -> services
 - No local/Tilt image refs admitted
+
+**Implementation status:** Phase 9 is complete per operator handoff as of
+2026-04-18. The production application services are deployed, the reviewed
+Phase 6 route and ingress policy artifacts are live, and the ingress smoke
+test succeeded via the OCI public Network Load Balancer frontend IP. Phase 10
+is the next open phase.
 
 ---
 

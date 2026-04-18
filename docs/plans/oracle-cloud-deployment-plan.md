@@ -1313,14 +1313,14 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, 8, and 9 are now also complete, so Phase 10 is the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, 8, 9, and 10 are now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phases 5, 6, 7, 8, and 9 are complete per operator handoff as of 2026-04-18. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, the infrastructure deploy/verification, and the application-service deploy/ingress smoke pass. Phase 10 is the next open phase.
+**Current checkpoint:** Phases 5, 6, 7, 8, and 9 are complete per operator handoff as of 2026-04-18. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, the infrastructure deploy/verification, and the application-service deploy/ingress smoke pass. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1511,14 +1511,14 @@ This phase turns the local repo manifests into a production deployment artifact.
 - The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
 - No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
 - The production verifier passes on the current checked-in Phase 6 artifacts.
-- **Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
+- **Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 
 ---
 
 ## Phase 7: Production Kyverno Admission Policy
 
 **Owner:** Split between AI-owned repo work and human-owned OCI execution
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 **Estimated time:** 4-8 hours
 
 ### Required policy layout
@@ -1619,14 +1619,14 @@ kubernetes/kyverno/policies/production/
 **Implementation status:** Repo-owned Phase 7 install/apply artifacts are
 checked in and were executed successfully on the OCI host per operator handoff
 as of 2026-04-17. The production Kyverno controller and policy set are now
-live, and Phase 8 and Phase 9 are also complete, so Phase 10 is the next open phase.
+live, and Phases 8, 9, and 10 are also complete for the current forward deployment path, so Phase 11 is the next open phase.
 
 ---
 
 ## Phase 8: Deploy Infrastructure Services
 
 **Owner:** Human executes script (Pattern B)
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 **Estimated time:** 15-30 minutes
 
 ### Steps
@@ -1666,14 +1666,14 @@ live, and Phase 8 and Phase 9 are also complete, so Phase 10 is the next open ph
 
 **Implementation status:** Phase 8 is complete per operator handoff as of
 2026-04-17. The infrastructure namespace is live with PostgreSQL, RabbitMQ,
-and Redis, and Phase 9 is also complete, so Phase 10 is the next open phase.
+and Redis, and Phases 9 and 10 are also complete for the current forward deployment path, so Phase 11 is the next open phase.
 
 ---
 
 ## Phase 9: Deploy Application Services
 
 **Owner:** Human executes script (Pattern B)
-**Status:** Complete per operator handoff as of 2026-04-18. Phase 10 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-18. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
 **Estimated time:** 30-60 minutes
 
 ### Pre-requisites
@@ -1756,7 +1756,8 @@ and Redis, and Phase 9 is also complete, so Phase 10 is the next open phase.
 2026-04-18. The production application services are deployed, the reviewed
 Phase 6 route and ingress policy artifacts are live, and the ingress smoke
 test succeeded via the OCI public Network Load Balancer frontend IP. Phase 10
-is the next open phase.
+is now also complete for the current forward deployment path, so Phase 11 is
+the next open phase.
 
 ---
 
@@ -1768,7 +1769,8 @@ is the next open phase.
 Prometheus/Grafana already have repo-owned manifests and values in the current
 tree. Jaeger and Kiali remain planned Phase 10 work, but they are not part of
 the active OCI rollout on this branch.
-As of 2026-04-18, Phase 10 Step 1 is complete and every later Phase 10 action is
+As of 2026-04-18, Phase 10 is complete for the current forward deployment path.
+Phase 10 Step 1 is complete and every later originally planned Phase 10 action is
 deferred pending an internal-only observability access redesign. Keep the live
 OCI baseline at Prometheus internal-only plus the existing Grafana
 deployment/route from Step 1 until that redesign is reviewed.
@@ -1811,14 +1813,15 @@ deployment/route from Step 1 until that redesign is reviewed.
 
   kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
 
-**Current checkpoint:** Phase 10 Step 1 was executed on 2026-04-18. As of
-2026-04-18, every Phase 10 step after Step 1 is deferred pending an
-internal-only observability access redesign. Keep the live OCI baseline at
-Prometheus internal-only plus the existing Grafana install from Step 1. Leave
-`KIALI_DOMAIN` and `JAEGER_DOMAIN` blank, do not resume the deferred Jaeger,
-Kiali, tracing, or observability-route work on the forward path, and do not
-make piecemeal public observability changes before the redesign exists. That
-redesign may also revisit Grafana access.
+**Current checkpoint:** Phase 10 Step 1 was executed on 2026-04-18. Phase 10
+is complete for the current forward deployment path because the remaining
+originally planned Jaeger, Kiali, tracing, and observability-route work is now
+explicitly deferred pending an internal-only observability access redesign.
+Keep the live OCI baseline at Prometheus internal-only plus the existing
+Grafana install from Step 1. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank,
+do not resume the deferred Jaeger, Kiali, tracing, or observability-route work
+on the forward path, and do not make piecemeal public observability changes
+before the redesign exists. That redesign may also revisit Grafana access.
 
 2. **[Human]** Hold the remaining Phase 10 work.
    - Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank in `~/.config/budget-analyzer/instance.env`.
@@ -1855,9 +1858,9 @@ redesign may also revisit Grafana access.
     - Do not render or apply the checked-in production observability routes on the forward path.
     - **Status:** Deferred as of 2026-04-18 pending the redesign.
 12. **[Human]** Final Phase 10 verification pass.
-    - Phase 10 is not complete while Steps 2 through 11 remain deferred.
+    - Phase 10 is complete for the current forward deployment path; the deferred follow-up no longer blocks completion.
     - Reopen this verification only after the internal-only observability access redesign is reviewed and the deferred OCI steps are intentionally resumed.
-    - **Status:** Deferred as of 2026-04-18 pending the redesign.
+    - **Status:** Complete for the current forward deployment path as of 2026-04-18; deferred follow-up remains pending the redesign.
 
 ### Outputs
 
@@ -1865,6 +1868,13 @@ redesign may also revisit Grafana access.
 - The current Grafana baseline from Step 1 remains installed
 - Jaeger, Kiali, tracing activation, and any additional observability routing
   remain deferred pending the internal-only observability access redesign
+
+**Implementation status:** Phase 10 is complete for the current forward
+deployment path as of 2026-04-18. The OCI baseline includes Prometheus plus
+the existing Grafana deployment/route from Step 1, while the originally
+planned Jaeger, Kiali, tracing, and additional observability-access work is
+explicitly deferred pending the internal-only redesign. Phase 11 is the next
+open phase.
 
 ---
 

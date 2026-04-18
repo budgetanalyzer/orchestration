@@ -59,9 +59,11 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/scripts/15-apply-phase-7-policies.sh`
 9. Note the current Phase 10 boundary before reviewing or running any later
    observability artifacts:
-   - Phase 10 Step 1 completed on 2026-04-18.
-   - Everything after Phase 10 Step 1 is deferred pending an internal-only
-     observability access redesign.
+   - Phase 10 is complete for the current forward deployment path as of
+     2026-04-18.
+   - Phase 10 Step 1 completed on 2026-04-18. The remaining originally planned
+     Phase 10 work is deferred pending an internal-only observability access
+     redesign.
    - Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank, and do not resume any
      Jaeger, Kiali, tracing, or observability-route rollout work on this
      branch.
@@ -347,16 +349,17 @@ assumes that release name so Grafana stays reachable through the existing
 
 Status as of 2026-04-18:
 
+- Phase 10 is complete for the current forward deployment path.
 - Phase 10 Step 1 is complete. `kube-prometheus-stack` with Helm release
   `prometheus-stack` and the current Grafana hostname are the live production
   observability baseline.
-- Everything after Phase 10 Step 1 is deferred pending an internal-only
-  observability access redesign.
+- The remaining originally planned Phase 10 work is deferred pending an
+  internal-only observability access redesign.
 - Keep Prometheus internal-only. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN`
   blank, and do not resume any Jaeger, Kiali, tracing, or
   observability-route rollout work unless the deployment plan is explicitly
-  reopened with a reviewed access model for
-  Grafana, Jaeger, and Kiali.
+  reopened with a reviewed access model for Grafana, Jaeger, and Kiali.
+- Phase 11 is the next open phase.
 
 ## Phase 7 Checkpoint
 

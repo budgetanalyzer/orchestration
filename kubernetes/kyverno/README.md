@@ -72,6 +72,11 @@ Current exception boundaries are intentionally narrow:
   `kube-public`, `kube-node-lease`, and `local-path-storage` are excluded from
   the repo-owned workload baseline because those pods are chart-managed or
   cluster-managed rather than orchestration-managed.
+- Labeled cert-manager HTTP-01 solver pods
+  (`budgetanalyzer.io/cert-manager-http01-solver=true`) are excluded only from
+  the container-level security-context rules that cert-manager's Gateway solver
+  API cannot express. They still remain subject to namespace labels, pod-level
+  seccomp, automount, and image-admission policy checks.
 - The third-party image-digest rule skips fully mutated sidecar-injected Pod
   objects by checking for `sidecar.istio.io/status`, because the autogen
   controller rules already enforce the repo-owned images at the Deployment /

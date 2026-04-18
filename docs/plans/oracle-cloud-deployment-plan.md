@@ -1928,6 +1928,14 @@ open phase.
      ```
 4. **Render the reviewed Phase 11 Kubernetes manifests.**
    - Ensure `LETSENCRYPT_EMAIL` is populated in `~/.config/budget-analyzer/instance.env`.
+   - Let’s Encrypt account setup is handled by cert-manager through the rendered
+     `ClusterIssuer`; you do not create a separate Let’s Encrypt account by
+     hand. `LETSENCRYPT_EMAIL` is only the ACME contact email cert-manager
+     registers with Let's Encrypt.
+   - If the live cluster predates the digest-pinned cert-manager solver update,
+     re-run `./deploy/scripts/05-install-platform-controllers.sh` before
+     applying Phase 11 so the temporary HTTP-01 solver Pod is allowed by the
+     current Phase 7 image policy.
    - Use the repo-owned render path:
      ```bash
      ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
@@ -1944,6 +1952,11 @@ open phase.
      - `ReferenceGrant/allow-istio-ingress-public-tls-secret`
      - ingress ConfigMap adding `443 -> 30443`
      - a single public HTTPS listener for `demo.budgetanalyzer.org`
+   - The rendered `ClusterIssuer` also labels the temporary HTTP-01 solver Pods
+     and applies the strongest pod-level security context cert-manager exposes.
+     The accompanying Phase 7 policy exception is intentionally narrow and only
+     exists because cert-manager's Gateway solver API does not expose the
+     container-level `allowPrivilegeEscalation` and `capabilities.drop` fields.
    - The reviewed default path keeps the public TLS secret in `default`, not `istio-ingress`, and uses a `ReferenceGrant` so the `Gateway` in `istio-ingress` can read it. This avoids depending on `istio-ingress` for solver-route attachment while the current listener policy still selects namespaces labeled `budgetanalyzer.io/ingress-routes=true`.
 5. **Apply the Kubernetes TLS and Gateway resources in dependency order.**
    - cert-manager must already be installed with Gateway API support enabled.
@@ -1967,6 +1980,20 @@ open phase.
      kubectl get challenge -A
      kubectl get order -A
      ```
+   - A healthy issuance usually moves within a few minutes once DNS resolves and
+     public HTTP on port `80` is working. If the `Certificate` still shows
+     `Ready=False` after about 10 minutes, stop waiting and inspect the ACME
+     resources:
+     ```bash
+     kubectl describe challenge -A
+     kubectl describe order -A
+     ```
+   - If `Challenge.status.presented=false` and the reason mentions Kyverno
+     denying `cm-acme-http-solver-*`, the cluster is still running the older
+     cert-manager solver configuration. Re-run
+     `./deploy/scripts/05-install-platform-controllers.sh`, then delete the
+     stuck `Certificate`, `Order`, and `Challenge` resources or re-apply the
+     `Certificate` to force a fresh issuance attempt.
 6. **Add the OCI HTTPS listener and backend path for `443 -> 30443`.**
    - Phase 11 is not complete when the certificate is issued. The public NLB also needs the TLS listener/backend path.
    - In the OCI Console:

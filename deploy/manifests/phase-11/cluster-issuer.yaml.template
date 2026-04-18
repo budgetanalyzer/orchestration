@@ -16,3 +16,12 @@ spec:
                 kind: Gateway
                 name: istio-ingress-gateway
                 namespace: istio-ingress
+            podTemplate:
+              metadata:
+                labels:
+                  budgetanalyzer.io/cert-manager-http01-solver: "true"
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault

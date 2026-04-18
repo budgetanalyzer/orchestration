@@ -373,6 +373,26 @@ the current repo state, the apex `budgetanalyzer.org` is best handled as an
 optional forwarding target to `demo.budgetanalyzer.org`, not as the direct app
 origin.
 
+Phase 11's ACME HTTP-01 path now depends on the reviewed cert-manager and
+Kyverno compatibility contract in-repo:
+
+- `deploy/helm-values/cert-manager.values.yaml` pins the chart-managed
+  `acmesolver` image by digest so the temporary solver Pod can pass the Phase 7
+  production image policy even though it runs in `default`.
+- `deploy/manifests/phase-11/cluster-issuer.yaml.template` labels the temporary
+  solver Pod and applies the strongest pod-level security context the
+  cert-manager Gateway solver API exposes.
+- `kubernetes/kyverno/policies/30-require-workload-security-context.yaml`
+  keeps the normal container-level checks for repo-managed workloads but makes a
+  narrow exception for only those labeled solver Pods because cert-manager does
+  not let this repo declare `allowPrivilegeEscalation=false` or
+  `capabilities.drop=["ALL"]` on them.
+
+If your OCI cluster predates that contract change, re-run
+`./deploy/scripts/05-install-platform-controllers.sh` before retrying Phase 11
+certificate issuance so the live cert-manager release picks up the digest-pinned
+solver image.
+
 ## Phase 10 Checkpoint
 
 Status as of 2026-04-18:

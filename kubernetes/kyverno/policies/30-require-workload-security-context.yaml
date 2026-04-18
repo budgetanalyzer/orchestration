@@ -11,7 +11,9 @@ metadata:
       Repo-managed workloads must use the Phase 5 pod-hardening baseline:
       RuntimeDefault seccomp at the pod level plus non-root, no privilege
       escalation, and drop ALL capabilities for every container and init
-      container.
+      container. cert-manager's labeled HTTP-01 solver pods are excluded from
+      the container-level checks because the upstream Gateway solver API only
+      exposes pod-level securityContext fields.
 spec:
   validationFailureAction: Enforce
   background: true
@@ -69,6 +71,9 @@ spec:
           - key: "{{ request.operation || 'BACKGROUND' }}"
             operator: NotEquals
             value: DELETE
+          - key: "{{ request.object.metadata.labels.\"budgetanalyzer.io/cert-manager-http01-solver\" || '' }}"
+            operator: NotEquals
+            value: "true"
       validate:
         message: "All containers and init containers must set runAsNonRoot to true."
         foreach:
@@ -102,6 +107,9 @@ spec:
           - key: "{{ request.operation || 'BACKGROUND' }}"
             operator: NotEquals
             value: DELETE
+          - key: "{{ request.object.metadata.labels.\"budgetanalyzer.io/cert-manager-http01-solver\" || '' }}"
+            operator: NotEquals
+            value: "true"
       validate:
         message: "All containers and init containers must set allowPrivilegeEscalation to false."
         foreach:
@@ -135,6 +143,9 @@ spec:
           - key: "{{ request.operation || 'BACKGROUND' }}"
             operator: NotEquals
             value: DELETE
+          - key: "{{ request.object.metadata.labels.\"budgetanalyzer.io/cert-manager-http01-solver\" || '' }}"
+            operator: NotEquals
+            value: "true"
       validate:
         message: "All containers and init containers must drop ALL capabilities."
         foreach:

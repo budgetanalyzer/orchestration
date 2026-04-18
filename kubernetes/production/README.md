@@ -143,8 +143,9 @@ The Phase 6 observability baseline is intentionally narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- Jaeger and Kiali stay out of the production path until Phase 10 adds their
-  manifests, hardening, and routes deliberately
+- Jaeger and Kiali do not belong on the current forward deployment path. Their
+  planned Phase 10 follow-up remains deferred after Phase 10 Step 1 pending an
+  internal-only observability access redesign
 
 Render and review the current production hostname/egress slice with:
 
@@ -201,5 +202,6 @@ next live deployment phase is Phase 9.
 
 Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the
-repo-owned monitoring deliverables now, while Jaeger and Kiali stay deferred to
-Phase 10.
+repo-owned monitoring deliverables now, while the planned Jaeger/Kiali
+follow-up remains deferred after Phase 10 Step 1 pending an internal-only
+observability access redesign.

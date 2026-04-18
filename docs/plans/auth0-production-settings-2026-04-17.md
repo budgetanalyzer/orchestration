@@ -25,7 +25,8 @@ included. The practical layout on Free is:
 
 Phase 6 now locks the checked-in Grafana hostname to
 `grafana.budgetanalyzer.org`. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank
-until Phase 10/11 intentionally exposes those UIs.
+while the post-Phase-10-Step-1 observability work is deferred pending an
+internal-only access redesign.
 
 ## Recommended `instance.env` Values
 

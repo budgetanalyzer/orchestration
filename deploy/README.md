@@ -57,7 +57,15 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-9. Run the human-owned Phase 4 scripts in this exact order:
+9. Note the current Phase 10 boundary before reviewing or running any later
+   observability artifacts:
+   - Phase 10 Step 1 completed on 2026-04-18.
+   - Everything after Phase 10 Step 1 is deferred pending an internal-only
+     observability access redesign.
+   - Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank, and do not resume any
+     Jaeger, Kiali, tracing, or observability-route rollout work on this
+     branch.
+10. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -74,7 +82,9 @@ file outside the repo. It holds non-secret deployment metadata:
 
 - OCI tenancy, compartment, vault, instance, subnet, and region identifiers
 - the instance public IP and SSH key path
-- the public demo hostname plus any optional observability hostnames for later phases
+- the public demo hostname plus the current Grafana hostname; keep
+  `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank until the deferred internal-only
+  observability redesign explicitly reopens that work
 - the production non-secret Auth0/IDP settings used later to render `session-gateway-idp-config` and the Auth0 Istio egress config
 - the Let's Encrypt contact email
 
@@ -332,6 +342,21 @@ installs kube-prometheus-stack. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
 assumes that release name so Grafana stays reachable through the existing
 `prometheus-stack-grafana` Service referenced by the checked-in `HTTPRoute`.
+
+## Phase 10 Checkpoint
+
+Status as of 2026-04-18:
+
+- Phase 10 Step 1 is complete. `kube-prometheus-stack` with Helm release
+  `prometheus-stack` and the current Grafana hostname are the live production
+  observability baseline.
+- Everything after Phase 10 Step 1 is deferred pending an internal-only
+  observability access redesign.
+- Keep Prometheus internal-only. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN`
+  blank, and do not resume any Jaeger, Kiali, tracing, or
+  observability-route rollout work unless the deployment plan is explicitly
+  reopened with a reviewed access model for
+  Grafana, Jaeger, and Kiali.
 
 ## Phase 7 Checkpoint
 

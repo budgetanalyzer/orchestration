@@ -33,6 +33,8 @@ spec:
                 - kube-node-lease
                 - local-path-storage
                 - kyverno
+                - cert-manager
+                - external-secrets
                 - istio-system
                 - istio-ingress
                 - istio-egress
@@ -88,6 +90,8 @@ spec:
                 - kube-node-lease
                 - local-path-storage
                 - kyverno
+                - cert-manager
+                - external-secrets
                 - istio-system
                 - istio-ingress
                 - istio-egress
@@ -146,6 +150,8 @@ spec:
                 - kube-node-lease
                 - local-path-storage
                 - kyverno
+                - cert-manager
+                - external-secrets
                 - istio-system
                 - istio-ingress
                 - istio-egress

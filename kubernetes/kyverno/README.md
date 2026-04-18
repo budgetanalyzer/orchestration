@@ -68,10 +68,11 @@ Current exception boundaries are intentionally narrow:
 
 - `istio-ingress` keeps service-account token automount enabled for the ingress
   gateway's mesh identity bootstrap.
-- `istio-system`, `istio-ingress`, `istio-egress`, `kyverno`, `kube-system`,
-  `kube-public`, `kube-node-lease`, and `local-path-storage` are excluded from
-  the repo-owned workload baseline because those pods are chart-managed or
-  cluster-managed rather than orchestration-managed.
+- `cert-manager`, `external-secrets`, `istio-system`, `istio-ingress`,
+  `istio-egress`, `kyverno`, `kube-system`, `kube-public`,
+  `kube-node-lease`, and `local-path-storage` are excluded from the repo-owned
+  workload baseline because those pods are chart-managed or cluster-managed
+  rather than orchestration-managed.
 - Labeled cert-manager HTTP-01 solver pods
   (`budgetanalyzer.io/cert-manager-http01-solver=true`) are excluded only from
   the container-level security-context rules that cert-manager's Gateway solver

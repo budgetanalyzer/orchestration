@@ -239,7 +239,7 @@ Phase 4 stays HTTP-only even after the NLB pivot. For this phase the public NLB 
 
 On OCI, the public listener path also needs the frontend NSG to egress to the backend NSG on TCP `30080`. The 2026-04-16 operator run needed that explicit rule before the backend health check on `30080` would turn healthy.
 
-The checked-in ingress NetworkPolicy allow list must continue to admit that Phase 4 HTTP listener so ACME HTTP-01 reachability is not cut off when `deploy/scripts/07-apply-network-policies.sh` runs.
+The checked-in ingress NetworkPolicy allow list must continue to admit that Phase 4 HTTP listener so ACME HTTP-01 reachability is not cut off when `deploy/scripts/07-apply-network-policies.sh` runs. The repo now includes a narrow solver-only path for that purpose: the `istio-ingress` gateway may egress to labeled cert-manager HTTP-01 solver Pods in `default` on TCP `8089`, those solver Pods admit ingress only from the gateway, and they may egress to `istiod` on TCP `15012` so the injected sidecar can join the mesh.
 
 The Phase 4 runtime NetworkPolicy verifier intentionally runs before production Auth0 config exists. Because Step 8 of the main plan explicitly defers applying placeholder Istio egress routing, a pre-Auth0 OCI host can legitimately miss the verifier's two positive `istio-egress-gateway:443` checks while still proving the rest of the CNI contract. Treat those two checks as deferred only, and rerun the verifier after Phase 9 Step 2 applies the rendered egress config from the real `AUTH0_ISSUER_URI`.
 
@@ -387,6 +387,11 @@ Kyverno compatibility contract in-repo:
   narrow exception for only those labeled solver Pods because cert-manager does
   not let this repo declare `allowPrivilegeEscalation=false` or
   `capabilities.drop=["ALL"]` on them.
+- `kubernetes/network-policies/default-allow.yaml` and
+  `kubernetes/network-policies/istio-ingress-allow.yaml` now include the
+  matching narrow NetworkPolicy allowances for the temporary solver Pod path:
+  gateway -> solver on TCP `8089`, solver -> `istiod` on TCP `15012`, and no
+  broader default-namespace exception.
 
 If your OCI cluster predates that contract change, re-run only the cert-manager
 portion before retrying Phase 11 certificate issuance so the live cert-manager
@@ -394,6 +399,7 @@ release picks up the digest-pinned solver image:
 
 ```bash
 PHASE4_PLATFORM_CONTROLLERS=cert-manager ./deploy/scripts/05-install-platform-controllers.sh
+./deploy/scripts/07-apply-network-policies.sh
 ```
 
 If that rerun appears to stall, read the last emitted phase line first:

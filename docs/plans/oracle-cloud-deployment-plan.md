@@ -1964,6 +1964,12 @@ open phase.
      The accompanying Phase 7 policy exception is intentionally narrow and only
      exists because cert-manager's Gateway solver API does not expose the
      container-level `allowPrivilegeEscalation` and `capabilities.drop` fields.
+   - The checked-in NetworkPolicy allow list also needs a matching narrow
+     exception for those same labeled solver Pods: `istio-ingress` gateway
+     egress to TCP `8089`, solver Pod ingress from the gateway on TCP `8089`,
+     and solver Pod egress to `istiod` on TCP `15012` so the injected sidecar
+     can join the mesh. Keep that allowance label-scoped; do not broaden the
+     default namespace allow list for arbitrary temporary pods.
    - The reviewed default path keeps the public TLS secret in `default`, not `istio-ingress`, and uses a `ReferenceGrant` so the `Gateway` in `istio-ingress` can read it. This avoids depending on `istio-ingress` for solver-route attachment while the current listener policy still selects namespaces labeled `budgetanalyzer.io/ingress-routes=true`.
 5. **Apply the Kubernetes TLS and Gateway resources in dependency order.**
    - cert-manager must already be installed with Gateway API support enabled.
@@ -1986,6 +1992,7 @@ open phase.
      kubectl get certificaterequest -A
      kubectl get challenge -A
      kubectl get order -A
+     kubectl get httproute -A
      ```
    - A healthy issuance usually moves within a few minutes once DNS resolves and
      public HTTP on port `80` is working. If the `Certificate` still shows
@@ -1996,11 +2003,18 @@ open phase.
      kubectl describe order -A
      ```
    - If `Challenge.status.presented=false` and the reason mentions Kyverno
-     denying `cm-acme-http-solver-*`, the cluster is still running the older
-     cert-manager solver configuration. Re-run
-     `./deploy/scripts/05-install-platform-controllers.sh`, then delete the
-     stuck `Certificate`, `Order`, and `Challenge` resources or re-apply the
-     `Certificate` to force a fresh issuance attempt.
+      denying `cm-acme-http-solver-*`, the cluster is still running the older
+      cert-manager solver configuration. Re-run
+      `./deploy/scripts/05-install-platform-controllers.sh`, then delete the
+      stuck `Certificate`, `Order`, and `Challenge` resources or re-apply the
+      `Certificate` to force a fresh issuance attempt.
+   - If temporary `cm-acme-http-solver-*` `HTTPRoute`, `Service`, and `Pod`
+     objects appear but the challenge still times out or the self-check cannot
+     fetch the token, inspect the checked-in NetworkPolicy path next. Re-apply
+     `./deploy/scripts/07-apply-network-policies.sh`, then verify the solver
+     Pod keeps the label
+     `budgetanalyzer.io/cert-manager-http01-solver=true` and that the gateway
+     can still reach the solver on TCP `8089`.
 6. **Add the OCI HTTPS listener and backend path for `443 -> 30443`.**
    - Phase 11 is not complete when the certificate is issued. The public NLB also needs the TLS listener/backend path.
    - In the OCI Console:

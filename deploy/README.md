@@ -116,7 +116,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace Phase 4 depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the Phase 4 ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before Phase 11 adds the TLS listener or whenever the reviewed ingress render output changes. |
 | `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, `istio-cni`, `istiod`, the egress gateway, then applies the rendered ingress manifests plus mesh security policies. | Re-run after changing Istio pins, values, or the rendered ingress manifests. |
-| `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script now logs Helm repo-update vs install phases separately, waits up to `10m` per release, and dumps `helm status`, workloads, and recent namespace events if either install fails. | Re-run when Phase 5 or Phase 11 needs controller value changes. |
+| `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script now logs Helm repo-update vs install phases separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when Phase 5 or Phase 11 needs controller value changes. For the Phase 11 cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
 | `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before claiming Phase 4 complete. |
@@ -388,15 +388,18 @@ Kyverno compatibility contract in-repo:
   not let this repo declare `allowPrivilegeEscalation=false` or
   `capabilities.drop=["ALL"]` on them.
 
-If your OCI cluster predates that contract change, re-run
-`./deploy/scripts/05-install-platform-controllers.sh` before retrying Phase 11
-certificate issuance so the live cert-manager release picks up the digest-pinned
-solver image.
+If your OCI cluster predates that contract change, re-run only the cert-manager
+portion before retrying Phase 11 certificate issuance so the live cert-manager
+release picks up the digest-pinned solver image:
+
+```bash
+PHASE4_PLATFORM_CONTROLLERS=cert-manager ./deploy/scripts/05-install-platform-controllers.sh
+```
 
 If that rerun appears to stall, read the last emitted phase line first:
 
 - `updating Helm repo external-secrets` or `updating Helm repo jetstack` means the host is still fetching chart metadata.
-- `installing External Secrets Operator ... (timeout 10m)` or `installing cert-manager ... (timeout 10m)` means Helm is waiting for the release resources to become ready.
+- `installing External Secrets Operator ... (timeout 10m)` or `installing cert-manager ... (timeout 10m)` means Helm is waiting for the selected release resources to become ready.
 - On failure, the script now prints `helm status`, controller workloads, and recent namespace events for `external-secrets` and `cert-manager` automatically.
 
 ## Phase 10 Checkpoint

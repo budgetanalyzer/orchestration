@@ -1933,13 +1933,16 @@ open phase.
      hand. `LETSENCRYPT_EMAIL` is only the ACME contact email cert-manager
      registers with Let's Encrypt.
    - If the live cluster predates the digest-pinned cert-manager solver update,
-     re-run `./deploy/scripts/05-install-platform-controllers.sh` before
-     applying Phase 11 so the temporary HTTP-01 solver Pod is allowed by the
-     current Phase 7 image policy.
+     re-run only the cert-manager portion before applying Phase 11 so the
+     temporary HTTP-01 solver Pod is allowed by the current Phase 7 image
+     policy:
+     ```bash
+     PHASE4_PLATFORM_CONTROLLERS=cert-manager ./deploy/scripts/05-install-platform-controllers.sh
+     ```
    - That script now distinguishes Helm repo-update vs release-install phases,
-     uses an explicit `10m` Helm wait timeout per controller, and dumps
-     `helm status`, workloads, and recent namespace events for
-     `external-secrets` and `cert-manager` automatically if a rerun fails.
+     uses an explicit `10m` Helm wait timeout per selected controller, and
+     dumps `helm status`, workloads, and recent namespace events for the
+     selected controller namespace(s) automatically if a rerun fails.
    - Use the repo-owned render path:
      ```bash
      ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh

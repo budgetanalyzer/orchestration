@@ -408,6 +408,21 @@ If that rerun appears to stall, read the last emitted phase line first:
 - `installing External Secrets Operator ... (timeout 10m)` or `installing cert-manager ... (timeout 10m)` means Helm is waiting for the selected release resources to become ready.
 - On failure, the script now prints `helm status`, controller workloads, and recent namespace events for `external-secrets` and `cert-manager` automatically.
 
+For the Phase 11 OCI `443 -> 30443` cutover, treat the NLB security rules as
+required setup, not optional troubleshooting:
+
+- the frontend NSG on the public NLB needs a stateful ingress rule allowing
+  `0.0.0.0/0` to TCP `443`
+- that same frontend NSG needs a stateful egress rule to the instance-attached
+  backend NSG on TCP `30443`
+- the backend NSG on the instance VNIC needs a stateful ingress rule allowing
+  the frontend NSG to TCP `30443`
+- the `30443` backend set health check must stay `TCP` on port `30443`
+
+Without that frontend-egress plus backend-ingress pair, the HTTPS backend set
+can sit in `Critical` even when the Kubernetes `Gateway`, TLS secret, and
+certificate are all healthy.
+
 ## Phase 10 Checkpoint
 
 Status as of 2026-04-18:

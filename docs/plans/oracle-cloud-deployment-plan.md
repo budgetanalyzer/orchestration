@@ -134,8 +134,8 @@ These gates are non-negotiable. Do not deploy the public demo until all are true
 
 **Source of truth:** This section is the source of truth for Oracle Cloud Phase 3 execution, including the `service-common` remote-resolution contract for isolated image builds.
 **Owner:** Human for org/package settings and release approval; AI Assistant for repo configuration, workflow templates, documentation, and non-secret manifest inventory; CI/release workflow for publishing.
-**Status:** Strategy clarified on 2026-04-13; detailed human work breakdown added 2026-04-13; updated on 2026-04-14 to treat GitHub Packages as CI-only infrastructure for `service-common`; corrected on 2026-04-14 after verifying that GitHub Packages Maven/Gradle packages remain repository-scoped and do not expose per-package **Manage Actions access** for cross-repo workflow grants; implementation checkpoint reached through Chunk 2 Step 14 from the previous draft.
-**Estimated time:** Remaining work is roughly 0.5-1 day after the Chunk 2 Step 14 checkpoint, assuming the initial `service-common` workflow publish is already proven.
+**Status:** Complete as of 2026-04-16. The GitHub Packages CI-only contract, dedicated cross-repo package credential model, GHCR release-image path, and digest-pinned production image inventory are now the reviewed baseline consumed by the later OCI deployment phases.
+**Estimated time:** Completed; the original remaining estimate after the Chunk 2 Step 14 checkpoint was roughly 0.5-1 day.
 
 This phase must complete before any production Kubernetes manifests are applied.
 
@@ -1031,7 +1031,7 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 ## Phase 5: OCI Vault, External Secrets, and Internal TLS
 
 **Owner:** Human for OCI/IAM/secret values; AI may write templates only
-**Current checkpoint:** Phase 5 is complete per operator handoff as of 2026-04-17. OCI Vault, ESO-backed secret sync, the production non-secret IDP config, and the internal infrastructure TLS secrets are now treated as the completed baseline for the remaining OCI deployment phases.
+**Status:** Complete per operator handoff as of 2026-04-17. OCI Vault, ESO-backed secret sync, the production non-secret IDP config, and the internal infrastructure TLS secrets are now the completed baseline for the remaining OCI deployment phases.
 **Estimated time:** 2-4 hours if the secret values already exist outside the workspace.
 
 ### Principle
@@ -1313,14 +1313,14 @@ you use the tenancy root, Step 6 must use `in tenancy`, not `in compartment
 - ESO syncs the expected native Kubernetes `Secret` objects in `default` and `infrastructure`.
 - `ConfigMap/session-gateway-idp-config` exists in `default` and no longer points at localhost or placeholder Auth0 values.
 - `Secret/infra-ca` exists in both `default` and `infrastructure`, and `infra-tls-postgresql`, `infra-tls-redis`, and `infra-tls-rabbitmq` exist in `infrastructure`.
-- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, 8, 9, and 10 are now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+- Once those checks pass, Phase 5 is complete. **Status:** Complete per operator handoff as of 2026-04-17. Phases 6, 7, 8, 9, 10, and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 
 ---
 
 ## Phase 6: Production Manifests and Overlays
 
 **Owner:** AI Assistant writes manifests/scripts; Human provides production inputs, reviews changes, and runs live render/apply checks
-**Current checkpoint:** Phases 5, 6, 7, 8, and 9 are complete per operator handoff as of 2026-04-18. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, the infrastructure deploy/verification, and the application-service deploy/ingress smoke pass. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-18. Chunk 1 is complete, Chunk 2 Steps 4 through 10 are complete, and Chunk 3 Steps 11 through 13 are complete with the broadened production verifier, the recorded verifier pass, the final operator file-review handoff, the Kyverno OCI install, the production policy apply, the infrastructure deploy/verification, and the application-service deploy/ingress smoke pass. Phases 10 and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 **Estimated time:** 1-2 days
 
 This phase turns the local repo manifests into a production deployment artifact. It should produce committed, reviewable YAML or scripts with no secret values.
@@ -1511,14 +1511,14 @@ This phase turns the local repo manifests into a production deployment artifact.
 - The production monitoring and Redis posture is explicit in checked-in manifests/docs rather than left implied.
 - No Phase 6 artifact implies Jaeger/Kiali already exist in production; those observability additions remain scoped to Phase 10.
 - The production verifier passes on the current checked-in Phase 6 artifacts.
-- **Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+- **Status:** Complete per operator handoff as of 2026-04-17. Phases 10 and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 
 ---
 
 ## Phase 7: Production Kyverno Admission Policy
 
 **Owner:** Split between AI-owned repo work and human-owned OCI execution
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phases 10 and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 **Estimated time:** 4-8 hours
 
 ### Required policy layout
@@ -1619,14 +1619,14 @@ kubernetes/kyverno/policies/production/
 **Implementation status:** Repo-owned Phase 7 install/apply artifacts are
 checked in and were executed successfully on the OCI host per operator handoff
 as of 2026-04-17. The production Kyverno controller and policy set are now
-live, and Phases 8, 9, and 10 are also complete for the current forward deployment path, so Phase 11 is the next open phase.
+live, and Phases 8, 9, 10, and 11 are also complete for the current forward deployment path, so Phase 12 is the next open phase.
 
 ---
 
 ## Phase 8: Deploy Infrastructure Services
 
 **Owner:** Human executes script (Pattern B)
-**Status:** Complete per operator handoff as of 2026-04-17. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-17. Phases 10 and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 **Estimated time:** 15-30 minutes
 
 ### Steps
@@ -1666,14 +1666,14 @@ live, and Phases 8, 9, and 10 are also complete for the current forward deployme
 
 **Implementation status:** Phase 8 is complete per operator handoff as of
 2026-04-17. The infrastructure namespace is live with PostgreSQL, RabbitMQ,
-and Redis, and Phases 9 and 10 are also complete for the current forward deployment path, so Phase 11 is the next open phase.
+and Redis, and Phases 9, 10, and 11 are also complete for the current forward deployment path, so Phase 12 is the next open phase.
 
 ---
 
 ## Phase 9: Deploy Application Services
 
 **Owner:** Human executes script (Pattern B)
-**Status:** Complete per operator handoff as of 2026-04-18. Phase 10 is now also complete for the current forward deployment path, so Phase 11 is the next open phase.
+**Status:** Complete per operator handoff as of 2026-04-18. Phases 10 and 11 are now also complete for the current forward deployment path, so Phase 12 is the next open phase.
 **Estimated time:** 30-60 minutes
 
 ### Pre-requisites
@@ -1755,15 +1755,16 @@ and Redis, and Phases 9 and 10 are also complete for the current forward deploym
 **Implementation status:** Phase 9 is complete per operator handoff as of
 2026-04-18. The production application services are deployed, the reviewed
 Phase 6 route and ingress policy artifacts are live, and the ingress smoke
-test succeeded via the OCI public Network Load Balancer frontend IP. Phase 10
-is now also complete for the current forward deployment path, so Phase 11 is
-the next open phase.
+test succeeded via the OCI public Network Load Balancer frontend IP. Phases 10
+and 11 are now also complete for the current forward deployment path, so Phase
+12 is the next open phase.
 
 ---
 
 ## Phase 10: Deploy Observability Bundle
 
 **Owner:** Human executes script (Pattern B)
+**Status:** Complete for the current forward deployment path as of 2026-04-18. Prometheus plus the existing Grafana deployment/route are live, while the originally planned Jaeger, Kiali, tracing, and additional observability-access work remains intentionally deferred pending the internal-only redesign.
 **Estimated time:** 45-90 minutes
 
 Prometheus/Grafana already have repo-owned manifests and values in the current
@@ -1873,7 +1874,7 @@ before the redesign exists. That redesign may also revisit Grafana access.
 deployment path as of 2026-04-18. The OCI baseline includes Prometheus plus
 the existing Grafana deployment/route from Step 1, while the originally
 planned Jaeger, Kiali, tracing, and additional observability-access work is
-explicitly deferred pending the internal-only redesign. Phase 11 is the next
+explicitly deferred pending the internal-only redesign. Phase 12 is the next
 open phase.
 
 ---
@@ -1881,6 +1882,7 @@ open phase.
 ## Phase 11: Public TLS, DNS, and Uptime Monitoring
 
 **Owner:** Human (DNS requires registrar access)
+**Status:** Complete per operator handoff as of 2026-04-18. Public DNS now points `demo.budgetanalyzer.org` at the OCI public NLB frontend IP, cert-manager issued the reviewed Let's Encrypt certificate, the OCI NLB exposes the `443 -> 30443` pass-through path, and external uptime monitoring is in place. Phase 12 is the next open phase.
 **Estimated time:** 30-60 minutes
 
 ### Steps
@@ -2044,10 +2046,18 @@ open phase.
         - `Port`: `30443`
         - `Weight`: leave the default unless you intentionally changed weights on the existing app backend set
      9. Click `Add backends`.
-     10. Wait on the backend-set page and confirm the `Overall health` and backend health indicators stop showing `Critical`.
-     11. Open `Listeners`.
-     12. Click `Create listener`.
-     13. Fill `Create listener`:
+     10. Wire the OCI NSGs for the new `443 -> 30443` flow before expecting the backend health check to pass:
+        - Open the NLB-attached frontend NSG and add a **stateful ingress** rule allowing `0.0.0.0/0` to TCP `443`.
+        - In that same frontend NSG, add a **stateful egress** rule targeting the instance-attached backend NSG on TCP `30443`.
+        - Open the instance VNIC's backend NSG and add a **stateful ingress** rule allowing the frontend NSG to TCP `30443`.
+        - With stateful rules, do not add a matching backend-NSG egress rule just for return traffic.
+     11. Open the `30443` backend set health-check settings and confirm they still match the reviewed contract:
+        - `Protocol`: `TCP`
+        - `Port`: `30443`
+     12. Wait on the backend-set page and confirm the `Overall health` and backend health indicators stop showing `Critical`.
+     13. Open `Listeners`.
+     14. Click `Create listener`.
+     15. Fill `Create listener`:
         - `Name`: use a stable name such as `https-443`
         - `Protocol`: `TCP`
         - `IP protocol version`: keep the current NLB default unless you intentionally built the NLB around IPv6
@@ -2055,13 +2065,14 @@ open phase.
         - `Port`: `443`
         - `Backend set`: select the `30443` backend set you just verified
         - `Timeout`: leave the default value unless you already standardized a different TCP timeout on the existing listener set
-     14. Click `Create listener`.
-     15. Confirm the public NLB now exposes both listeners:
+     16. Click `Create listener`.
+     17. Confirm the public NLB now exposes both listeners:
         - existing Phase 4 HTTP listener on `80`
         - new Phase 11 TCP listener on `443`
    - Do not upload or attach a certificate in OCI for this step. The reviewed Phase 11 design keeps TLS termination and the `budgetanalyzer-org-tls` secret in Kubernetes/Istio; the OCI public NLB remains a layer-4 TCP pass-through.
    - If the backend stays unhealthy, check:
      - the backend set health status in OCI
+     - the frontend NSG ingress rule allowing `0.0.0.0/0` to TCP `443`
      - whether `Preserve source ID` drifted away from the Phase 4 app-ingress pattern
      - the frontend NSG egress rule to the backend NSG on TCP `30443`
      - the backend NSG ingress rule allowing TCP `30443` from the frontend NSG
@@ -2096,57 +2107,211 @@ open phase.
 - DNS points at the OCI public NLB frontend IP
 - External uptime checks alert on failures
 
+**Implementation status:** Phase 11 is complete per operator handoff as of
+2026-04-18. The reviewed public TLS path is live on
+`https://demo.budgetanalyzer.org`, the DNS/NLB/cert-manager flow is proven,
+and external uptime monitoring is active. Phase 12 is the next open phase.
+
 ---
 
 ## Phase 12: Backup, Runbook, and Go-Live
 
-**Owner:** Human + AI agent for non-secret scripts/docs
+**Owner:** Split between AI-owned repo work and human-owned OCI/storage execution
 **Estimated time:** 2-4 hours
 
-### Steps
+### Pre-requisites
 
-1. **Set up daily PostgreSQL logical backup.**
+- Phase 11 public HTTPS is already healthy on `https://demo.budgetanalyzer.org/health`.
+- The current forward path still keeps Jaeger, Kiali, and additional
+  observability access deferred. Do not use Phase 12 to make those public.
+- The operator has access to the OCI Console, the domain registrar, and the
+  chosen backup destination.
+
+### Phase 12 Execution Order
+
+Follow the chunks in order. Do not start the DR drill before the backup
+artifacts and runbook exist.
+
+#### Phase 12A: Lock the contract and artifact boundaries
+
+1. **[Human]** Confirm the current public baseline is healthy before adding
+   backup or landing-page work.
    ```bash
-   # Cron: daily pg_dump -> Cloudflare R2, Backblaze B2, or OCI Object Storage
-   0 3 * * * /usr/local/bin/backup-postgres.sh
+   curl -Iv https://demo.budgetanalyzer.org/health
+   kubectl get certificate -n default budgetanalyzer-org-public
+   kubectl get pods -n default
+   kubectl get pods -n infrastructure
    ```
-2. **Set up OCI Block Volume backup policy.**
-   - Always Free includes a limited number of volume backups.
-   - Cap retention so backup creation does not fail after the free allocation is exhausted.
-3. **Document Redis recovery behavior.**
-   - Production Redis is PVC-backed, so include it in backup/restore testing.
-   - Session continuity assumptions must match the persisted Redis design, not the local-dev `emptyDir` behavior.
-4. **Build the demo landing page** that links to:
-   - Budget Analyzer app
-   - Grafana dashboards, only if Grafana is still intentionally public when Phase 12 begins
-   - Do not add Kiali or Jaeger links until the deferred observability access redesign is complete and reviewed
-5. **Write runbook** covering:
-   - cert renewal verification
-   - PostgreSQL backup/restore
-   - k3s upgrade
-   - Istio upgrade
-   - image release and rollback
-   - Kyverno local/production policy distinction
-   - box died: restore from snapshot
-   - instance reclaimed: restart and recover
-6. **Disaster recovery drill.**
-   - Stop/restart the instance and verify the stack returns.
-   - Restore PostgreSQL into a clean environment.
-   - If recovery takes more than one hour, the runbook is not done.
-7. **Monthly maintenance reminders.**
-   - Log into OCI console once per month.
-   - Check OCI Metrics for CPU/memory/network utilization.
-   - Check cert-manager certificate status.
-   - Do not touch "Upgrade to PAYG."
-8. **Go live** only after DR drill succeeds.
+   - Stop if HTTPS, app pods, or infrastructure pods are not healthy.
+2. **[Human]** Choose the logical-backup destination and retention policy.
+   - Recommended: OCI Object Storage so the host can use OCI-native access
+     instead of introducing a new third-party backup credential.
+   - Allowed alternatives: Cloudflare R2 or Backblaze B2, with secrets handled
+     only by the human outside the repo.
+   - Record the chosen bucket/container name, retention window, and upload
+     authentication model in private operator notes before scripting.
+3. **[Human]** Choose the landing-page ownership model before any
+   implementation starts.
+   - Recommended for this repo: keep the landing page orchestration-owned and
+     NGINX-served from the existing production static route surface.
+   - Do not quietly replace the current `demo.budgetanalyzer.org/` app route
+     with the landing page unless the public URL contract is intentionally
+     re-reviewed.
+   - Do not assume a `budget-analyzer-web` code change from this repo. If the
+     desired landing page must live inside the React app, stop and switch to
+     the sibling repo context instead of hiding that cross-repo dependency
+     here.
+   - Do not repurpose `/peace`; it is already the reviewed Auth0 logout return
+     path.
+4. **[AI Assistant]** Turn the Phase 12 decisions into a concrete repo
+   artifact map before code or doc edits begin.
+   - Expected surfaces:
+     - `deploy/scripts/` for host-side backup/restore helpers
+     - `docs/runbooks/` for the production operations guide
+     - `kubernetes/production/` plus the production NGINX config path for any
+       orchestration-owned landing page
+   - Keep secrets, object-storage credentials, and OCI console-only actions out
+     of the repo.
+
+#### Phase 12B: Build the PostgreSQL logical backup path
+
+1. **[AI Assistant]** Add the non-secret backup and restore artifacts in this
+   repo.
+   - Write a host-side PostgreSQL logical-backup helper that:
+     - runs from the OCI host
+     - targets the live `infrastructure/postgresql` workload
+     - avoids hardcoding secret values in the repo
+     - writes timestamped backup files and uploads them to the chosen
+       object-storage destination
+   - Write the matching restore helper for restoring a selected backup into a
+     clean PostgreSQL target for drill use.
+   - Update the nearby operator docs so the execution path is explicit.
+2. **[Human]** Create or confirm the remote backup destination.
+   - OCI Object Storage: create the bucket and lifecycle/retention rule.
+   - R2/B2: create the bucket and store the access credentials only in the
+     approved operator location outside the repo.
+3. **[Human]** Run one manual end-to-end backup before scheduling anything.
+   ```bash
+   # Exact command depends on the repo-owned script path added in Step 1.
+   ```
+   - Success means:
+     - the backup file is created locally or streamed successfully
+     - the object appears in the remote bucket
+     - the backup size is plausible for the current PostgreSQL data set
+4. **[Human]** Install the daily schedule on the OCI host only after the
+   manual run succeeds.
+   - Cron is acceptable.
+   - A systemd timer is also acceptable if you want journal visibility and
+     retry behavior.
+   - Keep the schedule and any credential file locations in the operator
+     runbook.
+
+#### Phase 12C: Add the volume-backup and Redis recovery contract
+
+1. **[Human]** Configure the OCI Block Volume backup policy with bounded
+   retention.
+   - Always Free capacity is limited; do not choose a retention policy that
+     silently consumes the allocation and then fails future backups.
+   - Because k3s `local-path` storage lives on the node disk, this policy is
+     part of the recovery path for PostgreSQL PVC data, Redis PVC data,
+     RabbitMQ PVC data, and cluster-local state.
+2. **[Human]** Trigger one on-demand volume backup after the policy is
+   attached.
+   - Confirm it reaches a completed state in OCI before marking this chunk
+     done.
+3. **[AI Assistant]** Document the Redis recovery behavior in the runbook.
+   - Redis is production PVC-backed in this path, not `emptyDir`.
+   - PostgreSQL logical backup protects the relational data; it does not
+     replace the volume/snapshot path for Redis.
+   - Session continuity after a full-node restore is only as current as the
+     restored Redis volume state. If the restored snapshot is older than the
+     active session set, expect users to log in again.
+4. **[Human]** Review the documented Redis/session assumptions and confirm they
+   match the intended demo behavior.
+
+#### Phase 12D: Build the landing page and operator runbook
+
+1. **[AI Assistant]** Implement the landing page only on the approved
+   ownership surface from Phase 12A.
+   - Recommended forward path in this repo: add an orchestration-owned static
+     page on the production NGINX surface.
+   - Content should link to:
+     - the Budget Analyzer app
+     - Grafana only if it is still intentionally public when this chunk starts
+   - Do not add Kiali or Jaeger links on the current forward path.
+   - Be explicit that this is the single-node OCI demo, not the full managed
+     GCP target architecture.
+2. **[Human]** Review the landing-page copy, links, and public-observability
+   decision.
+   - If Grafana should no longer be public, remove it from the page instead of
+     leaving a broken or auth-walled link.
+3. **[AI Assistant]** Write the production runbook under `docs/runbooks/` and
+   update the runbook index.
+   - Minimum sections:
+     - cert renewal verification
+     - PostgreSQL backup
+     - PostgreSQL restore
+     - k3s upgrade
+     - Istio upgrade
+     - image release and rollback
+     - Kyverno local vs production policy distinction
+     - instance reboot recovery
+     - instance reclaimed or box lost recovery
+     - monthly maintenance checklist
+4. **[AI Assistant]** Update the nearest operator docs that point to the new
+   Phase 12 artifacts.
+   - At minimum, keep `docs/runbooks/README.md`, `deploy/README.md`, and this
+     plan aligned with the checked-in backup/runbook path.
+
+#### Phase 12E: Prove recovery, set reminders, and go live
+
+1. **[Human]** Run the simple platform recovery drill.
+   - Restart the OCI instance.
+   - Verify the node returns, k3s is healthy, the ingress path comes back, and
+     `https://demo.budgetanalyzer.org/health` recovers without manual repo
+     changes.
+2. **[Human]** Run the PostgreSQL restore drill into a clean environment using
+   the repo-owned restore path.
+   - Do not "test" restore by overwriting the live production database.
+   - Use a clean target so you can prove the backup is actually usable.
+3. **[Human]** Time the recovery flow and compare it to the Phase 12 bar.
+   - If the combined drill takes more than one hour, Phase 12 is not complete.
+     Fix the runbook or automation and rerun.
+4. **[Human]** Create the monthly maintenance reminder outside the repo.
+   - Include:
+     - log into OCI once per month
+     - review OCI CPU, memory, and network metrics
+     - review cert-manager certificate status
+     - do not click `Upgrade to PAYG`
+5. **[AI Assistant]** After the drill succeeds, update the plan/runbook with
+   the recorded operator outcome and the final go-live checklist.
+6. **[Human]** Put the public URL on the resume only after all prior Phase 12
+   chunks are complete and the DR drill has passed.
+
+### Exit Criteria
+
+- PostgreSQL logical backup is automated and has at least one verified remote
+  backup object.
+- OCI Block Volume backups are configured with bounded retention and at least
+  one manual backup has completed.
+- Redis recovery behavior and session-continuity expectations are documented
+  honestly.
+- The landing page is live on the approved ownership surface and does not
+  expose deferred observability surfaces.
+- The production runbook exists under `docs/runbooks/` and matches the
+  checked-in scripts/config.
+- The reboot drill and clean PostgreSQL restore drill both succeed in under one
+  hour.
+- Only after those checks pass is the URL ready for resume use.
 
 ### Outputs
 
-- Automated database backups
-- Bounded volume backup policy
-- Tested disaster recovery procedure
-- Demo landing page live
-- URL ready for resume
+- Automated PostgreSQL logical backup path
+- Bounded OCI volume backup policy
+- Documented Redis recovery behavior
+- Production runbook and maintenance checklist
+- Demo landing page live on the reviewed route surface
+- Tested go-live readiness
 
 ---
 

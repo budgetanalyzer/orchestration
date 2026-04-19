@@ -159,11 +159,11 @@ sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 
 ## Production Redis Input
 
-Local development still uses the shared
-`kubernetes/infrastructure/redis/deployment.yaml` with an ephemeral
-`emptyDir` at `/data`. Phase 6 now adds a separate production Redis path under
-`infrastructure/redis/` that keeps production storage explicit instead of
-reusing the local-dev assumption.
+Local development now uses the shared
+`kubernetes/infrastructure/redis/statefulset.yaml` with PVC-backed `/data`.
+The current production Redis path remains a separate overlay under
+`infrastructure/redis/` until the production-parity infrastructure work
+replaces it with the broad `kubernetes/production/infrastructure` target.
 
 That production overlay:
 
@@ -173,8 +173,7 @@ That production overlay:
 - generates the required `redis-acl-bootstrap` ConfigMap from the committed
   `kubernetes/production/infrastructure/redis/start-redis.sh` file so
   production does not depend on Tilt to create it
-- replaces the shared `emptyDir` `redis-data` volume with a
-  `PersistentVolumeClaim/redis-data`
+- mounts `/data` from `PersistentVolumeClaim/redis-data`
 - requests `5Gi` on the cluster's default storage class, which is expected to
   be k3s `local-path` on the OCI host
 

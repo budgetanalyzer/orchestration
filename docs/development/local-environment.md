@@ -388,7 +388,7 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
-- `redis` - Redis Deployment
+- `redis` - Redis StatefulSet
 - `rabbitmq` - RabbitMQ StatefulSet
 - `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
 - `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
@@ -698,7 +698,7 @@ Redis local access:
 - `default` is probe-only and should not be used by application code
 - `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
 - active browser sessions are extended through same-origin `GET /auth/v1/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
-- The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
+- The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting the pod.
 
 RabbitMQ local access:
 - Management UI: `http://localhost:15672`

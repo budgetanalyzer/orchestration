@@ -458,7 +458,22 @@ assert_ready_deployment() {
     fi
 }
 
-# shellcheck disable=SC2329 # Invoked indirectly through capture_command_output.
+assert_ready_statefulset() {
+    local namespace="$1"
+    local name="$2"
+    local ready
+    local replicas
+
+    ready="$(kubectl get statefulset "$name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+    replicas="$(kubectl get statefulset "$name" -n "$namespace" -o jsonpath='{.status.replicas}' 2>/dev/null || true)"
+    if [[ -n "$ready" && -n "$replicas" && "$ready" == "$replicas" && "$ready" != "0" ]]; then
+        pass "statefulset/${name} is Ready in ${namespace}"
+    else
+        fail "statefulset/${name} is not Ready in ${namespace}"
+    fi
+}
+
+# shellcheck disable=SC2317,SC2329 # Invoked indirectly through capture_command_output.
 redis_exec() {
     kubectl exec -n infrastructure "$REDIS_POD" -- \
         redis-cli \
@@ -618,10 +633,10 @@ run_live_checks() {
         fail "deployment/session-gateway is missing from the live cluster"
     fi
 
-    if require_kubectl_resource deployment redis infrastructure; then
-        assert_ready_deployment infrastructure redis
+    if require_kubectl_resource statefulset redis infrastructure; then
+        assert_ready_statefulset infrastructure redis
     else
-        fail "deployment/redis is missing from the live cluster"
+        fail "statefulset/redis is missing from the live cluster"
     fi
 
     if ! prepare_live_redis_context; then

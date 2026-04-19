@@ -207,6 +207,13 @@ same common values plus the k3s overlay.
 
 ## Phase 2: Shared Redis StatefulSet Baseline
 
+**Status:** Implemented on 2026-04-19. Local Redis now uses the shared
+infrastructure kustomization and a single-replica `StatefulSet` with the
+`redis-data` claim template. The local runtime verifiers that directly encoded
+the old Redis `Deployment` or `emptyDir` shape were updated with this phase.
+The production overlay, production migration scripts, and production render
+guardrail updates remain later phases in this plan.
+
 1. **[AI-Assistant]** Replace
    `kubernetes/infrastructure/redis/deployment.yaml` with
    `kubernetes/infrastructure/redis/statefulset.yaml`.

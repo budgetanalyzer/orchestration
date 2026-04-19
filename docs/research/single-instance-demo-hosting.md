@@ -47,7 +47,7 @@ The goal is to run k3s + Istio + the application stack + the observability bundl
 |---|---|---|---|---|---|
 | postgresql | 256 Mi | 512 Mi | 100 m | 500 m | `kubernetes/infrastructure/postgresql/statefulset.yaml:100-104` |
 | rabbitmq | 256 Mi | 512 Mi | 100 m | 500 m | `kubernetes/infrastructure/rabbitmq/statefulset.yaml:35-39` |
-| redis | 128 Mi | 256 Mi | 100 m | 300 m | `kubernetes/infrastructure/redis/deployment.yaml:87-91` |
+| redis | 128 Mi | 256 Mi | 100 m | 300 m | `kubernetes/infrastructure/redis/statefulset.yaml:88-94` |
 | **Infra subtotal** | **640 Mi** | **1.25 GiB** | **0.3 vCPU** | **1.3 vCPU** | |
 
 ### Platform overhead (k3s + Istio)
@@ -209,7 +209,7 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 ### What stays the same (the showcase)
 
 - All `kubernetes/services/*` deployments — `transaction-service`, `currency-service`, `session-gateway`, `permission-service`, `budget-analyzer-web`, `nginx-gateway`, `ext-authz`
-- All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis Deployment
+- All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis StatefulSet
 - All `kubernetes/istio/*` — `peer-authentication.yaml` (mesh-wide STRICT mTLS), `authorization-policies.yaml`, `ext-authz-policy.yaml`, the istiod extension provider for `ext-authz-http`, the istio ingress gateway, the egress gateway, the egress `REGISTRY_ONLY` outbound traffic policy and `ServiceEntry`s
 - `kubernetes/network-policies/*` — the default-deny baseline plus the per-namespace allow rules for `istio-ingress`, `istio-egress`, and infrastructure
 - `kubernetes/kyverno/*` — the Phase 7 ClusterPolicies and the static gate (`scripts/guardrails/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.

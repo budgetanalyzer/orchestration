@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: infrastructure
   labels:
     app: redis
 spec:
+  serviceName: redis
   replicas: 1
   selector:
     matchLabels:
@@ -17,6 +18,8 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -118,12 +121,17 @@ spec:
             defaultMode: 0555
         - name: redis-tmp
           emptyDir: {}
-        # Local dev keeps Redis AOF ephemeral here; production persistence would require a PVC.
-        - name: redis-data
-          emptyDir: {}
         - name: redis-tls
           secret:
             secretName: infra-tls-redis
         - name: redis-ca
           secret:
             secretName: infra-ca
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

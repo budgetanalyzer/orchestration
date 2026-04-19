@@ -183,7 +183,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 | **Current version** | 7-alpine |
 | **Watch** | https://github.com/redis/redis |
 | **Also watch** | https://github.com/docker-library/redis (image tags) |
-| **Defined in** | `orchestration/kubernetes/infrastructure/redis/deployment.yaml` |
+| **Defined in** | `orchestration/kubernetes/infrastructure/redis/statefulset.yaml` |
 
 **Why important**: Session store for authentication (session-gateway and ext-authz both read from it). Security patches matter because it holds active session data. Redis 7 is the current major.
 
@@ -473,7 +473,7 @@ table below tracks the human-readable tags; the checked-in refs now use
 | golang | 1.24-alpine | `orchestration/ext-authz/Dockerfile` |
 | distroless/static | nonroot | `orchestration/ext-authz/Dockerfile` |
 | postgres | 16-alpine | `orchestration/kubernetes/infrastructure/postgresql/statefulset.yaml` |
-| redis | 7-alpine | `orchestration/kubernetes/infrastructure/redis/deployment.yaml` |
+| redis | 7-alpine | `orchestration/kubernetes/infrastructure/redis/statefulset.yaml` |
 | rabbitmq | 3.13-management | `orchestration/kubernetes/infrastructure/rabbitmq/statefulset.yaml` |
 | nginxinc/nginx-unprivileged | 1.29.4-alpine | `orchestration/kubernetes/services/nginx-gateway/deployment.yaml` |
 

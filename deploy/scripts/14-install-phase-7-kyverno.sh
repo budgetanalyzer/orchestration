@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 label_baseline_namespace() {
@@ -37,7 +38,7 @@ helm upgrade --install kyverno kyverno/kyverno \
     --values "$(phase4_repo_path "deploy/helm-values/kyverno.values.yaml")" \
     --wait
 
-phase4_info "verifying Phase 7 controller deployments"
+phase4_info "verifying Kyverno controller deployments"
 kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=300s >/dev/null
 kubectl wait --for=condition=Available deployment/kyverno-background-controller -n kyverno --timeout=300s >/dev/null
 kubectl wait --for=condition=Available deployment/kyverno-cleanup-controller -n kyverno --timeout=300s >/dev/null

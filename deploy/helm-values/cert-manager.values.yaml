@@ -1,5 +1,5 @@
 # Hardened single-node values for the Oracle Cloud production install path.
-# Gateway API support stays enabled here so Phase 4 and Phase 11 share the same
+# Gateway API support stays enabled here so the HTTP ingress and public TLS paths share the same
 # controller install contract.
 
 crds:
@@ -11,7 +11,7 @@ config:
 acmesolver:
   image:
     # The HTTP-01 solver pods run in application namespaces, so they must satisfy
-    # the Phase 7 digest policy even though the cert-manager controllers themselves
+    # the image-digest policy even though the cert-manager controllers themselves
     # live in the excluded cert-manager namespace.
     digest: sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f
 

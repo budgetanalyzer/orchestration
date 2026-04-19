@@ -2,13 +2,13 @@
 
 # verify-phase-6-edge-browser-hardening.sh
 #
-# Completion gate for Security Hardening v2 Phase 6 edge/browser hardening.
+# Runtime verifier for edge/browser hardening.
 # Proves the checked-in dev/production edge contract, the live CSP/header
 # behavior on the real app paths, the final auth-edge throttling coverage, the
-# API rate-limit identity model, and the Phase 5 regression cascade.
+# API rate-limit identity model, and the runtime-hardening regression cascade.
 #
 # The shared /api-docs surface remains observable here, but docs-route problems
-# are warning-only and do not block Phase 6 completion.
+# are warning-only and do not block edge/browser verification.
 #
 # Usage:
 #   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
@@ -59,7 +59,7 @@ Options:
   --subverifier-timeout <dur>         Timeout for each nested verifier
                                       (default: 20m).
   --phase5-regression-timeout <dur>   Per-script timeout passed through to the
-                                      Phase 5 regression verifier
+                                      runtime-hardening regression verifier
                                       (default: 10m).
   -h, --help                          Show this help text.
 EOF
@@ -268,8 +268,7 @@ start_nginx_port_forward() {
     kubectl port-forward "${NGINX_DEPLOYMENT}" -n "${NGINX_NAMESPACE}" :8080 >"${PORT_FORWARD_LOG}" 2>&1 &
     PORT_FORWARD_PID=$!
 
-    local attempt
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
         PORT_FORWARD_PORT="$(sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' "${PORT_FORWARD_LOG}" | tail -n 1)"
         if [[ -n "${PORT_FORWARD_PORT}" ]]; then
             return 0
@@ -922,25 +921,25 @@ verify_auth_edge_runtime() {
 verify_nested_verifiers() {
     section "Nested Verifiers"
     info "Per-verifier timeout: ${SUBVERIFIER_TIMEOUT}"
-    info "Phase 5 regression timeout: ${PHASE5_REGRESSION_TIMEOUT}"
+    info "Runtime-hardening regression timeout: ${PHASE5_REGRESSION_TIMEOUT}"
 
     run_subverifier \
-        "Phase 6 Session 3 strict-CSP audit" \
+        "Frontend strict-CSP audit" \
         "${SCRIPT_DIR}/audit-phase-6-session-3-frontend-csp.sh"
 
     run_subverifier \
-        "Phase 6 Session 7 API rate-limit identity verifier" \
+        "API rate-limit identity verifier" \
         "${SCRIPT_DIR}/verify-phase-6-session-7-api-rate-limit-identity.sh"
 
     run_subverifier \
-        "Phase 5 runtime-hardening regression cascade" \
+        "Runtime-hardening regression cascade" \
         "${SCRIPT_DIR}/verify-phase-5-runtime-hardening.sh" \
         --regression-timeout "${PHASE5_REGRESSION_TIMEOUT}"
 }
 
 main() {
     echo "==============================================================="
-    echo "  Phase 6 Edge + Browser Hardening Verifier"
+    echo "  Edge + Browser Hardening Verifier"
     echo "==============================================================="
     echo
 
@@ -962,8 +961,8 @@ main() {
     printf 'Passed: %d\n' "${PASSED}"
     printf 'Failed: %d\n' "${FAILED}"
     printf 'Warnings: %d\n' "${WARNED}"
-    info "Manual browser-console validation is still required on /_prod-smoke/ before Phase 6 can be called complete"
-    info "Warnings from /api-docs checks stay visible here but do not block Phase 6 completion"
+    info "Manual browser-console validation is still required on /_prod-smoke/ before edge/browser security can be called complete"
+    info "Warnings from /api-docs checks stay visible here but do not block edge/browser verification"
 
     echo
     echo "==============================================================="

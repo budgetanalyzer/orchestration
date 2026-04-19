@@ -2,10 +2,11 @@
 
 Stay informed about dependency updates to avoid painful catch-up upgrades. This guide organizes every major dependency by priority tier, provides GitHub watch links, and documents which dependencies must upgrade together.
 
-## Phase 7 Supply-Chain Contract
+## Supply-Chain Contract
 
-Phase 7 Session 1 froze the active pinning scope in
-[`docs/plans/security-hardening-v2-phase-7-session-1-contract.md`](./plans/security-hardening-v2-phase-7-session-1-contract.md).
+The active pinning scope is enforced by
+[`scripts/lib/phase-7-image-pinning-targets.txt`](../scripts/lib/phase-7-image-pinning-targets.txt)
+and [`scripts/lib/phase-7-allowed-latest.txt`](../scripts/lib/phase-7-allowed-latest.txt).
 
 - Only the seven explicit local Tilt image repos may remain on `:latest` in
   checked-in manifests, and only with `imagePullPolicy: Never`. Live Tilt
@@ -15,11 +16,10 @@ Phase 7 Session 1 froze the active pinning scope in
 - Every third-party image or Docker base image is now an immutable-digest
   target, including retained test assets and sibling build surfaces.
 - `tests/setup-flow` and `tests/security-preflight` are retained, stale,
-  non-gating Phase 7 assets until they are realigned, but their third-party
+  non-gating retained assets until they are realigned, but their third-party
   refs still follow the same digest-pinning rule.
 - The Session 1 installer inventory remains a frozen historical record; the
-  version tables below reflect the current checked-in workspace toolchain as of
-  March 28, 2026.
+  version tables below reflect the checked-in workspace toolchain.
 
 ## How to Watch a GitHub Repository for Releases
 
@@ -441,7 +441,7 @@ React major version
 
 Quick-reference table of every pinned version and where it's defined.
 
-Phase 7 Session 2 digest-pins the orchestration-owned third-party images in the
+The image-pinning guardrail digest-pins the orchestration-owned third-party images in the
 active manifests, verifier scripts, Kind configs, and retained DinD assets. The
 table below tracks the human-readable tags; the checked-in refs now use
 `name:tag@sha256:...`.

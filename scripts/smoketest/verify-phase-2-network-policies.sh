@@ -2,7 +2,7 @@
 
 # verify-phase-2-network-policies.sh
 #
-# Runtime verification for Security Hardening v2 Phase 2 network policies.
+# Runtime verification for NetworkPolicy enforcement.
 # Proves that NetworkPolicy allowlists are enforced in the current Istio
 # ingress/egress topology by testing both authorized and unauthorized
 # connectivity paths using disposable probe pods.
@@ -317,7 +317,7 @@ create_all_probes() {
 
 main() {
     echo "=============================================="
-    echo "  Phase 2 Network Policy Verifier"
+    echo "  Network Policy Verifier"
     echo "=============================================="
     echo
 
@@ -465,9 +465,9 @@ main() {
         default "$PROBE_EXTAUTHZ" istio-egress-gateway.istio-egress 443
 
     # ------------------------------------------------------------------
-    section "Negative: Explicit Phase 2 Non-Edges"
+    section "Negative: Explicit Non-Edges"
     # ------------------------------------------------------------------
-    # These paths are explicitly outside the Phase 2 contract and must stay
+    # These paths are explicitly outside the NetworkPolicy contract and must stay
     # blocked unless the topology changes and the policy set is updated.
 
     assert_deny_consistently "session-gateway -> nginx-gateway:8080" \

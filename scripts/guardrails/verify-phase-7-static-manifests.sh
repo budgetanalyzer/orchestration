@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static Phase 7 guardrail gate for checked-in manifests, policy fixtures, and
+# Static security guardrail gate for checked-in manifests, policy fixtures, and
 # active setup guidance.
 
 set -euo pipefail
@@ -63,7 +63,7 @@ usage() {
     cat <<'EOF'
 Usage: scripts/guardrails/verify-phase-7-static-manifests.sh [--self-test]
 
-Runs the Phase 7 static guardrail suite:
+Runs the static security guardrail suite:
 - kubeconform schema validation for checked-in manifests
 - kube-linter with the repo-specific security baseline
 - Kyverno CLI tests for the admission fixtures
@@ -688,7 +688,7 @@ run_self_test() {
     done < <(find "${fixture_dir}" -type f | sort)
 
     if (( ${#fixture_files[@]} == 0 )); then
-        echo "Phase 7 static self-test fixtures are missing" >&2
+        echo "Static security guardrail self-test fixtures are missing" >&2
         exit 1
     fi
 
@@ -710,11 +710,11 @@ run_self_test() {
     fi
 
     if (( self_test_failures > 0 )); then
-        printf 'Phase 7 static self-test failed (%d unexpected passes)\n' "${self_test_failures}" >&2
+        printf 'Static security guardrail self-test failed (%d unexpected passes)\n' "${self_test_failures}" >&2
         exit 1
     fi
 
-    echo "Phase 7 static self-test passed"
+    echo "Static security guardrail self-test passed"
 }
 
 main() {
@@ -772,7 +772,7 @@ main() {
     run_repo_pattern_scans
 
     echo
-    echo "Phase 7 static manifest verification passed"
+    echo "Static security manifest verification passed"
 }
 
 main "$@"

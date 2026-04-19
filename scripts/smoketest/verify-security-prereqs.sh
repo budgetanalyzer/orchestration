@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-security-prereqs.sh - Deterministic runtime proof for Security Hardening v2 Phase 0.
+# verify-security-prereqs.sh - Deterministic runtime proof for platform security prerequisites.
 
 set -euo pipefail
 
@@ -287,7 +287,7 @@ prove_istio_readiness_and_injection() {
     local pod_name="istio-sidecar-smoke"
     kubectl delete pod "$pod_name" -n default --ignore-not-found >/dev/null 2>&1 || true
 
-    # Keep this probe compatible with restricted PSA and Phase 7 admission so
+    # Keep this probe compatible with restricted PSA and security guardrail admission so
     # the check proves sidecar injection rather than an outdated pod shape.
     cat <<MANIFEST | kubectl apply -n default -f - >/dev/null
 apiVersion: v1
@@ -365,7 +365,7 @@ MANIFEST
 
 main() {
     echo "=============================================="
-    echo "  Security Prerequisite Verifier (Phase 0)"
+    echo "  Security Prerequisite Verifier"
     echo "=============================================="
     echo
 

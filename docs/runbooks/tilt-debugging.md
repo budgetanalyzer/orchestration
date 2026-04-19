@@ -27,23 +27,23 @@ kind get clusters
 kubectl cluster-info --context kind-kind
 docker inspect kind-control-plane --format '{{.Config.Image}}'
 
-# Validate Phase 0 security prerequisites
+# Validate platform security prerequisites
 ./scripts/smoketest/verify-security-prereqs.sh
 
-# Validate Phase 1 credential isolation
+# Validate credential isolation
 ./scripts/smoketest/verify-phase-1-credentials.sh
 
-# Validate the Session Architecture Rethink Phase 5 contract
+# Validate the shared session contract
 ./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only
 
-# Validate Phase 2 network policy enforcement
+# Validate NetworkPolicy enforcement
 ./scripts/smoketest/verify-phase-2-network-policies.sh
 
-# Validate Phase 3 ingress/egress hardening
+# Validate Istio ingress and egress hardening
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh
 ```
 
-`./scripts/smoketest/verify-security-prereqs.sh` proves the Phase 0 platform
+`./scripts/smoketest/verify-security-prereqs.sh` proves the platform security
 baseline. `./scripts/smoketest/verify-session-architecture-phase-5.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
@@ -51,8 +51,8 @@ explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
 deployment, and the full Session Gateway auth-route ownership contract for
 `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`, with no standalone
 `/user` match.
-`./scripts/smoketest/verify-phase-3-istio-ingress.sh` is the Phase 3 completion
-gate. The browser login page is `/login`; the actual OAuth2 redirect starts at
+`./scripts/smoketest/verify-phase-3-istio-ingress.sh` verifies Istio ingress and
+egress hardening. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/v1/session`. The browser only
 carries an opaque `BA_SESSION` cookie; Session Gateway keeps the session data
@@ -277,7 +277,7 @@ curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/aut
 # Inspect one specific session hash if you have the cookie value
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
 
-# Verify the full Session Architecture Rethink Phase 5 contract
+# Verify the full shared session contract
 ./scripts/smoketest/verify-session-architecture-phase-5.sh
 
 # Flush all Redis data (clears all sessions)
@@ -513,9 +513,9 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 
 ---
 
-## NetworkPolicy Troubleshooting (Phase 2)
+## NetworkPolicy Troubleshooting
 
-Phase 2 enforces deny-by-default ingress and egress in `default` and `infrastructure` namespaces for pod-to-pod traffic. Kubelet probes and Tilt port-forwards are host-to-pod traffic, so under Calico's default `defaultEndpointToHostAction=Accept` they do not rely on these allowlists. When services break after policy changes, these are the most common causes.
+NetworkPolicy enforcement applies deny-by-default ingress and egress in `default` and `infrastructure` namespaces for pod-to-pod traffic. Kubelet probes and Tilt port-forwards are host-to-pod traffic, so under Calico's default `defaultEndpointToHostAction=Accept` they do not rely on these allowlists. When services break after policy changes, these are the most common causes.
 
 ### Missing DNS Egress
 
@@ -601,7 +601,7 @@ kubectl patch felixconfiguration default --type=merge -p '{"spec":{"defaultEndpo
 
 ### Runtime Verification
 
-Run the Phase 2 verifier to confirm policies are enforced (not just present):
+Run the NetworkPolicy verifier to confirm policies are enforced (not just present):
 ```bash
 ./scripts/smoketest/verify-phase-2-network-policies.sh
 ```
@@ -662,10 +662,10 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 # Start fresh
 tilt up
 
-# Verify the Phase 0 platform baseline once platform resources are healthy
+# Verify the platform security baseline once platform resources are healthy
 ./scripts/smoketest/verify-security-prereqs.sh
 
-# Verify the Phase 3 completion gate after ingress resources are ready
+# Verify Istio ingress and egress hardening after ingress resources are ready
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh
 ```
 

@@ -185,10 +185,10 @@ The Docker socket acts like a wormhole - commands issued inside the container "t
 ### Pattern 2: True Docker-in-Docker (CI Testing)
 
 **Implemented in**: `tests/setup-flow/` and `tests/security-preflight/`
-**Use case**: Testing the complete developer onboarding flow and the isolated Phase 0 runtime baseline
+**Use case**: Testing the complete developer onboarding flow and the isolated platform security prerequisite baseline
 
-Phase 7 status: these retained DinD suites are stale against the current
-Istio-only baseline and are non-gating for Phase 7 until they are explicitly
+Security guardrail status: these retained DinD suites are stale against the current
+Istio-only baseline and are non-gating until they are explicitly
 realigned. Keep them as reference assets, not as current completion proof.
 
 #### The Problem
@@ -199,7 +199,7 @@ We need to test that a brand new developer can:
 3. Run `tilt up`
 4. Access the application at `https://app.budgetanalyzer.localhost`
 
-We also need a second isolated suite that proves the Phase 0 runtime baseline:
+We also need a second isolated suite that proves the platform security prerequisite baseline:
 - Calico-backed `NetworkPolicy` enforcement
 - Pod Security Admission behavior
 - Istio readiness and sidecar injection
@@ -335,7 +335,7 @@ To make autonomous execution effective, define **clear, testable success criteri
 ```markdown
 ## Success Criteria
 
-### Phase 0: Platform Preconditions
+### Platform Preconditions
 - [ ] Local Kind clusters enforce `NetworkPolicy`
 - [ ] Pod Security Admission labels are applied without breaking current workloads
 - [ ] Kyverno is installed with a scoped smoke policy
@@ -353,7 +353,7 @@ To make autonomous execution effective, define **clear, testable success criteri
 
 ```bash
 # 1. Human reviews plan and success criteria
-cat docs/plans/security-hardening-v2-phase-0-implementation.md
+cat docs/architecture/security-architecture.md
 
 # 2. Human starts agent in autonomous mode
 claude --dangerously-skip-permissions
@@ -515,19 +515,19 @@ Create a checklist before running the agent:
 Break large tasks into phases:
 
 ```bash
-# Phase 1: Setup
+# Milestone 1: Setup
 dangerous -p "create database migrations for user auth"
 
-# Verify Phase 1 success
+# Verify setup success
 ./gradlew flywayMigrate
 
-# Phase 2: Implementation
+# Milestone 2: Implementation
 dangerous -p "implement auth endpoints"
 
-# Verify Phase 2 success
+# Verify implementation success
 ./gradlew test
 
-# Phase 3: Integration
+# Milestone 3: Integration
 dangerous -p "integrate auth with frontend"
 ```
 
@@ -643,7 +643,7 @@ on my host machine (outside the container).
 - [Security Architecture](security-architecture.md) - Defense-in-depth security model
 - [Workspace README](../../../workspace/README.md) - Devcontainer and sandbox entry point
 - [Setup Flow Testing](../../tests/setup-flow/README.md) - Docker-in-Docker bootstrap validation
-- [Security Preflight Testing](../../tests/security-preflight/README.md) - Docker-in-Docker Phase 0 runtime validation
+- [Security Preflight Testing](../../tests/security-preflight/README.md) - Docker-in-Docker platform prerequisite validation
 
 ## References
 

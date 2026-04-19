@@ -3,8 +3,6 @@
 Date: 2026-04-02
 Updated: 2026-04-06
 
-Status: Draft
-
 Related documents:
 
 - `docs/architecture/security-architecture.md`
@@ -23,10 +21,10 @@ the linked Session Gateway plan and should stay there.
 
 ## Session Gateway Dependency
 
-This plan's prerequisites on Session Gateway are now satisfied (as of
-2026-04-06, executed via the sibling session-gateway plan
-`local-session-revocation-and-refresh-token-removal.md` and recorded in ADR
-[`007-browser-only-session-gateway.md`](../decisions/007-browser-only-session-gateway.md)):
+This plan's prerequisites on Session Gateway are satisfied via the sibling
+session-gateway plan `local-session-revocation-and-refresh-token-removal.md`
+and recorded in ADR
+[`007-browser-only-session-gateway.md`](../decisions/007-browser-only-session-gateway.md):
 
 - Session Gateway is explicitly browser-only.
 - Browser-session validity is local and Redis-based, not Auth0-refresh-based.

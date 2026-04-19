@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pinned tool versions and verified download metadata for Phase 7 Sessions 4 and 6.
+# Pinned tool versions and verified download metadata for security guardrail tooling.
 
 PHASE7_KUBECTL_VERSION="v1.30.8"
 PHASE7_HELM_VERSION="v3.20.1"

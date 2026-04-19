@@ -2,7 +2,7 @@
 # Authorization Policies for service-to-service traffic
 # ============================================================================
 #
-# With Istio-managed ingress (Phase 3), the ingress gateway has a SPIFFE
+# With Istio-managed ingress, the ingress gateway has a SPIFFE
 # identity and participates in mesh mTLS. All services — both ingress-facing
 # and internal — now have AuthorizationPolicies restricting their callers.
 #

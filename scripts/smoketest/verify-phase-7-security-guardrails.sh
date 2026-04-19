@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Final local Phase 7 completion gate. Runs the static guardrail suite first,
+# Final local security guardrail proof. Runs the static guardrail suite first,
 # then the live-cluster runtime guardrail proof.
 
 set -euo pipefail
@@ -16,7 +16,7 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-phase-7-security-guardrails.sh [options]
 
-Runs the local final Phase 7 completion gate in this order:
+Runs the local final security guardrail proof in this order:
   1. ./scripts/guardrails/verify-phase-7-static-manifests.sh
   2. ./scripts/smoketest/verify-phase-7-runtime-guardrails.sh
 
@@ -35,7 +35,7 @@ Environment:
       Default runtime regression umbrella timeout to pass to the runtime verifier.
 
 Notes:
-  - This is the local Phase 7 completion command.
+  - This is the local security guardrail command.
   - CI remains intentionally static-only via
     ./scripts/guardrails/verify-phase-7-static-manifests.sh.
 EOF
@@ -81,22 +81,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ! -x "${STATIC_GATE}" ]]; then
-    printf 'ERROR: static Phase 7 gate is missing or not executable: %s\n' "${STATIC_GATE}" >&2
+    printf 'ERROR: static security guardrail gate is missing or not executable: %s\n' "${STATIC_GATE}" >&2
     exit 1
 fi
 
 if [[ ! -x "${RUNTIME_GATE}" ]]; then
-    printf 'ERROR: runtime Phase 7 gate is missing or not executable: %s\n' "${RUNTIME_GATE}" >&2
+    printf 'ERROR: runtime security guardrail gate is missing or not executable: %s\n' "${RUNTIME_GATE}" >&2
     exit 1
 fi
 
-section "Phase 7 Static Guardrails"
+section "Static Security Guardrails"
 "${STATIC_GATE}"
 
-section "Phase 7 Runtime Guardrails"
+section "Runtime Security Guardrails"
 PHASE7_WAIT_TIMEOUT="${runtime_wait_timeout}" \
 PHASE7_REGRESSION_TIMEOUT="${runtime_regression_timeout}" \
     "${RUNTIME_GATE}"
 
-section "Phase 7 Final Gate"
-printf 'Phase 7 static and runtime guardrails passed.\n'
+section "Final Security Guardrail Proof"
+printf 'Static and runtime security guardrails passed.\n'

@@ -16,6 +16,8 @@ set -e  # Exit on error
 
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/repo/repo-config.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "$SCRIPT_DIR/repo-config.sh"
 
 # Parse arguments
@@ -30,10 +32,11 @@ if [ $PULL_CHANGES -eq 1 ]; then
 fi
 echo
 
-# Phase 1: Validation - check all repos exist
-print_info "Phase 1: Validating repositories..."
+# Step 1: Validation - check all repos exist
+print_info "Step 1: Validating repositories..."
 VALIDATION_FAILED=0
 
+# shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
 for REPO in "${REPOS[@]}"; do
     REPO_PATH="$PARENT_DIR/$REPO"
 
@@ -71,7 +74,7 @@ fi
 print_success "All repositories validated"
 echo
 
-# Phase 2: Confirmation
+# Step 2: Confirmation
 print_info "The following repositories will be switched to main branch:"
 for REPO in "${REPOS[@]}"; do
     echo "  - $REPO"
@@ -87,8 +90,8 @@ fi
 
 echo
 
-# Phase 3: Checkout main branch
-print_info "Phase 2: Checking out main branch..."
+# Step 3: Checkout main branch
+print_info "Step 3: Checking out main branch..."
 
 SUCCESS_REPOS=()
 FAILED_REPOS=()

@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 PHASE6_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-6"
@@ -18,7 +19,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/13-render-phase-6-production-manifests.sh [--output-dir DIR]
 
-Renders the reviewed Phase 6 production gateway routes, Istio ingress
+Renders the reviewed production gateway routes, Istio ingress
 policies, monitoring hostname override, and Istio egress manifests into a
 local output directory.
 
@@ -57,9 +58,9 @@ main() {
     phase4_require_env_vars AUTH0_ISSUER_URI DEMO_DOMAIN GRAFANA_DOMAIN
 
     [[ "${DEMO_DOMAIN}" == "${LOCKED_DEMO_DOMAIN}" ]] || phase4_die \
-        "DEMO_DOMAIN=${DEMO_DOMAIN} does not match the locked Phase 6 production hostname ${LOCKED_DEMO_DOMAIN}"
+        "DEMO_DOMAIN=${DEMO_DOMAIN} does not match the locked production hostname ${LOCKED_DEMO_DOMAIN}"
     [[ "${GRAFANA_DOMAIN}" == "${LOCKED_GRAFANA_DOMAIN}" ]] || phase4_die \
-        "GRAFANA_DOMAIN=${GRAFANA_DOMAIN} does not match the locked Phase 6 monitoring hostname ${LOCKED_GRAFANA_DOMAIN}"
+        "GRAFANA_DOMAIN=${GRAFANA_DOMAIN} does not match the locked monitoring hostname ${LOCKED_GRAFANA_DOMAIN}"
 
     mkdir -p "${output_dir}"
 
@@ -77,10 +78,10 @@ main() {
         --auth0-issuer-uri "${AUTH0_ISSUER_URI}" > "${output_dir}/istio-egress.yaml"
 
     if grep -R -E -n 'budgetanalyzer\.localhost|auth0-issuer\.placeholder\.invalid' "${output_dir}" >/dev/null; then
-        phase4_die "rendered Phase 6 output still contains localhost or placeholder Auth0 values"
+        phase4_die "rendered production output still contains localhost or placeholder Auth0 values"
     fi
 
-    phase4_info "rendered Phase 6 production artifacts into ${output_dir}"
+    phase4_info "rendered production artifacts into ${output_dir}"
     phase4_info "review ${output_dir}/gateway-routes.yaml, ${output_dir}/istio-ingress-policies.yaml, ${output_dir}/prometheus-stack-values.override.yaml, and ${output_dir}/istio-egress.yaml before any live apply"
 }
 

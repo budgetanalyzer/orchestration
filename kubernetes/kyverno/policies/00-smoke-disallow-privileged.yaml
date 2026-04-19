@@ -4,12 +4,13 @@ metadata:
   name: smoke-disallow-privileged
   annotations:
     policies.kyverno.io/title: Smoke Disallow Privileged
-    policies.kyverno.io/category: Phase 0 Smoke
+    policies.kyverno.io/category: Platform Smoke
     policies.kyverno.io/severity: medium
     policies.kyverno.io/subject: Pod
     policies.kyverno.io/description: >-
-      Retained scoped smoke policy used by the Phase 0 verifier to prove that
-      Kyverno admission is live before the full Phase 7 policy suite runs.
+      Retained scoped smoke policy used by the platform prerequisite verifier
+      to prove that Kyverno admission is live before the full security
+      guardrail policy suite runs.
 spec:
   validationFailureAction: Enforce
   background: false

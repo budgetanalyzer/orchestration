@@ -15,6 +15,8 @@ set -e  # Exit on error
 
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/repo/repo-config.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "$SCRIPT_DIR/repo-config.sh"
 
 # repo-config.sh already defines the release repo set; no exclusions needed
@@ -43,8 +45,8 @@ fi
 print_info "Preparing to tag all repositories with version: $VERSION"
 echo
 
-# Phase 1: Validation - check all repos exist and are clean
-print_info "Phase 1: Validating repositories..."
+# Step 1: Validation - check all repos exist and are clean
+print_info "Step 1: Validating repositories..."
 
 # Run the validation script (pass exclusions so it validates the same repo set)
 if ! EXCLUDE_REPOS="$(IFS=','; echo "${EXCLUDE_FROM_RELEASE[*]}")" "$SCRIPT_DIR/validate-repos.sh"; then
@@ -54,6 +56,7 @@ fi
 
 # Additional validation: Check if tag already exists in any repository
 VALIDATION_FAILED=0
+# shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
 for REPO in "${REPOS[@]}"; do
     REPO_PATH="$PARENT_DIR/$REPO"
     cd "$REPO_PATH"
@@ -71,7 +74,7 @@ if [ $VALIDATION_FAILED -eq 1 ]; then
     exit 1
 fi
 
-# Phase 2: Confirmation
+# Step 2: Confirmation
 print_info "The following repositories will be tagged with $VERSION and pushed:"
 for REPO in "${REPOS[@]}"; do
     echo "  - $REPO"
@@ -87,8 +90,8 @@ fi
 
 echo
 
-# Phase 3: Tagging
-print_info "Phase 2: Tagging repositories..."
+# Step 3: Tagging
+print_info "Step 3: Tagging repositories..."
 
 TAGGED_REPOS=()
 FAILED_REPOS=()
@@ -108,9 +111,9 @@ done
 
 echo
 
-# Phase 4: Pushing tags
+# Step 4: Pushing tags
 if [ ${#TAGGED_REPOS[@]} -gt 0 ]; then
-    print_info "Phase 3: Pushing tags to remote..."
+    print_info "Step 4: Pushing tags to remote..."
 
     PUSHED_REPOS=()
     PUSH_FAILED_REPOS=()

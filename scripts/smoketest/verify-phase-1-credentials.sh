@@ -2,7 +2,7 @@
 
 # verify-phase-1-credentials.sh
 #
-# Runtime verification for Security Hardening v2 Phase 1 credential isolation.
+# Runtime verification for credential isolation.
 # Tests that per-service identities are enforced across PostgreSQL, RabbitMQ,
 # Redis, and ext-authz.
 #
@@ -16,6 +16,8 @@ set -euo pipefail
 PASSED=0
 FAILED=0
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=scripts/lib/redis-cli.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 PORT_FORWARD_PIDS=()
@@ -297,7 +299,7 @@ pg_expect_denied() {
 }
 
 echo "=============================================="
-echo "  Phase 1 Credential Verification"
+echo "  Credential Verification"
 echo "=============================================="
 
 require_host_command kubectl

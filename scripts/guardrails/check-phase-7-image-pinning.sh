@@ -2,9 +2,9 @@
 
 # check-phase-7-image-pinning.sh
 #
-# Static verification for Phase 7 Session 2 image pinning. This is scoped to
-# orchestration-owned active assets plus the retained DinD test assets frozen by
-# the Phase 7 Session 1 contract.
+# Static verification for image pinning. This is scoped to
+# orchestration-owned active assets plus the retained DinD test assets covered
+# by the supply-chain guardrail contract.
 
 set -euo pipefail
 
@@ -91,7 +91,7 @@ check_target_files_exist() {
     done
 
     if (( ${#missing[@]} > 0 )); then
-        printf 'ERROR: Phase 7 image pinning target list references missing files:\n' >&2
+        printf 'ERROR: image pinning target list references missing files:\n' >&2
         printf '  - %s\n' "${missing[@]}" >&2
         exit 1
     fi
@@ -147,7 +147,7 @@ usage() {
     cat <<'EOF'
 Usage: scripts/guardrails/check-phase-7-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
 
-Without flags, scans the Phase 7 image-pinning inventory for unexpected
+Without flags, scans the image-pinning inventory for unexpected
 checked-in :latest refs and missing third-party @sha256 digests.
 
 Optional output modes:
@@ -229,17 +229,17 @@ main() {
     done < <(extract_refs)
 
     if (( refs_checked == 0 )); then
-        printf 'ERROR: no image references were discovered in the Phase 7 target set\n' >&2
+        printf 'ERROR: no image references were discovered in the image-pinning target set\n' >&2
         exit 1
     fi
 
     if (( ${#failures[@]} > 0 )); then
-        printf 'Phase 7 image pinning check failed:\n' >&2
+        printf 'Image pinning check failed:\n' >&2
         printf '  - %s\n' "${failures[@]}" >&2
         exit 1
     fi
 
-    printf 'Phase 7 image pinning check passed (%d refs checked)\n' "${refs_checked}"
+    printf 'Image pinning check passed (%d refs checked)\n' "${refs_checked}"
 }
 
 main "$@"

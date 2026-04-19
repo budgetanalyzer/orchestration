@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-5"
@@ -14,10 +15,10 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/09-render-phase-5-secrets.sh [--output-dir DIR]
 
-Renders the reviewed Phase 5 non-secret artifacts into a local output
+Renders the reviewed production secret-sync artifacts into a local output
 directory:
   - ClusterSecretStore for OCI Vault instance-principal access
-  - ExternalSecret resources for the exact Phase 5 native Secret contract
+  - ExternalSecret resources for the exact production native Secret contract
   - production ConfigMap/session-gateway-idp-config
 
 By default the render output goes to tmp/phase-5/ under the repo root.
@@ -81,7 +82,7 @@ main() {
         "IDP_AUDIENCE=${IDP_AUDIENCE}" \
         "IDP_LOGOUT_RETURN_TO=${IDP_LOGOUT_RETURN_TO}"
 
-    phase4_info "rendered Phase 5 secrets artifacts into ${output_dir}"
+    phase4_info "rendered production secret artifacts into ${output_dir}"
 }
 
 main "$@"

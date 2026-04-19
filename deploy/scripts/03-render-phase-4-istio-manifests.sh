@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 OUTPUT_DIR="${PHASE4_RENDER_ROOT}"
@@ -13,14 +14,14 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/03-render-phase-4-istio-manifests.sh [--output-dir DIR]
 
-Renders the Phase 4 production ingress ConfigMap and Gateway manifests into
+Renders the production ingress ConfigMap and Gateway manifests into
 tmp/phase-4/ for operator review.
 
-The rendered Gateway is intentionally HTTP-only in Phase 4 and keeps a single
+The rendered Gateway is intentionally HTTP-only for the initial ingress step and keeps a single
 host-agnostic listener with the hostname omitted so the checked-in localhost
 HTTPRoutes still attach until the production host-specific HTTPRoutes are
 rendered in lockstep in a later phase.
-Phase 11 adds the public TLS listener and certificate secret wiring after
+The public TLS cutover adds the public TLS listener and certificate secret wiring after
 certificate issuance is in place.
 EOF
 }
@@ -54,5 +55,5 @@ phase4_render_template \
     "$(phase4_repo_path "deploy/manifests/phase-4/istio-gateway.yaml.template")" \
     "${OUTPUT_DIR}/istio-gateway.yaml"
 
-phase4_info "rendered Phase 4 ingress manifests into ${OUTPUT_DIR}"
+phase4_info "rendered ingress manifests into ${OUTPUT_DIR}"
 phase4_info "review these files before running deploy/scripts/04-install-istio.sh"

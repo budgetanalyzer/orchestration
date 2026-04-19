@@ -6,7 +6,7 @@ For local development, PostgreSQL runs as a StatefulSet in the Kind cluster's
 `infrastructure` namespace. Each backend service gets its own database and its
 own login inside the shared PostgreSQL instance.
 
-Phase 1 Step 2 hardens that local PostgreSQL path:
+The credential isolation work hardens that local PostgreSQL path:
 
 - PostgreSQL bootstrap credentials come from `postgresql-bootstrap-credentials`
   instead of inline manifest values.
@@ -19,7 +19,7 @@ Phase 1 Step 2 hardens that local PostgreSQL path:
   `infra-tls-postgresql` server certificate and the shared `infra-ca` trust
   bundle.
 
-Phase 5 Session 7 hardens the runtime posture without changing the bootstrap
+The runtime-hardening work hardens the runtime posture without changing the bootstrap
 contract:
 
 - The pod disables Kubernetes API token automount and sets
@@ -117,7 +117,7 @@ Tilt will:
 
 ## Verification
 
-Run the Phase 1 verifier after `tilt up`:
+Run the credential isolation verifier after `tilt up`:
 
 ```bash
 ./scripts/smoketest/verify-phase-1-credentials.sh
@@ -136,7 +136,7 @@ PGPASSWORD="$POSTGRES_BOOTSTRAP_PASSWORD" psql "host=localhost user=postgres_adm
 The first command should succeed as `transaction_service`. The second should be
 rejected because cross-database `CONNECT` is revoked. The third should return
 `on`, proving the port-forwarded listener presents a certificate trusted by the
-local `infra-ca`. The Phase 5 verifier also asserts the non-root runtime
+local `infra-ca`. The runtime-hardening verifier also asserts the non-root runtime
 contract: `runAsUser`/`runAsGroup` `70` plus the explicit writable mounts for
 `/tmp` and `/var/run/postgresql`.
 

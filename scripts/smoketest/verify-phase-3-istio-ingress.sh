@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Runtime verification for Security Hardening v2 Phase 3.
+# Runtime verification for Istio ingress and egress hardening.
 
 set -euo pipefail
 
@@ -773,7 +773,7 @@ verify_forwarded_chain_log() {
 
 main() {
     echo "=============================================="
-    echo "  Phase 3 Istio Ingress/Egress Verifier"
+    echo "  Istio Ingress/Egress Verifier"
     echo "=============================================="
     echo
 

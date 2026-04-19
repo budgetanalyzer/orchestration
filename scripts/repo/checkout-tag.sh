@@ -14,6 +14,8 @@ set -e
 
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/repo/repo-config.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "$SCRIPT_DIR/repo-config.sh"
 
 # Validate arguments
@@ -28,8 +30,8 @@ ERRORS=0
 print_info "Checking out tag '$TAG_NAME' across all repositories"
 echo ""
 
-# Phase 1: Validate all repositories
-print_info "Phase 1: Validating repository states..."
+# Step 1: Validate all repositories
+print_info "Step 1: Validating repository states..."
 echo ""
 
 for repo in "${REPOS[@]}"; do
@@ -118,8 +120,8 @@ if [ $ERRORS -gt 0 ]; then
     exit 1
 fi
 
-# Phase 2: Checkout tags
-print_info "Phase 2: Checking out tag '$TAG_NAME'..."
+# Step 2: Checkout tags
+print_info "Step 2: Checking out tag '$TAG_NAME'..."
 echo ""
 
 for repo in "${REPOS[@]}"; do

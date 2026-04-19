@@ -112,6 +112,7 @@ For detected anomalies (rate limit triggers, unusual access patterns):
 
 ### Future Enhancements
 
-See [Security Hardening Plan v2](../plans/security-hardening-v2.md) for planned improvements including:
+See [Security Architecture](security-architecture.md) for current hardening
+work, including:
 - Session Gateway bulk revocation API
 - Per-user session listing and selective revocation

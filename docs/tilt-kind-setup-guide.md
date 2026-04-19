@@ -233,8 +233,8 @@ After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
 ./scripts/smoketest/verify-phase-4-transport-encryption.sh
 ```
 
-These provide deterministic runtime proof for the Phase 0 platform baseline and
-the Phase 4 transport-TLS cutover.
+These provide deterministic runtime proof for the platform security
+prerequisites and infrastructure transport TLS.
 
 ## Verification
 

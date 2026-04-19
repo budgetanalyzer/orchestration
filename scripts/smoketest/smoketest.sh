@@ -69,9 +69,9 @@ run_step() {
     "$@"
 }
 
-run_step "Phase 7 static manifest guardrails" \
+run_step "Static security manifest guardrails" \
     "${REPO_DIR}/scripts/guardrails/verify-phase-7-static-manifests.sh"
-run_step "Phase 0 platform baseline" \
+run_step "Platform security baseline" \
     "${REPO_DIR}/scripts/smoketest/verify-security-prereqs.sh"
 run_step "Clean Tilt deployment admission" \
     "${REPO_DIR}/scripts/smoketest/verify-clean-tilt-deployment-admission.sh"
@@ -79,9 +79,9 @@ run_step "Rendered monitoring manifests" \
     "${SCRIPT_DIR}/verify-monitoring-rendered-manifests.sh"
 run_step "Monitoring runtime" \
     "${SCRIPT_DIR}/verify-monitoring-runtime.sh"
-run_step "Session architecture Phase 5" \
+run_step "Shared session contract" \
     "${SCRIPT_DIR}/verify-session-architecture-phase-5.sh"
-run_step "Phase 7 security guardrails" \
+run_step "Security guardrails" \
     "${REPO_DIR}/scripts/smoketest/verify-phase-7-security-guardrails.sh" "${PHASE7_ARGS[@]}"
 
 printf '\nSmoketest passed.\n'

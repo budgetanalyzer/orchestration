@@ -155,12 +155,12 @@ kubectl get svc --all-namespaces | grep <port>
 
 ## Security Considerations
 
-**Network Policies (Phase 2 enforced)**:
+**Network Policies (enforced)**:
 - Both `default` and `infrastructure` namespaces have deny-by-default ingress and egress NetworkPolicy
 - The caller matrix below applies to pod-to-pod traffic only and is enforced by pod-label-scoped allowlists
-- Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this Phase 2 allowlist boundary
+- Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this pod-to-pod allowlist boundary
 - `session-gateway` and `currency-service` egress is constrained to the rendered Istio egress gateway pods only (`app: istio-egress-gateway`, `istio: egress-gateway`) in the `istio-egress` namespace; the gateway handles approved external traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts
-- Phase 4 transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full`, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
+- Infrastructure transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full`, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
 
 **Approved pod-to-pod callers per protected port**:
 
@@ -186,7 +186,7 @@ kubectl get networkpolicies -n infrastructure
 kubectl get networkpolicies -n istio-ingress
 kubectl get networkpolicies -n istio-egress
 
-# Run the Phase 2 verifier for runtime proof of the current Istio ingress,
+# Run the NetworkPolicy verifier for runtime proof of the current Istio ingress,
 # service-to-service, infrastructure, and Istio egress gateway allowlists
 ./scripts/smoketest/verify-phase-2-network-policies.sh
 ```

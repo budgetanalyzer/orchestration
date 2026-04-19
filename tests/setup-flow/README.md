@@ -1,7 +1,7 @@
 # Setup Flow Testing
 
-> Phase 7 status: this retained DinD suite is stale against the current
-> Istio-only baseline and is non-gating for Phase 7 until it is explicitly
+> Status: this retained DinD suite is stale against the current
+> Istio-only baseline and is non-gating until it is explicitly
 > realigned. Keep it in the inventory, and keep its third-party image refs
 > aligned with the same digest-pinning rule as the rest of the repo.
 >

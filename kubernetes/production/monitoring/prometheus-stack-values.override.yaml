@@ -1,9 +1,9 @@
-# Phase 6 production override for the existing kube-prometheus-stack install.
+# Production override for the existing kube-prometheus-stack install.
 # Keep the Helm release name as `prometheus-stack` so Grafana keeps the
 # `prometheus-stack-grafana` Service name expected by
 # `kubernetes/monitoring/grafana-httproute.yaml`.
 # This file intentionally only adjusts the current Prometheus/Grafana baseline;
-# Jaeger and Kiali stay out of the checked-in production path until Phase 10.
+# Jaeger and Kiali stay out of the checked-in production path until the deferred observability work.
 grafana:
   grafana.ini:
     server:

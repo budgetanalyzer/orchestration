@@ -2,8 +2,10 @@
 
 **Date:** 2026-04-17
 **Status:** Research/reference findings. The deployable baseline now lives in
-[`oracle-cloud-deployment-plan.md`](../plans/oracle-cloud-deployment-plan.md#production-auth0-baseline).
-**Related plan:** [oracle-cloud-deployment-plan.md](../plans/oracle-cloud-deployment-plan.md)
+the operator-facing deployment runbook at
+[`deploy/README.md`](../../deploy/README.md) and the checked-in production
+manifests documented in
+[`kubernetes/production/README.md`](../../kubernetes/production/README.md).
 
 This note captures the Auth0 configuration findings behind the OCI demo and the
 matching non-secret `instance.env` values. It remains here as research so the
@@ -25,10 +27,9 @@ included. The practical layout on Free is:
 - Auth0 custom domain: `auth.budgetanalyzer.org`
 - API audience identifier: `https://api.budgetanalyzer.org`
 
-Phase 6 now locks the checked-in Grafana hostname to
-`grafana.budgetanalyzer.org`. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank
-while the post-Phase-10-Step-1 observability work is deferred pending an
-internal-only access redesign.
+The checked-in Grafana hostname is `grafana.budgetanalyzer.org`. Leave
+`KIALI_DOMAIN` and `JAEGER_DOMAIN` blank while the remaining observability
+access work is deferred pending an internal-only access redesign.
 
 ## Recommended `instance.env` Values
 
@@ -51,7 +52,7 @@ Notes:
 - `AUTH0_CLIENT_SECRET` does not belong in `instance.env`; it stays in OCI Vault
   as `budget-analyzer-auth0-client-secret`.
 - `AUTH0_ISSUER_URI` must be the same value later used by
-  `scripts/ops/render-istio-egress-config.sh` in Phase 9 Step 2.
+  `scripts/ops/render-istio-egress-config.sh` when rendering production egress.
 - `IDP_AUDIENCE` stays `https://api.budgetanalyzer.org`. The audience does not
   change when Auth0 moves to a custom domain.
 
@@ -377,12 +378,11 @@ Once the tenant and DNS are ready:
    `~/.config/budget-analyzer/instance.env`.
 2. Store `AUTH0_CLIENT_SECRET` in OCI Vault as
    `budget-analyzer-auth0-client-secret`.
-3. In Phase 5, after the OCI vault/key exists and `instance.env` includes
+3. After the OCI vault/key exists and `instance.env` includes
    `OCI_VAULT_OCID`, run `./deploy/scripts/09-render-phase-5-secrets.sh`,
    review the rendered `session-gateway-idp-config`, then apply it with
    `./deploy/scripts/10-apply-phase-5-secrets.sh`.
-4. In Phase 9 Step 2, render and apply Istio egress from the same
-   `AUTH0_ISSUER_URI`.
+4. Render and apply Istio egress from the same `AUTH0_ISSUER_URI`.
 
 If the Auth0 custom domain or demo hostname changes later, update
 `AUTH0_ISSUER_URI`, `IDP_LOGOUT_RETURN_TO`, and the application URLs together,

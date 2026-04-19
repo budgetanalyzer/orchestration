@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 DEFAULT_OUTPUT_DIR="${HOME}/.local/share/budget-analyzer/vault-secrets"
@@ -34,7 +35,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh [options]
 
-Creates the Phase 5 OCI Vault secret inventory for all plain-text secrets:
+Creates the OCI Vault secret inventory for all plain-text secrets:
   - prompts for AUTH0 client secret and FRED API key only if those OCI secrets
     do not already exist
   - generates strong random values for PostgreSQL, RabbitMQ, and Redis
@@ -257,7 +258,7 @@ main() {
 
     create_generated_secrets
 
-    phase4_info "created or confirmed every Phase 5 plain-text vault secret except budget-analyzer-rabbitmq-definitions"
+    phase4_info "created or confirmed every plain-text vault secret except budget-analyzer-rabbitmq-definitions"
     phase4_warn "next step: build budget-analyzer-rabbitmq-definitions using the RabbitMQ passwords in ${GENERATED_ENV_FILE}, then create that final OCI secret manually"
 }
 

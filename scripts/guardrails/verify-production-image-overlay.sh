@@ -11,7 +11,6 @@ PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-r
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
-LOCKED_GRAFANA_DOMAIN="grafana.budgetanalyzer.org"
 LOCKED_AUTH0_ISSUER_URI="https://auth.budgetanalyzer.org/"
 TEMP_DIR=""
 RENDERED_APPS_FILE=""
@@ -238,7 +237,6 @@ create_temp_instance_env() {
     INSTANCE_ENV_FILE_TMP="${TEMP_DIR}/instance.env"
     cat > "${INSTANCE_ENV_FILE_TMP}" <<EOF
 DEMO_DOMAIN=${LOCKED_DEMO_DOMAIN}
-GRAFANA_DOMAIN=${LOCKED_GRAFANA_DOMAIN}
 AUTH0_ISSUER_URI=${LOCKED_AUTH0_ISSUER_URI}
 EOF
 }
@@ -301,13 +299,25 @@ verify_phase6_render_outputs() {
     assert_no_phase6_forbidden_patterns "${ingress_file}"
     assert_no_phase6_forbidden_patterns "${monitoring_file}"
     assert_no_phase6_forbidden_patterns "${egress_file}"
+    assert_not_contains "${INSTANCE_ENV_FILE_TMP}" 'GRAFANA[_]DOMAIN' \
+        "temporary production instance env still contains the Grafana domain env var"
+    assert_not_contains "${gateway_file}" 'name:[[:space:]]*grafana-route' \
+        "rendered gateway routes still contain grafana-route"
+    assert_not_contains "${gateway_file}" 'prometheus-stack-grafana' \
+        "rendered gateway routes still point at the Grafana Service"
+    assert_not_contains "${gateway_file}" 'grafana\.budgetanalyzer\.org' \
+        "rendered gateway routes still contain the public Grafana hostname"
+    assert_not_contains "${ingress_file}" 'grafana\.budgetanalyzer\.org' \
+        "rendered ingress policies still contain the public Grafana hostname"
+    assert_not_contains "${monitoring_file}" 'grafana\.budgetanalyzer\.org' \
+        "rendered monitoring override still contains the public Grafana hostname"
+    assert_not_contains "${egress_file}" 'grafana\.budgetanalyzer\.org' \
+        "rendered Istio egress output still contains the public Grafana hostname"
 
     assert_contains_literal "${gateway_file}" 'name: app-route' "rendered gateway routes are missing app-route"
     assert_contains_literal "${gateway_file}" 'name: api-route' "rendered gateway routes are missing api-route"
     assert_contains_literal "${gateway_file}" 'name: auth-route' "rendered gateway routes are missing auth-route"
-    assert_contains_literal "${gateway_file}" 'name: grafana-route' "rendered gateway routes are missing grafana-route"
     assert_contains_literal "${gateway_file}" "${LOCKED_DEMO_DOMAIN}" "rendered gateway routes are missing the production demo hostname"
-    assert_contains_literal "${gateway_file}" "${LOCKED_GRAFANA_DOMAIN}" "rendered gateway routes are missing the production Grafana hostname"
     assert_contains_literal "${gateway_file}" 'value: /auth' "rendered auth route is missing the /auth path prefix"
     assert_contains_literal "${gateway_file}" 'value: /oauth2' "rendered auth route is missing the /oauth2 path prefix"
     assert_contains_literal "${gateway_file}" 'value: /login/oauth2' "rendered auth route is missing the /login/oauth2 path prefix"
@@ -317,9 +327,12 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${ingress_file}" 'name: ingress-auth-local-rate-limit' "rendered ingress policies are missing ingress-auth-local-rate-limit"
     assert_contains_literal "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" "rendered ingress policies are missing the production demo hostname"
 
-    assert_contains_literal "${monitoring_file}" 'domain: grafana.budgetanalyzer.org' "rendered monitoring override is missing the production Grafana domain"
-    assert_contains_literal "${monitoring_file}" 'root_url: https://grafana.budgetanalyzer.org' "rendered monitoring override is missing the production Grafana root_url"
+    assert_contains_literal "${monitoring_file}" 'domain: localhost' "rendered monitoring override is missing the loopback Grafana domain"
+    assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3000' "rendered monitoring override is missing the loopback Grafana root_url"
+    assert_contains_literal "${monitoring_file}" 'cookie_secure: false' "rendered monitoring override is missing loopback cookie_secure=false"
     assert_contains_literal "${monitoring_file}" 'prometheus-stack-grafana' "rendered monitoring override no longer documents the expected Grafana Service contract"
+    assert_not_contains "${monitoring_file}" 'anonymous' \
+        "rendered monitoring override appears to enable anonymous Grafana access"
 
     assert_contains_literal "${egress_file}" 'name: auth0-idp' "rendered Istio egress output is missing the Auth0 ServiceEntry"
     assert_contains_literal "${egress_file}" 'auth.budgetanalyzer.org' "rendered Istio egress output is missing the production Auth0 host"

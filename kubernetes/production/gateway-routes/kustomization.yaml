@@ -5,7 +5,6 @@ resources:
   - ../../gateway/app-httproute.yaml
   - ../../gateway/api-httproute.yaml
   - ../../gateway/auth-httproute.yaml
-  - ../../monitoring/grafana-httproute.yaml
 
 patches:
   - target:
@@ -38,13 +37,3 @@ patches:
       - op: replace
         path: /spec/hostnames/0
         value: demo.budgetanalyzer.org
-  - target:
-      group: gateway.networking.k8s.io
-      version: v1
-      kind: HTTPRoute
-      name: grafana-route
-      namespace: monitoring
-    patch: |-
-      - op: replace
-        path: /spec/hostnames/0
-        value: grafana.budgetanalyzer.org

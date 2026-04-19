@@ -71,11 +71,14 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 10. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The current forward deployment path has Prometheus and Grafana only.
+   - Production Grafana is internal-only and accessed with
+     `kubectl port-forward`; the production route render does not publish a
+     Grafana `HTTPRoute`.
    - The remaining observability access work is deferred pending an
      internal-only observability access redesign.
-   - Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank, and do not resume any
-     Jaeger, Kiali, tracing, or observability-route rollout work on this
-     branch.
+   - Do not add Grafana, Kiali, or Jaeger public hostname inputs, and do not
+     resume any Jaeger, Kiali, tracing, or observability-route rollout work on
+     this branch.
 11. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
@@ -93,9 +96,7 @@ file outside the repo. It holds non-secret deployment metadata:
 
 - OCI tenancy, compartment, vault, instance, subnet, and region identifiers
 - the instance public IP and SSH key path
-- the public demo hostname plus the current Grafana hostname; keep
-  `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank until the deferred internal-only
-  observability redesign explicitly reopens that work
+- the public demo hostname
 - the production non-secret Auth0/IDP settings used later to render `session-gateway-idp-config` and the Auth0 Istio egress config
 - the Let's Encrypt contact email
 
@@ -133,7 +134,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, or any `instance.env` change that affects the rendered resources. |
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
 | `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, and Redis, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated infrastructure passwords are written to an operator-only file outside the repo so the RabbitMQ definitions JSON can be assembled once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated password receipt file is reused on subsequent runs. |
-| `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed production gateway routes, ingress policies, monitoring hostname override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
+| `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed app-only production gateway routes, ingress policies, production Grafana port-forward override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
 | `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
 | `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared admission policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
 | `deploy/scripts/16-render-phase-11-public-tls-manifests.sh` | Renders the reviewed app-only public TLS artifacts into `tmp/phase-11/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the app TLS cutover or whenever the reviewed public hostname/TLS contract changes. |
@@ -490,14 +491,20 @@ certificate are all healthy.
 
 - Prometheus and Grafana are the production observability baseline.
 - `kube-prometheus-stack` with Helm release
-  `prometheus-stack` and the current Grafana hostname are the live production
-  observability baseline.
+  `prometheus-stack` is the live production observability baseline.
+- Production Grafana has no public `HTTPRoute` in the phase-6 route render.
+  Access it through a loopback-bound port-forward:
+  `kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80`.
+- When updating a live instance from an older render, explicitly delete any
+  stale route because `kubectl apply` does not prune removed kustomize
+  resources:
+  `kubectl delete httproute -n monitoring grafana-route --ignore-not-found`.
 - The remaining observability access work is deferred pending an
   internal-only observability access redesign.
-- Keep Prometheus internal-only. Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN`
-  blank, and do not resume any Jaeger, Kiali, tracing, or
-  observability-route rollout work unless the deployment path is explicitly
-  reopened with a reviewed access model for Grafana, Jaeger, and Kiali.
+- Keep Prometheus internal-only, and do not resume any Jaeger, Kiali, tracing,
+  or observability-route rollout work unless the deployment path is explicitly
+  reopened with a reviewed internal-only access model for Grafana, Jaeger, and
+  Kiali.
 - Public TLS cutover is the next open deployment area.
 
 ## Production Admission Policy

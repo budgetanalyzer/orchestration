@@ -65,7 +65,9 @@ Choose scripts by runtime boundary:
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
-  active setup guidance scans.
+  active setup guidance scans. Its kubeconform pass validates checked-in
+  Kubernetes resource manifests and skips Kustomize patch fragments under
+  `patches/` directories.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed Phase 6 production route/ingress/monitoring/egress output, verifies

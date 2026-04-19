@@ -111,6 +111,7 @@ collect_schema_manifest_files() {
     find "${REPO_DIR}/kubernetes" -type f \( -name '*.yaml' -o -name '*.yml' \) \
         ! -name '*values.yaml' \
         ! -name '*values.override.yaml' \
+        ! -path '*/patches/*' \
         ! -path "${REPO_DIR}/kubernetes/production/docs-aggregator/*" \
         | sort
 }

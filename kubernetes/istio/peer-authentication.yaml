@@ -1,5 +1,5 @@
 # Default: STRICT mTLS for all east-west (service-to-service) traffic.
-# With Istio-managed ingress (Phase 3), the ingress gateway has a mesh identity
+# With Istio-managed ingress, the ingress gateway has a mesh identity
 # (SPIFFE), so PERMISSIVE exceptions are no longer needed for ingress-facing
 # services. All traffic in the default namespace requires mTLS.
 apiVersion: security.istio.io/v1

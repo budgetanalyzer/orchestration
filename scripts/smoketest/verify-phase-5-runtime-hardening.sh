@@ -2,11 +2,11 @@
 
 # verify-phase-5-runtime-hardening.sh
 #
-# Runtime verification for Security Hardening v2 Phase 5 runtime hardening and
-# Pod Security. Proves the Istio CNI cutover, namespace PSA posture,
+# Runtime verification for runtime hardening and Pod Security. Proves the
+# Istio CNI cutover, namespace PSA posture,
 # service-account-token hardening, workload security contexts, and restricted
 # PSA admission behavior for meshed workloads. Also runs regressions for
-# earlier phase verifiers unless explicitly skipped.
+# earlier security verifiers unless explicitly skipped.
 #
 # Usage:
 #   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
@@ -30,8 +30,9 @@ usage() {
 Usage: ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
 
 Options:
-  --skip-regressions          Skip Phase 1 through Phase 4 regression verifiers.
-  --regression-timeout <dur>  Per-script timeout for Phase 1 through Phase 4
+  --skip-regressions          Skip credential, NetworkPolicy, ingress, and
+                              transport-TLS regression verifiers.
+  --regression-timeout <dur>  Per-script timeout for those regression
                               regression verifiers (default: 10m).
   -h, --help                  Show this help text.
 EOF
@@ -867,15 +868,15 @@ run_regressions() {
         fi
     }
 
-    run_regression_verifier "Phase 1 credential verification" "${SCRIPT_DIR}/verify-phase-1-credentials.sh"
-    run_regression_verifier "Phase 2 network-policy verification" "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"
-    run_regression_verifier "Phase 3 ingress verification" "${SCRIPT_DIR}/verify-phase-3-istio-ingress.sh"
-    run_regression_verifier "Phase 4 transport-encryption verification" "${SCRIPT_DIR}/verify-phase-4-transport-encryption.sh"
+    run_regression_verifier "Credential isolation verification" "${SCRIPT_DIR}/verify-phase-1-credentials.sh"
+    run_regression_verifier "NetworkPolicy verification" "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"
+    run_regression_verifier "Istio ingress verification" "${SCRIPT_DIR}/verify-phase-3-istio-ingress.sh"
+    run_regression_verifier "Transport-encryption verification" "${SCRIPT_DIR}/verify-phase-4-transport-encryption.sh"
 }
 
 main() {
     echo "=============================================="
-    echo "  Phase 5 Runtime Hardening Verifier"
+    echo "  Runtime Hardening Verifier"
     echo "=============================================="
     echo
 

@@ -12,7 +12,6 @@ ORCHESTRATION_DIR="$REPOS_DIR/orchestration"
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
@@ -34,10 +33,6 @@ fail_test() {
     echo -e "${RED}[FAIL]${NC} $1"
     ((TESTS_FAILED++)) || true
     FAILED_TESTS+=("$1")
-}
-
-warn_test() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 # =============================================================================
@@ -168,7 +163,7 @@ fi
 print_test "Validating Kind networking model..."
 
 if kubectl get daemonset kindnet -n kube-system &>/dev/null; then
-    fail_test "Kind default CNI (kindnet) detected - cluster is incompatible with Phase 0 hardening"
+    fail_test "Kind default CNI (kindnet) detected - cluster is incompatible with platform hardening"
 else
     pass_test "Kind default CNI is disabled"
 fi

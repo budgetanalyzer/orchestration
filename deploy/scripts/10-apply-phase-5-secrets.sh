@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-5"
@@ -14,7 +15,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/10-apply-phase-5-secrets.sh [--output-dir DIR]
 
-Refreshes the reviewed Phase 5 render output and applies:
+Refreshes the reviewed production secret render output and applies:
   - ClusterSecretStore/budget-analyzer-oci-vault
   - ConfigMap/session-gateway-idp-config
   - the full ExternalSecret set for default and infrastructure
@@ -53,7 +54,7 @@ main() {
     phase4_require_commands kubectl
     phase4_require_cluster_access
 
-    phase4_info "refreshing the rendered Phase 5 secrets artifacts"
+    phase4_info "refreshing the rendered production secrets artifacts"
     "${SCRIPT_DIR}/09-render-phase-5-secrets.sh" --output-dir "${output_dir}" >/dev/null
     require_rendered_manifests "${output_dir}"
 
@@ -67,7 +68,7 @@ main() {
     kubectl apply -f "${output_dir}/external-secrets.yaml"
 
     phase4_warn "if IAM propagation is still incomplete, ClusterSecretStore or ExternalSecret status may stay not-ready until OCI finishes applying the dynamic-group and policy changes"
-    phase4_info "current Phase 5 secret-sync snapshot"
+    phase4_info "current production secret-sync snapshot"
     kubectl get clustersecretstore budget-analyzer-oci-vault
     kubectl get externalsecret -A
     kubectl get configmap -n default session-gateway-idp-config

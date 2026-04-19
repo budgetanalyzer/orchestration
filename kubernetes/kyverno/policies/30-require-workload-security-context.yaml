@@ -4,11 +4,11 @@ metadata:
   name: phase7-require-workload-security-context
   annotations:
     policies.kyverno.io/title: Require Workload Security Context
-    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/category: Security Guardrails
     policies.kyverno.io/severity: high
     policies.kyverno.io/subject: Pod
     policies.kyverno.io/description: >-
-      Repo-managed workloads must use the Phase 5 pod-hardening baseline:
+      Repo-managed workloads must use the runtime pod-hardening baseline:
       RuntimeDefault seccomp at the pod level plus non-root, no privilege
       escalation, and drop ALL capabilities for every container and init
       container. cert-manager's labeled HTTP-01 solver pods are excluded from

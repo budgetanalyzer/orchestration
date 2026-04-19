@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# test-security-preflight.sh - Runs inside test container to validate Phase 0 runtime security preconditions.
+# test-security-preflight.sh - Runs inside test container to validate runtime security preconditions.
 
 set -euo pipefail
 

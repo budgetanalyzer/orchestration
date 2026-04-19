@@ -28,7 +28,7 @@ Budget Analyzer is a reference architecture for enterprise architects and senior
 3. Follow the setup in the [orchestration README](README.md)
 4. Run `./setup.sh` on the host, then `tilt up`
 
-If you already have an older local Kind cluster, delete it first. Phase 0 hardening requires a rebuilt cluster with `disableDefaultCNI` plus Calico.
+If you already have an older local Kind cluster, delete it first. The platform security prerequisites require a rebuilt cluster with `disableDefaultCNI` plus Calico.
 
 > **Note**: VS Code is required. We use open source tools only—Cursor is closed source.
 

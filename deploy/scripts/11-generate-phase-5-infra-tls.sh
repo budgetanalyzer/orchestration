@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 SERVICES=(postgresql redis rabbitmq)
@@ -22,7 +23,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/11-generate-phase-5-infra-tls.sh [options]
 
-Generates the private Phase 5 infrastructure CA and service certificates
+Generates the private production infrastructure CA and service certificates
 outside the repo, then applies the expected Kubernetes Secret objects:
   - default/infra-ca
   - infrastructure/infra-ca
@@ -81,7 +82,7 @@ maybe_rotate_existing_material() {
         return 0
     fi
 
-    phase4_warn "rotating the Phase 5 infrastructure CA and service certificates in ${OUTPUT_DIR}"
+    phase4_warn "rotating the production infrastructure CA and service certificates in ${OUTPUT_DIR}"
     rm -f \
         "$(ca_cert_path)" \
         "$(ca_key_path)" \
@@ -225,7 +226,7 @@ main() {
     apply_ca_secret default
     apply_ca_secret infrastructure
 
-    phase4_info "Phase 5 infrastructure TLS material stored in ${OUTPUT_DIR}"
+    phase4_info "Production infrastructure TLS material stored in ${OUTPUT_DIR}"
     kubectl get secret -n default infra-ca
     kubectl get secret -n infrastructure infra-ca infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
 }

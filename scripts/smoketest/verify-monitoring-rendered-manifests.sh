@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render and validate the Phase 1 monitoring stack before Helm install.
+# Render and validate the monitoring stack before Helm install.
 
 set -euo pipefail
 

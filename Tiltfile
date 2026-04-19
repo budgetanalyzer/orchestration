@@ -1,6 +1,6 @@
 # ============================================================================
 # Budget Analyzer - Tiltfile
-# Phase 5: Complete Local Development Environment with Live Reload
+# Complete local development environment with live reload
 # ============================================================================
 
 # Load extensions
@@ -784,7 +784,7 @@ local_resource(
 )
 
 # Istio security policies (PeerAuthentication + AuthorizationPolicy)
-# Explicitly delete PERMISSIVE PeerAuthentication resources removed in Phase 3 Session 2.
+# Explicitly delete PERMISSIVE PeerAuthentication resources removed during the Istio ingress migration.
 # kubectl apply does not delete resources removed from a multi-document YAML file.
 local_resource(
     'istio-security-policies',
@@ -801,7 +801,7 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Kyverno admission controller and Phase 7 policy suite
+# Kyverno admission controller and security guardrail policy suite
 local_resource(
     'kyverno',
     cmd='''
@@ -895,7 +895,7 @@ local_resource(
 )
 
 # ============================================================================
-# NETWORK POLICIES (Phase 2 Security Hardening)
+# NETWORK POLICIES
 # ============================================================================
 
 # Apply deny and allow manifests together — never apply deny without matching allows.

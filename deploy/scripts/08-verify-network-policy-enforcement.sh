@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 PHASE4_NETWORK_POLICY_PROBE_IMAGE="${PHASE4_NETWORK_POLICY_PROBE_IMAGE:-postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416}"
@@ -88,7 +89,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/08-verify-network-policy-enforcement.sh
 
-This verifier creates disposable probe and listener pods so Phase 4 can prove
+This verifier creates disposable probe and listener pods so the production ingress path can prove
 the checked-in NetworkPolicy contract on the current k3s cluster before any
 application or infrastructure workloads are deployed.
 
@@ -490,7 +491,7 @@ create_all_temp_pods() {
 
 main() {
     printf '==============================================\n'
-    printf '  Phase 4 NetworkPolicy Enforcement Verifier\n'
+    printf '  NetworkPolicy Enforcement Verifier\n'
     printf '==============================================\n\n'
 
     load_operator_context

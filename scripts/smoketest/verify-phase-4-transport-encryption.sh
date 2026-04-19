@@ -2,7 +2,7 @@
 
 # verify-phase-4-transport-encryption.sh
 #
-# Runtime verification for Security Hardening v2 Phase 4 transport encryption.
+# Runtime verification for infrastructure transport encryption.
 # Proves client-side TLS validation for Redis, PostgreSQL, and RabbitMQ,
 # confirms RabbitMQ listener state as secondary broker proof, runs regressions
 # for earlier security verifiers, and checks the readiness of all
@@ -458,6 +458,7 @@ MANIFEST
 find_system_ca_bundle() {
     local pod="$1"
 
+    # shellcheck disable=SC2016 # This script is evaluated inside the target pod.
     kubectl exec -n default "$pod" -- sh -ceu '
 for candidate in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/ssl/certs/ca-bundle.crt; do
     if [ -f "$candidate" ]; then
@@ -477,6 +478,7 @@ run_redis_tls_ping() {
     local cacert="${3:-}"
 
     if [[ -n "$cacert" ]]; then
+        # shellcheck disable=SC2016 # This script is evaluated inside the Redis probe pod.
         kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
 redis-cli \
     --tls \
@@ -491,6 +493,7 @@ redis-cli \
         return
     fi
 
+    # shellcheck disable=SC2016 # This script is evaluated inside the Redis probe pod.
     kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
 redis-cli \
     --tls \
@@ -507,6 +510,7 @@ run_redis_plaintext_ping() {
     local username="$1"
     local password="$2"
 
+    # shellcheck disable=SC2016 # This script is evaluated inside the Redis probe pod.
     kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
 redis-cli \
     -h redis.infrastructure \
@@ -523,6 +527,7 @@ run_postgresql_verify_full() {
     local password="$2"
     local sslrootcert="$3"
 
+    # shellcheck disable=SC2016 # This script is evaluated inside the PostgreSQL probe pod.
     kubectl exec -n default "$POSTGRES_PROBE" -- sh -ceu '
 export PGPASSWORD="$1"
 export PGHOST="postgresql.infrastructure"
@@ -544,6 +549,7 @@ run_rabbitmq_tls_probe() {
     local cacert="$1"
     local server_hostname="$2"
 
+    # shellcheck disable=SC2016 # This script is evaluated inside the RabbitMQ probe pod.
     kubectl exec -n default "$RABBITMQ_PROBE" -- sh -ceu '
 python - "$1" "$2" <<'"'"'PY'"'"'
 import socket
@@ -575,7 +581,7 @@ assert_pod_ready() {
 
 main() {
     echo "=============================================="
-    echo "  Phase 4 Transport Encryption Verification"
+    echo "  Infrastructure Transport Encryption Verification"
     echo "=============================================="
 
     require_host_command kubectl
@@ -601,7 +607,7 @@ main() {
         RABBITMQ_WRONG_CA=$(find_system_ca_bundle "$RABBITMQ_PROBE")
         pass "Created disposable Redis, PostgreSQL, and RabbitMQ client probes"
     else
-        printf 'ERROR: Failed to create temporary Phase 4 probes\n' >&2
+        printf 'ERROR: Failed to create temporary transport-encryption probes\n' >&2
         exit 1
     fi
 
@@ -693,20 +699,20 @@ main() {
     section "Regression: Earlier Security Phases"
 
     if "${SCRIPT_DIR}/verify-phase-1-credentials.sh"; then
-        pass "Phase 1 credential verification still passes after transport-TLS cutover"
+        pass "Credential verification still passes after transport-TLS cutover"
     else
-        fail "Phase 1 credential verification failed after transport-TLS cutover"
+        fail "Credential verification failed after transport-TLS cutover"
     fi
 
-    # The temporary Phase 4 client probes add a small amount of extra policy and
-    # DNS churn in default/infrastructure. Give the nested Phase 2 rerun a
+    # The temporary transport client probes add a small amount of extra policy and
+    # DNS churn in default/infrastructure. Give the nested NetworkPolicy rerun a
     # slightly longer warmup budget so it validates policy intent instead of
     # flaking on probe startup timing.
     if PHASE2_ALLOW_ATTEMPTS=8 PHASE2_PROBE_STABILIZATION_SECONDS=8 \
         "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"; then
-        pass "Phase 2 network-policy verification still passes after RabbitMQ port cutover"
+        pass "NetworkPolicy verification still passes after RabbitMQ port cutover"
     else
-        fail "Phase 2 network-policy verification failed after RabbitMQ port cutover"
+        fail "NetworkPolicy verification failed after RabbitMQ port cutover"
     fi
 
     section "Client Pod Readiness"

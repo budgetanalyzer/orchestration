@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 phase4_load_instance_env
@@ -36,7 +37,7 @@ if [[ -n "${https_node_port}" ]]; then
     phase4_add_nat_redirect 443 "${https_node_port}"
 else
     phase4_remove_nat_redirects 443
-    phase4_warn "no ingress nodePort 443 exists yet; removed any stale port 443 redirect. Phase 4 is expected to stay HTTP-only until Phase 11 wires the TLS listener"
+    phase4_warn "no ingress nodePort 443 exists yet; removed any stale port 443 redirect. The initial ingress path is expected to stay HTTP-only until public TLS wires the TLS listener"
 fi
 
 phase4_run_sudo netfilter-persistent save >/dev/null

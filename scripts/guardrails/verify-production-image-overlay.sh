@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static verifier for the Phase 6 production render baseline.
+# Static verifier for the production render baseline.
 
 set -euo pipefail
 
@@ -227,11 +227,11 @@ assert_no_phase6_forbidden_patterns() {
 
     file="$1"
 
-    assert_not_contains "${file}" ':[[:alnum:]._-]*latest([[:space:]"]|$)' "Phase 6 production artifact contains a :latest ref: ${file}"
-    assert_not_contains "${file}" ':tilt-[a-f0-9]{16}([[:space:]"]|$)' "Phase 6 production artifact contains a Tilt image ref: ${file}"
-    assert_not_contains "${file}" 'imagePullPolicy:[[:space:]]*Never' "Phase 6 production artifact contains imagePullPolicy: Never: ${file}"
-    assert_not_contains "${file}" 'budgetanalyzer\.localhost' "Phase 6 production artifact contains a localhost hostname: ${file}"
-    assert_not_contains "${file}" 'auth0-issuer\.placeholder\.invalid' "Phase 6 production artifact contains the placeholder Auth0 issuer host: ${file}"
+    assert_not_contains "${file}" ':[[:alnum:]._-]*latest([[:space:]"]|$)' "Production artifact contains a :latest ref: ${file}"
+    assert_not_contains "${file}" ':tilt-[a-f0-9]{16}([[:space:]"]|$)' "Production artifact contains a Tilt image ref: ${file}"
+    assert_not_contains "${file}" 'imagePullPolicy:[[:space:]]*Never' "Production artifact contains imagePullPolicy: Never: ${file}"
+    assert_not_contains "${file}" 'budgetanalyzer\.localhost' "Production artifact contains a localhost hostname: ${file}"
+    assert_not_contains "${file}" 'auth0-issuer\.placeholder\.invalid' "Production artifact contains the placeholder Auth0 issuer host: ${file}"
 }
 
 create_temp_instance_env() {
@@ -292,10 +292,10 @@ verify_phase6_render_outputs() {
     monitoring_file="${PHASE6_RENDER_DIR}/prometheus-stack-values.override.yaml"
     egress_file="${PHASE6_RENDER_DIR}/istio-egress.yaml"
 
-    [[ -f "${gateway_file}" ]] || fail "Phase 6 render output is missing gateway-routes.yaml"
-    [[ -f "${ingress_file}" ]] || fail "Phase 6 render output is missing istio-ingress-policies.yaml"
-    [[ -f "${monitoring_file}" ]] || fail "Phase 6 render output is missing prometheus-stack-values.override.yaml"
-    [[ -f "${egress_file}" ]] || fail "Phase 6 render output is missing istio-egress.yaml"
+    [[ -f "${gateway_file}" ]] || fail "Production render output is missing gateway-routes.yaml"
+    [[ -f "${ingress_file}" ]] || fail "Production render output is missing istio-ingress-policies.yaml"
+    [[ -f "${monitoring_file}" ]] || fail "Production render output is missing prometheus-stack-values.override.yaml"
+    [[ -f "${egress_file}" ]] || fail "Production render output is missing istio-egress.yaml"
 
     assert_no_phase6_forbidden_patterns "${gateway_file}"
     assert_no_phase6_forbidden_patterns "${ingress_file}"
@@ -388,7 +388,7 @@ main() {
     verify_phase6_render_outputs
     verify_infrastructure_overlay
 
-    printf 'Phase 6 production verification passed: %s, %s, %s\n' \
+    printf 'Production verification passed: %s, %s, %s\n' \
         "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"
 }
 

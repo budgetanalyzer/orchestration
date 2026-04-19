@@ -589,7 +589,7 @@ management:
 - 5+ microservices (complexity justifies mesh)
 - Need service-to-service authentication (mTLS)
 - Need advanced traffic management (canary deployments, circuit breakers)
-- Documented in [../plans/security-hardening-v2.md](../plans/security-hardening-v2.md) as future migration
+- Documented in [security-architecture.md](security-architecture.md) as part of the current mesh baseline
 
 **Alternative Considered:**
 
@@ -734,7 +734,7 @@ Browser → Envoy → ext_authz (session validation) → NGINX → Backend Servi
 2. ext_authz service (HTTP, port 9002)
 3. Envoy ext_authz integration
 4. Redis-backed session storage and header injection
-5. Phase 0 platform baseline for later hardening work:
+5. Platform security prerequisite baseline for later hardening work:
    - Calico-backed Kind clusters
    - Pod Security Admission labels in `warn`/`audit`
    - Kyverno smoke-policy verification
@@ -780,15 +780,15 @@ Browser → Envoy → ext_authz (session validation) → NGINX → Backend Servi
 - Migration required regardless of cloud provider choice
 
 **Timeline:**
-- **Today → Phase 1 Deployment:** Continue using NGINX Gateway in GKE (short-term acceptable)
-- **Before Production (Phase 3):** Complete migration to Gateway API
+- **Initial private deployment:** Continue using NGINX Gateway in GKE (short-term acceptable)
+- **Before production:** Complete migration to Gateway API
 - **Hard Deadline:** March 2026 (no updates after)
 
 **Mitigation Strategy:**
 
 1. **Plan Gateway API migration as part of initial deployment**
 2. **Run both in parallel during transition** (NGINX + Gateway API)
-3. **Complete migration before production launch** (Phase 3)
+3. **Complete migration before production launch**
 4. **Test extensively** (see [Migration Guide](#migration-guide-nginx-to-gateway-api))
 
 **Resource-Based Routing Pattern Migration:**
@@ -1729,9 +1729,9 @@ export const config = configs[env as keyof typeof configs];
 
 ---
 
-## Phased Deployment Roadmap
+## Deployment Roadmap
 
-### Phase 0: GCP Project Setup
+### GCP Project Setup
 
 **Timeline:** 1-2 days
 **Prerequisites:** GCP account, billing enabled, project quota approved
@@ -1820,7 +1820,7 @@ export const config = configs[env as keyof typeof configs];
 
 ---
 
-### Phase 1: Private Network Deployment (Infrastructure Testing)
+### Private Network Deployment (Infrastructure Testing)
 
 **Timeline:** 1-2 weeks
 **Purpose:** Validate infrastructure, test deployment procedures, NO public access
@@ -1965,13 +1965,14 @@ export const config = configs[env as keyof typeof configs];
 
 ---
 
-### Phase 2: Security Hardening and Productionization (Required for Production)
+### Security Hardening and Productionization (Required for Production)
 
 **Timeline:** 8 weeks
 **Purpose:** Complete the remaining hardening work beyond the already-implemented local auth topology
 **Blocker:** Cannot deploy to public internet until complete
 
-**Reference:** See detailed timeline in [../plans/security-hardening-v2.md](../plans/security-hardening-v2.md)
+**Reference:** See the current security baseline in
+[security-architecture.md](security-architecture.md).
 
 **Summary Tasks:**
 
@@ -2020,10 +2021,10 @@ export const config = configs[env as keyof typeof configs];
 
 ---
 
-### Phase 3: Production Launch (Public Deployment)
+### Production Launch (Public Deployment)
 
 **Timeline:** 2-3 weeks
-**Prerequisites:** Phase 2 complete, security audit passed
+**Prerequisites:** security hardening complete, security audit passed
 
 **Tasks:**
 
@@ -3242,10 +3243,10 @@ This deployment architecture prioritizes **portability and minimal vendor lock-i
 
 1. Review this document with team
 2. Approve deployment architecture decisions
-3. Begin Phase 0 (GCP project setup)
-4. Execute Phase 1 (private deployment for infrastructure testing)
-5. Implement Phase 2 (authentication) in parallel
-6. Plan Phase 3 (production launch) once Phase 2 is complete
+3. Begin GCP project setup
+4. Execute private deployment for infrastructure testing
+5. Implement authentication hardening in parallel
+6. Plan production launch once security hardening is complete
 
 **Questions or Changes:**
 

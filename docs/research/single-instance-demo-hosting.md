@@ -59,7 +59,7 @@ The goal is to run k3s + Istio + the application stack + the observability bundl
 | istio-cni | ~0.05 GiB | |
 | istio-ingressgateway | ~0.3 GiB | NodePort 30443 per `ingress-gateway-config.yaml` |
 | Istio sidecars (~10 pods × ~60 MiB) | ~0.6 GiB | One per app pod; dominant data-plane cost |
-| Kyverno (admission baseline) | ~0.3 GiB | Phase 7 ClusterPolicies — kept for production parity |
+| Kyverno (admission baseline) | ~0.3 GiB | Security guardrail ClusterPolicies, kept for production parity |
 | **Platform subtotal** | **~2.75 GiB** | |
 
 ### Observability bundle (the architectural showcase)
@@ -212,7 +212,7 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 - All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis StatefulSet
 - All `kubernetes/istio/*` — `peer-authentication.yaml` (mesh-wide STRICT mTLS), `authorization-policies.yaml`, `ext-authz-policy.yaml`, the istiod extension provider for `ext-authz-http`, the istio ingress gateway, the egress gateway, the egress `REGISTRY_ONLY` outbound traffic policy and `ServiceEntry`s
 - `kubernetes/network-policies/*` — the default-deny baseline plus the per-namespace allow rules for `istio-ingress`, `istio-egress`, and infrastructure
-- `kubernetes/kyverno/*` — the Phase 7 ClusterPolicies and the static gate (`scripts/guardrails/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.
+- `kubernetes/kyverno/*` — the security guardrail ClusterPolicies and the static gate (`scripts/guardrails/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.
 - `kubernetes/gateway/*` — the Gateway API HTTPRoutes that fan traffic from the Istio ingress gateway into `nginx-gateway` (and onward to the services)
 - The ext_authz session-edge pattern, complete with `cookie` request-header passthrough and `x-user-id`/`x-roles`/`x-permissions` upstream injection
 - mTLS between sidecars (Istio handles this — it does not care that all sidecars happen to live on one node)
@@ -226,7 +226,7 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 - **NodePort is the cluster ingress path, but public ingress should terminate on an OCI Network Load Balancer.** Keep the Istio ingress gateway as `type: NodePort`, put an OCI public layer-4 NLB in front of it, set `externalTrafficPolicy: Local` on the ingress Service to preserve client IP, and use separate OCI controls for the public frontend and the instance backend path. In practice that means:
   - the NLB owns public `80` and later `443`
   - the instance does not stay directly exposed on public `80/443`
-  - the instance accepts only the backend path to `30080` during Phase 4 and later `30443` in Phase 11
+  - the instance accepts only the backend path to `30080` during the initial HTTP ingress step and later `30443` for public TLS
   - a future multi-node deployment keeps the same architecture; it just adds more ingress-node backends
 - **Auth0 callback URL** points to whatever public hostname the box has — one config edit in the Auth0 tenant.
 - **DNS:** point a subdomain you own at the box's IPv4. Hetzner gives you a free reverse-DNS entry; both Hetzner and Oracle give you a stable public IP.
@@ -282,7 +282,7 @@ Production parity goes from "matches the multi-node GKE design" to "matches ever
 | Managed datastores | ✅ Cloud SQL, Memorystore | ❌ Self-hosted Postgres/Redis/RabbitMQ in-cluster |
 | **Service mesh (Istio + STRICT mTLS + AuthorizationPolicies + ext_authz)** | ✅ Same | ✅ **Same — preserved** |
 | **Network policies (default-deny baseline)** | ✅ Same | ✅ **Same — preserved** |
-| **Kyverno admission baseline (Phase 7)** | ✅ Same | ✅ **Same — preserved** |
+| **Kyverno admission baseline** | ✅ Same | ✅ **Same — preserved** |
 | **The k8s manifests themselves** | ✅ Same | ✅ **Same — preserved** |
 | **Observability surface (Kiali + Prometheus + Grafana + Jaeger)** | ⚠️ Cloud Monitoring or self-hosted, often hidden internally | ✅ **Self-hosted, exposed publicly as part of the demo** |
 
@@ -381,7 +381,7 @@ The point of putting the URL on a resume is "click here, see the thing work *and
 - `kubernetes/services/*/deployment.yaml` and `kubernetes/infrastructure/**/*.yaml` — source of the application/infrastructure sizing in [§1](#1-workload-sizing--what-you-actually-need-to-host)
 - `kubernetes/istio/*` — the mesh configuration preserved by the [§6](#6-single-node-k3s-topology) topology
 - `kubernetes/network-policies/*` — the default-deny baseline preserved by the [§6](#6-single-node-k3s-topology) topology
-- `kubernetes/kyverno/*` — the Phase 7 admission baseline preserved by the [§6](#6-single-node-k3s-topology) topology (already supports `local-path-storage`, the k3s default)
+- `kubernetes/kyverno/*` — the security guardrail admission baseline preserved by the [§6](#6-single-node-k3s-topology) topology (already supports `local-path-storage`, the k3s default)
 - `kubernetes/gateway/*` — Gateway API HTTPRoutes that route through the Istio ingress gateway
 
 ---
@@ -395,4 +395,4 @@ The point of putting the URL on a resume is "click here, see the thing work *and
 5. **cert-manager + Istio ingress gateway integration** — HTTP-01 challenge through the Istio ingress gateway is the standard pattern but requires a small `Gateway`/`HTTPRoute` config addition for the `.well-known/acme-challenge` path. Verify the recipe end-to-end before committing. DNS-01 via a Hetzner DNS API or Cloudflare token is the fallback if HTTP-01 proves fragile.
 6. **Public Kiali/Grafana/Jaeger exposure** — basic auth at nginx-gateway is the minimum, but is there a cleaner pattern using the existing Istio AuthorizationPolicy infrastructure that the rest of the mesh already uses? See [§6](#6-single-node-k3s-topology) "Public exposure of the observability surface" for the three options; pick one and prototype it.
 7. **Prometheus retention vs disk pressure** — 1 week was assumed in [§1](#1-workload-sizing--what-you-actually-need-to-host). If disk pressure shows up on a 160 GB box (CAX31), drop to 24-48h. The trade-off is "I can show a recruiter a 7-day mesh trend" vs "the box stays healthy unattended." Probably 48h is the right default.
-8. **Kyverno on k3s** — the Phase 7 ClusterPolicies in `kubernetes/kyverno/policies/` are designed for the multi-node Tilt environment. The exception list already covers `local-path-storage`, but verify that the image-digest rule and the `:tilt-<hash>` exception don't accidentally block production pulls of Istio addon images. May need a small allow-path for the observability bundle's chart-managed images.
+8. **Kyverno on k3s** — the security guardrail ClusterPolicies in `kubernetes/kyverno/policies/` are designed for the multi-node Tilt environment. The exception list already covers `local-path-storage`, but verify that the image-digest rule and the `:tilt-<hash>` exception don't accidentally block production pulls of Istio addon images. May need a small allow-path for the observability bundle's chart-managed images.

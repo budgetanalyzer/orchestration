@@ -128,7 +128,7 @@ curl -kI https://app.budgetanalyzer.localhost/api-docs | grep -i content-securit
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.json
 curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 
-# Run the full Phase 6 completion gate
+# Run the edge and browser hardening verifier
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ```
 
@@ -222,7 +222,7 @@ That file expects a normal root-mounted frontend production build under
 `/usr/share/nginx/html`. It is not a header-only toggle layered on top of the
 dev route graph.
 
-The Phase 6 verifier does not rely on text inspection alone for that cutover
+The production route verifier does not rely on text inspection alone for that cutover
 file. It stages `nginx/nginx.production.k8s.conf` inside the running
 `nginx-gateway` pod, mirrors the pod's mounted include files into a temporary
 prefix, and runs `nginx -p <tmpdir> -t -c nginx.production.k8s.conf` there. If
@@ -245,9 +245,9 @@ kubectl exec deployment/nginx-gateway -- nginx -s reload
 tilt trigger nginx-gateway-config
 ```
 
-The Kubernetes access log now includes the derived `remote_addr`, the trusted proxy hop as `proxy_addr`, `X-Forwarded-For`, and `X-Real-IP` so the Phase 3 and Phase 6 verifiers can prove forwarded-header preservation and the API rate-limit trust model through Istio ingress.
+The Kubernetes access log now includes the derived `remote_addr`, the trusted proxy hop as `proxy_addr`, `X-Forwarded-For`, and `X-Real-IP` so the ingress and browser hardening verifiers can prove forwarded-header preservation and the API rate-limit trust model through Istio ingress.
 
-Phase 6 Session 7 adds a dedicated runtime proof:
+The API rate-limit identity runtime proof is:
 
 ```bash
 ./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
@@ -255,7 +255,7 @@ Phase 6 Session 7 adds a dedicated runtime proof:
 
 That verifier creates two temporary no-sidecar probe pods, sends authenticated API traffic through the live ingress gateway, confirms NGINX derives distinct client identities from the ingress-appended downstream hop, proves a forged external `X-Forwarded-For` value cannot pick a new bucket, and checks that separate real clients do not share one API limiter bucket.
 
-The full Phase 6 completion gate is:
+The edge and browser hardening verifier is:
 
 ```bash
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
@@ -266,11 +266,11 @@ the checked-in production route cutover, a real `nginx -t` syntax check of
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod, the
 fail-closed docs-path behavior,
 the remaining auth-edge throttling
-coverage, reruns the Session 3 frontend CSP audit, reruns the Session 7 API
-identity verifier, and then reruns the Phase 5 runtime-hardening cascade.
+coverage, reruns the frontend CSP audit, reruns the API identity verifier, and
+then reruns the runtime-hardening cascade.
 Manual browser-console validation on `/_prod-smoke/` is still required before
-Phase 6 is actually complete; `/api-docs` warnings remain visible but do not
-block completion.
+the browser proof is complete; `/api-docs` warnings remain visible but do not
+block the verifier.
 
 ## Customization
 

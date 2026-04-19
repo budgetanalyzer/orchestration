@@ -1,20 +1,14 @@
 # Production Manifests
 
 This directory contains the checked-in production baseline for the Oracle Cloud
-deployment plan. Phase 6 starts from the existing app overlay here and then
-finishes the remaining production route, monitoring, storage, and verification
-work around it.
+deployment path. The existing app overlay is paired with the reviewed
+production route, monitoring, storage, and verification inputs.
 
-## Current Starting Point
+## Production Baseline
 
 `apps/` already renders the repo-managed application workloads with the
 `0.0.12` GHCR release images pinned by digest from
 `kubernetes/production/apps/image-inventory.yaml`.
-
-Status as of 2026-04-17: Phase 6 is complete. Chunk 1 is complete, Chunk 2
-Steps 4 through 10 are complete, and Chunk 3 is complete with the broadened
-production verifier plus the recorded verifier pass and final file-review
-handoff.
 
 That overlay already:
 
@@ -27,9 +21,9 @@ That overlay already:
   bundle instead of the local `budget-analyzer-web-prod-smoke` image or the
   Vite dev server
 - intentionally does **not** manage `ConfigMap/session-gateway-idp-config`;
-  the production non-secret IDP config stays owned by the Phase 5 render/apply
-  path so the apps overlay cannot overwrite it with the checked-in fallback
-  localhost values
+  the production non-secret IDP config stays owned by the secret-sync
+  render/apply path so the apps overlay cannot overwrite it with the
+  checked-in fallback localhost values
 
 Render it with:
 
@@ -47,7 +41,7 @@ The generated `nginx-gateway-docs` ConfigMap is too large for client-side apply
 because `kubectl apply` would try to store the full manifest in the
 `kubectl.kubernetes.io/last-applied-configuration` annotation.
 
-Verify the current Phase 6 production baseline with:
+Verify the current production baseline with:
 
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
@@ -56,7 +50,7 @@ Verify the current Phase 6 production baseline with:
 That verifier now:
 
 - renders `apps/`, the broad production infrastructure overlay, and the
-  reviewed Phase 6 production route/ingress/monitoring/egress output
+  reviewed production route/ingress/monitoring/egress output
 - rejects `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`,
   `budgetanalyzer.localhost`, and `auth0-issuer.placeholder.invalid` anywhere
   in that checked-in production path
@@ -67,13 +61,10 @@ That verifier now:
 - applies the production image Kyverno policy at
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
-## Phase 7 Production Admission Path
+## Production Admission Path
 
-Phase 7 now has a repo-owned production admission path under `deploy/`:
-
-Status: complete per operator handoff as of 2026-04-17. The OCI cluster now
-runs the checked-in Kyverno controller values and the production-only Phase 7
-policy set.
+The repo-owned production admission path lives under `deploy/` and installs the
+checked-in Kyverno controller values and the production-only policy set.
 
 - `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
   instead of relying on mutable chart defaults.
@@ -82,11 +73,11 @@ policy set.
   pinned Kyverno chart version with those checked-in values.
 - `deploy/scripts/15-apply-phase-7-policies.sh` reruns
   `./scripts/guardrails/verify-production-image-overlay.sh` and then applies
-  the shared Phase 7 policies plus the production-only `50` variant.
+  the shared admission policies plus the production-only `50` variant.
 
 That split is intentional: the checked-in production verifier stays the static
-gate for the production image/render baseline, while the Phase 7 apply script
-is the operator-owned live-cluster step that activates the same production-only
+gate for the production image/render baseline, while the policy apply script is
+the operator-owned live-cluster step that activates the same production-only
 image policy on OCI.
 
 ## Production NGINX ConfigMap Inputs
@@ -117,7 +108,7 @@ The preserved public route contract is:
 
 ## Production Routing And Monitoring Inputs
 
-Phase 6 now keeps the production hostname cutover in reviewed, committed
+This directory keeps the production hostname cutover in reviewed, committed
 artifacts:
 
 - `gateway-routes/` renders the production `HTTPRoute` objects with
@@ -125,7 +116,7 @@ artifacts:
   shared localhost dev manifests untouched for Tilt
 - `istio-ingress-policies/` renders the production `AuthorizationPolicy` and
   ingress local-rate-limit objects with the demo hostname, separately from the
-  gateway routes so Phase 9 can still defer those policy applies until
+  gateway routes so the live deployment path can still defer those policy applies until
   `ext-authz` is ready
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
   server domain and root URL to the production monitoring hostname while
@@ -133,18 +124,18 @@ artifacts:
   yields the `prometheus-stack-grafana` Service used by
   `kubernetes/monitoring/grafana-httproute.yaml`
 - `deploy/scripts/13-render-phase-6-production-manifests.sh` renders the
-  Phase 6 production outputs under `tmp/phase-6/`, including the Auth0/FRED
-  Istio egress manifests derived from the production `AUTH0_ISSUER_URI`
+  production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
+  egress manifests derived from the production `AUTH0_ISSUER_URI`
 
-The Phase 6 observability baseline is intentionally narrow:
+The observability baseline is intentionally narrow:
 
 - Prometheus and Grafana are the only checked-in production monitoring assets
-  at this phase
+  in this baseline
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
 - Jaeger and Kiali do not belong on the current forward deployment path. Their
-  planned Phase 10 follow-up remains deferred after Phase 10 Step 1 pending an
+  planned observability access follow-up remains deferred pending an
   internal-only observability access redesign
 
 Render and review the current production hostname/egress slice with:
@@ -205,22 +196,20 @@ Redis session/cache data and must use the guarded migration script:
 Add `--restart-redis-clients` when Redis clients should be rolled after the
 new StatefulSet passes its TLS `PING` check.
 
-## Phase 6 Completion
-
-The checked-in production baseline is now complete for Phase 6.
+## Production Verification
 
 Recorded verifier output:
 
 ```text
-Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure
+Production verification passed for the app overlay, rendered production output, and production infrastructure overlay.
 ```
 
-The Phase 7 repo-owned install/apply surface is now checked in under `deploy/`.
-Status as of 2026-04-17: Phase 8 is also complete per operator handoff, so the
-next live deployment phase is Phase 9.
+The repo-owned production policy install/apply surface is now checked in under
+`deploy/`. The deferred production route and egress apply path is intentionally
+kept separate from the checked-in production baseline.
 
-Jaeger and Kiali remain out of scope for Phase 6. Keep the production docs and
+Jaeger and Kiali remain out of scope for this production baseline. Keep the production docs and
 manifests honest about the current baseline: Prometheus and Grafana are the
 repo-owned monitoring deliverables now, while the planned Jaeger/Kiali
-follow-up remains deferred after Phase 10 Step 1 pending an internal-only
-observability access redesign.
+follow-up remains deferred pending an internal-only observability access
+redesign.

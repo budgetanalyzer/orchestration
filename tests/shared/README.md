@@ -1,8 +1,8 @@
 # Shared Test Environment
 
-> Phase 7 status: this shared DinD image contract is retained only because
+> Status: this shared DinD image contract is retained only because
 > `tests/setup-flow` and `tests/security-preflight` are still checked in. Those
-> suites are stale, non-gating Phase 7 assets until they are explicitly
+> suites are stale, non-gating retained assets until they are explicitly
 > realigned, but `Dockerfile.test-env` still follows the same digest-pinning
 > rule as the rest of the repo.
 

@@ -127,7 +127,7 @@ checked-in repo files.
 Making the `service-common` Maven packages public in the GitHub UI does not
 remove the Maven/Gradle authentication requirement.
 
-Keep the package-visibility and workflow-access cleanup in Phase 3, but do not
+Keep the release workflow package-visibility and workflow-access cleanup, but do not
 treat it as the fix for local contributor UX. The fix for local contributor UX
 is keeping the side-by-side workspace and Tilt flow local-first and
 credential-free.

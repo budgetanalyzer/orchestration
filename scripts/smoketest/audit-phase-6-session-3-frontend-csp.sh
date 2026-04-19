@@ -2,12 +2,12 @@
 
 # audit-phase-6-session-3-frontend-csp.sh
 #
-# Static stop-gate audit for Security Hardening v2 Phase 6 Session 3.
+# Static stop-gate audit for the frontend strict-CSP contract.
 # Rebuilds the sibling production-smoke frontend bundle and checks for the
 # known strict-CSP blockers before the NGINX enforcement split lands.
 #
 # This script does not replace the manual browser-console validation required
-# by the Phase 6 plan. It makes the repo-owned audit repeatable and keeps the
+# by the edge/browser security plan. It makes the repo-owned audit repeatable and keeps the
 # coordinated sibling prerequisite explicit.
 
 set -euo pipefail
@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCHESTRATION_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 WORKSPACE_DIR="$(cd "${ORCHESTRATION_DIR}/.." && pwd)"
 WEB_DIR="${WORKSPACE_DIR}/budget-analyzer-web"
-DOC_PATH="docs/plans/security-hardening-v2-phase-6-session-3-frontend-csp-audit.md"
+DOC_PATH="docs/development/local-environment.md"
 
 PASSED=0
 FAILED=0
@@ -112,7 +112,7 @@ check_sonner_runtime_css_injection() {
 }
 
 main() {
-    section "Phase 6 Session 3 Frontend CSP Audit"
+    section "Frontend CSP Audit"
 
     require_command npm
     require_command rg
@@ -140,7 +140,7 @@ main() {
     printf 'Passed: %d\n' "${PASSED}"
     printf 'Failed: %d\n' "${FAILED}"
     info "Static findings are documented in ${DOC_PATH}"
-    info "Manual browser-console validation is still required before claiming Session 3 is closed"
+    info "Manual browser-console validation is still required before claiming the strict-CSP check is complete"
 
     if [[ "${FAILED}" -gt 0 ]]; then
         exit 1

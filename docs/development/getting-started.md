@@ -27,18 +27,18 @@ From your **host terminal** (not the devcontainer):
 cd path/to/workspace/orchestration
 ./setup.sh        # Recreates the kind cluster, ensures supported Helm, installs Calico, configures certs (browser + infra TLS), DNS, and .env
 vim .env          # Review infra password defaults; add Auth0 config/client secret and FRED API key
-./scripts/guardrails/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply Phase 7 static proof, including the approved local Tilt-tag replay
+./scripts/guardrails/verify-phase-7-static-manifests.sh   # Optional but recommended before cluster apply: static security guardrails, including the approved local Tilt-tag replay
 tilt up           # Start everything
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh  # Optional but recommended clean-start admission proof for the seven app deployments
-./scripts/smoketest/verify-security-prereqs.sh   # Optional but recommended Phase 0 proof
-./scripts/smoketest/verify-phase-1-credentials.sh   # Optional but recommended Phase 1 proof
+./scripts/smoketest/verify-security-prereqs.sh   # Optional but recommended platform security prerequisite proof
+./scripts/smoketest/verify-phase-1-credentials.sh   # Optional but recommended credential isolation proof
 ./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only  # Optional but recommended static proof of the shared session contract and full Session Gateway auth-route contract
-./scripts/smoketest/verify-phase-2-network-policies.sh  # Optional but recommended Phase 2 proof
-./scripts/smoketest/verify-phase-3-istio-ingress.sh  # Optional but recommended Phase 3 proof
-./scripts/smoketest/verify-phase-4-transport-encryption.sh  # Optional but recommended Phase 4 proof
-./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended Phase 5 proof
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended Phase 6 completion gate
-./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local Phase 7 completion gate
+./scripts/smoketest/verify-phase-2-network-policies.sh  # Optional but recommended NetworkPolicy enforcement proof
+./scripts/smoketest/verify-phase-3-istio-ingress.sh  # Optional but recommended Istio ingress and egress hardening proof
+./scripts/smoketest/verify-phase-4-transport-encryption.sh  # Optional but recommended infrastructure transport-TLS proof
+./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended runtime hardening and Pod Security proof
+./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended edge and browser security proof
+./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local security guardrail proof
 ./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass
 ```
 
@@ -99,11 +99,11 @@ Session Gateway share the `session:` key prefix contract plus the
 Session Gateway with no standalone `/user` ingress route.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local Phase
-7 completion command; it runs the Session 6 static gate and then the Session 7
-live runtime proof in order. The narrower
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local
+security guardrail command; it runs the static gate and then the live runtime
+proof in order. The narrower
 `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful
-when you only need the live-cluster Phase 7 runtime half.
+when you only need the live-cluster runtime guardrail proof.
 All verification scripts run against the current `kubectl` context. If a
 verifier says pods or network policies are missing while Tilt looks healthy,
 check `kubectl config current-context` and `tilt get uiresources` from the same

@@ -78,12 +78,12 @@ expects to exist remotely.
 
 ### `security-guardrails.yml`
 
-The orchestration repo now has a dedicated static security workflow for Phase 7
-Session 6. It is intentionally additive beside `test-setup.yml`; it does not
-reuse the stale DinD suites as guardrails for this phase.
+The orchestration repo now has a dedicated static security workflow for the
+manifest guardrail suite. It is intentionally additive beside `test-setup.yml`;
+it does not reuse the stale DinD suites as current security guardrails.
 
 It now runs on every push to `main` and every pull request targeting `main`.
-The narrower path filter was removed so guarded Phase 7 surfaces cannot bypass
+The narrower path filter was removed so guarded security surfaces cannot bypass
 the workflow when a new file path is added to the static scope.
 
 What it runs:
@@ -118,15 +118,16 @@ Use the same command locally to reproduce workflow failures without a cluster:
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
-For full local Phase 7 completion on a live cluster, use the separate final
-gate:
+For full local security guardrail proof on a live cluster, use the separate
+final gate:
 
 ```bash
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
 That wrapper intentionally stays out of GitHub Actions because the runtime
-proof depends on a live local cluster. CI for Phase 7 remains static-only.
+proof depends on a live local cluster. CI for the security guardrails remains
+static-only.
 
 ## Running Locally
 
@@ -155,7 +156,7 @@ For orchestration static security guardrails:
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 ```
 
-For the full local Phase 7 completion gate on a running cluster:
+For the full local security guardrail proof on a running cluster:
 
 ```bash
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
@@ -173,7 +174,7 @@ Planned improvements include:
 
 ### GitHub Packages
 
-`service-common` publishing is no longer a future idea. Phase 3 uses GitHub
+`service-common` publishing is no longer a future idea. Release workflows use GitHub
 Packages Maven as CI/release infrastructure while keeping the local
 contributor flow on `mavenLocal()` plus orchestration/Tilt.
 
@@ -204,7 +205,7 @@ The detailed local-vs-release resolution rules live in
 
 ### Release Images
 
-Phase 3 release image publishing is now wired as tag-driven repo-local
+Release image publishing is now wired as tag-driven repo-local
 workflows:
 
 - `transaction-service`, `currency-service`, `permission-service`, and
@@ -236,12 +237,12 @@ workflows:
   checked-in `serviceCommon` version
 - manual release-image rebuilds are supported only for tags created under the
   `v0.0.12`-forward contract; older tags remain intentionally unsupported
-- the Phase 3 production image inventory lives in
+- the production image inventory lives in
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.12` GHCR refs
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
-  checked-in Phase 6 production baseline: the rendered production app overlay,
+  checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed
   route/ingress/monitoring/egress render output. It rejects localhost hosts,
   placeholder Auth0 values, mutable image refs, and `imagePullPolicy: Never`,

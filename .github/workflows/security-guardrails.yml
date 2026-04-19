@@ -26,7 +26,7 @@ jobs:
           bash -n scripts/ops/render-istio-egress-config.sh
           bash -n scripts/guardrails/verify-phase-7-static-manifests.sh
 
-      - name: Run static Phase 7 guardrails
+      - name: Run static security guardrails
         run: ./scripts/guardrails/verify-phase-7-static-manifests.sh
 
       - name: Prove bad fixtures are rejected

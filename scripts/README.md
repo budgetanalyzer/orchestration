@@ -26,7 +26,7 @@ scripts/
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
-  full Phase 6 Oracle production baseline: app overlay, production
+  full Oracle production baseline: app overlay, production
   infrastructure overlay, production render output, and the production image
   Kyverno policy.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
@@ -56,7 +56,7 @@ Choose scripts by runtime boundary:
 
 ## Guardrails
 
-- `guardrails/check-phase-7-image-pinning.sh` verifies the Phase 7 image-pinning
+- `guardrails/check-phase-7-image-pinning.sh` verifies the image-pinning
   contract using `lib/phase-7-image-pinning-targets.txt` and
   `lib/phase-7-allowed-latest.txt`.
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
@@ -70,7 +70,7 @@ Choose scripts by runtime boundary:
   `patches/` directories.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
-  reviewed Phase 6 production route/ingress/monitoring/egress output, verifies
+  reviewed production route/ingress/monitoring/egress output, verifies
   the `0.0.12` digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
   `imagePullPolicy: Never`, verifies the Redis StatefulSet uses a `5Gi`
@@ -97,8 +97,8 @@ CI should call the static guardrail directly:
 6. `smoketest/verify-session-architecture-phase-5.sh`
 7. `smoketest/verify-phase-7-security-guardrails.sh`
 
-Use targeted verifiers when debugging one phase, and the umbrella when proving
-the current cluster:
+Use targeted verifiers when debugging one capability, and the umbrella when
+proving the current cluster:
 
 ```bash
 ./scripts/smoketest/smoketest.sh

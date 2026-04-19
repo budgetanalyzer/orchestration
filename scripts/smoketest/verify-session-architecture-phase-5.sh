@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify Session Architecture Rethink Phase 5 in the orchestration repo.
+# Verify the shared session contract in the orchestration repo.
 
 set -euo pipefail
 
@@ -15,7 +15,7 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-session-architecture-phase-5.sh [options]
 
-Verifies the Session Architecture Rethink Phase 5 contract:
+Verifies the shared session contract:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`

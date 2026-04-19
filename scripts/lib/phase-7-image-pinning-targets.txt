@@ -1,5 +1,5 @@
-# Phase 7 image pinning targets.
-# Keep this list aligned with docs/plans/security-hardening-v2-phase-7-session-1-contract.md.
+# Image pinning targets.
+# Keep this list aligned with the supply-chain guardrail documentation.
 
 kind-cluster-config.yaml
 kubernetes/infrastructure/postgresql/statefulset.yaml

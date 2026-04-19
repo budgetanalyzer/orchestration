@@ -4,7 +4,7 @@ metadata:
   name: phase7-require-namespace-pod-security-labels
   annotations:
     policies.kyverno.io/title: Require Namespace Pod Security Labels
-    policies.kyverno.io/category: Phase 7
+    policies.kyverno.io/category: Security Guardrails
     policies.kyverno.io/severity: high
     policies.kyverno.io/subject: Namespace
     policies.kyverno.io/description: >-

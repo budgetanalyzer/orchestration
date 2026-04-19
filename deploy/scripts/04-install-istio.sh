@@ -23,7 +23,7 @@ require_rendered_manifests() {
 phase4_load_instance_env
 phase4_require_commands helm kubectl
 phase4_require_cluster_access
-phase4_info "refreshing the rendered Phase 4 ingress manifests"
+phase4_info "refreshing the rendered ingress manifests"
 "${SCRIPT_DIR}/03-render-phase-4-istio-manifests.sh" --output-dir "${RENDERED_OUTPUT_DIR}" >/dev/null
 require_rendered_manifests
 
@@ -62,7 +62,7 @@ helm upgrade --install istio-egress-gateway istio/gateway \
     --wait
 kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=180s
 
-phase4_info "applying the rendered Phase 4 ingress resources"
+phase4_info "applying the rendered ingress resources"
 kubectl apply -f "$(phase4_repo_path "kubernetes/istio/ingress-namespace.yaml")" >/dev/null
 kubectl apply -f "${RENDERED_INGRESS_CONFIG}" >/dev/null
 kubectl apply -f "${RENDERED_GATEWAY}" >/dev/null
@@ -77,4 +77,4 @@ phase4_info "applying mesh security policies"
 kubectl apply -f "$(phase4_repo_path "kubernetes/istio/peer-authentication.yaml")" >/dev/null
 kubectl apply -f "$(phase4_repo_path "kubernetes/istio/authorization-policies.yaml")" >/dev/null
 
-phase4_info "Istio mesh and Phase 4 ingress path are installed"
+phase4_info "Istio mesh and ingress path are installed"

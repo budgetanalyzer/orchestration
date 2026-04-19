@@ -243,29 +243,29 @@ Check prerequisites:
 ### Quick Start
 ```bash
 # Optional but recommended before cluster apply
-# Catch Phase 7 static manifest/security regressions locally
+# Catch static manifest/security regressions locally
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 
 # Start all services with Tilt
 tilt up
 
 # Optional but recommended after tilt up on a clean rebuild
-# Prove the seven app deployments were admitted without Phase 7 image-policy violations
+# Prove the seven app deployments were admitted without image-policy violations
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 
 # Optional but recommended after core platform resources are healthy
-# Prove the Phase 0 platform baseline
+# Prove the platform security prerequisites
 ./scripts/smoketest/verify-security-prereqs.sh
-# Close Phase 3 ingress/egress hardening
+# Verify Istio ingress/egress hardening
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh
-# Close Phase 5 runtime hardening and namespace PSA enforcement
+# Verify runtime hardening and namespace PSA enforcement
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
-# Close the final local Phase 7 security-guardrail gate
+# Verify local security guardrails
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 
 # Optional aggregate local smoke pass
 # Runs static guardrails, clean admission, monitoring render/runtime checks,
-# Session Architecture Phase 5, and the Phase 7 security umbrella
+# shared session contract checks, and the security guardrail umbrella
 ./scripts/smoketest/smoketest.sh
 
 # Access Tilt UI for logs and status
@@ -278,7 +278,7 @@ tilt up
 tilt down
 ```
 
-`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6 local static guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local Phase 7 completion command; it runs the static gate first and then `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` for the live Session 7 proof. `./scripts/smoketest/smoketest.sh` is the aggregate local smoke pass and additionally exercises the rendered monitoring verifier, monitoring runtime verifier, and Session Architecture Phase 5 verifier from `scripts/smoketest/`. CI stays static-only. `./scripts/smoketest/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/smoketest/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
+`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the local static security guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local security guardrail umbrella; it runs the static gate first and then `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` for the live runtime proof. `./scripts/smoketest/smoketest.sh` is the aggregate local smoke pass and additionally exercises the rendered monitoring verifier, monitoring runtime verifier, and shared session contract verifier from `scripts/smoketest/`. CI stays static-only. `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites. `./scripts/smoketest/verify-phase-3-istio-ingress.sh` verifies Istio ingress and egress hardening. `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` verifies runtime hardening and reruns earlier capability verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
 
 Redis data survives ordinary pod replacement and should not be reset by
 accident. Use `./scripts/ops/flush-redis.sh` for a logical local Redis reset,
@@ -292,7 +292,7 @@ infrastructure state.
 # Check pod status (services run in default namespace)
 kubectl get pods
 
-# Validate the Phase 0 platform baseline
+# Validate the platform security prerequisites
 ./scripts/smoketest/verify-security-prereqs.sh
 
 # View logs for a service
@@ -372,22 +372,22 @@ Each microservice is maintained in its own repository:
 3. Bug fixes in existing functionality
 4. NOT new features or data-ownership implementation
 
-### Phase 7 Contract Freeze
+### Image-Pinning And Supply-Chain Guardrails
 
-- Use `docs/plans/security-hardening-v2-phase-7-session-1-contract.md` as the
-  source of truth for Phase 7 image-pinning scope, local `:latest`
-  exceptions, installer-hardening targets, and explicit exclusions.
-- The executable Phase 7 image inventories live in
+- Treat checked-in third-party image refs and Dockerfile base images as
+  digest-pinning targets unless an exception is explicitly documented in the
+  executable inventories.
+- The executable image-pinning inventories live in
   `scripts/lib/phase-7-image-pinning-targets.txt` and
-  `scripts/lib/phase-7-allowed-latest.txt`; keep them aligned with that
-  contract doc.
+  `scripts/lib/phase-7-allowed-latest.txt`; keep them aligned with the static
+  security guardrail checks.
 - Only the seven documented local image repos may remain on `:latest` in
   checked-in manifests. Live Tilt deploys rewrite those same repos to immutable
   `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on
   those managed deploys; treat every third-party `image:` or `FROM` ref as a
-  digest-pinning target unless it is explicitly excluded in that contract doc.
+  digest-pinning target unless it is explicitly excluded in the inventories.
 - `tests/setup-flow` and `tests/security-preflight` are stale, non-gating
-  Phase 7 assets until they are explicitly realigned to the current Istio-only
+  retained assets until they are explicitly realigned to the current Istio-only
   baseline. Do not treat them as current completion gates.
 
 **CRITICAL - Prerequisites First**: Before implementing any plan or feature:

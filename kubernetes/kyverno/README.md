@@ -1,9 +1,9 @@
 # Kyverno Policies
 
-This directory holds the Phase 7 admission-policy baseline.
+This directory holds the admission-policy baseline.
 
 - `policies/*.yaml` contains the ClusterPolicies Tilt applies to the local cluster.
-- `policies/production/` contains production-only policy variants. The Phase 3
+- `policies/production/` contains production-only policy variants. The production
   image overlay verifier applies `production/50-require-third-party-image-digests.yaml`
   against the rendered production app overlay to prove the production image path
   has no local Tilt image exceptions.
@@ -17,7 +17,7 @@ Run the local policy fixtures with:
 kyverno test kubernetes/kyverno/tests
 ```
 
-The Phase 7 static gate wraps those fixtures together with schema validation,
+The static security guardrail gate wraps those fixtures together with schema validation,
 `kube-linter`, and repo-specific guardrail scans:
 
 ```bash

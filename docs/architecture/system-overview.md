@@ -35,7 +35,7 @@ Backend Services ─── business logic, data authorization
 - ext_authz validates every API request
 - Session revocation is instant (Redis key delete)
 
-Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the Phase 0 platform baseline. Treat Phase 3 as complete only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites. Treat Istio ingress and egress hardening as verified only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
 
 ## Architecture Overview
 

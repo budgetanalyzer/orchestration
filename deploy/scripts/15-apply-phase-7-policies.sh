@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 POLICIES=(
@@ -53,12 +54,12 @@ phase4_info "verifying the checked-in production image baseline before live poli
 phase4_info "ensuring Kyverno admission controller is available"
 kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=300s >/dev/null
 
-phase4_info "applying Phase 7 production policy set"
+phase4_info "applying production security policy set"
 for policy_path in "${POLICIES[@]}"; do
     kubectl apply -f "$(phase4_repo_path "${policy_path}")" >/dev/null
 done
 
 verify_live_production_image_policy
 
-phase4_info "Phase 7 ClusterPolicy snapshot"
+phase4_info "Production ClusterPolicy snapshot"
 kubectl get clusterpolicy "${policy_names[@]}"

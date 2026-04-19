@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Runtime verification for Security Hardening v2 Phase 7 Session 7.
+# Runtime verification for live-cluster security guardrails.
 
 set -euo pipefail
 
@@ -46,7 +46,7 @@ Options:
 
 Environment:
   PHASE7_WAIT_TIMEOUT           Timeout for temporary probe readiness (default: 120s)
-  PHASE7_REGRESSION_TIMEOUT     Timeout for the reused Phase 6 regression umbrella
+  PHASE7_REGRESSION_TIMEOUT     Timeout for the reused edge/browser regression umbrella
                                 verifier (default: 35m)
 EOF
 }
@@ -188,14 +188,13 @@ capture_command() {
     local out_var_name="$1"
     shift
 
-    local -n out_ref="${out_var_name}"
     local captured_output status
     set +e
     captured_output="$("$@" 2>&1)"
     status=$?
     set -e
 
-    out_ref="${captured_output}"
+    printf -v "${out_var_name}" '%s' "${captured_output}"
     return "${status}"
 }
 
@@ -779,10 +778,15 @@ wait_for_labeled_resources_gone() {
     local resource_types="$1"
     local namespace_flag="$2"
     local deadline seconds_left
+    local -a kubectl_args=("${resource_types}")
+
+    if [[ -n "${namespace_flag}" ]]; then
+        kubectl_args+=("${namespace_flag}")
+    fi
 
     deadline=$((SECONDS + 60))
     while true; do
-        if [[ -z "$(kubectl get ${resource_types} ${namespace_flag} -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" -o name 2>/dev/null || true)" ]]; then
+        if [[ -z "$(kubectl get "${kubectl_args[@]}" -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" -o name 2>/dev/null || true)" ]]; then
             return 0
         fi
 
@@ -797,16 +801,16 @@ wait_for_labeled_resources_gone() {
 verify_cleanup_proof() {
     local rabbitmq_pod temp_resources vhosts_output
 
-    section "New Phase 7 Assertions: Cleanup Proof"
+    section "New Runtime Guardrail Assertions: Cleanup Proof"
 
     delete_rabbitmq_temp_vhost
     cleanup_temp_resources
 
     if wait_for_labeled_resources_gone "pod,networkpolicy" "-A"; then
-        pass_new "Phase 7 probe pods and temporary NetworkPolicy resources were cleaned up"
+        pass_new "Runtime guardrail probe pods and temporary NetworkPolicy resources were cleaned up"
     else
         temp_resources=$(kubectl get pod,networkpolicy -A -l "${TEMP_LABEL_KEY}=${TEMP_LABEL_VALUE}" -o name 2>/dev/null || true)
-        fail_new "Phase 7 temporary Kubernetes resources remain after cleanup: ${temp_resources:0:220}"
+        fail_new "Runtime guardrail temporary Kubernetes resources remain after cleanup: ${temp_resources:0:220}"
     fi
 
     rabbitmq_pod=$(require_pod "${INFRA_NAMESPACE}" app=rabbitmq RabbitMQ)
@@ -824,7 +828,7 @@ verify_cleanup_proof() {
 }
 
 verify_probe_setup() {
-    section "Phase 7 Runtime Probe Setup"
+    section "Runtime Guardrail Probe Setup"
     create_temp_resources
     wait_for_probe_ready "${REDIS_PROBE_NAME}"
     wait_for_probe_ready "${POSTGRES_PROBE_NAME}"
@@ -835,7 +839,7 @@ verify_probe_setup() {
 verify_redis_acl_guardrails() {
     local redis_username redis_password output=""
 
-    section "New Phase 7 Assertions: Redis ACL Guardrails"
+    section "New Runtime Guardrail Assertions: Redis ACL Guardrails"
 
     redis_username="${REDIS_CURRENCY_SERVICE_USERNAME}"
     redis_password=$(require_secret_value "${PROBE_NAMESPACE}" currency-service-redis-credentials password)
@@ -884,7 +888,7 @@ verify_redis_acl_guardrails() {
 verify_postgresql_guardrails() {
     local txn_user txn_password perm_user perm_password output=""
 
-    section "New Phase 7 Assertions: PostgreSQL Database Isolation"
+    section "New Runtime Guardrail Assertions: PostgreSQL Database Isolation"
 
     txn_user="${POSTGRES_TRANSACTION_USERNAME}"
     txn_password=$(require_secret_value "${PROBE_NAMESPACE}" transaction-service-postgresql-credentials password)
@@ -929,7 +933,7 @@ verify_rabbitmq_guardrails() {
     local rabbitmq_pod admin_username admin_password admin_vhost
     local currency_username currency_password currency_vhost output=""
 
-    section "New Phase 7 Assertions: RabbitMQ Permission Boundaries"
+    section "New Runtime Guardrail Assertions: RabbitMQ Permission Boundaries"
 
     rabbitmq_pod=$(require_pod "${INFRA_NAMESPACE}" app=rabbitmq RabbitMQ)
     admin_username="${RABBITMQ_ADMIN_USERNAME}"
@@ -995,7 +999,7 @@ verify_rabbitmq_guardrails() {
 }
 
 run_reused_regression_umbrella() {
-    section "Reused Runtime Regressions: Phase 2 Through Phase 6"
+    section "Reused Runtime Regressions"
     info "Timeout for reused regression umbrella: ${REGRESSION_TIMEOUT}"
 
     if env \
@@ -1003,21 +1007,21 @@ run_reused_regression_umbrella() {
         PHASE2_PROBE_STABILIZATION_SECONDS="${PHASE2_PROBE_STABILIZATION_SECONDS:-8}" \
         timeout --foreground --kill-after=10s "${REGRESSION_TIMEOUT}" \
         "${SCRIPT_DIR}/verify-phase-6-edge-browser-hardening.sh"; then
-        pass_reused "Phase 6 edge/browser hardening verifier passed and reran the Phase 5 runtime cascade plus the intended Phase 2 through Phase 4 regressions"
-        pass_reused "Phase 6 auth-edge throttling and API rate-limit identity proofs remain intact under the Phase 7 runtime baseline"
+        pass_reused "Edge/browser hardening verifier passed and reran the runtime cascade plus the intended NetworkPolicy, ingress, and transport regressions"
+        pass_reused "Auth-edge throttling and API rate-limit identity proofs remain intact under the runtime guardrail baseline"
     else
         local exit_code=$?
         if [[ "${exit_code}" -eq 124 || "${exit_code}" -eq 137 ]]; then
-            fail_reused "Phase 6 edge/browser hardening verifier timed out after ${REGRESSION_TIMEOUT}"
+            fail_reused "Edge/browser hardening verifier timed out after ${REGRESSION_TIMEOUT}"
         else
-            fail_reused "Phase 6 edge/browser hardening verifier failed under the Phase 7 runtime baseline"
+            fail_reused "Edge/browser hardening verifier failed under the runtime guardrail baseline"
         fi
     fi
 }
 
 main() {
     echo "==============================================================="
-    echo "  Phase 7 Runtime Guardrail Verifier"
+    echo "  Runtime Security Guardrail Verifier"
     echo "==============================================================="
     echo
 
@@ -1039,8 +1043,8 @@ main() {
     run_reused_regression_umbrella
 
     section "Summary"
-    printf 'New Phase 7 assertions: %d passed, %d failed\n' "${NEW_PASSED}" "${NEW_FAILED}"
-    printf 'Reused Phase 2-6 regressions: %d passed, %d failed\n' "${REUSED_PASSED}" "${REUSED_FAILED}"
+    printf 'New runtime guardrail assertions: %d passed, %d failed\n' "${NEW_PASSED}" "${NEW_FAILED}"
+    printf 'Reused runtime regressions: %d passed, %d failed\n' "${REUSED_PASSED}" "${REUSED_FAILED}"
 
     echo
     echo "==============================================================="

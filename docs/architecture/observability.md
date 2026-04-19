@@ -128,7 +128,7 @@ without a pod restart.
 The sidecar-based dashboard discovery pattern was evaluated and rejected —
 it would add a container and grant Grafana Kubernetes API access solely to
 watch a single ConfigMap that is already mounted as a volume. See the
-Phase 3 notes in the [observability plan](../plans/observability-stack-prometheus-grafana-2026-04-10.md)
+implementation notes in the [observability plan](../plans/observability-stack-prometheus-grafana-2026-04-10.md)
 for the full evaluation.
 
 ### Common Debugging Scenarios
@@ -238,7 +238,7 @@ Every image is digest-pinned in `kubernetes/monitoring/prometheus-stack-values.y
 
 ### Workload Hardening
 
-All monitoring pods comply with the Phase 7 contract:
+All monitoring pods comply with the current security guardrail contract:
 - `automountServiceAccountToken: false` on all pods
 - `runAsNonRoot: true`, `allowPrivilegeEscalation: false`,
   `capabilities.drop: [ALL]` on all containers

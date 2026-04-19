@@ -135,7 +135,7 @@ check_kind_cluster_network_model() {
 
     if kubectl get daemonset kindnet -n kube-system >/dev/null 2>&1; then
         print_error "Detected existing Kind cluster created with default CNI (kindnet)"
-        echo "  Phase 0 hardening requires a cluster created with disableDefaultCNI + Calico."
+        echo "  Platform hardening requires a cluster created with disableDefaultCNI + Calico."
         echo "  Rebuild with:"
         echo "    kind delete cluster --name kind"
         echo "    kind create cluster --config \"$SCRIPT_DIR/kind-cluster-config.yaml\""

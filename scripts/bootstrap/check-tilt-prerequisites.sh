@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
-# shellcheck source=../lib/pinned-tool-versions.sh
+# shellcheck source=scripts/lib/pinned-tool-versions.sh
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
 
 # Colors for output
@@ -260,7 +260,7 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
     if [ "$CLUSTER_CONNECTED" = true ]; then
         if kubectl get daemonset kindnet -n kube-system &> /dev/null; then
             echo -e "${RED}✗${NC} Cluster uses Kind default CNI (kindnet)"
-            echo "  Security Phase 0 requires disableDefaultCNI + Calico."
+            echo "  Platform security requires disableDefaultCNI + Calico."
             echo "  Rebuild with:"
             echo "  kind delete cluster --name kind"
             echo "  cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
@@ -352,7 +352,7 @@ fi
 
 echo
 
-echo "10. Checking Phase 4 infrastructure TLS secrets..."
+echo "10. Checking infrastructure TLS secrets..."
 echo "---------------------------------------------"
 
 if [ "$CLUSTER_CONNECTED" = true ]; then
@@ -380,9 +380,9 @@ if [ "$CLUSTER_CONNECTED" = true ]; then
     fi
 
     if [ ${#PHASE4_MISSING[@]} -eq 0 ]; then
-        echo -e "${GREEN}✓${NC} Phase 4 infrastructure TLS secrets are present"
+        echo -e "${GREEN}✓${NC} Infrastructure TLS secrets are present"
     else
-        echo -e "${RED}✗${NC} Phase 4 infrastructure TLS prerequisites are missing"
+        echo -e "${RED}✗${NC} Infrastructure TLS prerequisites are missing"
         for missing in "${PHASE4_MISSING[@]}"; do
             echo "  Missing: $missing"
         done
@@ -390,7 +390,7 @@ if [ "$CLUSTER_CONNECTED" = true ]; then
         ((ERRORS++))
     fi
 else
-    echo -e "${YELLOW}!${NC} Skipping Phase 4 TLS secret check (cluster not connected)"
+    echo -e "${YELLOW}!${NC} Skipping infrastructure TLS secret check (cluster not connected)"
     ((WARNINGS++))
 fi
 

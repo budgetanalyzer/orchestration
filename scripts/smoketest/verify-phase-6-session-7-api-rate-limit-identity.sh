@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Runtime verification for Security Hardening v2 Phase 6 Session 7.
+# Runtime verification for API rate-limit identity.
 
 set -euo pipefail
 
@@ -90,9 +90,9 @@ count_status() {
 }
 
 find_nginx_log_line() {
-    local probe_id="$1" attempt nginx_log_line
+    local probe_id="$1" nginx_log_line
 
-    for attempt in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5; do
         nginx_log_line=$(
             kubectl logs "${NGINX_DEPLOYMENT}" --tail="${NGINX_LOG_TAIL_LINES}" 2>/dev/null |
                 grep "$probe_id" | tail -n 1 || true
@@ -274,7 +274,7 @@ verify_log_identity() {
 
 main() {
     echo "==============================================================="
-    echo "  Phase 6 Session 7 API Rate-Limit Identity Verifier"
+    echo "  API Rate-Limit Identity Verifier"
     echo "==============================================================="
     echo
 
@@ -362,10 +362,10 @@ main() {
 
     if [[ "${FAILED}" -eq 0 ]]; then
         echo
-        echo "Phase 6 Session 7 verification succeeded (${PASSED} checks passed)."
+        echo "API rate-limit identity verification succeeded (${PASSED} checks passed)."
     else
         echo
-        echo "Phase 6 Session 7 verification FAILED (${FAILED} failed, ${PASSED} passed)." >&2
+        echo "API rate-limit identity verification FAILED (${FAILED} failed, ${PASSED} passed)." >&2
         exit 1
     fi
 }

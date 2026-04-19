@@ -409,7 +409,7 @@ For monitoring, keep the Helm release name `prometheus-stack` when
 kube-prometheus-stack is installed. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
 assumes that release name so Grafana stays reachable through the existing
-`prometheus-stack-grafana` Service referenced by the checked-in `HTTPRoute`.
+`prometheus-stack-grafana` Service used by the loopback port-forward contract.
 
 ## Public TLS Cutover
 
@@ -493,8 +493,11 @@ certificate are all healthy.
 - `kube-prometheus-stack` with Helm release
   `prometheus-stack` is the live production observability baseline.
 - Production Grafana has no public `HTTPRoute` in the phase-6 route render.
-  Access it through a loopback-bound port-forward:
-  `kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80`.
+  Access it through the shared loopback-bound operator contract:
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
+- Production Prometheus stays internal-only and uses the same pattern:
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
+- Keep observability port-forwards bound to `127.0.0.1`; do not use `--address 0.0.0.0`.
 - When updating a live instance from an older render, explicitly delete any
   stale route because `kubectl apply` does not prune removed kustomize
   resources:
@@ -505,6 +508,8 @@ certificate are all healthy.
   or observability-route rollout work unless the deployment path is explicitly
   reopened with a reviewed internal-only access model for Grafana, Jaeger, and
   Kiali.
+- Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
+  `jaeger.budgetanalyzer.org` as public production hostnames.
 - Public TLS cutover is the next open deployment area.
 
 ## Production Admission Policy

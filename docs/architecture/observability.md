@@ -170,26 +170,25 @@ for the full evaluation.
 
 ### Grafana
 
-Local Tilt currently exposes Grafana through Istio ingress at
-`https://grafana.budgetanalyzer.localhost`. That local ingress path is a
-temporary local-development convenience until the deferred local cleanup is
-designed.
-
-Production Grafana is internal-only. There is no public DNS record, Gateway
-listener, certificate, or `HTTPRoute` for Grafana in the production render.
-Use a loopback-bound port-forward instead:
+Local Tilt and production OCI/k3s use the same internal-only access contract
+for Grafana. There is no supported observability hostname. Keep Grafana behind
+Kubernetes and use a loopback-bound port-forward instead:
 
 ```bash
-kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/prometheus-stack-grafana 3300:80
 ```
 
-Then open `http://localhost:3000`.
+Then open `http://localhost:3300`.
+
+`grafana.budgetanalyzer.localhost` is retired. Do not introduce
+`grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
+`jaeger.budgetanalyzer.org` as public observability entry points.
 
 Grafana owns its own `/api/*` namespace and is **not** subject to Budget
-Analyzer's ext_authz session enforcement. The `ext-authz-at-ingress`
-AuthorizationPolicy is scoped to `app.budgetanalyzer.localhost` so it does
-not intercept requests to the Grafana host. Grafana manages its own
-authentication (admin user with Helm-generated password).
+Analyzer's ext_authz session enforcement because observability access does not
+use the application ingress path. Grafana manages its own authentication
+(admin user with Helm-generated password), and anonymous access stays disabled.
 
 ```bash
 # Retrieve admin password
@@ -206,23 +205,22 @@ For browser-side dashboard debugging, run the isolated Playwright probe from
 the orchestration repo:
 
 ```bash
-./scripts/ops/grafana-ui-playwright-debug.sh
+./scripts/ops/grafana-ui-playwright-debug.sh --url http://127.0.0.1:3300
 ```
 
 The helper fetches the Grafana admin password from Kubernetes unless
 `GRAFANA_ADMIN_PASSWORD` is already set, passes it to Playwright through the
 environment only, and writes transient screenshots, API responses, console
 errors, request failures, and panel-state summaries under
-`tmp/grafana-ui-debug/`. It targets the local Grafana ingress URL directly and
-uses Playwright `ignoreHTTPSErrors` so local mkcert trust differences inside
-the container do not require certificate regeneration.
+`tmp/grafana-ui-debug/`. Start the Grafana port-forward first, keep it bound to
+`127.0.0.1`, and do not switch observability forwarding to `0.0.0.0`.
 
 ### Prometheus
 
 Internal only — no ingress route. Use port-forward:
 
 ```bash
-kubectl port-forward -n monitoring \
+kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/prometheus-stack-kube-prom-prometheus 9090:9090
 ```
 

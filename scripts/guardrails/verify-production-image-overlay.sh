@@ -328,7 +328,7 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" "rendered ingress policies are missing the production demo hostname"
 
     assert_contains_literal "${monitoring_file}" 'domain: localhost' "rendered monitoring override is missing the loopback Grafana domain"
-    assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3000' "rendered monitoring override is missing the loopback Grafana root_url"
+    assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3300' "rendered monitoring override is missing the loopback Grafana root_url"
     assert_contains_literal "${monitoring_file}" 'cookie_secure: false' "rendered monitoring override is missing loopback cookie_secure=false"
     assert_contains_literal "${monitoring_file}" 'prometheus-stack-grafana' "rendered monitoring override no longer documents the expected Grafana Service contract"
     assert_not_contains "${monitoring_file}" 'anonymous' \

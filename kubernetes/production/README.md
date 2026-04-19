@@ -131,14 +131,20 @@ The observability baseline is intentionally narrow:
 
 - Prometheus and Grafana are the only checked-in production monitoring assets
   in this baseline
-- production Grafana is internal-only; access it through
-  `kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80`
+- production Grafana is internal-only; access it through the shared local and
+  production operator contract:
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
+- production Prometheus is also internal-only:
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`
+- keep observability port-forwards loopback-bound; do not use `--address 0.0.0.0`
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
 - Jaeger and Kiali do not belong on the current forward deployment path. Their
   planned observability access follow-up remains deferred pending an
   internal-only observability access redesign
+- do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
+  `jaeger.budgetanalyzer.org`
 
 Render and review the current production hostname/egress slice with:
 

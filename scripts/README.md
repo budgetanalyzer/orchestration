@@ -26,7 +26,9 @@ scripts/
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
   loopback-only Grafana and Prometheus port-forward verifier. It defaults to
   the canonical `3300` and `9090` local ports and accepts flag overrides when
-  those loopback ports are already occupied on the operator workstation.
+  those loopback ports are already occupied on the operator workstation. Use
+  the same loopback-only commands in local Tilt and production OCI/k3s, and do
+  not use `--address 0.0.0.0` for observability access.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
@@ -124,9 +126,10 @@ the active context and Tilt resource state from the same host shell first.
   `istio-egress-gateway:443` checks are deferred until the real egress routing
   is rendered and applied later in the production plan.
 - `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
-  runner under `tmp/grafana-ui-debug/`, logs into the local Grafana ingress
-  route, opens the provisioned dashboards, and captures browser-side debugging
-  artifacts without committing Node dependency files.
+  runner under `tmp/grafana-ui-debug/`, logs into a port-forwarded Grafana
+  URL such as `http://127.0.0.1:3300`, opens the provisioned dashboards, and
+  captures browser-side debugging artifacts without committing Node dependency
+  files.
 - `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
   the TLS-only in-cluster listener.
 - `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.

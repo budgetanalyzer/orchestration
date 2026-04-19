@@ -146,8 +146,15 @@ for the OAuth2 round-trip.
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs
 - **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
 - **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
-- **Grafana**: https://grafana.budgetanalyzer.localhost
+- **Grafana**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`, then open http://localhost:3300
+- **Prometheus**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`, then open http://localhost:9090
 - **Tilt UI**: http://localhost:10350 (logs and status)
+
+Observability is internal-only in both local Tilt and production OCI/k3s.
+Keep Grafana authentication enabled, keep observability port-forwards bound to
+`127.0.0.1`, and do not use `grafana.budgetanalyzer.localhost`,
+`grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
+`jaeger.budgetanalyzer.org` as operator entry points.
 
 ### Stopping
 

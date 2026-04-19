@@ -67,12 +67,12 @@ grafana:
       readOnly: true
   grafana.ini:
     server:
-      domain: grafana.budgetanalyzer.localhost
-      root_url: https://grafana.budgetanalyzer.localhost
+      domain: localhost
+      root_url: http://localhost:3300
     feature_toggles:
       newPanelPadding: false
     security:
-      cookie_secure: true
+      cookie_secure: false
   datasources:
     datasources.yaml:
       apiVersion: 1

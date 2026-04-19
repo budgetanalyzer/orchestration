@@ -163,7 +163,8 @@ Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the pl
 **Grafana** (Port 80, `monitoring` namespace)
 - Dashboard visualization
 - Pre-provisioned JVM and Spring Boot dashboards
-- Exposed at `https://grafana.budgetanalyzer.localhost` via Istio ingress
+- Internal-only operator access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
+- Grafana authentication stays enabled; anonymous access stays disabled
 
 **kube-state-metrics** (`monitoring` namespace)
 - Kubernetes resource metrics for Prometheus

@@ -1,6 +1,6 @@
 # Plan: Internal-Only Observability Access
 
-**Status:** In progress (`Phase 0` complete)
+**Status:** In progress (`Phases 0-1` complete; `Phase 2` repo changes landed)
 **Date:** 2026-04-19
 
 ## Decision
@@ -514,6 +514,12 @@ Then open `http://127.0.0.1:9090` on your workstation.
 
 **Goal:** Make the contract explicit before changing local routing.
 
+**Status, 2026-04-19:** Complete. The active local setup, architecture, deploy,
+and operator docs now describe the same loopback-only Grafana and Prometheus
+access contract, retire `grafana.budgetanalyzer.localhost` from active setup
+guidance, and warn operators not to use `--address 0.0.0.0` for observability
+port-forwards.
+
 Document the shared contract in:
 
 - `docs/architecture/observability.md`
@@ -554,6 +560,14 @@ The contract text should say:
 
 **Goal:** Make Grafana generate URLs and cookies for the same loopback URL in
 local Tilt and production.
+
+**Status, 2026-04-19:** Repo-owned config and guardrail updates are complete.
+The shared Helm values now point Grafana at `http://localhost:3300` with
+`domain: localhost` and `cookie_secure: false` in both local and production
+render paths, and the production overlay verifier now fails if that
+loopback-only contract drifts or if anonymous access appears. Live Grafana
+login verification through a local port-forward still requires a reachable
+cluster runtime.
 
 Update `kubernetes/monitoring/prometheus-stack-values.yaml`:
 

@@ -106,7 +106,8 @@ cd orchestration/
 ```
 
 **What `setup.sh` does in the current Phase 0 baseline:**
-1. Deletes any existing `kind` cluster and recreates it from scratch
+1. Deletes any existing `kind` cluster and recreates it from scratch, which is
+   the clean-state contract for PVC-backed local infrastructure such as Redis
 2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
 3. Installs pinned Calico and waits for CoreDNS readiness
 4. Ensures a supported Helm `3.20.x` binary is installed before any Helm-backed setup continues
@@ -698,7 +699,7 @@ Redis local access:
 - `default` is probe-only and should not be used by application code
 - `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
 - active browser sessions are extended through same-origin `GET /auth/v1/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
-- The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting the pod.
+- The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting `redis-0` or relying on `tilt down`.
 
 RabbitMQ local access:
 - Management UI: `http://localhost:15672`

@@ -188,6 +188,11 @@ On a new or already migrated cluster, apply that rendered target with:
 ./deploy/scripts/18-apply-production-infrastructure.sh
 ```
 
+Use these repo-owned scripts as the production infrastructure path. They render
+the overlay with Kustomize load restrictions disabled so the production target
+can reuse the shared `kubernetes/infrastructure` baseline without duplicating
+PostgreSQL, RabbitMQ, or Redis manifests.
+
 The old production-only Redis Deployment/PVC overlay under
 `kubernetes/production/infrastructure/redis/` has been removed. Replacing an
 existing OCI Redis Deployment with the StatefulSet shape is destructive for

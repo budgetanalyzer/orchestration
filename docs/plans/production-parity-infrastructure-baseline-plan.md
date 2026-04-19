@@ -2,7 +2,7 @@
 
 Date: 2026-04-19
 
-Status: Draft
+Status: Implemented through Phase 6; local and OCI validation phases remain.
 
 Related documents:
 
@@ -393,6 +393,11 @@ old Redis `Deployment` plus standalone PVC shape.
    happens, stop and document the additional verifier change explicitly.
 
 ## Phase 6: Documentation Updates
+
+**Status:** Implemented on 2026-04-19. Documentation now records the common
+plus Kind/k3s Istio CNI overlay model, the shared Redis StatefulSet baseline,
+PVC-backed local Redis state, the broad production infrastructure scripts, and
+the destructive OCI Redis migration contract.
 
 1. **[AI-Assistant]** Update `docs/development/local-environment.md`:
    - local Istio CNI now uses common values plus the Kind overlay

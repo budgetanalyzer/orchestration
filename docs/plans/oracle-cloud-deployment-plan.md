@@ -2503,8 +2503,10 @@ sudo systemctl reload ssh
 
 ## TODO
 
-- Revisit local-development Redis storage parity. PostgreSQL and RabbitMQ
-  already use PVC-backed storage in dev, while local Redis still uses
-  `emptyDir`. Replace the local Redis `emptyDir` data volume with a PVC-backed
-  path and keep the "fresh Redis state" workflow explicit through a reset
-  command or overlay instead of making ephemeral storage the default.
+- Redis storage parity was superseded by the production-parity infrastructure
+  baseline on 2026-04-19. Local and production Redis now use the shared
+  PVC-backed `StatefulSet/redis` shape; fresh Redis state comes from
+  `./scripts/ops/flush-redis.sh` for logical local resets, local
+  cluster/runtime recreation for clean PVC-backed development, or the guarded
+  destructive OCI migration command for existing production Redis
+  Deployment/PVC replacements.

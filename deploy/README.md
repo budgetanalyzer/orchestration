@@ -360,6 +360,11 @@ On a new or already migrated cluster, apply that rendered target with:
 ./deploy/scripts/18-apply-production-infrastructure.sh
 ```
 
+Both production infrastructure scripts are safe to rerun. The render script
+overwrites the review artifact under `tmp/production-infrastructure/`, and the
+apply script refreshes that render before applying it and waiting for the
+StatefulSets that are present.
+
 The old production-only Redis Deployment/PVC overlay is superseded. Migrating
 an existing OCI Redis Deployment to the StatefulSet shape is destructive for
 Redis session/cache data; use the guarded migration script rather than applying
@@ -372,6 +377,9 @@ ad hoc deletes:
 Add `--restart-redis-clients` when you want the script to roll out
 `session-gateway`, `ext-authz`, and `currency-service` after Redis passes the
 TLS `PING` check.
+The migration script ignores already-absent old Redis resources, so a rerun
+after the first migration should converge on the same broad infrastructure
+target without deleting PostgreSQL or RabbitMQ data.
 
 For monitoring, keep the Helm release name `prometheus-stack` when Phase 10
 installs kube-prometheus-stack. The checked-in production override at

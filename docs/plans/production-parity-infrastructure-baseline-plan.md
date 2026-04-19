@@ -469,6 +469,18 @@ the destructive OCI Redis migration contract.
    ```bash
    ./deploy/scripts/04-install-istio.sh
    ```
+   This script reapplies the Phase 4 HTTP-only ingress `Gateway`. If Phase 11
+   public TLS is already complete on the host, immediately restore the Phase 11
+   Gateway after the Istio reinstall:
+   ```bash
+   ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
+   kubectl apply -f tmp/phase-11/ingress-gateway-config.yaml
+   kubectl apply -f tmp/phase-11/istio-gateway.yaml
+   kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=180s
+   kubectl get svc -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
+   ```
+   Expected result on a Phase 11 host: the ingress Service exposes both
+   `80:30080/TCP` and `443:30443/TCP`.
 4. **[Human]** Verify CNI convergence:
    ```bash
    kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=180s

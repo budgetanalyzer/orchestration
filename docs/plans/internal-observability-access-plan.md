@@ -1,6 +1,6 @@
 # Plan: Internal-Only Observability Access
 
-**Status:** In progress (`Phases 0-4` complete; `Phase 5` pending)
+**Status:** In progress (`Phases 0-5` complete; `Phase 6` pending)
 **Date:** 2026-04-19
 
 ## Decision
@@ -763,6 +763,13 @@ shellcheck scripts/guardrails/verify-production-image-overlay.sh
 - CI/static local checks reject a new observability ingress route.
 - The production renderer still proves app-only public routing.
 - Exceptions, if any, are explicit and documented in this plan.
+
+**Status, 2026-04-19:** Implemented. `scripts/guardrails/verify-phase-7-static-manifests.sh`
+now rejects observability `HTTPRoute`/Gateway hostname drift, removed
+production observability hostname inputs, forbidden Grafana hostnames in Helm
+values, Grafana anonymous-access enablement, and Istio ingress allowances to
+observability services. `scripts/guardrails/verify-production-image-overlay.sh`
+mirrors the same contract against the rendered production artifacts.
 
 ### Phase 6 - Validate Local/Production Parity End To End
 

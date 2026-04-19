@@ -56,8 +56,9 @@ That verifier now:
   in that checked-in production path
 - verifies the production NGINX/public-route contract is coming from
   `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
-- verifies the production docs bundle, Grafana hostname override, Auth0 egress
-  render, and Redis StatefulSet `5Gi` claim-template path all stay present
+- verifies the production docs bundle, app-only gateway route render, loopback
+  Grafana override, Auth0 egress render, and Redis StatefulSet `5Gi`
+  claim-template path all stay present
 - applies the production image Kyverno policy at
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
@@ -112,17 +113,16 @@ This directory keeps the production hostname cutover in reviewed, committed
 artifacts:
 
 - `gateway-routes/` renders the production `HTTPRoute` objects with
-  `demo.budgetanalyzer.org` and `grafana.budgetanalyzer.org`, while leaving the
-  shared localhost dev manifests untouched for Tilt
+  `demo.budgetanalyzer.org`, while leaving the shared localhost dev manifests
+  untouched for Tilt
 - `istio-ingress-policies/` renders the production `AuthorizationPolicy` and
   ingress local-rate-limit objects with the demo hostname, separately from the
   gateway routes so the live deployment path can still defer those policy applies until
   `ext-authz` is ready
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
-  server domain and root URL to the production monitoring hostname while
-  preserving the checked-in `prometheus-stack` Helm release name contract that
-  yields the `prometheus-stack-grafana` Service used by
-  `kubernetes/monitoring/grafana-httproute.yaml`
+  server domain and root URL for loopback port-forward access while preserving
+  the checked-in `prometheus-stack` Helm release name contract that yields the
+  `prometheus-stack-grafana` Service
 - `deploy/scripts/13-render-phase-6-production-manifests.sh` renders the
   production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
   egress manifests derived from the production `AUTH0_ISSUER_URI`
@@ -131,6 +131,8 @@ The observability baseline is intentionally narrow:
 
 - Prometheus and Grafana are the only checked-in production monitoring assets
   in this baseline
+- production Grafana is internal-only; access it through
+  `kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80`
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
@@ -146,6 +148,14 @@ sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
 sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
 sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
 sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+```
+
+If a live OCI cluster was previously applied from a render that published
+Grafana, explicitly delete the stale route after applying the new app-only
+route render:
+
+```bash
+kubectl delete httproute -n monitoring grafana-route --ignore-not-found
 ```
 
 ## Production Infrastructure Input

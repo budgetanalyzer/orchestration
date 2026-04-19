@@ -170,8 +170,20 @@ for the full evaluation.
 
 ### Grafana
 
-Exposed via Istio ingress at `https://grafana.budgetanalyzer.localhost`.
-No port-forward needed for local development.
+Local Tilt currently exposes Grafana through Istio ingress at
+`https://grafana.budgetanalyzer.localhost`. That local ingress path is a
+temporary local-development convenience until the deferred local cleanup is
+designed.
+
+Production Grafana is internal-only. There is no public DNS record, Gateway
+listener, certificate, or `HTTPRoute` for Grafana in the production render.
+Use a loopback-bound port-forward instead:
+
+```bash
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
+```
+
+Then open `http://localhost:3000`.
 
 Grafana owns its own `/api/*` namespace and is **not** subject to Budget
 Analyzer's ext_authz session enforcement. The `ext-authz-at-ingress`
@@ -201,9 +213,9 @@ The helper fetches the Grafana admin password from Kubernetes unless
 `GRAFANA_ADMIN_PASSWORD` is already set, passes it to Playwright through the
 environment only, and writes transient screenshots, API responses, console
 errors, request failures, and panel-state summaries under
-`tmp/grafana-ui-debug/`. It targets the Grafana ingress URL directly and uses
-Playwright `ignoreHTTPSErrors` so local mkcert trust differences inside the
-container do not require certificate regeneration.
+`tmp/grafana-ui-debug/`. It targets the local Grafana ingress URL directly and
+uses Playwright `ignoreHTTPSErrors` so local mkcert trust differences inside
+the container do not require certificate regeneration.
 
 ### Prometheus
 

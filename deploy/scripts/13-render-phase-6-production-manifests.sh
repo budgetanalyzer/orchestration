@@ -12,16 +12,14 @@ PHASE6_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-6"
 readonly PHASE6_RENDER_ROOT
 LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
 readonly LOCKED_DEMO_DOMAIN
-LOCKED_GRAFANA_DOMAIN="grafana.budgetanalyzer.org"
-readonly LOCKED_GRAFANA_DOMAIN
 
 usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/13-render-phase-6-production-manifests.sh [--output-dir DIR]
 
 Renders the reviewed production gateway routes, Istio ingress
-policies, monitoring hostname override, and Istio egress manifests into a
-local output directory.
+policies, production Grafana port-forward override, and Istio egress
+manifests into a local output directory.
 
 By default the render output goes to tmp/phase-6/ under the repo root.
 EOF
@@ -55,12 +53,10 @@ main() {
 
     phase4_load_instance_env
     phase4_require_commands kubectl
-    phase4_require_env_vars AUTH0_ISSUER_URI DEMO_DOMAIN GRAFANA_DOMAIN
+    phase4_require_env_vars AUTH0_ISSUER_URI DEMO_DOMAIN
 
     [[ "${DEMO_DOMAIN}" == "${LOCKED_DEMO_DOMAIN}" ]] || phase4_die \
         "DEMO_DOMAIN=${DEMO_DOMAIN} does not match the locked production hostname ${LOCKED_DEMO_DOMAIN}"
-    [[ "${GRAFANA_DOMAIN}" == "${LOCKED_GRAFANA_DOMAIN}" ]] || phase4_die \
-        "GRAFANA_DOMAIN=${GRAFANA_DOMAIN} does not match the locked monitoring hostname ${LOCKED_GRAFANA_DOMAIN}"
 
     mkdir -p "${output_dir}"
 

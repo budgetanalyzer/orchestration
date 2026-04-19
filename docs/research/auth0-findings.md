@@ -27,9 +27,9 @@ included. The practical layout on Free is:
 - Auth0 custom domain: `auth.budgetanalyzer.org`
 - API audience identifier: `https://api.budgetanalyzer.org`
 
-The checked-in Grafana hostname is `grafana.budgetanalyzer.org`. Leave
-`KIALI_DOMAIN` and `JAEGER_DOMAIN` blank while the remaining observability
-access work is deferred pending an internal-only access redesign.
+Production observability hostnames are intentionally absent. Grafana,
+Prometheus, and any future Jaeger/Kiali surfaces stay internal-only and use
+operator port-forward access.
 
 ## Recommended `instance.env` Values
 
@@ -37,9 +37,6 @@ Set these values in `~/.config/budget-analyzer/instance.env`:
 
 ```bash
 DEMO_DOMAIN=demo.budgetanalyzer.org
-GRAFANA_DOMAIN=grafana.budgetanalyzer.org
-KIALI_DOMAIN=
-JAEGER_DOMAIN=
 
 AUTH0_CLIENT_ID=<production-regular-web-app-client-id>
 AUTH0_ISSUER_URI=https://auth.budgetanalyzer.org/

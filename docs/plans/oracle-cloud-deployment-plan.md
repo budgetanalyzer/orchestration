@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-12
 **Status:** Revised plan
-**Based on:** [`single-instance-demo-hosting.md`](../research/single-instance-demo-hosting.md), [`oracle-cloud-always-free-provisioning.md`](../research/oracle-cloud-always-free-provisioning.md), [`production-secrets-and-ai-agent-boundaries.md`](../research/production-secrets-and-ai-agent-boundaries.md)
+**Based on:** [`single-instance-demo-hosting.md`](../research/single-instance-demo-hosting.md), [`oracle-cloud-always-free-provisioning.md`](../research/oracle-cloud-always-free-provisioning.md), [`production-secrets-and-ai-agent-boundaries.md`](../research/production-secrets-and-ai-agent-boundaries.md), [`auth0-findings.md`](../research/auth0-findings.md)
 
 Deploy the full Budget Analyzer architecture - k3s, Istio service mesh, application services, infrastructure (PostgreSQL/Redis/RabbitMQ), and the observability bundle (Prometheus/Grafana/Jaeger/Kiali) - to an Oracle Cloud Always Free Ampere A1 instance (4 OCPU / 24 GB RAM / 200 GB disk). Cost: $0/mo.
 
@@ -1038,6 +1038,93 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
 
 AI agents work with secret names and vault paths, never secret values. Templates and manifests are committed; populated values never enter the repo or workspace.
 
+### Production Auth0 Baseline
+
+Use one US Auth0 Free-tier tenant for the OCI demo. Auth0 Free currently supports
+one tenant and one tenant-scoped custom domain, so the working layout is one
+tenant with a demo browser application, a separate localhost browser
+application, and one shared API registration.
+
+Public domains and identifiers:
+
+- Demo application: `demo.budgetanalyzer.org`
+- Auth0 custom domain: `auth.budgetanalyzer.org`
+- Shared API audience identifier: `https://api.budgetanalyzer.org`
+- Grafana route: `grafana.budgetanalyzer.org`
+- Deferred observability hostnames: keep `KIALI_DOMAIN` and `JAEGER_DOMAIN`
+  blank until the internal-only observability access redesign is reviewed.
+
+Set these production non-secret values in
+`~/.config/budget-analyzer/instance.env` before rendering Phase 5 secrets:
+
+```bash
+DEMO_DOMAIN=demo.budgetanalyzer.org
+GRAFANA_DOMAIN=grafana.budgetanalyzer.org
+KIALI_DOMAIN=
+JAEGER_DOMAIN=
+
+AUTH0_CLIENT_ID=<budget-analyzer-demo-regular-web-app-client-id>
+AUTH0_ISSUER_URI=https://auth.budgetanalyzer.org/
+IDP_AUDIENCE=https://api.budgetanalyzer.org
+IDP_LOGOUT_RETURN_TO=https://demo.budgetanalyzer.org/peace
+```
+
+`AUTH0_CLIENT_SECRET` does not belong in `instance.env`. Store it only in OCI
+Vault as `budget-analyzer-auth0-client-secret`; ESO syncs it into
+`Secret/auth0-credentials` during Phase 5.
+
+Auth0 tenant and application settings:
+
+- Configure `auth.budgetanalyzer.org` under Auth0 `Branding` -> `Custom
+  Domains` with Auth0-managed certificates. The required Squarespace DNS record
+  is a `CNAME` named `auth` pointing at the exact Auth0 edge hostname shown by
+  the custom-domain UI. Verify it with `dig auth.budgetanalyzer.org -t CNAME
+  +short`.
+- Create `Budget Analyzer Demo` as a `Regular Web Application`, not an SPA.
+  Use login URI `https://demo.budgetanalyzer.org/login`, callback URL
+  `https://demo.budgetanalyzer.org/login/oauth2/code/idp`, logout URL
+  `https://demo.budgetanalyzer.org/peace`, web origin
+  `https://demo.budgetanalyzer.org`, and ID token expiration `3600` seconds.
+- Create `Budget Analyzer Dev` as a separate `Regular Web Application` for
+  localhost with login URI `https://app.budgetanalyzer.localhost/login`,
+  callback URL
+  `https://app.budgetanalyzer.localhost/login/oauth2/code/idp`, logout URL
+  `https://app.budgetanalyzer.localhost/peace`, web origin
+  `https://app.budgetanalyzer.localhost`, and ID token expiration `3600`
+  seconds.
+- Keep production on issuer `https://auth.budgetanalyzer.org/`. Keep localhost
+  development on the canonical tenant issuer
+  `https://<your-tenant>.us.auth0.com/` unless shared browser SSO between demo
+  and localhost is intentional.
+- Create one shared API registration named `Budget Analyzer API` with
+  identifier `https://api.budgetanalyzer.org`, signing algorithm `RS256`, JWT
+  profile `RFC 9068`, maximum access-token lifetime `900` seconds, offline
+  access off, Auth0 RBAC off, and Auth0 permissions-in-token off. Set user
+  application access to allow and client access to deny until a real
+  machine-to-machine caller exists.
+- Set tenant sessions to non-persistent, idle lifetime `15` minutes, and maximum
+  lifetime `480` minutes. If the dashboard has separate persistent values, keep
+  them aligned to avoid drift.
+
+Operational notes:
+
+- The shared API identifier is an audience string; Auth0 does not call that URL.
+- The current authorization model does not enforce Auth0 API scopes or Auth0
+  RBAC. `session-gateway` resolves roles and permissions through
+  `permission-service`, stores them in the Redis session, and forwards
+  `X-Permissions` / `X-Roles`.
+- First-login user sync is keyed by the identity-provider subject (`idpSub`),
+  not email. One Auth0 tenant for demo and localhost is compatible with that
+  model; each environment still creates its own local database row on first
+  login.
+- If the custom domain, demo hostname, or Auth0 issuer changes, update
+  `AUTH0_ISSUER_URI`, `IDP_LOGOUT_RETURN_TO`, the Auth0 application URLs, the
+  Phase 5 IDP ConfigMap render, and the Phase 6/9 Istio egress render in the
+  same reviewed change.
+
+Detailed UI notes and rationale are retained as research in
+[`auth0-findings.md`](../research/auth0-findings.md).
+
 ### Phase 5 Execution Order (Detailed)
 
 #### Chunk 1: Prepare the reviewed Phase 5 inputs
@@ -1683,7 +1770,9 @@ and Redis, and Phases 9, 10, and 11 are also complete for the current forward de
 - Phase 7 production Kyverno policy active
 - Phase 8 infrastructure services running in `infrastructure`
 - ESO-created service secrets ready in `default`
-- Production Auth0 callback/logout URLs configured in Auth0
+- Production Auth0 custom domain, demo application, shared API registration,
+  callback URL, and logout URL configured according to the Phase 5 Auth0
+  baseline
 
 ### Steps
 

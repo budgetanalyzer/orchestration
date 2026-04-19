@@ -1,12 +1,14 @@
-# Auth0 Production Settings for OCI Demo
+# Auth0 Findings
 
 **Date:** 2026-04-17
-**Status:** Recommended settings for Phase 5 Chunk 1 Step 1 and later hostname work
-**Related plan:** [oracle-cloud-deployment-plan.md](./oracle-cloud-deployment-plan.md)
+**Status:** Research/reference findings. The deployable baseline now lives in
+[`oracle-cloud-deployment-plan.md`](../plans/oracle-cloud-deployment-plan.md#production-auth0-baseline).
+**Related plan:** [oracle-cloud-deployment-plan.md](../plans/oracle-cloud-deployment-plan.md)
 
-This note captures the recommended Auth0 configuration for the OCI demo and the
-matching non-secret `instance.env` values so the deployment work can resume
-without re-deriving the same decisions.
+This note captures the Auth0 configuration findings behind the OCI demo and the
+matching non-secret `instance.env` values. It remains here as research so the
+same Auth0 Free-tier, custom-domain, SSO, and first-login-sync decisions do not
+need to be re-derived later.
 
 It now reflects the current Auth0 Free-tier constraint that only one tenant is
 included. The practical layout on Free is:

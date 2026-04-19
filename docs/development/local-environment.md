@@ -44,7 +44,13 @@ mkcert --version
 
 Phase 3 now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
-`1.29.1`; the egress gateway uses
+`1.29.1`. Local Tilt installs `istio/cni` with
+`kubernetes/istio/cni-values.kind.yaml` so Kind + Calico use the standard
+`/etc/cni/net.d` and `/opt/cni/bin` paths, while production k3s deploys keep
+using `kubernetes/istio/cni-values.yaml`. This is a deliberate local-only split
+after the OCI deployment was verified; the cleaner long-term structure is a
+common Istio CNI values baseline plus explicit Kind and k3s overlays. The
+egress gateway uses
 `kubernetes/istio/egress-gateway-values.yaml` to keep
 `service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
 now flow through Gateway `spec.infrastructure.parametersRef` via

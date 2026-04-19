@@ -13,8 +13,9 @@ Related documents:
 - `deploy/README.md`
 - `README.md`
 - `AGENTS.md`
+- `kubernetes/istio/cni-common-values.yaml`
 - `kubernetes/istio/cni-kind-values.yaml`
-- `kubernetes/istio/cni-values.yaml`
+- `kubernetes/istio/cni-k3s-values.yaml`
 - `scripts/smoketest/verify-phase-5-runtime-hardening.sh`
 - `scripts/guardrails/verify-production-image-overlay.sh`
 
@@ -173,6 +174,10 @@ This keeps the shared-baseline model without reintroducing duplicated
 production Redis manifests.
 
 ## Phase 1: Istio CNI Values Baseline
+
+**Status:** Implemented on 2026-04-19. Local Tilt now installs Istio CNI from
+the common values plus the Kind overlay, and the OCI install script uses the
+same common values plus the k3s overlay.
 
 1. **[AI-Assistant]** Add `kubernetes/istio/cni-common-values.yaml` with the
    shared Istio CNI values:

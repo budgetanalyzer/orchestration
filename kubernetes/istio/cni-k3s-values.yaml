@@ -2,6 +2,3 @@ global:
   # K3s uses nonstandard bundled CNI paths; this enables Istio's built-in
   # overrides for the chained CNI binary and config directories.
   platform: k3s
-
-seccompProfile:
-  type: RuntimeDefault

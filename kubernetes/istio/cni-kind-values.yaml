@@ -1,9 +1,4 @@
-# Local Kind uses Calico with the standard CNI directories. Do not set
-# global.platform=k3s here, or Istio CNI will watch the k3s-only
-# /var/lib/rancher paths and never find Calico's chained config.
-#
-# TODO: restore the normal baseline + overlay shape with common, kind, and
-# k3s values files once the verified production deployment can absorb that
-# refactor safely.
-seccompProfile:
-  type: RuntimeDefault
+# Local Kind uses Calico with the chart's standard CNI binary and config
+# directories. Do not set global.platform here; the k3s platform override is
+# production-specific.
+{}

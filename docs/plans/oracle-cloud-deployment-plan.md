@@ -450,7 +450,8 @@ Pattern B here does not mean "AI executes Phase 4." It means the AI assistant ma
    helm upgrade --install istio-cni istio/cni \
      --namespace istio-system \
      --version 1.29.2 \
-     --values kubernetes/istio/cni-values.yaml \
+     --values kubernetes/istio/cni-common-values.yaml \
+     --values kubernetes/istio/cni-k3s-values.yaml \
      --wait
 
    helm upgrade --install istiod istio/istiod \
@@ -741,7 +742,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    sed -n '1,320p' deploy/scripts/04-install-istio.sh
    sed -n '1,220p' deploy/manifests/phase-4/ingress-gateway-config.yaml.template
    sed -n '1,220p' deploy/manifests/phase-4/istio-gateway.yaml.template
-   sed -n '1,220p' kubernetes/istio/cni-values.yaml
+   sed -n '1,220p' kubernetes/istio/cni-common-values.yaml
+   sed -n '1,220p' kubernetes/istio/cni-k3s-values.yaml
    sed -n '1,260p' kubernetes/istio/istiod-values.yaml
    sed -n '1,220p' kubernetes/istio/egress-gateway-values.yaml
    ```

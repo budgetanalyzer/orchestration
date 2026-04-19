@@ -415,6 +415,22 @@ default, fix or rebuild `service-common`; do not add
 `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` to each
 orchestration deployment as a workaround.
 
+### Production-Grade Parity
+
+Treat both supported runtime paths, local Tilt/Kind and OCI/k3s, as
+production-grade microservices deployments. Tilt is not a shortcut environment
+where weaker infrastructure patterns are acceptable; it is the production
+parity path for proving the same architecture, security boundaries, persistence
+contracts, routing model, and operational behavior before OCI deployment.
+
+Do not present manual live-cluster drift, security bypasses, relaxed policies,
+untracked Helm overrides, degraded persistence such as replacing StatefulSets
+with `emptyDir`, or compensating orchestration changes as final fixes.
+Temporary recovery commands are acceptable only when clearly labeled as
+diagnostic or incident-recovery steps. Every durable fix must be repo-owned,
+repeatable from scripts/manifests, documented in the affected plan or runbook,
+and verified with the relevant smoke or guardrail checks.
+
 ### Planning Transparency
 
 **Write plans to `docs/plans/`, not hidden locations.** When planning work:

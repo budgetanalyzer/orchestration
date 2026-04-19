@@ -1,6 +1,6 @@
 # Plan: Internal-Only Observability Access
 
-**Status:** In progress (`Phases 0-1` complete; `Phase 2` repo changes landed)
+**Status:** In progress (`Phases 0-3` complete; `Phase 4` pending)
 **Date:** 2026-04-19
 
 ## Decision
@@ -618,6 +618,12 @@ shellcheck scripts/guardrails/verify-production-image-overlay.sh
 
 **Goal:** Stop applying any local Gateway route to Grafana so local development
 matches production.
+
+**Status, 2026-04-19:** Complete. Tilt no longer applies a local Grafana
+`HTTPRoute`, the local ingress network policy no longer allows Grafana egress,
+the network-policy verifier now asserts Grafana deny semantics from
+`istio-ingress`, and local setup no longer treats
+`grafana.budgetanalyzer.localhost` as a required host entry.
 
 Edit local runtime inputs:
 

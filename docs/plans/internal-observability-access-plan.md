@@ -1,6 +1,6 @@
 # Plan: Internal-Only Observability Access
 
-**Status:** In progress (`Phases 0-3` complete; `Phase 4` pending)
+**Status:** In progress (`Phases 0-4` complete; `Phase 5` pending)
 **Date:** 2026-04-19
 
 ## Decision
@@ -676,10 +676,13 @@ Expected result: no observability `HTTPRoute` exists in local or production.
 **Goal:** Make the access model testable without relying on a manual browser
 check as the only proof.
 
-**Status, 2026-04-19:** The base smoke script landed during Phase 0 to capture
-the current cleanup baseline. Remaining Phase 4 work is wiring it into the
-aggregate smoke pass, adding the anonymous-access assertion, and aligning the
-Playwright helper with the same URL contract.
+**Status, 2026-04-19:** Complete. The focused smoke script now starts and
+cleans up loopback-bound Grafana and Prometheus port-forwards, verifies the
+Grafana and Prometheus health endpoints, fails loudly when the canonical local
+ports are already occupied, and proves unauthenticated Grafana dashboard access
+is rejected. The aggregate smoke pass now runs it after the monitoring runtime
+verifier, and the Playwright helper defaults to `http://127.0.0.1:3300` with a
+preflight that tells the operator to start the Grafana port-forward first.
 
 Extend `scripts/smoketest/verify-observability-port-forward-access.sh` so that
 it:

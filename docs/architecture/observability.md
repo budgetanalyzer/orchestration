@@ -181,6 +181,21 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
 
 Then open `http://localhost:3300`.
 
+To prove the supported access path without leaving manual `kubectl port-forward`
+processes behind, run:
+
+```bash
+./scripts/smoketest/verify-observability-port-forward-access.sh
+```
+
+The smoke script starts and cleans up its own loopback-bound Grafana and
+Prometheus port-forwards, waits for Grafana and Prometheus health on the
+canonical `3300` and `9090` local ports by default, and verifies that
+unauthenticated Grafana dashboard access is rejected. If either loopback port
+is already occupied, it fails and names the expected `kubectl port-forward`
+owner; rerun with explicit port overrides only when that competing listener is
+intentional.
+
 `grafana.budgetanalyzer.localhost` is retired. Do not introduce
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
 `jaeger.budgetanalyzer.org` as public observability entry points.
@@ -205,15 +220,16 @@ For browser-side dashboard debugging, run the isolated Playwright probe from
 the orchestration repo:
 
 ```bash
-./scripts/ops/grafana-ui-playwright-debug.sh --url http://127.0.0.1:3300
+./scripts/ops/grafana-ui-playwright-debug.sh
 ```
 
 The helper fetches the Grafana admin password from Kubernetes unless
 `GRAFANA_ADMIN_PASSWORD` is already set, passes it to Playwright through the
 environment only, and writes transient screenshots, API responses, console
 errors, request failures, and panel-state summaries under
-`tmp/grafana-ui-debug/`. Start the Grafana port-forward first, keep it bound to
-`127.0.0.1`, and do not switch observability forwarding to `0.0.0.0`.
+`tmp/grafana-ui-debug/`. It defaults `GRAFANA_URL` to
+`http://127.0.0.1:3300`, so start the Grafana port-forward first, keep it bound
+to `127.0.0.1`, and do not switch observability forwarding to `0.0.0.0`.
 
 ### Prometheus
 

@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 PHASE7_ARGS=()
+OBSERVABILITY_ARGS=()
 
 usage() {
     cat <<'EOF'
@@ -18,10 +19,15 @@ Runs the local live-cluster validation sequence:
   3. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
   4. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
   5. ./scripts/smoketest/verify-monitoring-runtime.sh
-  6. ./scripts/smoketest/verify-session-architecture-phase-5.sh
-  7. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
+  6. ./scripts/smoketest/verify-observability-port-forward-access.sh
+  7. ./scripts/smoketest/verify-session-architecture-phase-5.sh
+  8. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 
 Options:
+  --observability-grafana-port <port>
+      Pass through to verify-observability-port-forward-access.sh.
+  --observability-prometheus-port <port>
+      Pass through to verify-observability-port-forward-access.sh.
   --runtime-wait-timeout <duration>
       Pass through to verify-phase-7-security-guardrails.sh.
   --runtime-regression-timeout <duration>
@@ -44,6 +50,16 @@ require_value() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --observability-grafana-port)
+            require_value "$1" "${2:-}"
+            OBSERVABILITY_ARGS+=("--grafana-port" "$2")
+            shift 2
+            ;;
+        --observability-prometheus-port)
+            require_value "$1" "${2:-}"
+            OBSERVABILITY_ARGS+=("--prometheus-port" "$2")
+            shift 2
+            ;;
         --runtime-wait-timeout|--runtime-regression-timeout)
             require_value "$1" "${2:-}"
             PHASE7_ARGS+=("$1" "$2")
@@ -79,6 +95,8 @@ run_step "Rendered monitoring manifests" \
     "${SCRIPT_DIR}/verify-monitoring-rendered-manifests.sh"
 run_step "Monitoring runtime" \
     "${SCRIPT_DIR}/verify-monitoring-runtime.sh"
+run_step "Observability port-forward access" \
+    "${SCRIPT_DIR}/verify-observability-port-forward-access.sh" "${OBSERVABILITY_ARGS[@]}"
 run_step "Shared session contract" \
     "${SCRIPT_DIR}/verify-session-architecture-phase-5.sh"
 run_step "Security guardrails" \

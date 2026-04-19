@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies Grafana and Prometheus health over loopback-bound kubectl port-forwards.
+# Verifies Grafana and Prometheus access over loopback-bound kubectl port-forwards.
 
 set -euo pipefail
 
@@ -12,15 +12,17 @@ PROMETHEUS_REMOTE_PORT=9090
 PROMETHEUS_LOCAL_PORT=9090
 WAIT_TIMEOUT_SECONDS=30
 POLL_INTERVAL_SECONDS=1
-CURRENT_PORT_FORWARD_PID=""
-CURRENT_PORT_FORWARD_LOG=""
+
+declare -A PORT_FORWARD_PIDS=()
+declare -A PORT_FORWARD_LOGS=()
 
 usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-observability-port-forward-access.sh [options]
 
 Starts loopback-only kubectl port-forwards for Grafana and Prometheus, then
-checks their health endpoints over localhost.
+checks their health endpoints over localhost and confirms Grafana anonymous
+dashboard access is rejected.
 
 Options:
   --grafana-port PORT      Local loopback port for Grafana. Default: 3300
@@ -67,6 +69,8 @@ require_service() {
 
 ensure_loopback_port_is_free() {
     local port="$1"
+    local expected_owner="$2"
+    local active_listener=""
 
     if ! python3 - "${port}" <<'PY'
 import socket
@@ -82,26 +86,43 @@ finally:
     sock.close()
 PY
     then
-        printf 'ERROR: loopback port 127.0.0.1:%s is already in use; rerun with a free port via --grafana-port or --prometheus-port\n' "${port}" >&2
+        if command -v lsof >/dev/null 2>&1; then
+            active_listener="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | tail -n +2 | head -n 1 || true)"
+        elif command -v ss >/dev/null 2>&1; then
+            active_listener="$(ss -ltnp "( sport = :${port} )" 2>/dev/null | tail -n +2 | head -n 1 || true)"
+        fi
+
+        printf 'ERROR: loopback port 127.0.0.1:%s is already in use.\n' "${port}" >&2
+        printf 'Expected owner: %s\n' "${expected_owner}" >&2
+        if [[ -n "${active_listener}" ]]; then
+            printf 'Current listener: %s\n' "${active_listener}" >&2
+        fi
+        printf 'Rerun with a free port via --grafana-port or --prometheus-port if this listener is intentional.\n' >&2
         exit 1
     fi
 }
 
-cleanup_current_port_forward() {
-    if [[ -n "${CURRENT_PORT_FORWARD_PID}" ]]; then
-        kill "${CURRENT_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
-        wait "${CURRENT_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
-        CURRENT_PORT_FORWARD_PID=""
-    fi
+cleanup_port_forwards() {
+    local name
 
-    if [[ -n "${CURRENT_PORT_FORWARD_LOG}" ]]; then
-        rm -f "${CURRENT_PORT_FORWARD_LOG}"
-        CURRENT_PORT_FORWARD_LOG=""
-    fi
+    for name in "${!PORT_FORWARD_PIDS[@]}"; do
+        kill "${PORT_FORWARD_PIDS[${name}]}" >/dev/null 2>&1 || true
+    done
+
+    for name in "${!PORT_FORWARD_PIDS[@]}"; do
+        wait "${PORT_FORWARD_PIDS[${name}]}" >/dev/null 2>&1 || true
+    done
+
+    for name in "${!PORT_FORWARD_LOGS[@]}"; do
+        rm -f "${PORT_FORWARD_LOGS[${name}]}"
+    done
 }
 
 wait_for_url() {
-    local url="$1"
+    local label="$1"
+    local url="$2"
+    local pid="$3"
+    local log_file="$4"
     local deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
 
     while (( SECONDS < deadline )); do
@@ -109,41 +130,96 @@ wait_for_url() {
             return 0
         fi
 
+        if ! kill -0 "${pid}" >/dev/null 2>&1; then
+            printf 'ERROR: %s port-forward exited before %s became ready\n' "${label}" "${url}" >&2
+            printf 'Port-forward log:\n' >&2
+            cat "${log_file}" >&2
+            return 1
+        fi
+
         sleep "${POLL_INTERVAL_SECONDS}"
     done
 
+    printf 'ERROR: %s health check timed out for %s\n' "${label}" "${url}" >&2
+    printf 'Port-forward log:\n' >&2
+    cat "${log_file}" >&2
     return 1
 }
 
-run_port_forward_check() {
-    local label="$1"
-    local resource="$2"
-    local local_port="$3"
-    local remote_port="$4"
-    local url="$5"
+start_port_forward() {
+    local name="$1"
+    local label="$2"
+    local resource="$3"
+    local local_port="$4"
+    local remote_port="$5"
+    local expected_owner="$6"
     local log_file
     local pid
 
-    ensure_loopback_port_is_free "${local_port}"
+    ensure_loopback_port_is_free "${local_port}" "${expected_owner}"
 
     log_file="$(mktemp)"
     kubectl port-forward -n "${MONITORING_NAMESPACE}" "${resource}" \
         "${local_port}:${remote_port}" --address 127.0.0.1 >"${log_file}" 2>&1 &
     pid=$!
-    CURRENT_PORT_FORWARD_PID="${pid}"
-    CURRENT_PORT_FORWARD_LOG="${log_file}"
+    PORT_FORWARD_PIDS["${name}"]="${pid}"
+    PORT_FORWARD_LOGS["${name}"]="${log_file}"
 
-    if wait_for_url "${url}"; then
+    printf 'Started %s port-forward for %s on 127.0.0.1:%s\n' "${label}" "${resource}" "${local_port}"
+}
+
+wait_for_port_forward_health() {
+    local name="$1"
+    local label="$2"
+    local resource="$3"
+    local local_port="$4"
+    local url="$5"
+
+    if wait_for_url "${label}" "${url}" "${PORT_FORWARD_PIDS[${name}]}" "${PORT_FORWARD_LOGS[${name}]}"; then
         printf '[PASS] %s via %s on 127.0.0.1:%s\n' "${label}" "${resource}" "${local_port}"
-        cleanup_current_port_forward
         return 0
     fi
 
-    printf 'ERROR: %s health check failed for %s on 127.0.0.1:%s\n' "${label}" "${resource}" "${local_port}" >&2
-    printf 'Port-forward log:\n' >&2
-    cat "${log_file}" >&2
-    cleanup_current_port_forward
     return 1
+}
+
+assert_distinct_local_ports() {
+    if [[ "${GRAFANA_LOCAL_PORT}" == "${PROMETHEUS_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --grafana-port and --prometheus-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
+}
+
+assert_grafana_authentication_required() {
+    local body_file
+    local status_code
+
+    body_file="$(mktemp)"
+    status_code="$(curl -sS -o "${body_file}" -w '%{http_code}' --max-time 5 \
+        "http://127.0.0.1:${GRAFANA_LOCAL_PORT}/api/search?type=dash-db")"
+
+    case "${status_code}" in
+        302|401|403)
+            printf '[PASS] Grafana anonymous dashboard access rejected with HTTP %s\n' "${status_code}"
+            ;;
+        200)
+            printf 'ERROR: Grafana dashboard search is accessible without authentication on 127.0.0.1:%s\n' "${GRAFANA_LOCAL_PORT}" >&2
+            printf 'Response excerpt:\n' >&2
+            sed -n '1,20p' "${body_file}" >&2
+            rm -f "${body_file}"
+            return 1
+            ;;
+        *)
+            printf 'ERROR: unexpected Grafana anonymous-access response on 127.0.0.1:%s: HTTP %s\n' \
+                "${GRAFANA_LOCAL_PORT}" "${status_code}" >&2
+            printf 'Response excerpt:\n' >&2
+            sed -n '1,20p' "${body_file}" >&2
+            rm -f "${body_file}"
+            return 1
+            ;;
+    esac
+
+    rm -f "${body_file}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -183,25 +259,44 @@ require_positive_integer "--grafana-port" "${GRAFANA_LOCAL_PORT}"
 require_positive_integer "--prometheus-port" "${PROMETHEUS_LOCAL_PORT}"
 require_positive_integer "--wait-timeout" "${WAIT_TIMEOUT_SECONDS}"
 require_positive_integer "--poll-interval" "${POLL_INTERVAL_SECONDS}"
+assert_distinct_local_ports
 require_cluster_access
 require_service "${GRAFANA_RESOURCE}"
 require_service "${PROMETHEUS_RESOURCE}"
-trap cleanup_current_port_forward EXIT INT TERM
+trap cleanup_port_forwards EXIT INT TERM
 
 printf 'Using kubectl context: %s\n' "$(kubectl config current-context)"
 
-run_port_forward_check \
-    "Grafana health" \
+start_port_forward \
+    "grafana" \
+    "Grafana" \
     "${GRAFANA_RESOURCE}" \
     "${GRAFANA_LOCAL_PORT}" \
     "${GRAFANA_REMOTE_PORT}" \
-    "http://127.0.0.1:${GRAFANA_LOCAL_PORT}/api/health"
+    "kubectl port-forward -n ${MONITORING_NAMESPACE} ${GRAFANA_RESOURCE} ${GRAFANA_LOCAL_PORT}:${GRAFANA_REMOTE_PORT} --address 127.0.0.1"
 
-run_port_forward_check \
-    "Prometheus readiness" \
+start_port_forward \
+    "prometheus" \
+    "Prometheus" \
     "${PROMETHEUS_RESOURCE}" \
     "${PROMETHEUS_LOCAL_PORT}" \
     "${PROMETHEUS_REMOTE_PORT}" \
+    "kubectl port-forward -n ${MONITORING_NAMESPACE} ${PROMETHEUS_RESOURCE} ${PROMETHEUS_LOCAL_PORT}:${PROMETHEUS_REMOTE_PORT} --address 127.0.0.1"
+
+wait_for_port_forward_health \
+    "grafana" \
+    "Grafana health" \
+    "${GRAFANA_RESOURCE}" \
+    "${GRAFANA_LOCAL_PORT}" \
+    "http://127.0.0.1:${GRAFANA_LOCAL_PORT}/api/health"
+
+wait_for_port_forward_health \
+    "prometheus" \
+    "Prometheus readiness" \
+    "${PROMETHEUS_RESOURCE}" \
+    "${PROMETHEUS_LOCAL_PORT}" \
     "http://127.0.0.1:${PROMETHEUS_LOCAL_PORT}/-/ready"
+
+assert_grafana_authentication_required
 
 printf 'Observability port-forward verification passed.\n'

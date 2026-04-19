@@ -274,13 +274,18 @@ Prometheus under their servlet context paths, so the monitored paths are
 `/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
 Session Gateway.
 
-Grafana is exposed via Istio ingress at
-https://grafana.budgetanalyzer.localhost (TLS terminated at the gateway, same
-wildcard cert as the main app). No port-forward needed.
+Observability is internal-only in both local Tilt and production OCI/k3s.
+Retire `grafana.budgetanalyzer.localhost` and use the same loopback-only
+operator commands everywhere:
 
 ```bash
+# Grafana UI (loopback-only; keep this bound to 127.0.0.1)
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/prometheus-stack-grafana 3300:80
+
 # Prometheus UI (port-forward only — no ingress route)
-kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/prometheus-stack-kube-prom-prometheus 9090:9090
 
 # Grafana admin password
 kubectl get secret -n monitoring prometheus-stack-grafana \
@@ -288,7 +293,11 @@ kubectl get secret -n monitoring prometheus-stack-grafana \
 echo
 ```
 
-After Prometheus comes up, open `http://localhost:9090/targets` and confirm the
+Open `http://localhost:3300` for Grafana and `http://localhost:9090/targets`
+for Prometheus. Do not use `--address 0.0.0.0` for observability
+port-forwards.
+
+After Prometheus comes up, confirm the
 Spring Boot targets for `currency-service`, `transaction-service`,
 `permission-service`, and `session-gateway` are `UP`. Prometheus labels each
 target with the service name as `job`; use the `application` label for
@@ -312,13 +321,13 @@ for scrape topology details, security compliance, and debugging guidance.
 When dashboard behavior needs browser-side evidence, run:
 
 ```bash
-./scripts/ops/grafana-ui-playwright-debug.sh
+./scripts/ops/grafana-ui-playwright-debug.sh --url http://127.0.0.1:3300
 ```
 
-That helper logs into `https://grafana.budgetanalyzer.localhost` with the
-admin password from the Kubernetes secret and stores ignored screenshots,
-dashboard inventory, panel-state summaries, console errors, request failures,
-and a Grafana datasource query response under `tmp/grafana-ui-debug/`.
+That helper logs into the port-forwarded Grafana URL with the admin password
+from the Kubernetes secret and stores ignored screenshots, dashboard
+inventory, panel-state summaries, console errors, request failures, and a
+Grafana datasource query response under `tmp/grafana-ui-debug/`.
 `./scripts/bootstrap/check-tilt-prerequisites.sh` also blocks on the
 infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
 `./setup.sh` on the host. Use `./scripts/bootstrap/setup-infra-tls.sh` only when you
@@ -596,6 +605,8 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | Redis | 6379 | localhost:6379 | TLS-only cache/session access |
 | RabbitMQ | 5671 | localhost:5671 | AMQPS data plane |
 | RabbitMQ Management | 15672 | http://localhost:15672 | Internal management UI |
+| Grafana | 3300 | http://localhost:3300 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` |
+| Prometheus | 9090 | http://localhost:9090 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables

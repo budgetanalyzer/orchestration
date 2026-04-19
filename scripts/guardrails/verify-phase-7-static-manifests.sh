@@ -59,6 +59,27 @@ ACTIVE_NAMESPACE_MANIFESTS=(
     "${REPO_DIR}/kubernetes/istio/ingress-namespace.yaml"
 )
 
+OBSERVABILITY_ROUTE_PATHS=(
+    "${REPO_DIR}/kubernetes"
+    "${REPO_DIR}/deploy/manifests"
+)
+
+OBSERVABILITY_PRODUCTION_INPUT_PATHS=(
+    "${REPO_DIR}/deploy/instance.env.template"
+    "${REPO_DIR}/deploy/README.md"
+    "${REPO_DIR}/deploy/scripts"
+)
+
+OBSERVABILITY_GRAFANA_VALUES_FILES=(
+    "${REPO_DIR}/kubernetes/monitoring/prometheus-stack-values.yaml"
+    "${REPO_DIR}/kubernetes/production/monitoring/prometheus-stack-values.override.yaml"
+)
+
+OBSERVABILITY_INGRESS_POLICY_PATHS=(
+    "${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
+    "${REPO_DIR}/kubernetes/production/istio-ingress-policies"
+)
+
 usage() {
     cat <<'EOF'
 Usage: scripts/guardrails/verify-phase-7-static-manifests.sh [--self-test]
@@ -577,6 +598,166 @@ scan_pipe_to_shell_guidance() {
     printf '%s pipe-to-shell guidance scan passed\n' "${subject}"
 }
 
+grafana_anonymous_access_enabled() {
+    local file="$1"
+
+    awk '
+        function indentation(line) {
+            match(line, /^[[:space:]]*/)
+            return RLENGTH
+        }
+        {
+            raw = $0
+            line = tolower($0)
+            indent = indentation(raw)
+
+            if (in_auth_anonymous && indent <= auth_anonymous_indent &&
+                line !~ /^[[:space:]]*#/ && line !~ /^[[:space:]]*$/) {
+                in_auth_anonymous = 0
+            }
+
+            if (line ~ /^[[:space:]]*auth\.anonymous:[[:space:]]*$/) {
+                in_auth_anonymous = 1
+                auth_anonymous_indent = indent
+                next
+            }
+
+            if (in_auth_anonymous && line ~ /^[[:space:]]*enabled:[[:space:]]*true([[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+
+            if (line ~ /auth\.anonymous\.enabled:[[:space:]]*true([[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+
+            if (line ~ /gf_auth_anonymous_enabled[^[:alnum:]]*["'\'']?true(["'\'']|[[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+        }
+        END {
+            exit found ? 0 : 1
+        }
+    ' "${file}"
+}
+
+scan_observability_httproutes() {
+    local file
+    local -a failures=()
+
+    while IFS= read -r file; do
+        [[ -n "${file}" ]] || continue
+
+        if grep -Eq '^kind:[[:space:]]*HTTPRoute([[:space:]]|$)' "${file}" &&
+            grep -Eiq '\b(grafana|prometheus|kiali|jaeger)\b' "${file}"; then
+            failures+=("${file#"${REPO_DIR}"/}")
+        fi
+    done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'observability HTTPRoute scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'observability HTTPRoute scan passed\n'
+}
+
+scan_observability_gateway_hostnames() {
+    local file
+    local -a failures=()
+
+    while IFS= read -r file; do
+        [[ -n "${file}" ]] || continue
+
+        if grep -Eq '^kind:[[:space:]]*(HTTPRoute|Gateway)([[:space:]]|$)' "${file}" &&
+            grep -Eiq '(^|[[:space:]-])["'\'']?(grafana|prometheus|kiali|jaeger)\.[[:alnum:].-]+' "${file}"; then
+            failures+=("${file#"${REPO_DIR}"/}")
+        fi
+    done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'observability Gateway/HTTPRoute hostname scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'observability Gateway/HTTPRoute hostname scan passed\n'
+}
+
+scan_observability_production_inputs() {
+    local -a matches=()
+    local line
+    local pattern='\b(GRAFANA_DOMAIN|KIALI_DOMAIN|JAEGER_DOMAIN)\b'
+
+    while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        matches+=("${line}")
+    done < <(search_guidance_paths "${pattern}" "${OBSERVABILITY_PRODUCTION_INPUT_PATHS[@]}")
+
+    if (( ${#matches[@]} > 0 )); then
+        printf 'observability production input scan failed:\n' >&2
+        printf '  - %s\n' "${matches[@]}" >&2
+        return 1
+    fi
+
+    printf 'observability production input scan passed\n'
+}
+
+scan_grafana_values_contract() {
+    local file
+    local line
+    local -a hostname_matches=()
+    local hostname_pattern='grafana\.budgetanalyzer\.(localhost|org)'
+    local -a anonymous_failures=()
+
+    while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        hostname_matches+=("${line}")
+    done < <(search_guidance_paths "${hostname_pattern}" "${OBSERVABILITY_GRAFANA_VALUES_FILES[@]}")
+
+    for file in "${OBSERVABILITY_GRAFANA_VALUES_FILES[@]}"; do
+        [[ -f "${file}" ]] || continue
+        if grafana_anonymous_access_enabled "${file}"; then
+            anonymous_failures+=("${file#"${REPO_DIR}"/}: Grafana anonymous access is enabled")
+        fi
+    done
+
+    if (( ${#hostname_matches[@]} > 0 || ${#anonymous_failures[@]} > 0 )); then
+        printf 'Grafana values contract scan failed:\n' >&2
+        if (( ${#hostname_matches[@]} > 0 )); then
+            printf '  - %s\n' "${hostname_matches[@]}" >&2
+        fi
+        if (( ${#anonymous_failures[@]} > 0 )); then
+            printf '  - %s\n' "${anonymous_failures[@]}" >&2
+        fi
+        return 1
+    fi
+
+    printf 'Grafana values contract scan passed\n'
+}
+
+scan_istio_ingress_observability_allowances() {
+    local -a matches=()
+    local line
+    local pattern='kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali|jaeger)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
+
+    while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        matches+=("${line}")
+    done < <(search_guidance_paths "${pattern}" "${OBSERVABILITY_INGRESS_POLICY_PATHS[@]}")
+
+    if (( ${#matches[@]} > 0 )); then
+        printf 'Istio ingress observability allowance scan failed:\n' >&2
+        printf '  - %s\n' "${matches[@]}" >&2
+        return 1
+    fi
+
+    printf 'Istio ingress observability allowance scan passed\n'
+}
+
 extract_image_refs_from_files() {
     local -a files=("$@")
     local match file remainder line text ref
@@ -674,6 +855,11 @@ run_repo_pattern_scans() {
     "${IMAGE_PINNING_SCRIPT}"
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
     scan_pipe_to_shell_guidance "repo" "${ACTIVE_GUIDANCE_PATHS[@]}"
+    scan_observability_httproutes
+    scan_observability_gateway_hostnames
+    scan_observability_production_inputs
+    scan_grafana_values_contract
+    scan_istio_ingress_observability_allowances
 }
 
 run_self_test() {

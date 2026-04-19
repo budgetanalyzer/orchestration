@@ -1,6 +1,6 @@
 # Plan: Internal-Only Observability Access
 
-**Status:** In progress
+**Status:** In progress (`Phases 0-5` complete; `Phase 6` pending)
 **Date:** 2026-04-19
 
 ## Decision
@@ -335,58 +335,521 @@ If Grafana login fails after the public route is removed, inspect the Helm
 values and browser cookie behavior first; the likely fix is the production
 loopback `root_url`/`cookie_secure` override, not a public route.
 
-## Local Tilt Direction
+## Phased Implementation: Identical Local And Production Access
 
-Local Tilt should install the observability tools needed to debug and explain
-the system, but access should remain operator-oriented:
+The target model is the same in both supported runtime paths:
 
-- Grafana: port-forward preferred; local ingress can be removed or treated as a
-  temporary developer convenience until the internal-only model is aligned.
-- Prometheus: continue port-forward-only.
-- Jaeger: add as a local observability resource with no public ingress.
-- Kiali: add as a local observability resource with no public ingress.
+- Observability UIs are `ClusterIP` services only.
+- Operators use loopback-bound `kubectl port-forward`.
+- Production operators reach the OCI host first, then use the same
+  loopback-bound Kubernetes port-forward.
+- No observability service has a DNS record, Gateway listener, `HTTPRoute`,
+  public certificate, demo landing-page link, or anonymous public UI.
 
-Example local access pattern:
+Use the same workstation-facing ports everywhere:
+
+| Tool | Namespace | Service | Operator URL | Port-forward |
+|------|-----------|---------|--------------|--------------|
+| Grafana | `monitoring` | `prometheus-stack-grafana` | `http://localhost:3300` | `3300:80` |
+| Prometheus | `monitoring` | `prometheus-stack-kube-prom-prometheus` | `http://localhost:9090` | `9090:9090` |
+| Jaeger, if added later | TBD | TBD | `http://localhost:16686` | `16686:<service-port>` |
+| Kiali, if added later | TBD | TBD | `http://localhost:20001` | `20001:<service-port>` |
+
+Grafana intentionally uses local port `3300`, not `3000`, because local Tilt
+already reserves `localhost:3000` for the frontend Vite dev-server
+port-forward. Production could use `3000`, but using a different command in
+production would undercut the identical-access goal.
+
+### Phase 0 - Prove The Current Cleanup And Port-Forward Baseline
+
+**Goal:** Confirm the immediate cleanup did not remove observability itself and
+prove the current port-forward path before deleting the local ingress
+convenience.
+
+**Status, 2026-04-19:** Complete. Repo-owned checks and local `kind-kind`
+verification passed. This workspace did not have production kube context or
+OCI host access, so the documented OCI-host runtime commands remain
+operator-run verification steps when reconciling production.
+
+**Repo checks:**
 
 ```bash
-kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80
-kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
+./deploy/scripts/13-render-phase-6-production-manifests.sh
+./scripts/guardrails/verify-production-image-overlay.sh
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh
 ```
 
-Jaeger and Kiali commands should be added after their namespaces, release names,
-and service names are finalized.
-
-## Production Direction
-
-Production observability access should require operator access to the OCI host
-or to the cluster credentials.
-
-Baseline pattern:
+Confirm the production render still has no public observability route:
 
 ```bash
-ssh <oci-host>
-kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80 --address 127.0.0.1
+rg -n 'grafana\.budgetanalyzer\.org|kiali\.budgetanalyzer\.org|jaeger\.budgetanalyzer\.org|name: grafana-route' \
+  tmp/phase-6 || true
 ```
 
-If workstation browser access is needed, use SSH local forwarding to the OCI
-host and keep the Kubernetes port-forward bound to loopback.
+Expected result: no matches.
 
-## Deferred Work
+**Local runtime checks after `tilt up`:**
 
-- Decide whether local Grafana ingress should be removed entirely.
-- Add Jaeger local Tilt manifests/Helm values.
-- Add Kiali local Tilt manifests/Helm values.
-- Decide whether production should include Jaeger/Kiali at all, or whether they
-  remain local-only observability tools.
-- Update Phase 10 documentation after the implementation path is chosen.
-- Add smoke checks proving observability has no public Gateway/HTTPRoute in
-  production.
+```bash
+kubectl get pods -n monitoring
+kubectl get svc -n monitoring prometheus-stack-grafana \
+  prometheus-stack-kube-prom-prometheus
 
-## Success Criteria
+# Terminal 1; keep this running while checking Grafana from another shell.
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3300:80 \
+  --address 127.0.0.1
+
+# Terminal 2.
+curl -fsS http://127.0.0.1:3300/api/health
+
+# Stop the Grafana port-forward, then start Prometheus from Terminal 1.
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090 \
+  --address 127.0.0.1
+
+# Terminal 2.
+curl -fsS http://127.0.0.1:9090/-/ready
+```
+
+This phase proves port-forward reachability. If the current Grafana Helm values
+still point at the old ingress URL or at `http://localhost:3000`, browser login
+through `http://127.0.0.1:3300` may redirect incorrectly. Treat that as input
+to Phase 2, not as a reason to keep the ingress route.
+
+If the current values already point at `http://localhost:3300`, run the
+browser-side Grafana diagnostic against the port-forwarded URL:
+
+```bash
+./scripts/ops/grafana-ui-playwright-debug.sh --url http://127.0.0.1:3300
+```
+
+**Production runtime checks on the OCI host (`ubuntu@152.70.145.68`):**
+
+Start by opening an SSH session to the OCI host:
+
+```bash
+ssh -i ~/.ssh/oci-budgetanalyzer ubuntu@152.70.145.68
+```
+
+```bash
+kubectl get httproute -A
+kubectl get gateway -n istio-ingress istio-ingress-gateway -o yaml | \
+  grep -E 'grafana|kiali|jaeger' || true
+kubectl get svc -n monitoring prometheus-stack-grafana \
+  -o jsonpath='{.spec.type}{"\n"}'
+
+# Keep this running while checking Grafana from another shell.
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3300:80 \
+  --address 127.0.0.1
+
+# Separate shell on the OCI host.
+curl -fsS http://127.0.0.1:3300/api/health
+
+# Stop the Grafana port-forward, then check Prometheus.
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090 \
+  --address 127.0.0.1
+
+# Separate shell on the OCI host.
+curl -fsS http://127.0.0.1:9090/-/ready
+```
+
+If testing from a workstation browser, keep both hops loopback-bound:
+
+```bash
+# Terminal 1 on the OCI host.
+kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3300:80 \
+  --address 127.0.0.1
+
+# Terminal 2 on your workstation.
+ssh -i ~/.ssh/oci-budgetanalyzer -N \
+  -L 3300:127.0.0.1:3300 \
+  ubuntu@152.70.145.68
+```
+
+Then open `http://127.0.0.1:3300` on your workstation.
+
+Prometheus uses the same pattern:
+
+```bash
+# Terminal 1 on the OCI host.
+kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090 \
+  --address 127.0.0.1
+
+# Terminal 2 on your workstation.
+ssh -i ~/.ssh/oci-budgetanalyzer -N \
+  -L 9090:127.0.0.1:9090 \
+  ubuntu@152.70.145.68
+```
+
+Then open `http://127.0.0.1:9090` on your workstation.
+
+**Completion criteria:**
+
+- Production has no live Grafana, Kiali, or Jaeger `HTTPRoute`.
+- Grafana health is reachable through `127.0.0.1:3300`.
+- Prometheus remains reachable through `127.0.0.1:9090`.
+- Any port-forward failure is fixed before Phase 1 starts.
+
+**2026-04-19 verification notes:**
+
+- `./scripts/guardrails/verify-production-image-overlay.sh` passed.
+- `./scripts/smoketest/verify-monitoring-rendered-manifests.sh` passed.
+- `./deploy/scripts/13-render-phase-6-production-manifests.sh` rendered cleanly
+  with a temporary `INSTANCE_ENV_FILE` that supplied the locked non-secret
+  `DEMO_DOMAIN` and `AUTH0_ISSUER_URI` values expected by the renderer.
+- `rg -n 'grafana\.budgetanalyzer\.org|kiali\.budgetanalyzer\.org|jaeger\.budgetanalyzer\.org|name: grafana-route' tmp/phase-6`
+  returned no matches after the render.
+- Added
+  `./scripts/smoketest/verify-observability-port-forward-access.sh` as a
+  repeatable local Phase 0 proof for loopback-only Grafana and Prometheus
+  health checks.
+- The new verifier failed fast on the canonical local ports in this AI
+  devcontainer because non-repo loopback listeners already occupied
+  `127.0.0.1:3300` and `127.0.0.1:9090`, then passed with
+  `./scripts/smoketest/verify-observability-port-forward-access.sh --grafana-port 13300 --prometheus-port 19090`.
+  The canonical operator contract remains `3300` for Grafana and `9090` for
+  Prometheus; the flag overrides exist only to keep the baseline verifiable in
+  environments where those loopback ports are already taken.
+
+### Phase 1 - Lock The Shared Operator Access Contract
+
+**Goal:** Make the contract explicit before changing local routing.
+
+**Status, 2026-04-19:** Complete. The active local setup, architecture, deploy,
+and operator docs now describe the same loopback-only Grafana and Prometheus
+access contract, retire `grafana.budgetanalyzer.localhost` from active setup
+guidance, and warn operators not to use `--address 0.0.0.0` for observability
+port-forwards.
+
+Document the shared contract in:
+
+- `docs/architecture/observability.md`
+- `docs/development/local-environment.md`
+- `docs/development/getting-started.md`
+- `docs/architecture/port-reference.md`
+- `docs/architecture/system-overview.md`
+- `docs/architecture/security-architecture.md`
+- `README.md`
+- `AGENTS.md`
+- `deploy/README.md`
+- `kubernetes/production/README.md`
+- `scripts/README.md`
+
+The contract text should say:
+
+- Local and production use port-forward-only observability access.
+- Grafana is `http://localhost:3300` through
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
+- Prometheus is `http://localhost:9090` through
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
+- `grafana.budgetanalyzer.localhost` is retired.
+- `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, and
+  `jaeger.budgetanalyzer.org` must not be introduced.
+- Grafana authentication stays enabled; anonymous access stays disabled.
+- Operators must not use `--address 0.0.0.0` for observability
+  port-forwards.
+
+**Completion criteria:**
+
+- No active setup or quick-start doc tells a developer to open
+  `https://grafana.budgetanalyzer.localhost`.
+- Production docs and local docs show the same port-forward commands.
+- Active setup and architecture docs no longer reference the retired hostnames
+  except as historical cleanup context.
+
+### Phase 2 - Align Grafana Helm Values To Loopback Access
+
+**Goal:** Make Grafana generate URLs and cookies for the same loopback URL in
+local Tilt and production.
+
+**Status, 2026-04-19:** Repo-owned config and guardrail updates are complete.
+The shared Helm values now point Grafana at `http://localhost:3300` with
+`domain: localhost` and `cookie_secure: false` in both local and production
+render paths, and the production overlay verifier now fails if that
+loopback-only contract drifts or if anonymous access appears. Live Grafana
+login verification through a local port-forward still requires a reachable
+cluster runtime.
+
+Update `kubernetes/monitoring/prometheus-stack-values.yaml`:
+
+```yaml
+grafana:
+  grafana.ini:
+    server:
+      domain: localhost
+      root_url: http://localhost:3300
+    security:
+      cookie_secure: false
+```
+
+Keep the existing datasource, dashboard provisioning, authentication, and
+`ClusterIP` service behavior unchanged. Do not enable anonymous access.
+
+Update `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
+to the same loopback URL. Keep the production override unless the production
+renderer, production verifier, and production README are changed in the same
+work; the override is still useful as a render-time assertion that production
+does not inherit a public Grafana hostname.
+
+Update `scripts/guardrails/verify-production-image-overlay.sh` so it expects:
+
+- `domain: localhost`
+- `root_url: http://localhost:3300`
+- `cookie_secure: false`
+- no public Grafana hostname
+- no anonymous Grafana access
+
+**Validation:**
+
+```bash
+bash -n scripts/guardrails/verify-production-image-overlay.sh
+shellcheck scripts/guardrails/verify-production-image-overlay.sh
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh
+./deploy/scripts/13-render-phase-6-production-manifests.sh
+./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+**Completion criteria:**
+
+- Local and production Helm values agree on `http://localhost:3300`.
+- Grafana login works through the local port-forward.
+- No rendered production output contains a public observability hostname.
+
+### Phase 3 - Remove The Local Grafana Ingress Path
+
+**Goal:** Stop applying any local Gateway route to Grafana so local development
+matches production.
+
+**Status, 2026-04-19:** Complete. Tilt no longer applies a local Grafana
+`HTTPRoute`, the local ingress network policy no longer allows Grafana egress,
+the network-policy verifier now asserts Grafana deny semantics from
+`istio-ingress`, and local setup no longer treats
+`grafana.budgetanalyzer.localhost` as a required host entry.
+
+Edit local runtime inputs:
+
+- Remove the `grafana-ingress-route` `local_resource` from `Tiltfile`.
+- Delete `kubernetes/monitoring/grafana-httproute.yaml`, or leave only a
+  clearly non-applied historical note in this plan. Prefer deletion to avoid a
+  dormant route being reapplied later.
+- Remove `grafana.budgetanalyzer.localhost` from local setup guidance, hosts
+  examples, and troubleshooting docs.
+
+Edit network policy inputs:
+
+- Remove `allow-istio-ingress-egress-to-grafana` from
+  `kubernetes/network-policies/istio-ingress-allow.yaml`.
+- Update `deploy/scripts/08-verify-network-policy-enforcement.sh` so the
+  Istio ingress gateway no longer has a positive egress expectation to
+  Grafana. If the script keeps a temporary Grafana listener pod, use it for a
+  negative assertion instead.
+- Re-check any phase-3 or phase-5 smoke scripts that mention Grafana ingress;
+  keep internal Grafana health checks only if they do not imply ingress access.
+
+**Validation:**
+
+```bash
+bash -n deploy/scripts/08-verify-network-policy-enforcement.sh
+shellcheck deploy/scripts/08-verify-network-policy-enforcement.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
+```
+
+After `tilt up`:
+
+```bash
+kubectl get httproute -A | grep -Ei 'grafana|kiali|jaeger' || true
+kubectl get networkpolicy -n istio-ingress
+./scripts/smoketest/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-phase-5-runtime-hardening.sh
+```
+
+Expected result: no observability `HTTPRoute` exists in local or production.
+
+**Completion criteria:**
+
+- Local Tilt no longer creates or updates a Grafana `HTTPRoute`.
+- Istio ingress gateway no longer needs egress to Grafana.
+- The app ingress path still works.
+- Grafana and Prometheus still work through loopback port-forward.
+
+### Phase 4 - Add A Repeatable Port-Forward Smoke Check
+
+**Goal:** Make the access model testable without relying on a manual browser
+check as the only proof.
+
+**Status, 2026-04-19:** Complete. The focused smoke script now starts and
+cleans up loopback-bound Grafana and Prometheus port-forwards, verifies the
+Grafana and Prometheus health endpoints, fails loudly when the canonical local
+ports are already occupied, and proves unauthenticated Grafana dashboard access
+is rejected. The aggregate smoke pass now runs it after the monitoring runtime
+verifier, and the Playwright helper defaults to `http://127.0.0.1:3300` with a
+preflight that tells the operator to start the Grafana port-forward first.
+
+Extend `scripts/smoketest/verify-observability-port-forward-access.sh` so that
+it:
+
+- starts loopback-bound `kubectl port-forward` processes for Grafana and
+  Prometheus on the canonical ports
+- waits until `http://127.0.0.1:3300/api/health` returns success
+- waits until `http://127.0.0.1:9090/-/ready` returns success
+- confirms Grafana anonymous access is not enabled, either by checking Helm
+  values or by verifying unauthenticated dashboard access is rejected
+- cleans up child port-forward processes on exit
+- fails if the local port is already occupied, with a message that names the
+  expected process owner
+
+Wire it into `scripts/smoketest/smoketest.sh` after the monitoring runtime
+check. Keep it usable against whichever Kubernetes context the operator has
+selected; do not hardcode `/workspace` or a cluster name.
+
+Update `scripts/ops/grafana-ui-playwright-debug.sh`:
+
+- default `GRAFANA_URL` to `http://127.0.0.1:3300`
+- keep `--url` override support
+- update help text and docs to say a Grafana port-forward must already be
+  running, unless the script is explicitly enhanced to manage one
+
+**Validation:**
+
+```bash
+bash -n scripts/smoketest/verify-observability-port-forward-access.sh
+shellcheck scripts/smoketest/verify-observability-port-forward-access.sh
+bash -n scripts/ops/grafana-ui-playwright-debug.sh
+shellcheck scripts/ops/grafana-ui-playwright-debug.sh
+./scripts/smoketest/verify-observability-port-forward-access.sh
+./scripts/ops/grafana-ui-playwright-debug.sh
+./scripts/smoketest/smoketest.sh
+```
+
+**Completion criteria:**
+
+- A local operator can prove Grafana and Prometheus port-forward access with
+  one smoke script.
+- The aggregate smoke pass covers the access model.
+- The browser diagnostic uses the same URL contract.
+
+### Phase 5 - Add Static Guardrails Against Observability Ingress Drift
+
+**Goal:** Prevent future work from accidentally republishing observability.
+
+Extend the static guardrail suite so it fails on:
+
+- `HTTPRoute` manifests for Grafana, Prometheus, Kiali, or Jaeger
+- Gateway hostnames matching `grafana.*`, `prometheus.*`, `kiali.*`, or
+  `jaeger.*`
+- `GRAFANA_DOMAIN`, `KIALI_DOMAIN`, or `JAEGER_DOMAIN` production inputs
+- Grafana Helm values containing `grafana.budgetanalyzer.localhost` or
+  `grafana.budgetanalyzer.org`
+- Grafana anonymous access being enabled
+- Istio ingress network policy allowances to observability services unless a
+  future plan explicitly reintroduces an internal-only gateway
+
+The implementation can live in `scripts/guardrails/verify-phase-7-static-manifests.sh`
+or in a smaller helper sourced by it. Keep production-specific assertions in
+`scripts/guardrails/verify-production-image-overlay.sh` as well.
+
+**Validation:**
+
+```bash
+bash -n scripts/guardrails/verify-phase-7-static-manifests.sh
+bash -n scripts/guardrails/verify-production-image-overlay.sh
+shellcheck scripts/guardrails/verify-phase-7-static-manifests.sh
+shellcheck scripts/guardrails/verify-production-image-overlay.sh
+./scripts/guardrails/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+**Completion criteria:**
+
+- CI/static local checks reject a new observability ingress route.
+- The production renderer still proves app-only public routing.
+- Exceptions, if any, are explicit and documented in this plan.
+
+**Status, 2026-04-19:** Implemented. `scripts/guardrails/verify-phase-7-static-manifests.sh`
+now rejects observability `HTTPRoute`/Gateway hostname drift, removed
+production observability hostname inputs, forbidden Grafana hostnames in Helm
+values, Grafana anonymous-access enablement, and Istio ingress allowances to
+observability services. `scripts/guardrails/verify-production-image-overlay.sh`
+mirrors the same contract against the rendered production artifacts.
+
+### Phase 6 - Validate Local/Production Parity End To End
+
+**Goal:** Prove the two runtime paths now use the same operator model.
+
+**Local parity checklist:**
+
+```bash
+tilt up
+kubectl get httproute -A | grep -Ei 'grafana|prometheus|kiali|jaeger' || true
+./scripts/smoketest/verify-monitoring-runtime.sh
+./scripts/smoketest/verify-observability-port-forward-access.sh
+./scripts/ops/grafana-ui-playwright-debug.sh
+```
+
+**Production parity checklist on the OCI host:**
+
+```bash
+./deploy/scripts/13-render-phase-6-production-manifests.sh
+./scripts/guardrails/verify-production-image-overlay.sh
+kubectl get httproute -A | grep -Ei 'grafana|prometheus|kiali|jaeger' || true
+kubectl get svc -n monitoring prometheus-stack-grafana \
+  -o jsonpath='{.spec.type}{"\n"}'
+kubectl get svc -n monitoring prometheus-stack-kube-prom-prometheus \
+  -o jsonpath='{.spec.type}{"\n"}'
+./scripts/smoketest/verify-observability-port-forward-access.sh
+```
+
+**Public negative checks from outside OCI:**
+
+```bash
+curl -I http://demo.budgetanalyzer.org
+curl -I http://grafana.budgetanalyzer.org || true
+curl -k -I https://grafana.budgetanalyzer.org || true
+curl -I http://kiali.budgetanalyzer.org || true
+curl -I http://jaeger.budgetanalyzer.org || true
+```
+
+Expected result: the app host still works, and observability hostnames fail DNS,
+fail connection, fail TLS, or return no matching route. They must not return a
+Grafana, Kiali, Jaeger, or Prometheus UI response.
+
+**Completion criteria:**
+
+- The same documented port-forward commands work in local and production.
+- The same smoke script works against local and production kube contexts.
+- The public internet cannot reach observability UIs.
+
+### Phase 7 - Add Jaeger And Kiali Only After Access Parity Is Stable
+
+**Goal:** Avoid mixing tool rollout with access-model cleanup.
+
+Do not add Jaeger or Kiali until Phases 0 through 6 are complete.
+
+When adding either tool:
+
+- Add the service as `ClusterIP`.
+- Do not add Gateway, `HTTPRoute`, public DNS, public TLS, or demo-page links.
+- Add a canonical port-forward command to this plan and to
+  `docs/architecture/observability.md`.
+- Add the tool to `scripts/smoketest/verify-observability-port-forward-access.sh`
+  only after its release name, namespace, service, and health endpoint are
+  stable.
+- Add static guardrail coverage before merging the tool rollout.
+
+**Completion criteria:**
+
+- Jaeger/Kiali, if present, follow the same internal-only operator access
+  contract as Grafana and Prometheus.
+- No observability tool gets a one-off public exception.
+
+## Final Success Criteria
 
 - Public production TLS remains app-only.
-- No production render output contains public Grafana, Kiali, or Jaeger routes.
-- Observability UIs are reachable by port-forward for an operator.
-- Observability UIs are not reachable from the public internet.
-- Local Tilt can still provide the observability tools needed for debugging and
+- Local Tilt and production OCI/k3s expose observability UIs only through
+  loopback-bound port-forwards.
+- No local or production render output contains public Grafana, Prometheus,
+  Kiali, or Jaeger routes.
+- Grafana, Prometheus, and any later Jaeger/Kiali services remain `ClusterIP`.
+- Grafana authentication remains enabled, and anonymous access remains disabled.
+- A repeatable smoke check proves Grafana and Prometheus port-forward access.
+- Local Tilt still provides the observability tools needed for debugging and
   architecture review.

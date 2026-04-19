@@ -511,8 +511,6 @@ main() {
         istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_EXTAUTHZ_IP}" 9002
     assert_allow_eventually "istio-ingress probe -> session-gateway listener:8081" \
         istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_SESSION_IP}" 8081
-    assert_allow_eventually "istio-ingress probe -> grafana listener:3000" \
-        istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_GRAFANA_IP}" 3000
 
     section "Positive: Default Namespace East-West"
     assert_allow_eventually "nginx probe -> transaction-service listener:8082" \
@@ -595,6 +593,8 @@ main() {
         default "${PROBE_EXTAUTHZ}" "${LISTENER_RABBITMQ_IP}" 5671
     assert_deny_consistently "istio-ingress probe -> permission-service listener:8086" \
         istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_PERMISSION_IP}" 8086
+    assert_deny_consistently "istio-ingress probe -> grafana listener:3000" \
+        istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_GRAFANA_IP}" 3000
     assert_deny_consistently "ext-authz probe -> istio-egress-gateway:443" \
         default "${PROBE_EXTAUTHZ}" "${ISTIO_EGRESS_SERVICE_IP}" 443
     assert_deny_consistently "transaction-service probe -> istio-egress-gateway:443" \

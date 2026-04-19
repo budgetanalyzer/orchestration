@@ -9,6 +9,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./scripts/lib/pinned-tool-versions.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/scripts/lib/pinned-tool-versions.sh"
 
 # Colors for output
@@ -220,7 +221,7 @@ print_success "Calico and CoreDNS are ready"
 # =============================================================================
 print_step "Checking DNS configuration..."
 
-REQUIRED_HOSTS=("app.budgetanalyzer.localhost" "grafana.budgetanalyzer.localhost")
+REQUIRED_HOSTS=("app.budgetanalyzer.localhost")
 MISSING_HOSTS=()
 for host in "${REQUIRED_HOSTS[@]}"; do
     if ! grep -q "$host" /etc/hosts 2>/dev/null; then

@@ -41,6 +41,12 @@ LOCAL_IMAGE_REPOS=(
     "ext-authz"
 )
 
+FORBIDDEN_OBSERVABILITY_HOST_PATTERN='(grafana|prometheus|kiali|jaeger)\.budgetanalyzer\.(localhost|org)'
+FORBIDDEN_OBSERVABILITY_ROUTE_PATTERN='name:[[:space:]]*(grafana|prometheus|kiali|jaeger)-route'
+FORBIDDEN_OBSERVABILITY_SERVICE_PATTERN='prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus|kiali|jaeger'
+FORBIDDEN_OBSERVABILITY_INPUT_PATTERN='(GRAFANA_DOMAIN|KIALI_DOMAIN|JAEGER_DOMAIN)'
+FORBIDDEN_OBSERVABILITY_INGRESS_PATTERN='kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali|jaeger)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
+
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
     exit 1
@@ -211,6 +217,51 @@ assert_redis_statefulset_storage_shape() {
     fi
 }
 
+grafana_anonymous_access_enabled() {
+    local file="$1"
+
+    awk '
+        function indentation(line) {
+            match(line, /^[[:space:]]*/)
+            return RLENGTH
+        }
+        {
+            raw = $0
+            line = tolower($0)
+            indent = indentation(raw)
+
+            if (in_auth_anonymous && indent <= auth_anonymous_indent &&
+                line !~ /^[[:space:]]*#/ && line !~ /^[[:space:]]*$/) {
+                in_auth_anonymous = 0
+            }
+
+            if (line ~ /^[[:space:]]*auth\.anonymous:[[:space:]]*$/) {
+                in_auth_anonymous = 1
+                auth_anonymous_indent = indent
+                next
+            }
+
+            if (in_auth_anonymous && line ~ /^[[:space:]]*enabled:[[:space:]]*true([[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+
+            if (line ~ /auth\.anonymous\.enabled:[[:space:]]*true([[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+
+            if (line ~ /gf_auth_anonymous_enabled[^[:alnum:]]*["'\'']?true(["'\'']|[[:space:]]|$)/) {
+                found = 1
+                exit 0
+            }
+        }
+        END {
+            exit found ? 0 : 1
+        }
+    ' "${file}"
+}
+
 render_kustomize() {
     local overlay_dir output_file
 
@@ -299,20 +350,22 @@ verify_phase6_render_outputs() {
     assert_no_phase6_forbidden_patterns "${ingress_file}"
     assert_no_phase6_forbidden_patterns "${monitoring_file}"
     assert_no_phase6_forbidden_patterns "${egress_file}"
-    assert_not_contains "${INSTANCE_ENV_FILE_TMP}" 'GRAFANA[_]DOMAIN' \
-        "temporary production instance env still contains the Grafana domain env var"
-    assert_not_contains "${gateway_file}" 'name:[[:space:]]*grafana-route' \
-        "rendered gateway routes still contain grafana-route"
-    assert_not_contains "${gateway_file}" 'prometheus-stack-grafana' \
-        "rendered gateway routes still point at the Grafana Service"
-    assert_not_contains "${gateway_file}" 'grafana\.budgetanalyzer\.org' \
-        "rendered gateway routes still contain the public Grafana hostname"
-    assert_not_contains "${ingress_file}" 'grafana\.budgetanalyzer\.org' \
-        "rendered ingress policies still contain the public Grafana hostname"
-    assert_not_contains "${monitoring_file}" 'grafana\.budgetanalyzer\.org' \
-        "rendered monitoring override still contains the public Grafana hostname"
-    assert_not_contains "${egress_file}" 'grafana\.budgetanalyzer\.org' \
-        "rendered Istio egress output still contains the public Grafana hostname"
+    assert_not_contains "${INSTANCE_ENV_FILE_TMP}" "${FORBIDDEN_OBSERVABILITY_INPUT_PATTERN}" \
+        "temporary production instance env still contains removed observability hostname inputs"
+    assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_ROUTE_PATTERN}" \
+        "rendered gateway routes still contain an observability HTTPRoute"
+    assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_SERVICE_PATTERN}" \
+        "rendered gateway routes still point at an observability Service"
+    assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
+        "rendered gateway routes still contain an observability hostname"
+    assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
+        "rendered ingress policies still contain an observability hostname"
+    assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_INGRESS_PATTERN}" \
+        "rendered ingress policies still allow access to observability services"
+    assert_not_contains "${monitoring_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
+        "rendered monitoring override still contains an observability hostname"
+    assert_not_contains "${egress_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
+        "rendered Istio egress output still contains an observability hostname"
 
     assert_contains_literal "${gateway_file}" 'name: app-route' "rendered gateway routes are missing app-route"
     assert_contains_literal "${gateway_file}" 'name: api-route' "rendered gateway routes are missing api-route"
@@ -328,11 +381,12 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" "rendered ingress policies are missing the production demo hostname"
 
     assert_contains_literal "${monitoring_file}" 'domain: localhost' "rendered monitoring override is missing the loopback Grafana domain"
-    assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3000' "rendered monitoring override is missing the loopback Grafana root_url"
+    assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3300' "rendered monitoring override is missing the loopback Grafana root_url"
     assert_contains_literal "${monitoring_file}" 'cookie_secure: false' "rendered monitoring override is missing loopback cookie_secure=false"
     assert_contains_literal "${monitoring_file}" 'prometheus-stack-grafana' "rendered monitoring override no longer documents the expected Grafana Service contract"
-    assert_not_contains "${monitoring_file}" 'anonymous' \
-        "rendered monitoring override appears to enable anonymous Grafana access"
+    if grafana_anonymous_access_enabled "${monitoring_file}"; then
+        fail "rendered monitoring override enables anonymous Grafana access"
+    fi
 
     assert_contains_literal "${egress_file}" 'name: auth0-idp' "rendered Istio egress output is missing the Auth0 ServiceEntry"
     assert_contains_literal "${egress_file}" 'auth.budgetanalyzer.org' "rendered Istio egress output is missing the production Auth0 host"

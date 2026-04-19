@@ -19,8 +19,8 @@
 | 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
-| 9090 | Prometheus | HTTP | Metrics query and UI | Internal (port-forward only) |
-| 80 | Grafana | HTTP | Dashboard visualization | Internal (Istio ingress route) |
+| 9090 | Prometheus | HTTP | Metrics query and UI | Internal (port-forward only; operator URL `http://localhost:9090`) |
+| 80 | Grafana | HTTP | Dashboard visualization | Internal (port-forward only; operator URL `http://localhost:3300`) |
 
 ## Port Ranges by Layer
 
@@ -109,7 +109,7 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 
 **Monitoring (monitoring namespace)**:
 - 9090: Prometheus (port-forward only, no ingress route)
-- 80: Grafana (exposed at `https://grafana.budgetanalyzer.localhost` via Istio ingress)
+- 80: Grafana (service port only; access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`)
 
 ## Adding a New Service
 

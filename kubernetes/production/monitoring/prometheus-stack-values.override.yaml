@@ -9,6 +9,6 @@ grafana:
   grafana.ini:
     server:
       domain: localhost
-      root_url: http://localhost:3000
+      root_url: http://localhost:3300
     security:
       cookie_secure: false

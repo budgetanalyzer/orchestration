@@ -885,15 +885,6 @@ k8s_resource(
     labels=['monitoring'],
 )
 
-# Grafana ingress route (grafana.budgetanalyzer.localhost)
-local_resource(
-    'grafana-ingress-route',
-    cmd='kubectl apply -f kubernetes/monitoring/grafana-httproute.yaml',
-    deps=['kubernetes/monitoring/grafana-httproute.yaml'],
-    resource_deps=['prometheus-stack', 'istio-ingress-config'],
-    labels=['monitoring'],
-)
-
 # ============================================================================
 # NETWORK POLICIES
 # ============================================================================

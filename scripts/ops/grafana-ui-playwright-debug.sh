@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-GRAFANA_URL="${GRAFANA_URL:-https://grafana.budgetanalyzer.localhost}"
+GRAFANA_URL="${GRAFANA_URL:-http://127.0.0.1:3300}"
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
 PLAYWRIGHT_VERSION="${PLAYWRIGHT_VERSION:-1.59.1}"
 DEBUG_APPLICATION="${GRAFANA_DEBUG_APPLICATION:-currency-service}"
@@ -22,12 +22,12 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/ops/grafana-ui-playwright-debug.sh [options]
 
-Runs a one-off Playwright probe against the local Grafana ingress URL and writes
+Runs a one-off Playwright probe against a port-forwarded Grafana URL and writes
 transient artifacts under tmp/grafana-ui-debug by default.
 
 Options:
   --url URL              Grafana base URL.
-                         Default: https://grafana.budgetanalyzer.localhost
+                         Default: http://127.0.0.1:3300
   --application NAME     Dashboard application variable.
                          Default: currency-service
   --namespace NAME       Dashboard Namespace variable.
@@ -50,7 +50,9 @@ Environment overrides:
 
 The admin password is fetched from Secret/monitoring/prometheus-stack-grafana
 when GRAFANA_ADMIN_PASSWORD is not set. It is passed to Playwright through the
-environment only and is not written to generated files or artifacts.
+environment only and is not written to generated files or artifacts. Start a
+loopback-bound Grafana port-forward first unless --url points to an existing
+reachable Grafana endpoint.
 EOF
 }
 
@@ -112,6 +114,17 @@ require_non_empty() {
     fi
 }
 
+ensure_grafana_url_is_reachable() {
+    local health_url="${GRAFANA_URL%/}/api/health"
+
+    if ! curl -fsSk --max-time 5 "${health_url}" >/dev/null; then
+        printf 'ERROR: Grafana is not reachable at %s\n' "${health_url}" >&2
+        printf 'Start a loopback-bound port-forward first, for example:\n' >&2
+        printf '  kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80\n' >&2
+        exit 1
+    fi
+}
+
 fetch_grafana_password() {
     kubectl get secret -n monitoring prometheus-stack-grafana \
         -o jsonpath='{.data.admin-password}' | base64 --decode
@@ -144,7 +157,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [['line']],
   use: {
-    baseURL: process.env.GRAFANA_URL || 'https://grafana.budgetanalyzer.localhost',
+    baseURL: process.env.GRAFANA_URL || 'http://127.0.0.1:3300',
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
@@ -200,7 +213,7 @@ function dashboardByUidOrTitle(dashboards, uid, titlePattern) {
 }
 
 function dashboardUrl(item, params) {
-  const url = new URL(item.url, 'https://grafana.budgetanalyzer.localhost');
+  const url = new URL(item.url, process.env.GRAFANA_URL || 'http://127.0.0.1:3300');
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -544,6 +557,7 @@ EOF
 main() {
     require_command kubectl
     require_command base64
+    require_command curl
     require_command npm
 
     require_non_empty "--url" "${GRAFANA_URL}"
@@ -551,6 +565,7 @@ main() {
     require_non_empty "--namespace" "${DEBUG_NAMESPACE}"
     require_non_empty "--instance" "${DEBUG_INSTANCE}"
     require_non_empty "--artifact-dir" "${ARTIFACT_DIR}"
+    ensure_grafana_url_is_reachable
 
     if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
         GRAFANA_ADMIN_PASSWORD="$(fetch_grafana_password)"

@@ -151,7 +151,7 @@ Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:808
 Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
 ```
 
-**Entry points**: `app.budgetanalyzer.localhost` (application), `grafana.budgetanalyzer.localhost` (monitoring)
+**Entry points**: `app.budgetanalyzer.localhost` (application)
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
 - `/api/*` → NGINX (ext_authz enforced, routing to backends)
 - `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
@@ -165,6 +165,7 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 - Same-origin architecture = no CORS issues
 - Opaque session tokens = no JWTs exposed to browser (XSS protection)
 - Centralized session validation and auth-path throttling at Istio ingress, with backend/API rate limiting remaining at NGINX
+- Observability is internal-only in both local Tilt and production OCI/k3s: use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` for Grafana and `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` for Prometheus. Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`, and do not use `--address 0.0.0.0`.
 
 **Discovery**:
 ```bash

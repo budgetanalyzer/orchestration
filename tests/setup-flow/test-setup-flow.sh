@@ -233,7 +233,7 @@ print_test "Configuring DNS in container..."
 if grep -q "budgetanalyzer.localhost" /etc/hosts; then
     pass_test "DNS entries already configured"
 else
-    echo "127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost grafana.budgetanalyzer.localhost" | sudo tee -a /etc/hosts > /dev/null
+    echo "127.0.0.1  app.budgetanalyzer.localhost api.budgetanalyzer.localhost" | sudo tee -a /etc/hosts > /dev/null
     if grep -q "budgetanalyzer.localhost" /etc/hosts; then
         pass_test "DNS entries added to /etc/hosts"
     else

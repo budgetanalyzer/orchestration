@@ -483,15 +483,16 @@ the destructive OCI Redis migration contract.
    kubectl get statefulset -n infrastructure
    kubectl get pod -n infrastructure redis-0
    kubectl get pvc -n infrastructure redis-data-redis-0
-   kubectl get deployment -n infrastructure redis
-   kubectl get pvc -n infrastructure redis-data
+   kubectl get deployment -n infrastructure redis --ignore-not-found
+   kubectl get pvc -n infrastructure redis-data --ignore-not-found
    ```
    Expected result:
    - `StatefulSet/redis` exists
    - `Pod/redis-0` is ready
    - `PersistentVolumeClaim/redis-data-redis-0` exists
-   - old `Deployment/redis` is absent
-   - old standalone `PersistentVolumeClaim/redis-data` is absent
+   - old `Deployment/redis` is absent; the command prints no rows
+   - old standalone `PersistentVolumeClaim/redis-data` is absent; the command
+     prints no rows
 7. **[Human]** Run production render guardrails:
    ```bash
    ./scripts/guardrails/verify-production-image-overlay.sh

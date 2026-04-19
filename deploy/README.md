@@ -143,6 +143,11 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/18-apply-production-infrastructure.sh` | Refreshes the production infrastructure render, applies it to the current cluster, and waits for PostgreSQL, RabbitMQ, and Redis StatefulSets when present. | Re-run on a new or already migrated cluster, or after infrastructure manifest changes. |
 | `deploy/scripts/19-migrate-production-redis-statefulset.sh` | Requires `--confirm-destroy-redis`, removes the old Redis Deployment and standalone `redis-data` PVC when present, applies the broad infrastructure target, verifies Redis TLS `PING`, and can optionally restart Redis clients with `--restart-redis-clients`. | Run once for an existing OCI Redis Deployment-to-StatefulSet migration; safe to rerun after migration because absent old Redis resources are ignored. |
 
+External Secrets Operator values intentionally leave service account token
+automount enabled for the controller, webhook, and cert-controller pods. Those
+controllers need in-cluster Kubernetes API credentials for watches, leader
+election, admission webhook serving, and certificate reconciliation.
+
 ## Chunk 3 Checkpoint
 
 If you are resuming at Phase 4 Chunk 3, use this checkpoint instead of re-reading shell history:

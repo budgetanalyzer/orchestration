@@ -744,18 +744,21 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Istio CNI (required before meshed namespaces can enforce Pod Security)
+# Istio CNI (required before meshed namespaces can enforce Pod Security).
+# Local Kind uses standard CNI paths; production k3s still uses
+# kubernetes/istio/cni-values.yaml. Longer term, split this into a common
+# baseline plus explicit kind/k3s overlays.
 local_resource(
     'istio-cni',
     cmd='''
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
             --version 1.29.1 \
-            --values kubernetes/istio/cni-values.yaml \
+            --values kubernetes/istio/cni-kind-values.yaml \
             --wait
         kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=120s
     ''',
-    deps=['kubernetes/istio/cni-values.yaml'],
+    deps=['kubernetes/istio/cni-kind-values.yaml'],
     resource_deps=['istio-base'],
     labels=['infrastructure'],
 )

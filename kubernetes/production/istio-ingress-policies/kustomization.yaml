@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../istio/ext-authz-policy.yaml
+  - ../../istio/ingress-rate-limit.yaml
+
+patches:
+  - target:
+      group: security.istio.io
+      version: v1
+      kind: AuthorizationPolicy
+      name: ext-authz-at-ingress
+      namespace: istio-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/to/0/operation/hosts/0
+        value: demo.budgetanalyzer.org
+  - target:
+      group: networking.istio.io
+      version: v1alpha3
+      kind: EnvoyFilter
+      name: ingress-auth-local-rate-limit
+      namespace: istio-ingress
+    patch: |-
+      - op: replace
+        path: /spec/configPatches/1/patch/value/rate_limits/0/actions/0/header_value_match/headers/0/string_match/exact
+        value: demo.budgetanalyzer.org

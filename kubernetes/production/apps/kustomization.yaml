@@ -15,7 +15,6 @@ resources:
   - ../../services/permission-service/service.yaml
   - ../../services/session-gateway/serviceaccount.yaml
   - ../../services/session-gateway/configmap.yaml
-  - ../../services/session-gateway/idp-configmap.yaml
   - ../../services/session-gateway/deployment.yaml
   - ../../services/session-gateway/service.yaml
   - ../../services/ext-authz/serviceaccount.yaml
@@ -29,21 +28,21 @@ configMapGenerator:
   - name: nginx-gateway-config
     namespace: default
     files:
-      - nginx.conf=../../../nginx/nginx.production.k8s.conf
+      - nginx.conf=../nginx/nginx.production.k8s.conf
   - name: nginx-gateway-includes
     namespace: default
     files:
-      - backend-headers.conf=../../../nginx/includes/backend-headers.conf
-      - security-headers-docs-csp.conf=../../../nginx/includes/security-headers-docs-csp.conf
-      - security-headers-strict-csp.conf=../../../nginx/includes/security-headers-strict-csp.conf
+      - backend-headers.conf=../nginx/includes/backend-headers.conf
+      - security-headers-docs-csp.conf=../nginx/includes/security-headers-docs-csp.conf
+      - security-headers-strict-csp.conf=../nginx/includes/security-headers-strict-csp.conf
   - name: nginx-gateway-docs
     namespace: default
     files:
-      - index.html=../../../docs-aggregator/index.html
-      - swagger-initializer.js=../../../docs-aggregator/swagger-initializer.js
-      - swagger-ui-overrides.css=../../../docs-aggregator/swagger-ui-overrides.css
-      - openapi.json=../../../docs-aggregator/openapi.json
-      - openapi.yaml=../../../docs-aggregator/openapi.yaml
+      - index.html=../docs-aggregator/index.html
+      - swagger-initializer.js=../docs-aggregator/swagger-initializer.js
+      - swagger-ui-overrides.css=../docs-aggregator/swagger-ui-overrides.css
+      - openapi.json=../docs-aggregator/openapi.json
+      - openapi.yaml=../docs-aggregator/openapi.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -99,6 +98,16 @@ patches:
       name: nginx-gateway
     patch: |-
       - op: replace
+        path: /spec/template/spec/initContainers/0/command/2
+        value: |-
+          mkdir -p /workdir/docs
+          cp /usr/share/nginx/html/swagger-ui.css /workdir/docs/
+          cp /usr/share/nginx/html/swagger-ui-bundle.js /workdir/docs/
+          cp /custom-docs/* /workdir/docs/
+      - op: replace
+        path: /spec/template/spec/initContainers/0/volumeMounts/0/name
+        value: nginx-web-assets
+      - op: replace
         path: /spec/template/spec/initContainers/1/name
         value: web-assets
       - op: replace
@@ -112,12 +121,16 @@ patches:
       - op: replace
         path: /spec/template/spec/initContainers/1/volumeMounts/0/name
         value: nginx-web-assets
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/2
       - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/3/name
+        path: /spec/template/spec/containers/0/volumeMounts/2/name
         value: nginx-web-assets
       - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/3/mountPath
+        path: /spec/template/spec/containers/0/volumeMounts/2/mountPath
         value: /usr/share/nginx/html
+      - op: remove
+        path: /spec/template/spec/volumes/2
       - op: replace
-        path: /spec/template/spec/volumes/4/name
+        path: /spec/template/spec/volumes/3/name
         value: nginx-web-assets

@@ -91,7 +91,7 @@ What it runs:
 - `./scripts/guardrails/verify-phase-7-static-manifests.sh`
 - `./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test`
 
-The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
+The workflow bootstraps repo-pinned `helm`, `kubeconform`, `kube-linter`, and
 `kyverno` binaries through `scripts/bootstrap/install-verified-tool.sh`, then runs:
 
 - schema validation for checked-in manifests, with explicit missing-schema
@@ -101,6 +101,8 @@ The workflow bootstraps repo-pinned `kubeconform`, `kube-linter`, and
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt
   `:tilt-<hash>` deploy refs derived from the checked-in contract inventory
+- a rendered Kyverno production-chart check that rejects mutable controller and
+  hook image refs from `deploy/helm-values/kyverno.values.yaml`
 - pattern scans for image pinning, namespace PSA labels, and lingering
   pipe-to-shell guidance in active setup docs/scripts
 
@@ -238,9 +240,12 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.12` GHCR refs
-- `./scripts/guardrails/verify-production-image-overlay.sh` verifies that
-  rendered production image path and applies the production image Kyverno policy
-  from `kubernetes/kyverno/policies/production/`
+- `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
+  checked-in Phase 6 production baseline: the rendered production app overlay,
+  the production Redis overlay, and the reviewed route/ingress/monitoring/egress
+  render output. It rejects localhost hosts, placeholder Auth0 values, mutable
+  image refs, and `imagePullPolicy: Never`, then applies the production image
+  Kyverno policy from `kubernetes/kyverno/policies/production/`
 
 ### Manual validation from a clean environment
 

@@ -11,10 +11,14 @@ STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-phase-7-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
+PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+# shellcheck source=../../deploy/scripts/lib/phase-4-version-contract.sh
+. "${REPO_DIR}/deploy/scripts/lib/phase-4-version-contract.sh"
 
 KUBECONFORM_ALLOWED_MISSING_KINDS=(
     AuthorizationPolicy
@@ -64,6 +68,7 @@ Runs the Phase 7 static guardrail suite:
 - kube-linter with the repo-specific security baseline
 - Kyverno CLI tests for the admission fixtures
 - generated Kyverno replay for representative approved local Tilt deploy refs
+- production Kyverno Helm render check for digest-pinned controller/hook images
 - Tilt secret/config boundary inventory validation
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
 
@@ -105,6 +110,8 @@ ensure_static_tool() {
 collect_schema_manifest_files() {
     find "${REPO_DIR}/kubernetes" -type f \( -name '*.yaml' -o -name '*.yml' \) \
         ! -name '*values.yaml' \
+        ! -name '*values.override.yaml' \
+        ! -path "${REPO_DIR}/kubernetes/production/docs-aggregator/*" \
         | sort
 }
 
@@ -450,6 +457,67 @@ EOF
     rm -rf "${temp_dir}"
 }
 
+run_kyverno_production_helm_render_check() {
+    local temp_dir rendered_file image refs_checked=0
+    local -a failures=()
+
+    [[ -f "${PRODUCTION_KYVERNO_VALUES}" ]] || {
+        echo "ERROR: production Kyverno values file is missing: ${PRODUCTION_KYVERNO_VALUES}" >&2
+        exit 1
+    }
+
+    temp_dir="$(mktemp -d)"
+    rendered_file="${temp_dir}/kyverno-production.yaml"
+
+    HELM_CACHE_HOME="${temp_dir}/cache" \
+    HELM_CONFIG_HOME="${temp_dir}/config" \
+    HELM_DATA_HOME="${temp_dir}/data" \
+    HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
+    HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
+        "${STATIC_TOOLS_BIN}/helm" repo add kyverno "${PHASE7_KYVERNO_HELM_REPO_URL}" >/dev/null
+
+    HELM_CACHE_HOME="${temp_dir}/cache" \
+    HELM_CONFIG_HOME="${temp_dir}/config" \
+    HELM_DATA_HOME="${temp_dir}/data" \
+    HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
+    HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
+        "${STATIC_TOOLS_BIN}/helm" repo update kyverno >/dev/null
+
+    HELM_CACHE_HOME="${temp_dir}/cache" \
+    HELM_CONFIG_HOME="${temp_dir}/config" \
+    HELM_DATA_HOME="${temp_dir}/data" \
+    HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
+    HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
+        "${STATIC_TOOLS_BIN}/helm" template kyverno kyverno/kyverno \
+            --version "${PHASE7_KYVERNO_CHART_VERSION}" \
+            --namespace kyverno \
+            --values "${PRODUCTION_KYVERNO_VALUES}" > "${rendered_file}"
+
+    while IFS= read -r image; do
+        [[ -n "${image}" ]] || continue
+        refs_checked=$((refs_checked + 1))
+
+        if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            failures+=("${image}")
+        fi
+    done < <(sed -nE 's/^[[:space:]]*image:[[:space:]]*"?([^"[:space:]]+)"?.*$/\1/p' "${rendered_file}" | sort -u)
+
+    rm -rf "${temp_dir}"
+
+    if (( refs_checked == 0 )); then
+        echo "production Kyverno Helm render check found no image references" >&2
+        exit 1
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'production Kyverno Helm render check failed:\n' >&2
+        printf '  - mutable rendered image ref: %s\n' "${failures[@]}" >&2
+        exit 1
+    fi
+
+    printf 'production Kyverno Helm render check passed (%d refs checked)\n' "${refs_checked}"
+}
+
 scan_namespace_psa_labels_in_files() {
     local label
     local subject="${1}"
@@ -679,6 +747,7 @@ main() {
     ensure_static_tool kubeconform
     ensure_static_tool kube-linter
     ensure_static_tool kyverno
+    ensure_static_tool helm
 
     log_step "kubeconform schema validation"
     run_kubeconform
@@ -691,6 +760,9 @@ main() {
 
     log_step "Generated Tilt local-image contract replay"
     run_generated_tilt_local_image_replay
+
+    log_step "Production Kyverno Helm render immutability"
+    run_kyverno_production_helm_render_check
 
     log_step "Tilt secret/config boundary inventory"
     "${SECRETS_ONLY_SCRIPT}"

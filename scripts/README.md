@@ -26,7 +26,8 @@ scripts/
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
-  Oracle production app image overlay and production image Kyverno policy.
+  full Phase 6 Oracle production baseline: app overlay, production render
+  output, Redis overlay, and the production image Kyverno policy.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -60,13 +61,17 @@ Choose scripts by runtime boundary:
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
   secret payload inventory in `lib/secrets-only-expected-keys.txt`.
 - `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
-  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay,
-  image pinning, secrets-only checks, namespace PSA checks, and active setup
-  guidance scans.
+  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
+  rendered production Kyverno Helm check that rejects mutable controller/hook
+  image refs, image pinning, secrets-only checks, namespace PSA checks, and
+  active setup guidance scans.
 - `guardrails/verify-production-image-overlay.sh` renders
-  `kubernetes/production/apps`, verifies the `0.0.12` digest-pinned GHCR image
-  inventory, rejects local `:latest` / `:tilt-` image paths, and applies the
-  production image Kyverno policy to the rendered overlay.
+  `kubernetes/production/apps`, `kubernetes/production/infrastructure/redis`,
+  and the reviewed Phase 6 production route/ingress/monitoring/egress output,
+  verifies the `0.0.12` digest-pinned GHCR image inventory, rejects local
+  `:latest` / `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts,
+  and `imagePullPolicy: Never`, and applies the production image Kyverno policy
+  to the rendered app overlay.
 
 CI should call the static guardrail directly:
 
@@ -105,6 +110,10 @@ the active context and Tilt resource state from the same host shell first.
 
 - `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
   egress manifests from `.env`.
+- `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
+  production Auth0 config exists, but in that pre-Auth0 state the two positive
+  `istio-egress-gateway:443` checks are deferred until the real egress routing
+  is rendered and applied later in the production plan.
 - `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
   runner under `tmp/grafana-ui-debug/`, logs into the local Grafana ingress
   route, opens the provisioned dashboards, and captures browser-side debugging

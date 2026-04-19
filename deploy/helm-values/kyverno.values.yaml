@@ -1,0 +1,203 @@
+# Production Kyverno values for the Oracle Cloud deployment path.
+# Keep this file explicit and reviewable instead of relying on chart defaults for
+# controller replica counts, token automount, and runtime hardening.
+#
+# Chart 3.7.1 does not expose first-class digest fields for the main Kyverno
+# images. The helper always renders `repository:tag`, so immutable refs are
+# encoded here as `repository@sha256` plus `tag=<64 hex>` to render the final
+# `repo@sha256:<hex>` form.
+
+crds:
+  migration:
+    image:
+      defaultRegistry: ""
+      registry: ""
+      repository: reg.kyverno.io/kyverno/kyverno-cli@sha256
+      tag: "3a7addf83897abae291361dfccbdf63cba5926c7795fe44e527883ae2237e4b8"
+
+admissionController:
+  replicas: 1
+  rbac:
+    serviceAccount:
+      automountServiceAccountToken: true
+  initContainer:
+    image:
+      defaultRegistry: ""
+      registry: ""
+      repository: reg.kyverno.io/kyverno/kyvernopre@sha256
+      tag: "13bb0430078d3e36cfa3a1c905d915fb7ad1a3a936fefa75092b6a480d2e2c2e"
+    pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 100m
+        memory: 256Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+    securityContext:
+      runAsNonRoot: true
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  container:
+    image:
+      defaultRegistry: ""
+      registry: ""
+      repository: reg.kyverno.io/kyverno/kyverno@sha256
+      tag: "f3138bcbd7314b1f66984cde24ea953dc300b36a3bf2f408ac2fe2897dcc40bf"
+    pullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: 384Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      runAsNonRoot: true
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+
+backgroundController:
+  image:
+    defaultRegistry: ""
+    registry: ""
+    repository: reg.kyverno.io/kyverno/background-controller@sha256
+    tag: "6d694a404b54368f5ad429f9341e2a9e4e17b8d83bd2ec74643cdaed845d6ea8"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  rbac:
+    serviceAccount:
+      automountServiceAccountToken: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  securityContext:
+    runAsNonRoot: true
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+cleanupController:
+  image:
+    defaultRegistry: ""
+    registry: ""
+    repository: reg.kyverno.io/kyverno/cleanup-controller@sha256
+    tag: "8789cbf5a89cbc97240de9d07be44a504d76e937fa75a43b27cb891b3d2b01c6"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  rbac:
+    serviceAccount:
+      automountServiceAccountToken: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  securityContext:
+    runAsNonRoot: true
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+reportsController:
+  image:
+    defaultRegistry: ""
+    registry: ""
+    repository: reg.kyverno.io/kyverno/reports-controller@sha256
+    tag: "7eb66e1fead6a3791209e1a0869d0217f9c89886a6809e99d3094b750e2b731d"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  rbac:
+    serviceAccount:
+      automountServiceAccountToken: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  securityContext:
+    runAsNonRoot: true
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+webhooksCleanup:
+  serviceAccount:
+    automountServiceAccountToken: true
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    runAsNonRoot: true
+    privileged: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      cpu: 100m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  image:
+    registry: ""
+    repository: registry.k8s.io/kubectl@sha256
+    tag: "1c6309bd167feb49b2bc1605bce05973002872fd0d26a2e76499ed0c903ea3cf"
+    pullPolicy: IfNotPresent
+
+test:
+  image:
+    registry: ""
+    repository: ghcr.io/kyverno/readiness-checker@sha256
+    tag: "c54c0aa24d536f7a31ed854db4f2b2d6863b41d7d85725e21f80cd318c4e815b"
+    pullPolicy: IfNotPresent

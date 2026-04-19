@@ -60,6 +60,8 @@ spec:
   ingress:
     - ports:
         - protocol: TCP
+          port: 80
+        - protocol: TCP
           port: 443
 ---
 apiVersion: networking.k8s.io/v1
@@ -104,6 +106,29 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-ingress-egress-to-acme-http01-solver
+  namespace: istio-ingress
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              budgetanalyzer.io/cert-manager-http01-solver: "true"
+      ports:
+        - protocol: TCP
+          port: 8089
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

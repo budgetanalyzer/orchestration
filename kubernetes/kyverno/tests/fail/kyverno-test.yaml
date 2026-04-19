@@ -49,6 +49,24 @@ results:
       - default/missing-hardening
     kind: Deployment
     result: fail
+  - policy: phase7-require-workload-security-context
+    rule: require-run-as-non-root
+    resources:
+      - default/unlabeled-acme-http01-like-pod
+    kind: Pod
+    result: fail
+  - policy: phase7-require-workload-security-context
+    rule: require-no-privilege-escalation
+    resources:
+      - default/unlabeled-acme-http01-like-pod
+    kind: Pod
+    result: fail
+  - policy: phase7-require-workload-security-context
+    rule: require-drop-all-capabilities
+    resources:
+      - default/unlabeled-acme-http01-like-pod
+    kind: Pod
+    result: fail
   - policy: phase7-require-third-party-image-digests
     rule: require-digest-or-approved-local-image
     resources:

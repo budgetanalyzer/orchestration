@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: infrastructure
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+          ports:
+            - name: redis
+              containerPort: 6379
+          command:
+            - /bin/sh
+            - /opt/redis/start-redis.sh
+          env:
+            - name: REDIS_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: default-password
+            - name: REDIS_SESSION_GATEWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: session-gateway-password
+            - name: REDIS_EXT_AUTHZ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: ext-authz-password
+            - name: REDIS_CURRENCY_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: currency-service-password
+            - name: REDIS_OPS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: ops-password
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: redis-bootstrap-credentials
+                  key: default-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 999
+          volumeMounts:
+            - name: redis-acl-bootstrap
+              mountPath: /opt/redis
+              readOnly: true
+            - name: redis-tmp
+              mountPath: /tmp
+            - name: redis-data
+              mountPath: /data
+            - name: redis-tls
+              mountPath: /tls
+              readOnly: true
+            - name: redis-ca
+              mountPath: /tls-ca
+              readOnly: true
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 300m
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: redis-acl-bootstrap
+          configMap:
+            name: redis-acl-bootstrap
+            defaultMode: 0555
+        - name: redis-tmp
+          emptyDir: {}
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data
+        - name: redis-tls
+          secret:
+            secretName: infra-tls-redis
+        - name: redis-ca
+          secret:
+            secretName: infra-ca

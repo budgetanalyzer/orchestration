@@ -173,3 +173,19 @@ spec:
               drop: ["ALL"]
             runAsNonRoot: true
             runAsUser: 65534
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unlabeled-acme-http01-like-pod
+  namespace: default
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: solver
+      image: quay.io/jetstack/cert-manager-acmesolver:v1.20.2@sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f
+      command: ["sh", "-c", "sleep 3600"]

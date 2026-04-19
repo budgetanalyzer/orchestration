@@ -52,20 +52,20 @@ Every value currently listed in `docs/development/secrets-only-handling.md` as a
 
 | Vault secret path | Corresponds to K8s Secret | Keys |
 |---|---|---|
-| `budget-analyzer/auth0-client-secret` | `auth0-credentials` | AUTH0_CLIENT_SECRET |
-| `budget-analyzer/fred-api-key` | `fred-api-credentials` | api-key |
-| `budget-analyzer/postgres-admin-password` | `postgresql-bootstrap-credentials` | password |
-| `budget-analyzer/postgres-transaction-svc` | `transaction-service-postgresql-credentials` | password |
-| `budget-analyzer/postgres-currency-svc` | `currency-service-postgresql-credentials` | password |
-| `budget-analyzer/postgres-permission-svc` | `permission-service-postgresql-credentials` | password |
-| `budget-analyzer/rabbitmq-admin-password` | `rabbitmq-bootstrap-credentials` | password |
-| `budget-analyzer/rabbitmq-definitions` | `rabbitmq-bootstrap-credentials` | definitions.json |
-| `budget-analyzer/rabbitmq-currency-svc` | `currency-service-rabbitmq-credentials` | password |
-| `budget-analyzer/redis-default-password` | `redis-bootstrap-credentials` | default-password |
-| `budget-analyzer/redis-ops-password` | `redis-bootstrap-credentials` | ops-password |
-| `budget-analyzer/redis-session-gateway` | `redis-bootstrap-credentials` | session-gateway-password |
-| `budget-analyzer/redis-ext-authz` | `redis-bootstrap-credentials` | ext-authz-password |
-| `budget-analyzer/redis-currency-svc` | `redis-bootstrap-credentials` | currency-service-password |
+| `budget-analyzer-auth0-client-secret` | `auth0-credentials` | AUTH0_CLIENT_SECRET |
+| `budget-analyzer-fred-api-key` | `fred-api-credentials` | api-key |
+| `budget-analyzer-postgres-admin-password` | `postgresql-bootstrap-credentials` | password |
+| `budget-analyzer-postgres-transaction-svc` | `transaction-service-postgresql-credentials` | password |
+| `budget-analyzer-postgres-currency-svc` | `currency-service-postgresql-credentials` | password |
+| `budget-analyzer-postgres-permission-svc` | `permission-service-postgresql-credentials` | password |
+| `budget-analyzer-rabbitmq-admin-password` | `rabbitmq-bootstrap-credentials` | password |
+| `budget-analyzer-rabbitmq-definitions` | `rabbitmq-bootstrap-credentials` | definitions.json |
+| `budget-analyzer-rabbitmq-currency-svc` | `currency-service-rabbitmq-credentials` | password |
+| `budget-analyzer-redis-default-password` | `redis-bootstrap-credentials` | default-password |
+| `budget-analyzer-redis-ops-password` | `redis-bootstrap-credentials` | ops-password |
+| `budget-analyzer-redis-session-gateway` | `redis-bootstrap-credentials` | session-gateway-password |
+| `budget-analyzer-redis-ext-authz` | `redis-bootstrap-credentials` | ext-authz-password |
+| `budget-analyzer-redis-currency-svc` | `redis-bootstrap-credentials` | currency-service-password |
 
 This is ~14 vault secrets. The free tier allows 150.
 
@@ -112,7 +112,7 @@ spec:
   data:
     - secretKey: password
       remoteRef:
-        key: budget-analyzer/postgres-admin-password
+        key: budget-analyzer-postgres-admin-password
 ```
 
 3. ESO creates the native `Secret` object. Pods reference it exactly as they do today — no application code changes.
@@ -134,18 +134,25 @@ Non-secret but deployment-specific values — OCIDs, compartment ID, public IP, 
 These live at **`~/.config/budget-analyzer/instance.env`** on the project owner's machine, outside `/workspace/` entirely. Deployment scripts source this file. The repo contains only a template documenting the expected keys:
 
 ```bash
-# deploy/instance.env.template — committed to repo, no values
-# Copy to ~/.config/budget-analyzer/instance.env and fill in.
+# deploy/instance.env.template — committed to repo
+# Copy to ~/.config/budget-analyzer/instance.env and fill in the blank values.
 
 OCI_TENANCY_OCID=
 OCI_COMPARTMENT_OCID=
+OCI_REGION=us-phoenix-1
+OCI_AVAILABILITY_DOMAIN=
 OCI_VAULT_OCID=
 OCI_VAULT_KEY_OCID=
 OCI_INSTANCE_OCID=
 OCI_SUBNET_OCID=
 INSTANCE_PUBLIC_IP=
 INSTANCE_SSH_KEY_PATH=~/.ssh/oci-budgetanalyzer
-DEMO_DOMAIN=
+DEMO_DOMAIN=demo.budgetanalyzer.org
+GRAFANA_DOMAIN=grafana.budgetanalyzer.org
+KIALI_DOMAIN=
+JAEGER_DOMAIN=
+LETSENCRYPT_EMAIL=
+PRODUCTION_RELEASE_VERSION=0.0.12
 ```
 
 AI agents can read the template (it's in the repo) and write deployment scripts that reference `$OCI_VAULT_OCID`, but they never see the actual OCID value.
@@ -181,13 +188,13 @@ deploy/
   instance.env.template              # committed — documents expected keys
   vault-bootstrap.sh.template        # committed — OCI Vault population (Pattern A)
   scripts/
-    01-setup-k3s.sh                  # committed — sources instance.env (Pattern B)
-    02-install-istio.sh              # committed — idempotent Helm install
-    03-install-external-secrets.sh   # committed — ESO Helm install
-    04-deploy-infrastructure.sh      # committed — kubectl apply infrastructure
-    05-deploy-services.sh            # committed — kubectl apply services
-    06-setup-tls.sh                  # committed — cert-manager + Let's Encrypt
-    07-deploy-observability.sh       # committed — Prometheus, Grafana, Jaeger, Kiali
+    01-install-k3s.sh                # committed — pinned k3s install
+    02-bootstrap-cluster.sh          # committed — Gateway API CRDs + namespaces
+    03-render-phase-4-istio-manifests.sh
+    04-install-istio.sh              # committed — Istio + mesh policy install
+    05-install-platform-controllers.sh
+    06-configure-host-redirects.sh
+    07-apply-network-policies.sh
 ```
 
 ---

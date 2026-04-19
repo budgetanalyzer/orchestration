@@ -1,0 +1,56 @@
+# Hardened single-node values for the Oracle Cloud production install path.
+# Gateway API support stays enabled here so Phase 4 and Phase 11 share the same
+# controller install contract.
+
+crds:
+  enabled: true
+
+config:
+  enableGatewayAPI: true
+
+acmesolver:
+  image:
+    # The HTTP-01 solver pods run in application namespaces, so they must satisfy
+    # the Phase 7 digest policy even though the cert-manager controllers themselves
+    # live in the excluded cert-manager namespace.
+    digest: sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f
+
+prometheus:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      cpu: 200m
+      memory: 192Mi
+
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      cpu: 200m
+      memory: 192Mi
+
+startupapicheck:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

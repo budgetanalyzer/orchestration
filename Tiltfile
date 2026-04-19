@@ -754,11 +754,11 @@ local_resource(
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
             --version 1.29.1 \
-            --values kubernetes/istio/cni-values.kind.yaml \
+            --values kubernetes/istio/cni-kind-values.yaml \
             --wait
         kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=120s
     ''',
-    deps=['kubernetes/istio/cni-values.kind.yaml'],
+    deps=['kubernetes/istio/cni-kind-values.yaml'],
     resource_deps=['istio-base'],
     labels=['infrastructure'],
 )

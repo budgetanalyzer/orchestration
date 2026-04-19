@@ -45,7 +45,7 @@ mkcert --version
 Phase 3 now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
 `1.29.1`. Local Tilt installs `istio/cni` with
-`kubernetes/istio/cni-values.kind.yaml` so Kind + Calico use the standard
+`kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the standard
 `/etc/cni/net.d` and `/opt/cni/bin` paths, while production k3s deploys keep
 using `kubernetes/istio/cni-values.yaml`. This is a deliberate local-only split
 after the OCI deployment was verified; the cleaner long-term structure is a

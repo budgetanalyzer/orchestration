@@ -55,15 +55,15 @@ Verify the current Phase 6 production baseline with:
 
 That verifier now:
 
-- renders `apps/`, the production Redis overlay, and the reviewed Phase 6
-  production route/ingress/monitoring/egress output
+- renders `apps/`, the broad production infrastructure overlay, and the
+  reviewed Phase 6 production route/ingress/monitoring/egress output
 - rejects `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`,
   `budgetanalyzer.localhost`, and `auth0-issuer.placeholder.invalid` anywhere
   in that checked-in production path
 - verifies the production NGINX/public-route contract is coming from
   `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
 - verifies the production docs bundle, Grafana hostname override, Auth0 egress
-  render, and PVC-backed Redis path all stay present
+  render, and Redis StatefulSet `5Gi` claim-template path all stay present
 - applies the production image Kyverno policy at
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
@@ -157,33 +157,48 @@ sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
 sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 ```
 
-## Production Redis Input
+## Production Infrastructure Input
 
-Local development now uses the shared
-`kubernetes/infrastructure/redis/statefulset.yaml` with PVC-backed `/data`.
-The current production Redis path remains a separate overlay under
-`infrastructure/redis/` until the production-parity infrastructure work
-replaces it with the broad `kubernetes/production/infrastructure` target.
+Production infrastructure now renders from the broad
+`kubernetes/production/infrastructure` overlay. That target reuses the shared
+`kubernetes/infrastructure` baseline for PostgreSQL, RabbitMQ, and Redis, then
+patches the Redis StatefulSet storage request for the OCI production shape.
 
-That production overlay:
+That production overlay includes:
 
-- keeps a production-owned Redis Deployment, Service, and bootstrap script
-  beside the overlay so `kubectl apply -k kubernetes/production/infrastructure/redis`
-  works without `LoadRestrictionsNone`
-- generates the required `redis-acl-bootstrap` ConfigMap from the committed
-  `kubernetes/production/infrastructure/redis/start-redis.sh` file so
-  production does not depend on Tilt to create it
-- mounts `/data` from `PersistentVolumeClaim/redis-data`
-- requests `5Gi` on the cluster's default storage class, which is expected to
-  be k3s `local-path` on the OCI host
+- `Namespace/infrastructure`
+- `StatefulSet/postgresql`, `StatefulSet/rabbitmq`, and `StatefulSet/redis`
+- `Service/postgresql`, `Service/rabbitmq`, and `Service/redis`
+- `ConfigMap/postgresql-init`, `ConfigMap/rabbitmq-config`, and
+  `ConfigMap/redis-acl-bootstrap`
+- Redis `volumeClaimTemplates.metadata.name: redis-data`
+- Redis `volumeClaimTemplates` storage request `5Gi`, expected to bind to the
+  k3s `local-path` default storage class on the OCI host
 
-Render or apply it with:
+Render it for review with:
 
 ```bash
-kubectl kustomize kubernetes/production/infrastructure/redis
-
-kubectl apply -k kubernetes/production/infrastructure/redis
+./deploy/scripts/17-render-production-infrastructure.sh
+sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
 ```
+
+On a new or already migrated cluster, apply that rendered target with:
+
+```bash
+./deploy/scripts/18-apply-production-infrastructure.sh
+```
+
+The old production-only Redis Deployment/PVC overlay under
+`kubernetes/production/infrastructure/redis/` has been removed. Replacing an
+existing OCI Redis Deployment with the StatefulSet shape is destructive for
+Redis session/cache data and must use the guarded migration script:
+
+```bash
+./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
+```
+
+Add `--restart-redis-clients` when Redis clients should be rolled after the
+new StatefulSet passes its TLS `PING` check.
 
 ## Phase 6 Completion
 
@@ -192,7 +207,7 @@ The checked-in production baseline is now complete for Phase 6.
 Recorded verifier output:
 
 ```text
-Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure/redis
+Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure
 ```
 
 The Phase 7 repo-owned install/apply surface is now checked in under `deploy/`.

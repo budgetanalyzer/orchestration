@@ -299,6 +299,13 @@ guardrail updates remain later phases in this plan.
 
 ## Phase 4: Idempotent OCI Scripts
 
+**Status:** Implemented on 2026-04-19. Production infrastructure now has
+repo-owned render/apply scripts under `deploy/scripts/`, and the destructive
+Redis migration path is guarded by `--confirm-destroy-redis`. The render output
+was validated locally at `tmp/production-infrastructure/infrastructure.yaml`
+and contains the broad PostgreSQL, RabbitMQ, and Redis target with Redis
+storage patched to `5Gi`.
+
 1. **[AI-Assistant]** Add
    `deploy/scripts/17-render-production-infrastructure.sh`.
 2. **[AI-Assistant]** The render script must:
@@ -345,6 +352,14 @@ guardrail updates remain later phases in this plan.
     - `shellcheck deploy/scripts/19-migrate-production-redis-statefulset.sh`
 
 ## Phase 5: Required Verifier Updates
+
+**Status:** Implemented on 2026-04-19. The Phase 5 runtime verifier already
+asserts Redis `/data` is backed by the StatefulSet-created
+`redis-data-redis-0` claim while keeping `redis-tmp` as the only Redis
+`emptyDir` assertion. The production image overlay guardrail now renders the
+broad `kubernetes/production/infrastructure` overlay, asserts
+`StatefulSet/redis`, checks the `redis-data` claim template with `5Gi`
+storage, and rejects the old standalone Redis PVC shape.
 
 Verifier changes are not optional here because the existing checks encode the
 old Redis `Deployment` plus standalone PVC shape.

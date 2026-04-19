@@ -436,13 +436,18 @@ assert_persistent_volume_claim() {
     local pod="$2"
     local label="$3"
     local volume_name="$4"
+    local expected_claim_name="${5:-}"
     local claim_name
 
     claim_name=$(kubectl get pod "$pod" -n "$namespace" \
         -o jsonpath="{range .spec.volumes[?(@.name==\"${volume_name}\")]}{.persistentVolumeClaim.claimName}{end}" \
         2>/dev/null || true)
 
-    if [[ -n "$claim_name" ]]; then
+    if [[ -n "$expected_claim_name" && "$claim_name" == "$expected_claim_name" ]]; then
+        pass "$label pod defines ${volume_name} as persistentVolumeClaim ${expected_claim_name}"
+    elif [[ -n "$expected_claim_name" ]]; then
+        fail "$label pod does not define ${volume_name} as persistentVolumeClaim ${expected_claim_name} (got ${claim_name:-<unset>})"
+    elif [[ -n "$claim_name" ]]; then
         pass "$label pod defines ${volume_name} as a persistentVolumeClaim volume (${claim_name})"
     else
         fail "$label pod does not define ${volume_name} as a persistentVolumeClaim volume"
@@ -681,10 +686,11 @@ verify_redis_runtime() {
 
     pod=$(require_pod "$namespace" "$selector" "$label")
     assert_container_user_group "$namespace" "$pod" "$container" "$label" "999" "1000"
+    assert_pod_fs_group "$namespace" "$pod" "$label" "1000"
     assert_container_mount_path "$namespace" "$pod" "$container" "$label" "redis-tmp" "/tmp"
     assert_container_mount_path "$namespace" "$pod" "$container" "$label" "redis-data" "/data"
     assert_empty_dir_volume "$namespace" "$pod" "$label" "redis-tmp"
-    assert_empty_dir_volume "$namespace" "$pod" "$label" "redis-data"
+    assert_persistent_volume_claim "$namespace" "$pod" "$label" "redis-data" "redis-data-redis-0"
 }
 
 verify_postgresql_runtime() {

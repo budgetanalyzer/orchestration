@@ -45,11 +45,11 @@ mkcert --version
 Phase 3 now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
 `1.29.1`. Local Tilt installs `istio/cni` with
-`kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the standard
-`/etc/cni/net.d` and `/opt/cni/bin` paths, while production k3s deploys keep
-using `kubernetes/istio/cni-values.yaml`. This is a deliberate local-only split
-after the OCI deployment was verified; the cleaner long-term structure is a
-common Istio CNI values baseline plus explicit Kind and k3s overlays. The
+`kubernetes/istio/cni-common-values.yaml` plus
+`kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
+standard `/etc/cni/net.d` and `/opt/cni/bin` paths. Production k3s deploys use
+the same common baseline plus `kubernetes/istio/cni-k3s-values.yaml`, which
+keeps the k3s-specific CNI path override isolated to the production overlay. The
 egress gateway uses
 `kubernetes/istio/egress-gateway-values.yaml` to keep
 `service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
@@ -106,7 +106,8 @@ cd orchestration/
 ```
 
 **What `setup.sh` does in the current Phase 0 baseline:**
-1. Deletes any existing `kind` cluster and recreates it from scratch
+1. Deletes any existing `kind` cluster and recreates it from scratch, which is
+   the clean-state contract for PVC-backed local infrastructure such as Redis
 2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
 3. Installs pinned Calico and waits for CoreDNS readiness
 4. Ensures a supported Helm `3.20.x` binary is installed before any Helm-backed setup continues
@@ -388,7 +389,7 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
-- `redis` - Redis Deployment
+- `redis` - Redis StatefulSet
 - `rabbitmq` - RabbitMQ StatefulSet
 - `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
 - `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
@@ -698,7 +699,7 @@ Redis local access:
 - `default` is probe-only and should not be used by application code
 - `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
 - active browser sessions are extended through same-origin `GET /auth/v1/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
-- The in-cluster Redis Deployment now runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on an `emptyDir`, so cache/session durability remains intentionally ephemeral in local dev. Production persistence would require a PVC-backed `/data` volume.
+- The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting `redis-0` or relying on `tilt down`.
 
 RabbitMQ local access:
 - Management UI: `http://localhost:15672`

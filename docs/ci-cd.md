@@ -242,10 +242,12 @@ workflows:
   using those `0.0.12` GHCR refs
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in Phase 6 production baseline: the rendered production app overlay,
-  the production Redis overlay, and the reviewed route/ingress/monitoring/egress
-  render output. It rejects localhost hosts, placeholder Auth0 values, mutable
-  image refs, and `imagePullPolicy: Never`, then applies the production image
-  Kyverno policy from `kubernetes/kyverno/policies/production/`
+  the production infrastructure overlay, and the reviewed
+  route/ingress/monitoring/egress render output. It rejects localhost hosts,
+  placeholder Auth0 values, mutable image refs, and `imagePullPolicy: Never`,
+  verifies the Redis StatefulSet uses a `5Gi` `redis-data` claim template, then
+  applies the production image Kyverno policy from
+  `kubernetes/kyverno/policies/production/`
 
 ### Manual validation from a clean environment
 

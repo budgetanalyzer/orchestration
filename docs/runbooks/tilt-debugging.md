@@ -59,6 +59,12 @@ carries an opaque `BA_SESSION` cookie; Session Gateway keeps the session data
 in Redis under `session:{id}` and the temporary OAuth2 request state under
 `oauth2:state:{state}`.
 
+Redis runs as `StatefulSet/redis`; the pod name is `redis-0`. Its `/data`
+directory is PVC-backed by the StatefulSet-created `redis-data-redis-0` claim,
+so deleting the pod or running `tilt down` is not a Redis reset contract. Use
+`./scripts/ops/flush-redis.sh` when you need to clear sessions/cache, or
+recreate the local cluster/runtime for a fully clean infrastructure state.
+
 ### Port Mapping
 
 | Port | Service | Protocol | Purpose |
@@ -219,7 +225,7 @@ Auth failures after login?
 ├── Check Redis for session data
 │   └── REDIS_OPS_USERNAME=redis-ops
 │       REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-│       kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
+│       kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
 └── Check Session Gateway Auth0 config and secret
     ├── kubectl get configmap session-gateway-idp-config -o yaml
     └── kubectl get secret auth0-credentials -o yaml
@@ -262,14 +268,14 @@ curl http://localhost:8081/actuator/health
 # Check Redis sessions with the redis-ops ACL user
 REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
+kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
+kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
 curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
 # Inspect one specific session hash if you have the cookie value
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
+kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
 
 # Verify the full Session Architecture Rethink Phase 5 contract
 ./scripts/smoketest/verify-session-architecture-phase-5.sh
@@ -491,7 +497,7 @@ kubectl get secret transaction-service-postgresql-credentials -o jsonpath='{.dat
 ```bash
 REDIS_OPS_USERNAME=redis-ops
 REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -it deploy/redis -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
+kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
 # Should see session:* keys after login; oauth2:state:* only exists during the OAuth2 round-trip
 ```
 
@@ -678,3 +684,8 @@ tilt trigger transaction-service
 ```bash
 ./scripts/ops/flush-redis.sh
 ```
+
+`redis-0` stores AOF data on the `redis-data-redis-0` PVC. If you need a
+fresh Redis data directory rather than a logical flush, delete and recreate the
+local cluster/runtime; pod deletion and `tilt down` alone should not be treated
+as data reset procedures.

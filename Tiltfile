@@ -43,18 +43,11 @@ docker_prune_settings(
 )
 
 # ============================================================================
-# INFRASTRUCTURE SERVICES (Raw Kubernetes Manifests)
+# INFRASTRUCTURE SERVICES (Shared Kubernetes Baseline)
 # ============================================================================
 
-# Infrastructure namespace
-k8s_yaml('kubernetes/infrastructure/namespace.yaml')
-
-# PostgreSQL
-k8s_yaml([
-    'kubernetes/infrastructure/postgresql/configmap.yaml',
-    'kubernetes/infrastructure/postgresql/service.yaml',
-    'kubernetes/infrastructure/postgresql/statefulset.yaml',
-])
+# PostgreSQL, Redis, RabbitMQ, and generated Redis ACL bootstrap ConfigMap
+k8s_yaml(kustomize('kubernetes/infrastructure'))
 
 k8s_resource(
     'postgresql',
@@ -64,19 +57,6 @@ k8s_resource(
     labels=['infrastructure', 'database'],
 )
 
-# Redis
-configmap_create(
-    'redis-acl-bootstrap',
-    namespace=INFRA_NAMESPACE,
-    from_file=['start-redis.sh=kubernetes/infrastructure/redis/start-redis.sh'],
-    watch=True
-)
-
-k8s_yaml([
-    'kubernetes/infrastructure/redis/deployment.yaml',
-    'kubernetes/infrastructure/redis/service.yaml',
-])
-
 k8s_resource(
     'redis',
     port_forwards=[
@@ -84,13 +64,6 @@ k8s_resource(
     ],
     labels=['infrastructure', 'cache'],
 )
-
-# RabbitMQ
-k8s_yaml([
-    'kubernetes/infrastructure/rabbitmq/configmap.yaml',
-    'kubernetes/infrastructure/rabbitmq/statefulset.yaml',
-    'kubernetes/infrastructure/rabbitmq/service.yaml',
-])
 
 k8s_resource(
     'rabbitmq',
@@ -745,20 +718,23 @@ local_resource(
 )
 
 # Istio CNI (required before meshed namespaces can enforce Pod Security).
-# Local Kind uses standard CNI paths; production k3s still uses
-# kubernetes/istio/cni-values.yaml. Longer term, split this into a common
-# baseline plus explicit kind/k3s overlays.
+# Local Kind uses the common CNI baseline plus a Kind overlay that keeps the
+# chart's standard CNI paths for Calico.
 local_resource(
     'istio-cni',
     cmd='''
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
             --version 1.29.1 \
+            --values kubernetes/istio/cni-common-values.yaml \
             --values kubernetes/istio/cni-kind-values.yaml \
             --wait
         kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=120s
     ''',
-    deps=['kubernetes/istio/cni-kind-values.yaml'],
+    deps=[
+        'kubernetes/istio/cni-common-values.yaml',
+        'kubernetes/istio/cni-kind-values.yaml',
+    ],
     resource_deps=['istio-base'],
     labels=['infrastructure'],
 )

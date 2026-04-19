@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
+# shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/lib/common.sh"
 
 RENDERED_OUTPUT_DIR="$(phase4_render_output_dir)"
@@ -39,7 +40,8 @@ helm upgrade --install istio-base istio/base \
 helm upgrade --install istio-cni istio/cni \
     --namespace istio-system \
     --version "${PHASE4_ISTIO_CHART_VERSION}" \
-    --values "$(phase4_repo_path "kubernetes/istio/cni-values.yaml")" \
+    --values "$(phase4_repo_path "kubernetes/istio/cni-common-values.yaml")" \
+    --values "$(phase4_repo_path "kubernetes/istio/cni-k3s-values.yaml")" \
     --wait
 
 helm upgrade --install istiod istio/istiod \

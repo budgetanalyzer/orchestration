@@ -47,7 +47,7 @@ The goal is to run k3s + Istio + the application stack + the observability bundl
 |---|---|---|---|---|---|
 | postgresql | 256 Mi | 512 Mi | 100 m | 500 m | `kubernetes/infrastructure/postgresql/statefulset.yaml:100-104` |
 | rabbitmq | 256 Mi | 512 Mi | 100 m | 500 m | `kubernetes/infrastructure/rabbitmq/statefulset.yaml:35-39` |
-| redis | 128 Mi | 256 Mi | 100 m | 300 m | `kubernetes/infrastructure/redis/deployment.yaml:87-91` |
+| redis | 128 Mi | 256 Mi | 100 m | 300 m | `kubernetes/infrastructure/redis/statefulset.yaml:88-94` |
 | **Infra subtotal** | **640 Mi** | **1.25 GiB** | **0.3 vCPU** | **1.3 vCPU** | |
 
 ### Platform overhead (k3s + Istio)
@@ -209,7 +209,7 @@ This section will eventually want a dedicated plan doc under `docs/plans/`, but 
 ### What stays the same (the showcase)
 
 - All `kubernetes/services/*` deployments — `transaction-service`, `currency-service`, `session-gateway`, `permission-service`, `budget-analyzer-web`, `nginx-gateway`, `ext-authz`
-- All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis Deployment
+- All `kubernetes/infrastructure/*` workloads — Postgres StatefulSet, RabbitMQ StatefulSet, Redis StatefulSet
 - All `kubernetes/istio/*` — `peer-authentication.yaml` (mesh-wide STRICT mTLS), `authorization-policies.yaml`, `ext-authz-policy.yaml`, the istiod extension provider for `ext-authz-http`, the istio ingress gateway, the egress gateway, the egress `REGISTRY_ONLY` outbound traffic policy and `ServiceEntry`s
 - `kubernetes/network-policies/*` — the default-deny baseline plus the per-namespace allow rules for `istio-ingress`, `istio-egress`, and infrastructure
 - `kubernetes/kyverno/*` — the Phase 7 ClusterPolicies and the static gate (`scripts/guardrails/verify-phase-7-static-manifests.sh`). The existing exception list already covers `local-path-storage`, which is the k3s default storage class, so the baseline runs unchanged.
@@ -327,7 +327,7 @@ The point of putting the URL on a resume is "click here, see the thing work *and
 1. **Validate the 9.7 GiB working-set estimate locally.** Bring up the existing Tilt environment, then `kubectl apply` the Istio addon bundle (`prometheus-community/kube-prometheus-stack`, `grafana/grafana`, `jaegertracing/jaeger`, `kiali/kiali-server`). Exercise the demo flow for an hour and check `kubectl top pods` to confirm the totals match this doc within ±20%. Iterate the sizing tables in [§1](#1-workload-sizing--what-you-actually-need-to-host) if reality disagrees.
 2. **Create the Oracle Cloud free account and provision the A1 instance** — see [`oracle-cloud-always-free-provisioning.md`](./oracle-cloud-always-free-provisioning.md) for the concrete walkthrough: home region selection (Phoenix vs Frankfurt), networking setup, capacity-retry script, first-SSH verification, and the OCI NLB/frontend-backend security split.
 3. **If Oracle provisioning fails after a day of retries**, sign up for Hetzner Cloud and provision a CAX41 in Helsinki or Falkenstein.
-4. **Install k3s** with `--disable=traefik --disable=servicelb --disable=metrics-server`; install Istio with the existing `istiod-values.yaml` and `cni-values.yaml`; apply the existing manifests under `kubernetes/`; install the four observability addons; configure the istiod tracing extension provider to point at the Jaeger collector.
+4. **Install k3s** with `--disable=traefik --disable=servicelb --disable=metrics-server`; install Istio with the existing `istiod-values.yaml`, `cni-common-values.yaml`, and `cni-k3s-values.yaml`; apply the existing manifests under `kubernetes/`; install the four observability addons; configure the istiod tracing extension provider to point at the Jaeger collector.
 5. **Front Kiali, Grafana, and Jaeger with read-only authentication.** Basic auth at nginx-gateway is the minimum bar; an Istio AuthorizationPolicy that allows GET-only is the more architecturally consistent option.
 6. **Set up cert-manager + Let's Encrypt** for the public TLS cert at the Istio ingress gateway, plus a daily `pg_dump` to a Backblaze B2 / Cloudflare R2 free bucket.
 7. **Build the demo landing page** that links to (a) the app, (b) the Kiali service mesh graph, (c) the Grafana dashboards (with a curated default dashboard showing the mesh in action), and (d) a sample Jaeger trace from a recent request. This landing page is the actual showcase surface — without it, the demo is just an SPA.

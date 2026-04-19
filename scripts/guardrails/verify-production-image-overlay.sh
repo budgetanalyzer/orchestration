@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_DIR="${REPO_DIR}/kubernetes/production/apps"
-REDIS_OVERLAY_DIR="${REPO_DIR}/kubernetes/production/infrastructure/redis"
+INFRASTRUCTURE_OVERLAY_DIR="${REPO_DIR}/kubernetes/production/infrastructure"
 PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
@@ -15,7 +15,7 @@ LOCKED_GRAFANA_DOMAIN="grafana.budgetanalyzer.org"
 LOCKED_AUTH0_ISSUER_URI="https://auth.budgetanalyzer.org/"
 TEMP_DIR=""
 RENDERED_APPS_FILE=""
-RENDERED_REDIS_FILE=""
+RENDERED_INFRASTRUCTURE_FILE=""
 PHASE6_RENDER_DIR=""
 INSTANCE_ENV_FILE_TMP=""
 
@@ -97,6 +97,118 @@ assert_contains_literal() {
 
     if ! grep -Fq "${needle}" "${file}"; then
         fail "${description}"
+    fi
+}
+
+assert_yaml_resource() {
+    local file kind name description
+
+    file="$1"
+    kind="$2"
+    name="$3"
+    description="$4"
+
+    if ! awk -v expected_kind="${kind}" -v expected_name="${name}" '
+        /^---$/ {
+            if (resource_kind == expected_kind && resource_name == expected_name) {
+                found = 1
+            }
+            resource_kind = ""
+            resource_name = ""
+            in_metadata = 0
+            next
+        }
+        /^kind:[[:space:]]*/ {
+            resource_kind = $0
+            sub(/^kind:[[:space:]]*/, "", resource_kind)
+            next
+        }
+        /^metadata:[[:space:]]*$/ {
+            in_metadata = 1
+            next
+        }
+        /^[^[:space:]]/ && $0 !~ /^metadata:/ {
+            in_metadata = 0
+        }
+        in_metadata && /^[[:space:]]+name:[[:space:]]*/ {
+            resource_name = $0
+            sub(/^[[:space:]]+name:[[:space:]]*/, "", resource_name)
+            next
+        }
+        END {
+            if (resource_kind == expected_kind && resource_name == expected_name) {
+                found = 1
+            }
+            exit found ? 0 : 1
+        }
+    ' "${file}"; then
+        fail "${description}"
+    fi
+}
+
+assert_redis_statefulset_storage_shape() {
+    local file="$1"
+
+    if ! awk '
+        function reset_doc() {
+            resource_kind = ""
+            resource_name = ""
+            in_metadata = 0
+            in_volume_claim_templates = 0
+            saw_claim_template = 0
+            saw_storage_request = 0
+        }
+        function finish_doc() {
+            if (resource_kind == "StatefulSet" && resource_name == "redis") {
+                saw_redis_statefulset = 1
+                if (in_volume_claim_templates && saw_claim_template && saw_storage_request) {
+                    redis_storage_ok = 1
+                }
+            }
+        }
+        BEGIN {
+            reset_doc()
+        }
+        /^---$/ {
+            finish_doc()
+            reset_doc()
+            next
+        }
+        /^kind:[[:space:]]*/ {
+            resource_kind = $0
+            sub(/^kind:[[:space:]]*/, "", resource_kind)
+            next
+        }
+        /^metadata:[[:space:]]*$/ {
+            in_metadata = 1
+            next
+        }
+        /^[^[:space:]]/ && $0 !~ /^metadata:/ {
+            in_metadata = 0
+        }
+        in_metadata && /^[[:space:]]+name:[[:space:]]*/ {
+            resource_name = $0
+            sub(/^[[:space:]]+name:[[:space:]]*/, "", resource_name)
+            next
+        }
+        /^  volumeClaimTemplates:[[:space:]]*$/ {
+            in_volume_claim_templates = 1
+            next
+        }
+        in_volume_claim_templates && /^[[:space:]]+name:[[:space:]]*redis-data[[:space:]]*$/ {
+            saw_claim_template = 1
+            next
+        }
+        in_volume_claim_templates && /^[[:space:]]+storage:[[:space:]]*5Gi[[:space:]]*$/ {
+            saw_storage_request = 1
+            next
+        }
+        END {
+            finish_doc()
+            exit saw_redis_statefulset && redis_storage_ok ? 0 : 1
+        }
+    ' "${file}"; then
+        fail "rendered production infrastructure Redis StatefulSet is missing volumeClaimTemplates.metadata.name: redis-data with storage: 5Gi"
     fi
 }
 
@@ -215,13 +327,35 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${egress_file}" 'name: auth0-via-egress' "rendered Istio egress output is missing the Auth0 VirtualService"
 }
 
-verify_redis_overlay() {
-    assert_no_phase6_forbidden_patterns "${RENDERED_REDIS_FILE}"
-    assert_contains_literal "${RENDERED_REDIS_FILE}" 'name: redis-acl-bootstrap' "rendered production Redis overlay is missing the redis-acl-bootstrap ConfigMap"
-    assert_contains_literal "${RENDERED_REDIS_FILE}" 'kind: PersistentVolumeClaim' "rendered production Redis overlay is missing the PersistentVolumeClaim"
-    assert_contains_literal "${RENDERED_REDIS_FILE}" 'name: redis-data' "rendered production Redis overlay is missing the redis-data volume/PVC name"
-    assert_contains_literal "${RENDERED_REDIS_FILE}" 'claimName: redis-data' "rendered production Redis overlay does not mount redis-data from a PersistentVolumeClaim"
-    assert_contains_literal "${RENDERED_REDIS_FILE}" 'storage: 5Gi' "rendered production Redis overlay is missing the expected 5Gi PVC request"
+verify_infrastructure_overlay() {
+    assert_no_phase6_forbidden_patterns "${RENDERED_INFRASTRUCTURE_FILE}"
+
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Namespace infrastructure \
+        "rendered production infrastructure is missing Namespace/infrastructure"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet postgresql \
+        "rendered production infrastructure is missing StatefulSet/postgresql"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet rabbitmq \
+        "rendered production infrastructure is missing StatefulSet/rabbitmq"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet redis \
+        "rendered production infrastructure is missing StatefulSet/redis"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service postgresql \
+        "rendered production infrastructure is missing Service/postgresql"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service rabbitmq \
+        "rendered production infrastructure is missing Service/rabbitmq"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service redis \
+        "rendered production infrastructure is missing Service/redis"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap postgresql-init \
+        "rendered production infrastructure is missing ConfigMap/postgresql-init"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap rabbitmq-config \
+        "rendered production infrastructure is missing ConfigMap/rabbitmq-config"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap redis-acl-bootstrap \
+        "rendered production infrastructure is missing ConfigMap/redis-acl-bootstrap"
+
+    assert_redis_statefulset_storage_shape "${RENDERED_INFRASTRUCTURE_FILE}"
+    assert_not_contains "${RENDERED_INFRASTRUCTURE_FILE}" 'kind:[[:space:]]*PersistentVolumeClaim' \
+        "rendered production infrastructure still contains the old standalone Redis PersistentVolumeClaim"
+    assert_not_contains "${RENDERED_INFRASTRUCTURE_FILE}" 'claimName:[[:space:]]*redis-data' \
+        "rendered production infrastructure still mounts the old standalone redis-data claim"
 }
 
 render_phase6_manifests() {
@@ -238,24 +372,24 @@ main() {
     ensure_static_tool kyverno
 
     [[ -d "${OVERLAY_DIR}" ]] || fail "production overlay directory not found: ${OVERLAY_DIR}"
-    [[ -d "${REDIS_OVERLAY_DIR}" ]] || fail "production Redis overlay directory not found: ${REDIS_OVERLAY_DIR}"
+    [[ -d "${INFRASTRUCTURE_OVERLAY_DIR}" ]] || fail "production infrastructure overlay directory not found: ${INFRASTRUCTURE_OVERLAY_DIR}"
     [[ -f "${PRODUCTION_IMAGE_POLICY}" ]] || fail "production image policy not found: ${PRODUCTION_IMAGE_POLICY}"
 
     TEMP_DIR="$(mktemp -d)"
     RENDERED_APPS_FILE="${TEMP_DIR}/apps.yaml"
-    RENDERED_REDIS_FILE="${TEMP_DIR}/redis.yaml"
+    RENDERED_INFRASTRUCTURE_FILE="${TEMP_DIR}/infrastructure.yaml"
     trap cleanup EXIT
 
     render_kustomize "${OVERLAY_DIR}" "${RENDERED_APPS_FILE}"
-    render_kustomize "${REDIS_OVERLAY_DIR}" "${RENDERED_REDIS_FILE}"
+    render_kustomize "${INFRASTRUCTURE_OVERLAY_DIR}" "${RENDERED_INFRASTRUCTURE_FILE}"
     render_phase6_manifests
 
     verify_apps_overlay
     verify_phase6_render_outputs
-    verify_redis_overlay
+    verify_infrastructure_overlay
 
     printf 'Phase 6 production verification passed: %s, %s, %s\n' \
-        "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${REDIS_OVERLAY_DIR}"
+        "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"
 }
 
 main "$@"

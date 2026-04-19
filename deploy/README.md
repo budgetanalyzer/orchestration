@@ -2,9 +2,10 @@
 
 This directory is the committed, operator-facing install surface for the Oracle
 Cloud deployment plan. Phase 4, Phase 5, the Phase 6 production render path,
-and the Phase 7 production Kyverno install/apply path now all have first-class,
-reviewable artifacts here so a human can inspect the exact cluster mutations
-before touching the OCI instance or Vault.
+the production infrastructure render/apply/migration path, and the Phase 7
+production Kyverno install/apply path now all have first-class, reviewable
+artifacts here so a human can inspect the exact cluster mutations before
+touching the OCI instance or Vault.
 
 `deploy/` contains only repeatable Pattern B artifacts:
 
@@ -13,6 +14,7 @@ before touching the OCI instance or Vault.
 - checked-in non-secret render templates under `deploy/manifests/phase-4/`
 - checked-in non-secret Phase 5 templates and manifests under `deploy/manifests/phase-5/`
 - the Phase 6 production render entry point under `deploy/scripts/`
+- the production infrastructure render/apply and guarded Redis migration entry points under `deploy/scripts/`
 - the Phase 7 production Kyverno install/apply entry points under `deploy/scripts/`
 - the non-secret instance config template at `deploy/instance.env.template`
 
@@ -32,6 +34,10 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 5. Review the Phase 4 render templates:
    - `deploy/manifests/phase-4/ingress-gateway-config.yaml.template`
    - `deploy/manifests/phase-4/istio-gateway.yaml.template`
+   - `kubernetes/istio/cni-common-values.yaml`
+   - `kubernetes/istio/cni-k3s-values.yaml`
+   - `kubernetes/istio/istiod-values.yaml`
+   - `kubernetes/istio/egress-gateway-values.yaml`
 6. Review the Phase 5 artifacts:
    - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
    - `deploy/manifests/phase-5/external-secrets.yaml`
@@ -45,9 +51,14 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/production/gateway-routes/kustomization.yaml`
    - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
    - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
-   - `kubernetes/production/infrastructure/redis/kustomization.yaml`
+   - `kubernetes/production/infrastructure/kustomization.yaml`
+   - `kubernetes/production/infrastructure/patches/redis-storage.yaml`
    - `deploy/scripts/13-render-phase-6-production-manifests.sh`
-8. Review the Phase 7 production admission inputs:
+8. Review the production infrastructure operation scripts:
+   - `deploy/scripts/17-render-production-infrastructure.sh`
+   - `deploy/scripts/18-apply-production-infrastructure.sh`
+   - `deploy/scripts/19-migrate-production-redis-statefulset.sh`
+9. Review the Phase 7 production admission inputs:
    - `kubernetes/kyverno/README.md`
    - `kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml`
    - `kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml`
@@ -57,7 +68,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-9. Note the current Phase 10 boundary before reviewing or running any later
+10. Note the current Phase 10 boundary before reviewing or running any later
    observability artifacts:
    - Phase 10 is complete for the current forward deployment path as of
      2026-04-18.
@@ -67,7 +78,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - Leave `KIALI_DOMAIN` and `JAEGER_DOMAIN` blank, and do not resume any
      Jaeger, Kiali, tracing, or observability-route rollout work on this
      branch.
-10. Run the human-owned Phase 4 scripts in this exact order:
+11. Run the human-owned Phase 4 scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -115,7 +126,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/01-install-k3s.sh` | Installs the pinned k3s release with the repo's Istio-friendly flags and prints the base cluster snapshot. | Re-run only if the host must be rebuilt or reconciled to the pinned k3s version. |
 | `deploy/scripts/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace Phase 4 depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the Phase 4 ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before Phase 11 adds the TLS listener or whenever the reviewed ingress render output changes. |
-| `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, `istio-cni`, `istiod`, the egress gateway, then applies the rendered ingress manifests plus mesh security policies. | Re-run after changing Istio pins, values, or the rendered ingress manifests. |
+| `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus mesh security policies. | Re-run after changing Istio pins, values, or the rendered ingress manifests. |
 | `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script now logs Helm repo-update vs install phases separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when Phase 5 or Phase 11 needs controller value changes. For the Phase 11 cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
 | `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
@@ -128,6 +139,14 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
 | `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared Phase 7 policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
 | `deploy/scripts/16-render-phase-11-public-tls-manifests.sh` | Renders the reviewed Phase 11 app-only public TLS artifacts into `tmp/phase-11/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the Phase 11 app TLS cutover or whenever the reviewed Phase 11 hostname/TLS contract changes. |
+| `deploy/scripts/17-render-production-infrastructure.sh` | Renders `kubernetes/production/infrastructure` with Kustomize load restrictions disabled into `tmp/production-infrastructure/infrastructure.yaml` for review. | Re-run before applying infrastructure, after changing the shared infrastructure baseline, or after changing the production Redis storage patch. |
+| `deploy/scripts/18-apply-production-infrastructure.sh` | Refreshes the production infrastructure render, applies it to the current cluster, and waits for PostgreSQL, RabbitMQ, and Redis StatefulSets when present. | Re-run on a new or already migrated cluster, or after infrastructure manifest changes. |
+| `deploy/scripts/19-migrate-production-redis-statefulset.sh` | Requires `--confirm-destroy-redis`, removes the old Redis Deployment and standalone `redis-data` PVC when present, applies the broad infrastructure target, verifies Redis TLS `PING`, and can optionally restart Redis clients with `--restart-redis-clients`. | Run once for an existing OCI Redis Deployment-to-StatefulSet migration; safe to rerun after migration because absent old Redis resources are ignored. |
+
+External Secrets Operator values intentionally leave service account token
+automount enabled for the controller, webhook, and cert-controller pods. Those
+controllers need in-cluster Kubernetes API credentials for watches, leader
+election, admission webhook serving, and certificate reconciliation.
 
 ## Chunk 3 Checkpoint
 
@@ -322,23 +341,50 @@ verifier against the checked-in baseline:
 ./scripts/guardrails/verify-production-image-overlay.sh
 ```
 
-That command renders the production app overlay, production Redis overlay, and
-the reviewed Phase 6 route/ingress/monitoring/egress output using the locked
-Phase 6 hostnames. It fails on localhost hosts, placeholder Auth0 values,
-mutable image refs, `imagePullPolicy: Never`, or a production route that falls
-back to `nginx/nginx.k8s.conf`.
+That command renders the production app overlay, the broad production
+infrastructure overlay, and the reviewed Phase 6
+route/ingress/monitoring/egress output using the locked Phase 6 hostnames. It
+fails on localhost hosts, placeholder Auth0 values, mutable image refs,
+`imagePullPolicy: Never`, the old standalone Redis PVC shape, or a production
+route that falls back to `nginx/nginx.k8s.conf`.
 
-Phase 6 also adds the checked-in production Redis path at
-`kubernetes/production/infrastructure/redis/`. That overlay generates the
-`redis-acl-bootstrap` ConfigMap from the committed production-local
-`start-redis.sh`, replaces the shared local-dev `emptyDir` with
-`PersistentVolumeClaim/redis-data`, and is the reviewed artifact Phase 8 should
-apply with `kubectl apply -k
-kubernetes/production/infrastructure/redis`.
+The production infrastructure target is now
+`kubernetes/production/infrastructure/`. It reuses the shared infrastructure
+baseline for PostgreSQL, RabbitMQ, and Redis, and patches the Redis
+StatefulSet's `redis-data` claim template to request `5Gi`. Render it for
+review with:
 
-Status as of 2026-04-17: Phase 8 is complete per operator handoff. Keep this
-Redis overlay as the reviewed production path for future infrastructure
-rebuilds.
+```bash
+./deploy/scripts/17-render-production-infrastructure.sh
+sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
+```
+
+On a new or already migrated cluster, apply that rendered target with:
+
+```bash
+./deploy/scripts/18-apply-production-infrastructure.sh
+```
+
+Both production infrastructure scripts are safe to rerun. The render script
+overwrites the review artifact under `tmp/production-infrastructure/`, and the
+apply script refreshes that render before applying it and waiting for the
+StatefulSets that are present.
+
+The old production-only Redis Deployment/PVC overlay is superseded. Migrating
+an existing OCI Redis Deployment to the StatefulSet shape is destructive for
+Redis session/cache data; use the guarded migration script rather than applying
+ad hoc deletes:
+
+```bash
+./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
+```
+
+Add `--restart-redis-clients` when you want the script to roll out
+`session-gateway`, `ext-authz`, and `currency-service` after Redis passes the
+TLS `PING` check.
+The migration script ignores already-absent old Redis resources, so a rerun
+after the first migration should converge on the same broad infrastructure
+target without deleting PostgreSQL or RabbitMQ data.
 
 For monitoring, keep the Helm release name `prometheus-stack` when Phase 10
 installs kube-prometheus-stack. The checked-in production override at

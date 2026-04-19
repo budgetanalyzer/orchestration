@@ -126,7 +126,7 @@ kubectl get svc -n monitoring
 - **Backend microservices**: Spring Boot REST APIs (ports 8082+)
 - **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
 - **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
-- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (in infrastructure namespace)
+- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (StatefulSets in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template)
 - **Monitoring**: Prometheus, Grafana, and kube-state-metrics (in monitoring namespace)
 - **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
 - **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
@@ -203,7 +203,7 @@ kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n
 - **Frontend**: React (see individual service package.json)
 - **Backend**: Spring Boot + Java (version managed in service-common)
 - **Build System**: Gradle (all backend services use Gradle with wrapper)
-- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (Kubernetes manifests in `kubernetes/infrastructure/`)
+- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (StatefulSet manifests in `kubernetes/infrastructure/`; Redis is not an ephemeral local Deployment)
 - **Ingress**: Istio Ingress Gateway (Kubernetes Gateway API)
 - **API Gateway**: NGINX (unprivileged Alpine image)
 - **Development**: Tilt + Kind (local Kubernetes)
@@ -225,6 +225,9 @@ directly from Helm. Ingress gateway hardening is declared through
 `kubernetes/istio/ingress-gateway-config.yaml` via Gateway
 `spec.infrastructure.parametersRef`, and the egress gateway uses
 `kubernetes/istio/egress-gateway-values.yaml` with `service.type=ClusterIP`.
+Local Istio CNI installs layer `kubernetes/istio/cni-common-values.yaml` with
+`kubernetes/istio/cni-kind-values.yaml`; OCI/k3s installs layer the same common
+baseline with `kubernetes/istio/cni-k3s-values.yaml`.
 
 Check prerequisites:
 ```bash
@@ -276,6 +279,11 @@ tilt down
 ```
 
 `./scripts/guardrails/verify-phase-7-static-manifests.sh` is the Phase 7 Session 6 local static guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local Phase 7 completion command; it runs the static gate first and then `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` for the live Session 7 proof. `./scripts/smoketest/smoketest.sh` is the aggregate local smoke pass and additionally exercises the rendered monitoring verifier, monitoring runtime verifier, and Session Architecture Phase 5 verifier from `scripts/smoketest/`. CI stays static-only. `./scripts/smoketest/verify-security-prereqs.sh` is the Phase 0 baseline proof. `./scripts/smoketest/verify-phase-3-istio-ingress.sh` is the Phase 3 completion gate. `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` is the Phase 5 completion gate and reruns the earlier phase verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
+
+Redis data survives ordinary pod replacement and should not be reset by
+accident. Use `./scripts/ops/flush-redis.sh` for a logical local Redis reset,
+or recreate the local cluster/runtime when you need a fully clean PVC-backed
+infrastructure state.
 
 ### Troubleshooting
 

@@ -3,7 +3,7 @@
 
 kind-cluster-config.yaml
 kubernetes/infrastructure/postgresql/statefulset.yaml
-kubernetes/infrastructure/redis/deployment.yaml
+kubernetes/infrastructure/redis/statefulset.yaml
 kubernetes/infrastructure/rabbitmq/statefulset.yaml
 kubernetes/services/budget-analyzer-web/deployment.yaml
 kubernetes/services/currency-service/deployment.yaml

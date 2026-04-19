@@ -450,7 +450,8 @@ Pattern B here does not mean "AI executes Phase 4." It means the AI assistant ma
    helm upgrade --install istio-cni istio/cni \
      --namespace istio-system \
      --version 1.29.2 \
-     --values kubernetes/istio/cni-values.yaml \
+     --values kubernetes/istio/cni-common-values.yaml \
+     --values kubernetes/istio/cni-k3s-values.yaml \
      --wait
 
    helm upgrade --install istiod istio/istiod \
@@ -741,7 +742,8 @@ This is the exact execution order for Phase 4. Follow the steps in order. Each s
    sed -n '1,320p' deploy/scripts/04-install-istio.sh
    sed -n '1,220p' deploy/manifests/phase-4/ingress-gateway-config.yaml.template
    sed -n '1,220p' deploy/manifests/phase-4/istio-gateway.yaml.template
-   sed -n '1,220p' kubernetes/istio/cni-values.yaml
+   sed -n '1,220p' kubernetes/istio/cni-common-values.yaml
+   sed -n '1,220p' kubernetes/istio/cni-k3s-values.yaml
    sed -n '1,260p' kubernetes/istio/istiod-values.yaml
    sed -n '1,220p' kubernetes/istio/egress-gateway-values.yaml
    ```
@@ -1446,7 +1448,7 @@ This phase turns the local repo manifests into a production deployment artifact.
      - The remaining checked-in production blockers are outside or broader than that overlay:
        - Production hostnames still point at localhost in `kubernetes/gateway/app-httproute.yaml`, `kubernetes/gateway/api-httproute.yaml`, `kubernetes/gateway/auth-httproute.yaml`, `kubernetes/monitoring/grafana-httproute.yaml`, `kubernetes/monitoring/prometheus-stack-values.yaml`, `kubernetes/istio/istio-gateway.yaml`, `kubernetes/istio/ext-authz-policy.yaml`, `kubernetes/istio/ingress-rate-limit.yaml`, and the checked-in fallback `kubernetes/services/session-gateway/idp-configmap.yaml` (`IDP_LOGOUT_RETURN_TO`).
        - `kubernetes/istio/egress-service-entries.yaml` and `kubernetes/istio/egress-routing.yaml` still carry `auth0-issuer.placeholder.invalid`. `scripts/ops/render-istio-egress-config.sh` already exists for `AUTH0_ISSUER_URI`, but Phase 6 still needs the reviewed production render/apply path and updated docs.
-       - `kubernetes/infrastructure/redis/deployment.yaml` still uses `emptyDir` for `/data` and explicitly documents that persistence is local-dev only. Phase 6 still needs a PVC-backed production Redis path and docs that make the production storage posture unambiguous.
+      - Superseded by the production-parity infrastructure baseline plan: `kubernetes/infrastructure/redis/statefulset.yaml` now uses PVC-backed `/data` locally, and the broad production infrastructure target now replaces the older production Redis-only overlay through the repo-owned render/apply/migration scripts.
        - `kubernetes/production/README.md` and `scripts/guardrails/verify-production-image-overlay.sh` still describe and verify only the old Phase 3 image-overlay slice. Phase 6 still needs a broader production render/static verifier and matching operator-facing docs.
      - Concrete Phase 6 file work derived from this audit:
        - Chunk 2 Steps 4-5: keep `kubernetes/production/apps/image-inventory.yaml` as the image source of truth, preserve `nginx/nginx.production.k8s.conf`, and extend `kubernetes/production/` with any committed production ConfigMap/PVC assets needed so the production route cutover stays repo-owned and Vite-free.
@@ -1539,19 +1541,17 @@ This phase turns the local repo manifests into a production deployment artifact.
    - Keep the checked-in production path honest about the current observability baseline: Prometheus/Grafana are the existing repo-owned monitoring assets, while Jaeger/Kiali are added later in Phase 10.
    - Do not imply Jaeger/Kiali are already deployed, routable, or hardened in any Phase 6 artifact.
    - PostgreSQL and RabbitMQ already use PVCs.
-   - Redis currently uses `emptyDir` only in local dev; Phase 6 must create a production PVC-backed Redis variant and remove ambiguity from the production path.
+   - Redis now uses the shared PVC-backed StatefulSet baseline locally and in
+     the production infrastructure target.
    - Implemented with:
      - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
-     - `kubernetes/production/infrastructure/redis/kustomization.yaml`
-     - `kubernetes/production/infrastructure/redis/deployment.yaml`
-     - `kubernetes/production/infrastructure/redis/service.yaml`
-     - `kubernetes/production/infrastructure/redis/pvc.yaml`
-     - `kubernetes/production/infrastructure/redis/start-redis.sh`
+     - `kubernetes/production/infrastructure/kustomization.yaml`
+     - `kubernetes/production/infrastructure/patches/redis-storage.yaml`
      - `kubernetes/production/README.md`
      - `deploy/README.md`
    - Notes:
      - The checked-in production monitoring baseline remains Prometheus/Grafana only in Phase 6, and the production override explicitly preserves the `prometheus-stack` release-name contract that yields the `prometheus-stack-grafana` Service used by the Grafana `HTTPRoute`.
-     - The production Redis path is now a first-class, self-contained overlay that generates `ConfigMap/redis-acl-bootstrap` from the committed `kubernetes/production/infrastructure/redis/start-redis.sh` input and replaces the local-dev `emptyDir` `redis-data` volume with `PersistentVolumeClaim/redis-data`.
+     - Superseded by the production-parity infrastructure baseline: production now reuses the shared `kubernetes/infrastructure` baseline through `kubernetes/production/infrastructure`, including `ConfigMap/redis-acl-bootstrap`, and patches Redis `volumeClaimTemplates.metadata.name: redis-data` to request `5Gi`.
 10. **[Human] Complete per operator handoff as of 2026-04-17.** Approve the production monitoring baseline and Redis decision before Phase 6 sign-off.
     - Stop if any Phase 6 manifest, route, or doc implies Jaeger/Kiali exposure before Phase 10 implements and hardens them.
     - Stop if Redis persistence behavior in production is still ambiguous or still depends on `emptyDir`.
@@ -1577,7 +1577,7 @@ This phase turns the local repo manifests into a production deployment artifact.
     - Stop on any failure. Do not treat leftover localhost hosts, placeholder Auth0 values, or mutable image refs as acceptable temporary production debt.
     - Recorded pass output:
       ```text
-      Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure/redis
+      Phase 6 production verification passed: /workspace/orchestration/kubernetes/production/apps, /tmp/tmp.JC7oppoyuC/phase-6, /workspace/orchestration/kubernetes/production/infrastructure
       ```
 13. **[Human] Complete per operator handoff as of 2026-04-17.** Do the final file review for the Phase 6 production baseline.
     - Review the production overlay directory, the affected NGINX config path, the affected Gateway/Istio manifests, and the production verifier script.
@@ -1686,7 +1686,7 @@ kubernetes/kyverno/policies/production/
    - Recorded outcome:
      ```text
      [phase4] verifying the checked-in production image baseline before live policy apply
-     Phase 6 production verification passed: /home/ubuntu/orchestration/kubernetes/production/apps, /tmp/tmp.Hb02mhcm7X/phase-6, /home/ubuntu/orchestration/kubernetes/production/infrastructure/redis
+     Phase 6 production verification passed: /home/ubuntu/orchestration/kubernetes/production/apps, /tmp/tmp.Hb02mhcm7X/phase-6, /home/ubuntu/orchestration/kubernetes/production/infrastructure
      [phase4] ensuring Kyverno admission controller is available
      [phase4] applying Phase 7 production policy set
      [phase4] Phase 7 ClusterPolicy snapshot
@@ -1733,16 +1733,26 @@ live, and Phases 8, 9, 10, and 11 are also complete for the current forward depl
    ```bash
    kubectl apply -f kubernetes/infrastructure/rabbitmq/
    ```
-4. **[Human] Complete per operator handoff as of 2026-04-17.** Deploy Redis.
+4. **[Human] Superseded by the production-parity infrastructure baseline.**
+   Deploy Redis through the broad production infrastructure target, not the old
+   Redis-only overlay. Migrating an existing production Redis Deployment to the
+   StatefulSet shape is destructive for Redis session/cache data and must use
+   the guarded migration workflow from the production-parity infrastructure
+   plan.
    ```bash
-   kubectl apply -k kubernetes/production/infrastructure/redis
+   ./deploy/scripts/17-render-production-infrastructure.sh
+   sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
+   ./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
    ```
 5. **[Human] Complete per operator handoff as of 2026-04-17.** Verify infrastructure pods.
    ```bash
    kubectl get pods -n infrastructure
    ```
    Current repo design disables Istio sidecar injection for `infrastructure`; expect one app container per pod, not `2/2`. Infrastructure transport encryption is provided by PostgreSQL/Redis/RabbitMQ TLS plus mesh-protected app namespaces.
-   - Verified result: PostgreSQL, RabbitMQ, and Redis are running in `infrastructure` with the reviewed production Redis overlay and the required TLS secret baseline already in place from Phase 5.
+   - Expected result after the superseding infrastructure target: PostgreSQL,
+     RabbitMQ, and Redis are running in `infrastructure`; Redis is
+     `StatefulSet/redis` with the `redis-data` volume claim template and the
+     required TLS secret baseline already in place from Phase 5.
 
 ### Outputs
 
@@ -2493,8 +2503,10 @@ sudo systemctl reload ssh
 
 ## TODO
 
-- Revisit local-development Redis storage parity. PostgreSQL and RabbitMQ
-  already use PVC-backed storage in dev, while local Redis still uses
-  `emptyDir`. Replace the local Redis `emptyDir` data volume with a PVC-backed
-  path and keep the "fresh Redis state" workflow explicit through a reset
-  command or overlay instead of making ephemeral storage the default.
+- Redis storage parity was superseded by the production-parity infrastructure
+  baseline on 2026-04-19. Local and production Redis now use the shared
+  PVC-backed `StatefulSet/redis` shape; fresh Redis state comes from
+  `./scripts/ops/flush-redis.sh` for logical local resets, local
+  cluster/runtime recreation for clean PVC-backed development, or the guarded
+  destructive OCI migration command for existing production Redis
+  Deployment/PVC replacements.

@@ -61,7 +61,7 @@ assert_no_observability_httproutes() {
 
     if [[ -n "${stale_routes}" ]]; then
         printf '%s\n' "${stale_routes}" >&2
-        phase4_die "observability HTTPRoutes are still present; delete the stale public observability routes before treating the rollout as complete"
+        phase4_die "observability HTTPRoutes are still present; delete the stale public observability routes before continuing the rollout"
     fi
 }
 

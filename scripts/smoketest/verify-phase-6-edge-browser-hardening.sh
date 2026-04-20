@@ -961,7 +961,7 @@ main() {
     printf 'Passed: %d\n' "${PASSED}"
     printf 'Failed: %d\n' "${FAILED}"
     printf 'Warnings: %d\n' "${WARNED}"
-    info "Manual browser-console validation is still required on /_prod-smoke/ before edge/browser security can be called complete"
+    info "Manual browser-console validation is still required on /_prod-smoke/ before relying on the edge/browser security proof"
     info "Warnings from /api-docs checks stay visible here but do not block edge/browser verification"
 
     echo

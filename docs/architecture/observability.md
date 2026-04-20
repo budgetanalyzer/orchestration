@@ -15,7 +15,7 @@ Spring Boot, Istio, and kube-state-metrics cover the intended observability
 story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
 kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy
 baseline does not need broad kube-system or node egress.
-Phase 7 keeps Jaeger and Kiali on the same internal-only contract: both run in
+Jaeger and Kiali use the same internal-only contract: both run in
 `monitoring`, both stay `ClusterIP` only, and operator access uses
 loopback-bound `kubectl port-forward` instead of any public observability
 hostname.
@@ -288,9 +288,8 @@ Then open `http://localhost:9090`. Useful first queries:
 
 ### Jaeger
 
-Phase 7 uses repo-managed Jaeger v2 manifests, not the Helm chart. The locked
-backend is now checked in under `kubernetes/monitoring/jaeger/`. The runtime
-contract is:
+Jaeger uses repo-managed v2 manifests, not the Helm chart. The locked backend
+lives under `kubernetes/monitoring/jaeger/`. The runtime contract is:
 
 - namespace: `monitoring`
 - service exposure: `ClusterIP` only
@@ -321,7 +320,7 @@ Validate the tracing control-plane wiring with:
 
 ### Kiali
 
-Phase 7 uses the standalone `kiali-server` Helm chart, not the Kiali operator.
+Kiali uses the standalone `kiali-server` Helm chart, not the Kiali operator.
 The locked runtime contract is:
 
 - namespace: `monitoring`
@@ -352,8 +351,8 @@ Open `http://localhost:20001/kiali` and paste the token.
 The monitoring stack meets the same security requirements as all other
 workloads in this repo.
 
-`monitoring` is now a first-class enforced namespace, not an implicit
-allow-all side case. The repo-owned baseline is deny-by-default ingress and
+`monitoring` is a first-class enforced namespace, not an implicit allow-all
+side case. The repo-owned baseline is deny-by-default ingress and
 egress plus explicit allowlists for:
 
 - DNS from `monitoring`
@@ -376,8 +375,8 @@ Prometheus also needs egress to injected workload pods on Istio's mTLS tunnel
 port `15008` for service-based Spring Boot scrapes, plus `istiod` on `15012`
 for xDS/CA traffic and `15014` for Istio control-plane metrics scraping.
 
-The `monitoring` namespace manifest also no longer opts into Gateway route
-attachment, so observability stays off the public ingress surface by default.
+The `monitoring` namespace manifest does not opt into Gateway route attachment,
+so observability stays off the public ingress surface by default.
 
 ### Image Pinning
 

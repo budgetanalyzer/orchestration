@@ -1,5 +1,5 @@
-# Kiali is installed from the standalone kiali/kiali-server chart.
-# Keep this file aligned with docs/plans/internal-observability-phase-7-jaeger-kiali-plan.md.
+# Kiali is installed from the standalone kiali/kiali-server chart with
+# token auth, namespace-scoped access, and ClusterIP-only exposure.
 
 auth:
   strategy: token

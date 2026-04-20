@@ -288,7 +288,7 @@ tilt get uiresources
 ### Production (Future)
 - Kubernetes deployment
 - Horizontal scaling per service
-- Istio service mesh (mTLS, AuthorizationPolicy, egress control implemented)
+- Istio service mesh (mTLS, AuthorizationPolicy, egress control)
 - Distributed tracing (future)
 
 ## Discovery Commands

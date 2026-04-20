@@ -886,7 +886,7 @@ scan_istio_ingress_observability_allowances() {
             ! grep -Eq 'app\.kubernetes\.io/name:[[:space:]]*jaeger' "${expected_jaeger_policy_file}" || \
             ! grep -Eq 'port:[[:space:]]*4317' "${expected_jaeger_policy_file}" || \
             ! grep -Eq 'port:[[:space:]]*4318' "${expected_jaeger_policy_file}"; then
-            failures+=("${expected_jaeger_policy_file#"${REPO_DIR}"/}: expected narrow istio-ingress OTLP egress policy to Jaeger collector is incomplete")
+            failures+=("${expected_jaeger_policy_file#"${REPO_DIR}"/}: expected narrow istio-ingress OTLP egress policy to Jaeger collector is missing required selectors or ports")
         fi
     fi
 

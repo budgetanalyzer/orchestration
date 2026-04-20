@@ -36,9 +36,9 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/22-apply-production-monitoring.sh [options]
 
-Idempotently reapplies the full production monitoring stack:
-Prometheus/Grafana, Grafana dashboards, Spring Boot ServiceMonitor, and by
-default the reviewed Jaeger/Kiali Phase 7 observability path.
+Idempotently reapplies the production monitoring stack: Prometheus/Grafana,
+Grafana dashboards, Spring Boot ServiceMonitor, and by default the reviewed
+Jaeger/Kiali observability apply path.
 
 Options:
   --skip-jaeger-kiali   Reapply only the Prometheus/Grafana baseline.

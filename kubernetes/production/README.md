@@ -140,12 +140,12 @@ The checked-in production monitoring overlay in this directory stays narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- reapply the complete internal monitoring stack with
+- reapply the full internal monitoring stack with
   `./deploy/scripts/22-apply-production-monitoring.sh`; use
   `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh or
   `--verify-runtime` when the rollout should also prove the dashboard input
   metrics
-- Jaeger and Kiali now have a separate reviewed OCI rollout path through
+- Jaeger and Kiali have a separate reviewed OCI rollout path through
   `deploy/scripts/20-render-phase-7-observability.sh` and
   `deploy/scripts/21-apply-phase-7-observability.sh`; those scripts reuse the
   shared `kubernetes/monitoring/jaeger/*.yaml`,

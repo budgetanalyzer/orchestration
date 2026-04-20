@@ -234,10 +234,10 @@ require_live_istio_targets() {
     local istio_egress_ready
 
     istiod_ready="$(kubectl get pod -n istio-system -l app=istiod -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null || true)"
-    [[ "${istiod_ready}" == "true" ]] || phase4_die "istiod is not ready in namespace istio-system; Chunk 3 must be complete before running this verifier"
+    [[ "${istiod_ready}" == "true" ]] || phase4_die "istiod is not ready in namespace istio-system; install Istio before running this verifier"
 
     istio_egress_ready="$(kubectl get pod -n istio-egress -l app=istio-egress-gateway,istio=egress-gateway -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null || true)"
-    [[ "${istio_egress_ready}" == "true" ]] || phase4_die "istio-egress-gateway is not ready in namespace istio-egress; Chunk 3 must be complete before running this verifier"
+    [[ "${istio_egress_ready}" == "true" ]] || phase4_die "istio-egress-gateway is not ready in namespace istio-egress; install Istio before running this verifier"
 
     ISTIOD_SERVICE_IP="$(kubectl get service istiod -n istio-system -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
     require_nonempty_value "istiod service ClusterIP" "${ISTIOD_SERVICE_IP}"

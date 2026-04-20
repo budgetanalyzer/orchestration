@@ -60,7 +60,7 @@ scripts/
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
   infrastructure overlay, production render output, and the production image
-  Kyverno policy. It is non-mutating, but it now also requires a live
+  Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
@@ -167,7 +167,7 @@ the active context and Tilt resource state from the same host shell first.
   entry point for persistent local Grafana, Prometheus, Jaeger, and Kiali
   access. It keeps the forwards bound to `127.0.0.1` and tears them down on
   `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path and
-  now coexists with that helper by reusing the expected canonical listeners
+  coexists with that helper by reusing the expected canonical listeners
   when they are already running. Use explicit `--grafana-port`,
   `--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only
   when some other intentional listener already owns one of those ports. If the

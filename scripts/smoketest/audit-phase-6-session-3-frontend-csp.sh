@@ -140,7 +140,7 @@ main() {
     printf 'Passed: %d\n' "${PASSED}"
     printf 'Failed: %d\n' "${FAILED}"
     info "Static findings are documented in ${DOC_PATH}"
-    info "Manual browser-console validation is still required before claiming the strict-CSP check is complete"
+    info "Manual browser-console validation is still required before relying on the strict-CSP check"
 
     if [[ "${FAILED}" -gt 0 ]]; then
         exit 1

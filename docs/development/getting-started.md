@@ -39,7 +39,7 @@ tilt up           # Start everything
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended runtime hardening and Pod Security proof
 ./scripts/smoketest/verify-observability-port-forward-access.sh  # Optional but recommended loopback-only Grafana, Prometheus, Jaeger, and Kiali access proof
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended edge and browser security proof
-./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local security guardrail proof
+./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended local security guardrail proof
 ./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass
 ```
 
@@ -51,7 +51,7 @@ locally before the downstream Java builds run. For the local-vs-release
 artifact contract, see
 [service-common-artifact-resolution.md](service-common-artifact-resolution.md).
 
-The script tree is now purpose-split: `scripts/bootstrap/` for host and
+The script tree is purpose-split: `scripts/bootstrap/` for host and
 cluster setup, `scripts/guardrails/` for CI-safe static checks,
 `scripts/smoketest/` for live-cluster verifiers, `scripts/ops/` for
 interactive maintenance, `scripts/loadtest/` for synthetic fixtures, and
@@ -100,7 +100,7 @@ Session Gateway share the `session:` key prefix contract plus the
 Session Gateway with no standalone `/user` ingress route.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local
 security guardrail command; it runs the static gate and then the live runtime
 proof in order. The narrower
 `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful

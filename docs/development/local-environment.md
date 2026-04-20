@@ -173,7 +173,7 @@ open https://app.budgetanalyzer.localhost
 # Optional but recommended: prove Istio ingress and egress hardening
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh
 
-# Optional but recommended: prove runtime hardening and final PSA labels
+# Optional but recommended: prove runtime hardening and PSA labels
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
 
 # Optional but recommended: prove edge and browser security
@@ -185,7 +185,7 @@ open https://app.budgetanalyzer.localhost
 # Optional but recommended right after tilt up on a clean rebuild: prove the app deployments were admitted cleanly
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 
-# Optional but recommended after the edge and browser security verifier: run the final local security guardrail proof
+# Optional but recommended after the edge and browser security verifier: run the local security guardrail proof
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 
 # Optional aggregate local smoke pass after Tilt is healthy
@@ -246,7 +246,7 @@ docs paths, final auth-edge throttling coverage,
 reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
 then reruns the runtime-hardening verifier as the regression cascade. It still does not
 replace the manual browser-console validation required on `/_prod-smoke/`.
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local
 security guardrail proof. It runs the static gate first and
 then the runtime gate so contributors do not have to stitch
 those commands together manually. CI intentionally remains static-only through
@@ -529,8 +529,8 @@ visibility plus fail-closed checks, the checked-in production-route syntax valid
 docs paths, the remaining auth-edge throttling
 paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
 proof, and then reruns the full runtime-hardening cascade. Manual
-browser-console validation on `/_prod-smoke/` is still required before the edge
-and browser security proof can be declared complete.
+browser-console validation on `/_prod-smoke/` is still required before relying
+on the edge and browser security proof.
 
 ### Shared Library Cascade
 
@@ -766,8 +766,8 @@ RabbitMQ local access:
 - Direct `bootRun` must set `SPRING_RABBITMQ_SSL_ENABLED=true`, `SPRING_RABBITMQ_SSL_BUNDLE=infra-ca`, and `INFRA_CA_CERT_PATH` to the host-side `infra-ca.pem`
 - Virtual host: `/`
 - The in-cluster RabbitMQ StatefulSet now runs as UID/GID `999` with `fsGroup: 999` and `readOnlyRootFilesystem: true`; `/var/lib/rabbitmq` remains the only writable runtime path and stays PVC-backed, while the config, definitions, and TLS material stay mounted read-only.
-- The RabbitMQ pod now uses a `startupProbe` on `rabbitmq-diagnostics -q ping` so clean `tilt down` / `tilt up` cycles can absorb longer management-plugin cold starts before liveness begins enforcing restarts, and the RabbitMQ exec probes now allow up to `45s` per check because the broker's diagnostics CLI can take tens of seconds to answer on this local Kind path.
-- The RabbitMQ config now disables management metrics collection with the supported `management_agent.disable_metrics_collector = true` setting instead of the deprecated-feature gate.
+- The RabbitMQ pod uses a `startupProbe` on `rabbitmq-diagnostics -q ping` so clean `tilt down` / `tilt up` cycles can absorb longer management-plugin cold starts before liveness begins enforcing restarts, and the RabbitMQ exec probes allow up to `45s` per check because the broker's diagnostics CLI can take tens of seconds to answer on this local Kind path.
+- The RabbitMQ config disables management metrics collection with the supported `management_agent.disable_metrics_collector = true` setting instead of the deprecated-feature gate.
 
 Activate with:
 ```bash

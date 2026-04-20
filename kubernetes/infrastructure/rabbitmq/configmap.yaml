@@ -25,6 +25,6 @@ data:
     log.console = true
     log.console.level = info
 
-    # Disable deprecated management metrics collection
-    # This feature is deprecated in RabbitMQ 3.13+ and will be removed
-    deprecated_features.permit.management_metrics_collection = false
+    # Prometheus is the intended metrics source; disable the management
+    # agent's internal metrics collector using RabbitMQ's supported setting.
+    management_agent.disable_metrics_collector = true

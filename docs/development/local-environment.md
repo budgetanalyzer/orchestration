@@ -723,6 +723,8 @@ RabbitMQ local access:
 - Direct `bootRun` must set `SPRING_RABBITMQ_SSL_ENABLED=true`, `SPRING_RABBITMQ_SSL_BUNDLE=infra-ca`, and `INFRA_CA_CERT_PATH` to the host-side `infra-ca.pem`
 - Virtual host: `/`
 - The in-cluster RabbitMQ StatefulSet now runs as UID/GID `999` with `fsGroup: 999` and `readOnlyRootFilesystem: true`; `/var/lib/rabbitmq` remains the only writable runtime path and stays PVC-backed, while the config, definitions, and TLS material stay mounted read-only.
+- The RabbitMQ pod now uses a `startupProbe` on `rabbitmq-diagnostics -q ping` so clean `tilt down` / `tilt up` cycles can absorb longer management-plugin cold starts before liveness begins enforcing restarts, and the RabbitMQ exec probes now allow up to `45s` per check because the broker's diagnostics CLI can take tens of seconds to answer on this local Kind path.
+- The RabbitMQ config now disables management metrics collection with the supported `management_agent.disable_metrics_collector = true` setting instead of the deprecated-feature gate.
 
 Activate with:
 ```bash

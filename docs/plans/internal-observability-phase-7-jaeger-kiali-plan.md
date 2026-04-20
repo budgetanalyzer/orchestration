@@ -73,6 +73,96 @@ Validation already completed in this session:
   `65 passed (out of 65)` before the final verifier service-path tightening and
   `15008` additions.
 
+Current blocker discovered after a fresh `tilt down` / `tilt up` on
+2026-04-20:
+
+- `infrastructure/rabbitmq-0` is in `CrashLoopBackOff` because the broker needs
+  about `193s` to complete startup, while the current exec probes in
+  `kubernetes/infrastructure/rabbitmq/statefulset.yaml` only give it about
+  `120s` of liveness budget after the initial delay.
+- The broker does eventually reach `Server startup complete`, but kubelet sends
+  `SIGTERM` shortly afterward because repeated `rabbitmq-diagnostics -q ping`
+  probe attempts time out during the long management-plugin startup window.
+- The most suspicious startup drag is the management deprecation path in
+  `kubernetes/infrastructure/rabbitmq/configmap.yaml`:
+  `deprecated_features.permit.management_metrics_collection = false`. RabbitMQ
+  3.13.7 logs that the deprecated feature is not permitted, then takes roughly
+  another two minutes before the management and Prometheus listeners come up.
+- That config line predates Phase 7 work, so the likely regression is an
+  existing RabbitMQ startup/probe fragility now exposed by current runtime
+  conditions, not a brand-new Jaeger/Kiali-specific RabbitMQ manifest change.
+
+Planned follow-up before Phase 7.3 proceeds:
+
+- confirm the minimum safe RabbitMQ startup strategy in-repo by testing the
+  least-invasive fix first: introduce a `startupProbe` or otherwise extend the
+  startup budget so kubelet stops killing a broker that eventually becomes
+  healthy
+- if startup remains unreasonably slow after probe-budget correction, test
+  whether the deprecated management metrics setting should be revised or removed
+  for RabbitMQ `3.13.x`
+- rerun the affected local validation after the fix: RabbitMQ pod stability,
+  `tilt up` health, and the relevant smoke/guardrail checks before resuming
+  Jaeger/Kiali rollout work
+
+2026-04-20 implementation update:
+
+- Added a minimal probe-budget fix in
+  `kubernetes/infrastructure/rabbitmq/statefulset.yaml`: a `startupProbe`
+  using `rabbitmq-diagnostics -q ping` with a `20s` initial delay and a
+  `240s` total failure window (`periodSeconds: 10`, `failureThreshold: 24`).
+  This keeps liveness disabled until the broker proves it can answer the same
+  health command used by the existing readiness and liveness probes.
+- Follow-up measurement on the live pod showed the same probe command succeeds
+  but is slow even after startup: inside the container,
+  `rabbitmq-diagnostics -q ping` returned in roughly `24s` to `37s`, while
+  `kubectl exec` runs took about `57s`. The RabbitMQ probes therefore also need
+  a larger `timeoutSeconds` budget on this local path; the manifest now uses
+  `timeoutSeconds: 45` for startup, readiness, and liveness while keeping the
+  existing command and cadence.
+- Live-cluster evidence from `kubectl logs -n infrastructure rabbitmq-0` still
+  shows RabbitMQ `3.13.7` spending most of its cold-start time in the
+  management-plugin path after the deprecated-feature warning. In the observed
+  run, the broker logged the deprecated
+  `management_metrics_collection` warning at `2026-04-20 11:44:42Z`, the
+  management HTTP listener came up at `11:45:50Z`, and `Server startup
+  complete` arrived at `11:45:56Z`.
+- Investigation result: the deprecated setting in
+  `kubernetes/infrastructure/rabbitmq/configmap.yaml`,
+  `deprecated_features.permit.management_metrics_collection = false`, is still
+  a plausible contributor to slow startup, but it is a separate behavior change
+  from the minimal probe fix. Official RabbitMQ documentation points to the
+  supported `management_agent.disable_metrics_collector = true` setting when
+  Prometheus is the intended metrics source, so that config should be evaluated
+  in a follow-up measurement after the probe-budget correction is proven stable.
+- Follow-up implementation on `2026-04-20`: the deprecated setting was replaced
+  with the supported `management_agent.disable_metrics_collector = true`
+  configuration in `kubernetes/infrastructure/rabbitmq/configmap.yaml` so the
+  broker no longer goes through the deprecated-feature path at startup.
+- Measurement after the config change showed a material improvement on the live
+  pod:
+  - the deprecated `management_metrics_collection` warning disappeared
+  - the management-agent log now reports only `Metrics collection disabled in
+    management agent, management only interface started`
+  - in the observed restart at `2026-04-20 12:20:43Z`, the management HTTP
+    listener came up at `12:20:46Z`, `Server startup complete` arrived at
+    `12:20:47Z`, and RabbitMQ reported `Time to start RabbitMQ: 9704 ms`
+  - the pod reached `1/1 Running` with `restartCount=0`, and a steady-state
+    `rabbitmq-diagnostics -q ping` sample returned in about `2s`
+- Validation after the probe changes:
+  - `kubectl apply --dry-run=server -f kubernetes/infrastructure/rabbitmq`
+    passed.
+  - A live StatefulSet rollout on `2026-04-20` reached `rabbitmq-0`
+    `1/1 Running` with `restartCount=0` on revision `rabbitmq-bb9d959d8`.
+  - `kubectl exec -n infrastructure rabbitmq-0 -- sh -lc 'date +%s;
+    rabbitmq-diagnostics -q ping; date +%s'` returned successfully once the pod
+    was Ready (observed `8s` in the final steady-state sample).
+  - `./scripts/guardrails/verify-phase-7-static-manifests.sh` passed.
+  - `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` did not complete
+    cleanly because unrelated application pods in `default` were already not
+    Ready (`currency-service`, `permission-service`, and missing
+    `session-gateway`), so it was not a clean RabbitMQ-only gate for this work.
+
 Interrupted state:
 
 - A final rerun of `./scripts/smoketest/verify-phase-2-network-policies.sh` was

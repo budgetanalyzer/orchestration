@@ -287,7 +287,14 @@ Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost`. `tilt up` installs the observability
 stack, but it does not manage persistent localhost tunnels for Grafana,
 Prometheus, Jaeger, or Kiali. Use the same explicit loopback-only operator
-commands everywhere:
+commands everywhere, or use the repo-owned helper when you want the canonical
+four forwards kept open together:
+
+```bash
+./scripts/ops/start-observability-port-forwards.sh
+```
+
+Underlying commands:
 
 ```bash
 # Grafana UI (loopback-only; keep this bound to 127.0.0.1)
@@ -318,7 +325,10 @@ echo
 Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
 for Prometheus, `http://localhost:16686/jaeger` for Jaeger, and
 `http://localhost:20001/kiali` for Kiali. Do not use `--address 0.0.0.0` for
-observability port-forwards.
+observability port-forwards. The focused smoke verifier remains the clean-shell
+proof path and still starts its own temporary forwards on the canonical ports
+by default, so stop the helper first or pass explicit port overrides when you
+want to run that verifier while the helper is already holding those ports.
 
 Validate the tracing control-plane wiring after `tilt up`:
 

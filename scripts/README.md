@@ -33,6 +33,12 @@ scripts/
   loopback-only access model in local Tilt and production OCI/k3s for the
   observability components installed there, and do not use `--address 0.0.0.0`
   for observability access.
+- `ops/start-observability-port-forwards.sh` - Foreground supervisor for the
+  canonical loopback-only Grafana, Prometheus, Jaeger, and Kiali
+  `kubectl port-forward` processes. It starts all four forwards by default,
+  supports repeated `--component` selection plus per-component port overrides,
+  prints the local URLs plus the Grafana password and Kiali token commands,
+  and cleans up all child forwards on exit.
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.
@@ -135,6 +141,13 @@ the active context and Tilt resource state from the same host shell first.
 
 - `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
   egress manifests from `.env`.
+- `ops/start-observability-port-forwards.sh` is the repo-owned convenience
+  entry point for persistent local Grafana, Prometheus, Jaeger, and Kiali
+  access. It keeps the forwards bound to `127.0.0.1` and tears them down on
+  `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path; if
+  the helper is already holding the canonical ports, stop it first or run the
+  verifier with explicit `--grafana-port`, `--prometheus-port`,
+  `--jaeger-port`, and `--kiali-port` overrides.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

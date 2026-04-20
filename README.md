@@ -63,17 +63,20 @@ Current local platform baseline:
 Monitoring access after `tilt up`:
 Tilt deploys Grafana, Prometheus, Jaeger, and Kiali, but it does not open or
 hold the localhost tunnels for them. Use explicit loopback-bound
-`kubectl port-forward` commands when you want operator access:
+`kubectl port-forward` commands when you want operator access. For a
+repo-owned convenience path that keeps the four canonical forwards running in
+one foreground process, use `./scripts/ops/start-observability-port-forwards.sh`.
 - Grafana: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` (then open `http://localhost:3300`)
 - Grafana admin password: `kubectl get secret -n monitoring prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode; echo`
 - Prometheus: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` (then open `http://localhost:9090`)
 - Jaeger: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` (then open `http://localhost:16686/jaeger`; generate several app requests first because tracing uses Istio default sampling)
 - Kiali: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` (then open `http://localhost:20001/kiali`; login with a short-lived token from `kubectl -n monitoring create token kiali`)
+- Convenience helper: `./scripts/ops/start-observability-port-forwards.sh`
 - Focused access proof: `./scripts/smoketest/verify-observability-port-forward-access.sh`
 - Prometheus targets to expect: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
 - Example Prometheus queries: `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`
 - Observability is internal-only in both local Tilt and production OCI/k3s. `grafana.budgetanalyzer.localhost`, `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, and `jaeger.budgetanalyzer.org` are not active operator entry points.
-- Keep Grafana and Kiali authentication enabled and keep observability port-forwards loopback-bound. Do not use `--address 0.0.0.0`. The focused smoke expects the canonical local ports `3300`, `9090`, `16686`, and `20001` unless you pass explicit overrides.
+- Keep Grafana and Kiali authentication enabled and keep observability port-forwards loopback-bound. Do not use `--address 0.0.0.0`. The focused smoke starts its own temporary forwards on the canonical local ports `3300`, `9090`, `16686`, and `20001` unless you pass explicit overrides, so stop the helper first or use override flags when those ports are already occupied intentionally.
 - See [Observability Architecture](docs/architecture/observability.md) for scrape topology, dashboards, and debugging guidance
 
 Use the targeted smoke scripts as capability checks rather than numbered completion gates. `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` verifies runtime hardening and PSA enforcement, `./scripts/smoketest/verify-phase-4-transport-encryption.sh` verifies infrastructure transport TLS, and `./scripts/smoketest/verify-phase-3-istio-ingress.sh` plus the live validation checklist verifies Istio ingress and egress hardening. `./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh` verifies edge and browser hardening, with manual browser-console validation on `/_prod-smoke/`; `/api-docs` probes now stay visible as warnings. `./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local security guardrail umbrella for the current cluster. The static script remains the CI/local reproducer for static guardrails, and `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` remains the targeted live-cluster runtime proof when you only need that half.

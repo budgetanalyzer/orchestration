@@ -148,6 +148,7 @@ for the OAuth2 round-trip.
 - **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
 - **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 - **Tilt observability contract**: `tilt up` deploys Grafana, Prometheus, Jaeger, and Kiali, but it does not open localhost tunnels for them
+- **Convenience helper**: `./scripts/ops/start-observability-port-forwards.sh`
 - **Grafana**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`, then open http://localhost:3300
 - **Prometheus**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`, then open http://localhost:9090
 - **Jaeger**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`, then open http://localhost:16686/jaeger
@@ -159,7 +160,11 @@ Observability is internal-only in both local Tilt and production OCI/k3s.
 Keep Grafana authentication enabled, keep observability port-forwards bound to
 `127.0.0.1`, and do not use `grafana.budgetanalyzer.localhost`,
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
-`jaeger.budgetanalyzer.org` as operator entry points.
+`jaeger.budgetanalyzer.org` as operator entry points. The focused smoke script
+still starts its own temporary forwards on the canonical ports by default, so
+stop the helper first or pass explicit `--grafana-port`, `--prometheus-port`,
+`--jaeger-port`, and `--kiali-port` overrides when those ports are already
+occupied intentionally.
 
 ### Stopping
 

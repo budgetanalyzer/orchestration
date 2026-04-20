@@ -207,6 +207,20 @@ is already occupied, it fails and names the expected `kubectl port-forward`
 owner; rerun with explicit port overrides only when that competing listener is
 intentional.
 
+For persistent operator access to all four observability UIs, use the repo-
+owned helper:
+
+```bash
+./scripts/ops/start-observability-port-forwards.sh
+```
+
+That helper keeps the canonical Grafana, Prometheus, Jaeger, and Kiali
+forwards bound to `127.0.0.1` in one foreground process, prints the local
+URLs plus the Grafana password and Kiali token commands, and tears down all
+child forwards on `Ctrl+C`. Raw `kubectl port-forward --address 127.0.0.1 ...`
+commands remain the underlying supported access model in both local Tilt and
+production OCI/k3s.
+
 `grafana.budgetanalyzer.localhost` is retired. Do not introduce
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
 `jaeger.budgetanalyzer.org` as public observability entry points.

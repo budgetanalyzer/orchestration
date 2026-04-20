@@ -53,14 +53,17 @@ scripts/
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
   infrastructure overlay, production render output, and the production image
-  Kyverno policy.
+  Kyverno policy. It is non-mutating, but it now also requires a live
+  `kubectl` context so the Kiali production render can use a Helm server-side
+  dry run and capture the full namespace-scoped RBAC footprint.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
-- `guardrails/` stays CI-safe and cluster-independent.
+- `guardrails/` stays non-mutating; most scripts are CI-safe, while
+  `verify-production-image-overlay.sh` also expects a live `kubectl` context.
 - `smoketest/` assumes a live `kubectl` context and a running local stack.
 - `ops/` is for interactive local maintenance.
 - `loadtest/` manages synthetic local fixtures.
@@ -101,14 +104,21 @@ Choose scripts by runtime boundary:
   the `0.0.12` digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
   `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
-  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, verifies the
-  Redis StatefulSet uses a `5Gi` `redis-data` claim template, and applies the
-  production image Kyverno policy to the rendered app overlay.
+  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, uses a live
+  Helm server-side dry run for the production Kiali render so namespace-scoped
+  RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
+  `redis-data` claim template, and applies the production image Kyverno policy
+  to the rendered app overlay.
 
-CI should call the static guardrail directly:
+Use the live-cluster production verifier when a cluster is available:
 
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+CI should keep calling the fully static guardrail directly:
+
+```bash
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 ./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
 ```

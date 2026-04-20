@@ -583,6 +583,14 @@ touching OCI.
 **Goal:** Add Jaeger and Kiali to OCI with the same internal-only access model
 and the same repo-owned manifests.
 
+**Status, 2026-04-20:** Implemented in the working tree. The deploy path now
+includes `deploy/scripts/20-render-phase-7-observability.sh` for reviewed OCI
+render output and `deploy/scripts/21-apply-phase-7-observability.sh` for the
+live Jaeger/Kiali apply path. The production static verifier now renders that
+same output and checks it for digest pinning, `ClusterIP`-only exposure, no
+public route resources, no public observability hostnames, Kiali token auth,
+non-cluster-wide RBAC, and the shared internal Prometheus/Jaeger URLs.
+
 **Implementation:**
 
 - Apply the same Jaeger manifests to OCI.

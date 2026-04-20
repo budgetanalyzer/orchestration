@@ -127,10 +127,10 @@ artifacts:
   production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
   egress manifests derived from the production `AUTH0_ISSUER_URI`
 
-The observability baseline is intentionally narrow:
+The checked-in production monitoring overlay in this directory stays narrow:
 
-- Prometheus and Grafana are the only checked-in production monitoring assets
-  in this baseline
+- `monitoring/prometheus-stack-values.override.yaml` is still only the Grafana
+  loopback override layered onto the existing `prometheus-stack` Helm release
 - production Grafana is internal-only; access it through the shared local and
   production operator contract:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
@@ -140,10 +140,15 @@ The observability baseline is intentionally narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- Jaeger backend manifests are checked in for local Phase 7.3 work, but Jaeger
-  and Kiali are not part of the current production install baseline. When they
-  are added to production, both stay in `monitoring`, stay `ClusterIP`-only,
-  and use loopback-bound `kubectl port-forward`:
+- Jaeger and Kiali now have a separate reviewed OCI rollout path through
+  `deploy/scripts/20-render-phase-7-observability.sh` and
+  `deploy/scripts/21-apply-phase-7-observability.sh`; those scripts reuse the
+  shared `kubernetes/monitoring/jaeger/*.yaml`,
+  `kubernetes/monitoring/kiali-values.yaml`, and
+  `scripts/ops/post-render-kiali-server.sh` inputs instead of adding a second
+  production-only observability manifest tree
+- when installed through that path, both stay in `monitoring`, stay
+  `ClusterIP`-only, and use loopback-bound `kubectl port-forward`:
   `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
   Kiali
 - do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
@@ -159,12 +164,12 @@ sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
 sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 ```
 
-If a live OCI cluster was previously applied from a render that published
-Grafana, explicitly delete the stale route after applying the new app-only
+If a live OCI cluster was previously applied from an older observability render,
+explicitly delete any stale observability route after applying the new app-only
 route render:
 
 ```bash
-kubectl delete httproute -n monitoring grafana-route --ignore-not-found
+kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found
 ```
 
 ## Production Infrastructure Input
@@ -224,11 +229,6 @@ Production verification passed for the app overlay, rendered production output, 
 ```
 
 The repo-owned production policy install/apply surface is now checked in under
-`deploy/`. The deferred production route and egress apply path is intentionally
-kept separate from the checked-in production baseline.
-
-Jaeger and Kiali remain out of scope for this production install baseline.
-Keep the production docs and manifests honest about the current baseline:
-Prometheus and Grafana are the production monitoring deliverables now, while
-the checked-in Jaeger backend waits for the later reviewed Phase 7 production
-step and Kiali remains planned follow-up work.
+`deploy/`. The route, egress, infrastructure, and observability apply paths are
+intentionally kept separate so operators can review each mutation slice before
+touching the OCI cluster.

@@ -58,7 +58,16 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/scripts/17-render-production-infrastructure.sh`
    - `deploy/scripts/18-apply-production-infrastructure.sh`
    - `deploy/scripts/19-migrate-production-redis-statefulset.sh`
-9. Review the production admission inputs:
+9. Review the production observability rollout inputs:
+   - `kubernetes/monitoring/jaeger/configmap.yaml`
+   - `kubernetes/monitoring/jaeger/pvc.yaml`
+   - `kubernetes/monitoring/jaeger/deployment.yaml`
+   - `kubernetes/monitoring/jaeger/services.yaml`
+   - `kubernetes/monitoring/kiali-values.yaml`
+   - `scripts/ops/post-render-kiali-server.sh`
+   - `deploy/scripts/20-render-phase-7-observability.sh`
+   - `deploy/scripts/21-apply-phase-7-observability.sh`
+10. Review the production admission inputs:
    - `kubernetes/kyverno/README.md`
    - `kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml`
    - `kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml`
@@ -68,11 +77,12 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-10. Note the current observability boundary before reviewing or running any
+11. Note the current observability boundary before reviewing or running any
    later observability artifacts:
-   - The current forward production deployment path installs Prometheus and
-     Grafana only. Jaeger backend manifests are checked in for the local Phase
-     7.3 rollout, but production install remains a later reviewed step.
+   - The existing production Prometheus/Grafana path is unchanged.
+   - Phase 7.8 now adds a reviewed OCI rollout path for Jaeger and Kiali
+     through `deploy/scripts/20-render-phase-7-observability.sh` and
+     `deploy/scripts/21-apply-phase-7-observability.sh`.
    - Production Grafana is internal-only and accessed with
      `kubectl port-forward`; the production route render does not publish a
      Grafana `HTTPRoute`.
@@ -80,7 +90,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
      both stay in `monitoring`, stay `ClusterIP`-only, and use loopback-bound
      `kubectl port-forward` instead of public routes.
    - Do not add Grafana, Kiali, or Jaeger public hostname inputs.
-11. Run the human-owned cluster bootstrap scripts in this exact order:
+12. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -142,6 +152,8 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/17-render-production-infrastructure.sh` | Renders `kubernetes/production/infrastructure` with Kustomize load restrictions disabled into `tmp/production-infrastructure/infrastructure.yaml` for review. | Re-run before applying infrastructure, after changing the shared infrastructure baseline, or after changing the production Redis storage patch. |
 | `deploy/scripts/18-apply-production-infrastructure.sh` | Refreshes the production infrastructure render, applies it to the current cluster, and waits for PostgreSQL, RabbitMQ, and Redis StatefulSets when present. | Re-run on a new or already migrated cluster, or after infrastructure manifest changes. |
 | `deploy/scripts/19-migrate-production-redis-statefulset.sh` | Requires `--confirm-destroy-redis`, removes the old Redis Deployment and standalone `redis-data` PVC when present, applies the broad infrastructure target, verifies Redis TLS `PING`, and can optionally restart Redis clients with `--restart-redis-clients`. | Run once for an existing OCI Redis Deployment-to-StatefulSet migration; safe to rerun after migration because absent old Redis resources are ignored. |
+| `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
+| `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those
@@ -412,6 +424,27 @@ kube-prometheus-stack is installed. The checked-in production override at
 assumes that release name so Grafana stays reachable through the existing
 `prometheus-stack-grafana` Service used by the loopback port-forward contract.
 
+For Jaeger and Kiali, use the repo-owned Phase 7.8 render/apply path instead of
+one-off `kubectl` or `helm` commands:
+
+```bash
+./deploy/scripts/20-render-phase-7-observability.sh
+sed -n '1,220p' tmp/phase-7-observability/jaeger-deployment.yaml
+sed -n '1,260p' tmp/phase-7-observability/kiali.yaml
+
+./deploy/scripts/21-apply-phase-7-observability.sh
+```
+
+The render step keeps the exact OCI Jaeger manifests and rendered Kiali output
+reviewable under `tmp/phase-7-observability/`. It now uses a Helm server-side
+dry run against the live cluster so `kiali.yaml` includes the full
+namespace-scoped `Role`/`RoleBinding` footprint that production will install.
+The apply step refreshes that artifact, applies the shared Jaeger manifests
+unchanged, installs the same `kiali/kiali-server` `2.24.0` chart version with
+the same pinned values and post-renderer used locally, waits for
+`Deployment/jaeger` plus `Deployment/kiali`, and aborts if any stale
+observability `HTTPRoute` still exists.
+
 ## Public TLS Cutover
 
 The repo-owned render path for the public TLS cutover is:
@@ -490,27 +523,27 @@ certificate are all healthy.
 
 ## Observability Boundary
 
-- Prometheus and Grafana are the production observability baseline.
 - `kube-prometheus-stack` with Helm release
-  `prometheus-stack` is the live production observability baseline.
+  `prometheus-stack` remains the production metrics baseline.
 - Production Grafana has no public `HTTPRoute` in the phase-6 route render.
   Access it through the shared loopback-bound operator contract:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
 - Production Prometheus stays internal-only and uses the same pattern:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
-- The Jaeger backend manifests are checked in for local Phase 7.3 work. The
-  production install remains deferred to the reviewed Phase 7 production step;
-  when applied there, Jaeger follows the same model through
+- Phase 7.8 now adds the reviewed OCI rollout path for Jaeger and Kiali:
+  `./deploy/scripts/20-render-phase-7-observability.sh` for review and
+  `./deploy/scripts/21-apply-phase-7-observability.sh` for the live install.
+- Jaeger follows the same internal-only model through
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
-- When Phase 7 observability additions land, Kiali follows the same model
-  through `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
+- Kiali follows the same model through
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
 - Keep observability port-forwards bound to `127.0.0.1`; do not use `--address 0.0.0.0`.
 - When updating a live instance from an older render, explicitly delete any
-  stale route because `kubectl apply` does not prune removed kustomize
-  resources:
-  `kubectl delete httproute -n monitoring grafana-route --ignore-not-found`.
-- Keep Prometheus internal-only, and keep any later Jaeger, Kiali, and tracing
-  rollout on the same reviewed internal-only port-forward model.
+  stale observability routes because `kubectl apply` does not prune removed
+  kustomize resources:
+  `kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found`.
+- Keep Prometheus, Jaeger, and Kiali internal-only on the same reviewed
+  loopback port-forward model.
 - Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
   `jaeger.budgetanalyzer.org` as public production hostnames.
 - Public TLS cutover is the next open deployment area.

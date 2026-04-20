@@ -12,7 +12,10 @@
 # exception: it explicitly joins the mesh so the verifier exercises the same
 # Istiod control-plane traffic as the real Prometheus pod. All probes carry the
 # same pod labels as the workload they impersonate, which is what
-# NetworkPolicy selectors match on.
+# NetworkPolicy selectors match on. For real default-namespace workload targets,
+# the verifier resolves the live pod IPs directly instead of hitting the
+# Service VIPs; otherwise the same-label probe pods can end up in the real
+# EndpointSlice and make the verifier test its own sleeping probes.
 #
 # Prerequisites: Tilt running with all services and network policies applied.
 #
@@ -37,6 +40,13 @@ TEMP_SERVICES=()
 LAST_SUCCESS_ATTEMPT=0
 LAST_FAILURE_ATTEMPTS=0
 KUBERNETES_SERVICE_IP=""
+NGINX_GATEWAY_IP=""
+EXT_AUTHZ_IP=""
+SESSION_GATEWAY_IP=""
+TRANSACTION_SERVICE_IP=""
+CURRENCY_SERVICE_IP=""
+PERMISSION_SERVICE_IP=""
+BUDGET_ANALYZER_WEB_IP=""
 
 usage() {
     cat <<'EOF'
@@ -152,6 +162,21 @@ require_network_policies() {
 
     printf '  Found %d policies in default, %d in infrastructure, %d in istio-ingress, %d in istio-egress, %d in monitoring\n' \
         "$default_count" "$infra_count" "$ingress_count" "$egress_count" "$monitoring_count"
+}
+
+resolve_live_pod_ip() {
+    local ns="$1" selector="$2" line
+
+    line=$(kubectl get pods -n "$ns" -l "$selector" --field-selector=status.phase=Running \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.podIP}{"\n"}{end}' |
+        awk '$1 !~ /^np2-/ && $2 != "" { print; exit }')
+
+    [[ -n "$line" ]] || {
+        printf 'ERROR: could not resolve a live non-probe pod IP in namespace %s for selector %s\n' "$ns" "$selector" >&2
+        exit 1
+    }
+
+    printf '%s\n' "${line#*$'\t'}"
 }
 
 # Create a disposable probe pod with sidecar injection disabled.
@@ -564,43 +589,50 @@ main() {
     require_cluster_access
     require_network_policies
     KUBERNETES_SERVICE_IP=$(kubectl get service kubernetes -n default -o jsonpath='{.spec.clusterIP}')
+    NGINX_GATEWAY_IP=$(resolve_live_pod_ip default app=nginx-gateway)
+    EXT_AUTHZ_IP=$(resolve_live_pod_ip default app=ext-authz)
+    SESSION_GATEWAY_IP=$(resolve_live_pod_ip default app=session-gateway)
+    TRANSACTION_SERVICE_IP=$(resolve_live_pod_ip default app=transaction-service)
+    CURRENCY_SERVICE_IP=$(resolve_live_pod_ip default app=currency-service)
+    PERMISSION_SERVICE_IP=$(resolve_live_pod_ip default app=permission-service)
+    BUDGET_ANALYZER_WEB_IP=$(resolve_live_pod_ip default app=budget-analyzer-web)
     create_all_probes
 
     # ------------------------------------------------------------------
     section "Positive: Istio Ingress Gateway -> Ingress Services"
     # ------------------------------------------------------------------
     # Istio ingress gateway pods are the only ingress-facing callers allowed
-    # to reach these default-namespace services. Target services resolve via
-    # cluster DNS.
+    # to reach these default-namespace services. Use live pod IPs here so the
+    # same-label verifier probes do not get added to the real Service backends.
 
     assert_allow_eventually "istio-ingress -> nginx-gateway:8080" \
-        istio-ingress "$PROBE_ISTIO_INGRESS" nginx-gateway.default 8080
+        istio-ingress "$PROBE_ISTIO_INGRESS" "$NGINX_GATEWAY_IP" 8080
 
     assert_allow_eventually "istio-ingress -> ext-authz:9002" \
-        istio-ingress "$PROBE_ISTIO_INGRESS" ext-authz.default 9002
+        istio-ingress "$PROBE_ISTIO_INGRESS" "$EXT_AUTHZ_IP" 9002
 
     assert_allow_eventually "istio-ingress -> session-gateway:8081" \
-        istio-ingress "$PROBE_ISTIO_INGRESS" session-gateway.default 8081
+        istio-ingress "$PROBE_ISTIO_INGRESS" "$SESSION_GATEWAY_IP" 8081
 
     # ------------------------------------------------------------------
     section "Positive: East-West (nginx-gateway -> backends)"
     # ------------------------------------------------------------------
 
     assert_allow_eventually "nginx-gateway -> transaction-service:8082" \
-        default "$PROBE_NGINX" transaction-service 8082
+        default "$PROBE_NGINX" "$TRANSACTION_SERVICE_IP" 8082
 
     assert_allow_eventually "nginx-gateway -> currency-service:8084" \
-        default "$PROBE_NGINX" currency-service 8084
+        default "$PROBE_NGINX" "$CURRENCY_SERVICE_IP" 8084
 
     assert_allow_eventually "nginx-gateway -> budget-analyzer-web:3000" \
-        default "$PROBE_NGINX" budget-analyzer-web 3000
+        default "$PROBE_NGINX" "$BUDGET_ANALYZER_WEB_IP" 3000
 
     # ------------------------------------------------------------------
     section "Positive: East-West (session-gateway -> permission-service)"
     # ------------------------------------------------------------------
 
     assert_allow_eventually "session-gateway -> permission-service:8086" \
-        default "$PROBE_SESSION" permission-service 8086
+        default "$PROBE_SESSION" "$PERMISSION_SERVICE_IP" 8086
 
     # ------------------------------------------------------------------
     section "Positive: Application -> Infrastructure"
@@ -685,6 +717,9 @@ main() {
     assert_allow_eventually "kiali -> jaeger-query:16686" \
         monitoring "$PROBE_MONITORING_KIALI" "$(service_fqdn monitoring "$LISTENER_JAEGER_QUERY_HTTP")" 16686
 
+    assert_allow_eventually "kiali -> istiod:15014" \
+        monitoring "$PROBE_MONITORING_KIALI" istiod.istio-system 15014
+
     assert_allow_eventually "kiali -> kubernetes.default:443" \
         monitoring "$PROBE_MONITORING_KIALI" "$KUBERNETES_SERVICE_IP" 443
 
@@ -716,25 +751,25 @@ main() {
     # no other ingress or egress allows. It cannot reach any service.
 
     assert_deny_consistently "unlabeled -> nginx-gateway:8080" \
-        default "$PROBE_UNLABELED" nginx-gateway 8080
+        default "$PROBE_UNLABELED" "$NGINX_GATEWAY_IP" 8080
 
     assert_deny_consistently "unlabeled -> session-gateway:8081" \
-        default "$PROBE_UNLABELED" session-gateway 8081
+        default "$PROBE_UNLABELED" "$SESSION_GATEWAY_IP" 8081
 
     assert_deny_consistently "unlabeled -> ext-authz:9002" \
-        default "$PROBE_UNLABELED" ext-authz 9002
+        default "$PROBE_UNLABELED" "$EXT_AUTHZ_IP" 9002
 
     assert_deny_consistently "unlabeled -> transaction-service:8082" \
-        default "$PROBE_UNLABELED" transaction-service 8082
+        default "$PROBE_UNLABELED" "$TRANSACTION_SERVICE_IP" 8082
 
     assert_deny_consistently "unlabeled -> currency-service:8084" \
-        default "$PROBE_UNLABELED" currency-service 8084
+        default "$PROBE_UNLABELED" "$CURRENCY_SERVICE_IP" 8084
 
     assert_deny_consistently "unlabeled -> permission-service:8086" \
-        default "$PROBE_UNLABELED" permission-service 8086
+        default "$PROBE_UNLABELED" "$PERMISSION_SERVICE_IP" 8086
 
     assert_deny_consistently "unlabeled -> budget-analyzer-web:3000" \
-        default "$PROBE_UNLABELED" budget-analyzer-web 3000
+        default "$PROBE_UNLABELED" "$BUDGET_ANALYZER_WEB_IP" 3000
 
     assert_deny_consistently "unlabeled -> redis:6379" \
         default "$PROBE_UNLABELED" redis.infrastructure 6379
@@ -772,10 +807,10 @@ main() {
         default "$PROBE_EXTAUTHZ" rabbitmq.infrastructure 5671
 
     assert_deny_consistently "session-gateway -> transaction-service:8082" \
-        default "$PROBE_SESSION" transaction-service 8082
+        default "$PROBE_SESSION" "$TRANSACTION_SERVICE_IP" 8082
 
     assert_deny_consistently "session-gateway -> currency-service:8084" \
-        default "$PROBE_SESSION" currency-service 8084
+        default "$PROBE_SESSION" "$CURRENCY_SERVICE_IP" 8084
 
     assert_deny_consistently "ext-authz -> istio-egress-gateway:443" \
         default "$PROBE_EXTAUTHZ" istio-egress-gateway.istio-egress 443
@@ -791,10 +826,10 @@ main() {
     # blocked unless the topology changes and the policy set is updated.
 
     assert_deny_consistently "session-gateway -> nginx-gateway:8080" \
-        default "$PROBE_SESSION" nginx-gateway 8080
+        default "$PROBE_SESSION" "$NGINX_GATEWAY_IP" 8080
 
     assert_deny_consistently "istio-ingress -> ext-authz:8090" \
-        istio-ingress "$PROBE_ISTIO_INGRESS" ext-authz.default 8090
+        istio-ingress "$PROBE_ISTIO_INGRESS" "$EXT_AUTHZ_IP" 8090
 
     assert_deny_consistently "currency-service -> rabbitmq:15672" \
         default "$PROBE_CURRENCY" rabbitmq.infrastructure 15672

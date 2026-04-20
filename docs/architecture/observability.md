@@ -347,7 +347,8 @@ egress plus explicit allowlists for:
 - Prometheus service discovery and scrape traffic to Grafana,
   kube-state-metrics, the Prometheus Operator, Spring Boot services, Istio
   sidecars, and Istiod
-- Kiali access to Prometheus, Jaeger query, and the Kubernetes API
+- Kiali access to Prometheus, Jaeger query, the Kubernetes API, and Istiod's
+  control-plane version endpoint on `15014`
 - OTLP ingress to `jaeger-collector` only from approved mesh workloads
 
 The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and

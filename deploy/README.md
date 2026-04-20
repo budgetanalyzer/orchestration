@@ -67,6 +67,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `scripts/ops/post-render-kiali-server.sh`
    - `deploy/scripts/20-render-phase-7-observability.sh`
    - `deploy/scripts/21-apply-phase-7-observability.sh`
+   - `deploy/scripts/22-apply-production-monitoring.sh`
 10. Review the production admission inputs:
    - `kubernetes/kyverno/README.md`
    - `kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml`
@@ -79,7 +80,8 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/scripts/15-apply-phase-7-policies.sh`
 11. Note the current observability boundary before reviewing or running any
    later observability artifacts:
-   - The existing production Prometheus/Grafana path is unchanged.
+   - The production Prometheus/Grafana path is owned by
+     `deploy/scripts/22-apply-production-monitoring.sh`.
    - Phase 7.8 now adds a reviewed OCI rollout path for Jaeger and Kiali
      through `deploy/scripts/20-render-phase-7-observability.sh` and
      `deploy/scripts/21-apply-phase-7-observability.sh`.
@@ -154,6 +156,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/19-migrate-production-redis-statefulset.sh` | Requires `--confirm-destroy-redis`, removes the old Redis Deployment and standalone `redis-data` PVC when present, applies the broad infrastructure target, verifies Redis TLS `PING`, and can optionally restart Redis clients with `--restart-redis-clients`. | Run once for an existing OCI Redis Deployment-to-StatefulSet migration; safe to rerun after migration because absent old Redis resources are ignored. |
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
+| `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the full production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those
@@ -525,6 +528,10 @@ certificate are all healthy.
 
 - `kube-prometheus-stack` with Helm release
   `prometheus-stack` remains the production metrics baseline.
+- Reapply the complete internal monitoring stack with
+  `./deploy/scripts/22-apply-production-monitoring.sh`; pass
+  `--verify-runtime` when you want the script to also prove the Spring
+  Boot/Grafana dashboard inputs after the rollout.
 - Production Grafana has no public `HTTPRoute` in the phase-6 route render.
   Access it through the shared loopback-bound operator contract:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.

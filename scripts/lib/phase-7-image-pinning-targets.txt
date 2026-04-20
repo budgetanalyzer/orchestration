@@ -6,6 +6,7 @@ kubernetes/infrastructure/postgresql/statefulset.yaml
 kubernetes/infrastructure/redis/statefulset.yaml
 kubernetes/infrastructure/rabbitmq/statefulset.yaml
 kubernetes/monitoring/jaeger/deployment.yaml
+kubernetes/monitoring/kiali-values.yaml
 kubernetes/services/budget-analyzer-web/deployment.yaml
 kubernetes/services/currency-service/deployment.yaml
 kubernetes/services/ext-authz/deployment.yaml

@@ -279,6 +279,9 @@ extension provider in `kubernetes/istio/istiod-values.yaml` and the
 mesh-default `kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays
 on Istio defaults, so generate several requests through
 `https://app.budgetanalyzer.localhost` before checking Jaeger.
+Tilt also installs the standalone `kiali-server` chart in `monitoring` with
+token auth, view-only mode, non-cluster-wide RBAC, and `ClusterIP` service
+exposure.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost` and use the same loopback-only
@@ -297,6 +300,13 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
 kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/jaeger-query 16686:16686
 
+# Kiali UI (port-forward only — no ingress route)
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/kiali 20001:20001
+
+# Short-lived Kiali login token
+kubectl -n monitoring create token kiali
+
 # Grafana admin password
 kubectl get secret -n monitoring prometheus-stack-grafana \
   -o jsonpath="{.data.admin-password}" | base64 --decode
@@ -304,8 +314,9 @@ echo
 ```
 
 Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
-for Prometheus, and `http://localhost:16686/jaeger` for Jaeger. Do not use
-`--address 0.0.0.0` for observability port-forwards.
+for Prometheus, `http://localhost:16686/jaeger` for Jaeger, and
+`http://localhost:20001/kiali` for Kiali. Do not use `--address 0.0.0.0` for
+observability port-forwards.
 
 Validate the tracing control-plane wiring after `tilt up`:
 

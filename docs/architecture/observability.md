@@ -15,10 +15,10 @@ Spring Boot, Istio, and kube-state-metrics cover the intended observability
 story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
 kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy
 baseline does not need broad kube-system or node egress.
-Phase 7 keeps Jaeger and Kiali on the same internal-only contract: Jaeger now
-runs in `monitoring`, Kiali is planned for the same namespace, both stay
-`ClusterIP` only, and operator access uses loopback-bound `kubectl port-forward`
-instead of any public observability hostname.
+Phase 7 keeps Jaeger and Kiali on the same internal-only contract: both run in
+`monitoring`, both stay `ClusterIP` only, and operator access uses
+loopback-bound `kubectl port-forward` instead of any public observability
+hostname.
 
 ## Components
 
@@ -29,6 +29,7 @@ instead of any public observability hostname.
 | Grafana | Dashboard visualization | `monitoring` |
 | kube-state-metrics | Kubernetes resource metrics | `monitoring` |
 | Jaeger | Distributed trace ingestion and query backend | `monitoring` |
+| Kiali | Istio mesh graph and workload inspection | `monitoring` |
 
 **Disabled components** (with rationale):
 - **Alertmanager** - dashboards first; alerting deferred
@@ -295,7 +296,10 @@ The locked runtime contract is:
 - service exposure: `ClusterIP` only
 - auth mode: `token`
 - UI posture: `view_only_mode: true`
-- RBAC posture: non-cluster-wide by default
+- RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
+  `istio-system`, `istio-ingress`, and `istio-egress`
+- image: Kiali `2.24.0`, pinned by digest
+- integrations: internal Prometheus URL and Jaeger query gRPC URL only
 - operator access:
 
 ```bash
@@ -303,12 +307,18 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/kiali 20001:20001
 ```
 
-Then open `https://localhost:20001`.
+Then create a short-lived login token:
+
+```bash
+kubectl -n monitoring create token kiali
+```
+
+Open `http://localhost:20001/kiali` and paste the token.
 
 ## Security Compliance
 
 The monitoring stack meets the same security requirements as all other
-workloads in this repo — no namespace exceptions.
+workloads in this repo.
 
 `monitoring` is now a first-class enforced namespace, not an implicit
 allow-all side case. The repo-owned baseline is deny-by-default ingress and
@@ -319,7 +329,7 @@ egress plus explicit allowlists for:
 - Prometheus service discovery and scrape traffic to Grafana,
   kube-state-metrics, the Prometheus Operator, Spring Boot services, Istio
   sidecars, and Istiod
-- future Kiali access to Prometheus, Jaeger query, and the Kubernetes API
+- Kiali access to Prometheus, Jaeger query, and the Kubernetes API
 - OTLP ingress to `jaeger-collector` only from approved mesh workloads
 
 The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and
@@ -340,7 +350,9 @@ attachment, so observability stays off the public ingress surface by default.
 
 Every image is digest-pinned in the monitoring inputs. Prometheus/Grafana image
 pins live in `kubernetes/monitoring/prometheus-stack-values.yaml`; Jaeger is
-pinned in `kubernetes/monitoring/jaeger/deployment.yaml`.
+pinned in `kubernetes/monitoring/jaeger/deployment.yaml`; Kiali is pinned in
+`kubernetes/monitoring/kiali-values.yaml` and normalized by the Helm
+post-renderer before apply.
 
 | Image | Tag | Digest |
 |-------|-----|--------|
@@ -349,6 +361,7 @@ pinned in `kubernetes/monitoring/jaeger/deployment.yaml`.
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
 | `kube-state-metrics/kube-state-metrics` | v2.18.0 | pinned |
+| `quay.io/kiali/kiali` | v2.24.0 | pinned |
 
 ### Workload Hardening
 

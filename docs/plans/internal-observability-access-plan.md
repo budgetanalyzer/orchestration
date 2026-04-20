@@ -352,8 +352,8 @@ Use the same workstation-facing ports everywhere:
 |------|-----------|---------|--------------|--------------|
 | Grafana | `monitoring` | `prometheus-stack-grafana` | `http://localhost:3300` | `3300:80` |
 | Prometheus | `monitoring` | `prometheus-stack-kube-prom-prometheus` | `http://localhost:9090` | `9090:9090` |
-| Jaeger, if added later | TBD | TBD | `http://localhost:16686` | `16686:<service-port>` |
-| Kiali, if added later | TBD | TBD | `http://localhost:20001` | `20001:<service-port>` |
+| Jaeger | `monitoring` | `jaeger-query` | `http://localhost:16686/jaeger` | `16686:16686` |
+| Kiali | `monitoring` | `kiali` | `http://localhost:20001/kiali` | `20001:20001` |
 
 Grafana intentionally uses local port `3300`, not `3000`, because local Tilt
 already reserves `localhost:3000` for the frontend Vite dev-server

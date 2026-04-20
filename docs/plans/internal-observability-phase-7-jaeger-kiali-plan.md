@@ -1,6 +1,6 @@
 # Plan: Phase 7 Jaeger And Kiali Rollout
 
-**Status:** Proposed
+**Status:** In progress; Phases 7.1-7.5 are implemented in the working tree.
 **Date:** 2026-04-19
 **Supersedes:** the placeholder `Phase 7` section in
 `docs/plans/internal-observability-access-plan.md`
@@ -72,6 +72,40 @@ Validation already completed in this session:
 - `./deploy/scripts/08-verify-network-policy-enforcement.sh` passed once at
   `65 passed (out of 65)` before the final verifier service-path tightening and
   `15008` additions.
+
+2026-04-20 Phase 7.5 implementation update:
+
+- Added `kubernetes/monitoring/kiali-values.yaml` for standalone
+  `kiali/kiali-server` `2.24.0` in `monitoring`.
+- Kiali is configured with token auth, `view_only_mode: true`,
+  `cluster_wide_access: false`, namespace discovery limited to `default`,
+  `monitoring`, `istio-system`, `istio-ingress`, and `istio-egress`, no ingress,
+  and `ClusterIP` service exposure.
+- Kiali points at the internal Prometheus service and the Jaeger query gRPC
+  endpoint. No public Grafana or Jaeger `external_url` is set.
+- The `kiali-server` `2.24.0` chart renders `deployment.image_digest` as
+  `image@sha256:<digest>:<tag>`. The repo keeps the chart value populated as
+  planned, then uses `scripts/ops/post-render-kiali-server.sh` to normalize the
+  final Deployment image to `image:<tag>@sha256:<digest>` before apply.
+- The same post-renderer adds the repo-required pod hardening that the chart
+  does not expose as values: `automountServiceAccountToken: false`, pod-level
+  `RuntimeDefault` seccomp, and an explicit projected Kubernetes API token
+  volume for Kiali's Kubernetes client.
+- `Tiltfile` now installs Kiali with the checked-in values and post-renderer.
+  `setup.sh` refreshes the `kiali` Helm repo metadata during bootstrap.
+- `scripts/smoketest/verify-monitoring-rendered-manifests.sh` now renders Kiali
+  through the post-renderer and checks image pinning, auth mode, view-only mode,
+  non-cluster-wide RBAC, no route/ingress resources, no public external URLs,
+  and the patched pod-hardening contract.
+
+Validation completed for this update:
+
+- `bash -n scripts/ops/post-render-kiali-server.sh scripts/smoketest/verify-monitoring-rendered-manifests.sh setup.sh`
+- `shellcheck scripts/ops/post-render-kiali-server.sh scripts/smoketest/verify-monitoring-rendered-manifests.sh setup.sh`
+- `./scripts/smoketest/verify-monitoring-rendered-manifests.sh`
+- `./scripts/guardrails/verify-phase-7-static-manifests.sh`
+- `helm upgrade --install kiali kiali/kiali-server --namespace monitoring --version 2.24.0 --values kubernetes/monitoring/kiali-values.yaml --post-renderer scripts/ops/post-render-kiali-server.sh --dry-run=server --debug`
+- `tilt alpha tiltfile-result --file Tiltfile`
 
 Current blocker discovered after a fresh `tilt down` / `tilt up` on
 2026-04-20:
@@ -531,7 +565,7 @@ touching OCI.
 - `tilt up`
 - monitoring stack healthy in `monitoring`
 - Jaeger UI reachable through `127.0.0.1:16686`
-- Kiali reachable through `https://127.0.0.1:20001`
+- Kiali reachable through `http://127.0.0.1:20001/kiali`
 - application traffic through `https://app.budgetanalyzer.localhost` produces
   traces visible in Jaeger
 - Kiali graph and workload pages load against the real mesh

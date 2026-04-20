@@ -294,6 +294,21 @@ else
 fi
 
 # =============================================================================
+# Step 6c: Install Kiali Helm repository
+# =============================================================================
+print_step "Setting up Kiali Helm repository..."
+
+if helm repo list 2>/dev/null | grep -q "^kiali"; then
+    helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
+    helm repo update kiali >/dev/null
+    print_success "Kiali Helm repository refreshed"
+else
+    helm repo add kiali https://kiali.org/helm-charts >/dev/null
+    helm repo update kiali >/dev/null
+    print_success "Kiali Helm repository added and refreshed"
+fi
+
+# =============================================================================
 # Step 7: Generate TLS certificates
 # =============================================================================
 print_step "Setting up TLS certificates..."

@@ -35,6 +35,10 @@ scripts/
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.
+- `smoketest/verify-monitoring-rendered-manifests.sh` - Renders the
+  Prometheus stack and Kiali chart, then checks image pinning, service exposure,
+  Kiali auth/RBAC posture, and server dry-run compliance for rendered workload
+  objects.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the

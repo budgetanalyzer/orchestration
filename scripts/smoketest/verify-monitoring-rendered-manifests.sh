@@ -8,9 +8,14 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 CHART="prometheus-community/kube-prometheus-stack"
 CHART_VERSION="83.4.0"
+KIALI_CHART="kiali/kiali-server"
+KIALI_CHART_VERSION="2.24.0"
 NAMESPACE="monitoring"
 RELEASE_NAME="prometheus-stack"
+KIALI_RELEASE_NAME="kiali"
 VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/prometheus-stack-values.yaml"
+KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
+KIALI_POST_RENDERER="${REPO_DIR}/scripts/ops/post-render-kiali-server.sh"
 NAMESPACE_FILE="${REPO_DIR}/kubernetes/monitoring/namespace.yaml"
 JAEGER_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 
@@ -58,10 +63,16 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 
 render_file="${tmp_dir}/prometheus-stack-render.yaml"
 workload_file="${tmp_dir}/prometheus-stack-workloads.yaml"
+kiali_render_file="${tmp_dir}/kiali-render.yaml"
+kiali_workload_file="${tmp_dir}/kiali-workloads.yaml"
 
 log_step "Refreshing prometheus-community Helm repo metadata"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
 helm repo update prometheus-community >/dev/null
+
+log_step "Refreshing kiali Helm repo metadata"
+helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
+helm repo update kiali >/dev/null
 
 log_step "Checking the monitoring namespace manifest"
 kubectl apply --dry-run=server -f "${NAMESPACE_FILE}" >/dev/null
@@ -77,9 +88,17 @@ helm template "${RELEASE_NAME}" "${CHART}" \
     --values "${VALUES_FILE}" \
     > "${render_file}"
 
+log_step "Rendering ${KIALI_CHART} ${KIALI_CHART_VERSION}"
+helm template "${KIALI_RELEASE_NAME}" "${KIALI_CHART}" \
+    --namespace "${NAMESPACE}" \
+    --version "${KIALI_CHART_VERSION}" \
+    --values "${KIALI_VALUES_FILE}" \
+    --post-renderer "${KIALI_POST_RENDERER}" \
+    > "${kiali_render_file}"
+
 log_step "Checking rendered image pinning"
 mapfile -t rendered_images < <(
-    grep -E '^[[:space:]]*image:[[:space:]]*' "${render_file}" \
+    grep -hE '^[[:space:]]*image:[[:space:]]*' "${render_file}" "${kiali_render_file}" \
         | sed -E 's/^[[:space:]]*image:[[:space:]]*"?([^"]+)"?/\1/' \
         | sort -u
 )
@@ -107,6 +126,47 @@ if search_file '^kind:[[:space:]]*DaemonSet$' "${render_file}" >/dev/null; then
     fail "Rendered manifests still contain a DaemonSet; node-exporter should be disabled."
 fi
 
+log_step "Checking rendered Kiali contract"
+if ! grep -Eq 'strategy:[[:space:]]*token' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not use token auth."
+fi
+
+if grep -Eq 'strategy:[[:space:]]*anonymous' "${kiali_render_file}"; then
+    fail "Rendered Kiali config enables anonymous auth."
+fi
+
+if ! grep -Eq 'view_only_mode:[[:space:]]*true' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not enable view_only_mode."
+fi
+
+if ! grep -Eq 'cluster_wide_access:[[:space:]]*false' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not disable cluster-wide access."
+fi
+
+if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)($|[[:space:]])' "${kiali_render_file}"; then
+    fail "Rendered Kiali manifests create an ingress, HTTPRoute, or Gateway."
+fi
+
+if grep -Eq 'external_url:[[:space:]]*https?://' "${kiali_render_file}"; then
+    fail "Rendered Kiali config sets a public external_url."
+fi
+
+if grep -Eq 'kind:[[:space:]]*Cluster(Role|RoleBinding)' "${kiali_render_file}"; then
+    fail "Rendered Kiali manifests request cluster-wide RBAC."
+fi
+
+if ! grep -Eq 'automountServiceAccountToken:[[:space:]]*false' "${kiali_render_file}"; then
+    fail "Rendered Kiali Deployment does not explicitly disable service account token automount."
+fi
+
+if ! grep -Eq 'seccompProfile:' "${kiali_render_file}" || ! grep -Eq 'type:[[:space:]]*RuntimeDefault' "${kiali_render_file}"; then
+    fail "Rendered Kiali Deployment does not set pod-level RuntimeDefault seccomp."
+fi
+
+if ! grep -Eq 'name:[[:space:]]*kiali-api-token' "${kiali_render_file}"; then
+    fail "Rendered Kiali Deployment does not mount the explicit projected API token."
+fi
+
 log_step "Server-dry-running rendered workload objects"
 extract_workloads "${render_file}" "${workload_file}"
 [[ -s "${workload_file}" ]] || fail "No rendered Deployment/StatefulSet/DaemonSet/Job objects were found."
@@ -114,6 +174,14 @@ dry_run_stderr="${tmp_dir}/kubectl-dry-run.stderr"
 if ! kubectl apply --dry-run=server -f "${workload_file}" >/dev/null 2>"${dry_run_stderr}"; then
     cat "${dry_run_stderr}" >&2
     fail "kubectl apply --dry-run=server rejected the rendered workload objects."
+fi
+
+log_step "Server-dry-running rendered Kiali workload objects"
+extract_workloads "${kiali_render_file}" "${kiali_workload_file}"
+[[ -s "${kiali_workload_file}" ]] || fail "No rendered Kiali Deployment/StatefulSet/DaemonSet/Job objects were found."
+if ! kubectl apply --dry-run=server -f "${kiali_workload_file}" >/dev/null 2>"${dry_run_stderr}"; then
+    cat "${dry_run_stderr}" >&2
+    fail "kubectl apply --dry-run=server rejected the rendered Kiali workload objects."
 fi
 
 printf '\nMonitoring render verification passed.\n'

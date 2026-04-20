@@ -877,8 +877,10 @@ local_resource(
     ''',
     deps=[
         'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'kubernetes/monitoring/kiali-values.yaml',
         'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
         'scripts/smoketest/verify-monitoring-rendered-manifests.sh',
+        'scripts/ops/post-render-kiali-server.sh',
     ],
     resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
     labels=['monitoring'],
@@ -941,6 +943,34 @@ k8s_resource(
     labels=['monitoring'],
     links=[
         link('http://localhost:16686/jaeger', 'Jaeger'),
+    ],
+)
+
+local_resource(
+    'kiali',
+    cmd='''
+        kubectl apply -f kubernetes/istio/ingress-namespace.yaml
+        kubectl apply -f kubernetes/istio/egress-namespace.yaml
+        helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
+        helm repo update kiali >/dev/null
+        helm upgrade --install kiali kiali/kiali-server \
+            --namespace monitoring \
+            --version 2.24.0 \
+            --values kubernetes/monitoring/kiali-values.yaml \
+            --post-renderer scripts/ops/post-render-kiali-server.sh \
+            --wait --timeout 5m
+        kubectl rollout status deployment/kiali -n monitoring --timeout=120s
+    ''',
+    deps=[
+        'kubernetes/monitoring/kiali-values.yaml',
+        'kubernetes/istio/ingress-namespace.yaml',
+        'kubernetes/istio/egress-namespace.yaml',
+        'scripts/ops/post-render-kiali-server.sh',
+    ],
+    resource_deps=['prometheus-stack', 'jaeger', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
+    links=[
+        link('http://localhost:20001/kiali', 'Kiali'),
     ],
 )
 

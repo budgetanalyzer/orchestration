@@ -90,17 +90,20 @@ Choose scripts by runtime boundary:
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
-  active setup guidance scans. Its kubeconform pass validates checked-in
-  Kubernetes resource manifests and skips Kustomize patch fragments under
-  `patches/` directories.
+  active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
+  in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
+  internal-only storage/service contract pinned in static review. Its
+  kubeconform pass validates checked-in Kubernetes resource manifests and skips
+  Kustomize patch fragments under `patches/` directories.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies
   the `0.0.12` digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
-  `imagePullPolicy: Never`, verifies the Redis StatefulSet uses a `5Gi`
-  `redis-data` claim template, and applies the production image Kyverno policy
-  to the rendered app overlay.
+  `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
+  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, verifies the
+  Redis StatefulSet uses a `5Gi` `redis-data` claim template, and applies the
+  production image Kyverno policy to the rendered app overlay.
 
 CI should call the static guardrail directly:
 
@@ -150,7 +153,10 @@ the active context and Tilt resource state from the same host shell first.
   now coexists with that helper by reusing the expected canonical listeners
   when they are already running. Use explicit `--grafana-port`,
   `--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only
-  when some other intentional listener already owns one of those ports.
+  when some other intentional listener already owns one of those ports. If the
+  helper reports a conflicting `code` listener on a canonical observability
+  port, that is host-side VS Code port forwarding, not a repo-owned Tilt
+  forward.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

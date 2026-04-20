@@ -83,6 +83,7 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
+JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
 KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 
@@ -671,26 +672,48 @@ scan_observability_httproutes() {
     printf 'observability HTTPRoute scan passed\n'
 }
 
-scan_observability_gateway_hostnames() {
+scan_observability_ingresses() {
     local file
     local -a failures=()
 
     while IFS= read -r file; do
         [[ -n "${file}" ]] || continue
 
-        if grep -Eq '^kind:[[:space:]]*(HTTPRoute|Gateway)([[:space:]]|$)' "${file}" &&
+        if grep -Eq '^kind:[[:space:]]*Ingress([[:space:]]|$)' "${file}" &&
+            grep -Eiq '\b(grafana|prometheus|kiali|jaeger)\b' "${file}"; then
+            failures+=("${file#"${REPO_DIR}"/}")
+        fi
+    done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'observability Ingress scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'observability Ingress scan passed\n'
+}
+
+scan_observability_public_entry_hostnames() {
+    local file
+    local -a failures=()
+
+    while IFS= read -r file; do
+        [[ -n "${file}" ]] || continue
+
+        if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)([[:space:]]|$)' "${file}" &&
             grep -Eiq '(^|[[:space:]-])["'\'']?(grafana|prometheus|kiali|jaeger)\.[[:alnum:].-]+' "${file}"; then
             failures+=("${file#"${REPO_DIR}"/}")
         fi
     done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
 
     if (( ${#failures[@]} > 0 )); then
-        printf 'observability Gateway/HTTPRoute hostname scan failed:\n' >&2
+        printf 'observability public-entry hostname scan failed:\n' >&2
         printf '  - %s\n' "${failures[@]}" >&2
         return 1
     fi
 
-    printf 'observability Gateway/HTTPRoute hostname scan passed\n'
+    printf 'observability public-entry hostname scan passed\n'
 }
 
 scan_observability_production_inputs() {
@@ -784,6 +807,51 @@ scan_kiali_values_contract() {
     fi
 
     printf 'Kiali values contract scan passed\n'
+}
+
+scan_jaeger_manifest_contract() {
+    local -a failures=()
+
+    if [[ ! -d "${JAEGER_MANIFEST_DIR}" ]]; then
+        failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: directory is missing")
+    fi
+
+    if [[ ! -f "${JAEGER_SERVICES_FILE}" ]]; then
+        failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        if [[ "$(grep -Ec '^[[:space:]]*type:[[:space:]]*ClusterIP([[:space:]]|$)' "${JAEGER_SERVICES_FILE}")" -ne 2 ]]; then
+            failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: Jaeger services must remain ClusterIP-only")
+        fi
+
+        if grep -Eq '^[[:space:]]*type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' "${JAEGER_SERVICES_FILE}"; then
+            failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: Jaeger services expose a non-ClusterIP type")
+        fi
+
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*jaeger-collector' \
+            'Jaeger collector Service'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*jaeger-query' \
+            'Jaeger query Service'
+    fi
+
+    if [[ -d "${JAEGER_MANIFEST_DIR}" ]]; then
+        if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)([[:space:]]|$)' "${JAEGER_MANIFEST_DIR}"/*.yaml; then
+            failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: Jaeger manifests create a public entry resource")
+        fi
+
+        if grep -Eiq '\b(elasticsearch|opensearch)\b' "${JAEGER_MANIFEST_DIR}"/*.yaml; then
+            failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: Jaeger manifests depend on Elasticsearch/OpenSearch")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Jaeger manifest contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Jaeger manifest contract scan passed\n'
 }
 
 scan_istio_ingress_observability_allowances() {
@@ -1022,10 +1090,12 @@ run_repo_pattern_scans() {
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
     scan_pipe_to_shell_guidance "repo" "${ACTIVE_GUIDANCE_PATHS[@]}"
     scan_observability_httproutes
-    scan_observability_gateway_hostnames
+    scan_observability_ingresses
+    scan_observability_public_entry_hostnames
     scan_observability_production_inputs
     scan_grafana_values_contract
     scan_kiali_values_contract
+    scan_jaeger_manifest_contract
     scan_istio_ingress_observability_allowances
     scan_istio_tracing_contract
 }

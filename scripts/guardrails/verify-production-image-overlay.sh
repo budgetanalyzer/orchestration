@@ -105,6 +105,43 @@ assert_contains_literal() {
     fi
 }
 
+assert_no_observability_public_entry_resources() {
+    local file="$1"
+    local description="$2"
+
+    if awk '
+        function finish_doc() {
+            if (resource_kind ~ /^(Ingress|HTTPRoute|Gateway)$/ &&
+                resource_text ~ /(grafana|prometheus|kiali|jaeger)-route|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus|jaeger(-collector|-query)?|kiali([[:space:]]|$)|((grafana|prometheus|kiali|jaeger)\.budgetanalyzer\.(localhost|org))/) {
+                found = 1
+            }
+        }
+        BEGIN {
+            resource_kind = ""
+            resource_text = ""
+        }
+        /^---$/ {
+            finish_doc()
+            resource_kind = ""
+            resource_text = ""
+            next
+        }
+        {
+            resource_text = resource_text $0 "\n"
+            if ($0 ~ /^kind:[[:space:]]*/) {
+                resource_kind = $0
+                sub(/^kind:[[:space:]]*/, "", resource_kind)
+            }
+        }
+        END {
+            finish_doc()
+            exit found ? 0 : 1
+        }
+    ' "${file}"; then
+        fail "${description}"
+    fi
+}
+
 assert_yaml_resource() {
     local file kind name description
 
@@ -327,6 +364,8 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /@vite/client {' "rendered production nginx config is missing the explicit Vite deny route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /_prod-smoke {' "rendered production nginx config is missing the explicit prod-smoke deny route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'https://demo.budgetanalyzer.org/api' "rendered production docs bundle is missing the production API server URL"
+    assert_no_observability_public_entry_resources "${RENDERED_APPS_FILE}" \
+        "rendered production app overlay contains an observability Ingress, HTTPRoute, or Gateway resource"
 
     "${STATIC_TOOLS_BIN}/kyverno" apply "${PRODUCTION_IMAGE_POLICY}" \
         --resource "${RENDERED_APPS_FILE}" \
@@ -358,6 +397,8 @@ verify_phase6_render_outputs() {
         "rendered gateway routes still point at an observability Service"
     assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
         "rendered gateway routes still contain an observability hostname"
+    assert_no_observability_public_entry_resources "${gateway_file}" \
+        "rendered gateway routes still contain an observability Ingress, HTTPRoute, or Gateway resource"
     assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
         "rendered ingress policies still contain an observability hostname"
     assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_INGRESS_PATTERN}" \

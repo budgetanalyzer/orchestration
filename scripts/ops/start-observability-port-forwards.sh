@@ -197,6 +197,7 @@ ensure_loopback_port_is_free() {
     local port="$1"
     local expected_owner="$2"
     local active_listener=""
+    local extra_hint=""
 
     if ! python3 - "${port}" <<'PY'
 import socket
@@ -222,6 +223,14 @@ PY
         printf 'Expected owner: %s\n' "${expected_owner}" >&2
         if [[ -n "${active_listener}" ]]; then
             printf 'Current listener: %s\n' "${active_listener}" >&2
+            case "${active_listener}" in
+                code\ *|*'("code"'*|*'/code '*|*'/code-insiders '*|*'("code-insiders"'*)
+                    extra_hint='The listener appears to be VS Code port forwarding on the host. Remove the forwarded port from the VS Code Ports view or stop that session, then rerun the helper.'
+                    ;;
+            esac
+        fi
+        if [[ -n "${extra_hint}" ]]; then
+            printf '%s\n' "${extra_hint}" >&2
         fi
         printf 'Pick a different local port with the matching --*-port flag or stop the competing listener.\n' >&2
         exit 1
@@ -286,7 +295,7 @@ wait_for_url() {
     local deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
 
     while (( SECONDS < deadline )); do
-        if curl -fsS --max-time 2 "${url}" >/dev/null; then
+        if curl -fsS --max-time 2 "${url}" >/dev/null 2>&1; then
             return 0
         fi
 

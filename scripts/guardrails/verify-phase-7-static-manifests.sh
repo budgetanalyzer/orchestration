@@ -84,6 +84,7 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
 JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
+KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 
 usage() {
     cat <<'EOF'
@@ -744,6 +745,47 @@ scan_grafana_values_contract() {
     printf 'Grafana values contract scan passed\n'
 }
 
+scan_kiali_values_contract() {
+    local -a failures=()
+
+    if [[ ! -f "${KIALI_VALUES_FILE}" ]]; then
+        failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'strategy:[[:space:]]*token' \
+            'Kiali token auth strategy'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'view_only_mode:[[:space:]]*true' \
+            'Kiali view-only mode'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'cluster_wide_access:[[:space:]]*false' \
+            'Kiali non-cluster-wide RBAC'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'service_type:[[:space:]]*ClusterIP' \
+            'Kiali ClusterIP service exposure'
+
+        if grep -Eq 'strategy:[[:space:]]*anonymous([[:space:]]|$)' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali anonymous auth is enabled")
+        fi
+
+        if grep -Eq 'cluster_wide_access:[[:space:]]*true([[:space:]]|$)' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali requests cluster-wide access")
+        fi
+
+        if grep -Eq 'external_url:[[:space:]]*https?://' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali sets a public external_url")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Kiali values contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Kiali values contract scan passed\n'
+}
+
 scan_istio_ingress_observability_allowances() {
     local expected_jaeger_policy_file="${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
     local -a failures=()
@@ -983,6 +1025,7 @@ run_repo_pattern_scans() {
     scan_observability_gateway_hostnames
     scan_observability_production_inputs
     scan_grafana_values_contract
+    scan_kiali_values_contract
     scan_istio_ingress_observability_allowances
     scan_istio_tracing_contract
 }

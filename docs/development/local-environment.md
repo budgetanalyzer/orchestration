@@ -635,6 +635,7 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | Grafana | 3300 | http://localhost:3300 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` |
 | Prometheus | 9090 | http://localhost:9090 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` |
 | Jaeger | 16686 | http://localhost:16686/jaeger | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` |
+| Kiali | 20001 | http://localhost:20001/kiali | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies Grafana, Prometheus, and Jaeger access over loopback-bound kubectl port-forwards.
+# Verifies Grafana, Prometheus, Jaeger, and Kiali access over loopback-bound kubectl port-forwards.
 
 set -euo pipefail
 
@@ -13,6 +13,9 @@ PROMETHEUS_LOCAL_PORT=9090
 JAEGER_RESOURCE="svc/jaeger-query"
 JAEGER_REMOTE_PORT=16686
 JAEGER_LOCAL_PORT=16686
+KIALI_RESOURCE="svc/kiali"
+KIALI_REMOTE_PORT=20001
+KIALI_LOCAL_PORT=20001
 WAIT_TIMEOUT_SECONDS=30
 POLL_INTERVAL_SECONDS=1
 
@@ -23,14 +26,15 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-observability-port-forward-access.sh [options]
 
-Starts loopback-only kubectl port-forwards for Grafana, Prometheus, and
-Jaeger, then checks their local endpoints and confirms Grafana anonymous
-dashboard access is rejected.
+Starts loopback-only kubectl port-forwards for Grafana, Prometheus, Jaeger,
+and Kiali, then checks their local endpoints and confirms Grafana and Kiali
+unauthenticated API access is rejected.
 
 Options:
   --grafana-port PORT      Local loopback port for Grafana. Default: 3300
   --prometheus-port PORT   Local loopback port for Prometheus. Default: 9090
   --jaeger-port PORT       Local loopback port for Jaeger. Default: 16686
+  --kiali-port PORT        Local loopback port for Kiali. Default: 20001
   --wait-timeout SECONDS   Max seconds to wait for each health check.
                            Default: 30
   --poll-interval SECONDS  Poll interval while waiting. Default: 1
@@ -202,6 +206,21 @@ assert_distinct_local_ports() {
         printf 'ERROR: --prometheus-port and --jaeger-port must be different when both port-forwards run together\n' >&2
         exit 1
     fi
+
+    if [[ "${GRAFANA_LOCAL_PORT}" == "${KIALI_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --grafana-port and --kiali-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
+
+    if [[ "${PROMETHEUS_LOCAL_PORT}" == "${KIALI_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --prometheus-port and --kiali-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
+
+    if [[ "${JAEGER_LOCAL_PORT}" == "${KIALI_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --jaeger-port and --kiali-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
 }
 
 assert_grafana_authentication_required() {
@@ -236,6 +255,38 @@ assert_grafana_authentication_required() {
     rm -f "${body_file}"
 }
 
+assert_kiali_authentication_required() {
+    local body_file
+    local status_code
+
+    body_file="$(mktemp)"
+    status_code="$(curl -sS -o "${body_file}" -w '%{http_code}' --max-time 5 \
+        "http://127.0.0.1:${KIALI_LOCAL_PORT}/kiali/api/status")"
+
+    case "${status_code}" in
+        401|403)
+            printf '[PASS] Kiali unauthenticated API access rejected with HTTP %s\n' "${status_code}"
+            ;;
+        200)
+            printf 'ERROR: Kiali status API is accessible without authentication on 127.0.0.1:%s\n' "${KIALI_LOCAL_PORT}" >&2
+            printf 'Response excerpt:\n' >&2
+            sed -n '1,20p' "${body_file}" >&2
+            rm -f "${body_file}"
+            return 1
+            ;;
+        *)
+            printf 'ERROR: unexpected Kiali unauthenticated API response on 127.0.0.1:%s: HTTP %s\n' \
+                "${KIALI_LOCAL_PORT}" "${status_code}" >&2
+            printf 'Response excerpt:\n' >&2
+            sed -n '1,20p' "${body_file}" >&2
+            rm -f "${body_file}"
+            return 1
+            ;;
+    esac
+
+    rm -f "${body_file}"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --grafana-port)
@@ -248,6 +299,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --jaeger-port)
             JAEGER_LOCAL_PORT="${2:-}"
+            shift 2
+            ;;
+        --kiali-port)
+            KIALI_LOCAL_PORT="${2:-}"
             shift 2
             ;;
         --wait-timeout)
@@ -276,6 +331,7 @@ require_command python3
 require_positive_integer "--grafana-port" "${GRAFANA_LOCAL_PORT}"
 require_positive_integer "--prometheus-port" "${PROMETHEUS_LOCAL_PORT}"
 require_positive_integer "--jaeger-port" "${JAEGER_LOCAL_PORT}"
+require_positive_integer "--kiali-port" "${KIALI_LOCAL_PORT}"
 require_positive_integer "--wait-timeout" "${WAIT_TIMEOUT_SECONDS}"
 require_positive_integer "--poll-interval" "${POLL_INTERVAL_SECONDS}"
 assert_distinct_local_ports
@@ -283,6 +339,7 @@ require_cluster_access
 require_service "${GRAFANA_RESOURCE}"
 require_service "${PROMETHEUS_RESOURCE}"
 require_service "${JAEGER_RESOURCE}"
+require_service "${KIALI_RESOURCE}"
 trap cleanup_port_forwards EXIT INT TERM
 
 printf 'Using kubectl context: %s\n' "$(kubectl config current-context)"
@@ -311,6 +368,14 @@ start_port_forward \
     "${JAEGER_REMOTE_PORT}" \
     "kubectl port-forward -n ${MONITORING_NAMESPACE} ${JAEGER_RESOURCE} ${JAEGER_LOCAL_PORT}:${JAEGER_REMOTE_PORT} --address 127.0.0.1"
 
+start_port_forward \
+    "kiali" \
+    "Kiali" \
+    "${KIALI_RESOURCE}" \
+    "${KIALI_LOCAL_PORT}" \
+    "${KIALI_REMOTE_PORT}" \
+    "kubectl port-forward -n ${MONITORING_NAMESPACE} ${KIALI_RESOURCE} ${KIALI_LOCAL_PORT}:${KIALI_REMOTE_PORT} --address 127.0.0.1"
+
 wait_for_port_forward_health \
     "grafana" \
     "Grafana health" \
@@ -332,6 +397,14 @@ wait_for_port_forward_health \
     "${JAEGER_LOCAL_PORT}" \
     "http://127.0.0.1:${JAEGER_LOCAL_PORT}/jaeger/api/services"
 
+wait_for_port_forward_health \
+    "kiali" \
+    "Kiali UI shell" \
+    "${KIALI_RESOURCE}" \
+    "${KIALI_LOCAL_PORT}" \
+    "http://127.0.0.1:${KIALI_LOCAL_PORT}/kiali/"
+
 assert_grafana_authentication_required
+assert_kiali_authentication_required
 
 printf 'Observability port-forward verification passed.\n'

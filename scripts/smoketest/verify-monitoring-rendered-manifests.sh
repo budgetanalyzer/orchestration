@@ -18,6 +18,8 @@ KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 KIALI_POST_RENDERER="${REPO_DIR}/scripts/ops/post-render-kiali-server.sh"
 NAMESPACE_FILE="${REPO_DIR}/kubernetes/monitoring/namespace.yaml"
 JAEGER_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
+JAEGER_DEPLOYMENT_FILE="${JAEGER_DIR}/deployment.yaml"
+JAEGER_SERVICES_FILE="${JAEGER_DIR}/services.yaml"
 
 log_step() {
     printf '\n==> %s\n' "$1"
@@ -96,9 +98,12 @@ helm template "${KIALI_RELEASE_NAME}" "${KIALI_CHART}" \
     --post-renderer "${KIALI_POST_RENDERER}" \
     > "${kiali_render_file}"
 
-log_step "Checking rendered image pinning"
+log_step "Checking rendered and checked-in image pinning"
 mapfile -t rendered_images < <(
-    grep -hE '^[[:space:]]*image:[[:space:]]*' "${render_file}" "${kiali_render_file}" \
+    grep -hE '^[[:space:]]*image:[[:space:]]*' \
+        "${render_file}" \
+        "${kiali_render_file}" \
+        "${JAEGER_DEPLOYMENT_FILE}" \
         | sed -E 's/^[[:space:]]*image:[[:space:]]*"?([^"]+)"?/\1/' \
         | sort -u
 )
@@ -126,6 +131,28 @@ if search_file '^kind:[[:space:]]*DaemonSet$' "${render_file}" >/dev/null; then
     fail "Rendered manifests still contain a DaemonSet; node-exporter should be disabled."
 fi
 
+log_step "Checking checked-in Jaeger contract"
+if [[ "$(grep -Ec '^[[:space:]]*type:[[:space:]]*ClusterIP([[:space:]]|$)' "${JAEGER_SERVICES_FILE}")" -ne 2 ]]; then
+    fail "Checked-in Jaeger services do not remain ClusterIP-only."
+fi
+
+if grep -Eq '^[[:space:]]*type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' "${JAEGER_SERVICES_FILE}"; then
+    fail "Checked-in Jaeger services expose a non-ClusterIP service type."
+fi
+
+if ! grep -Eq 'name:[[:space:]]*jaeger-collector' "${JAEGER_SERVICES_FILE}" || \
+    ! grep -Eq 'name:[[:space:]]*jaeger-query' "${JAEGER_SERVICES_FILE}"; then
+    fail "Checked-in Jaeger services are missing the collector or query service."
+fi
+
+if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)($|[[:space:]])' "${JAEGER_DIR}"/*.yaml; then
+    fail "Checked-in Jaeger manifests create an ingress, HTTPRoute, or Gateway."
+fi
+
+if grep -Eiq '\b(elasticsearch|opensearch)\b' "${JAEGER_DIR}"/*.yaml; then
+    fail "Checked-in Jaeger manifests depend on Elasticsearch/OpenSearch."
+fi
+
 log_step "Checking rendered Kiali contract"
 if ! grep -Eq 'strategy:[[:space:]]*token' "${kiali_render_file}"; then
     fail "Rendered Kiali config does not use token auth."
@@ -141,6 +168,14 @@ fi
 
 if ! grep -Eq 'cluster_wide_access:[[:space:]]*false' "${kiali_render_file}"; then
     fail "Rendered Kiali config does not disable cluster-wide access."
+fi
+
+if ! grep -Eq 'type:[[:space:]]*ClusterIP' "${kiali_render_file}"; then
+    fail "Rendered Kiali service does not remain ClusterIP-only."
+fi
+
+if grep -Eq 'type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' "${kiali_render_file}"; then
+    fail "Rendered Kiali manifests expose a non-ClusterIP service type."
 fi
 
 if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)($|[[:space:]])' "${kiali_render_file}"; then

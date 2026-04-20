@@ -24,14 +24,15 @@ scripts/
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
-  loopback-only Grafana, Prometheus, and Jaeger port-forward verifier. It
-  defaults to the canonical `3300`, `9090`, and `16686` local ports and accepts
-  flag overrides when those loopback ports are already occupied on the operator
-  workstation. It also verifies Grafana health, Prometheus readiness, Jaeger
-  query API access, and that unauthenticated Grafana dashboard access is
-  rejected. Use the same loopback-only access model in local Tilt and
-  production OCI/k3s for the observability components installed there, and do
-  not use `--address 0.0.0.0` for observability access.
+  loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
+  It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local
+  ports and accepts flag overrides when those loopback ports are already
+  occupied on the operator workstation. It verifies Grafana health,
+  Prometheus readiness, Jaeger query API access, Kiali UI shell access, and
+  that unauthenticated Grafana and Kiali API access is rejected. Use the same
+  loopback-only access model in local Tilt and production OCI/k3s for the
+  observability components installed there, and do not use `--address 0.0.0.0`
+  for observability access.
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.

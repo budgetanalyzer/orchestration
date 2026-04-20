@@ -140,10 +140,10 @@ The observability baseline is intentionally narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- Jaeger and Kiali are Phase 7 follow-up components, not part of the current
-  checked-in production baseline. When they are added, both stay in
-  `monitoring`, stay `ClusterIP`-only, and use loopback-bound
-  `kubectl port-forward`:
+- Jaeger backend manifests are checked in for local Phase 7.3 work, but Jaeger
+  and Kiali are not part of the current production install baseline. When they
+  are added to production, both stay in `monitoring`, stay `ClusterIP`-only,
+  and use loopback-bound `kubectl port-forward`:
   `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
   Kiali
 - do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
@@ -227,8 +227,8 @@ The repo-owned production policy install/apply surface is now checked in under
 `deploy/`. The deferred production route and egress apply path is intentionally
 kept separate from the checked-in production baseline.
 
-Jaeger and Kiali remain out of scope for this production baseline. Keep the production docs and
-manifests honest about the current baseline: Prometheus and Grafana are the
-repo-owned monitoring deliverables now, while the planned Jaeger/Kiali
-follow-up remains deferred pending an internal-only observability access
-redesign.
+Jaeger and Kiali remain out of scope for this production install baseline.
+Keep the production docs and manifests honest about the current baseline:
+Prometheus and Grafana are the production monitoring deliverables now, while
+the checked-in Jaeger backend waits for the later reviewed Phase 7 production
+step and Kiali remains planned follow-up work.

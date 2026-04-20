@@ -885,6 +885,13 @@ k8s_resource(
     labels=['monitoring'],
 )
 
+k8s_yaml([
+    'kubernetes/monitoring/jaeger/configmap.yaml',
+    'kubernetes/monitoring/jaeger/pvc.yaml',
+    'kubernetes/monitoring/jaeger/deployment.yaml',
+    'kubernetes/monitoring/jaeger/services.yaml',
+])
+
 # ============================================================================
 # NETWORK POLICIES
 # ============================================================================
@@ -915,6 +922,18 @@ local_resource(
     ],
     resource_deps=['istio-injection', 'monitoring-namespace'],
     labels=['infrastructure'],
+)
+
+k8s_resource(
+    'jaeger',
+    port_forwards=[
+        port_forward(16686, 16686, name='Jaeger UI'),
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
+    labels=['monitoring'],
+    links=[
+        link('http://localhost:16686/jaeger', 'Jaeger'),
+    ],
 )
 
 local_resource(

@@ -70,13 +70,15 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/scripts/15-apply-phase-7-policies.sh`
 10. Note the current observability boundary before reviewing or running any
    later observability artifacts:
-   - The current forward deployment path has Prometheus and Grafana only.
+   - The current forward production deployment path installs Prometheus and
+     Grafana only. Jaeger backend manifests are checked in for the local Phase
+     7.3 rollout, but production install remains a later reviewed step.
    - Production Grafana is internal-only and accessed with
      `kubectl port-forward`; the production route render does not publish a
      Grafana `HTTPRoute`.
-   - Phase 7 reserves the same internal-only access model for later Jaeger and
-     Kiali rollout work: both stay in `monitoring`, stay `ClusterIP`-only, and
-     use loopback-bound `kubectl port-forward` instead of public routes.
+   - Phase 7 uses the same internal-only access model for Jaeger and Kiali:
+     both stay in `monitoring`, stay `ClusterIP`-only, and use loopback-bound
+     `kubectl port-forward` instead of public routes.
    - Do not add Grafana, Kiali, or Jaeger public hostname inputs.
 11. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
@@ -496,8 +498,10 @@ certificate are all healthy.
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
 - Production Prometheus stays internal-only and uses the same pattern:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
-- When Phase 7 observability additions land, Jaeger follows the same model
-  through `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
+- The Jaeger backend manifests are checked in for local Phase 7.3 work. The
+  production install remains deferred to the reviewed Phase 7 production step;
+  when applied there, Jaeger follows the same model through
+  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
 - When Phase 7 observability additions land, Kiali follows the same model
   through `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
 - Keep observability port-forwards bound to `127.0.0.1`; do not use `--address 0.0.0.0`.

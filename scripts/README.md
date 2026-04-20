@@ -24,13 +24,14 @@ scripts/
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
-  loopback-only Grafana and Prometheus port-forward verifier. It defaults to
-  the canonical `3300` and `9090` local ports and accepts flag overrides when
-  those loopback ports are already occupied on the operator workstation. It
-  also verifies Grafana health, Prometheus readiness, and that unauthenticated
-  Grafana dashboard access is rejected. Use the same loopback-only commands in
-  local Tilt and production OCI/k3s, and do not use `--address 0.0.0.0` for
-  observability access.
+  loopback-only Grafana, Prometheus, and Jaeger port-forward verifier. It
+  defaults to the canonical `3300`, `9090`, and `16686` local ports and accepts
+  flag overrides when those loopback ports are already occupied on the operator
+  workstation. It also verifies Grafana health, Prometheus readiness, Jaeger
+  query API access, and that unauthenticated Grafana dashboard access is
+  rejected. Use the same loopback-only access model in local Tilt and
+  production OCI/k3s for the observability components installed there, and do
+  not use `--address 0.0.0.0` for observability access.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the

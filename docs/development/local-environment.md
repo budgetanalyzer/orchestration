@@ -273,6 +273,9 @@ Prometheus under their servlet context paths, so the monitored paths are
 `/currency-service/actuator/prometheus`,
 `/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
 Session Gateway.
+Tilt also applies the repo-managed Jaeger v2 backend in the same namespace.
+Jaeger is ready for OTLP traffic on `jaeger-collector`, but app traces do not
+arrive until the later Istio tracing phase wires the mesh provider.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost` and use the same loopback-only
@@ -287,15 +290,19 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
 kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/prometheus-stack-kube-prom-prometheus 9090:9090
 
+# Jaeger UI (port-forward only — no ingress route)
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/jaeger-query 16686:16686
+
 # Grafana admin password
 kubectl get secret -n monitoring prometheus-stack-grafana \
   -o jsonpath="{.data.admin-password}" | base64 --decode
 echo
 ```
 
-Open `http://localhost:3300` for Grafana and `http://localhost:9090/targets`
-for Prometheus. Do not use `--address 0.0.0.0` for observability
-port-forwards.
+Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
+for Prometheus, and `http://localhost:16686/jaeger` for Jaeger. Do not use
+`--address 0.0.0.0` for observability port-forwards.
 
 After Prometheus comes up, confirm the
 Spring Boot targets for `currency-service`, `transaction-service`,
@@ -607,6 +614,7 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 | RabbitMQ Management | 15672 | http://localhost:15672 | Internal management UI |
 | Grafana | 3300 | http://localhost:3300 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` |
 | Prometheus | 9090 | http://localhost:9090 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` |
+| Jaeger | 16686 | http://localhost:16686/jaeger | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` |
 | Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
 
 ## Environment Variables

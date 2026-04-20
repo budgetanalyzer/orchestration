@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies Grafana and Prometheus access over loopback-bound kubectl port-forwards.
+# Verifies Grafana, Prometheus, and Jaeger access over loopback-bound kubectl port-forwards.
 
 set -euo pipefail
 
@@ -10,6 +10,9 @@ GRAFANA_LOCAL_PORT=3300
 PROMETHEUS_RESOURCE="svc/prometheus-stack-kube-prom-prometheus"
 PROMETHEUS_REMOTE_PORT=9090
 PROMETHEUS_LOCAL_PORT=9090
+JAEGER_RESOURCE="svc/jaeger-query"
+JAEGER_REMOTE_PORT=16686
+JAEGER_LOCAL_PORT=16686
 WAIT_TIMEOUT_SECONDS=30
 POLL_INTERVAL_SECONDS=1
 
@@ -20,13 +23,14 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-observability-port-forward-access.sh [options]
 
-Starts loopback-only kubectl port-forwards for Grafana and Prometheus, then
-checks their health endpoints over localhost and confirms Grafana anonymous
+Starts loopback-only kubectl port-forwards for Grafana, Prometheus, and
+Jaeger, then checks their local endpoints and confirms Grafana anonymous
 dashboard access is rejected.
 
 Options:
   --grafana-port PORT      Local loopback port for Grafana. Default: 3300
   --prometheus-port PORT   Local loopback port for Prometheus. Default: 9090
+  --jaeger-port PORT       Local loopback port for Jaeger. Default: 16686
   --wait-timeout SECONDS   Max seconds to wait for each health check.
                            Default: 30
   --poll-interval SECONDS  Poll interval while waiting. Default: 1
@@ -97,7 +101,7 @@ PY
         if [[ -n "${active_listener}" ]]; then
             printf 'Current listener: %s\n' "${active_listener}" >&2
         fi
-        printf 'Rerun with a free port via --grafana-port or --prometheus-port if this listener is intentional.\n' >&2
+        printf 'Rerun with a free port via --grafana-port, --prometheus-port, or --jaeger-port if this listener is intentional.\n' >&2
         exit 1
     fi
 }
@@ -188,6 +192,16 @@ assert_distinct_local_ports() {
         printf 'ERROR: --grafana-port and --prometheus-port must be different when both port-forwards run together\n' >&2
         exit 1
     fi
+
+    if [[ "${GRAFANA_LOCAL_PORT}" == "${JAEGER_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --grafana-port and --jaeger-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
+
+    if [[ "${PROMETHEUS_LOCAL_PORT}" == "${JAEGER_LOCAL_PORT}" ]]; then
+        printf 'ERROR: --prometheus-port and --jaeger-port must be different when both port-forwards run together\n' >&2
+        exit 1
+    fi
 }
 
 assert_grafana_authentication_required() {
@@ -232,6 +246,10 @@ while [[ $# -gt 0 ]]; do
             PROMETHEUS_LOCAL_PORT="${2:-}"
             shift 2
             ;;
+        --jaeger-port)
+            JAEGER_LOCAL_PORT="${2:-}"
+            shift 2
+            ;;
         --wait-timeout)
             WAIT_TIMEOUT_SECONDS="${2:-}"
             shift 2
@@ -257,12 +275,14 @@ require_command curl
 require_command python3
 require_positive_integer "--grafana-port" "${GRAFANA_LOCAL_PORT}"
 require_positive_integer "--prometheus-port" "${PROMETHEUS_LOCAL_PORT}"
+require_positive_integer "--jaeger-port" "${JAEGER_LOCAL_PORT}"
 require_positive_integer "--wait-timeout" "${WAIT_TIMEOUT_SECONDS}"
 require_positive_integer "--poll-interval" "${POLL_INTERVAL_SECONDS}"
 assert_distinct_local_ports
 require_cluster_access
 require_service "${GRAFANA_RESOURCE}"
 require_service "${PROMETHEUS_RESOURCE}"
+require_service "${JAEGER_RESOURCE}"
 trap cleanup_port_forwards EXIT INT TERM
 
 printf 'Using kubectl context: %s\n' "$(kubectl config current-context)"
@@ -283,6 +303,14 @@ start_port_forward \
     "${PROMETHEUS_REMOTE_PORT}" \
     "kubectl port-forward -n ${MONITORING_NAMESPACE} ${PROMETHEUS_RESOURCE} ${PROMETHEUS_LOCAL_PORT}:${PROMETHEUS_REMOTE_PORT} --address 127.0.0.1"
 
+start_port_forward \
+    "jaeger" \
+    "Jaeger" \
+    "${JAEGER_RESOURCE}" \
+    "${JAEGER_LOCAL_PORT}" \
+    "${JAEGER_REMOTE_PORT}" \
+    "kubectl port-forward -n ${MONITORING_NAMESPACE} ${JAEGER_RESOURCE} ${JAEGER_LOCAL_PORT}:${JAEGER_REMOTE_PORT} --address 127.0.0.1"
+
 wait_for_port_forward_health \
     "grafana" \
     "Grafana health" \
@@ -296,6 +324,13 @@ wait_for_port_forward_health \
     "${PROMETHEUS_RESOURCE}" \
     "${PROMETHEUS_LOCAL_PORT}" \
     "http://127.0.0.1:${PROMETHEUS_LOCAL_PORT}/-/ready"
+
+wait_for_port_forward_health \
+    "jaeger" \
+    "Jaeger query API" \
+    "${JAEGER_RESOURCE}" \
+    "${JAEGER_LOCAL_PORT}" \
+    "http://127.0.0.1:${JAEGER_LOCAL_PORT}/jaeger/api/services"
 
 assert_grafana_authentication_required
 

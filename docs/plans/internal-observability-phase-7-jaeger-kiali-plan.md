@@ -348,6 +348,13 @@ deployment network-policy verifiers exercise the monitoring namespace directly.
 **Goal:** Deploy a stable, pinned Jaeger v2 backend without introducing a new
 external datastore.
 
+**Status, 2026-04-20:** Implemented for the local Tilt path. The repo now
+contains the digest-pinned Jaeger v2 manifests under
+`kubernetes/monitoring/jaeger/`, Tilt exposes a `jaeger` resource with a
+loopback UI port-forward, the image-pinning inventory includes the Jaeger
+deployment, and the observability port-forward verifier checks the Jaeger query
+API. Phase 7.4 is still required before app traces arrive.
+
 **Implementation:**
 
 - Add Jaeger manifests under `kubernetes/monitoring/jaeger/`:

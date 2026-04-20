@@ -12,6 +12,7 @@ NAMESPACE="monitoring"
 RELEASE_NAME="prometheus-stack"
 VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/prometheus-stack-values.yaml"
 NAMESPACE_FILE="${REPO_DIR}/kubernetes/monitoring/namespace.yaml"
+JAEGER_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 
 log_step() {
     printf '\n==> %s\n' "$1"
@@ -65,6 +66,9 @@ helm repo update prometheus-community >/dev/null
 log_step "Checking the monitoring namespace manifest"
 kubectl apply --dry-run=server -f "${NAMESPACE_FILE}" >/dev/null
 kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1 || fail "Namespace ${NAMESPACE} does not exist. Apply kubernetes/monitoring/namespace.yaml first."
+
+log_step "Server-dry-running Jaeger manifests"
+kubectl apply --dry-run=server -f "${JAEGER_DIR}" >/dev/null
 
 log_step "Rendering ${CHART} ${CHART_VERSION}"
 helm template "${RELEASE_NAME}" "${CHART}" \

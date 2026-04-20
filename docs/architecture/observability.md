@@ -15,10 +15,10 @@ Spring Boot, Istio, and kube-state-metrics cover the intended observability
 story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
 kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy
 baseline does not need broad kube-system or node egress.
-Phase 7 locks the internal-only contract for Jaeger and Kiali before their
-runtime artifacts land: both tools live in `monitoring`, stay `ClusterIP`
-only, and use loopback-bound `kubectl port-forward` instead of any public
-observability hostname.
+Phase 7 keeps Jaeger and Kiali on the same internal-only contract: Jaeger now
+runs in `monitoring`, Kiali is planned for the same namespace, both stay
+`ClusterIP` only, and operator access uses loopback-bound `kubectl port-forward`
+instead of any public observability hostname.
 
 ## Components
 
@@ -28,6 +28,7 @@ observability hostname.
 | Prometheus Operator | CRD-based scrape target management | `monitoring` |
 | Grafana | Dashboard visualization | `monitoring` |
 | kube-state-metrics | Kubernetes resource metrics | `monitoring` |
+| Jaeger | Distributed trace ingestion and query backend | `monitoring` |
 
 **Disabled components** (with rationale):
 - **Alertmanager** - dashboards first; alerting deferred
@@ -255,11 +256,15 @@ Then open `http://localhost:9090`. Useful first queries:
 ### Jaeger
 
 Phase 7 uses repo-managed Jaeger v2 manifests, not the Helm chart. The locked
-runtime contract is:
+backend is now checked in under `kubernetes/monitoring/jaeger/`. The runtime
+contract is:
 
 - namespace: `monitoring`
 - service exposure: `ClusterIP` only
 - storage: single-node PVC-backed Badger
+- image: Jaeger `2.17.0`, pinned by digest
+- collector service: `jaeger-collector` on OTLP `4317` and `4318`
+- query service: `jaeger-query` on `16685` and `16686`
 - operator access:
 
 ```bash
@@ -267,7 +272,9 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/jaeger-query 16686:16686
 ```
 
-Then open `http://localhost:16686`.
+Then open `http://localhost:16686/jaeger`. The backend is available before
+Istio tracing is wired; traces from the real app path start arriving after the
+Phase 7.4 mesh provider and Telemetry resources are added.
 
 ### Kiali
 
@@ -303,7 +310,7 @@ egress plus explicit allowlists for:
   kube-state-metrics, the Prometheus Operator, Spring Boot services, Istio
   sidecars, and Istiod
 - future Kiali access to Prometheus, Jaeger query, and the Kubernetes API
-- future OTLP ingress to `jaeger-collector` only from approved mesh workloads
+- OTLP ingress to `jaeger-collector` only from approved mesh workloads
 
 The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and
 private RFC1918 apiserver endpoints on `6443` because Calico evaluates the
@@ -321,7 +328,9 @@ attachment, so observability stays off the public ingress surface by default.
 
 ### Image Pinning
 
-Every image is digest-pinned in `kubernetes/monitoring/prometheus-stack-values.yaml`:
+Every image is digest-pinned in the monitoring inputs. Prometheus/Grafana image
+pins live in `kubernetes/monitoring/prometheus-stack-values.yaml`; Jaeger is
+pinned in `kubernetes/monitoring/jaeger/deployment.yaml`.
 
 | Image | Tag | Digest |
 |-------|-----|--------|

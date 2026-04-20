@@ -223,6 +223,20 @@ child forwards on `Ctrl+C`. Raw `kubectl port-forward --address 127.0.0.1 ...`
 commands remain the underlying supported access model in both local Tilt and
 production OCI/k3s.
 
+For workstation access to production OCI/k3s, keep the Kubernetes
+port-forwards running on the OCI host first, then open the matching
+workstation-side SSH tunnels:
+
+```bash
+./scripts/ops/start-observability-ssh-tunnels.sh 152.70.145.68
+```
+
+The SSH helper assumes `ubuntu` and `~/.ssh/oci-budgetanalyzer`, binds only to
+workstation loopback, and forwards the same canonical `3300`, `9090`, `16686`,
+and `20001` ports to the OCI host's loopback listeners. Operators can also set
+`OCI_INSTANCE_IP` in their shell profile and run the helper without an
+argument.
+
 `grafana.budgetanalyzer.localhost` is retired. Do not introduce
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
 `jaeger.budgetanalyzer.org` as public observability entry points.

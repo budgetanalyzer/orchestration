@@ -41,6 +41,13 @@ scripts/
   supports repeated `--component` selection plus per-component port overrides,
   prints the local URLs plus the Grafana password and Kiali token commands,
   and cleans up all child forwards on exit.
+- `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
+  tunnel helper for production OCI/k3s observability access. It takes the OCI
+  host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
+  plus `~/.ssh/oci-budgetanalyzer`, opens loopback-only tunnels for the
+  canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
+  matching `ops/start-observability-port-forwards.sh` process to already be
+  running on the OCI host.
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.
@@ -167,6 +174,14 @@ the active context and Tilt resource state from the same host shell first.
   helper reports a conflicting `code` listener on a canonical observability
   port, that is host-side VS Code port forwarding, not a repo-owned Tilt
   forward.
+- `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
+  for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
+  host, then from the workstation run
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` or set
+  `OCI_INSTANCE_IP` and run `./scripts/ops/start-observability-ssh-tunnels.sh`.
+  The helper keeps one SSH session open with local loopback tunnels for
+  `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
+  endpoints are not reachable.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

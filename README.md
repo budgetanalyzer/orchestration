@@ -72,6 +72,11 @@ one foreground process, use `./scripts/ops/start-observability-port-forwards.sh`
 - Jaeger: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` (then open `http://localhost:16686/jaeger`; generate several app requests first because tracing uses Istio default sampling)
 - Kiali: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` (then open `http://localhost:20001/kiali`; login with a short-lived token from `kubectl -n monitoring create token kiali`)
 - Convenience helper: `./scripts/ops/start-observability-port-forwards.sh`
+- OCI workstation tunnel helper: after the OCI host is running the same
+  loopback-bound port-forward helper, run
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` from your
+  workstation, or set `OCI_INSTANCE_IP` and omit the argument. It assumes
+  `ubuntu` and `~/.ssh/oci-budgetanalyzer`.
 - Focused access proof: `./scripts/smoketest/verify-observability-port-forward-access.sh`
 - Prometheus targets to expect: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
 - Example Prometheus queries: `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`

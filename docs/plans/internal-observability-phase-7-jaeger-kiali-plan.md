@@ -590,6 +590,11 @@ live Jaeger/Kiali apply path. The production static verifier now renders that
 same output and checks it for digest pinning, `ClusterIP`-only exposure, no
 public route resources, no public observability hostnames, Kiali token auth,
 non-cluster-wide RBAC, and the shared internal Prometheus/Jaeger URLs.
+`scripts/ops/start-observability-ssh-tunnels.sh` is now the workstation-side
+helper for the optional SSH local-forward proof; it assumes `ubuntu` plus
+`~/.ssh/oci-budgetanalyzer`, accepts `OCI_INSTANCE_IP` when the host argument
+is omitted, and forwards the canonical observability ports to the OCI host's
+loopback listeners.
 
 **Implementation:**
 
@@ -598,7 +603,8 @@ non-cluster-wide RBAC, and the shared internal Prometheus/Jaeger URLs.
 - Keep both services `ClusterIP`.
 - Reuse the same documented operator access contract:
   - OCI host `kubectl port-forward`
-  - optional SSH local forward from workstation
+  - optional SSH local forward from workstation through
+    `scripts/ops/start-observability-ssh-tunnels.sh`
 - Do not add DNS, public certs, Gateway listeners, or `HTTPRoute`s.
 - If production-specific storage sizing differs from local, keep it in an
   explicit checked-in override file, not an imperative one-off.

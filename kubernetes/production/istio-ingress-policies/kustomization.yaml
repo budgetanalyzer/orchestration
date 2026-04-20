@@ -7,16 +7,6 @@ resources:
 
 patches:
   - target:
-      group: security.istio.io
-      version: v1
-      kind: AuthorizationPolicy
-      name: ext-authz-at-ingress
-      namespace: istio-ingress
-    patch: |-
-      - op: replace
-        path: /spec/rules/0/to/0/operation/hosts/0
-        value: demo.budgetanalyzer.org
-  - target:
       group: networking.istio.io
       version: v1alpha3
       kind: EnvoyFilter

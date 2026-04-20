@@ -165,7 +165,7 @@ The Session Gateway implements session-based edge authorization specifically for
 
 **Why HTTP mode over gRPC:** Istio's `meshConfig.extensionProviders` with `envoyExtAuthzHttp` provides `headersToUpstreamOnAllow` — an infrastructure-level allowlist that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the ingress layer: even if a client sends `X-User-Id` in the original request, the Envoy ext_authz filter overwrites it with the value from ext_authz's response. Only headers listed in `headersToUpstreamOnAllow` are forwarded upstream.
 
-**Integration:** Called by the Istio ingress gateway on requests to `app.budgetanalyzer.localhost` `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`. The policy is host-scoped so only the application host is intercepted by application session auth.
+**Integration:** Called by the Istio ingress gateway on `/api/*` requests via `AuthorizationPolicy` with `action: CUSTOM`. Host ownership stays on the Gateway API `HTTPRoute` objects (`app.budgetanalyzer.localhost` locally, `demo.budgetanalyzer.org` in production) so Kiali does not misread the external app hostname as a missing service-registry host.
 
 ---
 

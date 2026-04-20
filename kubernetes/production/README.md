@@ -115,10 +115,10 @@ artifacts:
 - `gateway-routes/` renders the production `HTTPRoute` objects with
   `demo.budgetanalyzer.org`, while leaving the shared localhost dev manifests
   untouched for Tilt
-- `istio-ingress-policies/` renders the production `AuthorizationPolicy` and
-  ingress local-rate-limit objects with the demo hostname, separately from the
-  gateway routes so the live deployment path can still defer those policy applies until
-  `ext-authz` is ready
+- `istio-ingress-policies/` renders the production `/api/*`
+  `AuthorizationPolicy` and the ingress local-rate-limit object. Host ownership
+  stays on the production `HTTPRoute` overlay, while the rate-limit filter still
+  matches `demo.budgetanalyzer.org`.
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
   server domain and root URL for loopback port-forward access while preserving
   the checked-in `prometheus-stack` Helm release name contract that yields the
@@ -151,6 +151,12 @@ The checked-in production monitoring overlay in this directory stays narrow:
   `ClusterIP`-only, and use loopback-bound `kubectl port-forward`:
   `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
   Kiali
+- workstation access to production observability uses the same OCI-host
+  loopback port-forwards plus the local SSH tunnel helper:
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>`. The helper
+  also accepts `OCI_INSTANCE_IP` when the argument is omitted, assumes
+  `ubuntu` and `~/.ssh/oci-budgetanalyzer`, and forwards the canonical `3300`,
+  `9090`, `16686`, and `20001` ports to OCI host loopback.
 - do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
   `jaeger.budgetanalyzer.org`
 

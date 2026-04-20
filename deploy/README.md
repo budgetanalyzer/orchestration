@@ -537,6 +537,12 @@ certificate are all healthy.
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
 - Kiali follows the same model through
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
+- For workstation access, start those Kubernetes port-forwards on the OCI host
+  first, then run
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` locally. The
+  helper also accepts `OCI_INSTANCE_IP` when the argument is omitted, assumes
+  `ubuntu` and `~/.ssh/oci-budgetanalyzer`, and opens only loopback-bound SSH
+  tunnels for `3300`, `9090`, `16686`, and `20001`.
 - Keep observability port-forwards bound to `127.0.0.1`; do not use `--address 0.0.0.0`.
 - When updating a live instance from an older render, explicitly delete any
   stale observability routes because `kubectl apply` does not prune removed

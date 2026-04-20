@@ -28,6 +28,8 @@ POLL_INTERVAL_SECONDS=1
 declare -a SELECTED_COMPONENTS=()
 declare -A PORT_FORWARD_PIDS=()
 declare -A PORT_FORWARD_LOGS=()
+SHUTTING_DOWN=0
+CLEANUP_COMPLETE=0
 
 usage() {
     cat <<'EOF'
@@ -246,9 +248,14 @@ assert_distinct_local_ports() {
     done
 }
 
-# shellcheck disable=SC2317  # Invoked indirectly by trap cleanup_port_forwards EXIT INT TERM.
+# shellcheck disable=SC2317  # Invoked indirectly by trap cleanup_port_forwards EXIT.
 cleanup_port_forwards() {
     local component
+
+    if [[ "${CLEANUP_COMPLETE}" -eq 1 ]]; then
+        return 0
+    fi
+    CLEANUP_COMPLETE=1
 
     for component in "${!PORT_FORWARD_PIDS[@]}"; do
         kill "${PORT_FORWARD_PIDS[${component}]}" >/dev/null 2>&1 || true
@@ -261,6 +268,14 @@ cleanup_port_forwards() {
     for component in "${!PORT_FORWARD_LOGS[@]}"; do
         rm -f "${PORT_FORWARD_LOGS[${component}]}"
     done
+}
+
+# shellcheck disable=SC2317  # Invoked indirectly by trap handle_shutdown_signal INT TERM.
+handle_shutdown_signal() {
+    SHUTTING_DOWN=1
+    printf '\nStopping observability port-forwards...\n'
+    cleanup_port_forwards
+    exit 0
 }
 
 wait_for_url() {
@@ -371,21 +386,31 @@ print_access_summary() {
 
 monitor_port_forwards() {
     local component
+    local wait_status
 
     set +e
     wait -n
+    wait_status=$?
     set -e
+
+    if [[ "${SHUTTING_DOWN}" -eq 1 ]]; then
+        return 0
+    fi
 
     for component in "${SELECTED_COMPONENTS[@]}"; do
         if ! kill -0 "${PORT_FORWARD_PIDS[${component}]}" >/dev/null 2>&1; then
             printf 'ERROR: %s port-forward exited unexpectedly.\n' "$(component_label "${component}")" >&2
-            printf 'Port-forward log:\n' >&2
-            cat "${PORT_FORWARD_LOGS[${component}]}" >&2
+            if [[ -f "${PORT_FORWARD_LOGS[${component}]}" ]]; then
+                printf 'Port-forward log:\n' >&2
+                cat "${PORT_FORWARD_LOGS[${component}]}" >&2
+            else
+                printf 'Port-forward log is unavailable because cleanup already removed it.\n' >&2
+            fi
             exit 1
         fi
     done
 
-    exit 1
+    exit "${wait_status}"
 }
 
 main() {
@@ -448,7 +473,8 @@ main() {
     require_positive_integer "--poll-interval" "${POLL_INTERVAL_SECONDS}"
     assert_distinct_local_ports
     require_cluster_access
-    trap cleanup_port_forwards EXIT INT TERM
+    trap cleanup_port_forwards EXIT
+    trap handle_shutdown_signal INT TERM
 
     printf 'Using kubectl context: %s\n' "$(kubectl config current-context)"
 

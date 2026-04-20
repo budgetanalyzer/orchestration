@@ -37,7 +37,7 @@ tilt up           # Start everything
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh  # Optional but recommended Istio ingress and egress hardening proof
 ./scripts/smoketest/verify-phase-4-transport-encryption.sh  # Optional but recommended infrastructure transport-TLS proof
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended runtime hardening and Pod Security proof
-./scripts/smoketest/verify-observability-port-forward-access.sh  # Optional but recommended loopback-only Grafana and Prometheus access proof
+./scripts/smoketest/verify-observability-port-forward-access.sh  # Optional but recommended loopback-only Grafana, Prometheus, Jaeger, and Kiali access proof
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended edge and browser security proof
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local security guardrail proof
 ./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass

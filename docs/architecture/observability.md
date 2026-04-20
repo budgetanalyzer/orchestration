@@ -11,7 +11,14 @@ collection and visualization. The stack runs in a dedicated `monitoring`
 namespace and is installed via Helm through the Tiltfile.
 
 Infrastructure exporters (PostgreSQL, Redis, RabbitMQ) are not deployed.
-Spring Boot and Istio metrics alone cover the intended observability story.
+Spring Boot, Istio, and kube-state-metrics cover the intended observability
+story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
+kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy
+baseline does not need broad kube-system or node egress.
+Phase 7 locks the internal-only contract for Jaeger and Kiali before their
+runtime artifacts land: both tools live in `monitoring`, stay `ClusterIP`
+only, and use loopback-bound `kubectl port-forward` instead of any public
+observability hostname.
 
 ## Components
 
@@ -245,10 +252,71 @@ Then open `http://localhost:9090`. Useful first queries:
 - `jvm_memory_used_bytes` — JVM memory usage across services
 - `jvm_gc_pause_seconds_count` — GC pause frequency
 
+### Jaeger
+
+Phase 7 uses repo-managed Jaeger v2 manifests, not the Helm chart. The locked
+runtime contract is:
+
+- namespace: `monitoring`
+- service exposure: `ClusterIP` only
+- storage: single-node PVC-backed Badger
+- operator access:
+
+```bash
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/jaeger-query 16686:16686
+```
+
+Then open `http://localhost:16686`.
+
+### Kiali
+
+Phase 7 uses the standalone `kiali-server` Helm chart, not the Kiali operator.
+The locked runtime contract is:
+
+- namespace: `monitoring`
+- service exposure: `ClusterIP` only
+- auth mode: `token`
+- UI posture: `view_only_mode: true`
+- RBAC posture: non-cluster-wide by default
+- operator access:
+
+```bash
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/kiali 20001:20001
+```
+
+Then open `https://localhost:20001`.
+
 ## Security Compliance
 
 The monitoring stack meets the same security requirements as all other
 workloads in this repo — no namespace exceptions.
+
+`monitoring` is now a first-class enforced namespace, not an implicit
+allow-all side case. The repo-owned baseline is deny-by-default ingress and
+egress plus explicit allowlists for:
+
+- DNS from `monitoring`
+- Grafana to Prometheus
+- Prometheus service discovery and scrape traffic to Grafana,
+  kube-state-metrics, the Prometheus Operator, Spring Boot services, Istio
+  sidecars, and Istiod
+- future Kiali access to Prometheus, Jaeger query, and the Kubernetes API
+- future OTLP ingress to `jaeger-collector` only from approved mesh workloads
+
+The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and
+private RFC1918 apiserver endpoints on `6443` because Calico evaluates the
+connection after service DNAT in the local runtime.
+Other monitoring flows stay destination-scoped through namespace/pod selector
+allowlists. The verifier scripts exercise those paths through temporary
+`ClusterIP` Services so the repo does not need destinationless egress rules for
+Grafana, Prometheus, Kiali, Jaeger, or the Spring Boot metrics targets.
+Prometheus also needs egress to injected workload pods on Istio's mTLS tunnel
+port `15008` for service-based Spring Boot scrapes.
+
+The `monitoring` namespace manifest also no longer opts into Gateway route
+attachment, so observability stays off the public ingress surface by default.
 
 ### Image Pinning
 

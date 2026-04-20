@@ -740,18 +740,44 @@ scan_grafana_values_contract() {
 }
 
 scan_istio_ingress_observability_allowances() {
-    local -a matches=()
+    local expected_jaeger_policy_file="${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
+    local -a failures=()
+    local -a jaeger_matches=()
     local line
+    local file
     local pattern='kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali|jaeger)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
+    local forbidden_pattern='app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
 
     while IFS= read -r line; do
         [[ -n "${line}" ]] || continue
-        matches+=("${line}")
+        file="${line%%:*}"
+
+        if [[ "${line}" =~ ${forbidden_pattern} ]]; then
+            failures+=("${line}")
+            continue
+        fi
+
+        if [[ "${file}" == "${expected_jaeger_policy_file}" ]] && \
+            [[ "${line}" =~ kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*jaeger ]]; then
+            jaeger_matches+=("${line}")
+            continue
+        fi
+
+        failures+=("${line}")
     done < <(search_guidance_paths "${pattern}" "${OBSERVABILITY_INGRESS_POLICY_PATHS[@]}")
 
-    if (( ${#matches[@]} > 0 )); then
+    if (( ${#jaeger_matches[@]} > 0 )); then
+        if ! grep -Eq 'name:[[:space:]]*allow-istio-ingress-egress-to-jaeger-collector' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'app\.kubernetes\.io/name:[[:space:]]*jaeger' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'port:[[:space:]]*4317' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'port:[[:space:]]*4318' "${expected_jaeger_policy_file}"; then
+            failures+=("${expected_jaeger_policy_file#"${REPO_DIR}"/}: expected narrow istio-ingress OTLP egress policy to Jaeger collector is incomplete")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
         printf 'Istio ingress observability allowance scan failed:\n' >&2
-        printf '  - %s\n' "${matches[@]}" >&2
+        printf '  - %s\n' "${failures[@]}" >&2
         return 1
     fi
 

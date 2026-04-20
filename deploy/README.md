@@ -74,11 +74,10 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - Production Grafana is internal-only and accessed with
      `kubectl port-forward`; the production route render does not publish a
      Grafana `HTTPRoute`.
-   - The remaining observability access work is deferred pending an
-     internal-only observability access redesign.
-   - Do not add Grafana, Kiali, or Jaeger public hostname inputs, and do not
-     resume any Jaeger, Kiali, tracing, or observability-route rollout work on
-     this branch.
+   - Phase 7 reserves the same internal-only access model for later Jaeger and
+     Kiali rollout work: both stay in `monitoring`, stay `ClusterIP`-only, and
+     use loopback-bound `kubectl port-forward` instead of public routes.
+   - Do not add Grafana, Kiali, or Jaeger public hostname inputs.
 11. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
@@ -497,17 +496,17 @@ certificate are all healthy.
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
 - Production Prometheus stays internal-only and uses the same pattern:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
+- When Phase 7 observability additions land, Jaeger follows the same model
+  through `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
+- When Phase 7 observability additions land, Kiali follows the same model
+  through `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
 - Keep observability port-forwards bound to `127.0.0.1`; do not use `--address 0.0.0.0`.
 - When updating a live instance from an older render, explicitly delete any
   stale route because `kubectl apply` does not prune removed kustomize
   resources:
   `kubectl delete httproute -n monitoring grafana-route --ignore-not-found`.
-- The remaining observability access work is deferred pending an
-  internal-only observability access redesign.
-- Keep Prometheus internal-only, and do not resume any Jaeger, Kiali, tracing,
-  or observability-route rollout work unless the deployment path is explicitly
-  reopened with a reviewed internal-only access model for Grafana, Jaeger, and
-  Kiali.
+- Keep Prometheus internal-only, and keep any later Jaeger, Kiali, and tracing
+  rollout on the same reviewed internal-only port-forward model.
 - Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
   `jaeger.budgetanalyzer.org` as public production hostnames.
 - Public TLS cutover is the next open deployment area.

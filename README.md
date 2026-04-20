@@ -60,6 +60,8 @@ Monitoring access after `tilt up`:
 - Grafana: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` (then open `http://localhost:3300`)
 - Grafana admin password: `kubectl get secret -n monitoring prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode; echo`
 - Prometheus: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` (then open `http://localhost:9090`)
+- Jaeger Phase 7 contract: repo-managed Jaeger v2 manifests live in `monitoring`, stay `ClusterIP`-only, and use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` once the backend lands
+- Kiali Phase 7 contract: the standalone `kiali-server` Helm chart lives in `monitoring`, stays `ClusterIP`-only, and uses `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` once the release lands
 - Focused access proof: `./scripts/smoketest/verify-observability-port-forward-access.sh`
 - Prometheus targets to expect: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
 - Example Prometheus queries: `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`

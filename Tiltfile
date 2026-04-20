@@ -902,14 +902,18 @@ local_resource(
         kubectl apply -f kubernetes/network-policies/default-allow.yaml
         kubectl apply -f kubernetes/network-policies/infrastructure-deny.yaml
         kubectl apply -f kubernetes/network-policies/infrastructure-allow.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-deny.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-allow.yaml
     ''',
     deps=[
         'kubernetes/network-policies/default-deny.yaml',
         'kubernetes/network-policies/default-allow.yaml',
         'kubernetes/network-policies/infrastructure-deny.yaml',
         'kubernetes/network-policies/infrastructure-allow.yaml',
+        'kubernetes/network-policies/monitoring-deny.yaml',
+        'kubernetes/network-policies/monitoring-allow.yaml',
     ],
-    resource_deps=['istio-injection'],
+    resource_deps=['istio-injection', 'monitoring-namespace'],
     labels=['infrastructure'],
 )
 

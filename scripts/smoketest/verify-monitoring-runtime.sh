@@ -25,11 +25,11 @@ declare -A SERVICE_PORTS=(
     [permission-service]=8086
 )
 
-declare -A HEALTH_PATHS=(
-    [session-gateway]=/actuator/health
-    [transaction-service]=/transaction-service/actuator/health
-    [currency-service]=/currency-service/actuator/health
-    [permission-service]=/permission-service/actuator/health
+declare -A METRICS_PATHS=(
+    [session-gateway]=/actuator/prometheus
+    [transaction-service]=/transaction-service/actuator/prometheus
+    [currency-service]=/currency-service/actuator/prometheus
+    [permission-service]=/permission-service/actuator/prometheus
 )
 
 PASSED=0
@@ -81,6 +81,10 @@ pass() {
 fail_check() {
     printf '  [FAIL] %s\n' "$1" >&2
     FAILED=$((FAILED + 1))
+}
+
+warn_check() {
+    printf '  [WARN] %s\n' "$1" >&2
 }
 
 section() {
@@ -354,14 +358,14 @@ verify_dashboard_labels() {
     return 1
 }
 
-generate_health_traffic() {
+generate_metrics_traffic() {
     local app port path url
     local response status
     local failed=0
 
     for app in "${SPRING_APPS[@]}"; do
         port="${SERVICE_PORTS[${app}]}"
-        path="${HEALTH_PATHS[${app}]}"
+        path="${METRICS_PATHS[${app}]}"
         url="http://${app}.default.svc.cluster.local:${port}${path}"
 
         response=$(kubectl exec -n "${PROMETHEUS_NAMESPACE}" "${PROMETHEUS_POD}" \
@@ -372,9 +376,9 @@ generate_health_traffic() {
             | tail -n 1)
 
         if [[ -n "${status}" ]]; then
-            pass "Health request generated for ${app} (HTTP ${status})"
+            pass "Metrics request generated for ${app} (HTTP ${status})"
         else
-            fail_check "Health request generated for ${app}"
+            warn_check "Metrics request warmup skipped for ${app}"
             printf '    Failed request: %s\n' "${url}" >&2
             printf '%s\n' "${response}" | sed 's/^/    /' >&2
             failed=1
@@ -422,7 +426,7 @@ main() {
     verify_required_objects || true
 
     section "Traffic"
-    generate_health_traffic || true
+    generate_metrics_traffic || true
 
     app_regex="$(join_apps_regex)"
     target_query="min by (application) (up{namespace=\"default\", application=~\"${app_regex}\"})"

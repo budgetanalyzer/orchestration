@@ -140,9 +140,12 @@ The observability baseline is intentionally narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- Jaeger and Kiali do not belong on the current forward deployment path. Their
-  planned observability access follow-up remains deferred pending an
-  internal-only observability access redesign
+- Jaeger and Kiali are Phase 7 follow-up components, not part of the current
+  checked-in production baseline. When they are added, both stay in
+  `monitoring`, stay `ClusterIP`-only, and use loopback-bound
+  `kubectl port-forward`:
+  `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
+  Kiali
 - do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
   `jaeger.budgetanalyzer.org`
 

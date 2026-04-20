@@ -41,6 +41,16 @@ PROBE_PERM="phase4-np-perm-probe"
 readonly PROBE_PERM
 PROBE_UNLABELED="phase4-np-unlabeled-probe"
 readonly PROBE_UNLABELED
+PROBE_ISTIO_EGRESS="phase4-np-istio-egress-probe"
+readonly PROBE_ISTIO_EGRESS
+PROBE_MONITORING_GRAFANA="phase4-np-monitoring-grafana-probe"
+readonly PROBE_MONITORING_GRAFANA
+PROBE_MONITORING_PROMETHEUS="phase4-np-monitoring-prometheus-probe"
+readonly PROBE_MONITORING_PROMETHEUS
+PROBE_MONITORING_KIALI="phase4-np-monitoring-kiali-probe"
+readonly PROBE_MONITORING_KIALI
+PROBE_MONITORING_UNLABELED="phase4-np-monitoring-unlabeled-probe"
+readonly PROBE_MONITORING_UNLABELED
 
 LISTENER_NGINX="phase4-np-nginx-listener"
 readonly LISTENER_NGINX
@@ -64,14 +74,36 @@ LISTENER_RABBITMQ="phase4-np-rabbitmq-listener"
 readonly LISTENER_RABBITMQ
 LISTENER_GRAFANA="phase4-np-grafana-listener"
 readonly LISTENER_GRAFANA
+LISTENER_PROMETHEUS="phase4-np-prometheus-listener"
+readonly LISTENER_PROMETHEUS
+LISTENER_KUBE_STATE_METRICS="phase4-np-kube-state-metrics-listener"
+readonly LISTENER_KUBE_STATE_METRICS
+LISTENER_PROMETHEUS_OPERATOR="phase4-np-prometheus-operator-listener"
+readonly LISTENER_PROMETHEUS_OPERATOR
+LISTENER_JAEGER_QUERY_GRPC="phase4-np-jaeger-query-grpc-listener"
+readonly LISTENER_JAEGER_QUERY_GRPC
+LISTENER_JAEGER_QUERY_HTTP="phase4-np-jaeger-query-http-listener"
+readonly LISTENER_JAEGER_QUERY_HTTP
+LISTENER_JAEGER_COLLECTOR="phase4-np-jaeger-collector-listener"
+readonly LISTENER_JAEGER_COLLECTOR
+LISTENER_SPRING_BOOT_8081="phase4-np-spring-boot-8081"
+readonly LISTENER_SPRING_BOOT_8081
+LISTENER_SPRING_BOOT_8082="phase4-np-spring-boot-8082"
+readonly LISTENER_SPRING_BOOT_8082
+LISTENER_SPRING_BOOT_8084="phase4-np-spring-boot-8084"
+readonly LISTENER_SPRING_BOOT_8084
+LISTENER_SPRING_BOOT_8086="phase4-np-spring-boot-8086"
+readonly LISTENER_SPRING_BOOT_8086
 
 PASSED=0
 FAILED=0
 LAST_SUCCESS_ATTEMPT=0
 LAST_FAILURE_ATTEMPTS=0
 TEMP_PODS=()
+TEMP_SERVICES=()
 ISTIOD_SERVICE_IP=""
 ISTIO_EGRESS_SERVICE_IP=""
+KUBERNETES_SERVICE_IP=""
 
 LISTENER_NGINX_IP=""
 LISTENER_EXTAUTHZ_IP=""
@@ -131,7 +163,11 @@ cleanup() {
         return
     fi
 
-    phase4_info "cleaning up temporary NetworkPolicy verifier pods"
+    phase4_info "cleaning up temporary NetworkPolicy verifier resources"
+    for svc_ref in "${TEMP_SERVICES[@]}"; do
+        kubectl delete service "${svc_ref#*/}" -n "${svc_ref%%/*}" \
+            --ignore-not-found >/dev/null 2>&1 || true
+    done
     for pod_ref in "${TEMP_PODS[@]}"; do
         kubectl delete pod "${pod_ref#*/}" -n "${pod_ref%%/*}" \
             --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
@@ -169,6 +205,7 @@ require_network_policies() {
     local infrastructure_count
     local ingress_count
     local egress_count
+    local monitoring_count
 
     require_namespace default
     require_namespace infrastructure
@@ -181,13 +218,15 @@ require_network_policies() {
     infrastructure_count="$(kubectl get networkpolicy -n infrastructure --no-headers 2>/dev/null | wc -l)"
     ingress_count="$(kubectl get networkpolicy -n istio-ingress --no-headers 2>/dev/null | wc -l)"
     egress_count="$(kubectl get networkpolicy -n istio-egress --no-headers 2>/dev/null | wc -l)"
+    monitoring_count="$(kubectl get networkpolicy -n monitoring --no-headers 2>/dev/null | wc -l)"
 
     [[ "${default_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace default; run deploy/scripts/07-apply-network-policies.sh first"
     [[ "${infrastructure_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace infrastructure; run deploy/scripts/07-apply-network-policies.sh first"
     [[ "${ingress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-ingress; run deploy/scripts/07-apply-network-policies.sh first"
     [[ "${egress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-egress; run deploy/scripts/07-apply-network-policies.sh first"
+    [[ "${monitoring_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace monitoring; run deploy/scripts/07-apply-network-policies.sh first"
 
-    phase4_info "found ${default_count} policies in default, ${infrastructure_count} in infrastructure, ${ingress_count} in istio-ingress, ${egress_count} in istio-egress"
+    phase4_info "found ${default_count} policies in default, ${infrastructure_count} in infrastructure, ${ingress_count} in istio-ingress, ${egress_count} in istio-egress, ${monitoring_count} in monitoring"
 }
 
 require_live_istio_targets() {
@@ -205,6 +244,9 @@ require_live_istio_targets() {
 
     ISTIO_EGRESS_SERVICE_IP="$(kubectl get service istio-egress-gateway -n istio-egress -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
     require_nonempty_value "istio-egress-gateway service ClusterIP" "${ISTIO_EGRESS_SERVICE_IP}"
+
+    KUBERNETES_SERVICE_IP="$(kubectl get service kubernetes -n default -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
+    require_nonempty_value "kubernetes.default service ClusterIP" "${KUBERNETES_SERVICE_IP}"
 }
 
 build_label_lines() {
@@ -269,7 +311,7 @@ create_listener() {
     local label_lines
 
     shift 3
-    label_lines="$(build_label_lines "$@")"
+    label_lines="$(build_label_lines "$@" "budgetanalyzer.io/network-policy-listener=${name}")"
 
     kubectl delete pod "${name}" -n "${namespace}" \
         --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
@@ -313,6 +355,32 @@ MANIFEST
     TEMP_PODS+=("${namespace}/${name}")
 }
 
+create_service() {
+    local namespace="$1"
+    local name="$2"
+    local port="$3"
+
+    kubectl delete service "${name}" -n "${namespace}" \
+        --ignore-not-found >/dev/null 2>&1 || true
+
+    kubectl apply -n "${namespace}" -f - >/dev/null <<MANIFEST
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+  selector:
+    budgetanalyzer.io/network-policy-listener: "${name}"
+  ports:
+    - name: tcp-${port}
+      port: ${port}
+      targetPort: ${port}
+      protocol: TCP
+MANIFEST
+
+    TEMP_SERVICES+=("${namespace}/${name}")
+}
+
 wait_for_pod() {
     local namespace="$1"
     local pod_name="$2"
@@ -325,6 +393,13 @@ pod_ip() {
     local pod_name="$2"
 
     kubectl get pod "${pod_name}" -n "${namespace}" -o jsonpath='{.status.podIP}'
+}
+
+service_fqdn() {
+    local namespace="$1"
+    local name="$2"
+
+    printf '%s.%s.svc.cluster.local' "${name}" "${namespace}"
 }
 
 test_tcp() {
@@ -441,17 +516,57 @@ create_all_temp_pods() {
     create_listener infrastructure "${LISTENER_REDIS}" 6379 "app=redis"
     create_listener infrastructure "${LISTENER_POSTGRESQL}" 5432 "app=postgresql"
     create_listener infrastructure "${LISTENER_RABBITMQ}" 5671 "app=rabbitmq"
-    create_listener monitoring "${LISTENER_GRAFANA}" 3000 "app.kubernetes.io/name=grafana"
+    create_listener monitoring "${LISTENER_GRAFANA}" 3000 \
+        "app.kubernetes.io/name=grafana" \
+        "app.kubernetes.io/instance=prometheus-stack"
+    create_listener monitoring "${LISTENER_PROMETHEUS}" 9090 \
+        "app.kubernetes.io/name=prometheus" \
+        "operator.prometheus.io/name=prometheus-stack-kube-prom-prometheus"
+    create_listener monitoring "${LISTENER_KUBE_STATE_METRICS}" 8080 \
+        "app.kubernetes.io/name=kube-state-metrics" \
+        "app.kubernetes.io/instance=prometheus-stack"
+    create_listener monitoring "${LISTENER_PROMETHEUS_OPERATOR}" 8080 \
+        "app.kubernetes.io/name=kube-prometheus-stack-prometheus-operator" \
+        "app.kubernetes.io/instance=prometheus-stack"
+    create_listener monitoring "${LISTENER_JAEGER_QUERY_GRPC}" 16685 "app.kubernetes.io/name=jaeger"
+    create_listener monitoring "${LISTENER_JAEGER_QUERY_HTTP}" 16686 "app.kubernetes.io/name=jaeger"
+    create_listener monitoring "${LISTENER_JAEGER_COLLECTOR}" 4317 "app.kubernetes.io/name=jaeger"
+    create_listener default "${LISTENER_SPRING_BOOT_8081}" 8081 "app.kubernetes.io/framework=spring-boot"
+    create_listener default "${LISTENER_SPRING_BOOT_8082}" 8082 "app.kubernetes.io/framework=spring-boot"
+    create_listener default "${LISTENER_SPRING_BOOT_8084}" 8084 "app.kubernetes.io/framework=spring-boot"
+    create_listener default "${LISTENER_SPRING_BOOT_8086}" 8086 "app.kubernetes.io/framework=spring-boot"
+
+    create_service monitoring "${LISTENER_GRAFANA}" 3000
+    create_service monitoring "${LISTENER_PROMETHEUS}" 9090
+    create_service monitoring "${LISTENER_KUBE_STATE_METRICS}" 8080
+    create_service monitoring "${LISTENER_PROMETHEUS_OPERATOR}" 8080
+    create_service monitoring "${LISTENER_JAEGER_QUERY_GRPC}" 16685
+    create_service monitoring "${LISTENER_JAEGER_QUERY_HTTP}" 16686
+    create_service monitoring "${LISTENER_JAEGER_COLLECTOR}" 4317
+    create_service default "${LISTENER_SPRING_BOOT_8081}" 8081
+    create_service default "${LISTENER_SPRING_BOOT_8082}" 8082
+    create_service default "${LISTENER_SPRING_BOOT_8084}" 8084
+    create_service default "${LISTENER_SPRING_BOOT_8086}" 8086
 
     create_probe istio-ingress "${PROBE_ISTIO_INGRESS}" \
         "gateway.networking.k8s.io/gateway-name=istio-ingress-gateway"
-    create_probe default "${PROBE_NGINX}" "app=nginx-gateway"
-    create_probe default "${PROBE_SESSION}" "app=session-gateway"
-    create_probe default "${PROBE_EXTAUTHZ}" "app=ext-authz"
-    create_probe default "${PROBE_TXN}" "app=transaction-service"
-    create_probe default "${PROBE_CURRENCY}" "app=currency-service"
-    create_probe default "${PROBE_PERM}" "app=permission-service"
+    create_probe istio-egress "${PROBE_ISTIO_EGRESS}" "istio=egress-gateway"
+    create_probe default "${PROBE_NGINX}" "app=nginx-gateway" "security.istio.io/tlsMode=istio"
+    create_probe default "${PROBE_SESSION}" "app=session-gateway" "security.istio.io/tlsMode=istio"
+    create_probe default "${PROBE_EXTAUTHZ}" "app=ext-authz" "security.istio.io/tlsMode=istio"
+    create_probe default "${PROBE_TXN}" "app=transaction-service" "security.istio.io/tlsMode=istio"
+    create_probe default "${PROBE_CURRENCY}" "app=currency-service" "security.istio.io/tlsMode=istio"
+    create_probe default "${PROBE_PERM}" "app=permission-service" "security.istio.io/tlsMode=istio"
     create_probe default "${PROBE_UNLABELED}" "phase4-network-policy-verifier=unlabeled"
+    create_probe monitoring "${PROBE_MONITORING_GRAFANA}" \
+        "app.kubernetes.io/name=grafana" \
+        "app.kubernetes.io/instance=prometheus-stack"
+    create_probe monitoring "${PROBE_MONITORING_PROMETHEUS}" \
+        "app.kubernetes.io/name=prometheus" \
+        "operator.prometheus.io/name=prometheus-stack-kube-prom-prometheus" \
+        "security.istio.io/tlsMode=istio"
+    create_probe monitoring "${PROBE_MONITORING_KIALI}" "app.kubernetes.io/name=kiali"
+    create_probe monitoring "${PROBE_MONITORING_UNLABELED}" "phase4-network-policy-verifier=monitoring-unlabeled"
 
     wait_for_pod default "${LISTENER_NGINX}"
     wait_for_pod default "${LISTENER_EXTAUTHZ}"
@@ -460,11 +575,22 @@ create_all_temp_pods() {
     wait_for_pod default "${LISTENER_CURRENCY}"
     wait_for_pod default "${LISTENER_WEB}"
     wait_for_pod default "${LISTENER_PERMISSION}"
+    wait_for_pod default "${LISTENER_SPRING_BOOT_8081}"
+    wait_for_pod default "${LISTENER_SPRING_BOOT_8082}"
+    wait_for_pod default "${LISTENER_SPRING_BOOT_8084}"
+    wait_for_pod default "${LISTENER_SPRING_BOOT_8086}"
     wait_for_pod infrastructure "${LISTENER_REDIS}"
     wait_for_pod infrastructure "${LISTENER_POSTGRESQL}"
     wait_for_pod infrastructure "${LISTENER_RABBITMQ}"
     wait_for_pod monitoring "${LISTENER_GRAFANA}"
+    wait_for_pod monitoring "${LISTENER_PROMETHEUS}"
+    wait_for_pod monitoring "${LISTENER_KUBE_STATE_METRICS}"
+    wait_for_pod monitoring "${LISTENER_PROMETHEUS_OPERATOR}"
+    wait_for_pod monitoring "${LISTENER_JAEGER_QUERY_GRPC}"
+    wait_for_pod monitoring "${LISTENER_JAEGER_QUERY_HTTP}"
+    wait_for_pod monitoring "${LISTENER_JAEGER_COLLECTOR}"
     wait_for_pod istio-ingress "${PROBE_ISTIO_INGRESS}"
+    wait_for_pod istio-egress "${PROBE_ISTIO_EGRESS}"
     wait_for_pod default "${PROBE_NGINX}"
     wait_for_pod default "${PROBE_SESSION}"
     wait_for_pod default "${PROBE_EXTAUTHZ}"
@@ -472,6 +598,10 @@ create_all_temp_pods() {
     wait_for_pod default "${PROBE_CURRENCY}"
     wait_for_pod default "${PROBE_PERM}"
     wait_for_pod default "${PROBE_UNLABELED}"
+    wait_for_pod monitoring "${PROBE_MONITORING_GRAFANA}"
+    wait_for_pod monitoring "${PROBE_MONITORING_PROMETHEUS}"
+    wait_for_pod monitoring "${PROBE_MONITORING_KIALI}"
+    wait_for_pod monitoring "${PROBE_MONITORING_UNLABELED}"
 
     phase4_info "waiting ${PROBE_STABILIZATION_SECONDS}s for probe networking to stabilize"
     sleep "${PROBE_STABILIZATION_SECONDS}"
@@ -503,6 +633,7 @@ main() {
 
     section "Positive: DNS Baseline"
     assert_dns_success "unlabeled default probe -> kube-dns" default "${PROBE_UNLABELED}"
+    assert_dns_success "unlabeled monitoring probe -> kube-dns" monitoring "${PROBE_MONITORING_UNLABELED}"
 
     section "Positive: Istio Ingress Egress"
     assert_allow_eventually "istio-ingress probe -> nginx listener:8080" \
@@ -552,6 +683,48 @@ main() {
     assert_allow_eventually "currency-service probe -> istio-egress-gateway:443" \
         default "${PROBE_CURRENCY}" "${ISTIO_EGRESS_SERVICE_IP}" 443
 
+    section "Positive: Monitoring Namespace"
+    assert_allow_eventually "grafana probe -> prometheus listener:9090" \
+        monitoring "${PROBE_MONITORING_GRAFANA}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS}")" 9090
+    assert_allow_eventually "prometheus probe -> grafana listener:3000" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn monitoring "${LISTENER_GRAFANA}")" 3000
+    assert_allow_eventually "prometheus probe -> kube-state-metrics listener:8080" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn monitoring "${LISTENER_KUBE_STATE_METRICS}")" 8080
+    assert_allow_eventually "prometheus probe -> prometheus-operator listener:8080" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS_OPERATOR}")" 8080
+    assert_allow_eventually "prometheus probe -> prometheus listener:9090" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS}")" 9090
+    assert_allow_eventually "prometheus probe -> spring-boot metrics service:8081" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn default "${LISTENER_SPRING_BOOT_8081}")" 8081
+    assert_allow_eventually "prometheus probe -> spring-boot metrics service:8082" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn default "${LISTENER_SPRING_BOOT_8082}")" 8082
+    assert_allow_eventually "prometheus probe -> spring-boot metrics service:8084" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn default "${LISTENER_SPRING_BOOT_8084}")" 8084
+    assert_allow_eventually "prometheus probe -> spring-boot metrics service:8086" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn default "${LISTENER_SPRING_BOOT_8086}")" 8086
+    assert_allow_eventually "kiali probe -> prometheus listener:9090" \
+        monitoring "${PROBE_MONITORING_KIALI}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS}")" 9090
+    assert_allow_eventually "kiali probe -> jaeger-query gRPC listener:16685" \
+        monitoring "${PROBE_MONITORING_KIALI}" "$(service_fqdn monitoring "${LISTENER_JAEGER_QUERY_GRPC}")" 16685
+    assert_allow_eventually "kiali probe -> jaeger-query HTTP listener:16686" \
+        monitoring "${PROBE_MONITORING_KIALI}" "$(service_fqdn monitoring "${LISTENER_JAEGER_QUERY_HTTP}")" 16686
+    assert_allow_eventually "kiali probe -> kubernetes.default:443" \
+        monitoring "${PROBE_MONITORING_KIALI}" "${KUBERNETES_SERVICE_IP}" 443
+    assert_allow_eventually "prometheus probe -> kubernetes.default:443" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "${KUBERNETES_SERVICE_IP}" 443
+    assert_allow_eventually "kube-state-metrics probe -> kubernetes.default:443" \
+        monitoring "${LISTENER_KUBE_STATE_METRICS}" "${KUBERNETES_SERVICE_IP}" 443
+    assert_allow_eventually "prometheus-operator probe -> kubernetes.default:443" \
+        monitoring "${LISTENER_PROMETHEUS_OPERATOR}" "${KUBERNETES_SERVICE_IP}" 443
+    assert_allow_eventually "default nginx probe -> jaeger-collector listener:4317" \
+        default "${PROBE_NGINX}" "$(service_fqdn monitoring "${LISTENER_JAEGER_COLLECTOR}")" 4317
+    assert_allow_eventually "istio-ingress probe -> jaeger-collector listener:4317" \
+        istio-ingress "${PROBE_ISTIO_INGRESS}" "$(service_fqdn monitoring "${LISTENER_JAEGER_COLLECTOR}")" 4317
+    assert_allow_eventually "istio-egress probe -> jaeger-collector listener:4317" \
+        istio-egress "${PROBE_ISTIO_EGRESS}" "$(service_fqdn monitoring "${LISTENER_JAEGER_COLLECTOR}")" 4317
+    assert_allow_eventually "monitoring prometheus probe -> jaeger-collector listener:4317" \
+        monitoring "${PROBE_MONITORING_PROMETHEUS}" "$(service_fqdn monitoring "${LISTENER_JAEGER_COLLECTOR}")" 4317
+
     section "Negative: Unlabeled Isolation"
     assert_deny_consistently "unlabeled default probe -> nginx listener:8080" \
         default "${PROBE_UNLABELED}" "${LISTENER_NGINX_IP}" 8080
@@ -575,6 +748,12 @@ main() {
         default "${PROBE_UNLABELED}" "${LISTENER_RABBITMQ_IP}" 5671
     assert_deny_consistently "unlabeled default probe -> istio-egress-gateway:443" \
         default "${PROBE_UNLABELED}" "${ISTIO_EGRESS_SERVICE_IP}" 443
+    assert_deny_consistently "unlabeled monitoring probe -> prometheus listener:9090" \
+        monitoring "${PROBE_MONITORING_UNLABELED}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS}")" 9090
+    assert_deny_consistently "unlabeled monitoring probe -> jaeger-query HTTP listener:16686" \
+        monitoring "${PROBE_MONITORING_UNLABELED}" "$(service_fqdn monitoring "${LISTENER_JAEGER_QUERY_HTTP}")" 16686
+    assert_deny_consistently "unlabeled monitoring probe -> kubernetes.default:443" \
+        monitoring "${PROBE_MONITORING_UNLABELED}" "${KUBERNETES_SERVICE_IP}" 443
 
     section "Negative: Cross-Identity Restrictions"
     assert_deny_consistently "session-gateway probe -> nginx listener:8080" \
@@ -595,6 +774,10 @@ main() {
         istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_PERMISSION_IP}" 8086
     assert_deny_consistently "istio-ingress probe -> grafana listener:3000" \
         istio-ingress "${PROBE_ISTIO_INGRESS}" "${LISTENER_GRAFANA_IP}" 3000
+    assert_deny_consistently "default nginx probe -> prometheus listener:9090" \
+        default "${PROBE_NGINX}" "$(service_fqdn monitoring "${LISTENER_PROMETHEUS}")" 9090
+    assert_deny_consistently "default nginx probe -> jaeger-query HTTP listener:16686" \
+        default "${PROBE_NGINX}" "$(service_fqdn monitoring "${LISTENER_JAEGER_QUERY_HTTP}")" 16686
     assert_deny_consistently "ext-authz probe -> istio-egress-gateway:443" \
         default "${PROBE_EXTAUTHZ}" "${ISTIO_EGRESS_SERVICE_IP}" 443
     assert_deny_consistently "transaction-service probe -> istio-egress-gateway:443" \

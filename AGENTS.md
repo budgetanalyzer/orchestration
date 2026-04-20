@@ -127,7 +127,7 @@ kubectl get svc -n monitoring
 - **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
 - **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
 - **Infrastructure**: PostgreSQL, Redis, RabbitMQ (StatefulSets in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template)
-- **Monitoring**: Prometheus, Grafana, and kube-state-metrics (in monitoring namespace)
+- **Monitoring**: Prometheus, Grafana, and kube-state-metrics run in `monitoring`; Phase 7 keeps Jaeger and Kiali in the same namespace with `ClusterIP`-only access when they are added
 - **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
 - **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
 - **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
@@ -165,7 +165,7 @@ Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session G
 - Same-origin architecture = no CORS issues
 - Opaque session tokens = no JWTs exposed to browser (XSS protection)
 - Centralized session validation and auth-path throttling at Istio ingress, with backend/API rate limiting remaining at NGINX
-- Observability is internal-only in both local Tilt and production OCI/k3s: use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` for Grafana and `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` for Prometheus. Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`, and do not use `--address 0.0.0.0`.
+- Observability is internal-only in both local Tilt and production OCI/k3s: use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` for Grafana and `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` for Prometheus. Phase 7 reserves `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` for Jaeger and `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` for Kiali. Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`, and do not use `--address 0.0.0.0`.
 
 **Discovery**:
 ```bash

@@ -599,3 +599,28 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-default-mesh-egress-to-jaeger-collector
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      security.istio.io/tlsMode: istio
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jaeger
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318

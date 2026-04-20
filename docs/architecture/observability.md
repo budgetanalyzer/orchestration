@@ -199,13 +199,15 @@ processes behind, run:
 ./scripts/smoketest/verify-observability-port-forward-access.sh
 ```
 
-The smoke script starts and cleans up its own loopback-bound Grafana and
-Prometheus port-forwards, waits for Grafana and Prometheus health on the
-canonical `3300` and `9090` local ports by default, and verifies that
-unauthenticated Grafana dashboard access is rejected. If either loopback port
-is already occupied, it fails and names the expected `kubectl port-forward`
-owner; rerun with explicit port overrides only when that competing listener is
-intentional.
+The smoke script starts and cleans up any missing loopback-bound Grafana,
+Prometheus, Jaeger, and Kiali port-forwards, waits for the expected local
+health endpoints on the canonical `3300`, `9090`, `16686`, and `20001` ports
+by default, and verifies that unauthenticated Grafana dashboard access and
+unauthenticated Kiali API access are both rejected. If one of those loopback
+ports is already occupied by the expected observability `kubectl port-forward`
+listener, the verifier reuses it instead of failing. Use explicit port
+overrides only when some other intentional listener owns one of the canonical
+ports.
 
 For persistent operator access to all four observability UIs, use the repo-
 owned helper:

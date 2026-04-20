@@ -326,9 +326,11 @@ Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
 for Prometheus, `http://localhost:16686/jaeger` for Jaeger, and
 `http://localhost:20001/kiali` for Kiali. Do not use `--address 0.0.0.0` for
 observability port-forwards. The focused smoke verifier remains the clean-shell
-proof path and still starts its own temporary forwards on the canonical ports
-by default, so stop the helper first or pass explicit port overrides when you
-want to run that verifier while the helper is already holding those ports.
+proof path, starts any missing temporary forwards on the canonical ports, and
+reuses the expected existing loopback `kubectl port-forward` listeners when
+the helper or manual forwards already hold those ports. Pass explicit port
+overrides only when some other intentional listener already owns a canonical
+port.
 
 Validate the tracing control-plane wiring after `tilt up`:
 

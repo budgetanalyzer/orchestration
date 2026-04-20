@@ -26,8 +26,10 @@ scripts/
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
   loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
   It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local
-  ports and accepts flag overrides when those loopback ports are already
-  occupied on the operator workstation. It verifies Grafana health,
+  ports, starts any missing temporary forwards itself, reuses the expected
+  existing loopback `kubectl port-forward` listeners on those canonical ports,
+  and accepts flag overrides when some other intentional listener already
+  owns one of them. It verifies Grafana health,
   Prometheus readiness, Jaeger query API access, Kiali UI shell access, and
   that unauthenticated Grafana and Kiali API access is rejected. Use the same
   loopback-only access model in local Tilt and production OCI/k3s for the
@@ -144,10 +146,11 @@ the active context and Tilt resource state from the same host shell first.
 - `ops/start-observability-port-forwards.sh` is the repo-owned convenience
   entry point for persistent local Grafana, Prometheus, Jaeger, and Kiali
   access. It keeps the forwards bound to `127.0.0.1` and tears them down on
-  `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path; if
-  the helper is already holding the canonical ports, stop it first or run the
-  verifier with explicit `--grafana-port`, `--prometheus-port`,
-  `--jaeger-port`, and `--kiali-port` overrides.
+  `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path and
+  now coexists with that helper by reusing the expected canonical listeners
+  when they are already running. Use explicit `--grafana-port`,
+  `--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only
+  when some other intentional listener already owns one of those ports.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

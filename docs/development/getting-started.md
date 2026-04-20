@@ -161,10 +161,11 @@ Keep Grafana authentication enabled, keep observability port-forwards bound to
 `127.0.0.1`, and do not use `grafana.budgetanalyzer.localhost`,
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
 `jaeger.budgetanalyzer.org` as operator entry points. The focused smoke script
-still starts its own temporary forwards on the canonical ports by default, so
-stop the helper first or pass explicit `--grafana-port`, `--prometheus-port`,
-`--jaeger-port`, and `--kiali-port` overrides when those ports are already
-occupied intentionally.
+starts any missing temporary forwards on the canonical ports and reuses the
+expected existing loopback `kubectl port-forward` listeners when the helper or
+manual forwards already hold those ports. Pass explicit `--grafana-port`,
+`--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only when
+some other intentional listener already owns a canonical port.
 
 ### Stopping
 

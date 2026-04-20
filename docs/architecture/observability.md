@@ -313,7 +313,8 @@ allowlists. The verifier scripts exercise those paths through temporary
 `ClusterIP` Services so the repo does not need destinationless egress rules for
 Grafana, Prometheus, Kiali, Jaeger, or the Spring Boot metrics targets.
 Prometheus also needs egress to injected workload pods on Istio's mTLS tunnel
-port `15008` for service-based Spring Boot scrapes.
+port `15008` for service-based Spring Boot scrapes, plus `istiod` on `15012`
+for xDS/CA traffic and `15014` for Istio control-plane metrics scraping.
 
 The `monitoring` namespace manifest also no longer opts into Gateway route
 attachment, so observability stays off the public ingress surface by default.

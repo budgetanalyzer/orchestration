@@ -7,9 +7,12 @@
 # ingress/egress topology by testing both authorized and unauthorized
 # connectivity paths using disposable probe pods.
 #
-# Each probe pod uses sidecar.istio.io/inject: "false" so Istio does not
-# contaminate results. Probes carry the same pod labels as the workload they
-# impersonate, which is what NetworkPolicy selectors match on.
+# Most probe pods use sidecar.istio.io/inject: "false" so Istio does not
+# contaminate the raw policy checks. The monitoring Prometheus probe is the
+# exception: it explicitly joins the mesh so the verifier exercises the same
+# Istiod control-plane traffic as the real Prometheus pod. All probes carry the
+# same pod labels as the workload they impersonate, which is what
+# NetworkPolicy selectors match on.
 #
 # Prerequisites: Tilt running with all services and network policies applied.
 #
@@ -151,7 +154,7 @@ require_network_policies() {
         "$default_count" "$infra_count" "$ingress_count" "$egress_count" "$monitoring_count"
 }
 
-# Create a disposable probe pod.
+# Create a disposable probe pod with sidecar injection disabled.
 # Args: namespace pod-name label1=val1 [label2=val2 ...]
 create_probe() {
     local ns="$1" name="$2"
@@ -173,6 +176,53 @@ metadata:
   name: ${name}
   annotations:
     sidecar.istio.io/inject: "false"
+  labels:
+${label_lines}spec:
+  automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: ${PROBE_IMAGE}
+      command: ["sh", "-c", "sleep 3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+  terminationGracePeriodSeconds: 0
+MANIFEST
+
+    TEMP_PODS+=("${ns}/${name}")
+}
+
+# Create a disposable probe pod that explicitly joins the mesh.
+# Args: namespace pod-name label1=val1 [label2=val2 ...]
+create_injected_probe() {
+    local ns="$1" name="$2"
+    shift 2
+
+    local label_lines=""
+    local lbl
+    for lbl in "$@"; do
+        label_lines="${label_lines}    ${lbl%%=*}: \"${lbl#*=}\"
+"
+    done
+    label_lines="${label_lines}    sidecar.istio.io/inject: \"true\"
+"
+
+    kubectl delete pod "$name" -n "$ns" \
+        --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
+
+    kubectl apply -n "$ns" -f - >/dev/null 2>&1 <<MANIFEST
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${name}
   labels:
 ${label_lines}spec:
   automountServiceAccountToken: false
@@ -293,6 +343,20 @@ warm_probe_dns() {
 service_fqdn() {
     local ns="$1" name="$2"
     printf '%s.%s.svc.cluster.local' "$name" "$ns"
+}
+
+wait_for_pods_ready() {
+    local ns="$1"
+    shift
+
+    if kubectl wait --for=condition=Ready "$@" -n "$ns" --timeout=60s >/dev/null 2>&1; then
+        return 0
+    fi
+
+    printf 'ERROR: Timed out waiting for pods to become Ready in namespace %s: %s\n' \
+        "$ns" "$*" >&2
+    kubectl get -n "$ns" "$@" >&2 || true
+    return 1
 }
 
 connect_eventually() {
@@ -432,19 +496,18 @@ create_all_probes() {
     create_probe monitoring "$PROBE_MONITORING_GRAFANA" \
         "app.kubernetes.io/name=grafana" \
         "app.kubernetes.io/instance=prometheus-stack"
-    create_probe monitoring "$PROBE_MONITORING_PROMETHEUS" \
+    create_injected_probe monitoring "$PROBE_MONITORING_PROMETHEUS" \
         "app.kubernetes.io/name=prometheus" \
-        "operator.prometheus.io/name=prometheus-stack-kube-prom-prometheus" \
-        "security.istio.io/tlsMode=istio"
+        "operator.prometheus.io/name=prometheus-stack-kube-prom-prometheus"
     create_probe monitoring "$PROBE_MONITORING_KIALI" "app.kubernetes.io/name=kiali"
     create_probe monitoring "$PROBE_MONITORING_UNLABELED" "np2-role=monitoring-unlabeled"
 
     # Wait for all probes to be ready
-    kubectl wait --for=condition=Ready \
-        "pod/${PROBE_ISTIO_INGRESS}" -n istio-ingress --timeout=60s >/dev/null 2>&1
-    kubectl wait --for=condition=Ready \
-        "pod/${PROBE_ISTIO_EGRESS}" -n istio-egress --timeout=60s >/dev/null 2>&1
-    kubectl wait --for=condition=Ready \
+    wait_for_pods_ready istio-ingress \
+        "pod/${PROBE_ISTIO_INGRESS}"
+    wait_for_pods_ready istio-egress \
+        "pod/${PROBE_ISTIO_EGRESS}"
+    wait_for_pods_ready default \
         "pod/${PROBE_NGINX}" \
         "pod/${PROBE_SESSION}" \
         "pod/${PROBE_EXTAUTHZ}" \
@@ -455,9 +518,8 @@ create_all_probes() {
         "pod/${LISTENER_SPRING_BOOT_8081}" \
         "pod/${LISTENER_SPRING_BOOT_8082}" \
         "pod/${LISTENER_SPRING_BOOT_8084}" \
-        "pod/${LISTENER_SPRING_BOOT_8086}" \
-        -n default --timeout=60s >/dev/null 2>&1
-    kubectl wait --for=condition=Ready \
+        "pod/${LISTENER_SPRING_BOOT_8086}"
+    wait_for_pods_ready monitoring \
         "pod/${PROBE_MONITORING_GRAFANA}" \
         "pod/${PROBE_MONITORING_PROMETHEUS}" \
         "pod/${PROBE_MONITORING_KIALI}" \
@@ -468,8 +530,7 @@ create_all_probes() {
         "pod/${LISTENER_PROMETHEUS_OPERATOR}" \
         "pod/${LISTENER_JAEGER_QUERY_GRPC}" \
         "pod/${LISTENER_JAEGER_QUERY_HTTP}" \
-        "pod/${LISTENER_JAEGER_COLLECTOR}" \
-        -n monitoring --timeout=60s >/dev/null 2>&1
+        "pod/${LISTENER_JAEGER_COLLECTOR}"
 
     echo "  All probe pods ready"
     echo "  Waiting ${PROBE_STABILIZATION_SECONDS}s for probe DNS/network stabilization..."
@@ -596,6 +657,12 @@ main() {
 
     assert_allow_eventually "prometheus -> prometheus:9090" \
         monitoring "$PROBE_MONITORING_PROMETHEUS" "$(service_fqdn monitoring "$LISTENER_PROMETHEUS")" 9090
+
+    assert_allow_eventually "prometheus -> istiod:15012" \
+        monitoring "$PROBE_MONITORING_PROMETHEUS" istiod.istio-system 15012
+
+    assert_allow_eventually "prometheus -> istiod:15014" \
+        monitoring "$PROBE_MONITORING_PROMETHEUS" istiod.istio-system 15014
 
     assert_allow_eventually "prometheus -> spring-boot metrics:8081" \
         monitoring "$PROBE_MONITORING_PROMETHEUS" "$(service_fqdn default "$LISTENER_SPRING_BOOT_8081")" 8081

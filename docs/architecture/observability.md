@@ -181,7 +181,9 @@ for the full evaluation.
 
 Local Tilt and production OCI/k3s use the same internal-only access contract
 for Grafana. There is no supported observability hostname. Keep Grafana behind
-Kubernetes and use a loopback-bound port-forward instead:
+Kubernetes and use a loopback-bound port-forward instead. `tilt up` installs
+the observability workloads, but it does not own or keep localhost tunnels
+open for Grafana, Prometheus, Jaeger, or Kiali:
 
 ```bash
 kubectl port-forward --address 127.0.0.1 -n monitoring \

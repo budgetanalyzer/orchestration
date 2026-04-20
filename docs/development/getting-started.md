@@ -147,8 +147,11 @@ for the OAuth2 round-trip.
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs
 - **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
 - **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
+- **Tilt observability contract**: `tilt up` deploys Grafana, Prometheus, Jaeger, and Kiali, but it does not open localhost tunnels for them
 - **Grafana**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`, then open http://localhost:3300
 - **Prometheus**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`, then open http://localhost:9090
+- **Jaeger**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`, then open http://localhost:16686/jaeger
+- **Kiali**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`, then open http://localhost:20001/kiali and sign in with `kubectl -n monitoring create token kiali`
 - **Focused access proof**: `./scripts/smoketest/verify-observability-port-forward-access.sh`
 - **Tilt UI**: http://localhost:10350 (logs and status)
 

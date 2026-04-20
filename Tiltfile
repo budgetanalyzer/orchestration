@@ -936,14 +936,8 @@ local_resource(
 
 k8s_resource(
     'jaeger',
-    port_forwards=[
-        port_forward(16686, 16686, name='Jaeger UI'),
-    ],
     resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
     labels=['monitoring'],
-    links=[
-        link('http://localhost:16686/jaeger', 'Jaeger'),
-    ],
 )
 
 local_resource(
@@ -969,9 +963,6 @@ local_resource(
     ],
     resource_deps=['prometheus-stack', 'jaeger', 'istiod', 'kyverno-policies'],
     labels=['monitoring'],
-    links=[
-        link('http://localhost:20001/kiali', 'Kiali'),
-    ],
 )
 
 local_resource(

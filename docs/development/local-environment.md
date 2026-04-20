@@ -284,8 +284,10 @@ token auth, view-only mode, non-cluster-wide RBAC, and `ClusterIP` service
 exposure.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
-Retire `grafana.budgetanalyzer.localhost` and use the same loopback-only
-operator commands everywhere:
+Retire `grafana.budgetanalyzer.localhost`. `tilt up` installs the observability
+stack, but it does not manage persistent localhost tunnels for Grafana,
+Prometheus, Jaeger, or Kiali. Use the same explicit loopback-only operator
+commands everywhere:
 
 ```bash
 # Grafana UI (loopback-only; keep this bound to 127.0.0.1)

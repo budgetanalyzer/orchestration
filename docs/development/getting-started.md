@@ -37,9 +37,9 @@ tilt up           # Start everything
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh  # Optional but recommended Istio ingress and egress hardening proof
 ./scripts/smoketest/verify-phase-4-transport-encryption.sh  # Optional but recommended infrastructure transport-TLS proof
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh  # Optional but recommended runtime hardening and Pod Security proof
-./scripts/smoketest/verify-observability-port-forward-access.sh  # Optional but recommended loopback-only Grafana and Prometheus access proof
+./scripts/smoketest/verify-observability-port-forward-access.sh  # Optional but recommended loopback-only Grafana, Prometheus, Jaeger, and Kiali access proof
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh  # Optional but recommended edge and browser security proof
-./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended final local security guardrail proof
+./scripts/smoketest/verify-phase-7-security-guardrails.sh  # Optional but recommended local security guardrail proof
 ./scripts/smoketest/smoketest.sh  # Optional aggregate live-cluster smoke pass
 ```
 
@@ -51,7 +51,7 @@ locally before the downstream Java builds run. For the local-vs-release
 artifact contract, see
 [service-common-artifact-resolution.md](service-common-artifact-resolution.md).
 
-The script tree is now purpose-split: `scripts/bootstrap/` for host and
+The script tree is purpose-split: `scripts/bootstrap/` for host and
 cluster setup, `scripts/guardrails/` for CI-safe static checks,
 `scripts/smoketest/` for live-cluster verifiers, `scripts/ops/` for
 interactive maintenance, `scripts/loadtest/` for synthetic fixtures, and
@@ -100,7 +100,7 @@ Session Gateway share the `session:` key prefix contract plus the
 Session Gateway with no standalone `/user` ingress route.
 After logging in once, rerun the verifier without `--static-only` or with
 `--require-live-session` when you want the live Redis ACL/keyspace proof too.
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the final local
+`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local
 security guardrail command; it runs the static gate and then the live runtime
 proof in order. The narrower
 `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` entrypoint remains useful
@@ -147,8 +147,12 @@ for the OAuth2 round-trip.
 - **API Docs UI**: https://app.budgetanalyzer.localhost/api-docs
 - **OpenAPI JSON**: https://app.budgetanalyzer.localhost/api-docs/openapi.json
 - **OpenAPI YAML**: https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
+- **Tilt observability contract**: `tilt up` deploys Grafana, Prometheus, Jaeger, and Kiali, but it does not open localhost tunnels for them
+- **Convenience helper**: `./scripts/ops/start-observability-port-forwards.sh`
 - **Grafana**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`, then open http://localhost:3300
 - **Prometheus**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`, then open http://localhost:9090
+- **Jaeger**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`, then open http://localhost:16686/jaeger
+- **Kiali**: `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`, then open http://localhost:20001/kiali and sign in with `kubectl -n monitoring create token kiali`
 - **Focused access proof**: `./scripts/smoketest/verify-observability-port-forward-access.sh`
 - **Tilt UI**: http://localhost:10350 (logs and status)
 
@@ -156,7 +160,12 @@ Observability is internal-only in both local Tilt and production OCI/k3s.
 Keep Grafana authentication enabled, keep observability port-forwards bound to
 `127.0.0.1`, and do not use `grafana.budgetanalyzer.localhost`,
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
-`jaeger.budgetanalyzer.org` as operator entry points.
+`jaeger.budgetanalyzer.org` as operator entry points. The focused smoke script
+starts any missing temporary forwards on the canonical ports and reuses the
+expected existing loopback `kubectl port-forward` listeners when the helper or
+manual forwards already hold those ports. Pass explicit `--grafana-port`,
+`--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only when
+some other intentional listener already owns a canonical port.
 
 ### Stopping
 

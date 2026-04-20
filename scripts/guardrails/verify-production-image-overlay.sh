@@ -16,6 +16,7 @@ TEMP_DIR=""
 RENDERED_APPS_FILE=""
 RENDERED_INFRASTRUCTURE_FILE=""
 PHASE6_RENDER_DIR=""
+PHASE7_OBSERVABILITY_RENDER_DIR=""
 INSTANCE_ENV_FILE_TMP=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
@@ -93,6 +94,31 @@ assert_not_contains() {
     fi
 }
 
+assert_images_are_digest_pinned() {
+    local description="$1"
+    shift
+    local refs_checked=0
+    local file
+    local ref
+
+    for file in "$@"; do
+        [[ -f "${file}" ]] || fail "${description} is missing expected file: ${file}"
+
+        while IFS= read -r ref; do
+            [[ -n "${ref}" ]] || continue
+            refs_checked=$((refs_checked + 1))
+
+            if [[ ! "${ref}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+                fail "${description} contains a non-digest-pinned image in ${file}: ${ref}"
+            fi
+        done < <(sed -nE 's/^[[:space:]]*image:[[:space:]]*"?([^"[:space:]]+)"?.*$/\1/p' "${file}")
+    done
+
+    if (( refs_checked == 0 )); then
+        fail "${description} did not contain any image references"
+    fi
+}
+
 assert_contains_literal() {
     local file needle description
 
@@ -101,6 +127,43 @@ assert_contains_literal() {
     description="$3"
 
     if ! grep -Fq "${needle}" "${file}"; then
+        fail "${description}"
+    fi
+}
+
+assert_no_observability_public_entry_resources() {
+    local file="$1"
+    local description="$2"
+
+    if awk '
+        function finish_doc() {
+            if (resource_kind ~ /^(Ingress|HTTPRoute|Gateway)$/ &&
+                resource_text ~ /(grafana|prometheus|kiali|jaeger)-route|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus|jaeger(-collector|-query)?|kiali([[:space:]]|$)|((grafana|prometheus|kiali|jaeger)\.budgetanalyzer\.(localhost|org))/) {
+                found = 1
+            }
+        }
+        BEGIN {
+            resource_kind = ""
+            resource_text = ""
+        }
+        /^---$/ {
+            finish_doc()
+            resource_kind = ""
+            resource_text = ""
+            next
+        }
+        {
+            resource_text = resource_text $0 "\n"
+            if ($0 ~ /^kind:[[:space:]]*/) {
+                resource_kind = $0
+                sub(/^kind:[[:space:]]*/, "", resource_kind)
+            }
+        }
+        END {
+            finish_doc()
+            exit found ? 0 : 1
+        }
+    ' "${file}"; then
         fail "${description}"
     fi
 }
@@ -327,6 +390,8 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /@vite/client {' "rendered production nginx config is missing the explicit Vite deny route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /_prod-smoke {' "rendered production nginx config is missing the explicit prod-smoke deny route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'https://demo.budgetanalyzer.org/api' "rendered production docs bundle is missing the production API server URL"
+    assert_no_observability_public_entry_resources "${RENDERED_APPS_FILE}" \
+        "rendered production app overlay contains an observability Ingress, HTTPRoute, or Gateway resource"
 
     "${STATIC_TOOLS_BIN}/kyverno" apply "${PRODUCTION_IMAGE_POLICY}" \
         --resource "${RENDERED_APPS_FILE}" \
@@ -358,6 +423,8 @@ verify_phase6_render_outputs() {
         "rendered gateway routes still point at an observability Service"
     assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
         "rendered gateway routes still contain an observability hostname"
+    assert_no_observability_public_entry_resources "${gateway_file}" \
+        "rendered gateway routes still contain an observability Ingress, HTTPRoute, or Gateway resource"
     assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
         "rendered ingress policies still contain an observability hostname"
     assert_not_contains "${ingress_file}" "${FORBIDDEN_OBSERVABILITY_INGRESS_PATTERN}" \
@@ -434,9 +501,117 @@ render_phase6_manifests() {
         --output-dir "${PHASE6_RENDER_DIR}" >/dev/null
 }
 
+render_phase7_observability_manifests() {
+    PHASE7_OBSERVABILITY_RENDER_DIR="${TEMP_DIR}/phase-7-observability"
+
+    "${REPO_DIR}/deploy/scripts/20-render-phase-7-observability.sh" \
+        --output-dir "${PHASE7_OBSERVABILITY_RENDER_DIR}" >/dev/null
+}
+
+verify_phase7_observability_render_outputs() {
+    local namespace_file jaeger_configmap_file jaeger_pvc_file jaeger_deployment_file jaeger_services_file kiali_file
+    local file
+    local -a phase7_files=()
+
+    namespace_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/monitoring-namespace.yaml"
+    jaeger_configmap_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/jaeger-configmap.yaml"
+    jaeger_pvc_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/jaeger-pvc.yaml"
+    jaeger_deployment_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/jaeger-deployment.yaml"
+    jaeger_services_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/jaeger-services.yaml"
+    kiali_file="${PHASE7_OBSERVABILITY_RENDER_DIR}/kiali.yaml"
+
+    phase7_files=(
+        "${namespace_file}"
+        "${jaeger_configmap_file}"
+        "${jaeger_pvc_file}"
+        "${jaeger_deployment_file}"
+        "${jaeger_services_file}"
+        "${kiali_file}"
+    )
+
+    for file in "${phase7_files[@]}"; do
+        [[ -f "${file}" ]] || fail "Production observability render output is missing $(basename "${file}")"
+        assert_no_phase6_forbidden_patterns "${file}"
+        assert_not_contains "${file}" "${FORBIDDEN_OBSERVABILITY_HOST_PATTERN}" \
+            "rendered production observability output still contains a public observability hostname: ${file}"
+    done
+
+    assert_contains_literal "${namespace_file}" 'name: monitoring' \
+        "rendered production observability output is missing Namespace/monitoring"
+
+    assert_contains_literal "${jaeger_deployment_file}" \
+        'cr.jaegertracing.io/jaegertracing/jaeger:2.17.0@sha256:6266573208d665ce5c17483bce0a75d0806480d92c84766d288d0aee885ce708' \
+        "rendered production observability output is missing the pinned Jaeger image"
+    assert_contains_literal "${jaeger_services_file}" 'name: jaeger-collector' \
+        "rendered production observability output is missing Service/jaeger-collector"
+    assert_contains_literal "${jaeger_services_file}" 'name: jaeger-query' \
+        "rendered production observability output is missing Service/jaeger-query"
+    assert_not_contains "${jaeger_services_file}" \
+        'type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' \
+        "rendered production Jaeger services expose a non-ClusterIP service type"
+    assert_no_observability_public_entry_resources "${jaeger_services_file}" \
+        "rendered production Jaeger output contains an observability Ingress, HTTPRoute, or Gateway resource"
+
+    if grep -Eiq '\b(elasticsearch|opensearch)\b' \
+        "${jaeger_configmap_file}" "${jaeger_pvc_file}" "${jaeger_deployment_file}" "${jaeger_services_file}"; then
+        fail "rendered production Jaeger output depends on Elasticsearch/OpenSearch"
+    fi
+
+    if ! grep -Eq 'strategy:[[:space:]]*token' "${kiali_file}"; then
+        fail "rendered production Kiali output does not use token auth"
+    fi
+    if grep -Eq 'strategy:[[:space:]]*anonymous([[:space:]]|$)' "${kiali_file}"; then
+        fail "rendered production Kiali output enables anonymous auth"
+    fi
+    if ! grep -Eq 'view_only_mode:[[:space:]]*true' "${kiali_file}"; then
+        fail "rendered production Kiali output does not enable view_only_mode"
+    fi
+    if ! grep -Eq 'cluster_wide_access:[[:space:]]*false' "${kiali_file}"; then
+        fail "rendered production Kiali output does not disable cluster-wide access"
+    fi
+    if ! grep -Eq 'type:[[:space:]]*ClusterIP' "${kiali_file}"; then
+        fail "rendered production Kiali service does not remain ClusterIP-only"
+    fi
+    if grep -Eq 'type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' "${kiali_file}"; then
+        fail "rendered production Kiali output exposes a non-ClusterIP service type"
+    fi
+    if grep -Eq 'external_url:[[:space:]]*https?://' "${kiali_file}"; then
+        fail "rendered production Kiali output sets a public external_url"
+    fi
+    if grep -Eq 'kind:[[:space:]]*Cluster(Role|RoleBinding)' "${kiali_file}"; then
+        fail "rendered production Kiali output requests cluster-wide RBAC"
+    fi
+    if ! grep -Eq 'automountServiceAccountToken:[[:space:]]*false' "${kiali_file}"; then
+        fail "rendered production Kiali Deployment does not explicitly disable service account token automount"
+    fi
+    if ! grep -Eq 'seccompProfile:' "${kiali_file}" || ! grep -Eq 'type:[[:space:]]*RuntimeDefault' "${kiali_file}"; then
+        fail "rendered production Kiali Deployment does not set pod-level RuntimeDefault seccomp"
+    fi
+    if ! grep -Eq 'name:[[:space:]]*kiali-api-token' "${kiali_file}"; then
+        fail "rendered production Kiali Deployment does not mount the explicit projected API token"
+    fi
+
+    assert_contains_literal "${kiali_file}" \
+        'http://prometheus-stack-kube-prom-prometheus.monitoring:9090' \
+        "rendered production Kiali output is missing the internal Prometheus URL"
+    assert_contains_literal "${kiali_file}" \
+        'http://jaeger-query.monitoring:16685/jaeger' \
+        "rendered production Kiali output is missing the internal Jaeger URL"
+    assert_no_observability_public_entry_resources "${kiali_file}" \
+        "rendered production Kiali output contains an observability Ingress, HTTPRoute, or Gateway resource"
+
+    assert_images_are_digest_pinned \
+        "rendered production observability output" \
+        "${jaeger_deployment_file}" \
+        "${kiali_file}"
+}
+
 main() {
+    require_command helm
     require_command kubectl
     ensure_static_tool kyverno
+    kubectl cluster-info >/dev/null 2>&1 || \
+        fail "cannot reach the Kubernetes cluster; the production observability verifier now needs live cluster access to server-dry-run Kiali RBAC"
 
     [[ -d "${OVERLAY_DIR}" ]] || fail "production overlay directory not found: ${OVERLAY_DIR}"
     [[ -d "${INFRASTRUCTURE_OVERLAY_DIR}" ]] || fail "production infrastructure overlay directory not found: ${INFRASTRUCTURE_OVERLAY_DIR}"
@@ -450,13 +625,15 @@ main() {
     render_kustomize "${OVERLAY_DIR}" "${RENDERED_APPS_FILE}"
     render_kustomize "${INFRASTRUCTURE_OVERLAY_DIR}" "${RENDERED_INFRASTRUCTURE_FILE}"
     render_phase6_manifests
+    render_phase7_observability_manifests
 
     verify_apps_overlay
     verify_phase6_render_outputs
+    verify_phase7_observability_render_outputs
     verify_infrastructure_overlay
 
-    printf 'Production verification passed: %s, %s, %s\n' \
-        "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"
+    printf 'Production verification passed: %s, %s, %s, %s\n' \
+        "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${PHASE7_OBSERVABILITY_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"
 }
 
 main "$@"

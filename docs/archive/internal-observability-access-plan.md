@@ -352,8 +352,8 @@ Use the same workstation-facing ports everywhere:
 |------|-----------|---------|--------------|--------------|
 | Grafana | `monitoring` | `prometheus-stack-grafana` | `http://localhost:3300` | `3300:80` |
 | Prometheus | `monitoring` | `prometheus-stack-kube-prom-prometheus` | `http://localhost:9090` | `9090:9090` |
-| Jaeger, if added later | TBD | TBD | `http://localhost:16686` | `16686:<service-port>` |
-| Kiali, if added later | TBD | TBD | `http://localhost:20001` | `20001:<service-port>` |
+| Jaeger | `monitoring` | `jaeger-query` | `http://localhost:16686/jaeger` | `16686:16686` |
+| Kiali | `monitoring` | `kiali` | `http://localhost:20001/kiali` | `20001:20001` |
 
 Grafana intentionally uses local port `3300`, not `3000`, because local Tilt
 already reserves `localhost:3000` for the frontend Vite dev-server
@@ -822,18 +822,25 @@ Grafana, Kiali, Jaeger, or Prometheus UI response.
 
 **Goal:** Avoid mixing tool rollout with access-model cleanup.
 
-Do not add Jaeger or Kiali until Phases 0 through 6 are complete.
+**Status, 2026-04-19:** Phase 7.1 and Phase 7.2 are implemented in-repo. The
+runtime contract is now explicit, the `monitoring` namespace has its own deny +
+allow NetworkPolicy baseline, and the network-policy verifiers treat
+`monitoring` as a first-class enforced namespace. Jaeger/Kiali runtime
+artifacts, Istio tracing integration, and OCI rollout remain in the later
+Phase 7 sub-phases.
 
-When adding either tool:
+The detailed implementation plan now lives in
+`docs/plans/internal-observability-phase-7-jaeger-kiali-plan.md`.
 
-- Add the service as `ClusterIP`.
-- Do not add Gateway, `HTTPRoute`, public DNS, public TLS, or demo-page links.
-- Add a canonical port-forward command to this plan and to
-  `docs/architecture/observability.md`.
-- Add the tool to `scripts/smoketest/verify-observability-port-forward-access.sh`
-  only after its release name, namespace, service, and health endpoint are
-  stable.
-- Add static guardrail coverage before merging the tool rollout.
+Phase 7 remains blocked on Phases 0 through 6 being stable. The detailed plan
+keeps the original constraints:
+
+- Jaeger and Kiali must remain `ClusterIP` only.
+- No public Gateway, `HTTPRoute`, DNS, or TLS may be added.
+- Port-forward access must match the same internal-only operator model already
+  used for Grafana and Prometheus.
+- Static guardrails and local smoke coverage must land before the rollout is
+  considered complete.
 
 **Completion criteria:**
 

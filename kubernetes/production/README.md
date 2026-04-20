@@ -115,10 +115,10 @@ artifacts:
 - `gateway-routes/` renders the production `HTTPRoute` objects with
   `demo.budgetanalyzer.org`, while leaving the shared localhost dev manifests
   untouched for Tilt
-- `istio-ingress-policies/` renders the production `AuthorizationPolicy` and
-  ingress local-rate-limit objects with the demo hostname, separately from the
-  gateway routes so the live deployment path can still defer those policy applies until
-  `ext-authz` is ready
+- `istio-ingress-policies/` renders the production `/api/*`
+  `AuthorizationPolicy` and the ingress local-rate-limit object. Host ownership
+  stays on the production `HTTPRoute` overlay, while the rate-limit filter still
+  matches `demo.budgetanalyzer.org`.
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
   server domain and root URL for loopback port-forward access while preserving
   the checked-in `prometheus-stack` Helm release name contract that yields the
@@ -127,10 +127,10 @@ artifacts:
   production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
   egress manifests derived from the production `AUTH0_ISSUER_URI`
 
-The observability baseline is intentionally narrow:
+The checked-in production monitoring overlay in this directory stays narrow:
 
-- Prometheus and Grafana are the only checked-in production monitoring assets
-  in this baseline
+- `monitoring/prometheus-stack-values.override.yaml` is still only the Grafana
+  loopback override layered onto the existing `prometheus-stack` Helm release
 - production Grafana is internal-only; access it through the shared local and
   production operator contract:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
@@ -140,9 +140,28 @@ The observability baseline is intentionally narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
-- Jaeger and Kiali do not belong on the current forward deployment path. Their
-  planned observability access follow-up remains deferred pending an
-  internal-only observability access redesign
+- reapply the full internal monitoring stack with
+  `./deploy/scripts/22-apply-production-monitoring.sh`; use
+  `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh or
+  `--verify-runtime` when the rollout should also prove the dashboard input
+  metrics
+- Jaeger and Kiali have a separate reviewed OCI rollout path through
+  `deploy/scripts/20-render-phase-7-observability.sh` and
+  `deploy/scripts/21-apply-phase-7-observability.sh`; those scripts reuse the
+  shared `kubernetes/monitoring/jaeger/*.yaml`,
+  `kubernetes/monitoring/kiali-values.yaml`, and
+  `scripts/ops/post-render-kiali-server.sh` inputs instead of adding a second
+  production-only observability manifest tree
+- when installed through that path, both stay in `monitoring`, stay
+  `ClusterIP`-only, and use loopback-bound `kubectl port-forward`:
+  `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
+  Kiali
+- workstation access to production observability uses the same OCI-host
+  loopback port-forwards plus the local SSH tunnel helper:
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>`. The helper
+  also accepts `OCI_INSTANCE_IP` when the argument is omitted, assumes
+  `ubuntu` and `~/.ssh/oci-budgetanalyzer`, and forwards the canonical `3300`,
+  `9090`, `16686`, and `20001` ports to OCI host loopback.
 - do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
   `jaeger.budgetanalyzer.org`
 
@@ -156,12 +175,12 @@ sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
 sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 ```
 
-If a live OCI cluster was previously applied from a render that published
-Grafana, explicitly delete the stale route after applying the new app-only
+If a live OCI cluster was previously applied from an older observability render,
+explicitly delete any stale observability route after applying the new app-only
 route render:
 
 ```bash
-kubectl delete httproute -n monitoring grafana-route --ignore-not-found
+kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found
 ```
 
 ## Production Infrastructure Input
@@ -221,11 +240,6 @@ Production verification passed for the app overlay, rendered production output, 
 ```
 
 The repo-owned production policy install/apply surface is now checked in under
-`deploy/`. The deferred production route and egress apply path is intentionally
-kept separate from the checked-in production baseline.
-
-Jaeger and Kiali remain out of scope for this production baseline. Keep the production docs and
-manifests honest about the current baseline: Prometheus and Grafana are the
-repo-owned monitoring deliverables now, while the planned Jaeger/Kiali
-follow-up remains deferred pending an internal-only observability access
-redesign.
+`deploy/`. The route, egress, infrastructure, and observability apply paths are
+intentionally kept separate so operators can review each mutation slice before
+touching the OCI cluster.

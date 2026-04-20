@@ -33,6 +33,7 @@ KUBECONFORM_ALLOWED_MISSING_KINDS=(
     ServiceEntry
     ServiceMonitor
     Test
+    Telemetry
     VirtualService
 )
 
@@ -79,6 +80,12 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
     "${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
     "${REPO_DIR}/kubernetes/production/istio-ingress-policies"
 )
+
+ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
+ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
+JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
+JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
+KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 
 usage() {
     cat <<'EOF'
@@ -665,26 +672,48 @@ scan_observability_httproutes() {
     printf 'observability HTTPRoute scan passed\n'
 }
 
-scan_observability_gateway_hostnames() {
+scan_observability_ingresses() {
     local file
     local -a failures=()
 
     while IFS= read -r file; do
         [[ -n "${file}" ]] || continue
 
-        if grep -Eq '^kind:[[:space:]]*(HTTPRoute|Gateway)([[:space:]]|$)' "${file}" &&
+        if grep -Eq '^kind:[[:space:]]*Ingress([[:space:]]|$)' "${file}" &&
+            grep -Eiq '\b(grafana|prometheus|kiali|jaeger)\b' "${file}"; then
+            failures+=("${file#"${REPO_DIR}"/}")
+        fi
+    done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'observability Ingress scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'observability Ingress scan passed\n'
+}
+
+scan_observability_public_entry_hostnames() {
+    local file
+    local -a failures=()
+
+    while IFS= read -r file; do
+        [[ -n "${file}" ]] || continue
+
+        if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)([[:space:]]|$)' "${file}" &&
             grep -Eiq '(^|[[:space:]-])["'\'']?(grafana|prometheus|kiali|jaeger)\.[[:alnum:].-]+' "${file}"; then
             failures+=("${file#"${REPO_DIR}"/}")
         fi
     done < <(find "${OBSERVABILITY_ROUTE_PATHS[@]}" -type f \( -name '*.yaml' -o -name '*.yml' \) | sort)
 
     if (( ${#failures[@]} > 0 )); then
-        printf 'observability Gateway/HTTPRoute hostname scan failed:\n' >&2
+        printf 'observability public-entry hostname scan failed:\n' >&2
         printf '  - %s\n' "${failures[@]}" >&2
         return 1
     fi
 
-    printf 'observability Gateway/HTTPRoute hostname scan passed\n'
+    printf 'observability public-entry hostname scan passed\n'
 }
 
 scan_observability_production_inputs() {
@@ -739,23 +768,228 @@ scan_grafana_values_contract() {
     printf 'Grafana values contract scan passed\n'
 }
 
+scan_kiali_values_contract() {
+    local -a failures=()
+
+    if [[ ! -f "${KIALI_VALUES_FILE}" ]]; then
+        failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'strategy:[[:space:]]*token' \
+            'Kiali token auth strategy'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'view_only_mode:[[:space:]]*true' \
+            'Kiali view-only mode'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'cluster_wide_access:[[:space:]]*false' \
+            'Kiali non-cluster-wide RBAC'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'service_type:[[:space:]]*ClusterIP' \
+            'Kiali ClusterIP service exposure'
+
+        if grep -Eq 'strategy:[[:space:]]*anonymous([[:space:]]|$)' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali anonymous auth is enabled")
+        fi
+
+        if grep -Eq 'cluster_wide_access:[[:space:]]*true([[:space:]]|$)' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali requests cluster-wide access")
+        fi
+
+        if grep -Eq 'external_url:[[:space:]]*https?://' "${KIALI_VALUES_FILE}"; then
+            failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali sets a public external_url")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Kiali values contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Kiali values contract scan passed\n'
+}
+
+scan_jaeger_manifest_contract() {
+    local -a failures=()
+
+    if [[ ! -d "${JAEGER_MANIFEST_DIR}" ]]; then
+        failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: directory is missing")
+    fi
+
+    if [[ ! -f "${JAEGER_SERVICES_FILE}" ]]; then
+        failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        if [[ "$(grep -Ec '^[[:space:]]*type:[[:space:]]*ClusterIP([[:space:]]|$)' "${JAEGER_SERVICES_FILE}")" -ne 2 ]]; then
+            failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: Jaeger services must remain ClusterIP-only")
+        fi
+
+        if grep -Eq '^[[:space:]]*type:[[:space:]]*(LoadBalancer|NodePort|ExternalName)([[:space:]]|$)' "${JAEGER_SERVICES_FILE}"; then
+            failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: Jaeger services expose a non-ClusterIP type")
+        fi
+
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*jaeger-collector' \
+            'Jaeger collector Service'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*jaeger-query' \
+            'Jaeger query Service'
+    fi
+
+    if [[ -d "${JAEGER_MANIFEST_DIR}" ]]; then
+        if grep -Eq '^kind:[[:space:]]*(Ingress|HTTPRoute|Gateway)([[:space:]]|$)' "${JAEGER_MANIFEST_DIR}"/*.yaml; then
+            failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: Jaeger manifests create a public entry resource")
+        fi
+
+        if grep -Eiq '\b(elasticsearch|opensearch)\b' "${JAEGER_MANIFEST_DIR}"/*.yaml; then
+            failures+=("${JAEGER_MANIFEST_DIR#"${REPO_DIR}"/}: Jaeger manifests depend on Elasticsearch/OpenSearch")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Jaeger manifest contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Jaeger manifest contract scan passed\n'
+}
+
 scan_istio_ingress_observability_allowances() {
-    local -a matches=()
+    local expected_jaeger_policy_file="${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
+    local -a failures=()
+    local -a jaeger_matches=()
     local line
+    local file
     local pattern='kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali|jaeger)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
+    local forbidden_pattern='app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
 
     while IFS= read -r line; do
         [[ -n "${line}" ]] || continue
-        matches+=("${line}")
+        file="${line%%:*}"
+
+        if [[ "${line}" =~ ${forbidden_pattern} ]]; then
+            failures+=("${line}")
+            continue
+        fi
+
+        if [[ "${file}" == "${expected_jaeger_policy_file}" ]] && \
+            [[ "${line}" =~ kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*jaeger ]]; then
+            jaeger_matches+=("${line}")
+            continue
+        fi
+
+        failures+=("${line}")
     done < <(search_guidance_paths "${pattern}" "${OBSERVABILITY_INGRESS_POLICY_PATHS[@]}")
 
-    if (( ${#matches[@]} > 0 )); then
+    if (( ${#jaeger_matches[@]} > 0 )); then
+        if ! grep -Eq 'name:[[:space:]]*allow-istio-ingress-egress-to-jaeger-collector' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'app\.kubernetes\.io/name:[[:space:]]*jaeger' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'port:[[:space:]]*4317' "${expected_jaeger_policy_file}" || \
+            ! grep -Eq 'port:[[:space:]]*4318' "${expected_jaeger_policy_file}"; then
+            failures+=("${expected_jaeger_policy_file#"${REPO_DIR}"/}: expected narrow istio-ingress OTLP egress policy to Jaeger collector is missing required selectors or ports")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
         printf 'Istio ingress observability allowance scan failed:\n' >&2
-        printf '  - %s\n' "${matches[@]}" >&2
+        printf '  - %s\n' "${failures[@]}" >&2
         return 1
     fi
 
     printf 'Istio ingress observability allowance scan passed\n'
+}
+
+assert_pattern_in_file() {
+    local -n failures_ref="$1"
+    local file="$2"
+    local pattern="$3"
+    local label="$4"
+
+    if ! grep -Eq "${pattern}" "${file}"; then
+        failures_ref+=("${file#"${REPO_DIR}"/}: missing ${label}")
+    fi
+}
+
+scan_istio_tracing_contract() {
+    local -a failures=()
+
+    if [[ ! -f "${ISTIOD_VALUES_FILE}" ]]; then
+        failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'enableTracing:[[:space:]]*true' \
+            'meshConfig.enableTracing: true'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'defaultConfig:' \
+            'meshConfig.defaultConfig'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'tracing:[[:space:]]*\{\}' \
+            'empty meshConfig.defaultConfig.tracing'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'name:[[:space:]]*jaeger' \
+            'Jaeger extension provider name'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'opentelemetry:' \
+            'OpenTelemetry extension provider block'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'service:[[:space:]]*jaeger-collector\.monitoring\.svc\.cluster\.local' \
+            'internal Jaeger collector service'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'port:[[:space:]]*4317' \
+            'Jaeger OTLP/gRPC provider port'
+    fi
+
+    if [[ ! -f "${ISTIO_TRACING_TELEMETRY_FILE}" ]]; then
+        failures+=("${ISTIO_TRACING_TELEMETRY_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'apiVersion:[[:space:]]*telemetry\.istio\.io/v1' \
+            'Telemetry v1 apiVersion'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'kind:[[:space:]]*Telemetry' \
+            'Telemetry kind'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'name:[[:space:]]*mesh-default-tracing' \
+            'mesh-default tracing resource name'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'namespace:[[:space:]]*istio-system' \
+            'Istio root namespace'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'providers:' \
+            'Telemetry tracing providers block'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'name:[[:space:]]*jaeger' \
+            'Telemetry Jaeger provider selection'
+    fi
+
+    if [[ ! -f "${JAEGER_SERVICES_FILE}" ]]; then
+        failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*grpc-otlp' \
+            'Istio-classified Jaeger OTLP/gRPC service port name'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'appProtocol:[[:space:]]*grpc' \
+            'Jaeger OTLP/gRPC service appProtocol'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*http-otlp' \
+            'Istio-classified Jaeger OTLP/HTTP service port name'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'appProtocol:[[:space:]]*http' \
+            'Jaeger OTLP/HTTP service appProtocol'
+    fi
+
+    if grep -Eq 'randomSamplingPercentage:' "${ISTIOD_VALUES_FILE}" "${ISTIO_TRACING_TELEMETRY_FILE}" 2>/dev/null; then
+        failures+=("Istio tracing sampling must stay on defaults until an explicit reviewed setting is documented")
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Istio tracing contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Istio tracing contract scan passed\n'
 }
 
 extract_image_refs_from_files() {
@@ -856,10 +1090,14 @@ run_repo_pattern_scans() {
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
     scan_pipe_to_shell_guidance "repo" "${ACTIVE_GUIDANCE_PATHS[@]}"
     scan_observability_httproutes
-    scan_observability_gateway_hostnames
+    scan_observability_ingresses
+    scan_observability_public_entry_hostnames
     scan_observability_production_inputs
     scan_grafana_values_contract
+    scan_kiali_values_contract
+    scan_jaeger_manifest_contract
     scan_istio_ingress_observability_allowances
+    scan_istio_tracing_contract
 }
 
 run_self_test() {

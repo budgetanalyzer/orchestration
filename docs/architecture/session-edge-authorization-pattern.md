@@ -111,7 +111,7 @@ kubectl logs deployment/nginx-gateway
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
 
-**Runtime proof**: [`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh`](../../scripts/smoketest/verify-phase-6-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings instead of completion blockers. Manual browser-console validation on `/_prod-smoke/` is still required before edge and browser security can be called complete.
+**Runtime proof**: [`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh`](../../scripts/smoketest/verify-phase-6-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
 
 ### Session Gateway (Port 8081, HTTP) - Auth Layer
 

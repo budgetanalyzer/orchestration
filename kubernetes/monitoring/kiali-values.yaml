@@ -1,0 +1,50 @@
+# Kiali is installed from the standalone kiali/kiali-server chart with
+# token auth, namespace-scoped access, and ClusterIP-only exposure.
+
+auth:
+  strategy: token
+
+deployment:
+  image_name: quay.io/kiali/kiali
+  image_version: v2.24.0
+  image_digest: sha256:744439cbdbbc23c7a5d70544911abf8fe0b32c88c082e9a41ae6b50748bf736e
+  image_pull_policy: IfNotPresent
+  view_only_mode: true
+  cluster_wide_access: false
+  service_type: ClusterIP
+  network_policy:
+    enabled: false
+  ingress:
+    enabled: false
+  pod_annotations: null
+  discovery_selectors:
+    default:
+      - matchExpressions:
+          - key: kubernetes.io/metadata.name
+            operator: In
+            values:
+              - default
+              - monitoring
+              - istio-system
+              - istio-ingress
+              - istio-egress
+
+external_services:
+  grafana:
+    enabled: false
+  istio:
+    root_namespace: istio-system
+  prometheus:
+    url: http://prometheus-stack-kube-prom-prometheus.monitoring:9090
+  tracing:
+    enabled: true
+    provider: jaeger
+    internal_url: http://jaeger-query.monitoring:16685/jaeger
+    use_grpc: true
+
+server:
+  port: 20001
+  web_root: /kiali
+  observability:
+    metrics:
+      enabled: false

@@ -754,6 +754,14 @@ local_resource(
     labels=['infrastructure'],
 )
 
+local_resource(
+    'istio-tracing-telemetry',
+    cmd='kubectl apply -f kubernetes/istio/tracing-telemetry.yaml',
+    deps=['kubernetes/istio/tracing-telemetry.yaml'],
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
 # Namespace labeling for sidecar injection and Pod Security Admission
 local_resource(
     'istio-injection',
@@ -779,7 +787,7 @@ local_resource(
         kubectl label namespace istio-system pod-security.kubernetes.io/audit=privileged --overwrite
         kubectl label namespace istio-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
-    resource_deps=['istiod'],
+    resource_deps=['istio-tracing-telemetry'],
     labels=['infrastructure'],
 )
 
@@ -869,8 +877,10 @@ local_resource(
     ''',
     deps=[
         'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'kubernetes/monitoring/kiali-values.yaml',
         'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
         'scripts/smoketest/verify-monitoring-rendered-manifests.sh',
+        'scripts/ops/post-render-kiali-server.sh',
     ],
     resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
     labels=['monitoring'],
@@ -884,6 +894,13 @@ k8s_resource(
     resource_deps=['prometheus-stack'],
     labels=['monitoring'],
 )
+
+k8s_yaml([
+    'kubernetes/monitoring/jaeger/configmap.yaml',
+    'kubernetes/monitoring/jaeger/pvc.yaml',
+    'kubernetes/monitoring/jaeger/deployment.yaml',
+    'kubernetes/monitoring/jaeger/services.yaml',
+])
 
 # ============================================================================
 # NETWORK POLICIES
@@ -902,15 +919,50 @@ local_resource(
         kubectl apply -f kubernetes/network-policies/default-allow.yaml
         kubectl apply -f kubernetes/network-policies/infrastructure-deny.yaml
         kubectl apply -f kubernetes/network-policies/infrastructure-allow.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-deny.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-allow.yaml
     ''',
     deps=[
         'kubernetes/network-policies/default-deny.yaml',
         'kubernetes/network-policies/default-allow.yaml',
         'kubernetes/network-policies/infrastructure-deny.yaml',
         'kubernetes/network-policies/infrastructure-allow.yaml',
+        'kubernetes/network-policies/monitoring-deny.yaml',
+        'kubernetes/network-policies/monitoring-allow.yaml',
     ],
-    resource_deps=['istio-injection'],
+    resource_deps=['istio-injection', 'monitoring-namespace'],
     labels=['infrastructure'],
+)
+
+k8s_resource(
+    'jaeger',
+    resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'kiali',
+    cmd='''
+        kubectl apply -f kubernetes/istio/ingress-namespace.yaml
+        kubectl apply -f kubernetes/istio/egress-namespace.yaml
+        helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
+        helm repo update kiali >/dev/null
+        helm upgrade --install kiali kiali/kiali-server \
+            --namespace monitoring \
+            --version 2.24.0 \
+            --values kubernetes/monitoring/kiali-values.yaml \
+            --post-renderer scripts/ops/post-render-kiali-server.sh \
+            --wait --timeout 5m
+        kubectl rollout status deployment/kiali -n monitoring --timeout=120s
+    ''',
+    deps=[
+        'kubernetes/monitoring/kiali-values.yaml',
+        'kubernetes/istio/ingress-namespace.yaml',
+        'kubernetes/istio/egress-namespace.yaml',
+        'scripts/ops/post-render-kiali-server.sh',
+    ],
+    resource_deps=['prometheus-stack', 'jaeger', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
 )
 
 local_resource(

@@ -14,6 +14,9 @@ defaultRules:
     nodeExporterAlerting: false
     nodeExporterRecording: false
 
+coreDns:
+  enabled: false
+
 grafana:
   automountServiceAccountToken: false
   defaultDashboardsEnabled: false
@@ -138,6 +141,15 @@ kubeControllerManager:
   enabled: false
 
 kubeEtcd:
+  enabled: false
+
+kubeApiServer:
+  enabled: false
+
+kubelet:
+  enabled: false
+
+kubeProxy:
   enabled: false
 
 kubeScheduler:

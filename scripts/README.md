@@ -24,26 +24,53 @@ scripts/
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
-  loopback-only Grafana and Prometheus port-forward verifier. It defaults to
-  the canonical `3300` and `9090` local ports and accepts flag overrides when
-  those loopback ports are already occupied on the operator workstation. It
-  also verifies Grafana health, Prometheus readiness, and that unauthenticated
-  Grafana dashboard access is rejected. Use the same loopback-only commands in
-  local Tilt and production OCI/k3s, and do not use `--address 0.0.0.0` for
-  observability access.
+  loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
+  It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local
+  ports, starts any missing temporary forwards itself, reuses the expected
+  existing loopback `kubectl port-forward` listeners on those canonical ports,
+  and accepts flag overrides when some other intentional listener already
+  owns one of them. It verifies Grafana health,
+  Prometheus readiness, Jaeger query API access, Kiali UI shell access, and
+  that unauthenticated Grafana and Kiali API access is rejected. Use the same
+  loopback-only access model in local Tilt and production OCI/k3s for the
+  observability components installed there, and do not use `--address 0.0.0.0`
+  for observability access.
+- `ops/start-observability-port-forwards.sh` - Foreground supervisor for the
+  canonical loopback-only Grafana, Prometheus, Jaeger, and Kiali
+  `kubectl port-forward` processes. It starts all four forwards by default,
+  supports repeated `--component` selection plus per-component port overrides,
+  prints the local URLs plus the Grafana password and Kiali token commands,
+  and cleans up all child forwards on exit.
+- `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
+  tunnel helper for production OCI/k3s observability access. It takes the OCI
+  host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
+  plus `~/.ssh/oci-budgetanalyzer`, opens loopback-only tunnels for the
+  canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
+  matching `ops/start-observability-port-forwards.sh` process to already be
+  running on the OCI host.
+- `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
+  for the Jaeger OpenTelemetry extension provider and mesh-default Istio
+  Telemetry resource.
+- `smoketest/verify-monitoring-rendered-manifests.sh` - Renders the
+  Prometheus stack and Kiali chart, then checks image pinning, service exposure,
+  Kiali auth/RBAC posture, and server dry-run compliance for rendered workload
+  objects.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
   infrastructure overlay, production render output, and the production image
-  Kyverno policy.
+  Kyverno policy. It is non-mutating, but it requires a live
+  `kubectl` context so the Kiali production render can use a Helm server-side
+  dry run and capture the full namespace-scoped RBAC footprint.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
-- `guardrails/` stays CI-safe and cluster-independent.
+- `guardrails/` stays non-mutating; most scripts are CI-safe, while
+  `verify-production-image-overlay.sh` also expects a live `kubectl` context.
 - `smoketest/` assumes a live `kubectl` context and a running local stack.
 - `ops/` is for interactive local maintenance.
 - `loadtest/` manages synthetic local fixtures.
@@ -73,22 +100,32 @@ Choose scripts by runtime boundary:
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
-  active setup guidance scans. Its kubeconform pass validates checked-in
-  Kubernetes resource manifests and skips Kustomize patch fragments under
-  `patches/` directories.
+  active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
+  in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
+  internal-only storage/service contract pinned in static review. Its
+  kubeconform pass validates checked-in Kubernetes resource manifests and skips
+  Kustomize patch fragments under `patches/` directories.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies
   the `0.0.12` digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
-  `imagePullPolicy: Never`, verifies the Redis StatefulSet uses a `5Gi`
+  `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
+  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, uses a live
+  Helm server-side dry run for the production Kiali render so namespace-scoped
+  RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
   `redis-data` claim template, and applies the production image Kyverno policy
   to the rendered app overlay.
 
-CI should call the static guardrail directly:
+Use the live-cluster production verifier when a cluster is available:
 
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+CI should keep calling the fully static guardrail directly:
+
+```bash
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
 ./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
 ```
@@ -101,16 +138,18 @@ CI should call the static guardrail directly:
 2. `smoketest/verify-security-prereqs.sh`
 3. `smoketest/verify-clean-tilt-deployment-admission.sh`
 4. `smoketest/verify-monitoring-rendered-manifests.sh`
-5. `smoketest/verify-monitoring-runtime.sh`
-6. `smoketest/verify-observability-port-forward-access.sh`
-7. `smoketest/verify-session-architecture-phase-5.sh`
-8. `smoketest/verify-phase-7-security-guardrails.sh`
+5. `smoketest/verify-istio-tracing-config.sh`
+6. `smoketest/verify-monitoring-runtime.sh`
+7. `smoketest/verify-observability-port-forward-access.sh`
+8. `smoketest/verify-session-architecture-phase-5.sh`
+9. `smoketest/verify-phase-7-security-guardrails.sh`
 
 Use targeted verifiers when debugging one capability, and the umbrella when
 proving the current cluster:
 
 ```bash
 ./scripts/smoketest/smoketest.sh
+./scripts/smoketest/verify-istio-tracing-config.sh
 ./scripts/smoketest/verify-observability-port-forward-access.sh
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
@@ -124,6 +163,25 @@ the active context and Tilt resource state from the same host shell first.
 
 - `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
   egress manifests from `.env`.
+- `ops/start-observability-port-forwards.sh` is the repo-owned convenience
+  entry point for persistent local Grafana, Prometheus, Jaeger, and Kiali
+  access. It keeps the forwards bound to `127.0.0.1` and tears them down on
+  `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path and
+  coexists with that helper by reusing the expected canonical listeners
+  when they are already running. Use explicit `--grafana-port`,
+  `--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only
+  when some other intentional listener already owns one of those ports. If the
+  helper reports a conflicting `code` listener on a canonical observability
+  port, that is host-side VS Code port forwarding, not a repo-owned Tilt
+  forward.
+- `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
+  for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
+  host, then from the workstation run
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` or set
+  `OCI_INSTANCE_IP` and run `./scripts/ops/start-observability-ssh-tunnels.sh`.
+  The helper keeps one SSH session open with local loopback tunnels for
+  `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
+  endpoints are not reachable.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

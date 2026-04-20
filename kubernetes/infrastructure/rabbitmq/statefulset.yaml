@@ -72,6 +72,16 @@ spec:
             - name: rabbitmq-ca
               mountPath: /tls-ca
               readOnly: true
+          startupProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - -q
+                - ping
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 45
+            failureThreshold: 24
           livenessProbe:
             exec:
               command:
@@ -80,7 +90,7 @@ spec:
                 - ping
             initialDelaySeconds: 60
             periodSeconds: 30
-            timeoutSeconds: 10
+            timeoutSeconds: 45
           readinessProbe:
             exec:
               command:
@@ -89,7 +99,7 @@ spec:
                 - ping
             initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 45
       volumes:
         - name: rabbitmq-config
           configMap:

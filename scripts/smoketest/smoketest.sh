@@ -18,15 +18,20 @@ Runs the local live-cluster validation sequence:
   2. ./scripts/smoketest/verify-security-prereqs.sh
   3. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
   4. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
-  5. ./scripts/smoketest/verify-monitoring-runtime.sh
-  6. ./scripts/smoketest/verify-observability-port-forward-access.sh
-  7. ./scripts/smoketest/verify-session-architecture-phase-5.sh
-  8. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
+  5. ./scripts/smoketest/verify-istio-tracing-config.sh
+  6. ./scripts/smoketest/verify-monitoring-runtime.sh
+  7. ./scripts/smoketest/verify-observability-port-forward-access.sh
+  8. ./scripts/smoketest/verify-session-architecture-phase-5.sh
+  9. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 
 Options:
   --observability-grafana-port <port>
       Pass through to verify-observability-port-forward-access.sh.
   --observability-prometheus-port <port>
+      Pass through to verify-observability-port-forward-access.sh.
+  --observability-jaeger-port <port>
+      Pass through to verify-observability-port-forward-access.sh.
+  --observability-kiali-port <port>
       Pass through to verify-observability-port-forward-access.sh.
   --runtime-wait-timeout <duration>
       Pass through to verify-phase-7-security-guardrails.sh.
@@ -58,6 +63,16 @@ while [[ $# -gt 0 ]]; do
         --observability-prometheus-port)
             require_value "$1" "${2:-}"
             OBSERVABILITY_ARGS+=("--prometheus-port" "$2")
+            shift 2
+            ;;
+        --observability-jaeger-port)
+            require_value "$1" "${2:-}"
+            OBSERVABILITY_ARGS+=("--jaeger-port" "$2")
+            shift 2
+            ;;
+        --observability-kiali-port)
+            require_value "$1" "${2:-}"
+            OBSERVABILITY_ARGS+=("--kiali-port" "$2")
             shift 2
             ;;
         --runtime-wait-timeout|--runtime-regression-timeout)
@@ -93,6 +108,8 @@ run_step "Clean Tilt deployment admission" \
     "${REPO_DIR}/scripts/smoketest/verify-clean-tilt-deployment-admission.sh"
 run_step "Rendered monitoring manifests" \
     "${SCRIPT_DIR}/verify-monitoring-rendered-manifests.sh"
+run_step "Istio tracing configuration" \
+    "${SCRIPT_DIR}/verify-istio-tracing-config.sh"
 run_step "Monitoring runtime" \
     "${SCRIPT_DIR}/verify-monitoring-runtime.sh"
 run_step "Observability port-forward access" \

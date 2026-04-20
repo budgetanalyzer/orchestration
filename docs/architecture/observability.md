@@ -11,7 +11,14 @@ collection and visualization. The stack runs in a dedicated `monitoring`
 namespace and is installed via Helm through the Tiltfile.
 
 Infrastructure exporters (PostgreSQL, Redis, RabbitMQ) are not deployed.
-Spring Boot and Istio metrics alone cover the intended observability story.
+Spring Boot, Istio, and kube-state-metrics cover the intended observability
+story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
+kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy
+baseline does not need broad kube-system or node egress.
+Jaeger and Kiali use the same internal-only contract: both run in
+`monitoring`, both stay `ClusterIP` only, and operator access uses
+loopback-bound `kubectl port-forward` instead of any public observability
+hostname.
 
 ## Components
 
@@ -21,6 +28,8 @@ Spring Boot and Istio metrics alone cover the intended observability story.
 | Prometheus Operator | CRD-based scrape target management | `monitoring` |
 | Grafana | Dashboard visualization | `monitoring` |
 | kube-state-metrics | Kubernetes resource metrics | `monitoring` |
+| Jaeger | Distributed trace ingestion and query backend | `monitoring` |
+| Kiali | Istio mesh graph and workload inspection | `monitoring` |
 
 **Disabled components** (with rationale):
 - **Alertmanager** - dashboards first; alerting deferred
@@ -172,7 +181,9 @@ for the full evaluation.
 
 Local Tilt and production OCI/k3s use the same internal-only access contract
 for Grafana. There is no supported observability hostname. Keep Grafana behind
-Kubernetes and use a loopback-bound port-forward instead:
+Kubernetes and use a loopback-bound port-forward instead. `tilt up` installs
+the observability workloads, but it does not own or keep localhost tunnels
+open for Grafana, Prometheus, Jaeger, or Kiali:
 
 ```bash
 kubectl port-forward --address 127.0.0.1 -n monitoring \
@@ -188,13 +199,43 @@ processes behind, run:
 ./scripts/smoketest/verify-observability-port-forward-access.sh
 ```
 
-The smoke script starts and cleans up its own loopback-bound Grafana and
-Prometheus port-forwards, waits for Grafana and Prometheus health on the
-canonical `3300` and `9090` local ports by default, and verifies that
-unauthenticated Grafana dashboard access is rejected. If either loopback port
-is already occupied, it fails and names the expected `kubectl port-forward`
-owner; rerun with explicit port overrides only when that competing listener is
-intentional.
+The smoke script starts and cleans up any missing loopback-bound Grafana,
+Prometheus, Jaeger, and Kiali port-forwards, waits for the expected local
+health endpoints on the canonical `3300`, `9090`, `16686`, and `20001` ports
+by default, and verifies that unauthenticated Grafana dashboard access and
+unauthenticated Kiali API access are both rejected. If one of those loopback
+ports is already occupied by the expected observability `kubectl port-forward`
+listener, the verifier reuses it instead of failing. Use explicit port
+overrides only when some other intentional listener owns one of the canonical
+ports.
+
+For persistent operator access to all four observability UIs, use the repo-
+owned helper:
+
+```bash
+./scripts/ops/start-observability-port-forwards.sh
+```
+
+That helper keeps the canonical Grafana, Prometheus, Jaeger, and Kiali
+forwards bound to `127.0.0.1` in one foreground process, prints the local
+URLs plus the Grafana password and Kiali token commands, and tears down all
+child forwards on `Ctrl+C`. Raw `kubectl port-forward --address 127.0.0.1 ...`
+commands remain the underlying supported access model in both local Tilt and
+production OCI/k3s.
+
+For workstation access to production OCI/k3s, keep the Kubernetes
+port-forwards running on the OCI host first, then open the matching
+workstation-side SSH tunnels:
+
+```bash
+./scripts/ops/start-observability-ssh-tunnels.sh 152.70.145.68
+```
+
+The SSH helper assumes `ubuntu` and `~/.ssh/oci-budgetanalyzer`, binds only to
+workstation loopback, and forwards the same canonical `3300`, `9090`, `16686`,
+and `20001` ports to the OCI host's loopback listeners. Operators can also set
+`OCI_INSTANCE_IP` in their shell profile and run the helper without an
+argument.
 
 `grafana.budgetanalyzer.localhost` is retired. Do not introduce
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
@@ -245,14 +286,105 @@ Then open `http://localhost:9090`. Useful first queries:
 - `jvm_memory_used_bytes` — JVM memory usage across services
 - `jvm_gc_pause_seconds_count` — GC pause frequency
 
+### Jaeger
+
+Jaeger uses repo-managed v2 manifests, not the Helm chart. The locked backend
+lives under `kubernetes/monitoring/jaeger/`. The runtime contract is:
+
+- namespace: `monitoring`
+- service exposure: `ClusterIP` only
+- storage: single-node PVC-backed Badger
+- image: Jaeger `2.17.0`, pinned by digest
+- collector service: `jaeger-collector` on OTLP `4317` and `4318`, with
+  Istio-classified Service port names `grpc-otlp` and `http-otlp`
+- query service: `jaeger-query` on `16685` and `16686`
+- operator access:
+
+```bash
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/jaeger-query 16686:16686
+```
+
+Then open `http://localhost:16686/jaeger`. Istio tracing is wired through the
+repo-owned `jaeger` OpenTelemetry extension provider in
+`kubernetes/istio/istiod-values.yaml` and the mesh-default
+`kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays on Istio
+defaults, so generate several requests through `https://app.budgetanalyzer.localhost`
+before checking the Jaeger services and traces views.
+
+Validate the tracing control-plane wiring with:
+
+```bash
+./scripts/smoketest/verify-istio-tracing-config.sh
+```
+
+### Kiali
+
+Kiali uses the standalone `kiali-server` Helm chart, not the Kiali operator.
+The locked runtime contract is:
+
+- namespace: `monitoring`
+- service exposure: `ClusterIP` only
+- auth mode: `token`
+- UI posture: `view_only_mode: true`
+- RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
+  `istio-system`, `istio-ingress`, and `istio-egress`
+- image: Kiali `2.24.0`, pinned by digest
+- integrations: internal Prometheus URL and Jaeger query gRPC URL only
+- operator access:
+
+```bash
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/kiali 20001:20001
+```
+
+Then create a short-lived login token:
+
+```bash
+kubectl -n monitoring create token kiali
+```
+
+Open `http://localhost:20001/kiali` and paste the token.
+
 ## Security Compliance
 
 The monitoring stack meets the same security requirements as all other
-workloads in this repo — no namespace exceptions.
+workloads in this repo.
+
+`monitoring` is a first-class enforced namespace, not an implicit allow-all
+side case. The repo-owned baseline is deny-by-default ingress and
+egress plus explicit allowlists for:
+
+- DNS from `monitoring`
+- Grafana to Prometheus
+- Prometheus service discovery and scrape traffic to Grafana,
+  kube-state-metrics, the Prometheus Operator, Spring Boot services, Istio
+  sidecars, and Istiod
+- Kiali access to Prometheus, Jaeger query, the Kubernetes API, and Istiod's
+  control-plane version endpoint on `15014`
+- OTLP ingress to `jaeger-collector` only from approved mesh workloads
+
+The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and
+private RFC1918 apiserver endpoints on `6443` because Calico evaluates the
+connection after service DNAT in the local runtime.
+Other monitoring flows stay destination-scoped through namespace/pod selector
+allowlists. The verifier scripts exercise those paths through temporary
+`ClusterIP` Services so the repo does not need destinationless egress rules for
+Grafana, Prometheus, Kiali, Jaeger, or the Spring Boot metrics targets.
+Prometheus also needs egress to injected workload pods on Istio's mTLS tunnel
+port `15008` for service-based Spring Boot scrapes, plus `istiod` on `15012`
+for xDS/CA traffic and `15014` for Istio control-plane metrics scraping.
+
+The `monitoring` namespace manifest does not opt into Gateway route attachment,
+so observability stays off the public ingress surface by default.
 
 ### Image Pinning
 
-Every image is digest-pinned in `kubernetes/monitoring/prometheus-stack-values.yaml`:
+Every image is digest-pinned in the monitoring inputs. Prometheus/Grafana image
+pins live in `kubernetes/monitoring/prometheus-stack-values.yaml`; Jaeger is
+pinned in `kubernetes/monitoring/jaeger/deployment.yaml`; Kiali is pinned in
+`kubernetes/monitoring/kiali-values.yaml` and normalized by the Helm
+post-renderer before apply.
 
 | Image | Tag | Digest |
 |-------|-----|--------|
@@ -261,6 +393,7 @@ Every image is digest-pinned in `kubernetes/monitoring/prometheus-stack-values.y
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
 | `kube-state-metrics/kube-state-metrics` | v2.18.0 | pinned |
+| `quay.io/kiali/kiali` | v2.24.0 | pinned |
 
 ### Workload Hardening
 

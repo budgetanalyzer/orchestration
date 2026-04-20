@@ -1093,13 +1093,17 @@ main() {
         fail "ext-authz-at-ingress selector is ${ext_authz_selector:-missing} (expected ${INGRESS_GATEWAY_LABEL_SELECTOR})"
     fi
 
-    local ext_authz_hosts
+    local ext_authz_hosts ext_authz_paths api_route_host
     ext_authz_hosts=$(kubectl get authorizationpolicy.security.istio.io ext-authz-at-ingress -n istio-ingress \
-        -o jsonpath='{.spec.rules[0].to[0].operation.hosts[0]}' 2>/dev/null || true)
-    if [[ "$ext_authz_hosts" == "app.budgetanalyzer.localhost" ]]; then
-        pass "ext-authz-at-ingress is scoped to app.budgetanalyzer.localhost"
+        -o jsonpath='{.spec.rules[0].to[0].operation.hosts}' 2>/dev/null || true)
+    ext_authz_paths=$(kubectl get authorizationpolicy.security.istio.io ext-authz-at-ingress -n istio-ingress \
+        -o jsonpath='{.spec.rules[0].to[0].operation.paths[0]}' 2>/dev/null || true)
+    api_route_host=$(kubectl get httproute.gateway.networking.k8s.io api-route -n default \
+        -o jsonpath='{.spec.hostnames[0]}' 2>/dev/null || true)
+    if [[ -z "$ext_authz_hosts" && "$ext_authz_paths" == "/api/*" && "$api_route_host" == "app.budgetanalyzer.localhost" ]]; then
+        pass "ext-authz-at-ingress is path-scoped to /api/* and the API HTTPRoute is host-scoped to app.budgetanalyzer.localhost"
     else
-        fail "ext-authz-at-ingress hosts is ${ext_authz_hosts:-missing} (expected app.budgetanalyzer.localhost; unscoped policy intercepts all ingress hosts)"
+        fail "ext-authz-at-ingress/API route scope is invalid (hosts=${ext_authz_hosts:-none}, paths=${ext_authz_paths:-missing}, api-route host=${api_route_host:-missing})"
     fi
 
     if kubectl get pod -n monitoring -l app.kubernetes.io/name=grafana --no-headers 2>/dev/null | grep -q Running; then

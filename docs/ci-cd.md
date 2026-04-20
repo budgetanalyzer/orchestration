@@ -246,8 +246,10 @@ workflows:
   the production infrastructure overlay, and the reviewed
   route/ingress/monitoring/egress render output. It rejects localhost hosts,
   placeholder Auth0 values, mutable image refs, and `imagePullPolicy: Never`,
-  verifies the Redis StatefulSet uses a `5Gi` `redis-data` claim template, then
-  applies the production image Kyverno policy from
+  uses a live Helm server-side dry run for the Kiali production render so the
+  reviewed RBAC matches the namespace-scoped live install footprint, verifies
+  the Redis StatefulSet uses a `5Gi` `redis-data` claim template, then applies
+  the production image Kyverno policy from
   `kubernetes/kyverno/policies/production/`
 
 ### Manual validation from a clean environment

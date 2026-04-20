@@ -18,10 +18,11 @@ Runs the local live-cluster validation sequence:
   2. ./scripts/smoketest/verify-security-prereqs.sh
   3. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
   4. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
-  5. ./scripts/smoketest/verify-monitoring-runtime.sh
-  6. ./scripts/smoketest/verify-observability-port-forward-access.sh
-  7. ./scripts/smoketest/verify-session-architecture-phase-5.sh
-  8. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
+  5. ./scripts/smoketest/verify-istio-tracing-config.sh
+  6. ./scripts/smoketest/verify-monitoring-runtime.sh
+  7. ./scripts/smoketest/verify-observability-port-forward-access.sh
+  8. ./scripts/smoketest/verify-session-architecture-phase-5.sh
+  9. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 
 Options:
   --observability-grafana-port <port>
@@ -93,6 +94,8 @@ run_step "Clean Tilt deployment admission" \
     "${REPO_DIR}/scripts/smoketest/verify-clean-tilt-deployment-admission.sh"
 run_step "Rendered monitoring manifests" \
     "${SCRIPT_DIR}/verify-monitoring-rendered-manifests.sh"
+run_step "Istio tracing configuration" \
+    "${SCRIPT_DIR}/verify-istio-tracing-config.sh"
 run_step "Monitoring runtime" \
     "${SCRIPT_DIR}/verify-monitoring-runtime.sh"
 run_step "Observability port-forward access" \

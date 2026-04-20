@@ -353,7 +353,7 @@ contains the digest-pinned Jaeger v2 manifests under
 `kubernetes/monitoring/jaeger/`, Tilt exposes a `jaeger` resource with a
 loopback UI port-forward, the image-pinning inventory includes the Jaeger
 deployment, and the observability port-forward verifier checks the Jaeger query
-API. Phase 7.4 is still required before app traces arrive.
+API. Phase 7.4 now wires Istio traces into this backend.
 
 **Implementation:**
 
@@ -365,6 +365,8 @@ API. Phase 7.4 is still required before app traces arrive.
 - Configure Jaeger v2 as a single binary with:
   - OTLP gRPC on `4317`
   - optional OTLP HTTP on `4318`
+  - Istio-classified Service port names `grpc-otlp` and `http-otlp` so the
+    mesh treats collector traffic as gRPC/HTTP instead of opaque TCP
   - query gRPC on `16685`
   - query HTTP/UI on `16686`
   - query `base_path: /jaeger`
@@ -390,7 +392,7 @@ API. Phase 7.4 is still required before app traces arrive.
 - `kubectl apply --dry-run=server -f kubernetes/monitoring/jaeger`
 - local `tilt up`
 - port-forward Jaeger UI on `16686`
-- generate sample traces only after Phase 7.4 lands
+- generate sample traces through the Phase 7.4 Istio tracing provider
 
 **Exit criteria:**
 
@@ -402,6 +404,12 @@ API. Phase 7.4 is still required before app traces arrive.
 
 **Goal:** Make the existing Istio mesh emit traces to the internal Jaeger
 backend.
+
+**Status:** Complete for the local Tilt path. The repo now configures the
+`jaeger` OpenTelemetry extension provider, applies a mesh-default Telemetry
+resource, and includes static plus live-cluster verification through
+`verify-phase-7-static-manifests.sh` and
+`verify-istio-tracing-config.sh`.
 
 **Implementation:**
 

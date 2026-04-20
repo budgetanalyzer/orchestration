@@ -33,6 +33,7 @@ KUBECONFORM_ALLOWED_MISSING_KINDS=(
     ServiceEntry
     ServiceMonitor
     Test
+    Telemetry
     VirtualService
 )
 
@@ -79,6 +80,10 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
     "${REPO_DIR}/kubernetes/network-policies/istio-ingress-allow.yaml"
     "${REPO_DIR}/kubernetes/production/istio-ingress-policies"
 )
+
+ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
+ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
+JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
 
 usage() {
     cat <<'EOF'
@@ -784,6 +789,99 @@ scan_istio_ingress_observability_allowances() {
     printf 'Istio ingress observability allowance scan passed\n'
 }
 
+assert_pattern_in_file() {
+    local -n failures_ref="$1"
+    local file="$2"
+    local pattern="$3"
+    local label="$4"
+
+    if ! grep -Eq "${pattern}" "${file}"; then
+        failures_ref+=("${file#"${REPO_DIR}"/}: missing ${label}")
+    fi
+}
+
+scan_istio_tracing_contract() {
+    local -a failures=()
+
+    if [[ ! -f "${ISTIOD_VALUES_FILE}" ]]; then
+        failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'enableTracing:[[:space:]]*true' \
+            'meshConfig.enableTracing: true'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'defaultConfig:' \
+            'meshConfig.defaultConfig'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'tracing:[[:space:]]*\{\}' \
+            'empty meshConfig.defaultConfig.tracing'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'name:[[:space:]]*jaeger' \
+            'Jaeger extension provider name'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'opentelemetry:' \
+            'OpenTelemetry extension provider block'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'service:[[:space:]]*jaeger-collector\.monitoring\.svc\.cluster\.local' \
+            'internal Jaeger collector service'
+        assert_pattern_in_file failures "${ISTIOD_VALUES_FILE}" \
+            'port:[[:space:]]*4317' \
+            'Jaeger OTLP/gRPC provider port'
+    fi
+
+    if [[ ! -f "${ISTIO_TRACING_TELEMETRY_FILE}" ]]; then
+        failures+=("${ISTIO_TRACING_TELEMETRY_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'apiVersion:[[:space:]]*telemetry\.istio\.io/v1' \
+            'Telemetry v1 apiVersion'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'kind:[[:space:]]*Telemetry' \
+            'Telemetry kind'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'name:[[:space:]]*mesh-default-tracing' \
+            'mesh-default tracing resource name'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'namespace:[[:space:]]*istio-system' \
+            'Istio root namespace'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'providers:' \
+            'Telemetry tracing providers block'
+        assert_pattern_in_file failures "${ISTIO_TRACING_TELEMETRY_FILE}" \
+            'name:[[:space:]]*jaeger' \
+            'Telemetry Jaeger provider selection'
+    fi
+
+    if [[ ! -f "${JAEGER_SERVICES_FILE}" ]]; then
+        failures+=("${JAEGER_SERVICES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*grpc-otlp' \
+            'Istio-classified Jaeger OTLP/gRPC service port name'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'appProtocol:[[:space:]]*grpc' \
+            'Jaeger OTLP/gRPC service appProtocol'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'name:[[:space:]]*http-otlp' \
+            'Istio-classified Jaeger OTLP/HTTP service port name'
+        assert_pattern_in_file failures "${JAEGER_SERVICES_FILE}" \
+            'appProtocol:[[:space:]]*http' \
+            'Jaeger OTLP/HTTP service appProtocol'
+    fi
+
+    if grep -Eq 'randomSamplingPercentage:' "${ISTIOD_VALUES_FILE}" "${ISTIO_TRACING_TELEMETRY_FILE}" 2>/dev/null; then
+        failures+=("Istio tracing sampling must stay on defaults until an explicit reviewed setting is documented")
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Istio tracing contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Istio tracing contract scan passed\n'
+}
+
 extract_image_refs_from_files() {
     local -a files=("$@")
     local match file remainder line text ref
@@ -886,6 +984,7 @@ run_repo_pattern_scans() {
     scan_observability_production_inputs
     scan_grafana_values_contract
     scan_istio_ingress_observability_allowances
+    scan_istio_tracing_contract
 }
 
 run_self_test() {

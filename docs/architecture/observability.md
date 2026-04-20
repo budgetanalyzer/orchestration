@@ -263,7 +263,8 @@ contract is:
 - service exposure: `ClusterIP` only
 - storage: single-node PVC-backed Badger
 - image: Jaeger `2.17.0`, pinned by digest
-- collector service: `jaeger-collector` on OTLP `4317` and `4318`
+- collector service: `jaeger-collector` on OTLP `4317` and `4318`, with
+  Istio-classified Service port names `grpc-otlp` and `http-otlp`
 - query service: `jaeger-query` on `16685` and `16686`
 - operator access:
 
@@ -272,9 +273,18 @@ kubectl port-forward --address 127.0.0.1 -n monitoring \
   svc/jaeger-query 16686:16686
 ```
 
-Then open `http://localhost:16686/jaeger`. The backend is available before
-Istio tracing is wired; traces from the real app path start arriving after the
-Phase 7.4 mesh provider and Telemetry resources are added.
+Then open `http://localhost:16686/jaeger`. Istio tracing is wired through the
+repo-owned `jaeger` OpenTelemetry extension provider in
+`kubernetes/istio/istiod-values.yaml` and the mesh-default
+`kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays on Istio
+defaults, so generate several requests through `https://app.budgetanalyzer.localhost`
+before checking the Jaeger services and traces views.
+
+Validate the tracing control-plane wiring with:
+
+```bash
+./scripts/smoketest/verify-istio-tracing-config.sh
+```
 
 ### Kiali
 

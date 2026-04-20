@@ -754,6 +754,14 @@ local_resource(
     labels=['infrastructure'],
 )
 
+local_resource(
+    'istio-tracing-telemetry',
+    cmd='kubectl apply -f kubernetes/istio/tracing-telemetry.yaml',
+    deps=['kubernetes/istio/tracing-telemetry.yaml'],
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
 # Namespace labeling for sidecar injection and Pod Security Admission
 local_resource(
     'istio-injection',
@@ -779,7 +787,7 @@ local_resource(
         kubectl label namespace istio-system pod-security.kubernetes.io/audit=privileged --overwrite
         kubectl label namespace istio-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
-    resource_deps=['istiod'],
+    resource_deps=['istio-tracing-telemetry'],
     labels=['infrastructure'],
 )
 

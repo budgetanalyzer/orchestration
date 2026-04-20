@@ -274,8 +274,11 @@ Prometheus under their servlet context paths, so the monitored paths are
 `/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
 Session Gateway.
 Tilt also applies the repo-managed Jaeger v2 backend in the same namespace.
-Jaeger is ready for OTLP traffic on `jaeger-collector`, but app traces do not
-arrive until the later Istio tracing phase wires the mesh provider.
+Jaeger receives Istio traces through the repo-owned `jaeger` OpenTelemetry
+extension provider in `kubernetes/istio/istiod-values.yaml` and the
+mesh-default `kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays
+on Istio defaults, so generate several requests through
+`https://app.budgetanalyzer.localhost` before checking Jaeger.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost` and use the same loopback-only
@@ -303,6 +306,12 @@ echo
 Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
 for Prometheus, and `http://localhost:16686/jaeger` for Jaeger. Do not use
 `--address 0.0.0.0` for observability port-forwards.
+
+Validate the tracing control-plane wiring after `tilt up`:
+
+```bash
+./scripts/smoketest/verify-istio-tracing-config.sh
+```
 
 After Prometheus comes up, confirm the
 Spring Boot targets for `currency-service`, `transaction-service`,

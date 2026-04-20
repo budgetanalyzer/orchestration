@@ -32,6 +32,9 @@ scripts/
   rejected. Use the same loopback-only access model in local Tilt and
   production OCI/k3s for the observability components installed there, and do
   not use `--address 0.0.0.0` for observability access.
+- `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
+  for the Jaeger OpenTelemetry extension provider and mesh-default Istio
+  Telemetry resource.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
@@ -102,16 +105,18 @@ CI should call the static guardrail directly:
 2. `smoketest/verify-security-prereqs.sh`
 3. `smoketest/verify-clean-tilt-deployment-admission.sh`
 4. `smoketest/verify-monitoring-rendered-manifests.sh`
-5. `smoketest/verify-monitoring-runtime.sh`
-6. `smoketest/verify-observability-port-forward-access.sh`
-7. `smoketest/verify-session-architecture-phase-5.sh`
-8. `smoketest/verify-phase-7-security-guardrails.sh`
+5. `smoketest/verify-istio-tracing-config.sh`
+6. `smoketest/verify-monitoring-runtime.sh`
+7. `smoketest/verify-observability-port-forward-access.sh`
+8. `smoketest/verify-session-architecture-phase-5.sh`
+9. `smoketest/verify-phase-7-security-guardrails.sh`
 
 Use targeted verifiers when debugging one capability, and the umbrella when
 proving the current cluster:
 
 ```bash
 ./scripts/smoketest/smoketest.sh
+./scripts/smoketest/verify-istio-tracing-config.sh
 ./scripts/smoketest/verify-observability-port-forward-access.sh
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh

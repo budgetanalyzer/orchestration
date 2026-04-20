@@ -12,14 +12,16 @@ spec:
     app.kubernetes.io/name: jaeger
     app.kubernetes.io/component: tracing
   ports:
-    - name: otlp-grpc
+    - name: grpc-otlp
       port: 4317
       targetPort: otlp-grpc
       protocol: TCP
-    - name: otlp-http
+      appProtocol: grpc
+    - name: http-otlp
       port: 4318
       targetPort: otlp-http
       protocol: TCP
+      appProtocol: http
 ---
 apiVersion: v1
 kind: Service

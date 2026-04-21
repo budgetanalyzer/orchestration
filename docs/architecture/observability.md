@@ -175,6 +175,24 @@ for the full evaluation.
 2. Verify the Prometheus pod has a sidecar: `kubectl get pod -n monitoring -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].spec.containers[*].name}'`
 3. Verify AuthorizationPolicy allows Prometheus to reach `:15090`
 
+**Kiali shows many warnings or errors and it is unclear what is real:**
+1. Confirm the app stack is actually up: `kubectl get deploy -n default` and,
+   after `tilt up`, `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh`
+2. Run `./scripts/ops/triage-kiali-findings.sh`
+3. Treat `default` namespace findings as runtime-state findings first, not as
+   Kiali bugs, if the namespace currently has no pods, no app services, or only
+   the default service account
+4. Treat unhealthy external integrations from Kiali's `Istio Status` page,
+   such as tracing `Unreachable`, as real dependency gaps until the backing
+   service exists and is reachable
+5. Treat Kiali startup warnings about missing cluster-scoped webhook reads as
+   expected under this repo's namespace-scoped Kiali RBAC unless a workflow
+   specifically requires webhook inspection
+6. Persist the raw JSON and log snapshot with
+   `./scripts/ops/triage-kiali-findings.sh --output-dir tmp/kiali-triage`
+   when you want to walk the findings one by one or compare before and after a
+   cluster change
+
 ## Access
 
 ### Grafana

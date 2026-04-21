@@ -41,6 +41,11 @@ scripts/
   supports repeated `--component` selection plus per-component port overrides,
   prints the local URLs plus the Grafana password and Kiali token commands,
   and cleans up all child forwards on exit.
+- `ops/triage-kiali-findings.sh` - Authenticates to Kiali, snapshots the
+  current Kiali API findings plus recent Kiali warnings, compares them to live
+  Kubernetes namespace object counts, and classifies the obvious buckets such
+  as runtime-absent workloads, missing backend services, tracing dependency
+  gaps, and likely low-signal waypoint warnings.
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -174,6 +179,15 @@ the active context and Tilt resource state from the same host shell first.
   helper reports a conflicting `code` listener on a canonical observability
   port, that is host-side VS Code port forwarding, not a repo-owned Tilt
   forward.
+- `ops/triage-kiali-findings.sh` is the first-pass Kiali investigation helper.
+  It reuses an existing loopback Kiali listener when one is already up, starts
+  a temporary loopback-only Kiali port-forward when needed, authenticates with
+  a short-lived `kubectl create token kiali` token, and prints a human-readable
+  triage summary. It also compares the current Kiali findings against the
+  expected seven app deployments in `default`, so it can say explicitly when
+  cluster bring-up is the blocker and Kiali is just reporting missing runtime.
+  Use `--output-dir <dir>` when you want the raw JSON and log artifacts for
+  later review.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run

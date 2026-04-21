@@ -9,6 +9,34 @@ If those assumptions no longer hold, re-evaluate it as a real issue.
 
 ## Expected Warnings We Ignore
 
+### `ext-authz` service detail shows no Istio config
+
+Observed UI pattern:
+
+- `No Istio Config found for ext-authz`
+
+Why we ignore it:
+
+- The repo wires `ext-authz` into Istio through the mesh-wide
+  `extensionProviders` entry in `kubernetes/istio/istiod-values.yaml`, not
+  through a service-local `VirtualService`, `DestinationRule`, or similar
+  traffic object.
+- The ingress attachment happens through the `CUSTOM`
+  `AuthorizationPolicy` in `kubernetes/istio/ext-authz-policy.yaml`, while the
+  workload service itself is still a plain Kubernetes `Service`.
+- Kiali's service detail Istio Config view does not treat that mesh-global
+  extension-provider wiring as service-attached Istio config, so the empty
+  state is expected for `ext-authz`.
+
+When to revisit:
+
+- The repo moves `ext-authz` to service-local Istio traffic configuration and
+  Kiali should then show attached config on the service detail page.
+- Upstream Kiali gains first-class visibility for
+  `meshConfig.extensionProviders` on service detail pages.
+- The message appears for other services that are expected to have ordinary
+  attached Istio config.
+
 ### `KIA1317` in non-ambient namespaces
 
 Message:

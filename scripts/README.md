@@ -41,6 +41,14 @@ scripts/
   supports repeated `--component` selection plus per-component port overrides,
   prints the local URLs plus the Grafana password and Kiali token commands,
   and cleans up all child forwards on exit.
+- `ops/triage-kiali-findings.sh` - Authenticates to Kiali, snapshots the
+  current Kiali API findings plus recent Kiali warnings, compares them to live
+  Kubernetes namespace object counts, and classifies the obvious buckets such
+  as runtime-absent workloads, missing backend services, tracing dependency
+  gaps, and likely low-signal waypoint warnings. Use
+  `--runtime-shape production` on OCI so the helper expects the production
+  frontend topology (`nginx-gateway` serves the bundle; no standalone
+  `budget-analyzer-web` Deployment).
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -155,6 +163,14 @@ proving the current cluster:
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
+`smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for
+the current cluster. It keeps the existing Spring Boot dashboard-input checks
+and now also verifies the service-DNS-backed `istiod`, Grafana, Prometheus
+Operator, and kube-state-metrics scrapes plus the Kiali
+`monitoring/prometheus` health regression and the live Jaeger integration
+contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
+version-check failures in the current Kiali pod logs).
+
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm
 the active context and Tilt resource state from the same host shell first.
@@ -174,6 +190,19 @@ the active context and Tilt resource state from the same host shell first.
   helper reports a conflicting `code` listener on a canonical observability
   port, that is host-side VS Code port forwarding, not a repo-owned Tilt
   forward.
+- `ops/triage-kiali-findings.sh` is the first-pass Kiali investigation helper.
+  It reuses an existing loopback Kiali listener when one is already up, starts
+  a temporary loopback-only Kiali port-forward when needed, authenticates with
+  a short-lived `kubectl create token kiali` token, and prints a human-readable
+  triage summary. It also compares the current Kiali findings against the
+  expected app deployments in `default`, so it can say explicitly when cluster
+  bring-up is the blocker and Kiali is just reporting missing runtime. Local
+  Tilt defaults to the seven-workload topology; OCI production should use
+  `--runtime-shape production` so the helper expects the six-workload topology
+  where `nginx-gateway` serves the frontend bundle.
+  It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
+  for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
+  when you want the raw JSON and log artifacts for later review.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run

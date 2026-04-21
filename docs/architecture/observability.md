@@ -51,9 +51,20 @@ Prometheus (monitoring namespace, mesh-injected)
     ├── ServiceMonitor: istio-mesh
     │   └── istiod               :http-monitoring (istio-system)
     │
+    ├── ServiceMonitor: chart-managed monitoring services
+    │   ├── prometheus-stack-grafana             /metrics
+    │   ├── prometheus-stack-kube-prom-operator  /metrics
+    │   └── prometheus-stack-kube-state-metrics  /metrics
+    │
     └── PodMonitor: envoy-stats
         └── All mesh-injected pods  :15090/stats/prometheus
 ```
+
+For meshed Prometheus, the monitored `ServiceMonitor` jobs that stay on
+cluster Services must scrape the stable Service DNS name and service port, not
+the discovered endpoint pod IP. In this repo that contract applies to the four
+Spring Boot services plus `istiod`, Grafana, Prometheus Operator, and
+kube-state-metrics.
 
 ### Spring Boot Services
 
@@ -68,6 +79,12 @@ The `/actuator/prometheus` endpoint is exposed by service-common's
 New Spring Boot services require a new `endpoints` entry in
 `kubernetes/monitoring/servicemonitor-spring-boot.yaml` with the correct
 servlet context path and a `relabelings` keep-regex for the service name.
+
+For Kiali, the repo's shared app workload convention is `app` plus
+`version: v1` on Deployment metadata and pod-template labels. That same base
+manifests path feeds both Tilt and the OCI production apps overlay, so Kiali
+can group the deployed app workloads consistently without a second
+production-only version-label scheme.
 
 #### Dashboard Label Contract
 
@@ -105,6 +122,9 @@ and is used by the Spring Boot 3.x dashboard's `Namespace` variable.
 The Prometheus server pod is itself mesh-injected (`sidecar.istio.io/inject:
 "true"`) so it can reach Envoy metrics ports under STRICT mTLS without
 bypassing the repo's `AuthorizationPolicy` or `NetworkPolicy` posture.
+That same mesh posture means the `istiod`, Grafana, Prometheus Operator, and
+kube-state-metrics `ServiceMonitor` jobs are rewritten to their stable Service
+DNS addresses instead of scraping endpoint pod IPs directly.
 
 ## Dashboards
 
@@ -170,10 +190,44 @@ for the full evaluation.
      - permission-service: `kubectl exec <pod> -- curl -s localhost:8086/permission-service/actuator/prometheus | head`
    - NetworkPolicy allows Prometheus access: `kubectl get networkpolicy -n default`
 
+**Grafana, Prometheus Operator, kube-state-metrics, or istiod target down from meshed Prometheus:**
+1. Open `http://localhost:9090/targets` and inspect the `scrapeUrl`.
+2. The host should be the Service DNS name, not a pod IP:
+   - `istiod.istio-system.svc.cluster.local:15014`
+   - `prometheus-stack-grafana.monitoring.svc.cluster.local:80`
+   - `prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080`
+   - `prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080`
+3. If one of those jobs resolves to a pod IP again, fix the checked-in
+   `relabelings` in `kubernetes/monitoring/prometheus-stack-values.yaml`
+   instead of treating pod-IP scrapes as acceptable.
+
 **Envoy metrics missing:**
 1. Check the `envoy-stats` PodMonitor targets in Prometheus
 2. Verify the Prometheus pod has a sidecar: `kubectl get pod -n monitoring -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].spec.containers[*].name}'`
 3. Verify AuthorizationPolicy allows Prometheus to reach `:15090`
+
+**Kiali shows many warnings or errors and it is unclear what is real:**
+1. Confirm the app stack is actually up: `kubectl get deploy -n default` and,
+   after `tilt up`, `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh`
+2. Run `./scripts/ops/triage-kiali-findings.sh` locally, or
+   `./scripts/ops/triage-kiali-findings.sh --runtime-shape production` on OCI
+3. Treat `default` namespace findings as runtime-state findings first, not as
+   Kiali bugs, if the namespace currently has no pods, no app services, or only
+   the default service account
+4. On OCI, remember that `nginx-gateway` serves the frontend bundle. A missing
+   standalone `budget-analyzer-web` Deployment is normal there, while
+   `AuthorizationPolicy/default/budget-analyzer-web-policy` is stale drift and
+   should be removed from the production baseline.
+5. Treat unhealthy external integrations from Kiali's `Istio Status` page,
+   such as tracing `Unreachable`, as real dependency gaps until the backing
+   service exists and is reachable
+6. Treat only the documented expected-noise warnings as ignorable. See
+   [Kiali Expected Warnings](../runbooks/kiali-expected-warnings.md) for the
+   current allowlist and rationale.
+7. Persist the raw JSON and log snapshot with
+   `./scripts/ops/triage-kiali-findings.sh --output-dir tmp/kiali-triage`
+   when you want to walk the findings one by one or compare before and after a
+   cluster change
 
 ## Access
 
@@ -330,7 +384,12 @@ The locked runtime contract is:
 - RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
   `istio-system`, `istio-ingress`, and `istio-egress`
 - image: Kiali `2.24.0`, pinned by digest
-- integrations: internal Prometheus URL and Jaeger query gRPC URL only
+- integrations:
+  internal Prometheus URL, Jaeger query gRPC URL on `16685`, and Jaeger HTTP
+  health URL on `16686`
+- Jaeger version probe: explicitly disabled because Kiali `2.24.0` falls back
+  to `http://<host>/jaeger` on port `80` when `use_grpc: true`, which does not
+  match this repo's Jaeger query service contract
 - operator access:
 
 ```bash
@@ -345,6 +404,18 @@ kubectl -n monitoring create token kiali
 ```
 
 Open `http://localhost:20001/kiali` and paste the token.
+
+The repo-owned Jaeger/Kiali wiring is intentionally split by protocol:
+
+- `internal_url: http://jaeger-query.monitoring:16685/jaeger`
+  keeps Kiali trace queries on Jaeger's gRPC API.
+- `health_check_url: http://jaeger-query.monitoring:16686/jaeger`
+  keeps the component-health probe on Jaeger's HTTP query/UI endpoint.
+- `disable_version_check: true`
+  suppresses Kiali's broken Jaeger version probe for this topology. Upstream
+  Kiali `2.24.0` strips the gRPC port and retries the version fetch over plain
+  HTTP on the default port, which would otherwise generate repeated timeout
+  noise against `http://jaeger-query.monitoring/jaeger`.
 
 ## Security Compliance
 

@@ -38,6 +38,8 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/istio/cni-k3s-values.yaml`
    - `kubernetes/istio/istiod-values.yaml`
    - `kubernetes/istio/egress-gateway-values.yaml`
+   - `kubernetes/istio/peer-authentication.yaml`
+   - `kubernetes/production/istio/authorization-policies.yaml`
 6. Review the secret synchronization artifacts:
    - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
    - `deploy/manifests/phase-5/external-secrets.yaml`
@@ -138,7 +140,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/01-install-k3s.sh` | Installs the pinned k3s release with the repo's Istio-friendly flags and prints the base cluster snapshot. | Re-run only if the host must be rebuilt or reconciled to the pinned k3s version. |
 | `deploy/scripts/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace the deployment path depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
-| `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus mesh security policies. | Re-run after changing Istio pins, values, or the rendered ingress manifests. |
+| `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the phase-11 public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the phase-4 ingress reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the phase-11 ingress manifests immediately after the Istio reconcile. |
 | `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script logs Helm repo-update vs install stages separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when secret synchronization or public TLS needs controller value changes. For the public TLS cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
 | `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
@@ -279,6 +281,13 @@ public TLS cutover. The instance itself should no longer accept direct public
 `80/443` traffic once the NLB path exists. The public TLS cutover adds the
 HTTPS listener, the `30443` backend path, and the matching certificate/TLS
 wiring.
+
+Because `deploy/scripts/04-install-istio.sh` reapplies that HTTP-only phase-4
+ingress baseline, it now blocks by default when the live cluster already
+exposes the phase-11 `443 -> 30443` listener. Use
+`--acknowledge-public-tls-downgrade` only for an intentional Istio reconcile on
+an already-cut-over host, then immediately rerender and reapply the phase-11
+public TLS manifests.
 
 On OCI, the public listener path also needs the frontend NSG to egress to the backend NSG on TCP `30080`. The 2026-04-16 operator run needed that explicit rule before the backend health check on `30080` would turn healthy.
 

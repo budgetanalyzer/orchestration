@@ -280,8 +280,11 @@ mesh-default `kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays
 on Istio defaults, so generate several requests through
 `https://app.budgetanalyzer.localhost` before checking Jaeger.
 Tilt also installs the standalone `kiali-server` chart in `monitoring` with
-token auth, view-only mode, non-cluster-wide RBAC, and `ClusterIP` service
-exposure.
+token auth, view-only mode, non-cluster-wide RBAC, `ClusterIP` service
+exposure, Jaeger trace queries over gRPC `16685`, and Jaeger HTTP health
+checks over `16686`. The Kiali `2.24.0` Jaeger version check is intentionally
+disabled because upstream falls back to port `80` when `use_grpc: true`, which
+does not match this repo's Jaeger query service contract.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost`. `tilt up` installs the observability
@@ -338,6 +341,17 @@ Validate the tracing control-plane wiring after `tilt up`:
 ./scripts/smoketest/verify-istio-tracing-config.sh
 ```
 
+The repo-owned runtime observability proof is:
+
+```bash
+./scripts/smoketest/verify-monitoring-runtime.sh
+```
+
+It verifies the four Spring Boot scrapes, the service-DNS-backed `istiod`,
+Grafana, Prometheus Operator, and kube-state-metrics scrapes, the Grafana
+dashboard metric/label inputs, and the Kiali `monitoring/prometheus` health
+regression.
+
 After Prometheus comes up, confirm the
 Spring Boot targets for `currency-service`, `transaction-service`,
 `permission-service`, and `session-gateway` are `UP`. Prometheus labels each
@@ -345,6 +359,20 @@ target with the service name as `job`; use the `application` label for
 cross-service checks. Useful first queries:
 `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, and
 `jvm_gc_pause_seconds_count`.
+
+For the meshed Prometheus pod, the service-backed monitoring and control-plane
+targets should also stay `UP` via stable Service DNS hosts rather than endpoint
+pod IPs. When `istiod`, Grafana, Prometheus Operator, or kube-state-metrics
+look unhealthy, check `http://localhost:9090/targets` and confirm the
+`scrapeUrl` hosts are:
+
+- `istiod.istio-system.svc.cluster.local:15014`
+- `prometheus-stack-grafana.monitoring.svc.cluster.local:80`
+- `prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080`
+- `prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080`
+
+If one of those jobs falls back to a pod IP, fix the checked-in monitoring
+relabelings instead of treating the pod-IP scrape as acceptable.
 
 Grafana ships with two pre-provisioned dashboards (no manual import needed):
 

@@ -39,8 +39,15 @@ external_services:
   tracing:
     enabled: true
     provider: jaeger
+    # Kiali queries traces over the Jaeger gRPC query port, but its v2.24.0
+    # version probe falls back to plain HTTP on the default port if gRPC is
+    # enabled. Our Jaeger HTTP query endpoint lives on 16686, so keep the
+    # gRPC query URL, pin health checks to the HTTP UI/query path, and disable
+    # the broken version probe to stop repeated timeout noise.
     internal_url: http://jaeger-query.monitoring:16685/jaeger
+    health_check_url: http://jaeger-query.monitoring:16686/jaeger
     use_grpc: true
+    disable_version_check: true
 
 server:
   port: 20001

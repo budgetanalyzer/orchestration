@@ -7,6 +7,7 @@ Operational guides for debugging and troubleshooting the Budget Analyzer develop
 | Runbook | Description | When to Use |
 |---------|-------------|-------------|
 | [Tilt Debugging](tilt-debugging.md) | Debug Tilt/Kind local development environment | Services not starting, auth failures, network issues |
+| [Kiali Expected Warnings](kiali-expected-warnings.md) | Reference for Kiali warnings this repo intentionally ignores | Kiali triage shows low-signal warnings and you need the repo policy |
 
 ## Runbook Philosophy
 

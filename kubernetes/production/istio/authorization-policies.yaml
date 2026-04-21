@@ -1,14 +1,13 @@
 # ============================================================================
-# Authorization Policies for service-to-service traffic
+# Production Authorization Policies for service-to-service traffic
 # ============================================================================
 #
-# With Istio-managed ingress, the ingress gateway has a SPIFFE
-# identity and participates in mesh mTLS. All services — both ingress-facing
-# and internal — now have AuthorizationPolicies restricting their callers.
+# Keep the shared workload policies in this file aligned with
+# kubernetes/istio/authorization-policies.yaml.
 #
-# Ingress-facing services (nginx-gateway, ext-authz, session-gateway) accept
-# traffic only from the Istio ingress gateway identity.
-# Internal backend services accept traffic only from nginx-gateway.
+# OCI production intentionally omits budget-analyzer-web-policy because the
+# frontend bundle is served from nginx-gateway there instead of a standalone
+# budget-analyzer-web Deployment.
 # ============================================================================
 
 # Backend services: only accept traffic from nginx-gateway
@@ -60,27 +59,6 @@ spec:
             principals:
               - "cluster.local/ns/default/sa/nginx-gateway"
               - "cluster.local/ns/default/sa/session-gateway"
----
-# budget-analyzer-web: accepts from nginx-gateway (proxied by nginx).
-# This policy is local/Tilt-only because OCI production serves the frontend
-# bundle from nginx-gateway instead of running a standalone budget-analyzer-web
-# Deployment. Keep the production authz baseline in
-# kubernetes/production/istio/authorization-policies.yaml aligned for the
-# shared workloads.
-apiVersion: security.istio.io/v1
-kind: AuthorizationPolicy
-metadata:
-  name: budget-analyzer-web-policy
-  namespace: default
-spec:
-  selector:
-    matchLabels:
-      app: budget-analyzer-web
-  action: ALLOW
-  rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
 ---
 # Prometheus: allow the meshed Prometheus pod in monitoring to scrape
 # Envoy sidecar metrics from default-namespace workloads.

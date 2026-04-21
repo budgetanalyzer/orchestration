@@ -51,9 +51,20 @@ Prometheus (monitoring namespace, mesh-injected)
     ├── ServiceMonitor: istio-mesh
     │   └── istiod               :http-monitoring (istio-system)
     │
+    ├── ServiceMonitor: chart-managed monitoring services
+    │   ├── prometheus-stack-grafana             /metrics
+    │   ├── prometheus-stack-kube-prom-operator  /metrics
+    │   └── prometheus-stack-kube-state-metrics  /metrics
+    │
     └── PodMonitor: envoy-stats
         └── All mesh-injected pods  :15090/stats/prometheus
 ```
+
+For meshed Prometheus, the monitored `ServiceMonitor` jobs that stay on
+cluster Services must scrape the stable Service DNS name and service port, not
+the discovered endpoint pod IP. In this repo that contract applies to the four
+Spring Boot services plus `istiod`, Grafana, Prometheus Operator, and
+kube-state-metrics.
 
 ### Spring Boot Services
 
@@ -105,6 +116,9 @@ and is used by the Spring Boot 3.x dashboard's `Namespace` variable.
 The Prometheus server pod is itself mesh-injected (`sidecar.istio.io/inject:
 "true"`) so it can reach Envoy metrics ports under STRICT mTLS without
 bypassing the repo's `AuthorizationPolicy` or `NetworkPolicy` posture.
+That same mesh posture means the `istiod`, Grafana, Prometheus Operator, and
+kube-state-metrics `ServiceMonitor` jobs are rewritten to their stable Service
+DNS addresses instead of scraping endpoint pod IPs directly.
 
 ## Dashboards
 
@@ -169,6 +183,17 @@ for the full evaluation.
      - currency-service: `kubectl exec <pod> -- curl -s localhost:8084/currency-service/actuator/prometheus | head`
      - permission-service: `kubectl exec <pod> -- curl -s localhost:8086/permission-service/actuator/prometheus | head`
    - NetworkPolicy allows Prometheus access: `kubectl get networkpolicy -n default`
+
+**Grafana, Prometheus Operator, kube-state-metrics, or istiod target down from meshed Prometheus:**
+1. Open `http://localhost:9090/targets` and inspect the `scrapeUrl`.
+2. The host should be the Service DNS name, not a pod IP:
+   - `istiod.istio-system.svc.cluster.local:15014`
+   - `prometheus-stack-grafana.monitoring.svc.cluster.local:80`
+   - `prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080`
+   - `prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080`
+3. If one of those jobs resolves to a pod IP again, fix the checked-in
+   `relabelings` in `kubernetes/monitoring/prometheus-stack-values.yaml`
+   instead of treating pod-IP scrapes as acceptable.
 
 **Envoy metrics missing:**
 1. Check the `envoy-stats` PodMonitor targets in Prometheus

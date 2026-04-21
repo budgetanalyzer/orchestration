@@ -22,6 +22,10 @@ grafana:
   defaultDashboardsEnabled: false
   service:
     type: ClusterIP
+  serviceMonitor:
+    relabelings:
+      - targetLabel: __address__
+        replacement: prometheus-stack-grafana.monitoring.svc.cluster.local:80
   serviceAccount:
     autoMount: false
     automountServiceAccountToken: false
@@ -97,6 +101,12 @@ kube-state-metrics:
   automountServiceAccountToken: false
   serviceAccount:
     automountServiceAccountToken: false
+  prometheus:
+    monitor:
+      http:
+        relabelings:
+          - targetLabel: __address__
+            replacement: prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080
   image:
     registry: registry.k8s.io
     repository: kube-state-metrics/kube-state-metrics
@@ -172,6 +182,9 @@ prometheus:
       endpoints:
         - port: http-monitoring
           interval: 15s
+          relabelings:
+            - targetLabel: __address__
+              replacement: istiod.istio-system.svc.cluster.local:15014
   additionalPodMonitors:
     - name: envoy-stats
       namespaceSelector:
@@ -259,6 +272,10 @@ prometheus:
 
 prometheusOperator:
   automountServiceAccountToken: false
+  serviceMonitor:
+    relabelings:
+      - targetLabel: __address__
+        replacement: prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080
   tls:
     enabled: false
   admissionWebhooks:

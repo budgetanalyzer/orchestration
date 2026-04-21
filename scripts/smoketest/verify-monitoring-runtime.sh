@@ -75,7 +75,8 @@ Usage: ./scripts/smoketest/verify-monitoring-runtime.sh [options]
 Verifies that Prometheus is scraping the four Spring Boot services, the
 service-DNS-backed monitoring/control-plane targets, and that Kiali no longer
 reports Prometheus health as Failure. It also checks the JVM/Spring Boot
-Grafana dashboard label and metric inputs.
+Grafana dashboard label and metric inputs plus the live Kiali-to-Jaeger
+integration contract.
 
 Options:
   --wait-timeout SECONDS   Max seconds to wait for scrape-dependent checks.
@@ -595,6 +596,86 @@ if not overall_ok:
 PY
 }
 
+parse_kiali_jaeger_integration() {
+    local status_file="$1"
+    local istio_status_file="$2"
+    local kiali_log_file="$3"
+    local kiali_configmap_file="$4"
+
+    python3 - "${status_file}" "${istio_status_file}" "${kiali_log_file}" "${kiali_configmap_file}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+status_file, istio_status_file, kiali_log_file, kiali_configmap_file = sys.argv[1:5]
+
+with open(status_file, encoding="utf-8") as handle:
+    status_payload = json.load(handle)
+
+with open(istio_status_file, encoding="utf-8") as handle:
+    istio_status_payload = json.load(handle)
+
+with open(kiali_configmap_file, encoding="utf-8") as handle:
+    kiali_configmap_payload = json.load(handle)
+
+failures = []
+
+jaeger_service = next(
+    (
+        service
+        for service in (status_payload.get("externalServices") or [])
+        if (service.get("name") or "").lower() == "jaeger"
+    ),
+    None,
+)
+if jaeger_service is None:
+    failures.append("Kiali status API does not report an externalServices/jaeger entry.")
+else:
+    version = jaeger_service.get("version") or "not reported"
+    print(f"status/externalServices/jaeger: present, version={version}")
+
+tracing_status = next(
+    (
+        item
+        for item in istio_status_payload
+        if (item.get("name") or "") == "tracing"
+    ),
+    None,
+)
+if tracing_status is None:
+    failures.append("Kiali istio-status API does not report the tracing component.")
+else:
+    status = tracing_status.get("status") or "Unknown"
+    print(f"istio-status/tracing: status={status}")
+    if status != "Healthy":
+        failures.append(f"Kiali reports tracing status {status!r} instead of 'Healthy'.")
+
+config_yaml = ((kiali_configmap_payload.get("data") or {}).get("config.yaml") or "")
+expected_contract = {
+    "jaeger grpc internal_url": "internal_url: http://jaeger-query.monitoring:16685/jaeger",
+    "jaeger http health_check_url": "health_check_url: http://jaeger-query.monitoring:16686/jaeger",
+    "jaeger grpc enabled": "use_grpc: true",
+    "jaeger version check disabled": "disable_version_check: true",
+}
+for label, snippet in expected_contract.items():
+    if snippet not in config_yaml:
+        failures.append(f"Live Kiali config is missing {label}: {snippet}")
+    else:
+        print(f"config/{label}: ok")
+
+kiali_log_text = Path(kiali_log_file).read_text(encoding="utf-8")
+if "jaeger version check failed" in kiali_log_text:
+    failures.append("Kiali pod logs still contain 'jaeger version check failed'.")
+else:
+    print("logs/jaeger-version-check: absent")
+
+if failures:
+    for failure in failures:
+        print(failure, file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 wait_for_kiali_prometheus_health() {
     local description="$1"
     local deadline output
@@ -630,6 +711,60 @@ wait_for_kiali_prometheus_health() {
 
     fail_check "${description}"
     printf '    Timed out after %ss waiting for Kiali to stop reporting Prometheus health as Failure.\n' \
+        "${WAIT_TIMEOUT_SECONDS}" >&2
+    if [[ -n "${output:-}" ]]; then
+        printf '%s\n' "${output}" | sed 's/^/    /' >&2
+    fi
+    return 1
+}
+
+wait_for_kiali_jaeger_integration() {
+    local description="$1"
+    local deadline output
+    local tmp_dir triage_log kubectl_log
+
+    deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+    while (( SECONDS <= deadline )); do
+        tmp_dir="$(mktemp -d)"
+        triage_log="${tmp_dir}/triage.log"
+        kubectl_log="${tmp_dir}/kubectl.log"
+
+        if "${REPO_DIR}/scripts/ops/triage-kiali-findings.sh" \
+            --namespace monitoring \
+            --kiali-port "${KIALI_LOCAL_PORT}" \
+            --wait-timeout "${WAIT_TIMEOUT_SECONDS}" \
+            --poll-interval "${POLL_INTERVAL_SECONDS}" \
+            --log-tail-lines 200 \
+            --output-dir "${tmp_dir}" >"${triage_log}" 2>&1 \
+            && kubectl get configmap -n monitoring kiali -o json >"${tmp_dir}/kiali-configmap.json" 2>"${kubectl_log}" \
+            && output=$(
+                parse_kiali_jaeger_integration \
+                    "${tmp_dir}/status.json" \
+                    "${tmp_dir}/istio-status.json" \
+                    "${tmp_dir}/kiali.log" \
+                    "${tmp_dir}/kiali-configmap.json" 2>&1
+            ); then
+            pass "${description}"
+            printf '%s\n' "${output}" | sed 's/^/    /'
+            rm -rf "${tmp_dir}"
+            return 0
+        fi
+
+        output="$(sed -n '1,160p' "${triage_log}" 2>/dev/null || true)"
+        if [[ -s "${kubectl_log}" ]]; then
+            output+=$'\n'
+            output+="$(sed -n '1,80p' "${kubectl_log}")"
+        fi
+        rm -rf "${tmp_dir}"
+
+        if (( SECONDS >= deadline )); then
+            break
+        fi
+        sleep "${POLL_INTERVAL_SECONDS}"
+    done
+
+    fail_check "${description}"
+    printf '    Timed out after %ss waiting for Kiali to keep tracing healthy without Jaeger version-check failures.\n' \
         "${WAIT_TIMEOUT_SECONDS}" >&2
     if [[ -n "${output:-}" ]]; then
         printf '%s\n' "${output}" | sed 's/^/    /' >&2
@@ -739,6 +874,8 @@ main() {
     section "Kiali Health"
     wait_for_kiali_prometheus_health \
         "Kiali no longer reports monitoring/prometheus as Failure" || true
+    wait_for_kiali_jaeger_integration \
+        "Kiali tracing integration stays healthy without Jaeger version-check failures" || true
 
     printf '\nMonitoring runtime verification complete: %s passed, %s failed.\n' "${PASSED}" "${FAILED}"
     if (( FAILED > 0 )); then

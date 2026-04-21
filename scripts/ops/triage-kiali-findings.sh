@@ -11,6 +11,7 @@ KIALI_LOCAL_PORT=20001
 WAIT_TIMEOUT_SECONDS=30
 POLL_INTERVAL_SECONDS=1
 LOG_TAIL_LINES=200
+EXPECTED_WARNINGS_DOC="docs/runbooks/kiali-expected-warnings.md"
 EXPECTED_APP_DEPLOYMENTS=(
     budget-analyzer-web
     currency-service
@@ -351,7 +352,7 @@ classify_finding() {
             ;;
         KIA1317)
             if [[ "${is_ambient}" == "false" ]]; then
-                printf 'low-signal candidate: waypoint warning in a non-ambient namespace'
+                printf 'expected warning: waypoint warning in a non-ambient namespace; see %s' "${EXPECTED_WARNINGS_DOC}"
             else
                 printf 'review: waypoint-related warning in an ambient namespace'
             fi
@@ -365,6 +366,7 @@ classify_finding() {
 printf 'Kiali triage snapshot\n'
 printf 'Generated at: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 printf 'Kiali URL: %s\n' "${kiali_url}/"
+printf 'Expected warnings reference: %s\n' "${EXPECTED_WARNINGS_DOC}"
 
 app_deployments_present="$(expected_app_deployment_present_count)"
 app_deployments_total="$(expected_app_deployment_total)"
@@ -404,12 +406,21 @@ if [[ "$(jq 'map(select(.status != "Healthy")) | length' "${TMP_DIR}/istio-statu
     printf 'No unhealthy Istio integrations reported by Kiali.\n'
 fi
 
+printf '\n== Expected warnings observed ==\n'
+expected_warning_found=0
+
 if grep -Fq 'Unable to read CA bundle' "${TMP_DIR}/kiali.log"; then
-    printf '%s\n' '- Kiali log: missing additional CA bundle file. Likely benign unless a custom CA bundle is expected.'
+    printf '%s\n' "- Kiali log: missing additional CA bundle file. Expected; see ${EXPECTED_WARNINGS_DOC}."
+    expected_warning_found=1
 fi
 
 if grep -Fq "Unable to list webhooks for cluster [Kubernetes]" "${TMP_DIR}/kiali.log"; then
-    printf '%s\n' "- Kiali log: cannot read mutating webhooks. Expected under namespace-scoped RBAC unless webhook inspection is required."
+    printf '%s\n' "- Kiali log: cannot read mutating webhooks. Expected; see ${EXPECTED_WARNINGS_DOC}."
+    expected_warning_found=1
+fi
+
+if [[ "${expected_warning_found}" == "0" ]]; then
+    printf 'No documented expected startup/runtime warnings found in the recent Kiali log tail.\n'
 fi
 
 printf '\n== Health findings ==\n'

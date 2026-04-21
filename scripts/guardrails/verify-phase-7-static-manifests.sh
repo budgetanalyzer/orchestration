@@ -786,6 +786,18 @@ scan_kiali_values_contract() {
         assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
             'service_type:[[:space:]]*ClusterIP' \
             'Kiali ClusterIP service exposure'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'internal_url:[[:space:]]*http://jaeger-query\.monitoring:16685/jaeger' \
+            'Kiali Jaeger gRPC query URL'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'health_check_url:[[:space:]]*http://jaeger-query\.monitoring:16686/jaeger' \
+            'Kiali Jaeger HTTP health URL'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'use_grpc:[[:space:]]*true' \
+            'Kiali Jaeger gRPC mode'
+        assert_pattern_in_file failures "${KIALI_VALUES_FILE}" \
+            'disable_version_check:[[:space:]]*true' \
+            'Kiali Jaeger version-check suppression'
 
         if grep -Eq 'strategy:[[:space:]]*anonymous([[:space:]]|$)' "${KIALI_VALUES_FILE}"; then
             failures+=("${KIALI_VALUES_FILE#"${REPO_DIR}"/}: Kiali anonymous auth is enabled")

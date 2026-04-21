@@ -164,7 +164,9 @@ proving the current cluster:
 the current cluster. It keeps the existing Spring Boot dashboard-input checks
 and now also verifies the service-DNS-backed `istiod`, Grafana, Prometheus
 Operator, and kube-state-metrics scrapes plus the Kiali
-`monitoring/prometheus` health regression.
+`monitoring/prometheus` health regression and the live Jaeger integration
+contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
+version-check failures in the current Kiali pod logs).
 
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm
@@ -192,8 +194,9 @@ the active context and Tilt resource state from the same host shell first.
   triage summary. It also compares the current Kiali findings against the
   expected seven app deployments in `default`, so it can say explicitly when
   cluster bring-up is the blocker and Kiali is just reporting missing runtime.
-  Use `--output-dir <dir>` when you want the raw JSON and log artifacts for
-  later review.
+  It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
+  for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
+  when you want the raw JSON and log artifacts for later review.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run

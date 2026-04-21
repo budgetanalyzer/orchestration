@@ -210,9 +210,9 @@ for the full evaluation.
 4. Treat unhealthy external integrations from Kiali's `Istio Status` page,
    such as tracing `Unreachable`, as real dependency gaps until the backing
    service exists and is reachable
-5. Treat Kiali startup warnings about missing cluster-scoped webhook reads as
-   expected under this repo's namespace-scoped Kiali RBAC unless a workflow
-   specifically requires webhook inspection
+5. Treat only the documented expected-noise warnings as ignorable. See
+   [Kiali Expected Warnings](../runbooks/kiali-expected-warnings.md) for the
+   current allowlist and rationale.
 6. Persist the raw JSON and log snapshot with
    `./scripts/ops/triage-kiali-findings.sh --output-dir tmp/kiali-triage`
    when you want to walk the findings one by one or compare before and after a
@@ -373,7 +373,12 @@ The locked runtime contract is:
 - RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
   `istio-system`, `istio-ingress`, and `istio-egress`
 - image: Kiali `2.24.0`, pinned by digest
-- integrations: internal Prometheus URL and Jaeger query gRPC URL only
+- integrations:
+  internal Prometheus URL, Jaeger query gRPC URL on `16685`, and Jaeger HTTP
+  health URL on `16686`
+- Jaeger version probe: explicitly disabled because Kiali `2.24.0` falls back
+  to `http://<host>/jaeger` on port `80` when `use_grpc: true`, which does not
+  match this repo's Jaeger query service contract
 - operator access:
 
 ```bash
@@ -388,6 +393,18 @@ kubectl -n monitoring create token kiali
 ```
 
 Open `http://localhost:20001/kiali` and paste the token.
+
+The repo-owned Jaeger/Kiali wiring is intentionally split by protocol:
+
+- `internal_url: http://jaeger-query.monitoring:16685/jaeger`
+  keeps Kiali trace queries on Jaeger's gRPC API.
+- `health_check_url: http://jaeger-query.monitoring:16686/jaeger`
+  keeps the component-health probe on Jaeger's HTTP query/UI endpoint.
+- `disable_version_check: true`
+  suppresses Kiali's broken Jaeger version probe for this topology. Upstream
+  Kiali `2.24.0` strips the gRPC port and retries the version fetch over plain
+  HTTP on the default port, which would otherwise generate repeated timeout
+  noise against `http://jaeger-query.monitoring/jaeger`.
 
 ## Security Compliance
 

@@ -280,8 +280,11 @@ mesh-default `kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays
 on Istio defaults, so generate several requests through
 `https://app.budgetanalyzer.localhost` before checking Jaeger.
 Tilt also installs the standalone `kiali-server` chart in `monitoring` with
-token auth, view-only mode, non-cluster-wide RBAC, and `ClusterIP` service
-exposure.
+token auth, view-only mode, non-cluster-wide RBAC, `ClusterIP` service
+exposure, Jaeger trace queries over gRPC `16685`, and Jaeger HTTP health
+checks over `16686`. The Kiali `2.24.0` Jaeger version check is intentionally
+disabled because upstream falls back to port `80` when `use_grpc: true`, which
+does not match this repo's Jaeger query service contract.
 
 Observability is internal-only in both local Tilt and production OCI/k3s.
 Retire `grafana.budgetanalyzer.localhost`. `tilt up` installs the observability

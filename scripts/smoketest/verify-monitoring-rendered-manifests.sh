@@ -189,6 +189,22 @@ if grep -Eq 'external_url:[[:space:]]*https?://' "${kiali_render_file}"; then
     fail "Rendered Kiali config sets a public external_url."
 fi
 
+if ! grep -Eq 'internal_url:[[:space:]]*http://jaeger-query\.monitoring:16685/jaeger' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not keep the Jaeger gRPC query URL."
+fi
+
+if ! grep -Eq 'health_check_url:[[:space:]]*http://jaeger-query\.monitoring:16686/jaeger' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not keep the Jaeger HTTP health URL."
+fi
+
+if ! grep -Eq 'use_grpc:[[:space:]]*true' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not keep Jaeger gRPC enabled."
+fi
+
+if ! grep -Eq 'disable_version_check:[[:space:]]*true' "${kiali_render_file}"; then
+    fail "Rendered Kiali config does not disable the Jaeger version check."
+fi
+
 if grep -Eq 'kind:[[:space:]]*Cluster(Role|RoleBinding)' "${kiali_render_file}"; then
     fail "Rendered Kiali manifests request cluster-wide RBAC."
 fi

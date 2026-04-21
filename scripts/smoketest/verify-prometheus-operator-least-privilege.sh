@@ -19,8 +19,8 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-prometheus-operator-least-privilege.sh [options]
 
-Runs the full Phase 4 Prometheus Operator least-privilege verification set:
-the rendered-manifest verifier, live operator RBAC/object checks, positive and
+Runs the Prometheus Operator least-privilege verification set: the
+rendered-manifest verifier, live operator RBAC/object checks, positive and
 negative kubectl auth can-i proofs, the monitoring runtime verifier, and Kiali
 triage with persisted output.
 
@@ -174,7 +174,7 @@ run_can_i_check() {
 
 write_summary() {
     cat > "${SUMMARY_FILE}" <<EOF
-# Prometheus Operator Least-Privilege Phase 4 Verification
+# Prometheus Operator Least-Privilege Verification
 
 - Service account: \`${OPERATOR_SUBJECT}\`
 - Permission matrix: \`${MATRIX_FILE#"${REPO_DIR}"/}\`

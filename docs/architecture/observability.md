@@ -1,8 +1,6 @@
 # Observability Architecture
 
 **Date:** 2026-04-10
-**Status:** Active
-
 ## Overview
 
 Budget Analyzer uses [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)

@@ -56,11 +56,11 @@ scripts/
   canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
   matching `ops/start-observability-port-forwards.sh` process to already be
   running on the OCI host.
-- `ops/capture-prometheus-operator-phase-1-baseline.sh` - Renders the current
-  Prometheus stack, extracts the operator RBAC objects, builds a representative
-  `kubectl auth can-i` matrix for the operator service account, and refreshes
-  the checked-in Phase 1 least-privilege baseline note under
-  `docs/research/`.
+- `ops/capture-prometheus-operator-baseline.sh` - Renders the upstream
+  Prometheus stack without the repo post-renderer, extracts the operator RBAC
+  objects, builds a representative `kubectl auth can-i` matrix for the
+  operator service account, and refreshes the checked-in RBAC baseline note
+  under `docs/research/`.
 - `ops/post-render-prometheus-stack.sh` - Helm post-renderer for the
   Prometheus stack that replaces the upstream broad Prometheus Operator
   ClusterRole/ClusterRoleBinding with the repo-owned least-privilege split:
@@ -74,11 +74,10 @@ scripts/
   namespace-scope args and effective RBAC model, and server dry-run compliance
   for rendered workload objects.
 - `smoketest/verify-prometheus-operator-least-privilege.sh` - Full live
-  Phase 4 verifier for the Prometheus Operator least-privilege plan. It reruns
-  the rendered-manifest proof, checks the live operator RBAC object set,
-  enforces the required positive and negative `kubectl auth can-i` matrix,
-  reruns the monitoring runtime proof, and captures Kiali triage artifacts
-  under `tmp/`.
+  verifier for the Prometheus Operator least-privilege posture. It reruns the
+  rendered-manifest proof, checks the live operator RBAC object set, enforces
+  the required positive and negative `kubectl auth can-i` matrix, reruns the
+  monitoring runtime proof, and captures Kiali triage artifacts under `tmp/`.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
@@ -187,14 +186,13 @@ Operator, and kube-state-metrics scrapes plus the Kiali
 contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
 version-check failures in the current Kiali pod logs).
 `smoketest/verify-prometheus-operator-least-privilege.sh` is the focused
-Phase 4 least-privilege proof for the Prometheus Operator. It keeps a checked
+least-privilege proof for the Prometheus Operator. It keeps a checked
 permission matrix under `tmp/prometheus-operator-least-privilege/`, requires
 the representative denials in `default`, `infrastructure`, and `istio-system`,
 and persists `triage-kiali-findings.sh --output-dir` artifacts under
 `tmp/kiali-triage/`. Its render-time dependency,
-`smoketest/verify-monitoring-rendered-manifests.sh`, also carries the Phase 5
-ongoing guardrails that fail fast on namespace-scope drift and RBAC
-broadening.
+`smoketest/verify-monitoring-rendered-manifests.sh`, fails fast on
+namespace-scope drift and RBAC broadening.
 
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm
@@ -236,18 +234,17 @@ the active context and Tilt resource state from the same host shell first.
   The helper keeps one SSH session open with local loopback tunnels for
   `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
   endpoints are not reachable.
-- `ops/capture-prometheus-operator-phase-1-baseline.sh` is the repo-owned
-  Phase 1 evidence capture for the Prometheus Operator least-privilege plan.
-  It refreshes the chart render, records the rendered operator RBAC plus a
-  representative `kubectl auth can-i` matrix for
+- `ops/capture-prometheus-operator-baseline.sh` is the repo-owned upstream
+  comparison capture for the Prometheus Operator. It refreshes the chart
+  render without the repo post-renderer, records the rendered operator RBAC
+  plus a representative `kubectl auth can-i` matrix for
   `system:serviceaccount:monitoring:prometheus-stack-kube-prom-operator`, and
-  rewrites
-  `docs/research/prometheus-operator-least-privilege-phase-1-baseline.md`.
-  Run `smoketest/verify-monitoring-runtime.sh` separately after Tilt is up when
+  rewrites `docs/research/prometheus-operator-rbac-baseline.md`. Run
+  `smoketest/verify-monitoring-runtime.sh` separately after Tilt is up when
   you want the live runtime proof.
-- `ops/post-render-prometheus-stack.sh` is the repo-owned Phase 3 reduction
-  layer for `kube-prometheus-stack`. Local Tilt and production Helm installs
-  both run through it so the Prometheus Operator loses cluster-wide `secrets`,
+- `ops/post-render-prometheus-stack.sh` is the repo-owned RBAC reduction layer
+  for `kube-prometheus-stack`. Local Tilt and production Helm installs both run
+  through it so the Prometheus Operator loses cluster-wide `secrets`,
   `configmaps`, service mutation, and pod-delete authority outside
   `monitoring` while retaining the documented cluster-read exceptions for
   `namespaces`, `nodes`, `ingresses`, and `storageclasses`.

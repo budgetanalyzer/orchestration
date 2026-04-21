@@ -113,11 +113,11 @@ New Spring Boot services require a new `endpoints` entry in
 `kubernetes/monitoring/servicemonitor-spring-boot.yaml` with the correct
 servlet context path and a `relabelings` keep-regex for the service name.
 
-For Kiali, the repo's shared app workload convention is `app` plus
-`version: v1` on Deployment metadata and pod-template labels. That same base
-manifests path feeds both Tilt and the OCI production apps overlay, so Kiali
-can group the deployed app workloads consistently without a second
-production-only version-label scheme.
+For Kiali, the repo's shared workload convention is `app` plus `version: v1`
+on Deployment metadata and pod-template labels. The app Deployments in
+`default` follow that convention, and repo-managed observability workloads
+that Kiali groups directly, such as Jaeger in `monitoring`, should carry the
+same labels so Kiali does not report missing workload version information.
 
 #### Dashboard Label Contract
 

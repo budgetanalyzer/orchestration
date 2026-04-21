@@ -25,6 +25,8 @@ PROMETHEUS_VALUES_FILE="$(phase4_repo_path "kubernetes/monitoring/prometheus-sta
 readonly PROMETHEUS_VALUES_FILE
 PROMETHEUS_PRODUCTION_VALUES_FILE="$(phase4_repo_path "kubernetes/production/monitoring/prometheus-stack-values.override.yaml")"
 readonly PROMETHEUS_PRODUCTION_VALUES_FILE
+PROMETHEUS_POST_RENDERER="$(phase4_repo_path "scripts/ops/post-render-prometheus-stack.sh")"
+readonly PROMETHEUS_POST_RENDERER
 SPRING_BOOT_SERVICE_MONITOR_FILE="$(phase4_repo_path "kubernetes/monitoring/servicemonitor-spring-boot.yaml")"
 readonly SPRING_BOOT_SERVICE_MONITOR_FILE
 PRODUCTION_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
@@ -97,6 +99,7 @@ main() {
     require_file "${PROMETHEUS_VALUES_FILE}"
     require_file "${PROMETHEUS_PRODUCTION_VALUES_FILE}"
     require_file "${SPRING_BOOT_SERVICE_MONITOR_FILE}"
+    [[ -x "${PROMETHEUS_POST_RENDERER}" ]] || phase4_die "missing executable Prometheus post-renderer: ${PROMETHEUS_POST_RENDERER}"
     [[ -x "${PRODUCTION_VERIFIER}" ]] || phase4_die "missing executable production verifier: ${PRODUCTION_VERIFIER}"
 
     phase4_info "applying monitoring namespace"
@@ -118,6 +121,7 @@ main() {
         --version "${PHASE7_PROMETHEUS_STACK_CHART_VERSION}" \
         --values "${PROMETHEUS_VALUES_FILE}" \
         --values "${PROMETHEUS_PRODUCTION_VALUES_FILE}" \
+        --post-renderer "${PROMETHEUS_POST_RENDERER}" \
         --wait \
         --timeout "${HELM_WAIT_TIMEOUT}"
 

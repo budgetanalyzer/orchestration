@@ -61,13 +61,24 @@ scripts/
   `kubectl auth can-i` matrix for the operator service account, and refreshes
   the checked-in Phase 1 least-privilege baseline note under
   `docs/research/`.
+- `ops/post-render-prometheus-stack.sh` - Helm post-renderer for the
+  Prometheus stack that replaces the upstream broad Prometheus Operator
+  ClusterRole/ClusterRoleBinding with the repo-owned least-privilege split:
+  one narrow cluster-read binding plus namespaced monitoring/default roles.
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.
 - `smoketest/verify-monitoring-rendered-manifests.sh` - Renders the
   Prometheus stack and Kiali chart, then checks image pinning, service exposure,
-  Kiali auth/RBAC posture, Prometheus Operator namespace-scope flags, and
-  server dry-run compliance for rendered workload objects.
+  Kiali auth/RBAC posture, Prometheus Operator namespace-scope flags and
+  reduced RBAC shape, and server dry-run compliance for rendered workload
+  objects.
+- `smoketest/verify-prometheus-operator-least-privilege.sh` - Full live
+  Phase 4 verifier for the Prometheus Operator least-privilege plan. It reruns
+  the rendered-manifest proof, checks the live operator RBAC object set,
+  enforces the required positive and negative `kubectl auth can-i` matrix,
+  reruns the monitoring runtime proof, and captures Kiali triage artifacts
+  under `tmp/`.
 - `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
@@ -175,6 +186,12 @@ Operator, and kube-state-metrics scrapes plus the Kiali
 `monitoring/prometheus` health regression and the live Jaeger integration
 contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
 version-check failures in the current Kiali pod logs).
+`smoketest/verify-prometheus-operator-least-privilege.sh` is the focused
+Phase 4 least-privilege proof for the Prometheus Operator. It keeps a checked
+permission matrix under `tmp/prometheus-operator-least-privilege/`, requires
+the representative denials in `default`, `infrastructure`, and `istio-system`,
+and persists `triage-kiali-findings.sh --output-dir` artifacts under
+`tmp/kiali-triage/`.
 
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm
@@ -225,6 +242,12 @@ the active context and Tilt resource state from the same host shell first.
   `docs/research/prometheus-operator-least-privilege-phase-1-baseline.md`.
   Run `smoketest/verify-monitoring-runtime.sh` separately after Tilt is up when
   you want the live runtime proof.
+- `ops/post-render-prometheus-stack.sh` is the repo-owned Phase 3 reduction
+  layer for `kube-prometheus-stack`. Local Tilt and production Helm installs
+  both run through it so the Prometheus Operator loses cluster-wide `secrets`,
+  `configmaps`, service mutation, and pod-delete authority outside
+  `monitoring` while retaining the documented cluster-read exceptions for
+  `namespaces`, `nodes`, `ingresses`, and `storageclasses`.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

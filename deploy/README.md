@@ -435,6 +435,9 @@ kube-prometheus-stack is installed. The checked-in production override at
 `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
 assumes that release name so Grafana stays reachable through the existing
 `prometheus-stack-grafana` Service used by the loopback port-forward contract.
+Use `scripts/ops/post-render-prometheus-stack.sh` for every production Helm
+install or upgrade so the Prometheus Operator keeps the repo-owned
+least-privilege RBAC split instead of the chart's default broad cluster role.
 
 For Jaeger and Kiali, use the repo-owned observability render/apply path
 instead of one-off `kubectl` or `helm` commands:
@@ -540,7 +543,8 @@ certificate are all healthy.
 - Reapply the full internal monitoring stack with
   `./deploy/scripts/22-apply-production-monitoring.sh`; pass
   `--verify-runtime` when you want the script to also prove the Spring
-  Boot/Grafana dashboard inputs after the rollout.
+  Boot/Grafana dashboard inputs after the rollout. That path also keeps the
+  Prometheus Operator on the repo-owned RBAC post-renderer.
 - Production Grafana has no public `HTTPRoute` in the phase-6 route render.
   Access it through the shared loopback-bound operator contract:
   `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.

@@ -19,9 +19,15 @@ The chart-level least-privilege baseline also constrains the Prometheus
 Operator watch scope to the two namespaces that currently carry relevant
 monitoring CRs: `monitoring` and `default`. Prometheus, Alertmanager instance,
 Alertmanager config, and ThanosRuler instance discovery is pinned to
-`monitoring`. This narrows the operator's effective watch surface, but the
-upstream chart still renders broad cluster-scoped RBAC, so repo-owned RBAC
-reduction remains a separate follow-on step.
+`monitoring`. A repo-owned Helm post-renderer then replaces the upstream broad
+operator `ClusterRole`/`ClusterRoleBinding` pair with a narrower split:
+- one cluster-scoped read-only binding for `namespaces`, `nodes`,
+  `ingresses.networking.k8s.io`, and `storageclasses.storage.k8s.io`
+- one `Role`/`RoleBinding` in `monitoring` for Prometheus-owned writes and
+  namespaced config/Service reconciliation
+- one read-only `Role`/`RoleBinding` in `default` for the monitoring CRs the
+  operator consumes there, plus namespaced `events` writes for operator
+  diagnostics
 Jaeger and Kiali use the same internal-only contract: both run in
 `monitoring`, both stay `ClusterIP` only, and operator access uses
 loopback-bound `kubectl port-forward` instead of any public observability
@@ -522,7 +528,8 @@ watcher is needed.
 This script re-renders the pinned chart, verifies every image is
 digest-pinned, checks that no host-level node-exporter shapes remain, asserts
 the Prometheus Operator namespace watch flags stay narrowed to the documented
-`monitoring` and `default` scope, and runs `kubectl apply --dry-run=server`
+`monitoring` and `default` scope, asserts that the repo-owned reduced operator
+RBAC is still what Helm renders, and runs `kubectl apply --dry-run=server`
 against the current cluster.
 
 ## Helm Chart
@@ -530,9 +537,10 @@ against the current cluster.
 - **Chart**: `prometheus-community/kube-prometheus-stack`
 - **Version**: `83.4.0` (pinned)
 - **Values**: `kubernetes/monitoring/prometheus-stack-values.yaml`
+- **Post-renderer**: `scripts/ops/post-render-prometheus-stack.sh`
 
 The chart version is pinned. Any upgrade requires re-rendering and
-re-validating the hardening and image inventory.
+re-validating the hardening, operator RBAC reduction, and image inventory.
 
 ## Storage
 

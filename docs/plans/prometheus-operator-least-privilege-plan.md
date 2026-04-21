@@ -174,8 +174,9 @@ Status: implemented in
 with render-time assertions in
 [scripts/smoketest/verify-monitoring-rendered-manifests.sh](/workspace/orchestration/scripts/smoketest/verify-monitoring-rendered-manifests.sh:1).
 The operator now renders with an explicit watch scope of `monitoring,default`
-and `monitoring`-only instance namespace flags, but the chart still emits the
-same broad cluster-scoped RBAC, so Phase 3 remains required.
+and `monitoring`-only instance namespace flags. The chart still emitted the
+same broad cluster-scoped RBAC after that change, which is why the Phase 3
+repo-owned post-render reduction below was added.
 
 ### Work
 
@@ -206,6 +207,13 @@ This phase is expected to help, but not necessarily to finish the job.
 Upstream charts frequently keep broad `ClusterRole` templates even after namespace filters are set.
 
 ## Phase 3: Repo-Owned RBAC Reduction
+
+Status: implemented with
+[scripts/ops/post-render-prometheus-stack.sh](/workspace/orchestration/scripts/ops/post-render-prometheus-stack.sh:1),
+local/prod Helm wiring in [Tiltfile](/workspace/orchestration/Tiltfile:868) and
+[deploy/scripts/22-apply-production-monitoring.sh](/workspace/orchestration/deploy/scripts/22-apply-production-monitoring.sh:1),
+and render-time assertions in
+[scripts/smoketest/verify-monitoring-rendered-manifests.sh](/workspace/orchestration/scripts/smoketest/verify-monitoring-rendered-manifests.sh:1).
 
 ### Work
 
@@ -252,6 +260,14 @@ Every retained cluster-scoped rule needs one of:
 - a documented reconciliation path that cannot be expressed namespaced
 
 ## Phase 4: Verification And Negative Proofs
+
+Status: implemented with
+[scripts/smoketest/verify-prometheus-operator-least-privilege.sh](/workspace/orchestration/scripts/smoketest/verify-prometheus-operator-least-privilege.sh:1),
+which reruns the rendered-manifest proof, checks the live RBAC object set,
+enforces the required positive and negative `kubectl auth can-i` matrix,
+reruns [scripts/smoketest/verify-monitoring-runtime.sh](/workspace/orchestration/scripts/smoketest/verify-monitoring-runtime.sh:1),
+and persists [scripts/ops/triage-kiali-findings.sh](/workspace/orchestration/scripts/ops/triage-kiali-findings.sh:1)
+artifacts under `tmp/`.
 
 ### Work
 

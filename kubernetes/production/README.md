@@ -146,6 +146,10 @@ The checked-in production monitoring overlay in this directory stays narrow:
 - the production Helm install must keep the release name `prometheus-stack`
   and layer the production override on top of
   `kubernetes/monitoring/prometheus-stack-values.yaml`
+- the production Helm install must also keep using
+  `scripts/ops/post-render-prometheus-stack.sh` so the Prometheus Operator
+  RBAC stays on the repo-owned least-privilege split instead of the chart's
+  upstream broad cluster role
 - reapply the full internal monitoring stack with
   `./deploy/scripts/22-apply-production-monitoring.sh`; use
   `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh or

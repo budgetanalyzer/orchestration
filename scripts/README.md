@@ -45,7 +45,10 @@ scripts/
   current Kiali API findings plus recent Kiali warnings, compares them to live
   Kubernetes namespace object counts, and classifies the obvious buckets such
   as runtime-absent workloads, missing backend services, tracing dependency
-  gaps, and likely low-signal waypoint warnings.
+  gaps, and likely low-signal waypoint warnings. Use
+  `--runtime-shape production` on OCI so the helper expects the production
+  frontend topology (`nginx-gateway` serves the bundle; no standalone
+  `budget-analyzer-web` Deployment).
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -192,8 +195,11 @@ the active context and Tilt resource state from the same host shell first.
   a temporary loopback-only Kiali port-forward when needed, authenticates with
   a short-lived `kubectl create token kiali` token, and prints a human-readable
   triage summary. It also compares the current Kiali findings against the
-  expected seven app deployments in `default`, so it can say explicitly when
-  cluster bring-up is the blocker and Kiali is just reporting missing runtime.
+  expected app deployments in `default`, so it can say explicitly when cluster
+  bring-up is the blocker and Kiali is just reporting missing runtime. Local
+  Tilt defaults to the seven-workload topology; OCI production should use
+  `--runtime-shape production` so the helper expects the six-workload topology
+  where `nginx-gateway` serves the frontend bundle.
   It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
   for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
   when you want the raw JSON and log artifacts for later review.

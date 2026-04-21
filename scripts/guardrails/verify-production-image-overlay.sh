@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_DIR="${REPO_DIR}/kubernetes/production/apps"
 INFRASTRUCTURE_OVERLAY_DIR="${REPO_DIR}/kubernetes/production/infrastructure"
+PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/production/istio/authorization-policies.yaml"
 PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
@@ -492,6 +493,28 @@ verify_infrastructure_overlay() {
         "rendered production infrastructure still mounts the old standalone redis-data claim"
 }
 
+verify_production_istio_authorization_policies() {
+    [[ -f "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" ]] || \
+        fail "production Istio AuthorizationPolicy baseline not found: ${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}"
+
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: transaction-service-policy' \
+        "production Istio AuthorizationPolicy baseline is missing transaction-service-policy"
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: currency-service-policy' \
+        "production Istio AuthorizationPolicy baseline is missing currency-service-policy"
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: permission-service-policy' \
+        "production Istio AuthorizationPolicy baseline is missing permission-service-policy"
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: nginx-gateway-policy' \
+        "production Istio AuthorizationPolicy baseline is missing nginx-gateway-policy"
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: ext-authz-policy' \
+        "production Istio AuthorizationPolicy baseline is missing ext-authz-policy"
+    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: session-gateway-policy' \
+        "production Istio AuthorizationPolicy baseline is missing session-gateway-policy"
+    assert_not_contains "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name:[[:space:]]*budget-analyzer-web-policy([[:space:]]|$)' \
+        "production Istio AuthorizationPolicy baseline still includes budget-analyzer-web-policy"
+    assert_not_contains "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'app:[[:space:]]*budget-analyzer-web([[:space:]]|$)' \
+        "production Istio AuthorizationPolicy baseline still targets a standalone budget-analyzer-web workload"
+}
+
 render_phase6_manifests() {
     create_temp_instance_env
     PHASE6_RENDER_DIR="${TEMP_DIR}/phase-6"
@@ -631,6 +654,7 @@ main() {
     verify_phase6_render_outputs
     verify_phase7_observability_render_outputs
     verify_infrastructure_overlay
+    verify_production_istio_authorization_policies
 
     printf 'Production verification passed: %s, %s, %s, %s\n' \
         "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${PHASE7_OBSERVABILITY_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"

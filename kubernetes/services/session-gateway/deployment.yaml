@@ -5,6 +5,7 @@ metadata:
   namespace: default
   labels:
     app: session-gateway
+    version: v1
     app.kubernetes.io/framework: spring-boot
 spec:
   replicas: 1
@@ -15,6 +16,7 @@ spec:
     metadata:
       labels:
         app: session-gateway
+        version: v1
         app.kubernetes.io/framework: spring-boot
     spec:
       automountServiceAccountToken: false

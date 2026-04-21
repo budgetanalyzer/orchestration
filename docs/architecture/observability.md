@@ -80,6 +80,12 @@ New Spring Boot services require a new `endpoints` entry in
 `kubernetes/monitoring/servicemonitor-spring-boot.yaml` with the correct
 servlet context path and a `relabelings` keep-regex for the service name.
 
+For Kiali, the repo's shared app workload convention is `app` plus
+`version: v1` on Deployment metadata and pod-template labels. That same base
+manifests path feeds both Tilt and the OCI production apps overlay, so Kiali
+can group the deployed app workloads consistently without a second
+production-only version-label scheme.
+
 #### Dashboard Label Contract
 
 The JVM (Micrometer) and Spring Boot 3.x dashboards select a workload via
@@ -203,17 +209,22 @@ for the full evaluation.
 **Kiali shows many warnings or errors and it is unclear what is real:**
 1. Confirm the app stack is actually up: `kubectl get deploy -n default` and,
    after `tilt up`, `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh`
-2. Run `./scripts/ops/triage-kiali-findings.sh`
+2. Run `./scripts/ops/triage-kiali-findings.sh` locally, or
+   `./scripts/ops/triage-kiali-findings.sh --runtime-shape production` on OCI
 3. Treat `default` namespace findings as runtime-state findings first, not as
    Kiali bugs, if the namespace currently has no pods, no app services, or only
    the default service account
-4. Treat unhealthy external integrations from Kiali's `Istio Status` page,
+4. On OCI, remember that `nginx-gateway` serves the frontend bundle. A missing
+   standalone `budget-analyzer-web` Deployment is normal there, while
+   `AuthorizationPolicy/default/budget-analyzer-web-policy` is stale drift and
+   should be removed from the production baseline.
+5. Treat unhealthy external integrations from Kiali's `Istio Status` page,
    such as tracing `Unreachable`, as real dependency gaps until the backing
    service exists and is reachable
-5. Treat only the documented expected-noise warnings as ignorable. See
+6. Treat only the documented expected-noise warnings as ignorable. See
    [Kiali Expected Warnings](../runbooks/kiali-expected-warnings.md) for the
    current allowlist and rationale.
-6. Persist the raw JSON and log snapshot with
+7. Persist the raw JSON and log snapshot with
    `./scripts/ops/triage-kiali-findings.sh --output-dir tmp/kiali-triage`
    when you want to walk the findings one by one or compare before and after a
    cluster change

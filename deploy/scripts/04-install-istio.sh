@@ -11,13 +11,19 @@ source "${SCRIPT_DIR}/lib/common.sh"
 RENDERED_OUTPUT_DIR="$(phase4_render_output_dir)"
 RENDERED_INGRESS_CONFIG="${RENDERED_OUTPUT_DIR}/ingress-gateway-config.yaml"
 RENDERED_GATEWAY="${RENDERED_OUTPUT_DIR}/istio-gateway.yaml"
+PEER_AUTHENTICATION_FILE="$(phase4_repo_path "kubernetes/istio/peer-authentication.yaml")"
+PRODUCTION_AUTHORIZATION_POLICIES_FILE="$(phase4_repo_path "kubernetes/production/istio/authorization-policies.yaml")"
 readonly RENDERED_OUTPUT_DIR
 readonly RENDERED_INGRESS_CONFIG
 readonly RENDERED_GATEWAY
+readonly PEER_AUTHENTICATION_FILE
+readonly PRODUCTION_AUTHORIZATION_POLICIES_FILE
 
 require_rendered_manifests() {
     [[ -f "${RENDERED_INGRESS_CONFIG}" ]] || phase4_die "missing ${RENDERED_INGRESS_CONFIG}; run deploy/scripts/03-render-phase-4-istio-manifests.sh first"
     [[ -f "${RENDERED_GATEWAY}" ]] || phase4_die "missing ${RENDERED_GATEWAY}; run deploy/scripts/03-render-phase-4-istio-manifests.sh first"
+    [[ -f "${PEER_AUTHENTICATION_FILE}" ]] || phase4_die "missing ${PEER_AUTHENTICATION_FILE}"
+    [[ -f "${PRODUCTION_AUTHORIZATION_POLICIES_FILE}" ]] || phase4_die "missing ${PRODUCTION_AUTHORIZATION_POLICIES_FILE}"
 }
 
 phase4_load_instance_env
@@ -74,7 +80,7 @@ kubectl wait \
 kubectl rollout status deployment/istio-ingress-gateway-istio -n "${PHASE4_INGRESS_GATEWAY_NAMESPACE}" --timeout=180s
 
 phase4_info "applying mesh security policies"
-kubectl apply -f "$(phase4_repo_path "kubernetes/istio/peer-authentication.yaml")" >/dev/null
-kubectl apply -f "$(phase4_repo_path "kubernetes/istio/authorization-policies.yaml")" >/dev/null
+kubectl apply -f "${PEER_AUTHENTICATION_FILE}" >/dev/null
+kubectl apply -f "${PRODUCTION_AUTHORIZATION_POLICIES_FILE}" >/dev/null
 
 phase4_info "Istio mesh and ingress path are installed"

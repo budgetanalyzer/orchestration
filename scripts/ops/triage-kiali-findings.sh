@@ -12,7 +12,8 @@ WAIT_TIMEOUT_SECONDS=30
 POLL_INTERVAL_SECONDS=1
 LOG_TAIL_LINES=200
 EXPECTED_WARNINGS_DOC="docs/runbooks/kiali-expected-warnings.md"
-EXPECTED_APP_DEPLOYMENTS=(
+RUNTIME_SHAPE="local"
+LOCAL_EXPECTED_APP_DEPLOYMENTS=(
     budget-analyzer-web
     currency-service
     ext-authz
@@ -21,6 +22,15 @@ EXPECTED_APP_DEPLOYMENTS=(
     session-gateway
     transaction-service
 )
+PRODUCTION_EXPECTED_APP_DEPLOYMENTS=(
+    currency-service
+    ext-authz
+    nginx-gateway
+    permission-service
+    session-gateway
+    transaction-service
+)
+declare -a EXPECTED_APP_DEPLOYMENTS=()
 
 declare -a SELECTED_NAMESPACES=()
 PORT_FORWARD_PID=""
@@ -38,6 +48,9 @@ and classifies the obvious "real issue" vs "runtime absent" vs "likely
 low-signal" cases.
 
 Options:
+  --runtime-shape SHAPE     Expected app topology for default namespace.
+                           Supported values: local, production.
+                           Default: local
   --namespace NAME         Limit the report to a namespace Kiali can access.
                            Repeat to select multiple namespaces. Default: all
                            namespaces returned by Kiali.
@@ -53,6 +66,7 @@ Options:
 
 Examples:
   ./scripts/ops/triage-kiali-findings.sh
+  ./scripts/ops/triage-kiali-findings.sh --runtime-shape production
   ./scripts/ops/triage-kiali-findings.sh --namespace default
   ./scripts/ops/triage-kiali-findings.sh --output-dir tmp/kiali-triage
 EOF
@@ -105,8 +119,33 @@ append_namespace() {
     SELECTED_NAMESPACES+=("${namespace}")
 }
 
+set_runtime_shape() {
+    local shape="$1"
+
+    case "${shape}" in
+        local)
+            RUNTIME_SHAPE="local"
+            EXPECTED_APP_DEPLOYMENTS=("${LOCAL_EXPECTED_APP_DEPLOYMENTS[@]}")
+            ;;
+        production)
+            RUNTIME_SHAPE="production"
+            EXPECTED_APP_DEPLOYMENTS=("${PRODUCTION_EXPECTED_APP_DEPLOYMENTS[@]}")
+            ;;
+        *)
+            printf 'ERROR: unsupported --runtime-shape value: %s (expected local or production)\n' "${shape}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+set_runtime_shape "${RUNTIME_SHAPE}"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --runtime-shape)
+            set_runtime_shape "${2:-}"
+            shift 2
+            ;;
         --namespace)
             append_namespace "${2:-}"
             shift 2
@@ -323,6 +362,7 @@ namespace_is_ambient() {
 
 classify_finding() {
     local code="$1"
+    local message="$2"
     local pods="$3"
     local services="$4"
     local service_accounts="$5"
@@ -330,7 +370,11 @@ classify_finding() {
 
     case "${code}" in
         KIA0004)
-            if [[ "${pods}" == "0" ]]; then
+            if [[ "${RUNTIME_SHAPE}" == "production" && "${message}" == *"budget-analyzer-web-policy"* ]]; then
+                printf 'review: stale OCI drift; production should not include budget-analyzer-web-policy'
+            elif [[ "${RUNTIME_SHAPE}" == "production" && "${message}" == *"app=budget-analyzer-web"* ]]; then
+                printf 'review: stale OCI drift; production should not target a standalone budget-analyzer-web workload'
+            elif [[ "${pods}" == "0" ]]; then
                 printf 'likely runtime-absent: namespace has no running pods'
             else
                 printf 'review: selector does not match a current workload'
@@ -366,6 +410,7 @@ classify_finding() {
 printf 'Kiali triage snapshot\n'
 printf 'Generated at: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 printf 'Kiali URL: %s\n' "${kiali_url}/"
+printf 'Runtime shape: %s\n' "${RUNTIME_SHAPE}"
 printf 'Expected warnings reference: %s\n' "${EXPECTED_WARNINGS_DOC}"
 
 app_deployments_present="$(expected_app_deployment_present_count)"
@@ -373,8 +418,14 @@ app_deployments_total="$(expected_app_deployment_total)"
 missing_app_deployments="$(missing_expected_app_deployments || true)"
 
 printf '\n== App runtime preflight ==\n'
-printf 'Expected default deployments present: %s/%s\n' \
+printf 'Expected default deployments present for %s shape: %s/%s\n' \
+    "${RUNTIME_SHAPE}" \
     "${app_deployments_present}" "${app_deployments_total}"
+
+if [[ "${RUNTIME_SHAPE}" == "production" ]]; then
+    printf '%s\n' \
+        'Production shape note: nginx-gateway serves the frontend bundle, so a standalone budget-analyzer-web Deployment is intentionally absent.'
+fi
 
 if [[ -n "${missing_app_deployments}" ]]; then
     printf 'Missing default deployments:\n'
@@ -386,7 +437,7 @@ fi
 
 if [[ "${app_deployments_present}" == "0" ]]; then
     printf '%s\n' \
-        "App runtime is not up. Treat Kiali findings for \`default\` as secondary symptoms until the seven app deployments exist."
+        "App runtime is not up. Treat Kiali findings for \`default\` as secondary symptoms until the expected ${RUNTIME_SHAPE} workloads exist."
 fi
 
 printf '\n== Global status ==\n'
@@ -494,7 +545,7 @@ for namespace in "${SELECTED_NAMESPACES[@]}"; do
     fi
 
     while IFS=$'\t' read -r severity code count message; do
-        classification="$(classify_finding "${code}" "${namespace}" "${pods}" "${services}" "${service_accounts}" "${is_ambient}")"
+        classification="$(classify_finding "${code}" "${message}" "${pods}" "${services}" "${service_accounts}" "${is_ambient}")"
         printf -- '- %s %s x%s: %s\n' "${severity}" "${code}" "${count}" "${message}"
         printf '  classification: %s\n' "${classification}"
     done <<< "${validation_lines}"
@@ -502,7 +553,7 @@ done
 
 printf '\n== Suggested interpretation ==\n'
 if [[ "${app_deployments_present}" == "0" ]]; then
-    printf '%s\n' "- The main blocker is cluster bring-up: none of the seven expected app deployments exist in \`${DEFAULT_NAMESPACE}\`."
+    printf '%s\n' "- The main blocker is cluster bring-up: none of the expected ${RUNTIME_SHAPE} app deployments exist in \`${DEFAULT_NAMESPACE}\`."
     printf '%s\n' "- Do not spend time classifying most \`${DEFAULT_NAMESPACE}\` Kiali validations until the app stack is up; they mostly reflect missing runtime."
 elif [[ "$(pod_count "${DEFAULT_NAMESPACE}")" == "0" ]]; then
     printf '%s\n' "- \`${DEFAULT_NAMESPACE}\` has deployment objects missing pods, so Kiali findings there still mostly reflect failed bring-up rather than Kiali integration bugs."

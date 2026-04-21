@@ -112,6 +112,12 @@ The preserved public route contract is:
 This directory keeps the production hostname cutover in reviewed, committed
 artifacts:
 
+- `istio/authorization-policies.yaml` is the OCI production
+  `AuthorizationPolicy` baseline. It intentionally omits
+  `budget-analyzer-web-policy` because production serves the frontend bundle
+  from `nginx-gateway` instead of a standalone `budget-analyzer-web`
+  Deployment.
+
 - `gateway-routes/` renders the production `HTTPRoute` objects with
   `demo.budgetanalyzer.org`, while leaving the shared localhost dev manifests
   untouched for Tilt
@@ -182,6 +188,13 @@ route render:
 ```bash
 kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found
 ```
+
+The same "delete stale drift once, then rely on the repo-owned baseline"
+principle also applies to Istio authz. If an older OCI cluster still has
+`AuthorizationPolicy/default/budget-analyzer-web-policy`, delete it after
+reconciling with `./deploy/scripts/04-install-istio.sh`; that script now
+reapplies the production-specific authz baseline that excludes the
+frontend-only policy.
 
 ## Production Infrastructure Input
 

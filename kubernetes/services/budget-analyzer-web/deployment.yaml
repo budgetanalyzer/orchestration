@@ -5,6 +5,7 @@ metadata:
   namespace: default
   labels:
     app: budget-analyzer-web
+    version: v1
 spec:
   replicas: 1
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: budget-analyzer-web
+        version: v1
     spec:
       automountServiceAccountToken: false
       serviceAccountName: budget-analyzer-web

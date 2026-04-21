@@ -56,6 +56,11 @@ scripts/
   canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
   matching `ops/start-observability-port-forwards.sh` process to already be
   running on the OCI host.
+- `ops/capture-prometheus-operator-phase-1-baseline.sh` - Renders the current
+  Prometheus stack, extracts the operator RBAC objects, builds a representative
+  `kubectl auth can-i` matrix for the operator service account, and refreshes
+  the checked-in Phase 1 least-privilege baseline note under
+  `docs/research/`.
 - `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
   for the Jaeger OpenTelemetry extension provider and mesh-default Istio
   Telemetry resource.
@@ -211,6 +216,15 @@ the active context and Tilt resource state from the same host shell first.
   The helper keeps one SSH session open with local loopback tunnels for
   `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
   endpoints are not reachable.
+- `ops/capture-prometheus-operator-phase-1-baseline.sh` is the repo-owned
+  Phase 1 evidence capture for the Prometheus Operator least-privilege plan.
+  It refreshes the chart render, records the rendered operator RBAC plus a
+  representative `kubectl auth can-i` matrix for
+  `system:serviceaccount:monitoring:prometheus-stack-kube-prom-operator`, and
+  rewrites
+  `docs/research/prometheus-operator-least-privilege-phase-1-baseline.md`.
+  Run `smoketest/verify-monitoring-runtime.sh` separately after Tilt is up when
+  you want the live runtime proof.
 - `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing

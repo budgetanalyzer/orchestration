@@ -338,6 +338,17 @@ Validate the tracing control-plane wiring after `tilt up`:
 ./scripts/smoketest/verify-istio-tracing-config.sh
 ```
 
+The repo-owned runtime observability proof is:
+
+```bash
+./scripts/smoketest/verify-monitoring-runtime.sh
+```
+
+It verifies the four Spring Boot scrapes, the service-DNS-backed `istiod`,
+Grafana, Prometheus Operator, and kube-state-metrics scrapes, the Grafana
+dashboard metric/label inputs, and the Kiali `monitoring/prometheus` health
+regression.
+
 After Prometheus comes up, confirm the
 Spring Boot targets for `currency-service`, `transaction-service`,
 `permission-service`, and `session-gateway` are `UP`. Prometheus labels each

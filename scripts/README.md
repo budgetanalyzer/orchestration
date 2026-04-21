@@ -160,6 +160,12 @@ proving the current cluster:
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
+`smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for
+the current cluster. It keeps the existing Spring Boot dashboard-input checks
+and now also verifies the service-DNS-backed `istiod`, Grafana, Prometheus
+Operator, and kube-state-metrics scrapes plus the Kiali
+`monitoring/prometheus` health regression.
+
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm
 the active context and Tilt resource state from the same host shell first.

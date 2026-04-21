@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Runtime verification for Spring Boot metrics and Grafana dashboard inputs.
+# Runtime verification for Prometheus scrape health, dashboard inputs, and Kiali health.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 PROMETHEUS_NAMESPACE="monitoring"
 PROMETHEUS_SELECTOR='app.kubernetes.io/name=prometheus'
 PROMETHEUS_CONTAINER="prometheus"
 PROMETHEUS_URL="http://127.0.0.1:9090"
+KIALI_LOCAL_PORT=20001
 WAIT_TIMEOUT_SECONDS=120
 POLL_INTERVAL_SECONDS=5
 REQUEST_TIMEOUT_SECONDS=5
@@ -16,6 +20,13 @@ SPRING_APPS=(
     transaction-service
     currency-service
     permission-service
+)
+
+MONITORING_SCRAPE_TARGETS=(
+    istiod
+    prometheus-stack-grafana
+    prometheus-stack-kube-prom-operator
+    prometheus-stack-kube-state-metrics
 )
 
 declare -A SERVICE_PORTS=(
@@ -32,6 +43,27 @@ declare -A METRICS_PATHS=(
     [permission-service]=/permission-service/actuator/prometheus
 )
 
+declare -A MONITORING_TARGET_NAMESPACES=(
+    [istiod]=istio-system
+    [prometheus-stack-grafana]=monitoring
+    [prometheus-stack-kube-prom-operator]=monitoring
+    [prometheus-stack-kube-state-metrics]=monitoring
+)
+
+declare -A MONITORING_TARGET_HOSTS=(
+    [istiod]=istiod.istio-system.svc.cluster.local:15014
+    [prometheus-stack-grafana]=prometheus-stack-grafana.monitoring.svc.cluster.local:80
+    [prometheus-stack-kube-prom-operator]=prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080
+    [prometheus-stack-kube-state-metrics]=prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080
+)
+
+declare -A MONITORING_TARGET_PATHS=(
+    [istiod]=/metrics
+    [prometheus-stack-grafana]=/metrics
+    [prometheus-stack-kube-prom-operator]=/metrics
+    [prometheus-stack-kube-state-metrics]=/metrics
+)
+
 PASSED=0
 FAILED=0
 PROMETHEUS_POD=""
@@ -40,8 +72,10 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-monitoring-runtime.sh [options]
 
-Verifies that Prometheus is scraping the four Spring Boot services and that the
-JVM/Spring Boot Grafana dashboards have the labels and metrics they depend on.
+Verifies that Prometheus is scraping the four Spring Boot services, the
+service-DNS-backed monitoring/control-plane targets, and that Kiali no longer
+reports Prometheus health as Failure. It also checks the JVM/Spring Boot
+Grafana dashboard label and metric inputs.
 
 Options:
   --wait-timeout SECONDS   Max seconds to wait for scrape-dependent checks.
@@ -99,6 +133,19 @@ join_apps_regex() {
 join_apps_csv() {
     local IFS=","
     printf '%s' "${SPRING_APPS[*]}"
+}
+
+monitoring_target_specs() {
+    local target
+
+    for target in "${MONITORING_SCRAPE_TARGETS[@]}"; do
+        printf '%s|%s|%s|%s|%s\n' \
+            "${target}" \
+            "${MONITORING_TARGET_NAMESPACES[${target}]}" \
+            "${target}" \
+            "${MONITORING_TARGET_HOSTS[${target}]}" \
+            "${MONITORING_TARGET_PATHS[${target}]}"
+    done
 }
 
 require_command() {
@@ -160,6 +207,12 @@ promtool_label_values_json() {
         -c "${PROMETHEUS_CONTAINER}" -- \
         promtool query labels --format=json --match="${match_selector}" \
         "${PROMETHEUS_URL}" "${label_name}"
+}
+
+prometheus_active_targets_json() {
+    kubectl exec -n "${PROMETHEUS_NAMESPACE}" "${PROMETHEUS_POD}" \
+        -c "${PROMETHEUS_CONTAINER}" -- \
+        wget -qO- "${PROMETHEUS_URL}/api/v1/targets?state=active"
 }
 
 parse_required_app_values() {
@@ -243,9 +296,7 @@ if missing:
 print_failed_target_errors() {
     local targets_json
 
-    if ! targets_json=$(kubectl exec -n "${PROMETHEUS_NAMESPACE}" "${PROMETHEUS_POD}" \
-        -c "${PROMETHEUS_CONTAINER}" -- \
-        wget -qO- "${PROMETHEUS_URL}/api/v1/targets?state=active" 2>/dev/null); then
+    if ! targets_json=$(prometheus_active_targets_json 2>/dev/null); then
         printf '  Could not fetch Prometheus target details.\n' >&2
         return
     fi
@@ -284,6 +335,107 @@ missing = sorted(expected.difference(matched))
 for app in missing:
     print(f"  {app}: no active Prometheus target found")
 ' "$(join_apps_csv)" <<< "${targets_json}"
+}
+
+parse_required_monitoring_targets() {
+    python3 -c '
+import json
+import sys
+from urllib.parse import urlparse
+
+specs = []
+for raw in sys.argv[1:]:
+    name, namespace, service_name, expected_host, expected_path = raw.split("|", 4)
+    specs.append(
+        {
+            "name": name,
+            "namespace": namespace,
+            "service_name": service_name,
+            "expected_host": expected_host,
+            "expected_path": expected_path,
+        }
+    )
+
+try:
+    payload = json.load(sys.stdin)
+except json.JSONDecodeError as exc:
+    print(f"Could not parse Prometheus target JSON: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+targets = payload.get("data", {}).get("activeTargets", [])
+overall_ok = True
+
+for spec in specs:
+    matches = []
+
+    for target in targets:
+        labels = target.get("labels") or {}
+        discovered = target.get("discoveredLabels") or {}
+        namespaces = {
+            value
+            for value in (
+                labels.get("namespace"),
+                discovered.get("__meta_kubernetes_namespace"),
+            )
+            if value
+        }
+        service_names = {
+            value
+            for value in (
+                labels.get("service"),
+                labels.get("job"),
+                discovered.get("__meta_kubernetes_service_name"),
+            )
+            if value
+        }
+
+        if spec["namespace"] not in namespaces:
+            continue
+        if spec["service_name"] not in service_names:
+            continue
+        matches.append(target)
+
+    if not matches:
+        overall_ok = False
+        print(
+            "{}: missing active target for {}/{}".format(
+                spec["name"],
+                spec["namespace"],
+                spec["service_name"],
+            )
+        )
+        continue
+
+    target_ok = True
+    for target in matches:
+        scrape_url = target.get("scrapeUrl") or ""
+        parsed = urlparse(scrape_url)
+        actual_host = parsed.netloc or "(missing host)"
+        actual_path = parsed.path or "/"
+        health = target.get("health") or "unknown"
+        last_error = target.get("lastError") or "(no lastError reported)"
+        status = "OK"
+
+        if actual_host != spec["expected_host"]:
+            status = f"unexpected host {actual_host}"
+            target_ok = False
+        elif actual_path != spec["expected_path"]:
+            status = f"unexpected path {actual_path}"
+            target_ok = False
+        elif health != "up":
+            status = f"health={health}"
+            target_ok = False
+
+        print("{}: {} {} [{}]".format(spec["name"], health, scrape_url, status))
+        if health != "up":
+            print(f"  lastError: {last_error}")
+
+    if not target_ok:
+        overall_ok = False
+
+if not overall_ok:
+    sys.exit(1)
+' "$@"
 }
 
 run_query_check_once() {
@@ -358,6 +510,133 @@ verify_dashboard_labels() {
     return 1
 }
 
+wait_for_monitoring_targets_check() {
+    local description="$1"
+    local deadline output
+    local -a target_specs=()
+
+    mapfile -t target_specs < <(monitoring_target_specs)
+
+    deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+    while (( SECONDS <= deadline )); do
+        if output=$(
+            prometheus_active_targets_json 2>/dev/null \
+                | parse_required_monitoring_targets "${target_specs[@]}" 2>&1
+        ); then
+            pass "${description}"
+            printf '%s\n' "${output}" | sed 's/^/    /'
+            return 0
+        fi
+
+        if (( SECONDS >= deadline )); then
+            break
+        fi
+        sleep "${POLL_INTERVAL_SECONDS}"
+    done
+
+    fail_check "${description}"
+    printf '    Timed out after %ss waiting for Prometheus active targets to match the service-DNS contract.\n' \
+        "${WAIT_TIMEOUT_SECONDS}" >&2
+    if [[ -n "${output:-}" ]]; then
+        printf '%s\n' "${output}" | sed 's/^/    /' >&2
+    fi
+    return 1
+}
+
+parse_kiali_prometheus_health() {
+    local clusters_health_file="$1"
+
+    python3 - "${clusters_health_file}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+def iter_matches(section_name):
+    section = payload.get(section_name, {}).get("monitoring", {})
+    if not isinstance(section, dict):
+        return []
+    matches = []
+    for name, data in section.items():
+        if name not in {"prometheus", "prometheus-stack-kube-prom-prometheus"}:
+            continue
+        status = ((data or {}).get("status") or {}).get("status", "Unknown")
+        error_ratio = ((data or {}).get("status") or {}).get("errorRatio", "n/a")
+        request_rate = ((data or {}).get("status") or {}).get("totalRequestRate", "n/a")
+        matches.append((section_name, name, status, error_ratio, request_rate))
+    return matches
+
+matches = iter_matches("namespaceWorkloadHealth") + iter_matches("namespaceAppHealth")
+
+if not matches:
+    print("No Kiali monitoring health entry for Prometheus was returned.", file=sys.stderr)
+    sys.exit(1)
+
+overall_ok = True
+exact_prometheus_seen = False
+
+for section_name, name, status, error_ratio, request_rate in matches:
+    if name == "prometheus":
+        exact_prometheus_seen = True
+    print(
+        f"{section_name}/monitoring/{name}: status={status}, "
+        f"errorRatio={error_ratio}, requestRate={request_rate}"
+    )
+    if name == "prometheus" and status == "Failure":
+        overall_ok = False
+
+if not exact_prometheus_seen:
+    if any(status == "Failure" for _, _, status, _, _ in matches):
+        overall_ok = False
+
+if not overall_ok:
+    sys.exit(1)
+PY
+}
+
+wait_for_kiali_prometheus_health() {
+    local description="$1"
+    local deadline output
+    local tmp_dir triage_log
+
+    deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+    while (( SECONDS <= deadline )); do
+        tmp_dir="$(mktemp -d)"
+        triage_log="${tmp_dir}/triage.log"
+
+        if "${REPO_DIR}/scripts/ops/triage-kiali-findings.sh" \
+            --namespace monitoring \
+            --kiali-port "${KIALI_LOCAL_PORT}" \
+            --wait-timeout "${WAIT_TIMEOUT_SECONDS}" \
+            --poll-interval "${POLL_INTERVAL_SECONDS}" \
+            --log-tail-lines 50 \
+            --output-dir "${tmp_dir}" >"${triage_log}" 2>&1 \
+            && output=$(parse_kiali_prometheus_health "${tmp_dir}/clusters-health.json" 2>&1); then
+            pass "${description}"
+            printf '%s\n' "${output}" | sed 's/^/    /'
+            rm -rf "${tmp_dir}"
+            return 0
+        fi
+
+        output="$(sed -n '1,160p' "${triage_log}" 2>/dev/null || true)"
+        rm -rf "${tmp_dir}"
+
+        if (( SECONDS >= deadline )); then
+            break
+        fi
+        sleep "${POLL_INTERVAL_SECONDS}"
+    done
+
+    fail_check "${description}"
+    printf '    Timed out after %ss waiting for Kiali to stop reporting Prometheus health as Failure.\n' \
+        "${WAIT_TIMEOUT_SECONDS}" >&2
+    if [[ -n "${output:-}" ]]; then
+        printf '%s\n' "${output}" | sed 's/^/    /' >&2
+    fi
+    return 1
+}
+
 generate_metrics_traffic() {
     local app port path url
     local response status
@@ -416,6 +695,8 @@ main() {
     require_positive_integer "--wait-timeout" "${WAIT_TIMEOUT_SECONDS}"
     require_positive_integer "--poll-interval" "${POLL_INTERVAL_SECONDS}"
     require_command kubectl
+    require_command curl
+    require_command jq
     require_command python3
     require_cluster_access
     discover_prometheus_pod
@@ -440,6 +721,9 @@ main() {
         print_failed_target_errors
     fi
 
+    wait_for_monitoring_targets_check \
+        "Monitoring and control-plane scrape targets are up via Service DNS" || true
+
     section "Metrics"
     if (( targets_ok == 1 )); then
         wait_for_query_check "JVM metrics exist for all Spring Boot services" "${jvm_query}" 1 || true
@@ -451,6 +735,10 @@ main() {
 
     section "Dashboard Contract"
     verify_dashboard_labels || true
+
+    section "Kiali Health"
+    wait_for_kiali_prometheus_health \
+        "Kiali no longer reports monitoring/prometheus as Failure" || true
 
     printf '\nMonitoring runtime verification complete: %s passed, %s failed.\n' "${PASSED}" "${FAILED}"
     if (( FAILED > 0 )); then

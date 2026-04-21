@@ -101,9 +101,11 @@ Examples that still require investigation:
 - unhealthy external integrations in Kiali's `Istio Status`
 - `monitoring/prometheus` health failures
 - missing `jaeger-query` service when tracing is enabled
-- missing workload version information for the tracked app workloads in
-  `default`. The shared Deployment manifests are expected to stamp
-  `version: v1` on workload metadata and pod templates for Kiali grouping.
+- missing workload version information for tracked workloads. The shared app
+  Deployment manifests in `default` and repo-managed observability workloads
+  that Kiali groups directly, such as Jaeger in `monitoring`, are expected to
+  stamp `version: v1` on workload metadata and pod templates for Kiali
+  grouping.
 - `KIA0004` for `AuthorizationPolicy/default/budget-analyzer-web-policy` on
   OCI production. That policy is stale drift there because production serves
   the frontend from `nginx-gateway` instead of a standalone

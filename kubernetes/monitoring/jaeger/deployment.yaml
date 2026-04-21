@@ -4,8 +4,11 @@ metadata:
   name: jaeger
   namespace: monitoring
   labels:
+    app: jaeger
+    version: v1
     app.kubernetes.io/name: jaeger
     app.kubernetes.io/component: tracing
+    app.kubernetes.io/version: 2.17.0
 spec:
   replicas: 1
   strategy:
@@ -17,8 +20,11 @@ spec:
   template:
     metadata:
       labels:
+        app: jaeger
+        version: v1
         app.kubernetes.io/name: jaeger
         app.kubernetes.io/component: tracing
+        app.kubernetes.io/version: 2.17.0
     spec:
       automountServiceAccountToken: false
       securityContext:

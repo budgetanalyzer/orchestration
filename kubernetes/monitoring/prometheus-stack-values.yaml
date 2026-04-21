@@ -272,6 +272,18 @@ prometheus:
 
 prometheusOperator:
   automountServiceAccountToken: false
+  namespaces:
+    releaseNamespace: true
+    additional:
+      - default
+  alertmanagerInstanceNamespaces:
+    - monitoring
+  alertmanagerConfigNamespaces:
+    - monitoring
+  prometheusInstanceNamespaces:
+    - monitoring
+  thanosRulerInstanceNamespaces:
+    - monitoring
   serviceMonitor:
     relabelings:
       - targetLabel: __address__

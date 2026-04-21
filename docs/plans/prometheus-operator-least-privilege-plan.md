@@ -169,6 +169,14 @@ Without a before-state matrix, "reduced privilege" turns into guessing.
 
 ## Phase 2: Chart-Level Namespace Scoping
 
+Status: implemented in
+[kubernetes/monitoring/prometheus-stack-values.yaml](/workspace/orchestration/kubernetes/monitoring/prometheus-stack-values.yaml:273)
+with render-time assertions in
+[scripts/smoketest/verify-monitoring-rendered-manifests.sh](/workspace/orchestration/scripts/smoketest/verify-monitoring-rendered-manifests.sh:1).
+The operator now renders with an explicit watch scope of `monitoring,default`
+and `monitoring`-only instance namespace flags, but the chart still emits the
+same broad cluster-scoped RBAC, so Phase 3 remains required.
+
 ### Work
 
 Update the chart values to constrain the operator's watch scope first.

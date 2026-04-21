@@ -134,6 +134,27 @@ if search_file '^kind:[[:space:]]*DaemonSet$' "${render_file}" >/dev/null; then
     fail "Rendered manifests still contain a DaemonSet; node-exporter should be disabled."
 fi
 
+log_step "Checking rendered Prometheus Operator namespace scoping"
+if ! search_file '^[[:space:]]*-[[:space:]]*--namespaces=monitoring,default$' "${render_file}" >/dev/null; then
+    fail "Rendered Prometheus Operator does not scope watched namespaces to monitoring,default."
+fi
+
+if ! search_file '^[[:space:]]*-[[:space:]]*--alertmanager-instance-namespaces=monitoring$' "${render_file}" >/dev/null; then
+    fail "Rendered Prometheus Operator does not scope Alertmanager instance namespaces to monitoring."
+fi
+
+if ! search_file '^[[:space:]]*-[[:space:]]*--alertmanager-config-namespaces=monitoring$' "${render_file}" >/dev/null; then
+    fail "Rendered Prometheus Operator does not scope Alertmanager config namespaces to monitoring."
+fi
+
+if ! search_file '^[[:space:]]*-[[:space:]]*--prometheus-instance-namespaces=monitoring$' "${render_file}" >/dev/null; then
+    fail "Rendered Prometheus Operator does not scope Prometheus instance namespaces to monitoring."
+fi
+
+if ! search_file '^[[:space:]]*-[[:space:]]*--thanos-ruler-instance-namespaces=monitoring$' "${render_file}" >/dev/null; then
+    fail "Rendered Prometheus Operator does not scope ThanosRuler instance namespaces to monitoring."
+fi
+
 log_step "Checking checked-in Jaeger contract"
 if [[ "$(grep -Ec '^[[:space:]]*type:[[:space:]]*ClusterIP([[:space:]]|$)' "${JAEGER_SERVICES_FILE}")" -ne 2 ]]; then
     fail "Checked-in Jaeger services do not remain ClusterIP-only."

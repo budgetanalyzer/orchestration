@@ -33,6 +33,28 @@ Jaeger and Kiali use the same internal-only contract: both run in
 loopback-bound `kubectl port-forward` instead of any public observability
 hostname.
 
+## Prometheus Operator Privilege Model
+
+The Prometheus Operator least-privilege model is intentionally explicit in
+this repo. The approved namespace set is:
+
+| Scope | Effective access | Why it exists |
+|-------|------------------|---------------|
+| `monitoring` | Reads monitoring CRs and mutates only operator-owned resources (`StatefulSet`, generated `Secret`/`ConfigMap`, `Service`, `Endpoints`, `EndpointSlice`, status/finalizers, and diagnostic `Event` writes) | The operator reconciles the Prometheus stack that it owns in `monitoring`. |
+| `default` | Read-only access to `ServiceMonitor`, `PodMonitor`, `Probe`, `PrometheusRule`, and `ScrapeConfig`, plus diagnostic `Event` writes | The app-facing monitoring CRs consumed by the operator currently live in `default`. |
+| All other namespaces | No watch scope and no namespaced RBAC | This repo does not place operator-consumed monitoring CRs anywhere else. |
+
+The operator no longer keeps any cluster-wide authority for `secrets`,
+`configmaps`, `services`, `endpoints`, `endpointslices`, or `pods`. The only
+remaining cluster-scoped permissions are read-only exceptions:
+
+| Resource | Verbs | Justification |
+|----------|-------|---------------|
+| `namespaces` | `get`, `list`, `watch` | The operator still needs namespace discovery to reconcile the explicitly approved watch set (`monitoring`, `default`) and reject anything outside it. |
+| `nodes` | `list`, `watch` | The pinned chart still renders the operator with kubelet endpoint discovery flags (`--kubelet-service=...`, `--kubelet-endpoints=true`), so node metadata remains an upstream reconciliation input under chart `83.4.0`. |
+| `ingresses.networking.k8s.io` | `get`, `list`, `watch` | The pinned operator binary still keeps ingress objects in its cluster-scoped reconciliation inputs for probe-related discovery paths. |
+| `storageclasses.storage.k8s.io` | `get` | The repo keeps Prometheus on a PVC-backed `StatefulSet`, so the operator retains read-only StorageClass lookup for storage reconciliation. |
+
 ## Components
 
 | Component | Purpose | Namespace |
@@ -527,10 +549,13 @@ watcher is needed.
 
 This script re-renders the pinned chart, verifies every image is
 digest-pinned, checks that no host-level node-exporter shapes remain, asserts
-the Prometheus Operator namespace watch flags stay narrowed to the documented
-`monitoring` and `default` scope, asserts that the repo-owned reduced operator
-RBAC is still what Helm renders, and runs `kubectl apply --dry-run=server`
-against the current cluster.
+the Prometheus Operator namespace-scope args stay exactly on the documented
+`monitoring` and `default` model, asserts that the repo-owned reduced operator
+RBAC still renders to the approved effective permission set, and runs
+`kubectl apply --dry-run=server` against the current cluster. That render-time
+guardrail is what fails fast on any regression back toward cluster-wide secret
+access, namespaced mutation outside `monitoring`, or unexpected watched
+namespaces after a chart upgrade.
 
 ## Helm Chart
 

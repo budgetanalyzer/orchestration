@@ -70,9 +70,9 @@ scripts/
   Telemetry resource.
 - `smoketest/verify-monitoring-rendered-manifests.sh` - Renders the
   Prometheus stack and Kiali chart, then checks image pinning, service exposure,
-  Kiali auth/RBAC posture, Prometheus Operator namespace-scope flags and
-  reduced RBAC shape, and server dry-run compliance for rendered workload
-  objects.
+  Kiali auth/RBAC posture, the exact approved Prometheus Operator
+  namespace-scope args and effective RBAC model, and server dry-run compliance
+  for rendered workload objects.
 - `smoketest/verify-prometheus-operator-least-privilege.sh` - Full live
   Phase 4 verifier for the Prometheus Operator least-privilege plan. It reruns
   the rendered-manifest proof, checks the live operator RBAC object set,
@@ -191,7 +191,10 @@ Phase 4 least-privilege proof for the Prometheus Operator. It keeps a checked
 permission matrix under `tmp/prometheus-operator-least-privilege/`, requires
 the representative denials in `default`, `infrastructure`, and `istio-system`,
 and persists `triage-kiali-findings.sh --output-dir` artifacts under
-`tmp/kiali-triage/`.
+`tmp/kiali-triage/`. Its render-time dependency,
+`smoketest/verify-monitoring-rendered-manifests.sh`, also carries the Phase 5
+ongoing guardrails that fail fast on namespace-scope drift and RBAC
+broadening.
 
 All live verifiers execute against the current `kubectl` context. If a verifier
 reports missing pods, secrets, or policies while Tilt appears healthy, confirm

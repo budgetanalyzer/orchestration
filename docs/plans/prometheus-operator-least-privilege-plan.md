@@ -304,6 +304,14 @@ Representative required allows:
 
 ## Phase 5: Documentation And Ongoing Guardrails
 
+Status: implemented in
+[docs/architecture/observability.md](/workspace/orchestration/docs/architecture/observability.md:36)
+and
+[scripts/smoketest/verify-monitoring-rendered-manifests.sh](/workspace/orchestration/scripts/smoketest/verify-monitoring-rendered-manifests.sh:1).
+The repo now records the final allowed namespace set and the remaining
+cluster-scoped read exceptions, and the rendered-manifest verifier checks the
+exact operator namespace-scope args plus the approved effective RBAC model.
+
 ### Work
 
 - Update [docs/architecture/observability.md](/workspace/orchestration/docs/architecture/observability.md:477)

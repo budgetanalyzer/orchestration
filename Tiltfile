@@ -873,12 +873,14 @@ local_resource(
             --namespace monitoring \
             --version 83.4.0 \
             --values kubernetes/monitoring/prometheus-stack-values.yaml \
+            --post-renderer scripts/ops/post-render-prometheus-stack.sh \
             --wait --timeout 5m
     ''',
     deps=[
         'kubernetes/monitoring/prometheus-stack-values.yaml',
         'kubernetes/monitoring/kiali-values.yaml',
         'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
+        'scripts/ops/post-render-prometheus-stack.sh',
         'scripts/smoketest/verify-monitoring-rendered-manifests.sh',
         'scripts/ops/post-render-kiali-server.sh',
     ],

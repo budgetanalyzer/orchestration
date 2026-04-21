@@ -17,6 +17,7 @@ NAMESPACE="monitoring"
 RELEASE_NAME="prometheus-stack"
 KIALI_RELEASE_NAME="kiali"
 VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/prometheus-stack-values.yaml"
+PROMETHEUS_POST_RENDERER="${REPO_DIR}/scripts/ops/post-render-prometheus-stack.sh"
 KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 KIALI_POST_RENDERER="${REPO_DIR}/scripts/ops/post-render-kiali-server.sh"
 NAMESPACE_FILE="${REPO_DIR}/kubernetes/monitoring/namespace.yaml"
@@ -91,6 +92,7 @@ helm template "${RELEASE_NAME}" "${CHART}" \
     --namespace "${NAMESPACE}" \
     --version "${CHART_VERSION}" \
     --values "${VALUES_FILE}" \
+    --post-renderer "${PROMETHEUS_POST_RENDERER}" \
     > "${render_file}"
 
 log_step "Rendering ${KIALI_CHART} ${KIALI_CHART_VERSION}"
@@ -133,6 +135,264 @@ fi
 if search_file '^kind:[[:space:]]*DaemonSet$' "${render_file}" >/dev/null; then
     fail "Rendered manifests still contain a DaemonSet; node-exporter should be disabled."
 fi
+
+log_step "Checking rendered Prometheus Operator RBAC reduction"
+python3 - <<'PY' "${render_file}"
+import sys
+from pathlib import Path
+
+import yaml
+
+render_path = Path(sys.argv[1])
+docs = [
+    document
+    for document in yaml.safe_load_all(render_path.read_text(encoding="utf-8"))
+    if isinstance(document, dict)
+]
+
+objects = {}
+subjects_for = {}
+
+for document in docs:
+    kind = document.get("kind")
+    metadata = document.get("metadata") or {}
+    name = metadata.get("name")
+    namespace = metadata.get("namespace")
+    if not kind or not name:
+        continue
+    objects[(kind, name, namespace)] = document
+    if kind in {"RoleBinding", "ClusterRoleBinding"}:
+        for subject in document.get("subjects") or []:
+            if not isinstance(subject, dict):
+                continue
+            if subject.get("kind") != "ServiceAccount":
+                continue
+            if (
+                subject.get("name") == "prometheus-stack-kube-prom-operator"
+                and subject.get("namespace") == "monitoring"
+            ):
+                subjects_for[(kind, name, namespace)] = document
+
+
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def require_object(kind: str, name: str, namespace: str | None = None):
+    obj = objects.get((kind, name, namespace))
+    if obj is None:
+        scope = namespace if namespace is not None else "cluster"
+        fail(f"Rendered manifest is missing {kind}/{name} in {scope}.")
+    return obj
+
+
+def collect_permissions(role: dict) -> dict[tuple[str, str], tuple[str, ...]]:
+    permissions: dict[tuple[str, str], set[str]] = {}
+
+    for rule in role.get("rules") or []:
+        api_groups = rule.get("apiGroups") or [""]
+        resources = rule.get("resources") or []
+        verbs = set(rule.get("verbs") or [])
+
+        for api_group in api_groups:
+            for resource in resources:
+                permissions.setdefault((api_group, resource), set()).update(verbs)
+
+    return {
+        key: tuple(sorted(value))
+        for key, value in permissions.items()
+    }
+
+
+if ("ClusterRole", "prometheus-stack-kube-prom-operator", None) in objects:
+    fail("Rendered manifest still contains the upstream broad operator ClusterRole.")
+
+if ("ClusterRoleBinding", "prometheus-stack-kube-prom-operator", None) in objects:
+    fail("Rendered manifest still contains the upstream broad operator ClusterRoleBinding.")
+
+cluster_role = require_object(
+    "ClusterRole",
+    "prometheus-stack-kube-prom-operator-cluster-read",
+)
+cluster_role_binding = require_object(
+    "ClusterRoleBinding",
+    "prometheus-stack-kube-prom-operator-cluster-read",
+)
+monitoring_role = require_object(
+    "Role",
+    "prometheus-stack-kube-prom-operator-monitoring",
+    "monitoring",
+)
+monitoring_binding = require_object(
+    "RoleBinding",
+    "prometheus-stack-kube-prom-operator-monitoring",
+    "monitoring",
+)
+default_role = require_object(
+    "Role",
+    "prometheus-stack-kube-prom-operator-default-read",
+    "default",
+)
+default_binding = require_object(
+    "RoleBinding",
+    "prometheus-stack-kube-prom-operator-default-read",
+    "default",
+)
+operator_deployment = require_object(
+    "Deployment",
+    "prometheus-stack-kube-prom-operator",
+    "monitoring",
+)
+
+containers = (
+    operator_deployment.get("spec", {})
+    .get("template", {})
+    .get("spec", {})
+    .get("containers", [])
+)
+operator_container = next(
+    (
+        container
+        for container in containers
+        if container.get("name") == "kube-prometheus-stack"
+    ),
+    None,
+)
+if operator_container is None:
+    fail("Rendered operator Deployment is missing the kube-prometheus-stack container.")
+
+operator_args = operator_container.get("args") or []
+
+
+def require_singleton_arg(prefix: str, expected: str) -> None:
+    matching_args = [
+        arg
+        for arg in operator_args
+        if isinstance(arg, str) and arg.startswith(prefix)
+    ]
+    if matching_args != [expected]:
+        fail(
+            "Rendered operator Deployment drifted from the approved namespace-scoping "
+            f"arg for {prefix}: {matching_args!r}"
+        )
+
+
+require_singleton_arg("--namespaces=", "--namespaces=monitoring,default")
+require_singleton_arg(
+    "--alertmanager-instance-namespaces=",
+    "--alertmanager-instance-namespaces=monitoring",
+)
+require_singleton_arg(
+    "--alertmanager-config-namespaces=",
+    "--alertmanager-config-namespaces=monitoring",
+)
+require_singleton_arg(
+    "--prometheus-instance-namespaces=",
+    "--prometheus-instance-namespaces=monitoring",
+)
+require_singleton_arg(
+    "--thanos-ruler-instance-namespaces=",
+    "--thanos-ruler-instance-namespaces=monitoring",
+)
+
+if any(
+    isinstance(arg, str) and arg.startswith("--deny-namespaces=")
+    for arg in operator_args
+):
+    fail("Rendered operator Deployment unexpectedly sets denyNamespaces.")
+
+cluster_binding_ref = cluster_role_binding.get("roleRef") or {}
+if cluster_binding_ref.get("kind") != "ClusterRole" or \
+        cluster_binding_ref.get("name") != "prometheus-stack-kube-prom-operator-cluster-read":
+    fail("Rendered operator ClusterRoleBinding does not point to the repo-owned cluster-read role.")
+
+monitoring_binding_ref = monitoring_binding.get("roleRef") or {}
+if monitoring_binding_ref.get("kind") != "Role" or \
+        monitoring_binding_ref.get("name") != "prometheus-stack-kube-prom-operator-monitoring":
+    fail("Rendered operator monitoring RoleBinding does not point to the repo-owned monitoring Role.")
+
+default_binding_ref = default_binding.get("roleRef") or {}
+if default_binding_ref.get("kind") != "Role" or \
+        default_binding_ref.get("name") != "prometheus-stack-kube-prom-operator-default-read":
+    fail("Rendered operator default RoleBinding does not point to the repo-owned default Role.")
+
+approved_cluster_permissions = {
+    ("", "namespaces"): ("get", "list", "watch"),
+    ("", "nodes"): ("list", "watch"),
+    ("networking.k8s.io", "ingresses"): ("get", "list", "watch"),
+    ("storage.k8s.io", "storageclasses"): ("get",),
+}
+actual_cluster_permissions = collect_permissions(cluster_role)
+
+if actual_cluster_permissions != approved_cluster_permissions:
+    fail(
+        "Rendered operator cluster-scoped RBAC drifted from the approved "
+        f"read-only set: {sorted(actual_cluster_permissions.items())!r}"
+    )
+
+approved_monitoring_permissions = {
+    ("monitoring.coreos.com", "prometheuses"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "prometheuses/finalizers"): ("patch", "update"),
+    ("monitoring.coreos.com", "prometheuses/status"): ("patch", "update"),
+    ("monitoring.coreos.com", "alertmanagerconfigs"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "alertmanagers"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "podmonitors"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "probes"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "prometheusagents"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "prometheusrules"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "scrapeconfigs"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "servicemonitors"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "thanosrulers"): ("get", "list", "watch"),
+    ("apps", "statefulsets"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "configmaps"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "secrets"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "pods"): ("delete", "list"),
+    ("", "endpoints"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "services"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "services/finalizers"): ("update",),
+    ("discovery.k8s.io", "endpointslices"): ("create", "delete", "get", "list", "patch", "update", "watch"),
+    ("", "events"): ("create", "patch"),
+    ("events.k8s.io", "events"): ("create", "patch"),
+}
+actual_monitoring_permissions = collect_permissions(monitoring_role)
+if actual_monitoring_permissions != approved_monitoring_permissions:
+    fail(
+        "Rendered monitoring namespace operator Role drifted from the approved "
+        f"effective permission set: {sorted(actual_monitoring_permissions.items())!r}"
+    )
+
+approved_default_permissions = {
+    ("monitoring.coreos.com", "podmonitors"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "probes"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "prometheusrules"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "scrapeconfigs"): ("get", "list", "watch"),
+    ("monitoring.coreos.com", "servicemonitors"): ("get", "list", "watch"),
+    ("", "events"): ("create", "patch"),
+    ("events.k8s.io", "events"): ("create", "patch"),
+}
+actual_default_permissions = collect_permissions(default_role)
+if actual_default_permissions != approved_default_permissions:
+    fail(
+        "Rendered default namespace operator Role drifted from the approved "
+        f"effective permission set: {sorted(actual_default_permissions.items())!r}"
+    )
+
+bound_objects = {
+    (kind, name, namespace)
+    for kind, name, namespace in subjects_for
+}
+expected_bound_objects = {
+    ("ClusterRoleBinding", "prometheus-stack-kube-prom-operator-cluster-read", None),
+    ("RoleBinding", "prometheus-stack-kube-prom-operator-monitoring", "monitoring"),
+    ("RoleBinding", "prometheus-stack-kube-prom-operator-default-read", "default"),
+}
+if bound_objects != expected_bound_objects:
+    fail(
+        "Rendered operator service account bindings drifted from the approved "
+        f"set: {sorted(bound_objects)!r}"
+    )
+PY
 
 log_step "Checking checked-in Jaeger contract"
 if [[ "$(grep -Ec '^[[:space:]]*type:[[:space:]]*ClusterIP([[:space:]]|$)' "${JAEGER_SERVICES_FILE}")" -ne 2 ]]; then

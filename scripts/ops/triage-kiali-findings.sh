@@ -507,6 +507,7 @@ if jq -e '
     | any(.value.status.status == "Failure")
 ' "${TMP_DIR}/clusters-health.json" >/dev/null 2>&1; then
     printf '%s\n' "- The Prometheus failure in \`monitoring\` is worth investigating separately from the empty-namespace noise. Check Prometheus targets and Envoy telemetry paths."
+    printf '%s\n' "- For meshed Prometheus, \`istiod\`, Grafana, Prometheus Operator, and kube-state-metrics should scrape through Service DNS hosts, not pod IPs. Inspect each target \`scrapeUrl\` before treating the failure as a Kiali false positive."
 fi
 
 printf '\n== Next commands ==\n'

@@ -78,7 +78,8 @@ one foreground process, use `./scripts/ops/start-observability-port-forwards.sh`
   workstation, or set `OCI_INSTANCE_IP` and omit the argument. It assumes
   `ubuntu` and `~/.ssh/oci-budgetanalyzer`.
 - Focused access proof: `./scripts/smoketest/verify-observability-port-forward-access.sh`
-- Prometheus targets to expect: `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`
+- Prometheus scrape jobs to expect: Spring Boot `currency-service`, `transaction-service`, `permission-service`, and `session-gateway`, plus `istiod`, `prometheus-stack-grafana`, `prometheus-stack-kube-prom-operator`, and `prometheus-stack-kube-state-metrics`
+- For meshed Prometheus, the service-backed `scrapeUrl` hosts for `istiod`, Grafana, Prometheus Operator, and kube-state-metrics should stay on stable Service DNS names, not pod IPs
 - Example Prometheus queries: `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_count`
 - Observability is internal-only in both local Tilt and production OCI/k3s. `grafana.budgetanalyzer.localhost`, `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, and `jaeger.budgetanalyzer.org` are not active operator entry points.
 - Keep Grafana and Kiali authentication enabled and keep observability port-forwards loopback-bound. Do not use `--address 0.0.0.0`. The focused smoke starts any missing temporary forwards on the canonical local ports `3300`, `9090`, `16686`, and `20001`, and it reuses the expected existing loopback `kubectl port-forward` listeners when the helper or manual forwards already hold those ports. Use explicit override flags only when some other intentional listener owns a canonical port.

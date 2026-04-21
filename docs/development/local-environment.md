@@ -346,6 +346,20 @@ cross-service checks. Useful first queries:
 `up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, and
 `jvm_gc_pause_seconds_count`.
 
+For the meshed Prometheus pod, the service-backed monitoring and control-plane
+targets should also stay `UP` via stable Service DNS hosts rather than endpoint
+pod IPs. When `istiod`, Grafana, Prometheus Operator, or kube-state-metrics
+look unhealthy, check `http://localhost:9090/targets` and confirm the
+`scrapeUrl` hosts are:
+
+- `istiod.istio-system.svc.cluster.local:15014`
+- `prometheus-stack-grafana.monitoring.svc.cluster.local:80`
+- `prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080`
+- `prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080`
+
+If one of those jobs falls back to a pod IP, fix the checked-in monitoring
+relabelings instead of treating the pod-IP scrape as acceptable.
+
 Grafana ships with two pre-provisioned dashboards (no manual import needed):
 
 - **JVM (Micrometer)** - memory pools, GC pauses, threads, classloading per

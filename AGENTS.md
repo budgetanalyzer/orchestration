@@ -2,491 +2,372 @@
 
 ## Tree Position
 
-**Archetype**: coordinator
-**Scope**: budgetanalyzer ecosystem
-**Role**: System orchestrator; coordinates cross-cutting concerns and deployment
+**Archetype**: coordinator  
+**Scope**: budgetanalyzer ecosystem  
+**Role**: system orchestrator; coordinates cross-cutting concerns and deployment
 
 ### Relationships
-- **Coordinates**: All service repos (via patterns and selective documentation/configuration updates, not sibling code changes)
+- Coordinates sibling repos through deployment patterns, documentation, and configuration changes
+- Owns local platform orchestration, cross-repo operational conventions, and deployment policy
 
 ### Permissions
-- **Read**: All siblings via `../`
-- **Write**: This repository; documentation and configuration in sibling repos (no sibling code)
+- **Read**: sibling repos via `../`
+- **Write**: this repository; documentation and configuration in sibling repos when fixing deployment or environment issues
+- **Do not write**: sibling service code from this repo context
 
 ### Discovery
 ```bash
-# What I coordinate
-ls -d /workspace/*-service /workspace/session-gateway /workspace/budget-analyzer-web
+# Sibling repos expected next to this repo
+find .. -maxdepth 1 -mindepth 1 -type d \
+  \( -name '*-service' -o -name 'session-gateway' -o -name 'budget-analyzer-web' -o -name 'service-common' -o -name 'workspace' \) \
+  | sort
+
+# Repo structure
+tree -L 2 -I 'node_modules|target|.git'
+
+# Live local platform state
+tilt get uiresources
+kubectl get pods -A
+kubectl get svc -A
 ```
+
+## Documentation Strategy
+
+Keep `AGENTS.md` pattern-based and discovery-first. Prefer stable rules, discovery commands, and source-of-truth pointers over long inventories that drift.
+
+When editing `AGENTS.md`, read `docs/decisions/003-pattern-based-claude-md.md` first and apply its pattern-based guidance so this file stays maintainable over time.
+
+Do not optimize `AGENTS.md` for token minimization alone. Keep useful orchestration-specific constraints and workflows, but compress repetition and link to the closer source of truth when one already exists.
+
+Always update the nearest affected documentation in the same change:
+- `AGENTS.md` when instructions, guardrails, discovery commands, or repo-specific workflow changes
+- `README.md` when setup, usage, or repository purpose changes
+- `docs/` when architecture, configuration, APIs, behaviors, or operational workflows change
+- If the same detailed documentation is being copied across repos, stop and ask whether a centralized source of truth with links would be better
+
+Treat `docs/archive/` as historical reference only. Do not update archived files.
+
+Treat `docs/decisions/` as ADR context, not an active implementation surface. Do not modify decision files unless the user explicitly asks. The standing exception is that `docs/decisions/003-pattern-based-claude-md.md` should be consulted whenever `AGENTS.md` or similar AI context docs are edited.
 
 ## Code Exploration
 
-NEVER use Agent/subagent tools for code exploration. Use Grep, Glob, and Read directly.
+NEVER use Agent/subagent tools for code exploration. Use grep/glob/read style commands directly.
 
-## Shell Script Validation
+Prefer discovery commands over static inventories:
+- Use `rg` for text search
+- Use `find` or `tree` for structure
+- Use `sed`, `cat`, and targeted file reads for source-of-truth inspection
+- Use runtime inspection commands such as `kubectl`, `tilt`, and `docker` when validating current state
 
-When adding or modifying shell scripts (`.sh` files) in this repo, always validate them before considering the work complete:
+## Operating Context
 
-1. **Syntax check**: `bash -n <script>` — catches syntax errors without executing
-2. **Lint**: `shellcheck <script>` — catches common bugs, quoting issues, and portability problems
+This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
-Fix all errors and warnings before committing. Do not suppress shellcheck warnings without a justifying `# shellcheck disable=SC####` comment.
+This project is designed for AI-assisted development. The containerized development environment lives in the sibling `../workspace` repository; that repo owns the devcontainer configuration.
 
-## Documentation Discipline
+The default debugging model is split across host and container:
+- Tilt runs on the host machine
+- AI agents run inside the container
+- The container has shared workspace access and full `kubectl` access to the host-managed cluster
 
-Always keep documentation up to date after any configuration or code change.
+Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
+- Shape: `VM.Standard.A1.Flex`
+- Capacity: 4 OCPUs, 24 GB RAM
+- OS baseline: Ubuntu 22.04 Minimal
+- Region baseline: Phoenix
+- Deployment model: single-node, production-grade demo environment
 
-Update the nearest affected documentation in the same work:
-- `AGENTS.md` when instructions, guardrails, discovery commands, or repository-specific workflow changes
-- `README.md` when setup, usage, or repository purpose changes
-- `docs/` when architecture, configuration, APIs, behaviors, or operational workflows change
-- If you find yourself copying the same detailed documentation across repos, stop and ask the user whether they would prefer a single centralized source of truth with links from the other repos
-
-Do not leave documentation updates as follow-up work.
-
-## GitHub Actions Baseline
-
-This orchestration repo is the coordination point for GitHub Actions
-workflow standards and upgrade planning across the relevant Budget Analyzer
-repositories. When workflow changes span multiple repos, coordinate the
-policy here and then apply repo-local workflow edits in the owning
-repositories as needed.
-
-Keep repository workflows on Node 24-ready action majors. For this repo that
-means `actions/checkout@v6` for first-party checkout steps and the Docker
-release stack on `docker/setup-qemu-action@v4`,
-`docker/setup-buildx-action@v4`, `docker/login-action@v4`, and
-`docker/build-push-action@v7`. Set
-`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope so this repo stays
-opted into the Node 24 runner transition before GitHub flips the default.
-
-## Project Overview
-
-This orchestration repository coordinates the deployment and development environment for the Budget Analyzer application - a reference architecture for microservices, built as an open-source learning resource for architects exploring AI-assisted development.
-
-**Purpose**: Manages cross-service concerns, local development setup, and deployment coordination. Individual service code lives in separate repositories.
-
-## Production Deployment Target
-
-**Oracle Cloud Infrastructure (OCI) Free Tier**
-
-| Attribute | Value |
-|-----------|-------|
-| **Shape** | VM.Standard.A1.Flex (ARM/aarch64) |
-| **OCPUs** | 4 |
-| **Memory** | 24 GB |
-| **Network** | 4 Gbps |
-| **OS** | Ubuntu 22.04 Minimal aarch64 |
-| **Region** | Phoenix (phx) |
-| **Public IP** | 152.70.145.68 |
-
-**Architecture implications:**
+Architecture implications:
 - All container images must support `linux/arm64`
-- 24GB RAM is sufficient for full stack + observability (Prometheus/Grafana)
-- Single-node deployment (no HA, acceptable for portfolio demo)
+- Local Tilt/Kind and OCI/k3s are both treated as production-grade deployment paths
+- Observability remains internal-only in both environments
 
-## Development Environment
+Architecture principles:
+- Production parity between local Tilt/Kind and OCI/k3s
+- Microservices with clear service boundaries and independent deployability
+- Session-based edge authorization for browser security and session management
+- Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
+- Resource-based routing keeps the frontend decoupled from service topology
+- Defense in depth across Istio ingress, Session Gateway or NGINX, and downstream services
+- Kubernetes-native development uses Tilt live update so code changes reach running pods quickly while the full security stack stays active; see `docs/development/local-environment.md#live-development-pipeline`
 
-**This project is designed for AI-assisted development.**
+Technology pattern:
+- Frontend: React web application
+- Backends: Spring Boot + Java + Gradle
+- Browser auth edge: Session Gateway (Spring WebFlux)
+- External authorization: `ext-authz` Go service
+- Edge and routing: Istio ingress/egress plus NGINX API gateway
+- Infrastructure: PostgreSQL, Redis, RabbitMQ
+- Monitoring: Prometheus, Grafana, Jaeger, Kiali
 
-For containerized development environment setup, see the [workspace](https://github.com/budgetanalyzer/workspace) repository. That's where the devcontainer configuration lives.
+Service topology:
+- Frontend services: React-based web application, with port `3000` in local frontend development
+- Backend microservices: Spring Boot REST APIs, typically on ports `8082+`
+- Session Gateway: Spring WebFlux on port `8081` for browser authentication and heartbeat-driven session management
+- `ext-authz`: Go HTTP service on port `9002` for Istio external authorization and Redis-backed session validation
+- Infrastructure: PostgreSQL, Redis, and RabbitMQ in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template
+- Monitoring: Prometheus, Grafana, kube-state-metrics, the repo-managed Jaeger v2 backend, and standalone Kiali in `monitoring`; Jaeger and Kiali stay `ClusterIP`-only
+- Ingress: Istio Ingress Gateway on port `443` for TLS termination, routing, ext_authz enforcement, and auth-path throttling
+- Egress: Istio Egress Gateway as `ClusterIP` with `REGISTRY_ONLY` outbound policy
+- API Gateway: NGINX on port `8080` for internal routing, backend/API rate limiting, and load balancing
 
-**Default debugging environment**: Tilt runs on the host machine, while AI agents run inside the container with full read access to the shared workspace and full `kubectl` access to the host-managed cluster. Treat that host-Tilt plus in-container-`kubectl` split as the default deployment-debugging setup for this repository.
+Adding a new service:
+- Create manifests in `kubernetes/services/{name}/`
+- Register the service in `Tiltfile`
+- Add NGINX routes when the service owns public resources
+- See `docs/architecture/session-edge-authorization-pattern.md` and `nginx/README.md`
 
-## Architecture Principles
+Version numbers and concrete dependency selections live in service repos, manifests, and checked-in release inputs, not in this file.
 
-- **Production Parity**: Development environment faithfully recreates production
-- **Microservices**: Independently deployable services with clear boundaries
-- **Session-Based Edge Authorization**: Session Gateway provides browser security and authentication management
-- **Gateway Pattern**: Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
-- **Resource-Based Routing**: Frontend remains decoupled from service topology
-- **Defense in Depth**: Multiple security layers (Istio ingress/ext_authz → Session Gateway or NGINX → Services)
-- **Kubernetes-Native Development**: Tilt + Kind for consistent local Kubernetes development. The Tiltfile implements live update pipelines — Java JAR sync with process restart, React source sync with Vite HMR — so code changes reach running pods in seconds without image rebuilds, while the full production stack (mTLS, network policies, ext_authz) stays active. See [Live Development Pipeline](docs/development/local-environment.md#live-development-pipeline)
+## Source Of Truth
 
-## Service Architecture
+Use the closest source of truth for the topic instead of expanding `AGENTS.md` with inventory detail.
 
-**Pattern**: Microservices deployed via Tilt to local Kind cluster
+- Architecture overview and request flow: `docs/architecture/system-overview.md`
+- Session-based edge authorization and routing model: `docs/architecture/session-edge-authorization-pattern.md`
+- Resource-based routing rules: `docs/architecture/resource-routing-pattern.md`
+- Security posture and layered controls: `docs/architecture/security-architecture.md`
+- Service ports and topology: `docs/architecture/port-reference.md`
+- Local setup and live development pipeline: `docs/development/getting-started.md` and `docs/development/local-environment.md`
+- Containerized dev environment setup: sibling `../workspace` repository
+- Script directory map and canonical entry points: `scripts/README.md`
+- NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
+- Production overlays and OCI deployment inputs: `kubernetes/production/README.md`
+- Observability topology and operator access model: `docs/architecture/observability.md`
+- Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`
 
-**Discovery**:
+Useful discovery commands:
 ```bash
-# List all running resources
-tilt get uiresources
+# List public and internal NGINX route declarations
+rg -n "location .*(/api|/api-docs|/auth|/login|/oauth2|/logout)" \
+  nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
 
-# View pod status
-kubectl get pods
-kubectl get pods -n monitoring
+# List Kubernetes manifests that define the core edge and security contracts
+find kubernetes -maxdepth 2 -type f \
+  \( -path 'kubernetes/gateway/*' -o -path 'kubernetes/istio/*' -o -path 'kubernetes/network-policies/*' \) \
+  | sort
 
-# View service endpoints
-kubectl get svc
-kubectl get svc -n monitoring
+# Show deployed image refs in the current cluster
+kubectl get pods -A -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
 ```
 
-**Service Types**:
-- **Frontend services**: React-based web applications (port 3000 in dev)
-- **Backend microservices**: Spring Boot REST APIs (ports 8082+)
-- **Session Gateway**: Spring WebFlux (port 8081, HTTP) - browser authentication and heartbeat-driven session management
-- **ext-authz**: Go HTTP service (port 9002) - Istio external authorization, session validation via Redis
-- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (StatefulSets in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template)
-- **Monitoring**: Prometheus, Grafana, kube-state-metrics, the repo-managed Jaeger v2 backend, and standalone Kiali run in `monitoring`; Jaeger and Kiali stay `ClusterIP`-only
-- **Ingress**: Istio Ingress Gateway (port 443, HTTPS) - SSL termination, routing, ext_authz enforcement, and auth-path throttling
-- **Egress**: Istio Egress Gateway (ClusterIP) - outbound traffic control with REGISTRY_ONLY policy
-- **API Gateway**: NGINX (port 8080, HTTP) - internal routing, backend/API rate limiting, and load balancing
+## Core Runtime Pattern
 
-**Adding New Services**: Create K8s manifests in `kubernetes/services/{name}/`, add to `Tiltfile`, add NGINX routes if needed. See [docs/architecture/session-edge-authorization-pattern.md](docs/architecture/session-edge-authorization-pattern.md) for details.
+The primary request flow is:
 
-**Health Probes**: All Spring Boot services use a three-probe pattern:
-- **startupProbe**: Allows up to 120s for slow-starting JVM apps (5s × 24 checks). Pod won't receive traffic until startup succeeds.
-- **readinessProbe**: Checks if pod can accept traffic (10s interval)
-- **livenessProbe**: Checks if pod is healthy (20s interval)
-
-This prevents "connection refused" errors during deployments when services are still starting.
-
-## Session Edge Authorization + API Gateway Pattern
-
-**Pattern**: Hybrid architecture combining session-based edge authorization for browser security with API Gateway for routing and validation.
-
-**Request Flow**:
-```
-Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Istio Ingress (:443, auth-path throttling) → Session Gateway (:8081)
+```text
+Browser -> Istio Ingress (:443) -> ext_authz validates session -> NGINX (:8080) -> services
+Auth paths -> Istio Ingress (:443) -> Session Gateway (:8081)
 ```
 
-**Entry points**: `app.budgetanalyzer.localhost` (application)
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` → Session Gateway (auth lifecycle; browser JSON endpoints live under `/auth/v1/*`)
-- `/api/*` → NGINX (ext_authz enforced, routing to backends)
-- `/api-docs`, `/api-docs/*` → NGINX (public API documentation route)
-- `/login`, `/*` → NGINX (frontend, no auth required)
-- public NGINX-owned API examples include `/api/v1/transactions`, `/api/v1/currencies`, and `/api/v1/users`
+Entry-point ownership:
+- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` -> Session Gateway
+- `/api/*` -> NGINX, with ext_authz enforced at the ingress layer
+- `/api-docs`, `/api-docs/*`, `/login`, `/*` -> NGINX
 
-**Note**: During session creation, Session Gateway calls permission-service (:8086) to resolve roles/permissions. Active browser sessions stay alive through `GET /auth/v1/session`, and browser session inspection now lives at `GET /auth/v1/user`. Both stay on the direct `/auth/*` lane so Session Gateway can extend the session TTL without joining the API hot path. The heartbeat is Redis-local and does not call Auth0; IDP revocation propagates via explicit bulk revocation on the east-west `DELETE /internal/v1/sessions/users/{userId}` path.
-- `app.budgetanalyzer.localhost/api-docs` → Unified API documentation (Swagger UI)
+Session and identity rules:
+- Session Gateway resolves roles and permissions from `permission-service` during session creation
+- Active browser sessions are renewed through `GET /auth/v1/session`
+- Browser session inspection lives at `GET /auth/v1/user`
+- Bulk revocation propagates on `DELETE /internal/v1/sessions/users/{userId}`
+- Keep browser session logic on the direct `/auth/*` lane rather than pushing it through the general API path
 
-**Key Benefits**:
-- Same-origin architecture = no CORS issues
-- Opaque session tokens = no JWTs exposed to browser (XSS protection)
-- Centralized session validation and auth-path throttling at Istio ingress, with backend/API rate limiting remaining at NGINX
-- Observability is internal-only in both local Tilt and production OCI/k3s. In local Tilt, use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` for Grafana, `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` for Prometheus, `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` for Jaeger, and `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` for Kiali. `./scripts/ops/start-observability-port-forwards.sh` is the repo-owned convenience helper for keeping the canonical four forwards open together, and `./scripts/smoketest/verify-observability-port-forward-access.sh` remains the self-sufficient proof path because it starts any missing temporary forwards and reuses the expected existing loopback listeners when they already exist. Kiali uses token auth; generate an operator token with `kubectl -n monitoring create token kiali`. Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`, and do not use `--address 0.0.0.0`.
+Operational guardrails:
+- Follow the resource-based routing pattern for new API endpoints
+- Treat any new public `/api/...` route as incomplete until both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` claim it and verification proves it does not fall through to the SPA
+- Keep Spring Boot workloads on the startup/readiness/liveness probe pattern used by the checked-in manifests
+- Keep PostgreSQL, RabbitMQ, and Redis on their repo-owned stateful deployment patterns
+- Redis `/data` is PVC-backed. Do not treat pod replacement or `tilt down` as a Redis reset. Use `./scripts/ops/flush-redis.sh` for a logical reset, or recreate the cluster/runtime when a full clean state is required
 
-**Discovery**:
-```bash
-# List all API routes
-grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
-
-# Test gateway
-curl -v https://app.budgetanalyzer.localhost/health
-
-# View service ports
-kubectl get svc
-```
-
-**When to consult detailed documentation**:
-- Understanding component roles and request flow → [docs/architecture/session-edge-authorization-pattern.md](docs/architecture/session-edge-authorization-pattern.md)
-- Port reference and service topology → [docs/architecture/port-reference.md](docs/architecture/port-reference.md)
-- Adding new API routes → "Adding a New Resource Route" in [nginx/README.md](nginx/README.md)
-- Adding new microservices → "Adding a New Microservice" in [nginx/README.md](nginx/README.md)
-- Troubleshooting gateway issues → "Troubleshooting" in [nginx/README.md](nginx/README.md)
-- Security architecture details → [docs/architecture/security-architecture.md](docs/architecture/security-architecture.md)
-
-## Technology Stack
-
-**Principle**: Each service manages its own dependencies. Versions are defined in service-specific files.
-
-**Discovery**:
-```bash
-# List all Tilt resources
-tilt get uiresources
-
-# View deployed images
-kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
-```
-
-**Stack Patterns**:
-- **Frontend**: React (see individual service package.json)
-- **Backend**: Spring Boot + Java (version managed in service-common)
-- **Build System**: Gradle (all backend services use Gradle with wrapper)
-- **Infrastructure**: PostgreSQL, Redis, RabbitMQ (StatefulSet manifests in `kubernetes/infrastructure/`; Redis is not an ephemeral local Deployment)
-- **Ingress**: Istio Ingress Gateway (Kubernetes Gateway API)
-- **API Gateway**: NGINX (unprivileged Alpine image)
-- **Development**: Tilt + Kind (local Kubernetes)
-
-**Note**: Docker images should be pinned to specific versions for reproducibility.
+Observability rules:
+- Grafana, Prometheus, Jaeger, and Kiali are internal-only in both local Tilt and OCI/k3s
+- Use loopback-only `kubectl port-forward --address 127.0.0.1 ...` for operator access
+- `./scripts/ops/start-observability-port-forwards.sh` is the repo-owned helper for the canonical Grafana, Prometheus, Jaeger, and Kiali forwards
+- `./scripts/smoketest/verify-observability-port-forward-access.sh` is the focused access proof
+- Kiali uses token auth via `kubectl -n monitoring create token kiali`
+- Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`
+- Do not use `--address 0.0.0.0` for observability access
 
 ## Development Workflow
 
-### Prerequisites & Setup
+Use the prerequisite script rather than guessing tool or environment state:
 
-**Required tools**: Docker, Kind, kubectl, OpenSSL, Tilt, Git, mkcert
-Helm `3.20.x` is still the required runtime toolchain, but `./setup.sh` now
-installs the tested `v3.20.1` automatically when Helm is missing or unsupported.
-
-**Helm version**: Use Helm `3.20.x`. Helm 4 is not supported in this repo.
-Gateway API CRDs are pinned to `v1.4.0`, and the repo installs
-`istio/base`, `istio/cni`, `istio/istiod`, and `istio/gateway` `1.29.1`
-directly from Helm. Ingress gateway hardening is declared through
-`kubernetes/istio/ingress-gateway-config.yaml` via Gateway
-`spec.infrastructure.parametersRef`, and the egress gateway uses
-`kubernetes/istio/egress-gateway-values.yaml` with `service.type=ClusterIP`.
-Local Istio CNI installs layer `kubernetes/istio/cni-common-values.yaml` with
-`kubernetes/istio/cni-kind-values.yaml`; OCI/k3s installs layer the same common
-baseline with `kubernetes/istio/cni-k3s-values.yaml`.
-
-Check prerequisites:
 ```bash
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-**First-time setup**:
-```bash
-./setup.sh        # Recreates the kind cluster from scratch, installs Calico, ensures supported Helm, refreshes the Istio Helm repo index, configures certs (browser + infra TLS), DNS, and .env
-# Edit .env with your Auth0 config/client secret and FRED API key
-```
+Standard local startup path:
 
-### Quick Start
 ```bash
-# Optional but recommended before cluster apply
-# Catch static manifest/security regressions locally
+./setup.sh
+$EDITOR .env
 ./scripts/guardrails/verify-phase-7-static-manifests.sh
-
-# Start all services with Tilt
 tilt up
-
-# Optional but recommended after tilt up on a clean rebuild
-# Prove the seven app deployments were admitted without image-policy violations
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
-
-# Optional but recommended after core platform resources are healthy
-# Prove the platform security prerequisites
 ./scripts/smoketest/verify-security-prereqs.sh
-# Verify Istio ingress/egress hardening
 ./scripts/smoketest/verify-phase-3-istio-ingress.sh
-# Verify runtime hardening and namespace PSA enforcement
 ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
-# Verify local security guardrails
 ./scripts/smoketest/verify-phase-7-security-guardrails.sh
-
-# Optional aggregate local smoke pass
-# Runs static guardrails, clean admission, monitoring render/runtime checks,
-# shared session contract checks, and the security guardrail umbrella
 ./scripts/smoketest/smoketest.sh
-
-# Access Tilt UI for logs and status
-# Browser: http://localhost:10350
-
-# Access application
-# Browser: https://app.budgetanalyzer.localhost
-
-# Stop all services
-tilt down
 ```
 
-`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the local static security guardrail gate and matches the dedicated `security-guardrails.yml` workflow closely enough for local reproduction. It also replays representative approved local Tilt `:tilt-<hash>` refs through Kyverno so the live deploy-time admission path stays covered. `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side clean-start proof for the seven app deployments in `default` after `tilt up`. `./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local security guardrail umbrella; it runs the static gate first and then `./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` for the live runtime proof. `./scripts/smoketest/smoketest.sh` is the aggregate local smoke pass and additionally exercises the rendered monitoring verifier, monitoring runtime verifier, and shared session contract verifier from `scripts/smoketest/`. CI stays static-only. `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites. `./scripts/smoketest/verify-phase-3-istio-ingress.sh` verifies Istio ingress and egress hardening. `./scripts/smoketest/verify-phase-5-runtime-hardening.sh` verifies runtime hardening and reruns earlier capability verifiers as regressions. Browser login starts at the frontend route `/login`, which initiates OAuth2 through `/oauth2/authorization/idp` and returns through `/login/oauth2/code/idp`.
+Primary operator entry points:
+- App: `https://app.budgetanalyzer.localhost`
+- Tilt UI: `http://localhost:10350`
+- Observability helper: `./scripts/ops/start-observability-port-forwards.sh`
 
-Redis data survives ordinary pod replacement and should not be reset by
-accident. Use `./scripts/ops/flush-redis.sh` for a logical local Redis reset,
-or recreate the local cluster/runtime when you need a fully clean PVC-backed
-infrastructure state.
+Use targeted verifiers from `scripts/README.md` when working on one capability such as monitoring, tracing, shared session contracts, rate limiting, or browser hardening.
 
-### Troubleshooting
-
-**Quick commands**:
+Troubleshooting discovery:
 ```bash
-# Check pod status (services run in default namespace)
-kubectl get pods
-
-# Validate the platform security prerequisites
-./scripts/smoketest/verify-security-prereqs.sh
-
-# View logs for a service
+kubectl get pods -A
 kubectl logs deployment/nginx-gateway
-
-# Check NGINX configuration validity
 kubectl exec deployment/nginx-gateway -- nginx -t
-
-# View Istio ingress gateway logs
 kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-ingress-gateway
-
+tilt get uiresources
+kubectl config current-context
 ```
 
-**For detailed troubleshooting**: When encountering specific issues (502 errors, CORS problems, connection refused, etc.), consult the comprehensive troubleshooting guide in [nginx/README.md](nginx/README.md)
+When the failure is routing-related, start with `nginx/README.md`. When the failure is cluster-behavior-related, start with `docs/runbooks/tilt-debugging.md` and the targeted scripts in `scripts/smoketest/`.
 
-## Workspace Structure
+## GitHub Actions Baseline
 
-All repositories should be cloned side-by-side in a common parent directory:
+This repository coordinates GitHub Actions workflow standards and upgrade planning across the Budget Analyzer repos.
 
-```
-/workspace/
-├── .github/                    # Organization-level GitHub config (templates, profile README)
-├── workspace/                  # Devcontainer entry point (clone this first)
-├── orchestration/              # This repo - deployment coordination
-├── session-gateway/            # Auth service (session lifecycle)
-├── transaction-service/        # Transaction management
-├── currency-service/           # Currency/exchange rates
-├── permission-service/         # Internal roles/permissions
-├── budget-analyzer-web/        # React frontend
-├── service-common/             # Shared Java library
-├── checkstyle-config/          # Shared checkstyle rules
-└── claude-discovery/           # Experimental discovery tool
-```
+Keep repository workflows on Node 24-ready action majors. In this repo that means:
+- `actions/checkout@v6` for first-party checkout steps
+- `docker/setup-qemu-action@v4`
+- `docker/setup-buildx-action@v4`
+- `docker/login-action@v4`
+- `docker/build-push-action@v7`
+- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope
 
-**Note**: The `.github` directory at workspace root is the [organization-level .github repository](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file) containing default issue/PR templates for all repos.
+When workflow changes span multiple repos, coordinate the shared policy here and make repo-local workflow edits in the owning repos as needed.
 
-## Repository Structure
+## Project Priorities
 
-**Discovery**:
-```bash
-# View structure
-tree -L 2 -I 'node_modules|target'
-```
-
-**Key directories**:
-- [nginx/](nginx/) - Gateway configuration (dev and prod)
-- [scripts/](scripts/) - Automation and tooling, organized by purpose under `bootstrap/`, `guardrails/`, `smoketest/`, `ops/`, `loadtest/`, `repo/`, and `lib/`
-- [scripts/README.md](scripts/README.md) - Script directory map and canonical entry points
-- [docs/](docs/) - Architecture and cross-service documentation
-- [kubernetes/](kubernetes/) - Production deployment manifests
-- [.github/workflows/](.github/workflows/) - Repo-local CI plus the tag-driven `ext-authz` GHCR release workflow
-
-## Service Repositories
-
-Each microservice is maintained in its own repository:
-- **service-common**: https://github.com/budgetanalyzer/service-common - Shared library for all backend services
-- **transaction-service**: https://github.com/budgetanalyzer/transaction-service - Transaction management API
-- **currency-service**: https://github.com/budgetanalyzer/currency-service - Currency and exchange rate API
-- **budget-analyzer-web**: https://github.com/budgetanalyzer/budget-analyzer-web - React frontend application
-- **session-gateway**: https://github.com/budgetanalyzer/session-gateway - OAuth2 authentication and session management
-- **permission-service**: https://github.com/budgetanalyzer/permission-service - Internal roles/permissions resolution
-
-## Best Practices
-
-1. **Environment Parity**: Keep dev and prod configurations as similar as possible
-2. **Configuration Management**: Use environment variables for configuration
-3. **Health Checks**: All services expose health endpoints
-4. **Service Independence**: Each microservice should be independently deployable
-5. **API Versioning**: Version APIs to support backward compatibility
-6. **Living Documentation**: Verify accuracy by running discovery commands
-
-## NOTES FOR AI AGENTS
-
-**Project Focus**: This reference architecture is complete. Current priorities are:
+This reference architecture is functionally complete. Current priorities are:
 1. Documentation improvements and clarifications
 2. Architectural discussions and pattern explanations
 3. Bug fixes in existing functionality
-4. NOT new features or data-ownership implementation
+4. Not net-new features or data-ownership implementation
 
-### Image-Pinning And Supply-Chain Guardrails
+## Shell Script Validation
 
-- Treat checked-in third-party image refs and Dockerfile base images as
-  digest-pinning targets unless an exception is explicitly documented in the
-  executable inventories.
-- The executable image-pinning inventories live in
-  `scripts/lib/phase-7-image-pinning-targets.txt` and
-  `scripts/lib/phase-7-allowed-latest.txt`; keep them aligned with the static
-  security guardrail checks.
-- Only the seven documented local image repos may remain on `:latest` in
-  checked-in manifests. Live Tilt deploys rewrite those same repos to immutable
-  `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on
-  those managed deploys; treat every third-party `image:` or `FROM` ref as a
-  digest-pinning target unless it is explicitly excluded in the inventories.
-- `tests/setup-flow` and `tests/security-preflight` are stale, non-gating
-  retained assets until they are explicitly realigned to the current Istio-only
-  baseline. Do not treat them as current completion gates.
+When adding or modifying shell scripts in this repo, always validate them before considering the work complete:
 
-**CRITICAL - Prerequisites First**: Before implementing any plan or feature:
-1. Check for prerequisites in documentation (e.g., "Prerequisites: service-common Enhancement")
-2. If prerequisites are NOT satisfied, STOP immediately and inform the user
-3. Do NOT attempt to hack around missing prerequisites - this leads to broken implementations that must be deleted
-4. Complete prerequisites first, then return to the original task
+1. `bash -n <script>`
+2. `shellcheck <script>`
 
-### Cross-Repo Boundaries
+Fix all errors and warnings before finishing. Do not suppress a ShellCheck warning without an in-file `# shellcheck disable=SC####` justification comment.
 
-**Do NOT write code (Java, TypeScript, etc.) in sibling repositories.** This repo is the orchestrator — it coordinates, it doesn't implement service logic. When debugging cross-service issues, read sibling repos freely and only write to:
-- This repository (orchestration)
+## Prerequisites First
+
+Before implementing a plan or feature:
+1. Check the relevant documentation for prerequisites
+2. If prerequisites are missing, stop and call that out
+3. Do not hack around a missing prerequisite with orchestration-level compensating changes
+4. Complete prerequisites first, then return to the requested work
+
+## Image Pinning And Supply Chain Guardrails
+
+- Treat checked-in third-party image refs and Dockerfile base images as digest-pinning targets unless an exception is explicitly documented in the executable inventories
+- The executable inventories live in `scripts/lib/phase-7-image-pinning-targets.txt` and `scripts/lib/phase-7-allowed-latest.txt`
+- Keep those inventories aligned with the static security guardrail checks
+- Only the documented local image repos may remain on `:latest` in checked-in manifests
+- Live Tilt deploys rewrite those same repos to immutable `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on those managed deploys
+- Treat every third-party `image:` or `FROM` ref as a digest-pinning target unless it is explicitly excluded in the inventories
+- `tests/setup-flow` and `tests/security-preflight` are stale, non-gating retained assets until they are explicitly realigned to the current Istio-only baseline. Do not treat them as current completion gates
+
+## Cross-Repo Boundaries
+
+Do NOT write code in sibling repositories from this repo context.
+
+Allowed write surface from this repo:
+- This repository
 - Documentation in sibling repos
-- Configuration files (e.g., `application.yml`, manifests, env/config wiring) in sibling repos when fixing deployment/config issues
+- Configuration in sibling repos when fixing deployment, environment, or manifest wiring issues
 
-If a fix requires code changes in a service repo, describe the needed changes and let the user handle it (or switch to that repo's context).
+If a fix requires service logic changes in a sibling repo:
+- Stop
+- Describe the needed service-side change clearly
+- Let the user handle it, or switch to that repo's context
 
-**Do not hide sibling-repo contract failures with orchestration workarounds.**
-When the root cause belongs to another repo's shared code or service logic, do
-not add compensating environment variables, manifests, routing rules, or other
-deployment tweaks in this repo just to make the symptom disappear. Stop and
-call out the owning repo instead. Example: if Spring Boot services do not expose
-`/actuator/prometheus` even though service-common is supposed to provide that
-default, fix or rebuild `service-common`; do not add
-`MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` to each
-orchestration deployment as a workaround.
+Do not hide sibling-repo contract failures with orchestration workarounds.
 
-### Production-Grade Parity
+Example: if Spring Boot services fail to expose `/actuator/prometheus` and that contract belongs in `service-common`, fix or rebuild `service-common`. Do not patch orchestration manifests with compensating `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` overrides just to hide the defect.
 
-Treat both supported runtime paths, local Tilt/Kind and OCI/k3s, as
-production-grade microservices deployments. Tilt is not a shortcut environment
-where weaker infrastructure patterns are acceptable; it is the production
-parity path for proving the same architecture, security boundaries, persistence
-contracts, routing model, and operational behavior before OCI deployment.
+## Production-Grade Parity
 
-Do not present manual live-cluster drift, security bypasses, relaxed policies,
-untracked Helm overrides, degraded persistence such as replacing StatefulSets
-with `emptyDir`, or compensating orchestration changes as final fixes.
-Temporary recovery commands are acceptable only when clearly labeled as
-diagnostic or incident-recovery steps. Every durable fix must be repo-owned,
-repeatable from scripts/manifests, documented in the affected plan or runbook,
-and verified with the relevant smoke or guardrail checks.
+Treat both supported runtime paths, local Tilt/Kind and OCI/k3s, as production-grade microservices deployments.
 
-### Planning Transparency
+Do not present the following as durable fixes:
+- manual live-cluster drift
+- security bypasses
+- relaxed policies
+- untracked Helm overrides
+- degraded persistence such as replacing StatefulSets with `emptyDir`
+- orchestration-level compensations for service-owned defects
 
-**Write plans to `docs/plans/`, not hidden locations.** When planning work:
-- Create plan files in `docs/plans/` so they're visible and version-controlled
-- Don't use ephemeral plan modes that hide work from the user
-- Plans should be collaborative artifacts, not invisible scaffolding
+Temporary recovery commands are acceptable only when clearly labeled as diagnostics or incident-recovery steps. Every durable fix must be repo-owned, repeatable from scripts/manifests, documented in the affected runbook or plan, and verified with the relevant smoke or guardrail checks.
 
-### Autonomous AI Execution Pattern
+## Planning Transparency
 
-**Key principle**: An effective technique for running AI agents is autonomous execution. Set clear success criteria, then run with `--dangerously-skip-permissions`.
+Write plans to `docs/plans/`, not hidden locations.
 
-**For detailed understanding of**:
-- Why autonomous execution is essential for AI agents
-- How the container sandbox makes this safe
-- Docker access patterns (wormhole for TestContainers, true DinD for CI)
-- Success criteria patterns and best practices
+Plans should be visible, version-controlled collaboration artifacts. Do not hide meaningful project planning in ephemeral or private planning mechanisms.
 
-→ See [docs/architecture/autonomous-ai-execution.md](docs/architecture/autonomous-ai-execution.md)
+## Autonomous AI Execution Pattern
 
-### SSL/TLS Certificate Constraints
+The preferred AI execution pattern in this repo is autonomous execution with clear success criteria. For rationale, safety model, Docker access patterns, and examples, see `docs/architecture/autonomous-ai-execution.md`.
 
-**NEVER run SSL write operations** - Claude runs in a container with its own mkcert CA, but the user's browser trusts their host's mkcert CA. These are different CAs, so certificates generated in Claude's sandbox will cause browser SSL warnings.
+## SSL/TLS Certificate Constraints
 
-**Forbidden operations** (must be run by user on host):
-- `mkcert` (any certificate generation)
-- `openssl genrsa`, `openssl req -new`, `openssl x509 -req` (key/cert generation)
-- Any script that generates certificates (e.g., `setup-k8s-tls.sh`, `setup-infra-tls.sh`)
+NEVER run SSL write operations from the AI container.
 
-**Allowed operations** (read-only):
-- `openssl x509 -text -noout` (inspect certificates)
-- `openssl verify` (verify certificate chains)
-- `kubectl get secret -o yaml` (view secrets)
+The container has its own `mkcert` CA, but the user's browser trusts the host CA. Certificates generated inside the container will cause browser trust failures.
+
+Forbidden operations that must be run by the user on the host:
+- `mkcert`
+- `openssl genrsa`
+- `openssl req -new`
+- `openssl x509 -req`
+- Any script that generates browser or infrastructure certificates, including `scripts/bootstrap/setup-k8s-tls.sh` and `scripts/bootstrap/setup-infra-tls.sh`
+
+Allowed read-only operations:
+- `openssl x509 -text -noout`
+- `openssl verify`
+- `kubectl get secret -o yaml`
 - Certificate file reads for debugging
 
-When SSL issues occur, guide the user to run certificate scripts on their host machine.
+When SSL issues occur, guide the user to run the certificate scripts on the host.
 
-When working on this project:
-- Follow the resource-based routing pattern for new API endpoints
-- Treat public `/api/...` additions as incomplete until both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` claim the route and verification proves it does not fall through to the frontend SPA
-- Ensure Kubernetes configurations remain simple and maintainable
-- Keep service independence - avoid tight coupling between services
-- Each microservice lives in its own repository
-- This orchestration repo coordinates deployment and environment setup
-- All repositories should be cloned side-by-side in a common parent directory for cross-repo documentation links to work
-- **Path Portability**: Never hardcode absolute paths like `/workspace`. The orchestration repo must work when cloned to any directory. Use relative paths or dynamic resolution (e.g., `config.main_dir` in Tiltfiles, `$(dirname "$0")` in shell scripts)
-- Ignore all files in docs/archive and docs/decisions. Never change them, they are just for historical reference.
+## Path Portability
 
-**NO GIT WRITE OPERATIONS**: Never run git commands (commit, push, checkout, reset, etc.) without explicit user request. The user controls git workflow entirely. You may suggest what to commit, but don't do it.
+Never hardcode absolute workspace paths such as `/workspace`.
+
+Use relative paths or dynamically resolved paths instead:
+- `../service-common`
+- `$(dirname "$0")`
+- Tilt variables such as `config.main_dir`
+
+All repositories are expected to be cloned side-by-side under a common parent directory so cross-repo relative references continue to work.
+
+## Historical Docs
+
+Ignore `docs/archive/` for active implementation work.
+
+Use `docs/decisions/` for context and rationale, not as an implementation surface. Do not edit decision records unless explicitly asked.
+
+## NO GIT WRITE OPERATIONS
+
+Never run git write commands such as `commit`, `push`, `checkout`, `reset`, or branch manipulation without explicit user request. The user owns git workflow entirely.
 
 ## Honest Discourse
 
 Do not over-validate ideas. The user wants honest pushback, not agreement.
 
 - If something seems wrong, say so directly
-- Distinguish "novel" from "obvious in retrospect"
-- Push back on vague claims — ask for concrete constraints
-- Don't say "great question" or "that's a really interesting point"
-- Skip the preamble and caveats — just answer
+- Distinguish novel ideas from ideas that are obvious in retrospect
+- Push back on vague claims and ask for concrete constraints
+- Skip empty praise and filler

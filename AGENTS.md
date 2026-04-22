@@ -35,6 +35,8 @@ kubectl get svc -A
 
 Keep `AGENTS.md` pattern-based and discovery-first. Prefer stable rules, discovery commands, and source-of-truth pointers over long inventories that drift.
 
+Use `docs/OWNERSHIP.md` as the control surface for canonical documentation ownership. Update the owner doc first, then update summaries and cross-links.
+
 When editing `AGENTS.md`, read `docs/decisions/003-pattern-based-claude-md.md` first and apply its pattern-based guidance so this file stays maintainable over time.
 
 Do not optimize `AGENTS.md` for token minimization alone. Keep useful orchestration-specific constraints and workflows, but compress repetition and link to the closer source of truth when one already exists.
@@ -100,16 +102,13 @@ Technology pattern:
 - Infrastructure: PostgreSQL, Redis, RabbitMQ
 - Monitoring: Prometheus, Grafana, Jaeger, Kiali
 
-Service topology:
-- Frontend services: React-based web application, with port `3000` in local frontend development
-- Backend microservices: Spring Boot REST APIs, typically on ports `8082+`
-- Session Gateway: Spring WebFlux on port `8081` for browser authentication and heartbeat-driven session management
-- `ext-authz`: Go HTTP service on port `9002` for Istio external authorization and Redis-backed session validation
+Service topology summary:
+- Frontend: React web application for browser clients
+- Backend workloads: Spring Boot microservices behind NGINX, plus Session Gateway and `ext-authz` on the auth and authorization path
 - Infrastructure: PostgreSQL, Redis, and RabbitMQ in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template
 - Monitoring: Prometheus, Grafana, kube-state-metrics, the repo-managed Jaeger v2 backend, and standalone Kiali in `monitoring`; Jaeger and Kiali stay `ClusterIP`-only
-- Ingress: Istio Ingress Gateway on port `443` for TLS termination, routing, ext_authz enforcement, and auth-path throttling
-- Egress: Istio Egress Gateway as `ClusterIP` with `REGISTRY_ONLY` outbound policy
-- API Gateway: NGINX on port `8080` for internal routing, backend/API rate limiting, and load balancing
+- Ingress and egress: Istio ingress handles browser entry, `ext_authz`, and auth-path throttling; Istio egress stays `ClusterIP` with `REGISTRY_ONLY`
+- Exact service ports and exposure rules live in `docs/architecture/port-reference.md`
 
 Adding a new service:
 - Create manifests in `kubernetes/services/{name}/`
@@ -123,17 +122,20 @@ Version numbers and concrete dependency selections live in service repos, manife
 
 Use the closest source of truth for the topic instead of expanding `AGENTS.md` with inventory detail.
 
-- Architecture overview and request flow: `docs/architecture/system-overview.md`
-- Session-based edge authorization and routing model: `docs/architecture/session-edge-authorization-pattern.md`
+- Documentation ownership map: `docs/OWNERSHIP.md`
+- High-level system orientation: `docs/architecture/system-overview.md`
+- Browser request flow, route ownership, and shared browser session contract: `docs/architecture/session-edge-authorization-pattern.md`
 - Resource-based routing rules: `docs/architecture/resource-routing-pattern.md`
 - Security posture and layered controls: `docs/architecture/security-architecture.md`
-- Service ports and topology: `docs/architecture/port-reference.md`
-- Local setup and live development pipeline: `docs/development/getting-started.md` and `docs/development/local-environment.md`
+- Service ports and exposure rules: `docs/architecture/port-reference.md`
+- Supported local happy path: `docs/development/getting-started.md`
+- Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
 - Containerized dev environment setup: sibling `../workspace` repository
 - Script directory map and canonical entry points: `scripts/README.md`
 - NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
 - Production overlays and OCI deployment inputs: `kubernetes/production/README.md`
 - Observability topology and operator access model: `docs/architecture/observability.md`
+- Unified `/api-docs` behavior: `docs-aggregator/README.md`
 - Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`
 
 Useful discovery commands:
@@ -156,21 +158,19 @@ kubectl get pods -A -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' 
 The primary request flow is:
 
 ```text
-Browser -> Istio Ingress (:443) -> ext_authz validates session -> NGINX (:8080) -> services
-Auth paths -> Istio Ingress (:443) -> Session Gateway (:8081)
+Browser -> Istio Ingress -> ext_authz validates session -> NGINX -> services
+Auth paths -> Istio Ingress -> Session Gateway
 ```
 
 Entry-point ownership:
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout` -> Session Gateway
-- `/api/*` -> NGINX, with ext_authz enforced at the ingress layer
-- `/api-docs`, `/api-docs/*`, `/login`, `/*` -> NGINX
+- Browser auth lifecycle stays on the direct Session Gateway lane
+- API traffic stays on the NGINX lane with ingress-layer `ext_authz`
+- Exact route ownership and `/api-docs` behavior live in `docs/architecture/session-edge-authorization-pattern.md` and `docs-aggregator/README.md`
 
 Session and identity rules:
-- Session Gateway resolves roles and permissions from `permission-service` during session creation
-- Active browser sessions are renewed through `GET /auth/v1/session`
-- Browser session inspection lives at `GET /auth/v1/user`
-- Bulk revocation propagates on `DELETE /internal/v1/sessions/users/{userId}`
+- Session Gateway resolves roles and permissions from `permission-service` during session creation and owns browser session lifecycle on the direct auth lane
 - Keep browser session logic on the direct `/auth/*` lane rather than pushing it through the general API path
+- Exact browser endpoints and the shared Session Gateway/`ext_authz` contract live in `docs/architecture/session-edge-authorization-pattern.md`
 
 Operational guardrails:
 - Follow the resource-based routing pattern for new API endpoints
@@ -181,12 +181,11 @@ Operational guardrails:
 
 Observability rules:
 - Grafana, Prometheus, Jaeger, and Kiali are internal-only in both local Tilt and OCI/k3s
-- Use loopback-only `kubectl port-forward --address 127.0.0.1 ...` for operator access
-- `./scripts/ops/start-observability-port-forwards.sh` is the repo-owned helper for the canonical Grafana, Prometheus, Jaeger, and Kiali forwards
+- Use loopback-only access for operators: raw `kubectl port-forward --address 127.0.0.1 ...` or `./scripts/ops/start-observability-port-forwards.sh`
 - `./scripts/smoketest/verify-observability-port-forward-access.sh` is the focused access proof
-- Kiali uses token auth via `kubectl -n monitoring create token kiali`
-- Do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or `jaeger.budgetanalyzer.org`
+- Do not introduce public observability hostnames
 - Do not use `--address 0.0.0.0` for observability access
+- Exact observability access commands, local ports, and Kiali auth flow live in `docs/architecture/observability.md`
 
 ## Development Workflow
 
@@ -196,24 +195,16 @@ Use the prerequisite script rather than guessing tool or environment state:
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-Standard local startup path:
-
-```bash
-./setup.sh
-$EDITOR .env
-./scripts/guardrails/verify-phase-7-static-manifests.sh
-tilt up
-./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
-./scripts/smoketest/verify-security-prereqs.sh
-./scripts/smoketest/verify-phase-3-istio-ingress.sh
-./scripts/smoketest/verify-phase-5-runtime-hardening.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
-./scripts/smoketest/smoketest.sh
-```
+Supported local startup path:
+- `docs/development/getting-started.md` owns the exact bootstrap and verifier sequence
+- `tilt up` remains the supported full-stack entry point after the documented prerequisites are complete
+- `docs/development/local-environment.md` owns live-update mechanics and mixed local-and-cluster workflow detail
+- `scripts/README.md` owns the full verifier catalog and targeted capability checks
 
 Primary operator entry points:
 - App: `https://app.budgetanalyzer.localhost`
 - Tilt UI: `http://localhost:10350`
+- Unified API docs surface: `https://app.budgetanalyzer.localhost/api-docs`
 - Observability helper: `./scripts/ops/start-observability-port-forwards.sh`
 
 Use targeted verifiers from `scripts/README.md` when working on one capability such as monitoring, tracing, shared session contracts, rate limiting, or browser hardening.

@@ -1,175 +1,140 @@
 # Budget Analyzer - System Overview
 
-**Date:** 2025-11-24
+**Date:** 2026-04-22
 **Status:** Active
+
+## Purpose
+
+This document is the high-level map of the Budget Analyzer runtime. It
+summarizes the major layers and why they exist without re-owning the exact
+contracts that live elsewhere.
+
+Canonical topic owners for exact detail:
+
+- Request flow, route ownership, and browser session contract:
+  [session-edge-authorization-pattern.md](session-edge-authorization-pattern.md)
+- Security controls and rationale:
+  [security-architecture.md](security-architecture.md)
+- Ports and service exposure:
+  [port-reference.md](port-reference.md)
+- Observability access and operator workflows:
+  [observability.md](observability.md)
+- Unified `/api-docs` surface:
+  [../../docs-aggregator/README.md](../../docs-aggregator/README.md)
 
 ## Request Flow
 
-**Single entry point**: `app.budgetanalyzer.localhost`. Istio ingress gateway handles SSL termination, auth-path throttling, and ext_authz enforcement.
+**Single browser entry point**: `https://app.budgetanalyzer.localhost`
 
 ```
-BROWSER REQUEST FLOW
-====================
-
-Browser (https://app.budgetanalyzer.localhost)
-    │
-    ▼ HTTPS
-Istio Ingress Gateway (:443) ─── SSL termination, ext_authz on /api/* paths, auth-path rate limiting
-    │
-    ├─ /auth/*, /oauth2/*, /login/oauth2/*, /logout → Session Gateway (:8081) ─── auth lifecycle
-    │
-    ├─ /api/* → ext_authz (:9002) validates session from Redis
-    │           ├─ injects X-User-Id, X-Roles, X-Permissions headers
-    │           └─ NGINX Gateway (:8080) ─── routes to backend service
-    │
-    └─ /login, /* → NGINX Gateway (:8080) ─── serves frontend (no auth required)
-    │
-    ▼ HTTP
-Backend Services ─── business logic, data authorization
+Browser
+   │
+   ▼
+Istio Ingress Gateway
+   ├─ Auth lane → Session Gateway
+   └─ App/API lane → ext_authz → NGINX Gateway → Backend Services
+                                              │
+                                              ├─ PostgreSQL
+                                              ├─ Redis
+                                              └─ RabbitMQ
 ```
 
-**Why this works:**
-- Browser never sees tokens (XSS protection)
-- Single origin = no CORS
-- Istio ingress handles all SSL
-- ext_authz validates every API request
-- Session revocation is instant (Redis key delete)
+The important split is:
 
-Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites. Treat Istio ingress and egress hardening as verified only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and the live validation checklist pass.
+- Session Gateway owns browser authentication and session lifecycle.
+- `ext_authz` validates every browser `/api/*` request before NGINX forwards
+  it to a backend.
+- NGINX owns resource-based routing and backend/API rate limiting.
+- Backend services own business logic and data-level authorization.
+
+This gives the repo a same-origin browser surface, keeps tokens out of the
+browser, and preserves the same gateway layering in local Tilt and OCI/k3s.
+
+Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the
+platform security prerequisites. Treat Istio ingress and egress hardening as
+verified only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and
+the live validation checklist pass.
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Budget Analyzer Web                     │
-│                    (React 19 + TypeScript)                   │
+│                      Budget Analyzer Web                    │
+│                    (React 19 + TypeScript)                 │
 └───────────────────────────┬─────────────────────────────────┘
                             │ HTTPS
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                Istio Ingress Gateway (:443)                   │
-│   (SSL termination, auth-path throttling, ext_authz, routing)│
+│                   Istio Ingress Gateway                    │
+│      (TLS termination, auth throttling, routing, ext_authz)│
 └─────────┬──────────────────────────┬────────────────────────┘
-          │ auth paths               │ /api/*, /*
+          │ auth lane                │ app/API lane
           ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────┐
-│   Session Gateway    │   │   ext_authz (:9002)  │
-│   (OAuth2, Sessions) │   │   session validation │
-│   :8081              │   └──────────┬───────────┘
-└───────┬──────────────┘              │ headers injected
-        │                             ▼
-        ▼                   ┌──────────────────────────────────┐
-┌──────────────────────┐   │         NGINX API Gateway         │
-│  Permission Service  │   │   (routing, backend/API rate      │
-│   :8086              │   │    limiting)                      │
-└──────────────────────┘   │   :8080                           │
-                           └─────────┬────────────────────────┘
-                                     │
-                          ┌──────────┴──────────────────────┐
-                          ▼                                 ▼
-                 ┌──────────────────────┐  ┌──────────────────────┐
-                 │  Transaction Service │  │   Currency Service   │
-                 │   :8082              │  │   :8084              │
-                 └──────────┬───────────┘  └─────────┬────────────┘
-          │                                            │
-          ▼                                            ▼
+│   Session Gateway    │   │      ext_authz       │
+│  (OAuth2, sessions)  │   │  session validation  │
+└───────┬──────────────┘   └──────────┬───────────┘
+        │                             │ trusted headers
+        ▼                             ▼
+┌──────────────────────┐   ┌──────────────────────────────────┐
+│  Permission Service  │   │         NGINX API Gateway        │
+│ roles/permissions +  │   │   routing and backend throttling │
+│ bulk session revoke  │   └─────────┬────────────────────────┘
+└──────────────────────┘             │
+                                     ▼
+                 ┌──────────────────────┬──────────────────────┐
+                 │  Transaction Service │   Currency Service   │
+                 └──────────┬───────────┴─────────┬────────────┘
+                            ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Shared Infrastructure                           │
-│  • PostgreSQL (primary database)                             │
-│  • Redis (session hash storage, caching)                     │
-│  • RabbitMQ (async messaging)                                │
+│                    Shared Infrastructure                    │
+│        PostgreSQL • Redis • RabbitMQ • Monitoring           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Services
+## Service Layers
 
-### Frontend Services
+### Frontend
 
-**budget-analyzer-web**
-- React 19 single-page application
-- Features: Transaction management, CSV import, search, analytics
-- Development port: 3000
-- Production: Static assets served via NGINX
+`budget-analyzer-web` is a React single-page application. In local development
+it runs through the Vite-based workflow; in production-style flows NGINX serves
+the built frontend assets.
 
-### Gateway Services
+### Edge and Routing
 
-**Istio Ingress Gateway** (Port 443)
-- SSL/TLS termination
-- ext_authz enforcement on `/api/*` paths via meshConfig extensionProvider
-- Auth-path throttling on `/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`
-- Ingress routing based on path (Gateway API HTTPRoutes)
-- Kubernetes Gateway API compliant
-- Runs inside the Istio service mesh with SPIFFE identity
+Istio ingress, Session Gateway, `ext_authz`, NGINX, and Istio egress form the
+control plane at the application edge:
 
-**Istio Egress Gateway** (ClusterIP, istio-egress namespace)
-- Routes approved outbound traffic (Auth0, FRED API) via ServiceEntry + VirtualService
-- Uses TLS `PASSTHROUGH`; workload-to-egress traffic keeps `tls.mode: DISABLE` so the original external TLS/SNI reaches the gateway unchanged
-- Enforces REGISTRY_ONLY outbound policy — unapproved hosts are blocked
-- Only gateway pod with external internet access (NetworkPolicy enforced)
+- Istio ingress terminates TLS, applies auth-path throttling, and enforces
+  `ext_authz` on browser API traffic.
+- Session Gateway owns OAuth2 login, logout, and browser session renewal.
+- `ext_authz` converts the Redis-backed browser session into trusted identity
+  headers on every API request.
+- NGINX maps resource routes to backend services and applies backend/API rate
+  limiting.
+- Istio egress owns the approved outbound paths to external providers such as
+  Auth0 and FRED.
 
-**ext_authz Service** (Port 9002 HTTP, Port 8090 Health)
-- Per-request session validation via Redis lookup
-- Header injection (X-User-Id, X-Roles, X-Permissions)
-- Go HTTP service implementing Envoy ext_authz protocol
+See [session-edge-authorization-pattern.md](session-edge-authorization-pattern.md)
+for the detailed request-flow and route-ownership contract.
 
-**Session Gateway** (Port 8081)
-- OAuth2 authentication with Auth0
-- Session management via Redis hashes (`session:{id}`)
-- No Auth0 tokens stored after login — session hashes hold only user identity and permissions
-- Heartbeat endpoint `GET /auth/v1/session` extends the session TTL for active browser users (2-minute frontend default cadence; heartbeat is local Redis only, no Auth0 calls)
-- Calls permission-service to enrich session with roles/permissions
+### Business Services
 
-**NGINX API Gateway** (Port 8080)
-- Resource-based routing
-- Backend/API rate limiting
-- Load balancing
+- `transaction-service` owns transaction and budget workflows.
+- `currency-service` owns currency and exchange-rate workflows.
+- `permission-service` supplies roles and permissions to Session Gateway and
+  triggers bulk browser-session revocation when user state changes.
 
-### Backend Microservices
+### Shared Infrastructure and Observability
 
-**transaction-service** (Port 8082)
-- Domain: Transactions and budgets
-- Key features: CSV import (multi-bank), transaction CRUD, advanced search
-- Database: PostgreSQL (transactions, budgets, categories)
+- PostgreSQL is the primary relational store.
+- Redis stores browser sessions and selected service caches.
+- RabbitMQ carries asynchronous inter-service events.
+- Prometheus, Grafana, Jaeger, Kiali, and kube-state-metrics run in the
+  `monitoring` namespace and remain internal-only.
 
-**currency-service** (Port 8084)
-- Domain: Currencies and exchange rates
-- Key features: FRED API integration, scheduled imports, distributed caching
-- Database: PostgreSQL (currencies, exchange rates)
-- External: Federal Reserve Economic Data (FRED)
-
-### Infrastructure Services
-
-**PostgreSQL**
-- Primary database for all services
-- Service-specific databases
-- Managed via Flyway migrations per service
-
-**Redis**
-- Session storage (Session Gateway writes `session:{id}` hashes, ext_authz reads them)
-- Distributed caching (currency-service)
-
-**RabbitMQ**
-- Async messaging between services
-- Event-driven architecture (Spring Modulith)
-
-### Monitoring Services
-
-**Prometheus** (Port 9090, `monitoring` namespace)
-- Metrics scraping and storage (10Gi PVC)
-- Scrapes Spring Boot actuator endpoints, istiod, and Envoy sidecars
-- Mesh-injected for STRICT mTLS compliance
-- Access via port-forward only
-
-**Grafana** (Port 80, `monitoring` namespace)
-- Dashboard visualization
-- Pre-provisioned JVM and Spring Boot dashboards
-- Internal-only operator access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
-- Grafana authentication stays enabled; anonymous access stays disabled
-
-**kube-state-metrics** (`monitoring` namespace)
-- Kubernetes resource metrics for Prometheus
-
-See [Observability Architecture](observability.md) for details.
+See [observability.md](observability.md) for the operator access model and
+[port-reference.md](port-reference.md) for the exact service-exposure contract.
 
 ## Key Architectural Principles
 

@@ -187,11 +187,11 @@ rescans the provider path on a polling interval (default 10s), and kubelet
 propagates ConfigMap updates (~60s), so dashboard changes take effect
 without a pod restart.
 
-The sidecar-based dashboard discovery pattern was evaluated and rejected —
-it would add a container and grant Grafana Kubernetes API access solely to
-watch a single ConfigMap that is already mounted as a volume. See the
-implementation notes in the [observability plan](../plans/observability-stack-prometheus-grafana-2026-04-10.md)
-for the full evaluation.
+The sidecar-based dashboard discovery pattern was evaluated and rejected
+because it would add a container and grant Grafana Kubernetes API access solely
+to watch a single ConfigMap that is already mounted as a volume. The retained
+deployment model keeps dashboard delivery on the direct ConfigMap mount path
+instead.
 
 ### Common Debugging Scenarios
 
@@ -594,7 +594,8 @@ kubectl get pods -n monitoring
 kubectl get svc -n monitoring
 
 # Check Prometheus targets
-kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090
+kubectl port-forward --address 127.0.0.1 -n monitoring \
+  svc/prometheus-stack-kube-prom-prometheus 9090:9090
 # Then open http://localhost:9090/targets
 
 # Check ServiceMonitor and PodMonitor CRDs

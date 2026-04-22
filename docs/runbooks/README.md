@@ -2,6 +2,10 @@
 
 Operational guides for debugging and troubleshooting the Budget Analyzer development environment.
 
+Runbooks assume you already used the supported setup path in
+[../development/getting-started.md](../development/getting-started.md). If the
+stack is not up yet, start there first.
+
 ## Available Runbooks
 
 | Runbook | Description | When to Use |
@@ -24,7 +28,12 @@ These runbooks follow a **decision tree approach**:
 - **API Base**: https://app.budgetanalyzer.localhost/api
 
 ### Related Documentation
-- [Tilt Kind Setup Guide](../tilt-kind-setup-guide.md) - Initial setup instructions
+- [Getting Started](../development/getting-started.md) - Supported local
+  startup path
+- [Local Environment Mechanics](../development/local-environment.md) - How the
+  local environment works after bring-up
+- [Tilt/Kind Manual Deep Dive](../tilt-kind-setup-guide.md) - Manual bootstrap
+  internals only; not the default onboarding path
 - [NGINX Gateway README](../../nginx/README.md) - Routing configuration
 - [AGENTS.md](../../AGENTS.md) - Architecture overview
 

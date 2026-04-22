@@ -20,15 +20,9 @@ devcontainer:
 
 ```bash
 cd path/to/workspace/orchestration
-./scripts/bootstrap/check-tilt-prerequisites.sh
 ./setup.sh
 vim .env
-./scripts/guardrails/verify-phase-7-static-manifests.sh
 tilt up
-./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
-./scripts/smoketest/verify-security-prereqs.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
-./scripts/smoketest/smoketest.sh
 ```
 
 This is the supported local startup path for the repository:
@@ -36,15 +30,36 @@ This is the supported local startup path for the repository:
 - `./setup.sh` recreates the local `kind` cluster, installs the supported
   Helm/Calico/Istio prerequisites, configures browser and internal TLS, sets up
   local DNS, and prepares `.env`.
+- Edit `.env` before `tilt up`. Auth0 values and `FRED_API_KEY` are required
+  for local startup.
 - `tilt up` is the supported entry point for the full local stack.
-- [`scripts/README.md`](../../scripts/README.md) owns the full verifier catalog
-  and targeted capability checks.
 - [`local-environment.md`](local-environment.md) explains how the local
   environment works once that stack is up, including Tilt live update, mixed
   local-and-cluster workflows, and troubleshooting.
+- [`scripts/README.md`](../../scripts/README.md) owns the full verifier catalog
+  and targeted capability checks.
 
 Open `https://app.budgetanalyzer.localhost` after the app workloads are green
 in Tilt.
+
+## Validation
+
+After Tilt is healthy, run the aggregate local proof:
+
+```bash
+./scripts/smoketest/smoketest.sh
+```
+
+Use targeted verifiers only when you are debugging one capability:
+
+```bash
+./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
+./scripts/smoketest/verify-security-prereqs.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
+```
+
+For the full verifier catalog, use
+[`scripts/README.md`](../../scripts/README.md).
 
 ## `service-common` Contract
 
@@ -57,15 +72,16 @@ The canonical explanation of the local-vs-remote artifact contract lives in
 
 ## External Services
 
-The app needs two external accounts in addition to the local infrastructure
-password defaults already present in `.env`.
+The app requires both Auth0 and FRED credentials for local startup.
 
 ### Auth0
 
 1. Create an account at [auth0.com](https://auth0.com).
 2. Create an application of type **Regular Web Application**.
 3. Copy the Auth0 domain, client ID, and client secret into `.env`.
-4. Use [auth0-setup.md](../setup/auth0-setup.md) for the full setup guide.
+4. `AUTH0_ISSUER_URI` must be valid before `tilt up`; the local Auth0 egress
+   render derives its hostname from that value.
+5. Use [auth0-setup.md](../setup/auth0-setup.md) for the full setup guide.
 
 ### FRED API
 

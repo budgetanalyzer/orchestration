@@ -48,6 +48,6 @@ The Currency Service caches responses to minimize API calls.
 - Check Currency Service logs: `kubectl logs -n default deployment/currency-service`
 - Verify network connectivity to `api.stlouisfed.org`
 
-## Alternative: Skip FRED API
+## Requirement
 
-If you don't need exchange rate features, you can leave `FRED_API_KEY` empty. The Currency Service will start but exchange rate endpoints will return errors.
+`FRED_API_KEY` is required for the supported local setup path.

@@ -219,7 +219,7 @@ the active context and Tilt resource state from the same host shell first.
   a short-lived `kubectl create token kiali` token, and prints a human-readable
   triage summary. It also compares the current Kiali findings against the
   expected app deployments in `default`, so it can say explicitly when cluster
-  bring-up is the blocker and Kiali is just reporting missing runtime. Local
+  startup is the blocker and Kiali is just reporting missing runtime. Local
   Tilt defaults to the seven-workload topology; OCI production should use
   `--runtime-shape production` so the helper expects the six-workload topology
   where `nginx-gateway` serves the frontend bundle.

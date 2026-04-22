@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Audience:** Developers who need to understand how the supported local
-environment works after bring-up
+environment works after startup
 
 ## Prerequisites
 
@@ -90,11 +90,10 @@ cross-repo scripts, and documentation links.
 [getting-started.md](getting-started.md) owns the supported happy-path
 checklist for:
 
-- `./scripts/bootstrap/check-tilt-prerequisites.sh`
 - `./setup.sh`
 - `.env` review
 - `tilt up`
-- the recommended post-start verifier order
+- the optional validation flow after startup
 
 This document owns the mechanics behind that workflow instead:
 

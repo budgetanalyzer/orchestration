@@ -1,7 +1,8 @@
-# Local Development Environment Setup
+# Local Development Environment Mechanics
 
 **Status:** Active
-**Audience:** Developers setting up Budget Analyzer locally
+**Audience:** Developers who need to understand how the supported local
+environment works after bring-up
 
 ## Prerequisites
 
@@ -61,352 +62,107 @@ For host-side binary installs, prefer the checked-in verified installer:
 It uses pinned release artifacts with checked-in SHA-256 values instead of
 floating installer endpoints.
 
-## Quick Start
+## Workspace Shape
 
-### 1. Clone Repositories
+The supported onboarding path lives in
+[getting-started.md](getting-started.md). This document assumes that path is
+already in place and explains the local environment mechanics behind it.
 
-```bash
-# Create workspace directory
-mkdir -p ~/workspace/budget-analyzer
-cd ~/workspace/budget-analyzer
+If you clone repositories manually instead of using the sibling `workspace`
+repo, keep them side by side under a common parent directory:
 
-# Clone orchestration (required)
-git clone https://github.com/budgetanalyzer/orchestration.git
-
-# Clone services (as needed)
-git clone https://github.com/budgetanalyzer/service-common.git
-git clone https://github.com/budgetanalyzer/transaction-service.git
-git clone https://github.com/budgetanalyzer/currency-service.git
-git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
-git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/permission-service.git
+```text
+parent-directory/
+├── orchestration/
+├── service-common/
+├── transaction-service/
+├── currency-service/
+├── session-gateway/
+├── permission-service/
+└── budget-analyzer-web/
 ```
 
-**Repository structure:**
-```
-~/workspace/budget-analyzer/
-├── orchestration/           # This repo
-├── service-common/          # Shared Spring Boot library
-├── transaction-service/     # Transaction microservice
-├── currency-service/        # Currency microservice
-├── session-gateway/         # Unified session gateway
-├── permission-service/      # Internal roles/permissions
-└── budget-analyzer-web/     # React frontend
-```
+That side-by-side layout is required for the repo's relative-path workflow,
+cross-repo scripts, and documentation links.
 
-**Important:** This side-by-side layout is **required** for cross-repository documentation links to work correctly.
+## Supported Startup Path
 
-### 2. Bootstrap the Local Platform
+[getting-started.md](getting-started.md) owns the supported happy-path
+checklist for:
 
-Run the setup script on your **host machine**:
+- `./scripts/bootstrap/check-tilt-prerequisites.sh`
+- `./setup.sh`
+- `.env` review
+- `tilt up`
+- the recommended post-start verifier order
 
-```bash
-cd orchestration/
-./setup.sh
-```
+This document owns the mechanics behind that workflow instead:
 
-**What `setup.sh` does in the current platform security baseline:**
-1. Deletes any existing `kind` cluster and recreates it from scratch, which is
-   the clean-state contract for PVC-backed local infrastructure such as Redis
-2. Rejects older `kindnet`-based clusters that cannot enforce `NetworkPolicy`
-3. Installs pinned Calico and waits for CoreDNS readiness
-4. Ensures a supported Helm `3.20.x` binary is installed before any Helm-backed setup continues
-5. Configures local DNS plus browser-facing and internal transport TLS
-6. Installs Gateway API CRDs and prepares `.env`
+- what `setup.sh` assembles locally
+- how Tilt renders local config and secrets
+- how live update works for Java services, the frontend, and `service-common`
+- how to debug mixed local-and-cluster development workflows
 
-### 3. Configure Environment Variables
+The current local platform baseline still works like this:
 
-```bash
-# Create the file if setup.sh did not already create it
-[ -f .env ] || cp .env.example .env
-
-# Review the local PostgreSQL, RabbitMQ, and Redis password defaults, then add
-# your Auth0 config/client secret and FRED API key.
-```
+1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
+   scratch, which is the clean-state contract for PVC-backed local
+   infrastructure such as Redis.
+2. It rejects older `kindnet`-based clusters that cannot enforce
+   `NetworkPolicy`.
+3. It installs pinned Calico and waits for CoreDNS readiness.
+4. It ensures a supported Helm `3.20.x` binary is present before Helm-backed
+   setup continues.
+5. It configures local DNS plus browser-facing and internal transport TLS.
+6. It installs Gateway API CRDs and prepares `.env`.
 
 Tilt is the local secret producer for infrastructure credentials and the local
-renderer for non-secret Session Gateway Auth0 config. The Kubernetes manifests
-now keep passwords, client secrets, and API keys on the secret path, while
-issuer URIs, client IDs, audiences, hosts, ports, usernames, JDBC URLs, and
-logout URLs stay on checked-in manifests or ConfigMaps instead.
+renderer for non-secret Session Gateway Auth0 config. Kubernetes manifests keep
+passwords, client secrets, and API keys on the secret path, while issuer URIs,
+client IDs, audiences, hosts, ports, usernames, JDBC URLs, and logout URLs
+stay on checked-in manifests or ConfigMaps instead.
 
-### 4. Start Tilt
+For the credential-free local `service-common` contract, see
+[service-common-artifact-resolution.md](service-common-artifact-resolution.md).
+For the script directory map and verifier inventory, see
+[../../scripts/README.md](../../scripts/README.md).
 
-```bash
-cd orchestration/
-tilt up
-```
+## Observability Access
 
-### 5. Verify Services
+Local Tilt installs Grafana, Prometheus, Jaeger, and Kiali in the
+`monitoring` namespace as part of the default environment, and the Prometheus
+server pod is mesh-injected so the checked-in metrics pipeline works under the
+repo's STRICT mTLS and `NetworkPolicy` posture.
 
-```bash
-# Check all pods are running
-kubectl get pods -n default
-kubectl get pods -n infrastructure
-kubectl get pods -n monitoring
+This document does not own the exact observability access commands, operator
+URLs, or troubleshooting checklist. Use the canonical owner docs instead:
 
-# Test gateway
-curl https://app.budgetanalyzer.localhost/health
+- [../architecture/observability.md](../architecture/observability.md) for the
+  access model, loopback-only port-forward commands, scrape topology, and
+  dashboard expectations
+- [../../scripts/README.md](../../scripts/README.md) for the focused
+  observability helper and verifier entry points
 
-# Open frontend
-open https://app.budgetanalyzer.localhost
-
-# Optional but recommended: prove the platform security prerequisites
-./scripts/smoketest/verify-security-prereqs.sh
-
-# Optional but recommended: re-render and dry-run the monitoring stack inputs
-./scripts/smoketest/verify-monitoring-rendered-manifests.sh
-
-# Optional but recommended: prove credential isolation
-./scripts/smoketest/verify-phase-1-credentials.sh
-
-# Optional but recommended: prove the shared session contract
-# contract from orchestration before you log in
-./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only
-
-# Optional but recommended: prove NetworkPolicy enforcement
-./scripts/smoketest/verify-phase-2-network-policies.sh
-
-# Optional but recommended: prove infrastructure transport TLS
-./scripts/smoketest/verify-phase-4-transport-encryption.sh
-
-# Optional but recommended: prove Istio ingress and egress hardening
-./scripts/smoketest/verify-phase-3-istio-ingress.sh
-
-# Optional but recommended: prove runtime hardening and PSA labels
-./scripts/smoketest/verify-phase-5-runtime-hardening.sh
-
-# Optional but recommended: prove edge and browser security
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
-
-# Optional but recommended anytime: prove static security guardrails
-./scripts/guardrails/verify-phase-7-static-manifests.sh
-
-# Optional but recommended right after tilt up on a clean rebuild: prove the app deployments were admitted cleanly
-./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
-
-# Optional but recommended after the edge and browser security verifier: run the local security guardrail proof
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
-
-# Optional aggregate local smoke pass after Tilt is healthy
-./scripts/smoketest/smoketest.sh
-```
-
-`./scripts/guardrails/verify-phase-7-static-manifests.sh` is the local static
-security guardrail gate; it matches the dedicated `security-guardrails.yml`
-workflow closely enough for local reproduction and does not require a running
-cluster. It now also generates a Kyverno replay for representative approved
-local Tilt `:tilt-<hash>` refs so the live deploy-time admission path stays
-covered by the static guardrail suite.
-`./scripts/smoketest/verify-clean-tilt-deployment-admission.sh` is the host-side
-clean-start proof for the seven expected app deployments in `default`. Run it
-after `tilt up` when you want the specific admission regression check from the
-fresh-cluster workflow.
-`./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites.
-`./scripts/smoketest/smoketest.sh` is the aggregate local smoke entry point.
-It runs the static guardrails, platform prerequisite proof, clean Tilt admission
-proof, monitoring render/runtime checks, shared session contract verifier, and
-the final security guardrail umbrella in order.
-The surrounding `scripts/` tree is split by purpose: `bootstrap/` for setup,
-`guardrails/` for CI-safe static checks, `smoketest/` for live-cluster
-validation, `ops/` for day-two helpers, `loadtest/` for synthetic fixtures,
-and `repo/` for cross-repo maintenance. See
-[`scripts/README.md`](../../scripts/README.md) for the directory map.
-`./scripts/smoketest/verify-monitoring-rendered-manifests.sh` re-renders the pinned
-`kube-prometheus-stack` chart, proves every rendered workload image is
-digest-pinned, proves the render still avoids host-level node-exporter shapes,
-and server-dry-runs the rendered workload objects against the current cluster.
-`./scripts/smoketest/verify-session-architecture-phase-5.sh` proves the Session
-contract from orchestration: Redis ACL bootstrap
-uses `session:*` and `oauth2:state:*`, ext-authz and Session Gateway share the
-`session:` key prefix contract plus the `BA_SESSION` cookie-name default,
-orchestration explicitly wires `SESSION_COOKIE_NAME=BA_SESSION` into the
-`ext-authz` deployment, and `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and
-`/logout` still route only to Session Gateway with no standalone `/user` match.
-Use `--static-only` for repo-level validation before login. After a browser
-login, rerun it without that flag when you want the live Redis ACL/keyspace
-proof too, or add `--require-live-session` to insist on at least one real
-`session:*` key.
-`./scripts/smoketest/verify-phase-4-transport-encryption.sh` verifies
-infrastructure transport TLS, and
-`./scripts/smoketest/verify-phase-3-istio-ingress.sh` verifies Istio ingress and
-egress hardening.
-`./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh` is the
-scoped API rate-limit identity verifier for NGINX client-identity derivation and API
-rate-limit bucket correctness.
-`./scripts/smoketest/verify-phase-5-runtime-hardening.sh` verifies runtime
-hardening and reruns earlier security verifiers as regressions.
-`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh` verifies edge and
-browser security: it checks the live dev/strict CSP split on the real app
-paths, keeps `/api-docs` probes visible as warning-only checks, runs a real
-syntax check of the checked-in
-`nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod with
-the mounted include files, the fail-closed `/api-docs/*` contract for unknown
-docs paths, final auth-edge throttling coverage,
-reruns the Session 3 CSP audit plus the Session 7 API identity verifier, and
-then reruns the runtime-hardening verifier as the regression cascade. It still does not
-replace the manual browser-console validation required on `/_prod-smoke/`.
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh` is the local
-security guardrail proof. It runs the static gate first and
-then the runtime gate so contributors do not have to stitch
-those commands together manually. CI intentionally remains static-only through
-`security-guardrails.yml`.
-`./scripts/smoketest/verify-phase-7-runtime-guardrails.sh` remains the targeted
-live-cluster runtime guardrail proof. It adds the missing Redis ACL,
-PostgreSQL cross-database, and RabbitMQ permission-boundary denials, uses
-pinned temporary probe images plus self-cleaning temporary `NetworkPolicy`
-rules, and then reruns
-`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh` as the reused
-runtime regression umbrella.
-
-### 5a. Access Monitoring
-
-Tilt now installs the observability stack into the `monitoring` namespace as
-part of the default local environment.
-The Prometheus server pod is also injected into the Istio mesh so the checked-in
-Envoy `PodMonitor` can scrape sidecar metrics in `default` without bypassing the
-repo's STRICT mTLS, `AuthorizationPolicy`, or `NetworkPolicy` posture.
-The checked-in Spring Boot `ServiceMonitor` also scrapes the four actuator
-metrics endpoints in `default`; note that three of those services expose
-Prometheus under their servlet context paths, so the monitored paths are
-`/transaction-service/actuator/prometheus`,
-`/currency-service/actuator/prometheus`,
-`/permission-service/actuator/prometheus`, and `/actuator/prometheus` for
-Session Gateway.
-Tilt also applies the repo-managed Jaeger v2 backend in the same namespace.
-Jaeger receives Istio traces through the repo-owned `jaeger` OpenTelemetry
-extension provider in `kubernetes/istio/istiod-values.yaml` and the
-mesh-default `kubernetes/istio/tracing-telemetry.yaml` resource. Sampling stays
-on Istio defaults, so generate several requests through
-`https://app.budgetanalyzer.localhost` before checking Jaeger.
-Tilt also installs the standalone `kiali-server` chart in `monitoring` with
-token auth, view-only mode, non-cluster-wide RBAC, `ClusterIP` service
-exposure, Jaeger trace queries over gRPC `16685`, and Jaeger HTTP health
-checks over `16686`. The Kiali `2.24.0` Jaeger version check is intentionally
-disabled because upstream falls back to port `80` when `use_grpc: true`, which
-does not match this repo's Jaeger query service contract.
-
-Observability is internal-only in both local Tilt and production OCI/k3s.
-Retire `grafana.budgetanalyzer.localhost`. `tilt up` installs the observability
-stack, but it does not manage persistent localhost tunnels for Grafana,
-Prometheus, Jaeger, or Kiali. Use the same explicit loopback-only operator
-commands everywhere, or use the repo-owned helper when you want the canonical
-four forwards kept open together:
+The repo-owned convenience helper remains:
 
 ```bash
 ./scripts/ops/start-observability-port-forwards.sh
 ```
 
-Underlying commands:
+The focused access proof remains:
 
 ```bash
-# Grafana UI (loopback-only; keep this bound to 127.0.0.1)
-kubectl port-forward --address 127.0.0.1 -n monitoring \
-  svc/prometheus-stack-grafana 3300:80
-
-# Prometheus UI (port-forward only — no ingress route)
-kubectl port-forward --address 127.0.0.1 -n monitoring \
-  svc/prometheus-stack-kube-prom-prometheus 9090:9090
-
-# Jaeger UI (port-forward only — no ingress route)
-kubectl port-forward --address 127.0.0.1 -n monitoring \
-  svc/jaeger-query 16686:16686
-
-# Kiali UI (port-forward only — no ingress route)
-kubectl port-forward --address 127.0.0.1 -n monitoring \
-  svc/kiali 20001:20001
-
-# Short-lived Kiali login token
-kubectl -n monitoring create token kiali
-
-# Grafana admin password
-kubectl get secret -n monitoring prometheus-stack-grafana \
-  -o jsonpath="{.data.admin-password}" | base64 --decode
-echo
+./scripts/smoketest/verify-observability-port-forward-access.sh
 ```
 
-Open `http://localhost:3300` for Grafana, `http://localhost:9090/targets`
-for Prometheus, `http://localhost:16686/jaeger` for Jaeger, and
-`http://localhost:20001/kiali` for Kiali. Do not use `--address 0.0.0.0` for
-observability port-forwards. The focused smoke verifier remains the clean-shell
-proof path, starts any missing temporary forwards on the canonical ports, and
-reuses the expected existing loopback `kubectl port-forward` listeners when
-the helper or manual forwards already hold those ports. Pass explicit port
-overrides only when some other intentional listener already owns a canonical
-port.
-
-Validate the tracing control-plane wiring after `tilt up`:
+The tracing and monitoring runtime proofs remain:
 
 ```bash
 ./scripts/smoketest/verify-istio-tracing-config.sh
-```
-
-The repo-owned runtime observability proof is:
-
-```bash
 ./scripts/smoketest/verify-monitoring-runtime.sh
 ```
 
-It verifies the four Spring Boot scrapes, the service-DNS-backed `istiod`,
-Grafana, Prometheus Operator, and kube-state-metrics scrapes, the Grafana
-dashboard metric/label inputs, and the Kiali `monitoring/prometheus` health
-regression.
-
-After Prometheus comes up, confirm the
-Spring Boot targets for `currency-service`, `transaction-service`,
-`permission-service`, and `session-gateway` are `UP`. Prometheus labels each
-target with the service name as `job`; use the `application` label for
-cross-service checks. Useful first queries:
-`up{namespace="default", application!=""}`, `jvm_memory_used_bytes`, and
-`jvm_gc_pause_seconds_count`.
-
-For the meshed Prometheus pod, the service-backed monitoring and control-plane
-targets should also stay `UP` via stable Service DNS hosts rather than endpoint
-pod IPs. When `istiod`, Grafana, Prometheus Operator, or kube-state-metrics
-look unhealthy, check `http://localhost:9090/targets` and confirm the
-`scrapeUrl` hosts are:
-
-- `istiod.istio-system.svc.cluster.local:15014`
-- `prometheus-stack-grafana.monitoring.svc.cluster.local:80`
-- `prometheus-stack-kube-prom-operator.monitoring.svc.cluster.local:8080`
-- `prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080`
-
-If one of those jobs falls back to a pod IP, fix the checked-in monitoring
-relabelings instead of treating the pod-IP scrape as acceptable.
-
-Grafana ships with two pre-provisioned dashboards (no manual import needed):
-
-- **JVM (Micrometer)** - memory pools, GC pauses, threads, classloading per
-  service. Use the `application` dropdown to switch between services.
-- **Spring Boot 3.x Statistics** - HTTP request rates, latencies, and error
-  rates. Use the `application` and `instance` dropdowns to filter.
-
-Both dashboards are declaratively provisioned from
-`kubernetes/monitoring/grafana-dashboards-configmap.yaml` and survive Grafana
-pod restarts. Reference dashboard exports live under
-`kubernetes/monitoring/dashboards-src/`, but Tilt applies the ConfigMap
-directly. See [Observability Architecture](../architecture/observability.md)
-for scrape topology details, security compliance, and debugging guidance.
-When dashboard behavior needs browser-side evidence, run:
-
-```bash
-./scripts/ops/grafana-ui-playwright-debug.sh --url http://127.0.0.1:3300
-```
-
-That helper logs into the port-forwarded Grafana URL with the admin password
-from the Kubernetes secret and stores ignored screenshots, dashboard
-inventory, panel-state summaries, console errors, request failures, and a
-Grafana datasource query response under `tmp/grafana-ui-debug/`.
-`./scripts/bootstrap/check-tilt-prerequisites.sh` also blocks on the
-infrastructure TLS secrets. If they are missing after a cluster recreate, rerun
-`./setup.sh` on the host. Use `./scripts/bootstrap/setup-infra-tls.sh` only when you
-need to regenerate just the internal transport-TLS secrets.
-All verification scripts use the current `kubectl` context. If one reports
-missing pods, secrets, or network policies while Tilt appears healthy, verify
-`kubectl config current-context` and `tilt get uiresources` from the same host
-shell before assuming the script is wrong.
-
-### 6. Optional: Seed Synthetic Users, Sessions, and Transactions
+## Optional Synthetic Data
 
 Track 1 currently stops at data loading. Use the synthetic fixture scripts when
 you want realistic local data volume, including live Redis session hashes and
@@ -658,27 +414,9 @@ postgresql://transaction_service:${POSTGRES_TRANSACTION_SERVICE_PASSWORD:-budget
 
 ## Port Reference
 
-| Service | Port | URL | Notes |
-|---------|------|-----|-------|
-| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost | **Primary browser entry point** |
-| Istio Ingress Gateway | 443 | https://app.budgetanalyzer.localhost/api/* | API paths (same origin) |
-| NGINX Gateway | 8080 | - | Internal (routing) |
-| Session Gateway | 8081 | - | Internal (behind Istio ingress) |
-| transaction-service | 8082 | http://localhost:8082 | Direct access via port forward |
-| currency-service | 8084 | http://localhost:8084 | Direct access via port forward |
-| permission-service | 8086 | http://localhost:8086 | Direct access via port forward |
-| ext-authz | 9002 | http://localhost:9002/check | Direct access via port forward |
-| ext-authz | 8090 | http://localhost:8090/healthz | Health endpoint |
-| Frontend | 3000 | http://localhost:3000 | Direct access via port forward |
-| PostgreSQL | 5432 | localhost:5432 | Database access (`sslmode=verify-full`) |
-| Redis | 6379 | localhost:6379 | TLS-only cache/session access |
-| RabbitMQ | 5671 | localhost:5671 | AMQPS data plane |
-| RabbitMQ Management | 15672 | http://localhost:15672 | Internal management UI |
-| Grafana | 3300 | http://localhost:3300 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80` |
-| Prometheus | 9090 | http://localhost:9090 | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090` |
-| Jaeger | 16686 | http://localhost:16686/jaeger | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686` |
-| Kiali | 20001 | http://localhost:20001/kiali | Loopback-only via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001` |
-| Tilt UI | 10350 | http://localhost:10350 | Development dashboard |
+This document does not own the canonical port table. Use
+[../architecture/port-reference.md](../architecture/port-reference.md) for the
+current service, infrastructure, and observability port inventory.
 
 ## Environment Variables
 

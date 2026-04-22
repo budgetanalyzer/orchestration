@@ -2,7 +2,7 @@
 ## Design Document
 
 **Version:** 2.0
-**Date:** March 10, 2026
+**Date:** April 22, 2026
 **Status:** Active
 
 ---
@@ -28,10 +28,8 @@ Repository security posture:
 - Pod Security namespace enforcement: the checked-in namespace manifests declare the Pod Security `enforce` labels for `infrastructure`, `istio-ingress`, and `istio-egress`, while Tilt reapplies the `default`, `infrastructure`, and `istio-system` labels during reconciliation.
 - Runtime-hardening verifier: `./scripts/smoketest/verify-phase-5-runtime-hardening.sh --regression-timeout 8m` checks the runtime-hardening baseline, including the frontend UID/GID assertions plus the PostgreSQL init-container baseline assertions. The verifier reruns remain bounded per script so failures surface instead of hanging indefinitely.
 - Production-smoke frontend bundle path: Tilt runs the sibling frontend `build:prod-smoke` target, packages the resulting `dist/` bundle into a local static-asset image, and `nginx-gateway` serves that bundle at `/_prod-smoke/` through a non-root init-container copy step while `/` and `/login` remain on the Vite/HMR dev route.
-- `/api-docs` route: `nginx-gateway` keeps the repo-owned wrapper and generated `openapi.{json,yaml}` files in the `nginx-gateway-docs` ConfigMap, stages stock Swagger UI `5.11.0` assets from pinned `swaggerapi/swagger-ui:v5.11.0@sha256:b02a61c633b74257d9e5141a4821451bd95f48a834acc23946c84bf81587f214` through a hardened init-container copy step into an `emptyDir`, serves the route read-only, and still returns `404` for unlisted `/api-docs/*` requests instead of falling through to the frontend SPA.
+- `/api-docs` security posture: the docs surface stays same-origin, read-only, and isolated behind its own docs-only CSP carve-out instead of weakening the main app or `/api/*` routes. Exact docs-surface behavior and generated outputs live in [../../docs-aggregator/README.md](../../docs-aggregator/README.md).
 - Frontend strict-CSP audit: `./scripts/smoketest/audit-phase-6-session-3-frontend-csp.sh` rebuilds the sibling production-smoke bundle and checks the repo-owned strict-CSP prerequisites. The static audit passes after the sibling frontend removed the inline-style and `sonner` blockers. Manual browser-console validation is still required.
-- Docs-route CSP carve-out: `nginx-gateway` splits the relaxed Vite/HMR CSP from the production-oriented policy using checked-in include files, keeps the relaxed policy on the live dev routes, keeps the main strict policy without `'unsafe-inline'` or `'unsafe-eval'` on `/_prod-smoke/`, and serves `/api-docs` through a dedicated docs-only CSP include that allows the stock Swagger UI bundle without weakening the main app or `/api/*` routes.
-- Same-origin OpenAPI download flow: the `/api-docs/openapi.{json,yaml}` download endpoints do not emit `Access-Control-Allow-Origin: *`, and the shared docs/download flow stays same-origin by default unless a future explicit allowlist is documented for a real cross-origin consumer.
 - Frontend-owned `/login` auth-path throttle: the ingress auth-path local rate limit explicitly covers the entry point, including query-string variants, while keeping `/login` routed through NGINX and leaving `/login/oauth2/*` on Session Gateway. The Istio ingress verifier proves both the low-rate frontend response and the ingress `429` marker on `/login`.
 - API rate-limit identity proof: before enabling `real_ip_*`, the live NGINX capture showed `remote_addr=127.0.0.6`, `xff="<caller>,<downstream-hop>"`, and `xrealip="-"`, which proved the trust anchor is the pod-local Envoy sidecar hop rather than a guessed cluster CIDR. `nginx-gateway` trusts only `127.0.0.0/8` for `real_ip_header X-Forwarded-For`, keeps `real_ip_recursive on`, logs both the derived client identity and the trusted proxy hop, and therefore keys API `limit_req` buckets on the ingress-appended downstream client hop instead of the proxy sidecar address. `./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh` proves forged external `X-Forwarded-For` values cannot pick a new bucket and that different downstream clients do not share one bucket.
 - Production frontend route cutover: `nginx/nginx.production.k8s.conf` makes the production cutover explicit by serving the built frontend bundle on `/` and `/login` under the strict CSP, returning `404` for `/_prod-smoke/`, and removing the Vite-only public paths from the production route set instead of relying on a header-only toggle over the dev graph.
@@ -50,70 +48,35 @@ Operationally, those ingress-facing policies depend on the rendered gateway labe
 
 ## Architecture Overview
 
-### Request Flow
+The detailed browser request flow, route ownership, and shared browser session
+contract are owned by
+[session-edge-authorization-pattern.md](session-edge-authorization-pattern.md).
+This document focuses on the security boundaries that flow creates.
 
-**All browser traffic enters through the Istio ingress gateway.** It handles SSL termination, auth-path throttling, and ext_authz enforcement within the service mesh.
-
-```
-Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
-```
-
-### Component Architecture
+At a security-boundary level, the runtime looks like this:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT LAYER                              │
-├─────────────────────────────────────────────────────────────────┤
-│              React Web App (Browser, Port 3000)                 │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ Session Cookie (HTTPS)
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Istio Ingress Gateway (Port 443, HTTPS)             │
-│                    • SSL Termination (all traffic)               │
-│                    • ext_authz on app host /api/* paths only     │
-│                    • Routes /auth/*, /oauth2/*, /login/oauth2/*, │
-│                      /logout, /auth/v1/* → Session Gateway       │
-│                    • Routes /api/*, /* → NGINX                   │
-│                    • Local rate limiting on auth-sensitive paths │
-│                    • Mesh identity (SPIFFE) for mTLS             │
-└──────────────────────────────┬──────────────────────────────────┘
-                               ▼
-┌────────────────────────┐
-│   ext_authz HTTP       │
-│   Port 9002            │
-│   • Session lookup     │
-│     in Redis           │
-│   • Header injection   │
-│     (X-User-Id, etc.)  │
-└────────────────────────┘
-               │ Validated headers (X-User-Id, X-Roles, X-Permissions)
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    NGINX API Gateway (Port 8080, HTTP)           │
-│                    • Request Routing                             │
-│                    • Backend/API Rate Limiting                   │
-│                    • Load Balancing                              │
-└────────┬────────────────────────────────────────────────────────┘
-         │
-         └──────► Backend Microservices
-                  • Transaction Service (8082)
-                  • Currency Service (8084)
-                  • Permission Service (8086)
-                  • Data-level authorization
-
-┌────────────────────────┐       ┌─────────────────────────────┐
-│   Session Gateway      │       │   Identity Provider         │
-│   Port 8081 (HTTP)     │       │   (Auth0/Keycloak/Other)    │
-│   • OAuth Flow Mgmt    │       │   • User Authentication     │
-│   • Session lifecycle  │       │   • User Management         │
-│   • Session write      │       └─────────────────────────────┘
-│     to Redis           │
-│   • Bulk revocation    │
-│     (east-west)        │
-└────────────────────────┘
+Browser
+   │ HTTPS + session cookie
+   ▼
+Istio Ingress Gateway
+   ├─ Auth lane → Session Gateway → Redis session writes
+   └─ API lane → ext_authz → NGINX → Backend services
+                                   │
+                                   ├─ PostgreSQL
+                                   ├─ Redis
+                                   └─ RabbitMQ
 ```
+
+Security-critical implications:
+
+- All browser traffic enters through the Istio ingress gateway.
+- Session Gateway owns login, logout, and browser session renewal.
+- `ext_authz` turns the Redis-backed session into trusted upstream identity
+  headers on every browser API request.
+- Backend services still own data-level authorization after ingress validation.
+- Exact service ports and exposure rules live in
+  [port-reference.md](port-reference.md).
 
 ---
 
@@ -227,84 +190,31 @@ Service Logic:
 
 ---
 
-## Authentication Flows
+## Authentication And Session Boundaries
 
-### User Login Flow (Web Browser)
+The exact login, API-request, and heartbeat walkthroughs live in
+[session-edge-authorization-pattern.md](session-edge-authorization-pattern.md).
+From a security perspective, the important boundaries are:
 
-```
-1. User clicks "Login" in React app
-2. React routes to the frontend login page at `/login`
-3. Frontend initiates `GET /oauth2/authorization/idp`
-4. Session Gateway redirects to Auth0 authorize endpoint
-5. User authenticates at Auth0 (enters credentials)
-6. Auth0 redirects to Session Gateway `/login/oauth2/code/idp` with authorization code
-7. Session Gateway exchanges the authorization code for tokens at Auth0 (tokens are used only to derive identity)
-8. Session Gateway calls permission-service to resolve roles/permissions
-9. Session Gateway writes session data (user_id, idp_sub, email, display_name, picture, roles, permissions) to the Redis session hash (`session:{id}`) — no Auth0 tokens are persisted
-10. Session Gateway sets HTTP-only session cookie in browser
-11. Browser redirected to application home page
-```
-
-**Security Benefits:**
-- Tokens never exposed to browser JavaScript
-- Tokens immune to XSS attacks
-- Session cookie has HttpOnly, Secure, SameSite attributes
-- Session hash enables per-request validation via ext_authz at the Istio ingress layer
-
----
-
-### API Request Flow (Authenticated User)
-
-```
-1. Browser sends request with session cookie → Istio Ingress (:443)
-2. Istio ingress calls ext_authz HTTP service (:9002)
-3. ext_authz looks up session in Redis (session:{id})
-4. If valid: ext_authz injects X-User-Id, X-Roles, X-Permissions headers
-5. Istio ingress routes to NGINX (:8080) with injected headers
-6. NGINX routes to appropriate microservice
-7. Microservice reads identity from headers, validates user has permission for specific data
-8. Response flows back through NGINX → Istio Ingress → Browser
-```
-
-**Key Points:**
-- ext_authz validates every request (defense in depth)
-- Session revocation is instant — delete Redis key, next request fails
-- Microservices enforce data-level permissions
-- No cryptographic verification at runtime — Redis is trusted internal infrastructure
-
----
-
-### Session Heartbeat Flow
-
-```
-1. Frontend detects active browser use and calls `GET /auth/v1/session`
-2. Session Gateway reads the Redis session hash
-3. If missing or expired, Session Gateway returns 401
-4. Otherwise, Session Gateway extends the Redis TTL and `expires_at`
-5. Session Gateway returns `{ active, userId, roles, expiresAt }` to the frontend
-```
-
-The heartbeat does not call Auth0. Session liveness is entirely local. IDP revocation propagates via explicit east-west bulk revocation through `DELETE /internal/v1/sessions/users/{userId}`, which deletes all sessions for that user via the `user_sessions:{userId}` Redis index.
-
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration. A frontend that calls the heartbeat on a fixed timer without gating on activity would keep sessions alive indefinitely.
-
----
-
-### Internal Service-to-Service Authentication
+- Browser login and callback traffic stays on the Session Gateway auth lane.
+  Access tokens are used only inside Session Gateway and are not persisted or
+  exposed to browser JavaScript.
+- Every browser `/api/*` request is revalidated by `ext_authz`, which rebuilds
+  the trusted identity headers from Redis before NGINX forwards the request.
+- Active-session renewal happens on `GET /auth/v1/session`. Session Gateway
+  extends the Redis-backed session, while the frontend decides when to call the
+  heartbeat based on user activity.
+- IDP revocation does not depend on the heartbeat path. Bulk revocation
+  propagates explicitly through
+  `DELETE /internal/v1/sessions/users/{userId}` against the user-session index
+  in Redis.
 
 Internal services rely on Istio mTLS, ingress-scoped `AuthorizationPolicy`
-rules, and Kubernetes `NetworkPolicy` allowlists. Permission-service is called
-directly by Session Gateway over the mesh for role resolution and bulk session
-revocation.
-
-**Current approach:**
-- Session Gateway calls permission-service via internal Kubernetes DNS
-- Permission-service calls Session Gateway for user deactivation (bulk session revocation)
-- No browser session cookie is used for east-west service calls
-- NetworkPolicy enforces pod-level allowlists: Session Gateway ↔ permission-service (bidirectional), NGINX → transaction/currency/web/permission-service
-- Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under Calico's default host endpoint handling
-
-**Implemented:** mTLS via Istio service mesh. STRICT for all traffic in the default namespace — no PERMISSIVE exceptions. With Istio-managed ingress, the ingress gateway has a mesh identity (SPIFFE), so ingress-facing services (nginx-gateway and ext-authz) have AuthorizationPolicies restricting callers to the ingress gateway identity only. Session Gateway follows the same pattern except for one explicit east-west allowance: `permission-service` may issue `DELETE /internal/v1/sessions/users/{userId}` on port `8081` for bulk session revocation. This preserves cryptographic caller authentication without introducing shared application credentials.
+rules, and Kubernetes `NetworkPolicy` allowlists. Browser session cookies are
+not reused for east-west service calls. The one explicit cross-service session
+exception is `permission-service` calling Session Gateway for bulk session
+revocation. Kubelet probes and Tilt port-forwards remain host-to-pod exceptions
+under Calico's default host endpoint handling.
 
 ---
 
@@ -315,13 +225,12 @@ Prevent vendor lock-in by abstracting identity provider behind Session Gateway. 
 
 ### Implementation
 
-**All authentication protocol endpoints go through Session Gateway:**
-- `/auth/v1/*` - Versioned browser JSON endpoints (`session`, `user`)
-- `/oauth2/*` - OAuth2 callback and continuation endpoints
-- `/login/oauth2/*` - OAuth2 callback path
-- `/logout` - End session
-
-The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by calling `/oauth2/authorization/idp`, and ingress now rate limits it as an auth-sensitive entry point, but it is not itself a Session Gateway route.
+All browser authentication protocol endpoints stay on the Session Gateway auth
+lane documented in
+[session-edge-authorization-pattern.md](session-edge-authorization-pattern.md).
+The browser-facing `/login` page remains frontend-owned. It starts the OAuth2
+flow, is rate-limited as an auth-sensitive entry point, and stays separate from
+the versioned Session Gateway JSON endpoints.
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes
@@ -408,26 +317,23 @@ The browser-facing `/login` page is frontend-owned. It starts the OAuth2 flow by
 
 ### Content Security Policy Posture
 
-NGINX serves distinct CSP profiles by route. The main application and `/api/*` routes use a strict production-oriented policy that removes both `'unsafe-inline'` and `'unsafe-eval'`. The `/api-docs` route uses a separate docs-only relaxed CSP.
+NGINX serves distinct CSP profiles by route. The main application and `/api/*`
+routes use the strict production-oriented policy. `/api-docs` keeps a separate
+docs-only CSP because stock Swagger UI requires inline styles that the main app
+policy intentionally forbids.
 
-**Why the docs route has a different CSP:**
+The security boundary is the important point here:
 
-The stock Swagger UI bundle is not strict-CSP-compatible — it relies on inline styles that violate a strict `style-src 'self'` directive. Rather than patching a minified third-party bundle or weakening the main app policy, `/api-docs` carries its own dedicated CSP include that adds `'unsafe-inline'` to `style-src` only:
+- the docs relaxation is isolated to `/api-docs`
+- the main app and `/api/*` routes do not inherit it
+- the docs/download flow stays same-origin by default
 
-```
-style-src 'self' 'unsafe-inline';
-```
-
-All other directives remain identical to the strict profile.
-
-**Boundary guarantees:**
-
-- The main app routes (`/`, `/login`, `/_prod-smoke/`) and the `/api/*` route graph do not inherit the docs relaxation.
-- The docs route is public and read-only — Swagger UI runs with `supportedSubmitMethods: []` and the authorize button is hidden.
-- The docs route uses self-hosted Swagger UI assets served from the NGINX pod, not a CDN. No external script or style resources are loaded at runtime.
-- The docs route is outside `/api/*`, so it is not subject to Istio `ext_authz` enforcement or API rate limiting.
-
-The CSP include files are checked in at `nginx/includes/security-headers-{strict,dev,docs}-csp.conf`. See [nginx/README.md — CSP Split](../../nginx/README.md#csp-split) for the full profile comparison.
+Exact `/api-docs` behavior, generated outputs, and read-only UI details live in
+[../../docs-aggregator/README.md](../../docs-aggregator/README.md). The
+checked-in CSP split is implemented in
+`nginx/includes/security-headers-{strict,dev,docs}-csp.conf`; see
+[nginx/README.md — CSP Split](../../nginx/README.md#csp-split) for the NGINX
+profile comparison.
 
 ---
 
@@ -500,12 +406,12 @@ disable `automountServiceAccountToken`, and workloads that need Kubernetes API
 access use explicit projected service-account token volumes. See
 [Observability Architecture](observability.md) for full details.
 
-Operator access is internal-only in both local Tilt and production OCI/k3s:
-use `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
-for Grafana and
-`kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`
-for Prometheus. Grafana authentication remains enabled, anonymous access stays
-disabled, and observability port-forwards must stay loopback-bound.
+Operator access is internal-only in both local Tilt and production OCI/k3s.
+Keep observability access loopback-bound through Kubernetes port-forwards or
+the repo-owned helper scripts documented in
+[observability.md](observability.md). Grafana authentication remains enabled,
+anonymous access stays disabled, and the repo does not expose public
+observability hostnames.
 
 **Metrics currently collected:**
 - Spring Boot JVM metrics (memory, GC, threads) via `/actuator/prometheus`

@@ -1,112 +1,54 @@
-# Tilt-Kind Setup Guide
+# Tilt/Kind Manual Deep Dive
 
-Complete guide for setting up the Budget Analyzer local development environment using Tilt with Kind (Kubernetes in Docker).
+**Status:** Manual reference
+**Audience:** Contributors debugging or reproducing local bootstrap internals
 
-## Host Machine Dependencies
+This is not the supported default onboarding path.
 
-### apt-get Packages
+Use [docs/development/getting-started.md](development/getting-started.md) for
+the supported `./setup.sh` and `tilt up` workflow. Use this guide only when you
+need to understand or reproduce the underlying host-side bootstrap steps one by
+one.
 
-```bash
-# Install base packages (excluding Docker if already installed)
-sudo apt-get update && sudo apt-get install -y \
-  curl \
-  wget \
-  git \
-  build-essential \
-  unzip \
-  jq \
-  libnss3-tools
+## When To Use This Guide
 
-# Install Docker only if not already present
-# This works with both docker.io (Ubuntu) and docker-ce (Docker official)
-if ! command -v docker &> /dev/null; then
-  sudo apt-get install -y docker.io
-  sudo usermod -aG docker $USER
-  newgrp docker  # Apply immediately without logout
-else
-  echo "Docker already installed: $(docker --version)"
-fi
-```
+- debugging `./setup.sh`
+- reproducing a specific bootstrap step manually
+- learning how the Kind, Calico, DNS, and TLS pieces fit together
+- validating a host environment without relying on the full happy-path wrapper
 
-> **Note**: If you have `docker-ce` (Docker's official packages) installed, that works fine too. The commands above will detect it and skip installation.
+For the live-update pipeline, mixed local-and-cluster workflows, and
+troubleshooting after the stack is already up, use
+[docs/development/local-environment.md](development/local-environment.md).
 
-### KIND (Kubernetes in Docker)
+## Host Prerequisites
+
+Run the repo preflight first:
 
 ```bash
-curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-chmod +x ./kind
-sudo mv ./kind /usr/local/bin/kind
+./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-### kubectl
+For host-side binary installs, prefer the verified installer:
 
 ```bash
-# From the orchestration repo root
-./scripts/bootstrap/install-verified-tool.sh kubectl
+./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>
 ```
 
-This repo pins `kubectl` to `v1.30.8` so the client matches the local Kind node
-image baseline (`kindest/node:v1.30.8`).
+Current baseline:
 
-### Helm
+- Docker `24.0+`
+- Kind `0.20+`
+- `kubectl` `1.30.8`
+- Helm `3.20.x`
+- Tilt `0.37.0`
+- OpenSSL `3.x+`
+- `mkcert` `1.4.4`
 
-```bash
-./scripts/bootstrap/install-verified-tool.sh helm
-```
+Keep the repos side by side under a common parent directory if you are working
+outside the sibling `workspace` repo:
 
-Use Helm `3.20.x` for this repo. Helm 4 is not supported. The repo now uses
-Helm for `istio/base`, `istio/cni`, `istio/istiod`, `istio/gateway`, and
-`kyverno`. Gateway API CRDs are pinned to `v1.4.0`, ingress gateway hardening
-is declared through Gateway `spec.infrastructure.parametersRef`, and the egress
-gateway uses checked-in Helm values to keep `service.type=ClusterIP`.
-
-### Tilt
-
-```bash
-./scripts/bootstrap/install-verified-tool.sh tilt
-```
-
-### mkcert
-
-```bash
-# Linux
-sudo apt-get install -y libnss3-tools
-./scripts/bootstrap/install-verified-tool.sh mkcert
-
-# macOS
-brew install mkcert nss
-```
-
-### Verify Installation
-
-```bash
-docker --version        # Expected: Docker 20.10+
-kind --version          # Expected: kind v0.20+
-kubectl version --client # Expected: v1.30.8
-helm version            # Expected: v3.20.x
-tilt version            # Expected: v0.37.0
-mkcert --version        # Expected: v1.4.4
-```
-
-## Service Repositories
-
-Clone all service repositories as **siblings** to the `orchestration` repo. The scripts use relative paths, so they'll work from any location.
-
-```bash
-# Go to the parent directory of orchestration
-cd "$(dirname /path/to/orchestration)"
-
-# Clone all service repos alongside orchestration
-git clone https://github.com/budgetanalyzer/service-common.git
-git clone https://github.com/budgetanalyzer/transaction-service.git
-git clone https://github.com/budgetanalyzer/currency-service.git
-git clone https://github.com/budgetanalyzer/session-gateway.git
-git clone https://github.com/budgetanalyzer/budget-analyzer-web.git
-git clone https://github.com/budgetanalyzer/permission-service.git
-```
-
-Your directory structure should look like:
-```
+```text
 parent-directory/
 ├── orchestration/
 ├── service-common/
@@ -117,356 +59,184 @@ parent-directory/
 └── budget-analyzer-web/
 ```
 
-## Setup Steps
+## Manual Bootstrap Sequence
 
-If you want the supported happy path, run `./setup.sh` from the orchestration root on the host machine. It now deletes any existing `kind` cluster, recreates it from scratch, installs Helm `v3.20.1` automatically from a pinned verified release if your current Helm is missing or unsupported, and refreshes the existing `istio` Helm repo index so stale host-side chart metadata does not break fresh-cluster rebuilds. The steps below spell out the same flow manually for debugging and learning.
-
-### 1. Run Pre-flight Check
+### 1. Preflight
 
 ```bash
-cd /path/to/orchestration
+cd orchestration/
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-This verifies all dependencies and repositories are properly configured.
+### 2. `service-common` Resolution
 
-### 2. Publish service-common to Maven Local
+The supported local Tilt path is credential-free and publishes `service-common`
+for you. Do not treat manual `publishToMavenLocal` as part of normal
+onboarding.
 
-The backend services depend on `service-common`. Publish it to your local Maven repository:
+Only publish manually when you are intentionally reproducing Gradle resolution
+outside the normal Tilt flow or recovering from a local Maven cache problem:
 
 ```bash
-cd /path/to/service-common
-./gradlew publishToMavenLocal
+cd ../service-common
+./gradlew clean build publishToMavenLocal
 ```
 
-### 3. Create Kind Cluster
+See
+[docs/development/service-common-artifact-resolution.md](development/service-common-artifact-resolution.md)
+for the full local-vs-remote artifact contract.
 
-**Important**: Use the config file. It now does three critical things:
+### 3. Create The Kind Cluster
 
-- Enables HTTPS port mapping
-- Pins the Kind node image for reproducibility
-- Disables Kind default CNI (`kindnet`) so `NetworkPolicy` can be enforced with Calico
+Use the checked-in Kind config so the cluster matches the repo baseline:
 
 ```bash
-cd /path/to/orchestration
+cd ../orchestration
 kind create cluster --config kind-cluster-config.yaml
 ./scripts/bootstrap/install-calico.sh
 ```
 
-This creates a cluster with port mappings:
-- Port 80 → reserved host mapping
-- Port 443 → HTTPS (via NodePort 30443)
+That baseline does three important things:
 
-Verify the cluster:
+- disables Kind's default CNI so `NetworkPolicy` can be enforced with Calico
+- pins the Kind node image for reproducibility
+- maps HTTPS traffic through the repo's ingress contract
+
+Useful checks:
+
 ```bash
 kind get clusters
 kubectl cluster-info --context kind-kind
-
-# Verify the Kind node image matches kind-cluster-config.yaml
 docker inspect kind-control-plane --format '{{.Config.Image}}'
-
-# Verify port mappings
 docker port kind-control-plane
-# Expected: 30443/tcp -> 0.0.0.0:443
-
-# Verify default CNI is disabled and Calico is active
-kubectl get daemonset kindnet -n kube-system || true   # Expected: NotFound
+kubectl get daemonset kindnet -n kube-system || true
 kubectl get daemonset calico-node -n kube-system
 ```
 
 ### 4. Configure DNS
 
-Add entries to `/etc/hosts`:
+Add the local app host on the machine that runs the browser:
 
 ```bash
-echo '127.0.0.1  app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
+echo '127.0.0.1 app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
 ```
 
-### 5. Generate Browser TLS Certificates
+### 5. Generate Browser TLS Material
+
+Run the browser-facing certificate bootstrap on the host:
 
 ```bash
 ./scripts/bootstrap/setup-k8s-tls.sh
 ```
 
-This creates:
-- Trusted certificates for `*.budgetanalyzer.localhost`
-- Kubernetes TLS secret `budgetanalyzer-localhost-wildcard-tls`
+Do not run host-trust certificate generation from an AI container.
 
-### 6. Generate Internal Transport TLS Secrets
+### 6. Generate Internal Transport TLS Material
 
-`setup.sh` handles this automatically. To regenerate standalone:
+`./setup.sh` normally handles this for you. When reproducing the steps
+manually, generate the internal TLS secrets on the host:
 
 ```bash
 ./scripts/bootstrap/setup-infra-tls.sh
 ```
 
-This creates:
-- `infra-ca` in the `default` and `infrastructure` namespaces
-- `infra-tls-redis`
-- `infra-tls-postgresql`
-- `infra-tls-rabbitmq`
-
-### 7. Configure Auth0 Credentials
-
-Create `.env` from `.env.example`, then set the required values before running Tilt.
+### 7. Prepare `.env`
 
 ```bash
 [ -f .env ] || cp .env.example .env
 vim .env
 ```
 
+Review the local infrastructure password defaults, then add the Auth0 domain,
+client ID, client secret, and FRED API key.
+
 ### 8. Start Tilt
 
 ```bash
-cd /path/to/orchestration
 tilt up
 ```
 
-Access the Tilt UI at http://localhost:10350
+### 9. Run Focused Verification
 
-### 9. Run Security Verifiers
+For the supported verifier order, go back to
+[docs/development/getting-started.md](development/getting-started.md). For the
+full script catalog, use [scripts/README.md](../scripts/README.md).
 
-After core platform resources are up (`istiod`, Kyverno, smoke policy), run:
+Common focused checks after manual bring-up:
 
 ```bash
+./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 ./scripts/smoketest/verify-security-prereqs.sh
-./scripts/smoketest/verify-phase-4-transport-encryption.sh
+./scripts/smoketest/verify-phase-7-security-guardrails.sh
 ```
 
-These provide deterministic runtime proof for the platform security
-prerequisites and infrastructure transport TLS.
+## Manual Verification
 
-## Verification
-
-### Check Tilt UI
-
-Open http://localhost:10350 - all resources should show green status.
-
-### Check Kubernetes Pods
+Basic runtime checks:
 
 ```bash
-# Application services
 kubectl get pods -n default
-
-# Expected output:
-# NAME                                    READY   STATUS    RESTARTS   AGE
-# ext-authz-xxxxx                         1/1     Running   0          2m
-# permission-service-xxxxx                1/1     Running   0          2m
-# transaction-service-xxxxx               1/1     Running   0          2m
-# currency-service-xxxxx                  1/1     Running   0          2m
-# session-gateway-xxxxx                   1/1     Running   0          2m
-# nginx-gateway-xxxxx                     1/1     Running   0          2m
-# budget-analyzer-web-xxxxx               1/1     Running   0          2m
-
-# Infrastructure
 kubectl get pods -n infrastructure
-
-# Expected output:
-# NAME                      READY   STATUS    RESTARTS   AGE
-# postgresql-0              1/1     Running   0          3m
-# redis-master-0            1/1     Running   0          3m
-# rabbitmq-0                1/1     Running   0          3m
+kubectl get pods -n monitoring
 ```
 
-### Check Helm Releases
+Operator entry points:
 
-```bash
-helm list -n infrastructure
+- app: `https://app.budgetanalyzer.localhost`
+- Tilt UI: `http://localhost:10350`
+- unified API docs: `https://app.budgetanalyzer.localhost/api-docs`
 
-# Expected:
-# NAME         NAMESPACE      STATUS    CHART
-# postgresql   infrastructure deployed  postgresql-13.x.x
-# redis        infrastructure deployed  redis-17.x.x
-# rabbitmq     infrastructure deployed  rabbitmq-12.x.x
-```
-
-### Test Service Health
-
-```bash
-# NGINX Gateway
-curl http://localhost:8080/health
-# Expected: healthy
-
-# Transaction Service
-curl http://localhost:8082/actuator/health
-# Expected: {"status":"UP",...}
-
-# Currency Service
-curl http://localhost:8084/actuator/health
-# Expected: {"status":"UP",...}
-
-# Session Gateway
-curl http://localhost:8081/actuator/health
-# Expected: {"status":"UP",...}
-```
-
-### Access the Application
-
-After all services are healthy:
-
-- **Application**: https://app.budgetanalyzer.localhost
-- **API Docs**: https://app.budgetanalyzer.localhost/api-docs
-- **Tilt UI**: http://localhost:10350
-- **RabbitMQ Management**: http://localhost:15672 (`rabbitmq-admin` / value from `RABBITMQ_BOOTSTRAP_PASSWORD`)
-
-## Port Reference
-
-| Port | Service | Purpose |
-|------|---------|---------|
-| 443 | Istio Ingress Gateway | HTTPS entry point (via NodePort 30443) |
-| 80 | Kind host mapping | Reserved host mapping in the Kind config |
-| 3000 | budget-analyzer-web | Vite Dev Server |
-| 5432 | PostgreSQL | Database |
-| 6379 | Redis | TLS-only cache/session storage |
-| 5671 | RabbitMQ | AMQPS |
-| 15672 | RabbitMQ | Management UI |
-| 8080 | nginx-gateway | API Gateway (internal) |
-| 8081 | session-gateway | Auth (internal) |
-| 8082 | transaction-service | Business Logic |
-| 8084 | currency-service | Business Logic |
-| 5005 | transaction-service | Debug (JDWP) |
-| 5006 | currency-service | Debug (JDWP) |
-| 5009 | session-gateway | Debug (JDWP) |
+Exact `/api-docs` behavior lives in
+[docs-aggregator/README.md](../docs-aggregator/README.md). Exact observability
+access commands live in
+[docs/architecture/observability.md](architecture/observability.md).
 
 ## Troubleshooting
 
-### Pre-flight Check Fails
+Start with [docs/runbooks/README.md](runbooks/README.md) for active runbooks.
 
-Run the check script and address each error:
+### Preflight Fails
+
+Rerun the checked preflight and fix the reported missing tool, DNS, or
+certificate prerequisite instead of skipping it:
+
 ```bash
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-### Pods in CrashLoopBackOff
-
-Check pod logs:
-```bash
-kubectl logs -f deployment/<service-name>
-kubectl describe pod <pod-name>
-```
-
-Common causes:
-- Missing database (run migrations)
-- Invalid Auth0 credentials
-- Missing environment variables
-
-### Database Connection Refused
-
-1. Check PostgreSQL is running:
-   ```bash
-   kubectl get pods -n infrastructure | grep postgresql
-   ```
-
-2. Verify port forward:
-   ```bash
-   kubectl port-forward -n infrastructure svc/postgresql 5432:5432
-   ```
-
-### Auth0 401 Unauthorized
-
-1. Verify credentials are set:
-   ```bash
-   kubectl get configmap session-gateway-idp-config -o jsonpath='{.data.AUTH0_CLIENT_ID}'
-   kubectl get secret auth0-credentials -o jsonpath='{.data.AUTH0_CLIENT_SECRET}' | base64 -d
-   ```
-
-2. Check session-gateway logs:
-   ```bash
-   kubectl logs -f deployment/session-gateway
-   ```
-
-### TLS Certificate Errors
-
-Regenerate browser-facing wildcard certificates:
-```bash
-rm -rf nginx/certs/k8s
-./scripts/bootstrap/setup-k8s-tls.sh
-```
-
-Regenerate internal transport-TLS material:
-```bash
-rm -rf nginx/certs/infra
-./scripts/bootstrap/setup-infra-tls.sh
-```
-
 ### Kind Cluster Issues
 
-Delete and recreate with the config file:
+If the cluster shape drifted, rebuild it from the checked-in config:
+
 ```bash
 kind delete cluster --name kind
 kind create cluster --config kind-cluster-config.yaml
 ./scripts/bootstrap/install-calico.sh
-docker inspect kind-control-plane --format '{{.Config.Image}}'
 ```
 
-Then restart Tilt:
+### TLS Failures
+
+Regenerate only the affected TLS material on the host:
+
 ```bash
-tilt down
-tilt up
+./scripts/bootstrap/setup-k8s-tls.sh
+./scripts/bootstrap/setup-infra-tls.sh
 ```
 
-### Gradle Build Failures (service-web not found)
+### `service-common` Resolution Failures
 
-If services fail to build with "Could not find org.budgetanalyzer:service-web":
-```bash
-cd /path/to/service-common
-./gradlew publishToMavenLocal
-```
+If a local Java build cannot resolve `org.budgetanalyzer` artifacts while you
+are deliberately bypassing the normal Tilt publication step, republish
+`service-common` locally:
 
-Then trigger rebuilds in Tilt:
 ```bash
-tilt trigger transaction-service
-tilt trigger currency-service
-# ... etc
+cd ../service-common
+./gradlew clean build publishToMavenLocal
 ```
 
 ## Cleanup
 
-### Stop Tilt
-
-```bash
-# Ctrl+C in Tilt terminal, or:
-tilt down
-```
-
-### Delete Kind Cluster
-
-```bash
-kind delete cluster --name kind
-```
-
-### Remove DNS Entries
-
-Edit `/etc/hosts` and remove lines containing `budgetanalyzer.localhost`.
-
-## Quick Reference
-
-### One-liner Setup (after dependencies installed)
-
-```bash
-# First, publish service-common (run once)
-cd /path/to/service-common && ./gradlew publishToMavenLocal && cd /path/to/orchestration
-
-# Then run the setup (creates cluster, installs Calico, generates all certs, creates .env)
-./setup.sh && \
-vim .env && \
-tilt up
-```
-
-### Daily Development
-
-```bash
-cd /path/to/orchestration
-tilt up
-# Work on code - changes auto-reload
-# Ctrl+C to stop
-```
-
-### Full Reset
-
 ```bash
 tilt down
 kind delete cluster --name kind
-./setup.sh    # Recreates cluster, Calico, all certs, .env
-tilt up
 ```

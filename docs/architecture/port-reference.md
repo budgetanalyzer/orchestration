@@ -19,13 +19,13 @@
 | 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
-| 9090 | Prometheus | HTTP | Metrics query and UI | Internal (port-forward only; operator URL `http://localhost:9090`) |
-| 80 | Grafana | HTTP | Dashboard visualization | Internal (port-forward only; operator URL `http://localhost:3300`) |
+| 9090 | Prometheus | HTTP | Metrics query and UI | Internal (operator access; see [observability.md](observability.md)) |
+| 80 | Grafana | HTTP | Dashboard visualization | Internal (operator access; see [observability.md](observability.md)) |
 | 4317 | Jaeger collector | OTLP/gRPC | Trace ingestion endpoint | Internal (mesh workloads only) |
 | 4318 | Jaeger collector | OTLP/HTTP | Trace ingestion endpoint | Internal (mesh workloads only) |
 | 16685 | Jaeger query | gRPC | Trace query API for internal clients | Internal (monitoring namespace only) |
-| 16686 | Jaeger query | HTTP | Trace query API and UI | Internal (port-forward only; operator URL `http://localhost:16686/jaeger`) |
-| 20001 | Kiali | HTTP | Service mesh graph and workload UI | Internal (port-forward only; operator URL `http://localhost:20001/kiali`) |
+| 16686 | Jaeger query | HTTP | Trace query API and UI | Internal (operator access; see [observability.md](observability.md)) |
+| 20001 | Kiali | HTTP | Service mesh graph and workload UI | Internal (operator access; see [observability.md](observability.md)) |
 
 ## Port Ranges by Layer
 
@@ -113,13 +113,13 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 - 15672: RabbitMQ Management (standard)
 
 **Monitoring (monitoring namespace)**:
-- 9090: Prometheus (port-forward only, no ingress route)
-- 80: Grafana (service port only; access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`)
+- 9090: Prometheus (internal operator access; exact access flow lives in [observability.md](observability.md))
+- 80: Grafana (service port only; exact access flow lives in [observability.md](observability.md))
 - 4317: Jaeger collector OTLP/gRPC (internal service port only)
 - 4318: Jaeger collector OTLP/HTTP (internal service port only)
 - 16685: Jaeger query gRPC (internal service port only)
-- 16686: Jaeger query HTTP/UI (service port only; access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`)
-- 20001: Kiali HTTP/UI (service port only; access via `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`)
+- 16686: Jaeger query HTTP/UI (service port only; exact access flow lives in [observability.md](observability.md))
+- 20001: Kiali HTTP/UI (service port only; exact access flow lives in [observability.md](observability.md))
 
 ## Adding a New Service
 

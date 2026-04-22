@@ -6,13 +6,18 @@
 
 Budget Analyzer uses a multi-layer gateway architecture that separates browser security concerns (Session Gateway) from session validation (ext_authz) and API routing (NGINX Gateway). This provides maximum security for financial data while maintaining clean separation of concerns.
 
+This document owns the browser request flow, route ownership, and shared
+browser session contract. Exact service ports and exposure rules live in
+[port-reference.md](port-reference.md). Exact `/api-docs` behavior lives in
+[../../docs-aggregator/README.md](../../docs-aggregator/README.md).
+
 ## Request Flow
 
 **Single entry point**: `app.budgetanalyzer.localhost`
 
 ```
-Browser → Istio Ingress (:443) → ext_authz validates session → NGINX (:8080) → Services
-Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
+Browser → Istio Ingress → ext_authz validates session → NGINX → Services
+Auth paths: Browser → Istio Ingress → Session Gateway
 ```
 
 **Key stages**:
@@ -29,7 +34,7 @@ Auth paths: Browser → Istio Ingress (:443) → Session Gateway (:8081)
 
 ## Component Roles
 
-### Istio Ingress Gateway (Port 443, HTTPS) - Ingress Layer
+### Istio Ingress Gateway - Ingress Layer
 
 **Purpose**: SSL termination, ext_authz enforcement, and initial routing — inside the Istio service mesh with SPIFFE identity
 
@@ -56,7 +61,7 @@ kubectl logs -n istio-ingress -l gateway.networking.k8s.io/gateway-name=istio-in
 kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ```
 
-### ext_authz Service (Port 9002 HTTP, Port 8090 Health) - Authorization Layer
+### ext_authz Service - Authorization Layer
 
 **Purpose**: Per-request session validation via Redis lookup
 
@@ -80,7 +85,7 @@ kubectl logs deployment/ext-authz
 kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 ```
 
-### NGINX (Port 8080, HTTP) - API Gateway Layer
+### NGINX - API Gateway Layer
 
 **Purpose**: Routing and backend/API rate limiting for backend services
 
@@ -113,7 +118,7 @@ kubectl logs deployment/nginx-gateway
 
 **Runtime proof**: [`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh`](../../scripts/smoketest/verify-phase-6-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
 
-### Session Gateway (Port 8081, HTTP) - Auth Layer
+### Session Gateway - Auth Layer
 
 **Purpose**: Browser authentication and session security
 
@@ -200,28 +205,10 @@ Browser → Istio Ingress (app.budgetanalyzer.localhost) → ext_authz → NGINX
 
 **For comprehensive security architecture**: See [security-architecture.md](security-architecture.md)
 
-## Port Summary
+## Port And Exposure Reference
 
-| Port | Service | Purpose | Access |
-|------|---------|---------|--------|
-| 443 | Istio Ingress Gateway | SSL termination, ext_authz enforcement, auth-path throttling (HTTPS) | Public (browsers via app.budgetanalyzer.localhost) |
-| 9002 | ext_authz | Session validation (HTTP) | Internal (Istio ingress only) |
-| 8090 | ext_authz | Health endpoint (HTTP) | Internal (probes only) |
-| 8080 | NGINX Gateway | Routing, backend/API rate limiting | Internal (Istio ingress only) |
-| 8081 | Session Gateway | Browser authentication, session management | Internal (Istio ingress only) |
-| 8086 | Permission Service | Internal roles/permissions (network isolation) | Internal (Session Gateway only) |
-| 8082 | Transaction Service | Business logic | Internal (NGINX only) |
-| 8084 | Currency Service | Business logic | Internal (NGINX only) |
-| 3000 | React Dev Server | Frontend (dev only) | Internal (NGINX only) |
-
-**Discovery**:
-```bash
-# List all services and ports
-kubectl get svc
-
-# Check specific service port mappings
-kubectl describe svc nginx-gateway
-```
+Exact service ports, exposure levels, and caller allowlists live in
+[port-reference.md](port-reference.md).
 
 ## When to Use This Pattern
 

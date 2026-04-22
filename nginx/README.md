@@ -101,7 +101,9 @@ API requests go through Istio Ingress Gateway (443) → ext_authz → NGINX (808
 OAuth2 and auth lifecycle requests go through Istio Ingress Gateway (443) → Session Gateway (8081). The browser JSON endpoints now live at `/auth/v1/session` and `/auth/v1/user`.
 The frontend login page at `/login` goes through Istio Ingress Gateway (443) → NGINX (8080).
 The production-smoke verification path at `/_prod-smoke/` is served directly by NGINX from a built frontend bundle copied in by an init container; it does not proxy to the Vite dev server.
-The shared docs route at `/api-docs` now serves a checked-in wrapper plus the generated OpenAPI downloads from the same NGINX pod. Stock Swagger UI assets are copied in by a pinned init container and served same-origin from that docs mount. Unlisted `/api-docs/*` paths intentionally return `404` instead of falling through to the frontend SPA.
+NGINX also mounts the shared docs surface at `/api-docs`. Exact docs-route
+behavior, generated outputs, and docs-only CSP details live in
+[../docs-aggregator/README.md](../docs-aggregator/README.md).
 
 ### 3. Verify it's working
 
@@ -120,13 +122,6 @@ curl -kI https://app.budgetanalyzer.localhost/ | grep -i content-security-policy
 
 # Public smoke route emits the strict CSP
 curl -kI https://app.budgetanalyzer.localhost/_prod-smoke/ | grep -i content-security-policy
-
-# Public docs route is outside /api/* auth. Verify its headers directly:
-curl -kI https://app.budgetanalyzer.localhost/api-docs | grep -i content-security-policy
-
-# Machine-readable unified contracts stay public and same-origin:
-curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.json
-curl -kI https://app.budgetanalyzer.localhost/api-docs/openapi.yaml
 
 # Run the edge and browser hardening verifier
 ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
@@ -155,19 +150,19 @@ bundle path.
 
 The smoke path is a verification seam, not a second long-term application mode. API and auth endpoints stay root-relative (`/api`, `/oauth2/authorization/idp`, `/logout`) regardless of which frontend path is loaded.
 
-The `/api-docs` route serves a checked-in wrapper, self-hosted Swagger UI assets, and the unified OpenAPI downloads from `nginx-gateway`.
-Treat those surfaces differently:
-- `/api-docs` is the human-readable docs page.
-- `/api-docs/openapi.json` and `/api-docs/openapi.yaml` are the machine-readable unified contracts.
-The download endpoints at `/api-docs/openapi.json` and `/api-docs/openapi.yaml` intentionally do not emit wildcard CORS headers; same-origin browser fetches and downloads work through the shared public origin instead.
-Any other `/api-docs/*` path is intentionally outside that allowlist and returns `404`.
+NGINX also serves the repo-owned docs surface at `/api-docs`. Keep the route
+mounted here, but treat [../docs-aggregator/README.md](../docs-aggregator/README.md)
+as the canonical owner for exact docs outputs, allowlist behavior, and
+browser-facing contract details.
 
 ## CSP Split
 
 NGINX now serves three intentional CSP profiles:
 
 - Relaxed development CSP on the live Vite/HMR routes (`/`, `/login`, `/@vite/client`, `/src`, `/node_modules`, `/assets`)
-- Docs-only relaxed CSP on `/api-docs` and its explicit asset/download allowlist
+- Separate docs-route CSP for the repo-owned `/api-docs` surface; see
+  [../docs-aggregator/README.md](../docs-aggregator/README.md) for the exact
+  docs contract
 - Strict production-oriented CSP on `/_prod-smoke/` and on the checked-in production route variant
 
 The main strict policy removes both `'unsafe-inline'` and `'unsafe-eval'`:
@@ -180,15 +175,9 @@ NGINX applies those policies with checked-in include files so any `location`
 that adds route-specific headers can also re-include the full security-header
 set instead of accidentally dropping the inherited headers.
 
-The docs route now uses a dedicated include:
-
-```text
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self';
-```
-
-That docs-only CSP is explicit because the stock Swagger UI bundle is not
-strict-CSP-compatible. The main app route graph and the `/api/*` route graph do
-not inherit that relaxation.
+The docs route keeps its own dedicated include because the stock Swagger UI
+bundle is not strict-CSP-compatible. The main app route graph and the `/api/*`
+route graph do not inherit that relaxation.
 
 Your React app should be configured with:
 
@@ -408,8 +397,9 @@ If you see CORS errors:
 1. Verify you're accessing via `https://app.budgetanalyzer.localhost` (not direct service ports)
 2. Check that `VITE_API_BASE_URL=/api` in `.env` (relative URL, not full URL)
 3. Check Session Gateway is running and configured correctly
-4. Do not expect `/api-docs/openapi.{json,yaml}` to return `Access-Control-Allow-Origin: *`; those downloads are intentionally same-origin
-5. Do not expect other unlisted `/api-docs/*` paths to work; the docs subtree is allowlisted and those requests intentionally return `404`
+4. Use [../docs-aggregator/README.md](../docs-aggregator/README.md) for the
+   exact `/api-docs` browser contract instead of debugging against stale copied
+   expectations here
 
 ### ConfigMap not updating
 

@@ -15,6 +15,9 @@
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |
+| 5006 | Transaction Service JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
+| 5007 | Currency Service JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
+| 5009 | Session Gateway JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
 | 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients) | Internal (services only) |
 | 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
@@ -47,6 +50,11 @@
 
 ### Frontend Layer (Development)
 - **3000** - React Dev Server (Tilt live reload)
+
+### Local Debugging (Development)
+- **5006** - Transaction Service JDWP
+- **5007** - Currency Service JDWP
+- **5009** - Session Gateway JDWP
 
 ### Infrastructure Layer (Internal)
 - **5432** - PostgreSQL (database, client cert trust anchored by `infra-ca`)
@@ -105,6 +113,11 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 
 **Frontend Development (3000-3999)**:
 - 3000: React Dev Server (standard React port)
+
+**Local Debugging (5000-5099)**:
+- 5006: Transaction Service JDWP
+- 5007: Currency Service JDWP
+- 5009: Session Gateway JDWP
 
 **Infrastructure (Standard ports)**:
 - 5432: PostgreSQL (standard)

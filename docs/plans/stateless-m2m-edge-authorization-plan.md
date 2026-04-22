@@ -9,7 +9,7 @@ Related documents:
 - `docs/architecture/session-edge-authorization-pattern.md`
 - `docs/architecture/system-overview.md`
 - `docs/decisions/006-session-architecture-rethink.md`
-- [`../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md`](../../../session-gateway/docs/plans/local-session-revocation-and-refresh-token-removal.md)
+- [`../../../session-gateway/docs/session-configuration.md`](../../../session-gateway/docs/session-configuration.md)
 
 ## Scope
 
@@ -17,13 +17,12 @@ This plan covers the future stateless bearer-token lane for machine-to-machine a
 access.
 
 It does not restate Session Gateway's browser-lane cleanup. That service-specific work now lives in
-the linked Session Gateway plan and should stay there.
+the linked Session Gateway session-configuration doc and should stay there.
 
 ## Session Gateway Dependency
 
 This plan's prerequisites on Session Gateway are satisfied via the sibling
-session-gateway plan `local-session-revocation-and-refresh-token-removal.md`
-and recorded in ADR
+session-gateway session-configuration doc and recorded in ADR
 [`007-browser-only-session-gateway.md`](../decisions/007-browser-only-session-gateway.md):
 
 - Session Gateway is explicitly browser-only.

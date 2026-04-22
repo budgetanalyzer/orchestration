@@ -11,7 +11,7 @@ If you follow [getting-started.md](getting-started.md) and run local
 development through orchestration and Tilt:
 
 - clone the repos side by side
-- open `/workspace/orchestration`
+- open the sibling `orchestration/` repo
 - run `./setup.sh`
 - run `tilt up`
 

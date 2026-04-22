@@ -157,7 +157,7 @@ Bare `/login` remains a frontend route. The SPA owns that page and initiates the
 
 Active browser sessions also call `GET /auth/v1/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to extend the session TTL without putting Session Gateway on the API hot path. The heartbeat is Redis-local and does not call Auth0. Browser session inspection lives alongside it at `GET /auth/v1/user`.
 
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 3 minutes. When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
+**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 2 minutes (`VITE_HEARTBEAT_INTERVAL_MS=120000` in `budget-analyzer-web`). When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
 
 ## Shared Session Contract
 

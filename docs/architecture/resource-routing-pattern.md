@@ -34,7 +34,7 @@ Browser
 
 ## Current Configuration
 
-**Source of truth:** [nginx.k8s.conf](/workspace/orchestration/nginx/nginx.k8s.conf)
+**Source of truth:** [nginx.k8s.conf](../../nginx/nginx.k8s.conf)
 
 Example route:
 

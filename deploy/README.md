@@ -546,17 +546,16 @@ certificate are all healthy.
   Boot/Grafana dashboard inputs after the rollout. That path also keeps the
   Prometheus Operator on the repo-owned RBAC post-renderer.
 - Production Grafana has no public `HTTPRoute` in the phase-6 route render.
-  Access it through the shared loopback-bound operator contract:
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`.
-- Production Prometheus stays internal-only and uses the same pattern:
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`.
+  Production Prometheus also stays internal-only. Use the shared loopback-bound
+  operator contract documented in
+  [../docs/architecture/observability.md](../docs/architecture/observability.md)
+  instead of maintaining a second command inventory here.
 - The reviewed OCI rollout path for Jaeger and Kiali uses
   `./deploy/scripts/20-render-phase-7-observability.sh` for review and
   `./deploy/scripts/21-apply-phase-7-observability.sh` for the live install.
-- Jaeger follows the same internal-only model through
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/jaeger-query 16686:16686`.
-- Kiali follows the same model through
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/kiali 20001:20001`.
+- Jaeger and Kiali follow that same internal-only loopback model; use the
+  canonical commands and helper scripts from
+  [../docs/architecture/observability.md](../docs/architecture/observability.md).
 - For workstation access, start those Kubernetes port-forwards on the OCI host
   first, then run
   `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` locally. The

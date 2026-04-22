@@ -67,29 +67,8 @@ recreate the local cluster/runtime for a fully clean infrastructure state.
 
 ### Port Mapping
 
-| Port | Service | Protocol | Purpose |
-|------|---------|----------|---------|
-| **Application Access** |
-| 443 (30443) | Istio Ingress Gateway | HTTPS | Browser entry point |
-| 80 | Kind host mapping | TCP | Reserved host mapping in the Kind config |
-| **Internal Services** |
-| 8080 | nginx-gateway | HTTP | API routing (behind Istio ingress) |
-| 8081 | session-gateway | HTTP | Browser auth/session management |
-| 8082 | transaction-service | HTTP | Transaction API |
-| 8084 | currency-service | HTTP | Currency API |
-| 8086 | permission-service | HTTP | Roles/permissions API |
-| 9002 | ext-authz | HTTP | Session validation |
-| 8090 | ext-authz | HTTP | Health check |
-| 3000 | budget-analyzer-web | HTTP | React dev server |
-| **Infrastructure** |
-| 5432 | postgresql | TCP | Database |
-| 6379 | redis | TCP | Session storage |
-| 5671 | rabbitmq | AMQPS | Message queue |
-| 15672 | rabbitmq | HTTP | Management UI |
-| **Debug Ports** |
-| 5006 | transaction-service | JDWP | Remote debugging |
-| 5007 | currency-service | JDWP | Remote debugging |
-| 5009 | session-gateway | JDWP | Remote debugging |
+Use [../architecture/port-reference.md](../architecture/port-reference.md)
+for the canonical application, infrastructure, and local JDWP debug ports.
 
 ### Service Health Endpoints
 
@@ -159,13 +138,10 @@ path and does not reproduce real authenticated requests.
 
 ### 4. Remote Debugging (IDE)
 
-Each service has JDWP enabled. Configure your IDE:
-
-| Service | Debug Port | IDE Configuration |
-|---------|------------|-------------------|
-| transaction-service | 5006 | Remote JVM Debug → localhost:5006 |
-| currency-service | 5007 | Remote JVM Debug → localhost:5007 |
-| session-gateway | 5009 | Remote JVM Debug → localhost:5009 |
+Each service has JDWP enabled. Use the local debug ports documented in
+[../architecture/port-reference.md](../architecture/port-reference.md) and
+configure your IDE with a standard `Remote JVM Debug` connection to
+`localhost:<documented-port>`.
 
 ---
 

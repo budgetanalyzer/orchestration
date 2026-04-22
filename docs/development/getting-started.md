@@ -1,7 +1,6 @@
 # Getting Started
 
-**Tested with:** VS Code, Claude Code (extension or terminal), and an
-Anthropic account.
+**Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
 
 The supported containerized developer workspace lives in the sibling
 `workspace` repository:

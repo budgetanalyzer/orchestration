@@ -36,6 +36,7 @@ shape of the topic and link outward.
 | --- | --- | --- |
 | Documentation ownership policy | [docs/OWNERSHIP.md](OWNERSHIP.md) | Link here instead of restating the full ownership map. |
 | AI instructions and repo guardrails | [AGENTS.md](../AGENTS.md) | Other docs may describe the repo, but agent instructions and repo-operating constraints belong there. |
+| Reusable `AGENTS.md` authoring standard | [docs/agents-md-checkstyle.md](agents-md-checkstyle.md) | Link here instead of restating the pattern-based authoring rules. |
 | Supported local happy path | [docs/development/getting-started.md](development/getting-started.md) | Point readers there instead of repeating the full supported setup flow. |
 | Local environment mechanics and live-update internals | [docs/development/local-environment.md](development/local-environment.md) | Keep implementation detail there; summarize elsewhere. |
 | Manual Tilt/Kind bootstrap internals | [docs/tilt-kind-setup-guide.md](tilt-kind-setup-guide.md) | Treat it as a manual/deep-dive reference, not a competing default path. |

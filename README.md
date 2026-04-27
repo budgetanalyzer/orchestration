@@ -55,6 +55,7 @@ access commands and operator posture live in
 ## Documentation
 
 - [Documentation Ownership](docs/OWNERSHIP.md)
+- [AGENTS.md Checkstyle](docs/agents-md-checkstyle.md)
 - [Getting Started](docs/development/getting-started.md)
 - [Local Environment Mechanics](docs/development/local-environment.md)
 - [Tilt/Kind Manual Deep Dive](docs/tilt-kind-setup-guide.md)

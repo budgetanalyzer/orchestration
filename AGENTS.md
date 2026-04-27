@@ -37,7 +37,7 @@ Keep `AGENTS.md` pattern-based and discovery-first. Prefer stable rules, discove
 
 Use `docs/OWNERSHIP.md` as the control surface for canonical documentation ownership. Update the owner doc first, then update summaries and cross-links.
 
-When editing `AGENTS.md`, read `docs/decisions/003-pattern-based-claude-md.md` first and apply its pattern-based guidance so this file stays maintainable over time.
+When editing `AGENTS.md`, apply `docs/agents-md-checkstyle.md` as the active authoring standard. The rationale lives in `docs/decisions/003-pattern-based-claude-md.md`; consult that decision when changing the standard or resolving ambiguity.
 
 Do not optimize `AGENTS.md` for token minimization alone. Keep useful orchestration-specific constraints and workflows, but compress repetition and link to the closer source of truth when one already exists.
 
@@ -49,7 +49,7 @@ Always update the nearest affected documentation in the same change:
 
 Treat `docs/archive/` as historical reference only. Do not update archived files.
 
-Treat `docs/decisions/` as ADR context, not an active implementation surface. Do not modify decision files unless the user explicitly asks. The standing exception is that `docs/decisions/003-pattern-based-claude-md.md` should be consulted whenever `AGENTS.md` or similar AI context docs are edited.
+Treat `docs/decisions/` as ADR context, not an active implementation surface. Do not modify decision files unless the user explicitly asks. Use `docs/agents-md-checkstyle.md` whenever `AGENTS.md` or similar AI context docs are edited.
 
 ## Code Exploration
 
@@ -123,6 +123,7 @@ Version numbers and concrete dependency selections live in service repos, manife
 Use the closest source of truth for the topic instead of expanding `AGENTS.md` with inventory detail.
 
 - Documentation ownership map: `docs/OWNERSHIP.md`
+- Reusable `AGENTS.md` authoring standard: `docs/agents-md-checkstyle.md`
 - High-level system orientation: `docs/architecture/system-overview.md`
 - Browser request flow, route ownership, and shared browser session contract: `docs/architecture/session-edge-authorization-pattern.md`
 - Resource-based routing rules: `docs/architecture/resource-routing-pattern.md`

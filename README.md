@@ -1,5 +1,13 @@
 # Budget Analyzer Orchestration
 
+> "Archetype: coordinator. Role: System orchestrator; coordinates cross-cutting concerns and deployment."
+>
+> — [AGENTS.md](AGENTS.md#tree-position)
+
+## Build Status
+
+[![Security Guardrails](https://github.com/budgetanalyzer/orchestration/actions/workflows/security-guardrails.yml/badge.svg)](https://github.com/budgetanalyzer/orchestration/actions/workflows/security-guardrails.yml)
+
 This repo is the control plane for Budget Analyzer. It contains every Kubernetes manifest, Tilt workflow, Istio mesh configuration, network policy, monitoring stack, and deployment script needed to run the full platform — locally or in production — from a single `tilt up`.
 
 ## What makes this interesting

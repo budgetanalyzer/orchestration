@@ -54,6 +54,37 @@ Services:
 
 The first form survives refactoring. The second form drifts.
 
+## Preservation Rule
+
+When tightening or refactoring an existing `AGENTS.md`, preserve unique
+information. Do not remove a rule, guardrail, workflow, boundary, or operating
+constraint unless one of these is true:
+
+- The same meaning is preserved in the rewritten `AGENTS.md`.
+- The information is moved to a clearly named, closer source-of-truth document
+  and `AGENTS.md` now points to it.
+- The rule is genuinely obsolete for the current repository, and the rewrite
+  says so intentionally rather than deleting it silently.
+
+Treat deletion as the last option, not the default cleanup action.
+
+Do not equate "shorter" with "better." If a section contains non-duplicated
+repo-specific guidance, keep it or re-home it before removing it.
+
+Example:
+
+```markdown
+Keep this kind of direct guardrail if no closer owner doc exists:
+
+## Git Safety
+
+Never run git write commands such as `commit`, `push`, `checkout`, `reset`, or
+branch manipulation unless explicitly requested.
+```
+
+If you replace a concrete section with a pointer, verify the pointer actually
+owns the full instruction. Do not replace unique guidance with an empty link.
+
 ## Consultation Trigger Pattern
 
 Important pointers should explain when an agent should read the referenced
@@ -168,6 +199,7 @@ validation gates, and consultation triggers should be imperative.
 | AG015 | Explain when to update `AGENTS.md`. | Update it for new instructions, guardrails, workflows, or discovery commands, not for every ordinary code or config change. |
 | AG016 | Add consultation triggers for important references. | For key docs and config pointers, name the concrete tasks or failure modes that should trigger reading them. Inline guidance is fine; a literal `When to consult` block is optional. |
 | AG017 | Use imperative language for agent actions. | Write guardrails, workflows, validation gates, and consultation triggers as direct commands. Avoid passive descriptions when action is required. |
+| AG018 | Re-home unique guidance before removing it. | Do not delete repo-specific instructions just to reduce length. Preserve them in `AGENTS.md`, or move them to a real owner doc and leave a pointer. |
 
 ## Recommended Structure
 
@@ -287,6 +319,11 @@ Common operating rules:
 - Treat manual live-environment changes as diagnostics unless they are encoded
   back into repo-owned config.
 - Stop and report if a required prerequisite is missing.
+
+Do not demote stable guardrails into a vague summary. If the repository has a
+direct rule like "Never run git write commands unless explicitly requested,"
+keep that exact operational meaning visible unless a closer owner doc now
+authoritatively owns it.
 
 ### 5. Development Workflow
 
@@ -452,9 +489,12 @@ When asking an agent to create a new `AGENTS.md`, require this workflow.
    instead of copied inventories.
 6. Add consultation triggers for references that agents should not ignore
    during related changes.
-7. Verify every included command is syntactically plausible and every referenced
+7. Compare the draft against the existing `AGENTS.md` and explicitly preserve,
+   re-home, or intentionally retire each repo-specific rule that is not
+   duplicated elsewhere.
+8. Verify every included command is syntactically plausible and every referenced
    file exists.
-8. Update documentation indexes or ownership maps if the repository has them.
+9. Update documentation indexes or ownership maps if the repository has them.
 
 Do not generate `AGENTS.md` from assumptions alone. The file should be grounded
 in discovered repository facts.
@@ -472,6 +512,8 @@ Use this checklist before accepting a new or modified `AGENTS.md`.
   failures that require reading them.
 - Guardrails, workflow steps, and validation gates use imperative language.
 - Stable safety rules are directly visible.
+- Unique repo-specific guidance from the previous `AGENTS.md` was preserved,
+  re-homed to a real owner doc, or intentionally retired with justification.
 - Validation gates are clear by change type.
 - Missing-prerequisite behavior is explicit.
 - No machine-specific absolute paths are required.
@@ -482,6 +524,8 @@ Use this checklist before accepting a new or modified `AGENTS.md`.
   elsewhere.
 - References use plain paths or markdown links unless eager import semantics are
   intentional.
+- No section was removed solely because it looked verbose. Information loss was
+  checked explicitly.
 
 ## Minimal Template
 

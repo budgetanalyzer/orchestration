@@ -92,16 +92,23 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 24 (non-LTS) |
+| **Current version** | 25 (LTS) |
 | **Eclipse Temurin images** | https://github.com/adoptium/containers |
 | **Azul Zulu downloads** | https://www.azul.com/downloads/ |
-| **JDK release schedule** | https://www.java.com/releases/ |
+| **JDK release schedule** | https://www.java.com/releases/ and https://www.oracle.com/java/technologies/java-se-support-roadmap.html |
 | **Defined in** | `service-common/build.gradle.kts` (toolchain), `workspace/ai-agent-sandbox/Dockerfile` (Zulu), `orchestration/Tiltfile` (Temurin base image), `transaction-service/Dockerfile`, `currency-service/Dockerfile`, `permission-service/Dockerfile`, `session-gateway/Dockerfile` |
 | **Upgrade cadence** | New version every 6 months (March and September) |
 
-**Why critical**: Java 24 is non-LTS. When Java 25 ships (September 2026), Java 24 stops receiving security patches. You must either stay on the 6-month treadmill or drop back to the latest LTS (currently 21). Each JDK upgrade requires checking Gradle compatibility and revalidating base Docker images.
+**Why critical**: Java 25 is the current backend LTS baseline. Java 26 is the
+current non-LTS feature release and belongs on the six-month feature-release
+track, not the stable service baseline. Each JDK upgrade requires checking
+Gradle compatibility and revalidating base Docker images.
 
-**Coupling**: JDK version must match the Eclipse Temurin base image tags in the orchestration `Tiltfile` and the four backend service Dockerfiles, the Azul Zulu version in the devcontainer Dockerfile, and Gradle's supported JDK range.
+**Coupling**: JDK version must match the Eclipse Temurin base image tags in the
+orchestration `Tiltfile` and the four backend service Dockerfiles, the Azul
+Zulu version in the devcontainer Dockerfile, and Gradle's supported JDK range.
+Gradle 9.1.0+ is required for Java 25 toolchains and for running Gradle on Java
+25; the checked-in backend wrappers currently use Gradle 9.5.0.
 
 ---
 
@@ -321,7 +328,7 @@ Only used by ext-authz. Low urgency unless security patches are published.
 
 | | |
 |---|---|
-| **Current version** | 24-jre-alpine |
+| **Current version** | 25-jre-alpine |
 | **Releases** | https://github.com/adoptium/containers |
 | **Defined in** | `orchestration/Tiltfile` (inline Dockerfile for Spring Boot services) |
 
@@ -419,7 +426,7 @@ behavior you depend on.
 ### Java Stack
 
 ```
-JDK version (e.g., 24 -> 25)
+JDK version (e.g., 25 LTS -> next selected baseline)
   -> Eclipse Temurin base image tag in Tiltfile
   -> Azul Zulu version in devcontainer Dockerfile
   -> Gradle compatibility (check supported JDK versions)
@@ -468,7 +475,7 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Image | Tag | Where Used |
 |---|---|---|
-| eclipse-temurin | 24-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
+| eclipse-temurin | 25-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
 | node | 20-alpine | `budget-analyzer-web/Dockerfile`, `budget-analyzer-web/Dockerfile.dev` |
 | golang | 1.24-alpine | `orchestration/ext-authz/Dockerfile` |
 | distroless/static | nonroot | `orchestration/ext-authz/Dockerfile` |
@@ -481,11 +488,11 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Dependency | Version | Where Defined |
 |---|---|---|
-| Java | 24 | `service-common/build.gradle.kts` |
+| Java | 25 | `service-common/build.gradle.kts` |
 | Spring Boot | 3.5.7 | `*/gradle/libs.versions.toml` |
 | Spring Cloud | 2025.0.0 | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
 | Spring Modulith | 1.4.0 | `currency-service/gradle/libs.versions.toml` |
-| Gradle | 8.14.2 | `*/gradle/wrapper/gradle-wrapper.properties` |
+| Gradle | 9.5.0 | `*/gradle/wrapper/gradle-wrapper.properties` |
 | Spring Dep Mgmt Plugin | 1.1.7 | `*/gradle/libs.versions.toml` |
 | SpringDoc OpenAPI | 2.8.13 | `*/gradle/libs.versions.toml` |
 | Testcontainers | 1.21.4 | `session-gateway/`, `currency-service/`, `transaction-service/gradle/libs.versions.toml` |
@@ -532,7 +539,7 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Component | Version | Where Defined |
 |---|---|---|
 | Ubuntu | 24.04 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Azul Zulu JDK | 24 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Azul Zulu JDK | 25 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Go | 1.24.1 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Node.js | 20.x (`NODE_MAJOR=20`) | `workspace/ai-agent-sandbox/Dockerfile` |
 | Kind | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |

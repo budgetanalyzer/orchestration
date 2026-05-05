@@ -19,8 +19,8 @@ environment works after startup
 - mkcert 1.4.4
 
 **For Backend Development (Optional):**
-- JDK 24 (for running services outside Docker)
-- Gradle 8.5+ or use `./gradlew`
+- JDK 25 (for running services outside Docker)
+- Gradle 9.5.0 or use `./gradlew`
 
 **For Frontend Development (Optional):**
 - Node.js 20+ (LTS)

@@ -51,6 +51,10 @@ k8s_yaml(kustomize('kubernetes/infrastructure'))
 
 k8s_resource(
     'postgresql',
+    objects=[
+        'postgresql-init:configmap:infrastructure',
+        'postgresql-bootstrap-credentials:secret:infrastructure',
+    ],
     port_forwards=[
         port_forward(5432, 5432, name='PostgreSQL'),
     ],
@@ -59,6 +63,10 @@ k8s_resource(
 
 k8s_resource(
     'redis',
+    objects=[
+        'redis-acl-bootstrap:configmap:infrastructure',
+        'redis-bootstrap-credentials:secret:infrastructure',
+    ],
     port_forwards=[
         port_forward(6379, 6379, name='Redis'),
     ],
@@ -67,6 +75,10 @@ k8s_resource(
 
 k8s_resource(
     'rabbitmq',
+    objects=[
+        'rabbitmq-config:configmap:infrastructure',
+        'rabbitmq-bootstrap-credentials:secret:infrastructure',
+    ],
     port_forwards=[
         port_forward(5671, 5671, name='AMQPS'),
         port_forward(15672, 15672, name='Management UI'),
@@ -352,7 +364,7 @@ def spring_boot_service(name, deps=[]):
         name,
         context=repo_path,
         dockerfile_contents='''
-FROM eclipse-temurin:24-jre-alpine@sha256:4044b6c87cb088885bcd0220f7dc7a8a4aab76577605fa471945d2e98270741f
+FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar app.jar
@@ -434,7 +446,7 @@ docker_build_with_restart(
     'session-gateway',
     context=repo_path,
     dockerfile_contents='''
-FROM eclipse-temurin:24-jre-alpine@sha256:4044b6c87cb088885bcd0220f7dc7a8a4aab76577605fa471945d2e98270741f
+FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar app.jar
@@ -938,6 +950,10 @@ local_resource(
 
 k8s_resource(
     'jaeger',
+    objects=[
+        'jaeger-config:configmap:monitoring',
+        'jaeger-badger:persistentvolumeclaim:monitoring',
+    ],
     resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
     labels=['monitoring'],
 )

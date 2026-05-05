@@ -146,7 +146,7 @@ echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
 check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
-check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
+check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
 check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRATION_DIR")"
 check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
 if check_command "helm" "Helm" "$(phase7_install_hint helm "$ORCHESTRATION_DIR")"; then
@@ -307,11 +307,11 @@ if kubectl cluster-info --context kind-kind &> /dev/null; then
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "  Installing Gateway API CRDs..."
-            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
             echo -e "${GREEN}✓${NC} Gateway API CRDs installed"
         else
             echo "  Skipped. Install manually with:"
-            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
+            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml"
             ((WARNINGS++))
         fi
     fi

@@ -78,7 +78,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 1.29.1 (Helm charts) |
+| **Current version** | 1.29.2 (Helm charts) |
 | **Watch** | https://github.com/istio/istio |
 | **Also follow** | https://istio.io/latest/news/security/ (security bulletins) |
 | **Defined in** | `orchestration/Tiltfile` (helm upgrade commands) |
@@ -113,7 +113,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v0.24.0 (binary), node image `kindest/node:v1.30.8` (Kubernetes 1.30.8) |
+| **Current version** | v0.31.0 (binary), node image `kindest/node:v1.35.0` (Kubernetes 1.35.0) |
 | **Watch** | https://github.com/kubernetes-sigs/kind |
 | **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (binary), `orchestration/kind-cluster-config.yaml` (node image) |
 
@@ -125,9 +125,9 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | 0.37.0 |
+| **Current version** | 0.37.3 |
 | **Watch** | https://github.com/tilt-dev/tilt |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.0`, checksum-verified release tarball) |
+| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.3`, checksum-verified release tarball) |
 
 **Why important**: Tilt is under active development with Tiltfile API changes between versions. The entire development workflow (`tilt up`) depends on it. Breaking changes in extensions (`ext://restart_process`, `ext://configmap`, etc.) can silently break live reload, so the pinned baseline reduces surprise drift but release watching still matters before deliberate upgrades.
 
@@ -135,7 +135,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v1.4.0 |
+| **Current version** | v1.5.1 |
 | **Watch** | https://github.com/kubernetes-sigs/gateway-api |
 | **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
 
@@ -147,7 +147,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v3.29.3 |
+| **Current version** | v3.32.0 |
 | **Watch** | https://github.com/projectcalico/calico |
 | **Defined in** | `orchestration/scripts/bootstrap/install-calico.sh` |
 
@@ -159,7 +159,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | 3.7.1 (Helm chart) |
+| **Current version** | 3.8.0 (Helm chart), app v1.18.0 |
 | **Watch** | https://github.com/kyverno/kyverno |
 | **Defined in** | `orchestration/Tiltfile` (helm upgrade command) |
 
@@ -450,19 +450,19 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Component | Version | Where Defined |
 |---|---|---|
-| Kind (binary) | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Kind node image | kindest/node:v1.30.8 | `orchestration/kind-cluster-config.yaml` |
-| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind (binary) | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind node image | kindest/node:v1.35.0 | `orchestration/kind-cluster-config.yaml` |
+| Tilt | 0.37.3 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
-| Istio | 1.29.1 | `orchestration/Tiltfile` |
-| Calico | v3.29.3 | `orchestration/scripts/bootstrap/install-calico.sh` |
-| Kyverno | 3.7.1 | `orchestration/Tiltfile` |
-| Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
+| kubectl | v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
+| Istio | 1.29.2 | `orchestration/Tiltfile` |
+| Calico | v3.32.0 | `orchestration/scripts/bootstrap/install-calico.sh` |
+| Kyverno | 3.8.0 | `orchestration/Tiltfile` |
+| Gateway API CRDs | v1.5.1 | `orchestration/Tiltfile` |
 | mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/bootstrap/install-verified-tool.sh` |
 | kubeconform | v0.7.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kube-linter | v0.8.3 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
-| Kyverno CLI | v1.17.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| Kyverno CLI | v1.18.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 
 ### Container Images
 
@@ -535,10 +535,10 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Azul Zulu JDK | 24 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Go | 1.24.1 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Node.js | 20.x (`NODE_MAJOR=20`) | `workspace/ai-agent-sandbox/Dockerfile` |
-| Kind | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| kubectl | v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | v3.20.1 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Tilt | 0.37.3 | `workspace/ai-agent-sandbox/Dockerfile` |
 
 ---
 

@@ -11,10 +11,10 @@ environment works after startup
 **Minimum versions:**
 - Docker 24.0+
 - Kind 0.20+
-- kubectl 1.30.8 (matches `kindest/node:v1.30.8`)
+- kubectl 1.35.x (matches `kindest/node:v1.35.0`)
 - OpenSSL 3.x+
 - Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
-- Tilt 0.37.0
+- Tilt 0.37.3
 - Git 2.40+
 - mkcert 1.4.4
 
@@ -45,7 +45,7 @@ mkcert --version
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
-`1.29.1`. Local Tilt installs `istio/cni` with
+`1.29.2`. Local Tilt installs `istio/cni` with
 `kubernetes/istio/cni-common-values.yaml` plus
 `kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
 standard `/etc/cni/net.d` and `/opt/cni/bin` paths. Production k3s deploys use

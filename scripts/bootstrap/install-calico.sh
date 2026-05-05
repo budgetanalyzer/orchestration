@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-CALICO_VERSION="v3.29.3"
+CALICO_VERSION="v3.32.0"
 CALICO_MANIFEST_URL="https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
 CALICO_NAMESPACE="kube-system"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"

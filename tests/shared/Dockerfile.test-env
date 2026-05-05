@@ -6,9 +6,9 @@
 FROM ubuntu:22.04@sha256:ce4a593b4e323dcc3dd728e397e0a866a1bf516a1b7c31d6aa06991baec4f2e0
 
 ARG TARGETARCH
-ARG KUBECTL_VERSION=v1.30.8
+ARG KUBECTL_VERSION=v1.35.0
 ARG HELM_VERSION=v3.20.1
-ARG TILT_VERSION=0.37.0
+ARG TILT_VERSION=0.37.3
 ARG MKCERT_VERSION=v1.4.4
 
 # Avoid prompts during package installation
@@ -36,8 +36,8 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 # Install kubectl
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) kubectl_sha256='7f39bdcf768ce4b8c1428894c70c49c8b4d2eee52f3606eb02f5f7d10f66d692' ;; \
-        arm64) kubectl_sha256='e51d6a76fade0871a9143b64dc62a5ff44f369aa6cb4b04967d93798bf39d15b' ;; \
+        amd64) kubectl_sha256='a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989' ;; \
+        arm64) kubectl_sha256='58f82f9fe796c375c5c4b8439850b0f3f4d401a52434052f2df46035a8789e25' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \
@@ -50,7 +50,7 @@ RUN set -eux; \
         amd64|arm64) : ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSLo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-${TARGETARCH}"; \
+    curl -fsSLo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-${TARGETARCH}"; \
     chmod +x /usr/local/bin/kind
 
 # Install helm
@@ -70,8 +70,8 @@ RUN set -eux; \
 # Install tilt
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) tilt_arch='x86_64'; tilt_sha256='c2c7d3649233f01bc5d230b66b8ccd332401f348dc22b863fcf7244da6970ff1' ;; \
-        arm64) tilt_arch='arm64'; tilt_sha256='84457137539d8e4be6e90e9afecf8ef692ad3f8c19e9bf3355f3fbf4f8dce55f' ;; \
+        amd64) tilt_arch='x86_64'; tilt_sha256='e90bc6cf70882bc7579d8174a27cab2de0284612ec7339e4b32f669cd5de4e5c' ;; \
+        arm64) tilt_arch='arm64'; tilt_sha256='826f48198f368ef5edb684e9ae4c87ff76eca84c904f72b2376b29b93bffc019' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /tmp/tilt.tar.gz "https://github.com/tilt-dev/tilt/releases/download/v${TILT_VERSION}/tilt.${TILT_VERSION}.linux.${tilt_arch}.tar.gz"; \

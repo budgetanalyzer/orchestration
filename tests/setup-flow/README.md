@@ -6,7 +6,7 @@
 > aligned with the same digest-pinning rule as the rest of the repo.
 >
 > Its Kind node image intentionally stays on `kindest/node:v1.32.2` while the
-> main local cluster config stays on `kindest/node:v1.30.8`. That divergence is
+> main local cluster config stays on `kindest/node:v1.35.0`. That divergence is
 > documented, not normalized: this suite is a retained reference asset, not the
 > current parity baseline.
 

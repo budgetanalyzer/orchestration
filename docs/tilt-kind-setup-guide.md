@@ -39,9 +39,9 @@ Current baseline:
 
 - Docker `24.0+`
 - Kind `0.20+`
-- `kubectl` `1.30.8`
+- `kubectl` `1.35.x`
 - Helm `3.20.x`
-- Tilt `0.37.0`
+- Tilt `0.37.3`
 - OpenSSL `3.x+`
 - `mkcert` `1.4.4`
 

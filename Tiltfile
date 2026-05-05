@@ -696,7 +696,7 @@ local_resource(
 # Gateway API CRDs (must be installed before Istio ingress gateway)
 local_resource(
     'gateway-api-crds',
-    cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml',
+    cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml',
     labels=['infrastructure'],
 )
 
@@ -711,7 +711,7 @@ local_resource(
         helm upgrade --install istio-base istio/base \
             --namespace istio-system \
             --create-namespace \
-            --version 1.29.1 \
+            --version 1.29.2 \
             --wait
     ''',
     labels=['infrastructure'],
@@ -725,7 +725,7 @@ local_resource(
     cmd='''
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
-            --version 1.29.1 \
+            --version 1.29.2 \
             --values kubernetes/istio/cni-common-values.yaml \
             --values kubernetes/istio/cni-kind-values.yaml \
             --wait
@@ -745,7 +745,7 @@ local_resource(
     cmd='''
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
-            --version 1.29.1 \
+            --version 1.29.2 \
             --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
@@ -818,7 +818,7 @@ local_resource(
         helm upgrade --install kyverno kyverno/kyverno \
             --namespace kyverno \
             --create-namespace \
-            --version 3.7.1 \
+            --version 3.8.0 \
             --set admissionController.replicas=1 \
             --set backgroundController.replicas=1 \
             --set cleanupController.replicas=1 \
@@ -1009,7 +1009,7 @@ local_resource(
 )
 
 # Istio ingress gateway — auto-provisioned from the Gateway API resource.
-# Istio 1.29.1 supports declarative deployment/service customization through
+# Istio 1.29.2 supports declarative deployment/service customization through
 # Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
 # Gateway and then waits for the generated workload to settle.
 local_resource(
@@ -1067,8 +1067,8 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Egress gateway installed directly from istio/gateway 1.29.1.
-# The 1.29.1 chart now accepts the required service.type=ClusterIP input under
+# Egress gateway installed directly from istio/gateway 1.29.2.
+# The 1.29.2 chart accepts the required service.type=ClusterIP input under
 # the repo's Helm v3.20.1 toolchain, so the vendored manifest path is removed.
 local_resource(
     'istio-egress-gateway',
@@ -1085,7 +1085,7 @@ local_resource(
         fi
         helm upgrade --install istio-egress-gateway istio/gateway \
             --namespace istio-egress \
-            --version 1.29.1 \
+            --version 1.29.2 \
             --values kubernetes/istio/egress-gateway-values.yaml \
             --wait
         kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s

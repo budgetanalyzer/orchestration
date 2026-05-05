@@ -123,7 +123,7 @@ helm repo update kyverno >/dev/null
 helm upgrade --install kyverno kyverno/kyverno \
     --namespace kyverno \
     --create-namespace \
-    --version 3.7.1 \
+    --version 3.8.0 \
     --wait >/dev/null
 kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=5m >/dev/null
 print_success "Kyverno is ready"

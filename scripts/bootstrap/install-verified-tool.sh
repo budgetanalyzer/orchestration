@@ -6,11 +6,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=../lib/pinned-tool-versions.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
 
 usage() {
     cat <<'EOF'
-Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno> [--install-dir DIR]
+Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno> [--install-dir DIR]
 
 Installs the repo-pinned tool release for the current OS/architecture after
 verifying the checked-in SHA-256 checksum.
@@ -103,7 +104,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$TOOL" in
-    kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno)
+    kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno)
         ;;
     *)
         echo "Unsupported tool: $TOOL" >&2
@@ -148,6 +149,12 @@ case "$TOOL" in
         download_file "$URL" "$ARTIFACT"
         phase7_verify_sha256 "$ARTIFACT" "$EXPECTED_SHA256"
         install_binary "$ARTIFACT" "$INSTALL_DIR/mkcert"
+        ;;
+    kind)
+        ARTIFACT="$TMP_DIR/kind"
+        download_file "$URL" "$ARTIFACT"
+        phase7_verify_sha256 "$ARTIFACT" "$EXPECTED_SHA256"
+        install_binary "$ARTIFACT" "$INSTALL_DIR/kind"
         ;;
     kubeconform)
         ARCHIVE="$TMP_DIR/kubeconform.tar.gz"

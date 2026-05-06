@@ -122,7 +122,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | v0.31.0 (binary), node image `kindest/node:v1.35.0` (Kubernetes 1.35.0) |
 | **Watch** | https://github.com/kubernetes-sigs/kind |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (binary), `orchestration/kind-cluster-config.yaml` (node image) |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (binary and verified checksums), `orchestration/kind-cluster-config.yaml` (node image), `workspace/ai-agent-sandbox/Dockerfile` (devcontainer binary) |
 
 **Why important**: Kind is newer tooling with an evolving cluster config API. Each Kind release adds support for new Kubernetes versions via node images. Staying current means smaller config changes per upgrade and access to newer Kubernetes features. The node image pins the Kubernetes API version for the entire local development environment.
 
@@ -134,7 +134,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | 0.37.3 |
 | **Watch** | https://github.com/tilt-dev/tilt |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.3`, checksum-verified release tarball) |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (repo setup and verified installer), `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.3`, checksum-verified release tarball) |
 
 **Why important**: Tilt is under active development with Tiltfile API changes between versions. The entire development workflow (`tilt up`) depends on it. Breaking changes in extensions (`ext://restart_process`, `ext://configmap`, etc.) can silently break live reload, so the pinned baseline reduces surprise drift but release watching still matters before deliberate upgrades.
 
@@ -144,7 +144,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | v1.5.1 |
 | **Watch** | https://github.com/kubernetes-sigs/gateway-api |
-| **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (version and manifest URL), `orchestration/Tiltfile`, `orchestration/setup.sh`, `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
 
 **Why important**: Gateway API is graduating features from beta to GA. API changes affect HTTPRoute manifests, Gateway resources, and how Istio consumes them. Istio's support for specific Gateway API versions is documented in each Istio release.
 
@@ -156,7 +156,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 |---|---|
 | **Current version** | v3.32.0 |
 | **Watch** | https://github.com/projectcalico/calico |
-| **Defined in** | `orchestration/scripts/bootstrap/install-calico.sh` |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh`; installed by `orchestration/scripts/bootstrap/install-calico.sh` |
 
 **Why important**: CNI plugin that enforces NetworkPolicies. Must be compatible with the Kubernetes version running in Kind. Security-relevant because it's the enforcement layer for all network segmentation.
 
@@ -457,16 +457,16 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Component | Version | Where Defined |
 |---|---|---|
-| Kind (binary) | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind (binary) | v0.31.0 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
 | Kind node image | kindest/node:v1.35.0 | `orchestration/kind-cluster-config.yaml` |
-| Tilt | 0.37.3 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
+| Tilt | 0.37.3 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| Helm | 3.20.x (tested v3.20.1) | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| kubectl | v1.35.4 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
 | Istio | 1.29.2 | `orchestration/Tiltfile` |
-| Calico | v3.32.0 | `orchestration/scripts/bootstrap/install-calico.sh` |
+| Calico | v3.32.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | Kyverno | 3.8.0 | `orchestration/Tiltfile` |
-| Gateway API CRDs | v1.5.1 | `orchestration/Tiltfile` |
-| mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/bootstrap/install-verified-tool.sh` |
+| Gateway API CRDs | v1.5.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| mkcert | v1.4.4 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kubeconform | v0.7.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kube-linter | v0.8.3 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | Kyverno CLI | v1.18.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
@@ -543,7 +543,7 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Go | 1.24.1 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Node.js | 20.x (`NODE_MAJOR=20`) | `workspace/ai-agent-sandbox/Dockerfile` |
 | Kind | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
+| kubectl | v1.35.4 from the Kubernetes v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | v3.20.1 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Tilt | 0.37.3 | `workspace/ai-agent-sandbox/Dockerfile` |
 

@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Pinned tool versions and verified download metadata for security guardrail tooling.
 
-PHASE7_KUBECTL_VERSION="v1.35.0"
+PHASE7_KUBECTL_VERSION="v1.35.4"
 PHASE7_HELM_VERSION="v3.20.1"
 PHASE7_TILT_VERSION="0.37.3"
 PHASE7_MKCERT_VERSION="v1.4.4"
+PHASE7_KIND_VERSION="v0.31.0"
 PHASE7_KUBECONFORM_VERSION="v0.7.0"
 PHASE7_KUBE_LINTER_VERSION="v0.8.3"
 PHASE7_KYVERNO_CLI_VERSION="v1.18.0"
+PHASE7_GATEWAY_API_VERSION="v1.5.1"
+PHASE7_CALICO_VERSION="v3.32.0"
 
 phase7_normalize_os() {
     local raw_os
@@ -98,6 +101,9 @@ phase7_tool_version() {
         mkcert)
             printf '%s\n' "$PHASE7_MKCERT_VERSION"
             ;;
+        kind)
+            printf '%s\n' "$PHASE7_KIND_VERSION"
+            ;;
         kubeconform)
             printf '%s\n' "$PHASE7_KUBECONFORM_VERSION"
             ;;
@@ -145,6 +151,9 @@ phase7_tool_url() {
         mkcert)
             printf 'https://github.com/FiloSottile/mkcert/releases/download/%s/mkcert-%s-%s\n' "$PHASE7_MKCERT_VERSION" "$PHASE7_MKCERT_VERSION" "$platform"
             ;;
+        kind)
+            printf 'https://github.com/kubernetes-sigs/kind/releases/download/%s/kind-%s-%s\n' "$PHASE7_KIND_VERSION" "$os" "$arch"
+            ;;
         kubeconform)
             printf 'https://github.com/yannh/kubeconform/releases/download/%s/kubeconform-%s.tar.gz\n' "$PHASE7_KUBECONFORM_VERSION" "$platform"
             ;;
@@ -182,10 +191,10 @@ phase7_tool_url() {
 
 phase7_tool_sha256() {
     case "$1:$2" in
-        kubectl:linux-amd64) printf 'a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989\n' ;;
-        kubectl:linux-arm64) printf '58f82f9fe796c375c5c4b8439850b0f3f4d401a52434052f2df46035a8789e25\n' ;;
-        kubectl:darwin-amd64) printf '2447cb78911b10a667202b078eeb30541ec78d1280c3682921dc81607e148d96\n' ;;
-        kubectl:darwin-arm64) printf 'cf699c56340dc775230fde4ef84237d27563ea6ef52164c7d078072b586c3918\n' ;;
+        kubectl:linux-amd64) printf 'b529430df69a688fd61b64ad2299edb5fd71cb58be2a4779dba624c7d3510efd\n' ;;
+        kubectl:linux-arm64) printf '6a5a4cc4e396d7626a7a693a3044b51c75520f81db30fe6816c2554e53be336f\n' ;;
+        kubectl:darwin-amd64) printf 'dddb01bddb96f78e48e33105ccfa2feedff585a8b2e3b812f5d0f64c7403710a\n' ;;
+        kubectl:darwin-arm64) printf 'ec644a2473b64b486987f695dfb1867963ce6d42d267b86e944585a546f92b5d\n' ;;
         helm:linux-amd64) printf '0165ee4a2db012cc657381001e593e981f42aa5707acdd50658326790c9d0dc3\n' ;;
         helm:linux-arm64) printf '56b9d1b0e0efbb739be6e68a37860ace8ec9c7d3e6424e3b55d4c459bc3a0401\n' ;;
         helm:darwin-amd64) printf '580515b544d5c966edc6f782c9ae88e21a9e10c786a7d6c5fd4b52613f321076\n' ;;
@@ -198,6 +207,10 @@ phase7_tool_sha256() {
         mkcert:linux-arm64) printf 'b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0\n' ;;
         mkcert:darwin-amd64) printf 'a32dfab51f1845d51e810db8e47dcf0e6b51ae3422426514bf5a2b8302e97d4e\n' ;;
         mkcert:darwin-arm64) printf 'c8af0df44bce04359794dad8ea28d750437411d632748049d08644ffb66a60c6\n' ;;
+        kind:linux-amd64) printf 'eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa\n' ;;
+        kind:linux-arm64) printf '8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4\n' ;;
+        kind:darwin-amd64) printf 'a8b3cf77b2ad77aec5bf710d1a2589d9117576132af812885cad41e9dede4d4e\n' ;;
+        kind:darwin-arm64) printf '88bf554fe9da6311c9f8c2d082613c002911a476f6b5090e9420b35d84e70c5c\n' ;;
         kubeconform:linux-amd64) printf 'c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3\n' ;;
         kubeconform:linux-arm64) printf 'cc907ccf9e3c34523f0f32b69745265e0a6908ca85b92f41931d4537860eb83c\n' ;;
         kubeconform:darwin-amd64) printf 'c6771cc894d82e1b12f35ee797dcda1f7da6a3787aa30902a15c264056dd40d4\n' ;;
@@ -228,7 +241,7 @@ phase7_install_hint() {
         mkcert)
             printf 'sudo apt-get install -y libnss3-tools && "%s" mkcert\n' "$installer_path"
             ;;
-        kubectl|helm|tilt)
+        kubectl|helm|tilt|kind)
             printf '"%s" %s\n' "$installer_path" "$tool"
             ;;
         kubeconform|kube-linter|kyverno)
@@ -239,4 +252,12 @@ phase7_install_hint() {
             return 1
             ;;
     esac
+}
+
+phase7_gateway_api_manifest_url() {
+    printf 'https://github.com/kubernetes-sigs/gateway-api/releases/download/%s/standard-install.yaml\n' "$PHASE7_GATEWAY_API_VERSION"
+}
+
+phase7_calico_manifest_url() {
+    printf 'https://raw.githubusercontent.com/projectcalico/calico/%s/manifests/calico.yaml\n' "$PHASE7_CALICO_VERSION"
 }

@@ -1,12 +1,13 @@
 #!/bin/bash
 # Pre-flight check for Tilt-Kind development environment
 
-set -e
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/pinned-tool-versions.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
 
 # Colors for output
@@ -44,6 +45,12 @@ check_command() {
                 ;;
             tilt)
                 version=$($cmd version 2>&1 | head -n1)
+                ;;
+            kind)
+                version=$($cmd version 2>&1 | head -n1)
+                ;;
+            mkcert)
+                version=$($cmd --version 2>&1 | head -n1)
                 ;;
             openssl)
                 version=$($cmd version 2>&1 | head -n1)
@@ -95,7 +102,7 @@ check_file() {
 }
 
 normalize_semver() {
-    printf '%s\n' "$1" | sed -nE 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
 }
 
 version_ge() {
@@ -104,6 +111,132 @@ version_ge() {
 
 version_lt() {
     [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+check_java_version() {
+    local raw_version major_version
+
+    raw_version=$(java -version 2>&1 | head -n1 || true)
+    major_version=$(printf '%s\n' "$raw_version" | sed -nE 's/.*version "([0-9]+).*/\1/p' | head -n1)
+
+    if [ -z "$major_version" ]; then
+        echo -e "${RED}✗${NC} Could not parse Java version"
+        echo "  Raw output: $raw_version"
+        echo "  Install JDK 25 and ensure it is first on PATH or selected by JAVA_HOME."
+        ((ERRORS++))
+        return 1
+    fi
+
+    if [ "$major_version" = "25" ]; then
+        echo -e "${GREEN}✓${NC} Java baseline matches local Tilt build path ($raw_version)"
+        return 0
+    fi
+
+    echo -e "${RED}✗${NC} Unsupported Java version for local Tilt build path: $raw_version"
+    echo "  Expected JDK 25. Gradle local resources run on the host before Docker images are built."
+    echo "  Set JAVA_HOME to a JDK 25 install and ensure java on PATH resolves to that JDK."
+    ((ERRORS++))
+    return 1
+}
+
+check_node_version() {
+    local raw_version parsed_version
+
+    raw_version=$(node --version 2>/dev/null || true)
+    parsed_version=$(normalize_semver "$raw_version")
+
+    if [ -z "$parsed_version" ]; then
+        echo -e "${RED}✗${NC} Could not parse Node.js version"
+        echo "  Raw output: $raw_version"
+        echo "  Install Node.js 20+ for the local frontend prod-smoke Tilt resource."
+        ((ERRORS++))
+        return 1
+    fi
+
+    if version_ge "$parsed_version" "20.0.0"; then
+        echo -e "${GREEN}✓${NC} Node.js version supported for local Tilt frontend build ($raw_version)"
+        return 0
+    fi
+
+    echo -e "${RED}✗${NC} Unsupported Node.js version: $raw_version"
+    echo "  Expected Node.js 20+ for the local frontend prod-smoke Tilt resource."
+    ((ERRORS++))
+    return 1
+}
+
+check_npm_version() {
+    local raw_version parsed_version
+
+    raw_version=$(npm --version 2>/dev/null || true)
+    parsed_version=$(normalize_semver "$raw_version")
+
+    if [ -z "$parsed_version" ]; then
+        echo -e "${RED}✗${NC} Could not parse npm version"
+        echo "  Raw output: $raw_version"
+        echo "  Install npm 10+ for the local frontend prod-smoke Tilt resource."
+        ((ERRORS++))
+        return 1
+    fi
+
+    if version_ge "$parsed_version" "10.0.0"; then
+        echo -e "${GREEN}✓${NC} npm version supported for local Tilt frontend build ($raw_version)"
+        return 0
+    fi
+
+    echo -e "${RED}✗${NC} Unsupported npm version: $raw_version"
+    echo "  Expected npm 10+ for the local frontend prod-smoke Tilt resource."
+    ((ERRORS++))
+    return 1
+}
+
+tool_raw_version() {
+    case "$1" in
+        kubectl)
+            kubectl version --client 2>/dev/null | head -n1 || true
+            ;;
+        tilt)
+            tilt version 2>/dev/null | head -n1 || true
+            ;;
+        mkcert)
+            mkcert --version 2>/dev/null | head -n1 || true
+            ;;
+        kind)
+            kind version 2>/dev/null | head -n1 || true
+            ;;
+        *)
+            "$1" --version 2>/dev/null | head -n1 || true
+            ;;
+    esac
+}
+
+check_pinned_tool_version() {
+    local tool raw_version parsed_version expected_version expected_semver
+
+    tool="$1"
+    expected_version="$(phase7_tool_version "$tool")"
+    expected_semver="$(normalize_semver "$expected_version")"
+    raw_version="$(tool_raw_version "$tool")"
+    parsed_version="$(normalize_semver "$raw_version")"
+
+    if [ -z "$parsed_version" ]; then
+        echo -e "${RED}✗${NC} Could not parse ${tool} version"
+        echo "  Raw output: $raw_version"
+        echo "  Expected: $expected_version"
+        echo "  Install with: $(phase7_install_hint "$tool" "$ORCHESTRATION_DIR")"
+        ((ERRORS++))
+        return 1
+    fi
+
+    if [ "$parsed_version" = "$expected_semver" ]; then
+        echo -e "${GREEN}✓${NC} ${tool} version matches this repo ($raw_version; expected $expected_version)"
+        return 0
+    fi
+
+    echo -e "${RED}✗${NC} ${tool} version mismatch: $raw_version"
+    echo "  Expected: $expected_version"
+    echo "  Install with: $(phase7_install_hint "$tool" "$ORCHESTRATION_DIR")"
+    ((ERRORS++))
+    return 1
 }
 
 check_helm_version() {
@@ -146,14 +279,31 @@ echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
 check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
-check_command "kind" "KIND" "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind"
-check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRATION_DIR")"
+if check_command "kind" "Kind" "$(phase7_install_hint kind "$ORCHESTRATION_DIR")"; then
+    check_pinned_tool_version kind
+fi
+if check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRATION_DIR")"; then
+    check_pinned_tool_version kubectl
+fi
 check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
 if check_command "helm" "Helm" "$(phase7_install_hint helm "$ORCHESTRATION_DIR")"; then
     check_helm_version
 fi
-check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"
-check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"
+if check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"; then
+    check_pinned_tool_version tilt
+fi
+if check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"; then
+    check_pinned_tool_version mkcert
+fi
+if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
+    check_java_version
+fi
+if check_command "node" "Node.js" "Install Node.js 20+ from your OS package manager, nvm, or Volta"; then
+    check_node_version
+fi
+if check_command "npm" "npm" "Install npm 10+ with Node.js"; then
+    check_npm_version
+fi
 
 echo
 
@@ -184,6 +334,17 @@ REPOS=(
 for repo in "${REPOS[@]}"; do
     check_repo "$repo"
 done
+
+if [ -d "$WORKSPACE_DIR/budget-analyzer-web" ]; then
+    if [ -d "$WORKSPACE_DIR/budget-analyzer-web/node_modules" ]; then
+        echo -e "${GREEN}✓${NC} budget-analyzer-web/node_modules exists for the local prod-smoke build"
+    else
+        echo -e "${RED}✗${NC} budget-analyzer-web/node_modules is missing"
+        echo "  Tilt's budget-analyzer-web-prod-smoke-build resource runs npm on the host."
+        echo "  Run: cd $WORKSPACE_DIR/budget-analyzer-web && npm install"
+        ((ERRORS++))
+    fi
+fi
 
 echo
 
@@ -272,11 +433,21 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
         if kubectl get daemonset calico-node -n kube-system &> /dev/null; then
             CALICO_READY=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0)
             CALICO_DESIRED=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+            CALICO_IMAGES=$(kubectl get daemonset calico-node -n kube-system -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null || true)
             if [ "$CALICO_DESIRED" -gt 0 ] && [ "$CALICO_READY" -eq "$CALICO_DESIRED" ]; then
                 echo -e "${GREEN}✓${NC} Calico daemonset ready (${CALICO_READY}/${CALICO_DESIRED})"
             else
                 echo -e "${RED}✗${NC} Calico daemonset not ready (${CALICO_READY}/${CALICO_DESIRED})"
                 echo "  Run: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
+                ((ERRORS++))
+            fi
+            if printf '%s\n' "$CALICO_IMAGES" | grep -q "calico/node:${PHASE7_CALICO_VERSION}"; then
+                echo -e "${GREEN}✓${NC} Calico version matches this repo (${PHASE7_CALICO_VERSION})"
+            else
+                echo -e "${RED}✗${NC} Calico version mismatch"
+                echo "  Expected: ${PHASE7_CALICO_VERSION}"
+                echo "  Actual images: ${CALICO_IMAGES:-unknown}"
+                echo "  Reconcile with: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
                 ((ERRORS++))
             fi
         else
@@ -296,24 +467,23 @@ echo
 echo "7. Checking Gateway API CRDs..."
 echo "---------------------------------------------"
 
-# Only check if cluster exists and is accessible
-if kubectl cluster-info --context kind-kind &> /dev/null; then
-    # Check Gateway API CRDs
+# Only check if the expected local Kind cluster exists and is accessible.
+if [ "$CLUSTER_CONNECTED" = true ]; then
     if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
-        echo -e "${GREEN}✓${NC} Gateway API CRDs installed"
-    else
-        echo -e "${YELLOW}!${NC} Gateway API CRDs NOT installed"
-        read -p "  Install Gateway API CRDs? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "  Installing Gateway API CRDs..."
-            kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
-            echo -e "${GREEN}✓${NC} Gateway API CRDs installed"
+        GATEWAY_API_VERSION=$(kubectl get crd gateways.gateway.networking.k8s.io -o go-template='{{ index .metadata.annotations "gateway.networking.k8s.io/bundle-version" }}' 2>/dev/null || true)
+        if [ "$GATEWAY_API_VERSION" = "$PHASE7_GATEWAY_API_VERSION" ]; then
+            echo -e "${GREEN}✓${NC} Gateway API CRDs match this repo (${PHASE7_GATEWAY_API_VERSION})"
         else
-            echo "  Skipped. Install manually with:"
-            echo "  kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml"
-            ((WARNINGS++))
+            echo -e "${RED}✗${NC} Gateway API CRD version mismatch"
+            echo "  Expected: ${PHASE7_GATEWAY_API_VERSION}"
+            echo "  Actual:   ${GATEWAY_API_VERSION:-unknown}"
+            echo "  Reconcile with: kubectl apply -f $(phase7_gateway_api_manifest_url)"
+            ((ERRORS++))
         fi
+    else
+        echo -e "${RED}✗${NC} Gateway API CRDs NOT installed"
+        echo "  Reconcile with: kubectl apply -f $(phase7_gateway_api_manifest_url)"
+        ((ERRORS++))
     fi
 else
     echo -e "${YELLOW}!${NC} Skipping Gateway API check (no cluster connection)"

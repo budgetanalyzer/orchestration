@@ -9,7 +9,7 @@ development.
 | Tool | Version | Installation Method |
 |---|---|---|
 | Kind | `v0.31.0` | Downloaded binary from GitHub releases |
-| kubectl | `v1.35` apt repo | Installed from the Kubernetes apt repository |
+| kubectl | `v1.35.4` | Installed from the Kubernetes `v1.35` apt repository |
 | Helm | `v3.20.1` | Downloaded from `get.helm.sh` and verified with a checked-in SHA-256 |
 | Tilt | `0.37.3` | Downloaded from GitHub releases and verified with a checked-in SHA-256 |
 | Node.js | `20.x` | Installed from the signed NodeSource apt repository |

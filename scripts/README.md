@@ -102,15 +102,23 @@ Choose scripts by runtime boundary:
 ## Bootstrap
 
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
-  Tilt, `mkcert`, `kubeconform`, `kube-linter`, and `kyverno` releases after
-  verifying checked-in SHA-256 values.
-- `bootstrap/check-tilt-prerequisites.sh` validates local tools, certificates,
-  DNS, Docker/Kind prerequisites, and optional runtime security state.
-- `bootstrap/install-calico.sh` installs pinned Calico CNI for Kind clusters
-  created with `disableDefaultCNI`.
+  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
+  after verifying checked-in SHA-256 values.
+- `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
+  versions, certificates, DNS, Docker/Kind prerequisites, pinned Gateway API
+  and Calico state, and optional runtime security state. It reports drift and
+  install commands without performing interactive cluster changes.
+- `bootstrap/install-calico.sh` installs or reconciles pinned Calico CNI for
+  Kind clusters created with `disableDefaultCNI`.
 - `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
   certificate bootstrap scripts. Do not run them from an AI container because
   the browser must trust the host mkcert CA.
+
+Use `../setup.sh` when you want the full local bootstrap to converge
+repo-managed prerequisites and recreate the local Kind cluster. Use
+`bootstrap/install-verified-tool.sh` for a single pinned binary, and use
+`bootstrap/check-tilt-prerequisites.sh` as a read-only report before or after
+setup.
 
 ## Guardrails
 

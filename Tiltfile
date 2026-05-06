@@ -51,10 +51,6 @@ k8s_yaml(kustomize('kubernetes/infrastructure'))
 
 k8s_resource(
     'postgresql',
-    objects=[
-        'postgresql-init:configmap:infrastructure',
-        'postgresql-bootstrap-credentials:secret:infrastructure',
-    ],
     port_forwards=[
         port_forward(5432, 5432, name='PostgreSQL'),
     ],
@@ -63,10 +59,6 @@ k8s_resource(
 
 k8s_resource(
     'redis',
-    objects=[
-        'redis-acl-bootstrap:configmap:infrastructure',
-        'redis-bootstrap-credentials:secret:infrastructure',
-    ],
     port_forwards=[
         port_forward(6379, 6379, name='Redis'),
     ],
@@ -75,10 +67,6 @@ k8s_resource(
 
 k8s_resource(
     'rabbitmq',
-    objects=[
-        'rabbitmq-config:configmap:infrastructure',
-        'rabbitmq-bootstrap-credentials:secret:infrastructure',
-    ],
     port_forwards=[
         port_forward(5671, 5671, name='AMQPS'),
         port_forward(15672, 15672, name='Management UI'),
@@ -306,6 +294,58 @@ create_secret('fred-api-credentials', DEFAULT_NAMESPACE, {
     'api-key': os.getenv('FRED_API_KEY', ''),
 })
 
+def spring_gradle_deps(repo_path):
+    """Tracked Gradle inputs that can affect dependency resolution or build output."""
+    return [
+        repo_path + '/src',
+        repo_path + '/build.gradle.kts',
+        repo_path + '/settings.gradle.kts',
+        repo_path + '/gradle/libs.versions.toml',
+        repo_path + '/gradle/wrapper/gradle-wrapper.properties',
+    ]
+
+def service_common_publish_deps(repo_path):
+    """Tracked service-common inputs that can affect published Maven Local artifacts."""
+    return [
+        repo_path + '/build.gradle.kts',
+        repo_path + '/settings.gradle.kts',
+        repo_path + '/gradle/libs.versions.toml',
+        repo_path + '/gradle/wrapper/gradle-wrapper.properties',
+        repo_path + '/service-core/src',
+        repo_path + '/service-core/build.gradle.kts',
+        repo_path + '/service-web/src',
+        repo_path + '/service-web/build.gradle.kts',
+        repo_path + '/spring-platform/build.gradle.kts',
+        repo_path + '/spring-cloud-platform/build.gradle.kts',
+    ]
+
+def spring_boot_dockerfile(port):
+    """Inline dev Dockerfile that selects the executable Spring Boot Jar."""
+    return '''
+FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
+WORKDIR /app
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+COPY build/libs/*.jar /tmp/libs/
+RUN set -eu; \\
+    jar="$(find /tmp/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' | sort | head -n 1)"; \\
+    test -n "$jar"; \\
+    cp "$jar" /app/app.jar; \\
+    rm -rf /tmp/libs; \\
+    chown -R appuser:appgroup /app
+USER appuser
+EXPOSE ''' + str(port) + '''
+'''
+
+def spring_boot_live_update(repo_path):
+    """Live update the executable Jar after Gradle rebuilds it locally."""
+    return [
+        sync(repo_path + '/build/libs', '/tmp/libs'),
+        run(
+            'set -eu; jar="$(find /tmp/libs -maxdepth 1 -type f -name \'*.jar\' ! -name \'*-plain.jar\' | sort | head -n 1)"; test -n "$jar"; cp "$jar" /app/app.jar',
+            trigger=[repo_path + '/build/libs'],
+        ),
+    ]
+
 # ============================================================================
 # SERVICE-COMMON SHARED LIBRARY
 # ============================================================================
@@ -319,10 +359,7 @@ local_resource(
         'tilt trigger currency-service-compile && ' +
         'tilt trigger permission-service-compile && ' +
         'tilt trigger session-gateway-compile',
-    deps=[
-        get_repo_path('service-common') + '/src',
-        get_repo_path('service-common') + '/build.gradle.kts',
-    ],
+    deps=service_common_publish_deps(get_repo_path('service-common')),
     labels=['compile'],
     allow_parallel=True,
     auto_init=True
@@ -348,10 +385,7 @@ def spring_boot_service(name, deps=[]):
     local_resource(
         name + '-compile',
         cmd='cd ' + repo_path + ' && ./gradlew bootJar --parallel --build-cache -x test',
-        deps=[
-            repo_path + '/src',
-            repo_path + '/build.gradle.kts',
-        ],
+        deps=spring_gradle_deps(repo_path),
         resource_deps=['service-common-publish'],
         labels=['compile'],
         allow_parallel=True,
@@ -363,23 +397,13 @@ def spring_boot_service(name, deps=[]):
     docker_build_with_restart(
         name,
         context=repo_path,
-        dockerfile_contents='''
-FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
-WORKDIR /app
-RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
-COPY build/libs/*.jar app.jar
-RUN chown -R appuser:appgroup /app
-USER appuser
-EXPOSE ''' + str(port) + '''
-''',
+        dockerfile_contents=spring_boot_dockerfile(port),
         entrypoint=[
             'java',
             '-jar',
             '/app/app.jar'
         ],
-        live_update=[
-            sync(repo_path + '/build/libs', '/app'),
-        ]
+        live_update=spring_boot_live_update(repo_path)
     )
 
     # Step 3: Load Kubernetes manifests
@@ -432,10 +456,7 @@ repo_path = get_repo_path('session-gateway')
 local_resource(
     'session-gateway-compile',
     cmd='cd ' + repo_path + ' && ./gradlew bootJar --parallel --build-cache -x test',
-    deps=[
-        repo_path + '/src',
-        repo_path + '/build.gradle.kts',
-    ],
+    deps=spring_gradle_deps(repo_path),
     resource_deps=['service-common-publish'],
     labels=['compile'],
     allow_parallel=True
@@ -445,23 +466,13 @@ local_resource(
 docker_build_with_restart(
     'session-gateway',
     context=repo_path,
-    dockerfile_contents='''
-FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
-WORKDIR /app
-RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
-COPY build/libs/*.jar app.jar
-RUN chown -R appuser:appgroup /app
-USER appuser
-EXPOSE 8081
-''',
+    dockerfile_contents=spring_boot_dockerfile(8081),
     entrypoint=[
         'java',
         '-jar',
         '/app/app.jar'
     ],
-    live_update=[
-        sync(repo_path + '/build/libs', '/app'),
-    ]
+    live_update=spring_boot_live_update(repo_path)
 )
 
 k8s_yaml([
@@ -477,7 +488,7 @@ k8s_resource(
         port_forward(5009, 5005, name='Debug'),
     ],
     labels=['gateway'],
-    resource_deps=['redis', 'permission-service', 'istio-injection']
+    resource_deps=['session-gateway-compile', 'redis', 'permission-service', 'istio-injection']
 )
 
 # ============================================================================
@@ -708,7 +719,7 @@ local_resource(
 # Gateway API CRDs (must be installed before Istio ingress gateway)
 local_resource(
     'gateway-api-crds',
-    cmd='kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml',
+    cmd='. scripts/lib/pinned-tool-versions.sh && kubectl apply -f "$(phase7_gateway_api_manifest_url)"',
     labels=['infrastructure'],
 )
 
@@ -950,10 +961,6 @@ local_resource(
 
 k8s_resource(
     'jaeger',
-    objects=[
-        'jaeger-config:configmap:monitoring',
-        'jaeger-badger:persistentvolumeclaim:monitoring',
-    ],
     resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
     labels=['monitoring'],
 )

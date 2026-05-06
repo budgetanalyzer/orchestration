@@ -32,18 +32,33 @@ Run the repo preflight first:
 For host-side binary installs, prefer the verified installer:
 
 ```bash
-./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>
+./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno>
 ```
 
 Current baseline:
 
 - Docker `24.0+`
-- Kind `0.20+`
-- `kubectl` `1.35.x`
+- Kind `0.31.0` (`./setup.sh` auto-installs this pinned version if missing or
+  mismatched)
+- `kubectl` `1.35.4` (`./setup.sh` auto-installs this pinned version if missing
+  or mismatched)
 - Helm `3.20.x`
-- Tilt `0.37.3`
+- Tilt `0.37.3` (`./setup.sh` auto-installs this pinned version if Tilt is
+  missing or mismatched)
 - OpenSSL `3.x+`
-- `mkcert` `1.4.4`
+- `mkcert` `1.4.4` (`./setup.sh` auto-installs this pinned binary if missing
+  or mismatched)
+
+Manual equivalents for repo-managed binaries:
+
+```bash
+./scripts/bootstrap/install-verified-tool.sh kubectl
+./scripts/bootstrap/install-verified-tool.sh kind
+./scripts/bootstrap/install-verified-tool.sh helm
+./scripts/bootstrap/install-verified-tool.sh tilt
+sudo apt-get install -y libnss3-tools
+./scripts/bootstrap/install-verified-tool.sh mkcert
+```
 
 Keep the repos side by side under a common parent directory if you are working
 outside the sibling `workspace` repo:

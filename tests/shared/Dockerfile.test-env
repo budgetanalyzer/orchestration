@@ -6,7 +6,7 @@
 FROM ubuntu:22.04@sha256:ce4a593b4e323dcc3dd728e397e0a866a1bf516a1b7c31d6aa06991baec4f2e0
 
 ARG TARGETARCH
-ARG KUBECTL_VERSION=v1.35.0
+ARG KUBECTL_VERSION=v1.35.4
 ARG HELM_VERSION=v3.20.1
 ARG TILT_VERSION=0.37.3
 ARG MKCERT_VERSION=v1.4.4
@@ -36,8 +36,8 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 # Install kubectl
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) kubectl_sha256='a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989' ;; \
-        arm64) kubectl_sha256='58f82f9fe796c375c5c4b8439850b0f3f4d401a52434052f2df46035a8789e25' ;; \
+        amd64) kubectl_sha256='b529430df69a688fd61b64ad2299edb5fd71cb58be2a4779dba624c7d3510efd' ;; \
+        arm64) kubectl_sha256='6a5a4cc4e396d7626a7a693a3044b51c75520f81db30fe6816c2554e53be336f' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \

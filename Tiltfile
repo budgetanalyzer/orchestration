@@ -51,6 +51,11 @@ k8s_yaml(kustomize('kubernetes/infrastructure'))
 
 k8s_resource(
     'postgresql',
+    objects=[
+        'infrastructure:namespace',
+        'postgresql-init:configmap',
+        'postgresql-bootstrap-credentials:secret',
+    ],
     port_forwards=[
         port_forward(5432, 5432, name='PostgreSQL'),
     ],
@@ -59,6 +64,10 @@ k8s_resource(
 
 k8s_resource(
     'redis',
+    objects=[
+        'redis-acl-bootstrap:configmap',
+        'redis-bootstrap-credentials:secret',
+    ],
     port_forwards=[
         port_forward(6379, 6379, name='Redis'),
     ],
@@ -67,6 +76,10 @@ k8s_resource(
 
 k8s_resource(
     'rabbitmq',
+    objects=[
+        'rabbitmq-config:configmap',
+        'rabbitmq-bootstrap-credentials:secret',
+    ],
     port_forwards=[
         port_forward(5671, 5671, name='AMQPS'),
         port_forward(15672, 15672, name='Management UI'),
@@ -413,8 +426,19 @@ def spring_boot_service(name, deps=[]):
         'kubernetes/services/' + name + '/service.yaml',
     ]
     optional_configmap = 'kubernetes/services/' + name + '/configmap.yaml'
+    resource_objects = [
+        name + ':serviceaccount',
+        name + '-postgresql-credentials:secret',
+    ]
     if os.path.exists(optional_configmap):
         service_manifests.append(optional_configmap)
+        resource_objects.append(name + '-config:configmap')
+    if name == 'currency-service':
+        resource_objects.extend([
+            'currency-service-rabbitmq-credentials:secret',
+            'currency-service-redis-credentials:secret',
+            'fred-api-credentials:secret',
+        ])
     k8s_yaml(service_manifests)
 
     # Step 4: Configure resource with port forwards and dependencies
@@ -428,6 +452,7 @@ def spring_boot_service(name, deps=[]):
 
     k8s_resource(
         name,
+        objects=resource_objects,
         port_forwards=port_forwards_list,
         labels=['backend'] if name in ['transaction-service', 'currency-service', 'permission-service'] else ['gateway'],
         resource_deps=[name + '-compile'] + base_deps + deps,
@@ -483,6 +508,13 @@ k8s_yaml([
 
 k8s_resource(
     'session-gateway',
+    objects=[
+        'session-gateway:serviceaccount',
+        'session-gateway-config:configmap',
+        'session-gateway-idp-config:configmap',
+        'session-gateway-redis-credentials:secret',
+        'auth0-credentials:secret',
+    ],
     port_forwards=[
         port_forward(8081, 8081, name='HTTP'),
         port_forward(5009, 5005, name='Debug'),
@@ -509,6 +541,10 @@ k8s_yaml([
 
 k8s_resource(
     'ext-authz',
+    objects=[
+        'ext-authz:serviceaccount',
+        'ext-authz-redis-credentials:secret',
+    ],
     port_forwards=[
         port_forward(9002, 9002, name='HTTP'),
         port_forward(8090, 8090, name='Health'),
@@ -606,7 +642,23 @@ configmap_create(
         'index.html=docs-aggregator/index.html',
         'swagger-initializer.js=docs-aggregator/swagger-initializer.js',
         'swagger-ui-overrides.css=docs-aggregator/swagger-ui-overrides.css',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-openapi-json',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
         'openapi.json=docs-aggregator/openapi.json',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-openapi-yaml',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
         'openapi.yaml=docs-aggregator/openapi.yaml',
     ],
     watch=True
@@ -620,6 +672,14 @@ k8s_yaml([
 
 k8s_resource(
     'nginx-gateway',
+    objects=[
+        'nginx-gateway:serviceaccount',
+        'nginx-gateway-config:configmap',
+        'nginx-gateway-includes:configmap',
+        'nginx-gateway-docs:configmap',
+        'nginx-gateway-openapi-json:configmap',
+        'nginx-gateway-openapi-yaml:configmap',
+    ],
     port_forwards=[
         port_forward(8080, 8080, name='HTTP'),
     ],
@@ -659,6 +719,9 @@ k8s_yaml([
 
 k8s_resource(
     'budget-analyzer-web',
+    objects=[
+        'budget-analyzer-web:serviceaccount',
+    ],
     port_forwards=[
         port_forward(3000, 3000, name='Vite Dev Server'),
     ],
@@ -961,6 +1024,10 @@ local_resource(
 
 k8s_resource(
     'jaeger',
+    objects=[
+        'jaeger-config:configmap',
+        'jaeger-badger:persistentvolumeclaim',
+    ],
     resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
     labels=['monitoring'],
 )

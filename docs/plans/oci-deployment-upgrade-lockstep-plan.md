@@ -8,6 +8,7 @@ Related documents:
 - `docs/plans/dependency-upgrade-and-centralized-bom-plan.md`
 - `docs/dependency-notifications.md`
 - `docs/OWNERSHIP.md`
+- `docs-aggregator/README.md`
 - `deploy/README.md`
 - `kubernetes/production/README.md`
 - `deploy/scripts/lib/phase-4-version-contract.sh`
@@ -25,6 +26,48 @@ OCI deploy path or explicitly marked local-only.
 
 This plan does not replace the dependency upgrade plan. It is the production
 execution companion for that plan.
+
+## Current Branch Alignment
+
+The current dependency-upgrade branch implements centralized backend dependency
+management as two `service-common` platform artifacts:
+
+- `org.budgetanalyzer:spring-platform`
+- `org.budgetanalyzer:spring-cloud-platform`
+
+Use those names when planning production release images. The earlier
+`budgetanalyzer-dependencies` name remains a planning direction from the
+dependency plan, not the artifact name in the current sibling branches.
+
+Production surfaces already reflected on this branch:
+
+- Gateway API is pinned to `v1.5.1` in both the local tool contract and the OCI
+  phase 4 version contract.
+- Istio is pinned to `1.29.2` in local Tilt and the OCI phase 4 version
+  contract.
+- Kyverno is pinned to chart `3.8.0` locally and in OCI, with production image
+  digests refreshed in `deploy/helm-values/kyverno.values.yaml`.
+- PostgreSQL and Redis shared infrastructure manifests use refreshed digest
+  pins, and the production infrastructure render path inherits them.
+- The `/api-docs` ConfigMap split is represented in both local Tilt and the
+  production app overlay so large OpenAPI documents do not fall back to one
+  apply-annotation-heavy ConfigMap.
+
+Production surfaces still pending before this upgrade is actually deployed to
+OCI:
+
+- Backend and frontend GHCR release images still need to be rebuilt and
+  published for `linux/arm64` after the sibling repo branches are merged.
+- `kubernetes/production/apps/image-inventory.yaml`,
+  `kubernetes/production/apps/kustomization.yaml`, and
+  `scripts/guardrails/verify-production-image-overlay.sh` still reference the
+  existing production release image set until those images exist.
+- The planned release-image update helper and OCI lockstep verifier are not yet
+  implemented in this repo; they remain required script work below.
+- The current sibling backend branches still pin Spring Boot `3.5.7`, Spring
+  Cloud `2025.0.0`, and Spring Modulith `1.4.0` through the new platform
+  artifacts. If those framework versions are upgraded later, treat that as a
+  new release-image batch for OCI.
 
 ## Review Findings
 
@@ -80,7 +123,7 @@ new release images.
 
 | Upgrade area | Local development surface | OCI production surface | Required lockstep action |
 | --- | --- | --- | --- |
-| Spring Boot, Spring Cloud, Spring Modulith, backend library BOMs | Backend Gradle files and the new `budgetanalyzer-dependencies` platform | Published service release images and production image inventory | Build and publish new `linux/arm64` GHCR images, then update production image refs and the production verifier. |
+| Spring Boot, Spring Cloud, Spring Modulith, backend library BOMs | Backend Gradle files and the new `service-common` `spring-platform` / `spring-cloud-platform` artifacts | Published service release images and production image inventory | Build and publish new `linux/arm64` GHCR images, then update production image refs and the production verifier. |
 | Java and Gradle | Backend wrappers, toolchains, local Tilt runtime image, devcontainer | Service production Dockerfiles in sibling repos, published GHCR images | Treat OCI as updated only after the release images were rebuilt from the new Java/Gradle baseline and pinned in production manifests. |
 | Frontend React dependencies | `../budget-analyzer-web/package.json` and local Vite/Tilt flow | `budget-analyzer-web` GHCR release image used as the `nginx-gateway` web-assets init container | Publish the frontend release image and update the production image inventory, kustomize patch, and verifier. |
 | Istio | `Tiltfile`, local Istio values, Gateway API route smoke tests | `PHASE4_ISTIO_CHART_VERSION`, k3s CNI values, `deploy/scripts/04-install-istio.sh` | Update the production version contract, render/review phase 4 and phase 6 output, then rerun the Istio production script. |
@@ -158,6 +201,8 @@ The verifier should fail when:
   kube-prometheus-stack chart pin
 - production `image-inventory.yaml`, production kustomize patches, and
   `EXPECTED_IMAGE_REFS` in `verify-production-image-overlay.sh` disagree
+- production `/api-docs` ConfigMap generation disagrees with the rendered
+  `nginx-gateway` deployment volume references
 - production infrastructure renders an image that is not digest-pinned
 - production Helm values render chart-managed workload images without digests
 

@@ -16,10 +16,11 @@ Swagger UI `5.11.0` assets from a pinned `swaggerapi/swagger-ui` init
 container, and points the browser at the same-origin checked-in unified spec at
 `/api-docs/openapi.json`.
 
-Local Tilt mounts the wrapper assets, JSON contract, and YAML contract through
-separate ConfigMaps before the init container stages them into the NGINX docs
-directory. Keep that split in place when the generated contracts grow; a single
-large ConfigMap can exceed Kubernetes' apply-annotation size limit.
+Local Tilt and the production overlay mount the wrapper assets, JSON contract,
+and YAML contract through separate ConfigMaps before the init container stages
+them into the NGINX docs directory. Keep that split in place when the generated
+contracts grow; a single large ConfigMap can exceed Kubernetes' apply-annotation
+size limit.
 
 The route is intentionally read-only:
 
@@ -79,6 +80,6 @@ main app or `/api/*` posture.
 ## Dependencies
 
 - stock Swagger UI `5.11.0` assets, staged from pinned `swaggerapi/swagger-ui:v5.11.0`
-- split local ConfigMaps for wrapper assets, `openapi.json`, and `openapi.yaml`
+- split ConfigMaps for wrapper assets, `openapi.json`, and `openapi.yaml`
 - NGINX serving the checked-in wrapper files and generated OpenAPI downloads
 - `kubectl` access to the running local cluster when regenerating the unified spec

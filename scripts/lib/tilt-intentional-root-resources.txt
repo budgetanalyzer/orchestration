@@ -1,0 +1,11 @@
+# Tilt resources that intentionally have no resource_deps.
+#
+# Keep this list aligned with docs/plans/tiltfile-dependency-organization-plan.md.
+budget-analyzer-web-prod-smoke-build
+envoy-gateway-cleanup
+gateway-api-crds
+infrastructure-namespace
+istio-base
+mkcert-tls-secret
+monitoring-namespace
+service-common-publish

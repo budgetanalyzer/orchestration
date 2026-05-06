@@ -686,6 +686,9 @@ kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 kubectl get secret -n default infra-ca
 kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
 
+# Run the same read-only post-check setup.sh and Tilt use
+./scripts/bootstrap/check-infra-tls-secrets.sh
+
 # Restart browser to clear certificate cache
 ```
 

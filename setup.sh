@@ -404,6 +404,7 @@ print_step "Setting up TLS certificates..."
 print_step "Setting up infrastructure TLS certificates..."
 
 "$SCRIPT_DIR/scripts/bootstrap/setup-infra-tls.sh"
+"$SCRIPT_DIR/scripts/bootstrap/check-infra-tls-secrets.sh"
 
 # =============================================================================
 # Step 9: Create .env file

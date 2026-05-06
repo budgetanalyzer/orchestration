@@ -50,9 +50,21 @@ docker_prune_settings(
 k8s_yaml(kustomize('kubernetes/infrastructure'))
 
 k8s_resource(
+    objects=['infrastructure:namespace'],
+    new_name='infrastructure-namespace',
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'infra-tls-prerequisites',
+    cmd='./scripts/bootstrap/setup-infra-tls.sh && ./scripts/bootstrap/check-infra-tls-secrets.sh',
+    resource_deps=['infrastructure-namespace'],
+    labels=['infrastructure'],
+)
+
+k8s_resource(
     'postgresql',
     objects=[
-        'infrastructure:namespace',
         'postgresql-init:configmap',
         'postgresql-bootstrap-credentials:secret',
     ],
@@ -60,6 +72,7 @@ k8s_resource(
         port_forward(5432, 5432, name='PostgreSQL'),
     ],
     labels=['infrastructure', 'database'],
+    resource_deps=['infra-tls-prerequisites'],
 )
 
 k8s_resource(
@@ -72,6 +85,7 @@ k8s_resource(
         port_forward(6379, 6379, name='Redis'),
     ],
     labels=['infrastructure', 'cache'],
+    resource_deps=['infra-tls-prerequisites'],
 )
 
 k8s_resource(
@@ -85,6 +99,7 @@ k8s_resource(
         port_forward(15672, 15672, name='Management UI'),
     ],
     labels=['infrastructure'],
+    resource_deps=['infra-tls-prerequisites'],
 )
 
 # ============================================================================
@@ -873,7 +888,7 @@ local_resource(
         kubectl label namespace istio-system pod-security.kubernetes.io/audit=privileged --overwrite
         kubectl label namespace istio-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
     ''',
-    resource_deps=['istio-tracing-telemetry'],
+    resource_deps=['istio-tracing-telemetry', 'infrastructure-namespace'],
     labels=['infrastructure'],
 )
 
@@ -1018,7 +1033,7 @@ local_resource(
         'kubernetes/network-policies/monitoring-deny.yaml',
         'kubernetes/network-policies/monitoring-allow.yaml',
     ],
-    resource_deps=['istio-injection', 'monitoring-namespace'],
+    resource_deps=['istio-injection', 'infrastructure-namespace', 'monitoring-namespace'],
     labels=['infrastructure'],
 )
 

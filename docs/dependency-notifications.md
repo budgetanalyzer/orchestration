@@ -44,7 +44,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 | **Current version** | 3.5.7 |
 | **Watch** | https://github.com/spring-projects/spring-boot |
 | **Also follow** | https://spring.io/blog (release announcements) |
-| **Defined in** | `*/gradle/libs.versions.toml` (all backend services) |
+| **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; backend service catalogs also pin the Spring Boot Gradle plugin |
 | **Upgrade cadence** | Minor releases every ~3 months, patch releases every ~4 weeks |
 
 **Why critical**: Drives ~80% of backend dependency versions via BOM (Jackson, Flyway, Spring Security, Spring Data, etc.). Falling 2+ minor versions behind turns a routine upgrade into a multi-day effort. Security patches land here first.
@@ -55,14 +55,15 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 2025.0.0 (session-gateway, currency-service) |
+| **Current version** | 2025.0.0 (managed by `service-common`; consumed by `currency-service`) |
 | **Watch** | https://github.com/spring-cloud/spring-cloud-release |
-| **Also watch** | https://github.com/spring-cloud/spring-cloud-gateway (session-gateway depends on this directly) |
-| **Defined in** | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
+| **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-cloud-platform/build.gradle.kts`; consumed by `currency-service` |
 
 **Why critical**: Release trains are tightly coupled to Spring Boot versions. The [Spring Cloud release train compatibility table](https://spring.io/projects/spring-cloud) dictates which Spring Cloud version works with which Spring Boot version. A Spring Boot upgrade without matching the Spring Cloud release train will break compilation.
 
-**Note**: session-gateway and currency-service are currently aligned on `2025.0.0`. Keep both services on the same release train when upgrading Spring Boot.
+**Note**: `currency-service` is the only current Spring Cloud consumer. Keep the
+release train centralized in `service-common` and keep Spring Cloud
+dependencies opt-in for services that actually use them.
 
 ### Spring Security
 
@@ -78,7 +79,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 1.29.1 (Helm charts) |
+| **Current version** | 1.29.2 (Helm charts) |
 | **Watch** | https://github.com/istio/istio |
 | **Also follow** | https://istio.io/latest/news/security/ (security bulletins) |
 | **Defined in** | `orchestration/Tiltfile` (helm upgrade commands) |
@@ -92,16 +93,23 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 24 (non-LTS) |
+| **Current version** | 25 (LTS) |
 | **Eclipse Temurin images** | https://github.com/adoptium/containers |
 | **Azul Zulu downloads** | https://www.azul.com/downloads/ |
-| **JDK release schedule** | https://www.java.com/releases/ |
+| **JDK release schedule** | https://www.java.com/releases/ and https://www.oracle.com/java/technologies/java-se-support-roadmap.html |
 | **Defined in** | `service-common/build.gradle.kts` (toolchain), `workspace/ai-agent-sandbox/Dockerfile` (Zulu), `orchestration/Tiltfile` (Temurin base image), `transaction-service/Dockerfile`, `currency-service/Dockerfile`, `permission-service/Dockerfile`, `session-gateway/Dockerfile` |
 | **Upgrade cadence** | New version every 6 months (March and September) |
 
-**Why critical**: Java 24 is non-LTS. When Java 25 ships (September 2026), Java 24 stops receiving security patches. You must either stay on the 6-month treadmill or drop back to the latest LTS (currently 21). Each JDK upgrade requires checking Gradle compatibility and revalidating base Docker images.
+**Why critical**: Java 25 is the current backend LTS baseline. Java 26 is the
+current non-LTS feature release and belongs on the six-month feature-release
+track, not the stable service baseline. Each JDK upgrade requires checking
+Gradle compatibility and revalidating base Docker images.
 
-**Coupling**: JDK version must match the Eclipse Temurin base image tags in the orchestration `Tiltfile` and the four backend service Dockerfiles, the Azul Zulu version in the devcontainer Dockerfile, and Gradle's supported JDK range.
+**Coupling**: JDK version must match the Eclipse Temurin base image tags in the
+orchestration `Tiltfile` and the four backend service Dockerfiles, the Azul
+Zulu version in the devcontainer Dockerfile, and Gradle's supported JDK range.
+Gradle 9.1.0+ is required for Java 25 toolchains and for running Gradle on Java
+25; the checked-in backend wrappers currently use Gradle 9.5.0.
 
 ---
 
@@ -113,9 +121,9 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v0.24.0 (binary), node image `kindest/node:v1.30.8` (Kubernetes 1.30.8) |
+| **Current version** | v0.31.0 (binary), node image `kindest/node:v1.35.0` (Kubernetes 1.35.0) |
 | **Watch** | https://github.com/kubernetes-sigs/kind |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (binary), `orchestration/kind-cluster-config.yaml` (node image) |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (binary and verified checksums), `orchestration/kind-cluster-config.yaml` (node image), `workspace/ai-agent-sandbox/Dockerfile` (devcontainer binary) |
 
 **Why important**: Kind is newer tooling with an evolving cluster config API. Each Kind release adds support for new Kubernetes versions via node images. Staying current means smaller config changes per upgrade and access to newer Kubernetes features. The node image pins the Kubernetes API version for the entire local development environment.
 
@@ -125,9 +133,9 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | 0.37.0 |
+| **Current version** | 0.37.3 |
 | **Watch** | https://github.com/tilt-dev/tilt |
-| **Defined in** | `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.0`, checksum-verified release tarball) |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (repo setup and verified installer), `workspace/ai-agent-sandbox/Dockerfile` (`ARG TILT_VERSION=0.37.3`, checksum-verified release tarball) |
 
 **Why important**: Tilt is under active development with Tiltfile API changes between versions. The entire development workflow (`tilt up`) depends on it. Breaking changes in extensions (`ext://restart_process`, `ext://configmap`, etc.) can silently break live reload, so the pinned baseline reduces surprise drift but release watching still matters before deliberate upgrades.
 
@@ -135,9 +143,9 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v1.4.0 |
+| **Current version** | v1.5.1 |
 | **Watch** | https://github.com/kubernetes-sigs/gateway-api |
-| **Defined in** | `orchestration/Tiltfile` (kubectl apply URL), `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh` (version and manifest URL), `orchestration/Tiltfile`, `orchestration/setup.sh`, `orchestration/scripts/bootstrap/check-tilt-prerequisites.sh` |
 
 **Why important**: Gateway API is graduating features from beta to GA. API changes affect HTTPRoute manifests, Gateway resources, and how Istio consumes them. Istio's support for specific Gateway API versions is documented in each Istio release.
 
@@ -147,9 +155,9 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | v3.29.3 |
+| **Current version** | v3.32.0 |
 | **Watch** | https://github.com/projectcalico/calico |
-| **Defined in** | `orchestration/scripts/bootstrap/install-calico.sh` |
+| **Defined in** | `orchestration/scripts/lib/pinned-tool-versions.sh`; installed by `orchestration/scripts/bootstrap/install-calico.sh` |
 
 **Why important**: CNI plugin that enforces NetworkPolicies. Must be compatible with the Kubernetes version running in Kind. Security-relevant because it's the enforcement layer for all network segmentation.
 
@@ -159,7 +167,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | 3.7.1 (Helm chart) |
+| **Current version** | 3.8.0 (Helm chart), app v1.18.0 |
 | **Watch** | https://github.com/kyverno/kyverno |
 | **Defined in** | `orchestration/Tiltfile` (helm upgrade command) |
 
@@ -191,7 +199,7 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | ^19.0.0 |
+| **Current version** | ^19.2.5 |
 | **Watch** | https://github.com/facebook/react |
 | **Defined in** | `budget-analyzer-web/package.json` |
 
@@ -203,19 +211,22 @@ Watch releases. Breakage risk from active development, security-adjacent, or inf
 
 | | |
 |---|---|
-| **Current version** | 8.14.2 |
+| **Current version** | 9.5.0 |
 | **Watch** | https://github.com/gradle/gradle |
 | **Defined in** | `*/gradle/wrapper/gradle-wrapper.properties` (all backend repos) |
 
-**Why important**: Build system for all backend services. Within major version 8, upgrades are usually smooth. A future Gradle 9 will require build script changes across all repos. Also affects compatibility with the Spring dependency management plugin.
+**Why important**: Build system for all backend services. Patch upgrades within
+the current major are usually smooth, but each major upgrade needs build script
+validation across all backend repos. Gradle also gates supported Java toolchain
+and runtime baselines.
 
 ### Spring Modulith
 
 | | |
 |---|---|
-| **Current version** | 1.4.0 (currency-service only) |
+| **Current version** | 1.4.0 (managed by `service-common`; consumed by `currency-service`) |
 | **Watch** | https://github.com/spring-projects/spring-modulith |
-| **Defined in** | `currency-service/gradle/libs.versions.toml` |
+| **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 
 **Why important**: Used by currency-service for modular architecture. Relatively new Spring project with active API evolution. Must be compatible with the Spring Boot version.
 
@@ -321,7 +332,7 @@ Only used by ext-authz. Low urgency unless security patches are published.
 
 | | |
 |---|---|
-| **Current version** | 24-jre-alpine |
+| **Current version** | 25-jre-alpine |
 | **Releases** | https://github.com/adoptium/containers |
 | **Defined in** | `orchestration/Tiltfile` (inline Dockerfile for Spring Boot services) |
 
@@ -345,27 +356,26 @@ These either ride along with Spring Boot BOM upgrades or are stable libraries th
 
 | Dependency | Current | GitHub | Where Defined |
 |---|---|---|---|
-| SpringDoc OpenAPI | 2.8.13 | https://github.com/springdoc/springdoc-openapi | `*/gradle/libs.versions.toml` |
+| SpringDoc OpenAPI | 2.8.13 | https://github.com/springdoc/springdoc-openapi | `service-common/spring-platform/build.gradle.kts` |
 | Flyway | BOM-managed | https://github.com/flyway/flyway | Spring Boot BOM |
 | Jackson | BOM-managed | https://github.com/FasterXML/jackson | Spring Boot BOM |
-| ShedLock | 6.0.2 | https://github.com/lukas-krecan/ShedLock | `currency-service/gradle/libs.versions.toml` |
+| ShedLock | 6.0.2 | https://github.com/lukas-krecan/ShedLock | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 | PDFBox | 3.0.3 | https://github.com/apache/pdfbox | `transaction-service/gradle/libs.versions.toml` |
 | OpenCSV | 3.7 | https://github.com/opencsv/opencsv | `service-common/gradle/libs.versions.toml` |
-| WireMock | 3.10.0 | https://github.com/wiremock/wiremock | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
-| Awaitility | 4.2.2 | https://github.com/awaitility/awaitility | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
+| WireMock | 3.10.0 | https://github.com/wiremock/wiremock | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| Awaitility | 4.2.2 | https://github.com/awaitility/awaitility | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
 | JUnit Platform | 1.12.2 | https://github.com/junit-team/junit5 | `*/gradle/libs.versions.toml` |
 | JaCoCo | 0.8.13 | https://github.com/jacoco/jacoco | `transaction-service/gradle/libs.versions.toml` |
 | Spotless | 8.0.0 | https://github.com/diffplug/spotless | `service-common/build.gradle.kts`, `*/gradle/libs.versions.toml` |
 | Google Java Format | 1.32.0 | https://github.com/google/google-java-format | `service-common/build.gradle.kts` |
 | Checkstyle | 12.0.1 | https://github.com/checkstyle/checkstyle | `service-common/build.gradle.kts` |
-| Spring Dep Mgmt Plugin | 1.1.7 | https://github.com/spring-gradle-plugins/dependency-management-plugin | `*/gradle/libs.versions.toml` |
 | Radix UI | various | https://github.com/radix-ui/primitives | `budget-analyzer-web/package.json` |
 | Tanstack React Query | ^5.59.16 | https://github.com/TanStack/query | `budget-analyzer-web/package.json` |
 | Tanstack React Table | ^8.20.5 | https://github.com/TanStack/table | `budget-analyzer-web/package.json` |
 | Redux Toolkit | ^2.3.0 | https://github.com/reduxjs/redux-toolkit | `budget-analyzer-web/package.json` |
-| React Router | ^7.0.2 | https://github.com/remix-run/react-router | `budget-analyzer-web/package.json` |
+| React Router | ^7.14.2 | https://github.com/remix-run/react-router | `budget-analyzer-web/package.json` |
 | Framer Motion | ^11.11.17 | https://github.com/motiondivision/motion | `budget-analyzer-web/package.json` |
-| Axios | ^1.7.7 | https://github.com/axios/axios | `budget-analyzer-web/package.json` |
+| Axios | ^1.16.0 | https://github.com/axios/axios | `budget-analyzer-web/package.json` |
 | TailwindCSS | ^3.4.14 | https://github.com/tailwindlabs/tailwindcss | `budget-analyzer-web/package.json` |
 | ESLint | ^9.13.0 | https://github.com/eslint/eslint | `budget-analyzer-web/package.json` |
 | Prettier | ^3.6.2 | https://github.com/prettier/prettier | `budget-analyzer-web/package.json` |
@@ -385,10 +395,13 @@ Spring Boot version
   -> Spring Cloud release train (compatibility table: https://spring.io/projects/spring-cloud)
   -> Spring Security version (managed by Boot BOM, but watch for independent CVE patches)
   -> Spring Modulith version (compatibility table in its README)
-  -> Spring Dependency Management plugin (must support the Boot version)
+  -> Spring Boot Gradle plugin version (same Boot baseline)
 ```
 
-When upgrading Spring Boot, always check the Spring Cloud release train compatibility first. session-gateway and currency-service should stay aligned on the same Spring Cloud release train.
+When upgrading Spring Boot, always check the Spring Cloud release train
+compatibility first. Spring Cloud version selection is centralized in
+`service-common`; only services that use Spring Cloud APIs should consume the
+Spring Cloud platform.
 
 ### Kubernetes Stack
 
@@ -419,7 +432,7 @@ behavior you depend on.
 ### Java Stack
 
 ```
-JDK version (e.g., 24 -> 25)
+JDK version (e.g., 25 LTS -> next selected baseline)
   -> Eclipse Temurin base image tag in Tiltfile
   -> Azul Zulu version in devcontainer Dockerfile
   -> Gradle compatibility (check supported JDK versions)
@@ -450,25 +463,25 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Component | Version | Where Defined |
 |---|---|---|
-| Kind (binary) | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Kind node image | kindest/node:v1.30.8 | `orchestration/kind-cluster-config.yaml` |
-| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Helm | 3.20.x (tested v3.20.1) | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
-| Istio | 1.29.1 | `orchestration/Tiltfile` |
-| Calico | v3.29.3 | `orchestration/scripts/bootstrap/install-calico.sh` |
-| Kyverno | 3.7.1 | `orchestration/Tiltfile` |
-| Gateway API CRDs | v1.4.0 | `orchestration/Tiltfile` |
-| mkcert | v1.4.4 | Host installer guidance in `orchestration/scripts/bootstrap/install-verified-tool.sh` |
+| Kind (binary) | v0.31.0 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind node image | kindest/node:v1.35.0 | `orchestration/kind-cluster-config.yaml` |
+| Tilt | 0.37.3 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| Helm | 3.20.x (tested v3.20.1) | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| kubectl | v1.35.4 | `orchestration/scripts/lib/pinned-tool-versions.sh`, `workspace/ai-agent-sandbox/Dockerfile` |
+| Istio | 1.29.2 | `orchestration/Tiltfile` |
+| Calico | v3.32.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| Kyverno | 3.8.0 | `orchestration/Tiltfile` |
+| Gateway API CRDs | v1.5.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| mkcert | v1.4.4 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kubeconform | v0.7.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 | kube-linter | v0.8.3 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
-| Kyverno CLI | v1.17.1 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
+| Kyverno CLI | v1.18.0 | `orchestration/scripts/lib/pinned-tool-versions.sh` |
 
 ### Container Images
 
 | Image | Tag | Where Used |
 |---|---|---|
-| eclipse-temurin | 24-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
+| eclipse-temurin | 25-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
 | node | 20-alpine | `budget-analyzer-web/Dockerfile`, `budget-analyzer-web/Dockerfile.dev` |
 | golang | 1.24-alpine | `orchestration/ext-authz/Dockerfile` |
 | distroless/static | nonroot | `orchestration/ext-authz/Dockerfile` |
@@ -481,17 +494,16 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Dependency | Version | Where Defined |
 |---|---|---|
-| Java | 24 | `service-common/build.gradle.kts` |
-| Spring Boot | 3.5.7 | `*/gradle/libs.versions.toml` |
-| Spring Cloud | 2025.0.0 | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml` |
-| Spring Modulith | 1.4.0 | `currency-service/gradle/libs.versions.toml` |
-| Gradle | 8.14.2 | `*/gradle/wrapper/gradle-wrapper.properties` |
-| Spring Dep Mgmt Plugin | 1.1.7 | `*/gradle/libs.versions.toml` |
-| SpringDoc OpenAPI | 2.8.13 | `*/gradle/libs.versions.toml` |
-| Testcontainers | 1.21.4 | `session-gateway/`, `currency-service/`, `transaction-service/gradle/libs.versions.toml` |
-| WireMock | 3.10.0 | `session-gateway/`, `currency-service/gradle/libs.versions.toml` |
-| Awaitility | 4.2.2 | `session-gateway/`, `currency-service/gradle/libs.versions.toml` |
-| ShedLock | 6.0.2 | `currency-service/gradle/libs.versions.toml` |
+| Java | 25 | `service-common/build.gradle.kts` |
+| Spring Boot | 3.5.7 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; backend service catalogs also pin the Spring Boot Gradle plugin |
+| Spring Cloud | 2025.0.0 | `service-common/gradle/libs.versions.toml`, `service-common/spring-cloud-platform/build.gradle.kts` |
+| Spring Modulith | 1.4.0 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts` |
+| Gradle | 9.5.0 | `*/gradle/wrapper/gradle-wrapper.properties` |
+| SpringDoc OpenAPI | 2.8.13 | `service-common/spring-platform/build.gradle.kts` |
+| Testcontainers | 1.21.4 | `service-common/spring-platform/build.gradle.kts`; consumed by backend test dependencies |
+| WireMock | 3.10.0 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| Awaitility | 4.2.2 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| ShedLock | 6.0.2 | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 | PDFBox | 3.0.3 | `transaction-service/gradle/libs.versions.toml` |
 | OpenCSV | 3.7 | `service-common/gradle/libs.versions.toml` |
 | JUnit Platform | 1.12.2 | `*/gradle/libs.versions.toml` |
@@ -511,14 +523,14 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Dependency | Version | Where Defined |
 |---|---|---|
-| React | ^19.0.0 | `budget-analyzer-web/package.json` |
-| React DOM | ^19.0.0 | `budget-analyzer-web/package.json` |
-| React Router | ^7.0.2 | `budget-analyzer-web/package.json` |
+| React | ^19.2.5 | `budget-analyzer-web/package.json` |
+| React DOM | ^19.2.5 | `budget-analyzer-web/package.json` |
+| React Router | ^7.14.2 | `budget-analyzer-web/package.json` |
 | TypeScript | ^5.6.3 | `budget-analyzer-web/package.json` |
-| Vite | ^6.0.1 | `budget-analyzer-web/package.json` |
+| Vite | ^6.4.2 | `budget-analyzer-web/package.json` |
 | Vitest | ^3.2.4 | `budget-analyzer-web/package.json` |
 | TailwindCSS | ^3.4.14 | `budget-analyzer-web/package.json` |
-| Axios | ^1.7.7 | `budget-analyzer-web/package.json` |
+| Axios | ^1.16.0 | `budget-analyzer-web/package.json` |
 | Tanstack React Query | ^5.59.16 | `budget-analyzer-web/package.json` |
 | Tanstack React Table | ^8.20.5 | `budget-analyzer-web/package.json` |
 | Redux Toolkit | ^2.3.0 | `budget-analyzer-web/package.json` |
@@ -532,13 +544,13 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Component | Version | Where Defined |
 |---|---|---|
 | Ubuntu | 24.04 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Azul Zulu JDK | 24 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Azul Zulu JDK | 25 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Go | 1.24.1 | `workspace/ai-agent-sandbox/Dockerfile` |
 | Node.js | 20.x (`NODE_MAJOR=20`) | `workspace/ai-agent-sandbox/Dockerfile` |
-| Kind | v0.24.0 | `workspace/ai-agent-sandbox/Dockerfile` |
-| kubectl | v1.31 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
+| Kind | v0.31.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| kubectl | v1.35.4 from the Kubernetes v1.35 apt repo | `workspace/ai-agent-sandbox/Dockerfile` |
 | Helm | v3.20.1 | `workspace/ai-agent-sandbox/Dockerfile` |
-| Tilt | 0.37.0 | `workspace/ai-agent-sandbox/Dockerfile` |
+| Tilt | 0.37.3 | `workspace/ai-agent-sandbox/Dockerfile` |
 
 ---
 

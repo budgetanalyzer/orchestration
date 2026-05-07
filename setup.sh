@@ -48,7 +48,7 @@ SUPPORTED_HELM_MAXIMUM="4.0.0"
 TESTED_HELM_VERSION="$PHASE7_HELM_VERSION"
 
 normalize_semver() {
-    printf '%s\n' "$1" | sed -nE 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
 }
 
 version_ge() {
@@ -59,6 +59,91 @@ version_lt() {
     [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
 }
 
+assert_host_execution() {
+    if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
+        print_error "Run ./setup.sh from the host terminal, not from the devcontainer."
+        echo "This setup writes browser-trusted and infrastructure TLS material, which must use the host trust store."
+        echo "Open a host terminal in this repository and run:"
+        echo "  ./setup.sh"
+        exit 1
+    fi
+}
+
+tool_raw_version() {
+    case "$1" in
+        kubectl)
+            kubectl version --client 2>/dev/null | head -n1 || true
+            ;;
+        tilt)
+            tilt version 2>/dev/null | head -n1 || true
+            ;;
+        mkcert)
+            mkcert --version 2>/dev/null | head -n1 || true
+            ;;
+        kind)
+            kind version 2>/dev/null | head -n1 || true
+            ;;
+        *)
+            "$1" --version 2>/dev/null | head -n1 || true
+            ;;
+    esac
+}
+
+install_pinned_tool() {
+    local tool expected_version
+
+    tool="$1"
+    expected_version="$(phase7_tool_version "$tool")"
+    print_step "Installing ${tool} ${expected_version}..."
+    if ! "$SCRIPT_DIR/scripts/bootstrap/install-verified-tool.sh" "$tool"; then
+        print_error "Automatic ${tool} installation failed"
+        echo "Install ${tool} ${expected_version} manually, then rerun ./setup.sh"
+        exit 1
+    fi
+    hash -r 2>/dev/null || true
+}
+
+ensure_pinned_tool() {
+    local tool expected_version expected_semver raw_version parsed_version
+
+    tool="$1"
+    expected_version="$(phase7_tool_version "$tool")"
+    expected_semver="$(normalize_semver "$expected_version")"
+
+    if command -v "$tool" &> /dev/null; then
+        raw_version="$(tool_raw_version "$tool")"
+        parsed_version="$(normalize_semver "$raw_version")"
+
+        if [[ "$parsed_version" == "$expected_semver" ]]; then
+            print_success "${tool} version ready: $raw_version"
+            return 0
+        fi
+
+        print_warning "${tool} version mismatch detected: ${raw_version:-unknown}"
+        echo "  Expected ${tool} ${expected_version} from scripts/lib/pinned-tool-versions.sh"
+    else
+        print_warning "${tool} not found"
+    fi
+
+    install_pinned_tool "$tool"
+
+    if ! command -v "$tool" &> /dev/null; then
+        print_error "${tool} installation completed, but ${tool} is still not on PATH"
+        echo "Make sure the install directory used by install-verified-tool.sh is on PATH, then rerun ./setup.sh"
+        exit 1
+    fi
+
+    raw_version="$(tool_raw_version "$tool")"
+    parsed_version="$(normalize_semver "$raw_version")"
+    if [[ "$parsed_version" != "$expected_semver" ]]; then
+        print_error "${tool} installation did not produce the pinned version"
+        echo "Expected ${expected_version}; got ${raw_version:-unknown}"
+        exit 1
+    fi
+
+    print_success "${tool} version ready: $raw_version"
+}
+
 install_supported_helm() {
     print_step "Installing Helm ${TESTED_HELM_VERSION}..."
     if ! "$SCRIPT_DIR/scripts/bootstrap/install-verified-tool.sh" helm; then
@@ -66,6 +151,7 @@ install_supported_helm() {
         echo "Install Helm ${TESTED_HELM_VERSION} manually, then rerun ./setup.sh"
         exit 1
     fi
+    hash -r 2>/dev/null || true
 }
 
 ensure_supported_helm() {
@@ -146,6 +232,7 @@ check_kind_cluster_network_model() {
 }
 
 print_header "Budget Analyzer - Development Setup"
+assert_host_execution
 
 # =============================================================================
 # Step 1: Check required tools
@@ -163,10 +250,6 @@ check_tool() {
 }
 
 check_tool "docker" || true
-check_tool "kind" || true
-check_tool "kubectl" || true
-check_tool "tilt" || true
-check_tool "mkcert" || true
 check_tool "git" || true
 
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
@@ -188,7 +271,11 @@ fi
 
 print_success "Docker daemon is running"
 
+ensure_pinned_tool "kubectl"
+ensure_pinned_tool "kind"
 ensure_supported_helm
+ensure_pinned_tool "tilt"
+ensure_pinned_tool "mkcert"
 
 # =============================================================================
 # Step 2: Create Kind cluster
@@ -253,13 +340,9 @@ fi
 print_step "Setting up Gateway API CRDs..."
 
 # Gateway API CRDs (required before Istio ingress gateway, which Tilt installs)
-if kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null; then
-    print_success "Gateway API CRDs already installed"
-else
-    print_step "Installing Gateway API CRDs..."
-    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
-    print_success "Gateway API CRDs installed"
-fi
+print_step "Applying Gateway API CRDs (${PHASE7_GATEWAY_API_VERSION})..."
+kubectl apply -f "$(phase7_gateway_api_manifest_url)"
+print_success "Gateway API CRDs reconciled (${PHASE7_GATEWAY_API_VERSION})"
 
 # Note: Istio and the ingress gateway are installed by Tilt via Helm (see Tiltfile)
 
@@ -321,6 +404,7 @@ print_step "Setting up TLS certificates..."
 print_step "Setting up infrastructure TLS certificates..."
 
 "$SCRIPT_DIR/scripts/bootstrap/setup-infra-tls.sh"
+"$SCRIPT_DIR/scripts/bootstrap/check-infra-tls-secrets.sh"
 
 # =============================================================================
 # Step 9: Create .env file

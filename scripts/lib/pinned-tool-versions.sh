@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Pinned tool versions and verified download metadata for security guardrail tooling.
 
-PHASE7_KUBECTL_VERSION="v1.30.8"
+PHASE7_KUBECTL_VERSION="v1.35.4"
 PHASE7_HELM_VERSION="v3.20.1"
-PHASE7_TILT_VERSION="0.37.0"
+PHASE7_TILT_VERSION="0.37.3"
 PHASE7_MKCERT_VERSION="v1.4.4"
+PHASE7_KIND_VERSION="v0.31.0"
 PHASE7_KUBECONFORM_VERSION="v0.7.0"
 PHASE7_KUBE_LINTER_VERSION="v0.8.3"
-PHASE7_KYVERNO_CLI_VERSION="v1.17.1"
+PHASE7_KYVERNO_CLI_VERSION="v1.18.0"
+PHASE7_GATEWAY_API_VERSION="v1.5.1"
+PHASE7_CALICO_VERSION="v3.32.0"
 
 phase7_normalize_os() {
     local raw_os
@@ -98,6 +101,9 @@ phase7_tool_version() {
         mkcert)
             printf '%s\n' "$PHASE7_MKCERT_VERSION"
             ;;
+        kind)
+            printf '%s\n' "$PHASE7_KIND_VERSION"
+            ;;
         kubeconform)
             printf '%s\n' "$PHASE7_KUBECONFORM_VERSION"
             ;;
@@ -145,6 +151,9 @@ phase7_tool_url() {
         mkcert)
             printf 'https://github.com/FiloSottile/mkcert/releases/download/%s/mkcert-%s-%s\n' "$PHASE7_MKCERT_VERSION" "$PHASE7_MKCERT_VERSION" "$platform"
             ;;
+        kind)
+            printf 'https://github.com/kubernetes-sigs/kind/releases/download/%s/kind-%s-%s\n' "$PHASE7_KIND_VERSION" "$os" "$arch"
+            ;;
         kubeconform)
             printf 'https://github.com/yannh/kubeconform/releases/download/%s/kubeconform-%s.tar.gz\n' "$PHASE7_KUBECONFORM_VERSION" "$platform"
             ;;
@@ -182,22 +191,26 @@ phase7_tool_url() {
 
 phase7_tool_sha256() {
     case "$1:$2" in
-        kubectl:linux-amd64) printf '7f39bdcf768ce4b8c1428894c70c49c8b4d2eee52f3606eb02f5f7d10f66d692\n' ;;
-        kubectl:linux-arm64) printf 'e51d6a76fade0871a9143b64dc62a5ff44f369aa6cb4b04967d93798bf39d15b\n' ;;
-        kubectl:darwin-amd64) printf '46682e24c3aecfbe92f53b86fb15beb740c43a0fafe0a4e06a1c8bb3ce9e985b\n' ;;
-        kubectl:darwin-arm64) printf '52b11bb032f88e4718cd4e3c8374a6b1fad29772aa1ce701276cc4e17d37642f\n' ;;
+        kubectl:linux-amd64) printf 'b529430df69a688fd61b64ad2299edb5fd71cb58be2a4779dba624c7d3510efd\n' ;;
+        kubectl:linux-arm64) printf '6a5a4cc4e396d7626a7a693a3044b51c75520f81db30fe6816c2554e53be336f\n' ;;
+        kubectl:darwin-amd64) printf 'dddb01bddb96f78e48e33105ccfa2feedff585a8b2e3b812f5d0f64c7403710a\n' ;;
+        kubectl:darwin-arm64) printf 'ec644a2473b64b486987f695dfb1867963ce6d42d267b86e944585a546f92b5d\n' ;;
         helm:linux-amd64) printf '0165ee4a2db012cc657381001e593e981f42aa5707acdd50658326790c9d0dc3\n' ;;
         helm:linux-arm64) printf '56b9d1b0e0efbb739be6e68a37860ace8ec9c7d3e6424e3b55d4c459bc3a0401\n' ;;
         helm:darwin-amd64) printf '580515b544d5c966edc6f782c9ae88e21a9e10c786a7d6c5fd4b52613f321076\n' ;;
         helm:darwin-arm64) printf '75cc96ac3fe8b8b9928eb051e55698e98d1e026967b6bffe4f0f3c538a551b65\n' ;;
-        tilt:linux-amd64) printf 'c2c7d3649233f01bc5d230b66b8ccd332401f348dc22b863fcf7244da6970ff1\n' ;;
-        tilt:linux-arm64) printf '84457137539d8e4be6e90e9afecf8ef692ad3f8c19e9bf3355f3fbf4f8dce55f\n' ;;
-        tilt:darwin-amd64) printf '01c5e53921345ed4feb3ba6bc9585f8f5563e40bea27dae0384620d5bbc2ebea\n' ;;
-        tilt:darwin-arm64) printf '5af70d3ab374adeaffe3fb8b0d7f1695a880dc2a02a4c2bccf20223b153929e8\n' ;;
+        tilt:linux-amd64) printf 'e90bc6cf70882bc7579d8174a27cab2de0284612ec7339e4b32f669cd5de4e5c\n' ;;
+        tilt:linux-arm64) printf '826f48198f368ef5edb684e9ae4c87ff76eca84c904f72b2376b29b93bffc019\n' ;;
+        tilt:darwin-amd64) printf 'c8e2b58fb7efdec9ae7e3fc4249b4f662dc6520eabe8efcac84b80856f20d31b\n' ;;
+        tilt:darwin-arm64) printf '4d1f4e604aa5ca65a2df0d19c9e9b351cf9703be886f52fa5f3afd317d968ffd\n' ;;
         mkcert:linux-amd64) printf '6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52\n' ;;
         mkcert:linux-arm64) printf 'b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0\n' ;;
         mkcert:darwin-amd64) printf 'a32dfab51f1845d51e810db8e47dcf0e6b51ae3422426514bf5a2b8302e97d4e\n' ;;
         mkcert:darwin-arm64) printf 'c8af0df44bce04359794dad8ea28d750437411d632748049d08644ffb66a60c6\n' ;;
+        kind:linux-amd64) printf 'eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa\n' ;;
+        kind:linux-arm64) printf '8e1014e87c34901cc422a1445866835d1e666f2a61301c27e722bdeab5a1f7e4\n' ;;
+        kind:darwin-amd64) printf 'a8b3cf77b2ad77aec5bf710d1a2589d9117576132af812885cad41e9dede4d4e\n' ;;
+        kind:darwin-arm64) printf '88bf554fe9da6311c9f8c2d082613c002911a476f6b5090e9420b35d84e70c5c\n' ;;
         kubeconform:linux-amd64) printf 'c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3\n' ;;
         kubeconform:linux-arm64) printf 'cc907ccf9e3c34523f0f32b69745265e0a6908ca85b92f41931d4537860eb83c\n' ;;
         kubeconform:darwin-amd64) printf 'c6771cc894d82e1b12f35ee797dcda1f7da6a3787aa30902a15c264056dd40d4\n' ;;
@@ -206,10 +219,10 @@ phase7_tool_sha256() {
         kube-linter:linux-arm64) printf '802e1b09eabd08f6f0a060a6b8ab2bf7bc7e6bf4f673bb2692303704c84b3e22\n' ;;
         kube-linter:darwin-amd64) printf 'c62e8af3c9df2557c7a3922119ea1b35597794737d1ccad493f63a0d66e7b8fc\n' ;;
         kube-linter:darwin-arm64) printf '6e3443a8ff8625a9fc31a38682c783988d7559018f7ff707a4f8c77c18c92f14\n' ;;
-        kyverno:linux-amd64) printf 'd0c0f52e8fc8d66a3663b63942b131e5f91b63f7644b3e446546f79142d1b7a3\n' ;;
-        kyverno:linux-arm64) printf '6f6a66711ba8fc2bd54a28aa1755a62605d053a6a3a758186201ba1f56698ced\n' ;;
-        kyverno:darwin-amd64) printf 'd221d8d93c622b68a2933f4e0accd61db4f41100336f1ddad141259742f70948\n' ;;
-        kyverno:darwin-arm64) printf '851d1fcc4427a317674cc1892af4f43dcd19983c94498a1a913b6b849f71ef8c\n' ;;
+        kyverno:linux-amd64) printf '3aa7b7aa68732fd6bc5732f1030d0ed12e1b0ffe7dbac5f5aa21fd8695718904\n' ;;
+        kyverno:linux-arm64) printf '37697771e1cc92daf73bebde4eb304691af09e07a4278cc82062e829c8475cec\n' ;;
+        kyverno:darwin-amd64) printf '35f4884e98e32e87223f1591e4ca0f82f9136f1cc9e9ba6482c441fdb00611d5\n' ;;
+        kyverno:darwin-arm64) printf '9b3d02f999c2b12e315b70b8d5b2db569b08e16f70449a23991515ed390e9268\n' ;;
         *)
             echo "Unsupported checksum lookup: $1 on $2" >&2
             return 1
@@ -228,7 +241,7 @@ phase7_install_hint() {
         mkcert)
             printf 'sudo apt-get install -y libnss3-tools && "%s" mkcert\n' "$installer_path"
             ;;
-        kubectl|helm|tilt)
+        kubectl|helm|tilt|kind)
             printf '"%s" %s\n' "$installer_path" "$tool"
             ;;
         kubeconform|kube-linter|kyverno)
@@ -239,4 +252,12 @@ phase7_install_hint() {
             return 1
             ;;
     esac
+}
+
+phase7_gateway_api_manifest_url() {
+    printf 'https://github.com/kubernetes-sigs/gateway-api/releases/download/%s/standard-install.yaml\n' "$PHASE7_GATEWAY_API_VERSION"
+}
+
+phase7_calico_manifest_url() {
+    printf 'https://raw.githubusercontent.com/projectcalico/calico/%s/manifests/calico.yaml\n' "$PHASE7_CALICO_VERSION"
 }

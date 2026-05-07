@@ -4,8 +4,13 @@
 
 set -euo pipefail
 
-CALICO_VERSION="v3.29.3"
-CALICO_MANIFEST_URL="https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/pinned-tool-versions.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
+
+CALICO_VERSION="$PHASE7_CALICO_VERSION"
+CALICO_MANIFEST_URL="$(phase7_calico_manifest_url)"
 CALICO_NAMESPACE="kube-system"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 MIN_INOTIFY_INSTANCES="${MIN_INOTIFY_INSTANCES:-1024}"
@@ -50,6 +55,13 @@ is_calico_ready() {
     fi
 
     return 0
+}
+
+is_calico_version_pinned() {
+    local images
+
+    images="$(kubectl get daemonset calico-node -n "${CALICO_NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null || true)"
+    printf '%s\n' "$images" | grep -q "calico/node:${CALICO_VERSION}"
 }
 
 ensure_cluster_uses_disable_default_cni_model() {
@@ -117,10 +129,10 @@ main() {
     ensure_kind_node_inotify_budget
     ensure_kube_proxy_ready
 
-    if is_calico_ready; then
+    if is_calico_ready && is_calico_version_pinned; then
         print_step "Calico already ready (${CALICO_VERSION})"
     else
-        print_step "Installing Calico (${CALICO_VERSION})..."
+        print_step "Installing/reconciling Calico (${CALICO_VERSION})..."
         kubectl apply -f "${CALICO_MANIFEST_URL}" >/dev/null
 
         print_step "Waiting for calico-node daemonset rollout..."
@@ -132,6 +144,12 @@ main() {
         if ! is_calico_ready; then
             print_error "Calico resources exist but are not ready"
             kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=calico-node || true
+            exit 1
+        fi
+
+        if ! is_calico_version_pinned; then
+            print_error "Calico daemonset does not use pinned image version ${CALICO_VERSION}"
+            kubectl get daemonset calico-node -n "${CALICO_NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[*].image}{"\n"}' || true
             exit 1
         fi
     fi

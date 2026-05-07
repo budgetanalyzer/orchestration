@@ -102,15 +102,27 @@ Choose scripts by runtime boundary:
 ## Bootstrap
 
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
-  Tilt, `mkcert`, `kubeconform`, `kube-linter`, and `kyverno` releases after
-  verifying checked-in SHA-256 values.
-- `bootstrap/check-tilt-prerequisites.sh` validates local tools, certificates,
-  DNS, Docker/Kind prerequisites, and optional runtime security state.
-- `bootstrap/install-calico.sh` installs pinned Calico CNI for Kind clusters
-  created with `disableDefaultCNI`.
+  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
+  after verifying checked-in SHA-256 values.
+- `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
+  versions, certificates, DNS, Docker/Kind prerequisites, pinned Gateway API
+  and Calico state, and optional runtime security state. It reports drift and
+  install commands without performing interactive cluster changes.
+- `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
+  used by `setup.sh` and Tilt. Tilt reruns the host-only
+  `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
+  so namespace recreation cannot leave the infrastructure TLS secrets missing.
+- `bootstrap/install-calico.sh` installs or reconciles pinned Calico CNI for
+  Kind clusters created with `disableDefaultCNI`.
 - `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
   certificate bootstrap scripts. Do not run them from an AI container because
   the browser must trust the host mkcert CA.
+
+Use `../setup.sh` when you want the full local bootstrap to converge
+repo-managed prerequisites and recreate the local Kind cluster. Use
+`bootstrap/install-verified-tool.sh` for a single pinned binary, and use
+`bootstrap/check-tilt-prerequisites.sh` as a read-only report before or after
+setup.
 
 ## Guardrails
 
@@ -119,6 +131,11 @@ Choose scripts by runtime boundary:
   `lib/phase-7-allowed-latest.txt`.
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
   secret payload inventory in `lib/secrets-only-expected-keys.txt`.
+- `guardrails/check-tilt-resource-roots.sh` evaluates the Tiltfile and verifies
+  that resources without `resource_deps` match
+  `lib/tilt-intentional-root-resources.txt`. It requires the standard
+  side-by-side workspace checkout because Tiltfile evaluation references
+  sibling service repositories.
 - `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook

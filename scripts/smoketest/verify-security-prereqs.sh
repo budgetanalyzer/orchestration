@@ -8,6 +8,7 @@ BUSYBOX_IMAGE="busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd
 
 TEMP_NAMESPACES=()
 TEMP_PODS=()
+NEW_TEMP_NAMESPACE=""
 
 print_step() {
     echo "▶ $1"
@@ -32,6 +33,7 @@ cleanup() {
     done
 
     for ns in "${TEMP_NAMESPACES[@]:-}"; do
+        kubectl delete pod --all -n "$ns" --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
         kubectl delete namespace "$ns" --ignore-not-found --wait=false >/dev/null 2>&1 || true
     done
 }
@@ -63,7 +65,7 @@ metadata:
     pod-security.kubernetes.io/audit-version: v1.32
 MANIFEST
     TEMP_NAMESPACES+=("$ns")
-    echo "$ns"
+    NEW_TEMP_NAMESPACE="$ns"
 }
 
 wait_for_condition() {
@@ -88,11 +90,21 @@ netpol_can_connect() {
     kubectl exec -n "$ns" client -- wget -q -T 2 -O - http://server:8080 2>/dev/null | grep -q "ok"
 }
 
+pod_has_istio_proxy() {
+    local namespace="$1"
+    local pod_name="$2"
+
+    kubectl get pod "$pod_name" -n "$namespace" \
+        -o jsonpath='{.spec.containers[*].name}{" "}{.spec.initContainers[*].name}' \
+        | grep -qw istio-proxy
+}
+
 prove_network_policy_enforcement() {
     print_step "Verifying NetworkPolicy enforcement (allow -> deny -> allow)..."
 
     local ns
-    ns="$(new_temp_namespace "ba-netpol")"
+    new_temp_namespace "ba-netpol"
+    ns="$NEW_TEMP_NAMESPACE"
 
     kubectl label namespace "$ns" istio-injection=disabled --overwrite >/dev/null
 
@@ -220,7 +232,8 @@ prove_pod_security_admission() {
     print_step "Verifying Pod Security Admission restricted enforcement..."
 
     local ns
-    ns="$(new_temp_namespace "ba-psa")"
+    new_temp_namespace "ba-psa"
+    ns="$NEW_TEMP_NAMESPACE"
 
     kubectl label namespace "$ns" pod-security.kubernetes.io/enforce=restricted --overwrite >/dev/null
     kubectl label namespace "$ns" pod-security.kubernetes.io/enforce-version=v1.32 --overwrite >/dev/null
@@ -317,7 +330,7 @@ MANIFEST
 
     TEMP_PODS+=("default/${pod_name}")
 
-    wait_for_condition "Istio sidecar was not injected into smoke pod" 45 "kubectl get pod ${pod_name} -n default -o jsonpath='{.spec.containers[*].name}' | grep -qw istio-proxy"
+    wait_for_condition "Istio sidecar was not injected into smoke pod" 45 "pod_has_istio_proxy default '${pod_name}'"
     print_success "Istio readiness and sidecar injection proof passed"
 }
 
@@ -328,7 +341,8 @@ prove_kyverno_smoke_policy() {
     kubectl get clusterpolicy smoke-disallow-privileged >/dev/null 2>&1 || fail "Missing Kyverno smoke policy: smoke-disallow-privileged"
 
     local ns
-    ns="$(new_temp_namespace "ba-kyverno")"
+    new_temp_namespace "ba-kyverno"
+    ns="$NEW_TEMP_NAMESPACE"
 
     kubectl label namespace "$ns" security.budgetanalyzer.io/kyverno-smoke=true --overwrite >/dev/null
     kubectl label namespace "$ns" istio-injection=disabled --overwrite >/dev/null

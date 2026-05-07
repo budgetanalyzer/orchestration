@@ -41,7 +41,13 @@ configMapGenerator:
       - index.html=../docs-aggregator/index.html
       - swagger-initializer.js=../docs-aggregator/swagger-initializer.js
       - swagger-ui-overrides.css=../docs-aggregator/swagger-ui-overrides.css
+  - name: nginx-gateway-openapi-json
+    namespace: default
+    files:
       - openapi.json=../docs-aggregator/openapi.json
+  - name: nginx-gateway-openapi-yaml
+    namespace: default
+    files:
       - openapi.yaml=../docs-aggregator/openapi.yaml
 
 generatorOptions:
@@ -104,6 +110,8 @@ patches:
           cp /usr/share/nginx/html/swagger-ui.css /workdir/docs/
           cp /usr/share/nginx/html/swagger-ui-bundle.js /workdir/docs/
           cp /custom-docs/* /workdir/docs/
+          cp /custom-openapi-json/* /workdir/docs/
+          cp /custom-openapi-yaml/* /workdir/docs/
       - op: replace
         path: /spec/template/spec/initContainers/0/volumeMounts/0/name
         value: nginx-web-assets
@@ -132,5 +140,5 @@ patches:
       - op: remove
         path: /spec/template/spec/volumes/2
       - op: replace
-        path: /spec/template/spec/volumes/3/name
+        path: /spec/template/spec/volumes/5/name
         value: nginx-web-assets

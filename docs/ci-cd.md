@@ -34,7 +34,7 @@ All workflows trigger on:
 ### Build Steps
 
 1. **Checkout**: Clone the repository
-2. **Setup JDK 24**: Install Temurin JDK 24
+2. **Setup JDK 25**: Install Temurin JDK 25
 3. **Setup Gradle**: Configure Gradle with caching
 4. **Resolve pinned `serviceCommon` version**: Read `gradle/libs.versions.toml`
 5. **Validate GitHub Packages access**: Fail fast if

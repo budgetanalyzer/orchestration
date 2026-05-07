@@ -27,9 +27,10 @@ tilt up
 
 This is the supported local startup path for the repository:
 
-- `./setup.sh` recreates the local `kind` cluster, installs the supported
-  Helm/Calico/Istio prerequisites, configures browser and internal TLS, sets up
-  local DNS, and prepares `.env`.
+- `./setup.sh` converges repo-managed pinned prerequisites such as `kubectl`,
+  Kind, Tilt, `mkcert`, Calico, and Gateway API CRDs, installs a supported
+  Helm 3 binary when needed, recreates the local `kind` cluster, configures
+  browser and internal TLS, sets up local DNS, and prepares `.env`.
 - Edit `.env` before `tilt up`. Auth0 values and `FRED_API_KEY` are required
   for local startup.
 - `tilt up` is the supported entry point for the full local stack.

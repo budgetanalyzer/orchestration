@@ -21,6 +21,7 @@ jobs:
       - name: Validate changed shell syntax
         run: |
           bash -n scripts/guardrails/check-phase-7-image-pinning.sh
+          bash -n scripts/guardrails/check-tilt-resource-roots.sh
           bash -n scripts/bootstrap/install-verified-tool.sh
           bash -n scripts/lib/pinned-tool-versions.sh
           bash -n scripts/ops/render-istio-egress-config.sh

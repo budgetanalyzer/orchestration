@@ -195,7 +195,7 @@ tilt get uiresources
 
 **Backend:**
 - Spring Boot 3.x
-- Java 24
+- Java 25
 - Pure JPA (Jakarta Persistence API)
 - Spring Modulith (modularity + events)
 

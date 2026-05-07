@@ -8,6 +8,17 @@ K8S_CERTS_DIR="$ORCHESTRATION_DIR/nginx/certs/k8s"
 echo "=== Budget Analyzer - Kubernetes TLS Setup ==="
 echo
 
+assert_host_execution() {
+    if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
+        echo "[ERROR] This script must be run from your host machine, not from the devcontainer or Tilt." >&2
+        echo "        Open a host terminal in $ORCHESTRATION_DIR and run:" >&2
+        echo "        ./scripts/bootstrap/setup-k8s-tls.sh" >&2
+        exit 1
+    fi
+}
+
+assert_host_execution
+
 # Check if mkcert is installed
 if ! command -v mkcert &> /dev/null; then
     echo "[ERROR] mkcert is not installed"
@@ -79,9 +90,9 @@ if [ "$OS" = "linux" ] && [ "$CERTUTIL_AVAILABLE" = true ]; then
     # Handle snap-installed Chromium (uses isolated NSS database)
     SNAP_CHROMIUM_NSS="$HOME/snap/chromium/current/.pki/nssdb"
     if [ -d "$SNAP_CHROMIUM_NSS" ]; then
-        if ! certutil -d sql:$SNAP_CHROMIUM_NSS -L 2>/dev/null | grep -q "mkcert"; then
+        if ! certutil -d "sql:$SNAP_CHROMIUM_NSS" -L 2>/dev/null | grep -q "mkcert"; then
             echo "Installing CA to snap Chromium..."
-            certutil -d sql:$SNAP_CHROMIUM_NSS -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
+            certutil -d "sql:$SNAP_CHROMIUM_NSS" -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
                 echo "[OK] CA installed to snap Chromium" || \
                 echo "[WARN] Failed to install CA to snap Chromium"
         else
@@ -95,9 +106,9 @@ if [ "$OS" = "linux" ] && [ "$CERTUTIL_AVAILABLE" = true ]; then
         for profile in "$SNAP_FIREFOX_DIR"/*.default* "$SNAP_FIREFOX_DIR"/*.default-release*; do
             if [ -d "$profile" ]; then
                 profile_name=$(basename "$profile")
-                if ! certutil -d sql:$profile -L 2>/dev/null | grep -q "mkcert"; then
+                if ! certutil -d "sql:$profile" -L 2>/dev/null | grep -q "mkcert"; then
                     echo "Installing CA to snap Firefox profile ($profile_name)..."
-                    certutil -d sql:$profile -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
+                    certutil -d "sql:$profile" -A -t "C,," -n "mkcert" -i "$CA_FILE" && \
                         echo "[OK] CA installed to snap Firefox" || \
                         echo "[WARN] Failed to install CA to snap Firefox"
                 else
@@ -113,10 +124,11 @@ if [ "$OS" = "linux" ] && [ "$CERTUTIL_AVAILABLE" = true ]; then
         for profile in "$NATIVE_FIREFOX_DIR"/*.default* "$NATIVE_FIREFOX_DIR"/*.default-release*; do
             if [ -d "$profile" ]; then
                 profile_name=$(basename "$profile")
-                if ! certutil -d sql:$profile -L 2>/dev/null | grep -q "mkcert"; then
+                if ! certutil -d "sql:$profile" -L 2>/dev/null | grep -q "mkcert"; then
                     echo "Installing CA to native Firefox profile ($profile_name)..."
-                    certutil -d sql:$profile -A -t "C,," -n "mkcert" -i "$CA_FILE" 2>/dev/null && \
-                        echo "[OK] CA installed to native Firefox" || true
+                    if certutil -d "sql:$profile" -A -t "C,," -n "mkcert" -i "$CA_FILE" 2>/dev/null; then
+                        echo "[OK] CA installed to native Firefox"
+                    fi
                 fi
             fi
         done

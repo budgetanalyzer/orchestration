@@ -10,21 +10,35 @@ environment works after startup
 
 **Minimum versions:**
 - Docker 24.0+
-- Kind 0.20+
-- kubectl 1.30.8 (matches `kindest/node:v1.30.8`)
+- Kind 0.31.0 (`setup.sh` auto-installs this pinned version if missing or
+  mismatched)
+- kubectl 1.35.4 (`setup.sh` auto-installs this pinned version if missing or
+  mismatched; it stays on the same Kubernetes minor as `kindest/node:v1.35.0`)
 - OpenSSL 3.x+
 - Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
-- Tilt 0.37.0
+- Tilt 0.37.3 (`setup.sh` auto-installs this pinned version if Tilt is missing
+  or mismatched)
 - Git 2.40+
-- mkcert 1.4.4
+- mkcert 1.4.4 (`setup.sh` auto-installs this pinned binary if missing or
+  mismatched; Linux still needs host `libnss3-tools` for browser trust stores)
+- JDK 25 (required by host-side Gradle local resources before service images are built)
+- Node.js 20+ and npm 10+ (required by the local frontend prod-smoke Tilt resource)
 
-**For Backend Development (Optional):**
-- JDK 24 (for running services outside Docker)
-- Gradle 8.5+ or use `./gradlew`
+Gradle does not need to be installed globally for the normal Tilt path; use the
+checked-in `./gradlew` wrappers.
 
-**For Frontend Development (Optional):**
-- Node.js 20+ (LTS)
-- npm 10+
+Repo-managed pinned prerequisites are `kubectl`, Kind, Tilt, `mkcert`, Calico,
+and Gateway API CRDs. Helm is repo-installed when missing or outside the
+supported Helm 3 range. Host-managed prerequisites remain Docker, Git, OpenSSL,
+JDK, Node.js, npm, sibling repository checkouts, and frontend `node_modules`.
+
+The sibling `budget-analyzer-web` repo must also have local npm dependencies
+installed because `budget-analyzer-web-prod-smoke-build` runs on the host:
+
+```bash
+cd ../budget-analyzer-web
+npm install
+```
 
 ### Verify Prerequisites
 
@@ -41,11 +55,14 @@ helm version
 tilt version
 git --version
 mkcert --version
+java -version
+node --version
+npm --version
 ```
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
-`1.29.1`. Local Tilt installs `istio/cni` with
+`1.29.2`. Local Tilt installs `istio/cni` with
 `kubernetes/istio/cni-common-values.yaml` plus
 `kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
 standard `/etc/cni/net.d` and `/opt/cni/bin` paths. Production k3s deploys use
@@ -58,7 +75,7 @@ now flow through Gateway `spec.infrastructure.parametersRef` via
 `kubernetes/istio/ingress-gateway-config.yaml`.
 
 For host-side binary installs, prefer the checked-in verified installer:
-`./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kubeconform|kube-linter|kyverno>`.
+`./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno>`.
 It uses pinned release artifacts with checked-in SHA-256 values instead of
 floating installer endpoints.
 
@@ -109,11 +126,12 @@ The current local platform baseline still works like this:
    infrastructure such as Redis.
 2. It rejects older `kindnet`-based clusters that cannot enforce
    `NetworkPolicy`.
-3. It installs pinned Calico and waits for CoreDNS readiness.
-4. It ensures a supported Helm `3.20.x` binary is present before Helm-backed
-   setup continues.
-5. It configures local DNS plus browser-facing and internal transport TLS.
-6. It installs Gateway API CRDs and prepares `.env`.
+3. It installs or version-corrects repo-managed pinned binaries before cluster
+   creation, and ensures a supported Helm `3.20.x` binary is present before
+   Helm-backed setup continues.
+4. It installs or reconciles pinned Calico and waits for CoreDNS readiness.
+5. It applies pinned Gateway API CRDs, configures local DNS plus
+   browser-facing and internal transport TLS, and prepares `.env`.
 
 Tilt is the local secret producer for infrastructure credentials and the local
 renderer for non-secret Session Gateway Auth0 config. Kubernetes manifests keep
@@ -667,6 +685,9 @@ kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 # Verify infra secrets exist
 kubectl get secret -n default infra-ca
 kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
+
+# Run the same read-only post-check setup.sh and Tilt use
+./scripts/bootstrap/check-infra-tls-secrets.sh
 
 # Restart browser to clear certificate cache
 ```

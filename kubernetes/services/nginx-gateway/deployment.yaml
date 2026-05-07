@@ -33,6 +33,8 @@ spec:
           cp /usr/share/nginx/html/swagger-ui.css /workdir/
           cp /usr/share/nginx/html/swagger-ui-bundle.js /workdir/
           cp /custom-docs/* /workdir/
+          cp /custom-openapi-json/* /workdir/
+          cp /custom-openapi-yaml/* /workdir/
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -47,6 +49,12 @@ spec:
           mountPath: /workdir
         - name: nginx-docs-config
           mountPath: /custom-docs
+          readOnly: true
+        - name: nginx-openapi-json-config
+          mountPath: /custom-openapi-json
+          readOnly: true
+        - name: nginx-openapi-yaml-config
+          mountPath: /custom-openapi-yaml
           readOnly: true
       - name: web-prod-smoke-assets
         image: budget-analyzer-web-prod-smoke:latest
@@ -129,6 +137,12 @@ spec:
       - name: nginx-docs-config
         configMap:
           name: nginx-gateway-docs
+      - name: nginx-openapi-json-config
+        configMap:
+          name: nginx-gateway-openapi-json
+      - name: nginx-openapi-yaml-config
+        configMap:
+          name: nginx-gateway-openapi-yaml
       - name: nginx-web-prod-smoke
         emptyDir: {}
       - name: nginx-tmp

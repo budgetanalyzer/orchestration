@@ -61,10 +61,10 @@ Phases:
     release-triggering network write is explicit at the call site.
 
   post
-    Verifies the release tag exists on origin, bumps ../service-common to the
-    next patch snapshot, and updates Java consumers from
-    MAJOR.MINOR.PATCH-SNAPSHOT to MAJOR.MINOR.PATCH. Run this only after
-    publish-release.yml has completed for the tag.
+    Verifies the release tag exists on origin and updates Java consumers from
+    MAJOR.MINOR.PATCH-SNAPSHOT to MAJOR.MINOR.PATCH. It leaves
+    ../service-common/build.gradle.kts on the released version. Run this only
+    after publish-release.yml has completed for the tag.
 EOF
 }
 
@@ -96,14 +96,6 @@ validate_release_version() {
     local version="$1"
 
     [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-}
-
-next_patch_snapshot() {
-    local version="$1"
-    local major minor patch
-
-    IFS='.' read -r major minor patch <<< "${version}"
-    printf '%s.%s.%s-SNAPSHOT\n' "${major}" "${minor}" "$((patch + 1))"
 }
 
 read_service_common_version() {
@@ -342,14 +334,12 @@ run_post() {
     local release_version="$1"
     local service_version
     local expected_snapshot
-    local next_snapshot
     local repo consumer_version
 
     validate_release_version "${release_version}" || fail "Invalid release version: ${release_version}. Expected MAJOR.MINOR.PATCH."
 
     service_version="$(read_service_common_version)"
     expected_snapshot="${release_version}-SNAPSHOT"
-    next_snapshot="$(next_patch_snapshot "${release_version}")"
 
     [[ "${service_version}" == "${release_version}" ]] || fail "service-common version is ${service_version}; expected released version ${release_version}"
 
@@ -366,13 +356,9 @@ run_post() {
     verify_origin_tag_exists "v${release_version}"
     print_info "Assuming publish-release.yml has completed for v${release_version}."
 
-    require_clean_worktree "service-common"
     for repo in "${CONSUMER_REPOS[@]}"; do
         require_clean_worktree "${repo}"
     done
-
-    print_info "Bumping service-common to ${next_snapshot}"
-    rewrite_service_common_version "${next_snapshot}"
 
     print_info "Updating Java consumers to ${release_version}"
     for repo in "${CONSUMER_REPOS[@]}"; do
@@ -381,10 +367,11 @@ run_post() {
 
     print_success "Post-release version updates complete"
     echo "Changed:"
-    echo "- ../service-common/build.gradle.kts -> ${next_snapshot}"
     for repo in "${CONSUMER_REPOS[@]}"; do
         echo "- ../${repo}/gradle/libs.versions.toml -> ${release_version}"
     done
+    echo
+    echo "service-common remains on ${release_version}; bump it manually when ready."
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then

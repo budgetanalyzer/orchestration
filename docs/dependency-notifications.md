@@ -41,7 +41,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 3.5.7 |
+| **Current version** | 3.5.14 |
 | **Watch** | https://github.com/spring-projects/spring-boot |
 | **Also follow** | https://spring.io/blog (release announcements) |
 | **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; backend service catalogs also pin the Spring Boot Gradle plugin |
@@ -55,7 +55,7 @@ Watch these immediately. Security patches, aggressive release cadences, or painf
 
 | | |
 |---|---|
-| **Current version** | 2025.0.0 (managed by `service-common`; consumed by `currency-service`) |
+| **Current version** | 2025.0.2 (managed by `service-common`; consumed by `currency-service`) |
 | **Watch** | https://github.com/spring-cloud/spring-cloud-release |
 | **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-cloud-platform/build.gradle.kts`; consumed by `currency-service` |
 
@@ -224,7 +224,7 @@ and runtime baselines.
 
 | | |
 |---|---|
-| **Current version** | 1.4.0 (managed by `service-common`; consumed by `currency-service`) |
+| **Current version** | 1.4.11 (managed by `service-common`; consumed by `currency-service`) |
 | **Watch** | https://github.com/spring-projects/spring-modulith |
 | **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 
@@ -304,7 +304,7 @@ Message broker for currency-service. Major versions are infrequent. Check lifecy
 |---|---|
 | **Current version** | 1.21.4 |
 | **Releases** | https://github.com/testcontainers/testcontainers-java |
-| **Defined in** | `session-gateway/gradle/libs.versions.toml`, `currency-service/gradle/libs.versions.toml`, `transaction-service/gradle/libs.versions.toml` |
+| **Defined in** | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; consumed by backend test dependencies |
 
 Test infrastructure. Usually backward compatible within major version.
 
@@ -356,14 +356,14 @@ These either ride along with Spring Boot BOM upgrades or are stable libraries th
 
 | Dependency | Current | GitHub | Where Defined |
 |---|---|---|---|
-| SpringDoc OpenAPI | 2.8.13 | https://github.com/springdoc/springdoc-openapi | `service-common/spring-platform/build.gradle.kts` |
+| SpringDoc OpenAPI | 2.8.17 | https://github.com/springdoc/springdoc-openapi | `service-common/spring-platform/build.gradle.kts` |
 | Flyway | BOM-managed | https://github.com/flyway/flyway | Spring Boot BOM |
 | Jackson | BOM-managed | https://github.com/FasterXML/jackson | Spring Boot BOM |
-| ShedLock | 6.0.2 | https://github.com/lukas-krecan/ShedLock | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
+| ShedLock | 6.10.0 | https://github.com/lukas-krecan/ShedLock | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 | PDFBox | 3.0.3 | https://github.com/apache/pdfbox | `transaction-service/gradle/libs.versions.toml` |
 | OpenCSV | 3.7 | https://github.com/opencsv/opencsv | `service-common/gradle/libs.versions.toml` |
-| WireMock | 3.10.0 | https://github.com/wiremock/wiremock | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
-| Awaitility | 4.2.2 | https://github.com/awaitility/awaitility | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| WireMock | 3.13.2 | https://github.com/wiremock/wiremock | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| Awaitility | 4.3.0 | https://github.com/awaitility/awaitility | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
 | JUnit Platform | 1.12.2 | https://github.com/junit-team/junit5 | `*/gradle/libs.versions.toml` |
 | JaCoCo | 0.8.13 | https://github.com/jacoco/jacoco | `transaction-service/gradle/libs.versions.toml` |
 | Spotless | 8.0.0 | https://github.com/diffplug/spotless | `service-common/build.gradle.kts`, `*/gradle/libs.versions.toml` |
@@ -402,6 +402,11 @@ When upgrading Spring Boot, always check the Spring Cloud release train
 compatibility first. Spring Cloud version selection is centralized in
 `service-common`; only services that use Spring Cloud APIs should consume the
 Spring Cloud platform.
+
+Spring Boot 4, Spring Cloud 2025.1, Spring Framework 7, Spring Security 7,
+Spring Modulith 2, SpringDoc 3, Testcontainers 2, ShedLock 7, and JUnit
+Platform 6 are a separate major migration lane. Do not mix them into a Spring
+Boot 3.5.x patch batch.
 
 ### Kubernetes Stack
 
@@ -495,15 +500,15 @@ table below tracks the human-readable tags; the checked-in refs now use
 | Dependency | Version | Where Defined |
 |---|---|---|
 | Java | 25 | `service-common/build.gradle.kts` |
-| Spring Boot | 3.5.7 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; backend service catalogs also pin the Spring Boot Gradle plugin |
-| Spring Cloud | 2025.0.0 | `service-common/gradle/libs.versions.toml`, `service-common/spring-cloud-platform/build.gradle.kts` |
-| Spring Modulith | 1.4.0 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts` |
+| Spring Boot | 3.5.14 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts`; backend service catalogs also pin the Spring Boot Gradle plugin |
+| Spring Cloud | 2025.0.2 | `service-common/gradle/libs.versions.toml`, `service-common/spring-cloud-platform/build.gradle.kts` |
+| Spring Modulith | 1.4.11 | `service-common/gradle/libs.versions.toml`, `service-common/spring-platform/build.gradle.kts` |
 | Gradle | 9.5.0 | `*/gradle/wrapper/gradle-wrapper.properties` |
-| SpringDoc OpenAPI | 2.8.13 | `service-common/spring-platform/build.gradle.kts` |
+| SpringDoc OpenAPI | 2.8.17 | `service-common/spring-platform/build.gradle.kts` |
 | Testcontainers | 1.21.4 | `service-common/spring-platform/build.gradle.kts`; consumed by backend test dependencies |
-| WireMock | 3.10.0 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
-| Awaitility | 4.2.2 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
-| ShedLock | 6.0.2 | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
+| WireMock | 3.13.2 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| Awaitility | 4.3.0 | `service-common/spring-platform/build.gradle.kts`; consumed by session-gateway and currency-service tests |
+| ShedLock | 6.10.0 | `service-common/spring-platform/build.gradle.kts`; consumed by `currency-service` |
 | PDFBox | 3.0.3 | `transaction-service/gradle/libs.versions.toml` |
 | OpenCSV | 3.7 | `service-common/gradle/libs.versions.toml` |
 | JUnit Platform | 1.12.2 | `*/gradle/libs.versions.toml` |

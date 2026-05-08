@@ -304,7 +304,29 @@ directory without writing outside the repository.
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state.
 - `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
-- `repo/tag-release.sh` creates release tags across configured repositories.
+- `repo/tag-release.sh` creates release tags across configured repositories. If
+  the requested tag already exists in `service-common`, it warns and skips
+  `service-common` so the all-repo tag flow can run after the earlier
+  service-common Maven release tag; the same existing tag in any other repo
+  remains a hard failure.
+- `repo/release-service-common-snapshot.sh` coordinates the tag-driven
+  `service-common` snapshot-to-release flow. Run `prepare` while
+  `service-common` and all Java consumers are pinned to the same
+  `MAJOR.MINOR.PATCH-SNAPSHOT`; it reads that version from
+  `../service-common/build.gradle.kts`, verifies the Java consumers match
+  exactly, strips `-SNAPSHOT` in
+  `../service-common/build.gradle.kts` and runs the required Gradle validation.
+  After that release-prep change is merged to `service-common` main, run
+  `tag --push` to fast-forward main, assert local `main` matches `origin/main`,
+  and push the derived `vMAJOR.MINOR.PATCH` from `service-common` only. The
+  explicit `--push` flag is required for the release-triggering network write.
+  This phase intentionally does not call `repo/tag-release.sh`, because the
+  Java consumer repos also publish on tag pushes and still point at the
+  snapshot dependency until `post` has run and those changes have been merged.
+  Once `publish-release.yml` has completed for the service-common tag, run
+  `post` to pin Java consumers to the released version. `post` leaves
+  `service-common` on the released version; bump it back to the next snapshot
+  manually when ready.
 - `repo/update-service-common-version.sh` bumps the checked-in
   `service-common` version literal in `../service-common/build.gradle.kts` and
   the matching `serviceCommon` catalog entry in each Java consumer repo.

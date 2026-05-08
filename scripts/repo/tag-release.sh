@@ -7,8 +7,8 @@
 #
 # This script will:
 # 1. Validate the version format
-# 2. Check that all repositories exist and are clean
-# 3. Tag each repository with the specified version
+# 2. Check that all tagged repositories exist and are clean
+# 3. Tag each repository except service-common with the specified version
 # 4. Push all tags to remote
 
 set -e  # Exit on error
@@ -45,23 +45,57 @@ fi
 print_info "Preparing to tag all repositories with version: $VERSION"
 echo
 
+SKIPPED_REPOS=("service-common")
+
+repo_is_skipped() {
+    local repo="$1"
+    local skipped_repo
+
+    for skipped_repo in "${SKIPPED_REPOS[@]}"; do
+        if [ "$repo" = "$skipped_repo" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+print_warning "service-common is skipped by this all-repo tag flow."
+echo "  Reason: service-common is tagged earlier to publish Maven artifacts, and"
+echo "  after the post flow its checked-in version is the next SNAPSHOT."
+echo
+
 # Step 1: Validation - check all repos exist and are clean
 print_info "Step 1: Validating repositories..."
 
 # Run the validation script (pass exclusions so it validates the same repo set)
-if ! EXCLUDE_REPOS="$(IFS=','; echo "${EXCLUDE_FROM_RELEASE[*]}")" "$SCRIPT_DIR/validate-repos.sh"; then
+if ! EXCLUDE_REPOS="$(IFS=','; echo "${SKIPPED_REPOS[*]}")" "$SCRIPT_DIR/validate-repos.sh"; then
     print_error "Repository validation failed. Please fix the issues above before tagging."
     exit 1
 fi
 
 # Additional validation: Check if tag already exists in any repository
 VALIDATION_FAILED=0
+
 # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
 for REPO in "${REPOS[@]}"; do
+    if repo_is_skipped "$REPO"; then
+        print_warning "Skipping tag-existence validation for $REPO"
+        continue
+    fi
+
     REPO_PATH="$PARENT_DIR/$REPO"
     cd "$REPO_PATH"
 
+    TAG_EXISTS=0
     if git rev-parse "$VERSION" >/dev/null 2>&1; then
+        TAG_EXISTS=1
+    fi
+    if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+        TAG_EXISTS=1
+    fi
+
+    if [ $TAG_EXISTS -eq 1 ]; then
         print_warning "Tag $VERSION already exists in $REPO"
         VALIDATION_FAILED=1
     fi
@@ -77,7 +111,11 @@ fi
 # Step 2: Confirmation
 print_info "The following repositories will be tagged with $VERSION and pushed:"
 for REPO in "${REPOS[@]}"; do
-    echo "  - $REPO"
+    if repo_is_skipped "$REPO"; then
+        echo "  - $REPO (skipped; service-common was tagged earlier for Maven release)"
+    else
+        echo "  - $REPO"
+    fi
 done
 echo
 
@@ -97,6 +135,11 @@ TAGGED_REPOS=()
 FAILED_REPOS=()
 
 for REPO in "${REPOS[@]}"; do
+    if repo_is_skipped "$REPO"; then
+        print_warning "↷ Skipping $REPO because service-common is tagged separately"
+        continue
+    fi
+
     REPO_PATH="$PARENT_DIR/$REPO"
     cd "$REPO_PATH"
 
@@ -160,9 +203,19 @@ if [ ${#FAILED_REPOS[@]} -gt 0 ]; then
     done
 fi
 
-if [ ${#PUSHED_REPOS[@]} -eq ${#REPOS[@]} ]; then
+if [ ${#SKIPPED_REPOS[@]} -gt 0 ]; then
     echo
-    print_success "All repositories successfully tagged with $VERSION and pushed!"
+    echo -e "${YELLOW}Skipped ${#SKIPPED_REPOS[@]} repositories by policy:${NC}"
+    for REPO in "${SKIPPED_REPOS[@]}"; do
+        echo "  ↷ $REPO (service-common Maven release tag is managed separately)"
+    done
+fi
+
+EXPECTED_PUSHED_COUNT=$((${#REPOS[@]} - ${#SKIPPED_REPOS[@]}))
+
+if [ ${#PUSHED_REPOS[@]} -eq "$EXPECTED_PUSHED_COUNT" ] && [ ${#FAILED_REPOS[@]} -eq 0 ] && [ ${#PUSH_FAILED_REPOS[@]} -eq 0 ]; then
+    echo
+    print_success "All required repositories successfully tagged with $VERSION and pushed!"
     exit 0
 else
     echo

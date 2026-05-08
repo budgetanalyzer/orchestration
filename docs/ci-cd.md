@@ -203,6 +203,18 @@ Current contract:
 The detailed local-vs-release resolution rules live in
 [docs/development/service-common-artifact-resolution.md](development/service-common-artifact-resolution.md).
 
+Use `./scripts/repo/release-service-common-snapshot.sh` from the orchestration
+repo to drive the current manual `service-common` release flow. `prepare`
+reads the checked-in `service-common` snapshot, verifies all Java consumers use
+that exact same snapshot, strips `-SNAPSHOT`, and runs the required Gradle
+validation. `tag --push` pushes the matching `vMAJOR.MINOR.PATCH` tag from
+`service-common` main after verifying local `main` matches `origin/main`.
+`post` updates `service-common` plus Java consumers after `publish-release.yml`
+completes for the tag. The service-common Maven release tag is intentionally
+separate from the all-repository `repo/tag-release.sh` flow because Java
+consumer release workflows also run on tag pushes and must not release from
+source still pinned to the snapshot dependency.
+
 ### Release Images
 
 Release image publishing is now wired as tag-driven repo-local

@@ -164,9 +164,9 @@ def build_rabbitmq_definitions(admin_user, admin_password, service_user, service
     {
       "user": %s,
       "vhost": %s,
-      "configure": "^(amq\\\\.gen.*|currency\\\\.created|currency\\\\.created\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$",
-      "write": "^(amq\\\\.default|currency\\\\.created|DLX)$",
-      "read": "^(currency\\\\.created|currency\\\\.created\\\\.exchange-rate-import-service(\\\\.dlq)?)$"
+      "configure": "^(amq\\\\.gen.*|exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$",
+      "write": "^(amq\\\\.default|exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$",
+      "read": "^(exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?)$"
     }
   ]
 }""" % (

@@ -1,0 +1,35 @@
+{
+  "users": [
+    {
+      "name": "rabbitmq-admin",
+      "password": "${RABBITMQ_ADMIN_PASSWORD}",
+      "tags": ["administrator"]
+    },
+    {
+      "name": "currency-service",
+      "password": "${RABBITMQ_CURRENCY_SERVICE_PASSWORD}",
+      "tags": []
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "rabbitmq-admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "currency-service",
+      "vhost": "/",
+      "configure": "^(amq\\.gen.*|exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?|DLX)$",
+      "write": "^(amq\\.default|exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?|DLX)$",
+      "read": "^(exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?)$"
+    }
+  ]
+}

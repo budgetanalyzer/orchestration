@@ -289,7 +289,6 @@ RABBITMQ_ADMIN_PASSWORD=$(kubectl get secret rabbitmq-bootstrap-credentials -n i
 kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl authenticate_user rabbitmq-admin "$RABBITMQ_ADMIN_PASSWORD"
 
 # Inspect the boot-time definitions secret
-kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.username}' | base64 -d && echo
 kubectl get secret rabbitmq-bootstrap-credentials -n infrastructure -o jsonpath='{.data.definitions\.json}' | base64 -d
 
 # Inspect the currency-service connection secret
@@ -305,6 +304,17 @@ permissions, recreate the RabbitMQ PVC and restart the resource:
 ```bash
 kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
 tilt trigger rabbitmq
+```
+
+If only stale broker resources from the former `currency.created` channel need
+cleanup, use the admin identity to inspect and delete those old resources:
+
+```bash
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_exchanges name
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl list_queues name
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl delete_queue currency.created.exchange-rate-import-service
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl delete_queue currency.created.exchange-rate-import-service.dlq
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl delete_exchange currency.created
 ```
 
 ### NGINX Gateway

@@ -49,6 +49,13 @@ Production surfaces already reflected on this branch:
   digests refreshed in `deploy/helm-values/kyverno.values.yaml`.
 - PostgreSQL and Redis shared infrastructure manifests use refreshed digest
   pins, and the production infrastructure render path inherits them.
+- The RabbitMQ `currency-service` resource allow-list now follows the
+  `exchange-rate.import.requested` destination introduced by
+  `currency-service` commit `6535b33` and removes the former `currency.created`
+  destination from the local Tilt definitions. OCI operators must render
+  `budget-analyzer-rabbitmq-definitions` from
+  `deploy/manifests/phase-5/rabbitmq-definitions.template.json` before
+  deploying the matching `currency-service` image.
 - The `/api-docs` ConfigMap split is represented in both local Tilt and the
   production app overlay so large OpenAPI documents do not fall back to one
   apply-annotation-heavy ConfigMap.
@@ -134,6 +141,7 @@ new release images.
 | Kyverno | `Tiltfile`, local policies, Kyverno CLI | `PHASE7_KYVERNO_CHART_VERSION`, `deploy/helm-values/kyverno.values.yaml`, `deploy/scripts/14-install-phase-7-kyverno.sh`, `deploy/scripts/15-apply-phase-7-policies.sh` | Update production chart and digest-pinned controller image values together, then rerun production policy install/apply. |
 | kube-prometheus-stack | Local monitoring Helm install and values | `PHASE7_PROMETHEUS_STACK_CHART_VERSION`, production monitoring override, `deploy/scripts/22-apply-production-monitoring.sh` | Update chart pin and any digest-pinned rendered image values/post-render expectations, then reapply production monitoring. |
 | Kiali | Local Kiali chart and values | `PHASE7_KIALI_CHART_VERSION`, `kubernetes/monitoring/kiali-values.yaml`, `deploy/scripts/20-render-phase-7-observability.sh`, `deploy/scripts/21-apply-phase-7-observability.sh` | Update chart pin and values, render production Kiali against the live cluster, then apply through the reviewed observability path. |
+| RabbitMQ application channels | `Tiltfile` boot-time definitions and local RabbitMQ secret | OCI Vault `budget-analyzer-rabbitmq-definitions` synced into `rabbitmq-bootstrap-credentials[definitions.json]` | Keep `deploy/manifests/phase-5/rabbitmq-definitions.template.json` aligned with `currency-service` Spring Cloud Stream destinations, include service queues/DLQs in `write` permission for RabbitMQ declaration checks, update the OCI Vault secret before deploying a matching service image, and clean obsolete broker resources such as the former `currency.created` exchange/queues during the infrastructure reconcile. |
 | PostgreSQL | `kubernetes/infrastructure/postgresql` | `kubernetes/production/infrastructure` render/apply path | Refresh digests in the shared manifest, render the production overlay, and apply through `18-apply-production-infrastructure.sh`; major versions need a separate data migration plan. |
 | Redis | `kubernetes/infrastructure/redis` | `kubernetes/production/infrastructure` render/apply path and Redis StatefulSet storage patch | Refresh digests in the shared manifest, render the production overlay, and apply through the production infrastructure script; major versions need session/cache compatibility validation first. |
 
@@ -387,7 +395,21 @@ Run these on the OCI host from the updated repo checkout.
    ./deploy/scripts/09-render-phase-5-secrets.sh
    ./deploy/scripts/10-apply-phase-5-secrets.sh
    ```
-3. Apply the production app overlay with server-side apply:
+   If the upgrade changes RabbitMQ application destinations, update the OCI
+   Vault `budget-analyzer-rabbitmq-definitions` secret from
+   `deploy/manifests/phase-5/rabbitmq-definitions.template.json` before this
+   step, then confirm the synced `rabbitmq-bootstrap-credentials` secret
+   contains the new definitions.
+3. If the upgrade removes RabbitMQ application destinations, manually delete
+   the obsolete empty queues before deploying the matching service image. For
+   the `currency.created` to `exchange-rate.import.requested` cutover:
+   ```bash
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service.dlq
+   ```
+   Do not delete non-empty queues without an explicit migration or discard
+   decision.
+4. Apply the production app overlay with server-side apply:
    ```bash
    kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -
    kubectl rollout status deployment/transaction-service --timeout=300s
@@ -397,17 +419,17 @@ Run these on the OCI host from the updated repo checkout.
    kubectl rollout status deployment/ext-authz --timeout=300s
    kubectl rollout status deployment/nginx-gateway --timeout=300s
    ```
-4. Reapply Kyverno and policies if Kyverno, policies, or production image refs
+5. Reapply Kyverno and policies if Kyverno, policies, or production image refs
    changed:
    ```bash
    ./deploy/scripts/14-install-phase-7-kyverno.sh
    ./deploy/scripts/15-apply-phase-7-policies.sh
    ```
-5. Reapply observability if monitoring, Jaeger, or Kiali changed:
+6. Reapply observability if monitoring, Jaeger, or Kiali changed:
    ```bash
    ./deploy/scripts/22-apply-production-monitoring.sh --verify-runtime
    ```
-6. If phase 4 Istio reconcile temporarily removed public TLS, render and apply
+7. If phase 4 Istio reconcile temporarily removed public TLS, render and apply
    the phase 11 public TLS artifacts immediately:
    ```bash
    ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh

@@ -229,6 +229,10 @@ postgresql_bootstrap_password = os.getenv('POSTGRES_BOOTSTRAP_PASSWORD', 'budget
 transaction_service_pg_password = os.getenv('POSTGRES_TRANSACTION_SERVICE_PASSWORD', 'budget-analyzer-transaction-service')
 currency_service_pg_password = os.getenv('POSTGRES_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service')
 permission_service_pg_password = os.getenv('POSTGRES_PERMISSION_SERVICE_PASSWORD', 'budget-analyzer-permission-service')
+transaction_preview_import_token_encryption_secret = os.getenv(
+    'PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET',
+    'budget-analyzer-transaction-preview-import-token-encryption-secret',
+)
 
 create_secret('postgresql-bootstrap-credentials', INFRA_NAMESPACE, {
     'password': postgresql_bootstrap_password,
@@ -239,6 +243,10 @@ create_secret('postgresql-bootstrap-credentials', INFRA_NAMESPACE, {
 
 create_secret('transaction-service-postgresql-credentials', DEFAULT_NAMESPACE, {
     'password': transaction_service_pg_password,
+})
+
+create_secret('transaction-service-preview-import-token-credentials', DEFAULT_NAMESPACE, {
+    'encryption-secret': transaction_preview_import_token_encryption_secret,
 })
 
 create_secret('currency-service-postgresql-credentials', DEFAULT_NAMESPACE, {
@@ -454,6 +462,8 @@ def spring_boot_service(name, deps=[]):
             'currency-service-redis-credentials:secret',
             'fred-api-credentials:secret',
         ])
+    if name == 'transaction-service':
+        resource_objects.append('transaction-service-preview-import-token-credentials:secret')
     k8s_yaml(service_manifests)
 
     # Step 4: Configure resource with port forwards and dependencies

@@ -15,6 +15,7 @@ This repo now enforces a simple boundary:
 | `fred-api-credentials` | `api-key` |
 | `postgresql-bootstrap-credentials` | `password`, `transaction-service-password`, `currency-service-password`, `permission-service-password` |
 | `transaction-service-postgresql-credentials` | `password` |
+| `transaction-service-preview-import-token-credentials` | `encryption-secret` |
 | `currency-service-postgresql-credentials` | `password` |
 | `permission-service-postgresql-credentials` | `password` |
 | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` |
@@ -49,6 +50,9 @@ the secret values it configures.
 | `rabbitmq-bootstrap-credentials` | `username`, `currency-service-username`, `virtual-host` | checked-in manifest values and the documented `definitions.json` exception |
 | `*-redis-credentials` | `host`, `port`, `username` | checked-in service deployment env |
 | `redis-bootstrap-credentials` | `default-username`, `ops-username`, `session-gateway-username`, `ext-authz-username`, `currency-service-username` | checked-in manifest values and verifier constants |
+
+`PREVIEW_IMPORT_TOKEN_TTL` is non-sensitive and owned by the transaction-service
+runtime default unless a deployment intentionally chooses a non-default value.
 
 ## Guardrail
 

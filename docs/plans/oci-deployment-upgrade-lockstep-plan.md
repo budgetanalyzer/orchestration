@@ -65,6 +65,10 @@ OCI:
 
 - Backend and frontend GHCR release images still need to be rebuilt and
   published for `linux/arm64` after the sibling repo branches are merged.
+- The `transaction-service` preview import token encryption secret introduced
+  by the `duplicate-file-upload-warning` branch needs a full local and OCI
+  secret-sync path before deploying a matching release image. See
+  `docs/plans/transaction-preview-import-token-secret-plan.md`.
 - `kubernetes/production/apps/image-inventory.yaml`,
   `kubernetes/production/apps/kustomization.yaml`, and
   `scripts/guardrails/verify-production-image-overlay.sh` still reference the
@@ -142,6 +146,7 @@ new release images.
 | kube-prometheus-stack | Local monitoring Helm install and values | `PHASE7_PROMETHEUS_STACK_CHART_VERSION`, production monitoring override, `deploy/scripts/22-apply-production-monitoring.sh` | Update chart pin and any digest-pinned rendered image values/post-render expectations, then reapply production monitoring. |
 | Kiali | Local Kiali chart and values | `PHASE7_KIALI_CHART_VERSION`, `kubernetes/monitoring/kiali-values.yaml`, `deploy/scripts/20-render-phase-7-observability.sh`, `deploy/scripts/21-apply-phase-7-observability.sh` | Update chart pin and values, render production Kiali against the live cluster, then apply through the reviewed observability path. |
 | RabbitMQ application channels | `Tiltfile` boot-time definitions and local RabbitMQ secret | OCI Vault `budget-analyzer-rabbitmq-definitions` synced into `rabbitmq-bootstrap-credentials[definitions.json]` | Keep `deploy/manifests/phase-5/rabbitmq-definitions.template.json` aligned with `currency-service` Spring Cloud Stream destinations, include service queues/DLQs in `write` permission for RabbitMQ declaration checks, update the OCI Vault secret before deploying a matching service image, and clean obsolete broker resources such as the former `currency.created` exchange/queues during the infrastructure reconcile. |
+| Transaction preview import token encryption secret | `Tiltfile` local `transaction-service-preview-import-token-credentials[encryption-secret]` and `kubernetes/services/transaction-service/deployment.yaml` env injection | OCI Vault `budget-analyzer-transaction-preview-import-token-encryption-secret` synced into `transaction-service-preview-import-token-credentials[encryption-secret]` | Create the dedicated secret path before deploying a transaction-service image that requires `PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`; keep the key out of PostgreSQL credentials, update the secrets-only inventory, and reapply phase 5 secret sync on OCI. |
 | PostgreSQL | `kubernetes/infrastructure/postgresql` | `kubernetes/production/infrastructure` render/apply path | Refresh digests in the shared manifest, render the production overlay, and apply through `18-apply-production-infrastructure.sh`; major versions need a separate data migration plan. |
 | Redis | `kubernetes/infrastructure/redis` | `kubernetes/production/infrastructure` render/apply path and Redis StatefulSet storage patch | Refresh digests in the shared manifest, render the production overlay, and apply through the production infrastructure script; major versions need session/cache compatibility validation first. |
 
@@ -395,6 +400,12 @@ Run these on the OCI host from the updated repo checkout.
    ./deploy/scripts/09-render-phase-5-secrets.sh
    ./deploy/scripts/10-apply-phase-5-secrets.sh
    ```
+   If the upgrade includes the transaction-service preview import token work,
+   create or confirm the OCI Vault
+   `budget-analyzer-transaction-preview-import-token-encryption-secret` first,
+   then confirm the synced
+   `transaction-service-preview-import-token-credentials` Secret exists in the
+   `default` namespace before deploying the matching transaction-service image.
    If the upgrade changes RabbitMQ application destinations, update the OCI
    Vault `budget-analyzer-rabbitmq-definitions` secret from
    `deploy/manifests/phase-5/rabbitmq-definitions.template.json` before this

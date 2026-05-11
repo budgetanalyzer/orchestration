@@ -16,6 +16,7 @@ Related documents:
 - `kubernetes/production/apps/image-inventory.yaml`
 - `kubernetes/production/apps/kustomization.yaml`
 - `scripts/guardrails/verify-production-image-overlay.sh`
+- `docs/plans/kind-k3s-inotify-log-streaming-plan.md`
 
 ## Scope
 
@@ -75,6 +76,9 @@ OCI:
   existing production release image set until those images exist.
 - The planned release-image update helper and OCI lockstep verifier are not yet
   implemented in this repo; they remain required script work below.
+- The OCI bootstrap path does not yet converge host inotify limits for
+  k3s/containerd log-follow behavior. Add that before treating `kubectl logs -f`
+  and operator log streaming as reliable on the production host.
 - The current sibling backend branches still pin Spring Boot `3.5.7`, Spring
   Cloud `2025.0.0`, and Spring Modulith `1.4.0` through the new platform
   artifacts. If those framework versions are upgraded later, treat that as a
@@ -141,6 +145,7 @@ new release images.
 | Gateway API CRDs | `Tiltfile`, `setup.sh`, local prerequisite checks | `PHASE4_GATEWAY_API_CRDS_VERSION` and `deploy/scripts/02-bootstrap-cluster.sh` | Update both local and production CRD pins, apply CRDs through the production bootstrap script, then rerun route checks. |
 | Kubernetes platform | Kind binary/node image, kubectl, Calico | `PHASE4_K3S_VERSION`, `PHASE4_POD_SECURITY_VERSION`, OCI host `kubectl` install | Choose compatible Kind and k3s Kubernetes versions together, update the production version contract, and reconcile k3s before mesh upgrades. |
 | Calico | `scripts/bootstrap/install-calico.sh` and Kind CNI | Not installed separately in OCI k3s | Mark OCI as `Not applicable`; still validate k3s NetworkPolicy enforcement with the production verifier. |
+| Kubernetes node inotify budget | `scripts/bootstrap/install-calico.sh` converges Kind node `fs.inotify.max_user_instances` and `fs.inotify.max_user_watches` | OCI host sysctl settings consumed by k3s/containerd and `kubectl logs -f` | Keep local and OCI minimums aligned at `max_user_instances >= 8192` and `max_user_watches >= 524288`; converge OCI before or during k3s install and verify log-follow behavior after rollout. |
 | Tilt | `scripts/lib/pinned-tool-versions.sh`, devcontainer | No runtime production component | Mark OCI as `Local-only`; no deploy script change required. |
 | Kyverno | `Tiltfile`, local policies, Kyverno CLI | `PHASE7_KYVERNO_CHART_VERSION`, `deploy/helm-values/kyverno.values.yaml`, `deploy/scripts/14-install-phase-7-kyverno.sh`, `deploy/scripts/15-apply-phase-7-policies.sh` | Update production chart and digest-pinned controller image values together, then rerun production policy install/apply. |
 | kube-prometheus-stack | Local monitoring Helm install and values | `PHASE7_PROMETHEUS_STACK_CHART_VERSION`, production monitoring override, `deploy/scripts/22-apply-production-monitoring.sh` | Update chart pin and any digest-pinned rendered image values/post-render expectations, then reapply production monitoring. |
@@ -250,6 +255,36 @@ Document the new script in:
 - `kubernetes/production/README.md`
 - `scripts/README.md`
 
+### 4. Add OCI Host Inotify Budget Convergence
+
+Update `deploy/scripts/01-install-k3s.sh` or add a small helper sourced by that
+script so the OCI host converges these sysctls before k3s starts or restarts:
+
+```text
+fs.inotify.max_user_instances = 8192
+fs.inotify.max_user_watches = 524288
+```
+
+Required behavior:
+
+- write a reviewed file such as `/etc/sysctl.d/90-budget-analyzer-inotify.conf`
+  through `phase4_run_sudo`
+- run `sysctl --system` or targeted `sysctl -w` commands before installing or
+  restarting k3s
+- print the final values with `sysctl fs.inotify.max_user_instances
+  fs.inotify.max_user_watches`
+- make reruns idempotent
+- do not lower higher operator-provided values
+- document that this is a host prerequisite for reliable `kubectl logs -f`,
+  Tilt-like log streaming, and other fsnotify consumers on k3s/containerd
+
+Validation for the changed production script:
+
+```bash
+bash -n deploy/scripts/01-install-k3s.sh
+shellcheck deploy/scripts/01-install-k3s.sh
+```
+
 ## OCI Upgrade Execution Steps
 
 ### Phase 0: Preflight
@@ -270,6 +305,12 @@ Document the new script in:
    helm list -A
    kubectl get deploy,statefulset -A
    ```
+6. Capture the current OCI host inotify baseline:
+   ```bash
+   sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+   ```
+   Values below `8192` instances or `524288` watches must be reconciled before
+   relying on `kubectl logs -f` during the upgrade.
 
 ### Phase 1: Update Version Contracts
 
@@ -363,6 +404,11 @@ Run these on the OCI host from the updated repo checkout.
    ```bash
    ./deploy/scripts/01-install-k3s.sh
    kubectl get nodes -o wide
+   ```
+   This step must also converge the OCI host inotify budget for k3s/containerd
+   log-follow behavior. Confirm the values after the script runs:
+   ```bash
+   sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
    ```
 2. Reapply Gateway API CRDs and namespace labels if Gateway API or Pod Security
    version changed:
@@ -483,7 +529,14 @@ Run these on the OCI host from the updated repo checkout.
    ./scripts/smoketest/verify-observability-port-forward-access.sh
    ./scripts/smoketest/verify-monitoring-runtime.sh --wait-timeout 180
    ```
-5. From a workstation, verify the public route through the production hostname:
+5. Verify Kubernetes log follow no longer emits the fsnotify watcher error:
+   ```bash
+   kubectl logs -f deployment/transaction-service --tail=1 --request-timeout=10s
+   ```
+   Any remaining `failed to create fsnotify watcher: too many open files` output
+   means the OCI host inotify budget is still not converged or another host
+   file-descriptor limit needs investigation.
+6. From a workstation, verify the public route through the production hostname:
    ```bash
    curl -I https://demo.budgetanalyzer.org/
    curl -I https://demo.budgetanalyzer.org/api-docs
@@ -501,6 +554,8 @@ Run these on the OCI host from the updated repo checkout.
 - `./scripts/guardrails/verify-production-image-overlay.sh` passes.
 - OCI workloads roll out from checked-in scripts/manifests without manual live
   cluster drift.
+- OCI host inotify limits are converged by the checked-in production bootstrap
+  path and `kubectl logs -f` works without fsnotify watcher errors.
 - Observability remains internal-only, with no public Grafana, Prometheus,
   Jaeger, or Kiali routes.
 - Any changed shell scripts pass `bash -n` and `shellcheck`.

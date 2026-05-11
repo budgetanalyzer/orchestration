@@ -115,7 +115,11 @@ file outside the repo. It holds non-secret deployment metadata:
 - the production non-secret Auth0/IDP settings used later to render `session-gateway-idp-config` and the Auth0 Istio egress config
 - the Let's Encrypt contact email
 
-Do not put secret payloads in `instance.env`. Secret values stay in OCI Vault and later `ExternalSecret` resources.
+Do not put secret payloads in `instance.env`. Secret values stay in OCI
+Vault and later `ExternalSecret` resources. Generated application secrets,
+including the transaction-service preview import token encryption secret, are
+created by the phase 5 Vault bootstrap script rather than added to
+`deploy/instance.env.template`.
 
 Only the non-secret IDP values belong here. `AUTH0_CLIENT_SECRET` still belongs in OCI Vault.
 
@@ -145,10 +149,10 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before treating NetworkPolicy enforcement as verified. |
-| `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values. |
-| `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, or any `instance.env` change that affects the rendered resources. |
+| `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
+| `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, checked-in `ExternalSecret` inventory changes, or any `instance.env` change that affects the rendered resources. |
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
-| `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, and Redis, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated infrastructure passwords are written to an operator-only file outside the repo so the checked-in RabbitMQ definitions template can be rendered once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated password receipt file is reused on subsequent runs. |
+| `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, Redis, and generated application secrets such as `budget-analyzer-transaction-preview-import-token-encryption-secret`, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated secret material is written to an operator-only file outside the repo so the checked-in RabbitMQ definitions template can be rendered once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated secret receipt file is reused on subsequent runs. |
 | `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed app-only production gateway routes, ingress policies, production Grafana port-forward override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
 | `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
 | `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared admission policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
@@ -341,6 +345,10 @@ shell history:
    sed -n '1,260p' tmp/phase-5/external-secrets.yaml
    sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
    ```
+   The script generates `budget-analyzer-transaction-preview-import-token-encryption-secret`
+   for the transaction-service preview import token flow. That is an OCI Vault
+   application secret, not a `deploy/instance.env.template` value.
+
    The script intentionally stops short of `budget-analyzer-rabbitmq-definitions`. Build that JSON from `deploy/manifests/phase-5/rabbitmq-definitions.template.json` with the generated RabbitMQ passwords from `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`, then create the final OCI secret manually.
 
    The template is the checked-in allow-list for the `currency-service` AMQP resources. It currently grants `exchange-rate.import.requested`, `exchange-rate.import.requested.exchange-rate-import-service`, its DLQ, server-named reply queues, `amq.default`, and `DLX`. The service queue and DLQ must be present in `write` as well as `configure` and `read`, because RabbitMQ checks `write` permission during queue declaration.
@@ -350,6 +358,8 @@ shell history:
    ./deploy/scripts/10-apply-phase-5-secrets.sh
    kubectl get clustersecretstore budget-analyzer-oci-vault
    kubectl get externalsecret -A
+   kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
+   kubectl get secret -n default transaction-service-preview-import-token-credentials
    kubectl get configmap -n default session-gateway-idp-config -o yaml
    ```
 5. Generate and apply the internal TLS secrets from the OCI host or another trusted machine outside AI sessions.
@@ -358,7 +368,13 @@ shell history:
    ./deploy/scripts/11-generate-phase-5-infra-tls.sh
    ```
    The script writes the CA and service keypairs under `~/.local/share/budget-analyzer/infra-tls` by default, keeps them outside the repo, and refuses to run from the containerized AI workspace.
-6. Stop if any `ExternalSecret` reports sync errors, if `session-gateway-idp-config` still shows placeholder/localhost values, or if any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or `infra-tls-rabbitmq` are missing.
+6. Stop if any `ExternalSecret` reports sync errors, if
+   `transaction-service-preview-import-token-credentials` is missing before a
+   transaction-service image that requires
+   `PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET` is deployed, if
+   `session-gateway-idp-config` still shows placeholder/localhost values, or if
+   any of `infra-ca`, `infra-tls-postgresql`, `infra-tls-redis`, or
+   `infra-tls-rabbitmq` are missing.
 
 ## Production Render Review
 

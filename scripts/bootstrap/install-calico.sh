@@ -13,7 +13,8 @@ CALICO_VERSION="$PHASE7_CALICO_VERSION"
 CALICO_MANIFEST_URL="$(phase7_calico_manifest_url)"
 CALICO_NAMESPACE="kube-system"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
-MIN_INOTIFY_INSTANCES="${MIN_INOTIFY_INSTANCES:-1024}"
+MIN_INOTIFY_INSTANCES="${MIN_INOTIFY_INSTANCES:-8192}"
+MIN_INOTIFY_WATCHES="${MIN_INOTIFY_WATCHES:-524288}"
 
 print_step() {
     echo "▶ $1"
@@ -80,8 +81,10 @@ ensure_kind_node_inotify_budget() {
 
     local nodes=()
     local node
-    local current_limit
-    local updated_nodes=0
+    local current_value
+    local final_value
+    local changed
+    local updated_any=false
 
     mapfile -t nodes < <(kind get nodes --name "${KIND_CLUSTER_NAME}" 2>/dev/null || true)
 
@@ -90,21 +93,39 @@ ensure_kind_node_inotify_budget() {
     fi
 
     for node in "${nodes[@]}"; do
-        current_limit="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)"
+        changed=false
 
-        if ! [[ "${current_limit}" =~ ^[0-9]+$ ]]; then
+        current_value="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)"
+        if ! [[ "${current_value}" =~ ^[0-9]+$ ]]; then
             print_error "Could not read fs.inotify.max_user_instances from Kind node ${node}"
             exit 1
         fi
-
-        if (( current_limit < MIN_INOTIFY_INSTANCES )); then
+        if (( current_value < MIN_INOTIFY_INSTANCES )); then
             docker exec "${node}" sysctl -w "fs.inotify.max_user_instances=${MIN_INOTIFY_INSTANCES}" >/dev/null
-            updated_nodes=$((updated_nodes + 1))
+            changed=true
+        fi
+
+        current_value="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)"
+        if ! [[ "${current_value}" =~ ^[0-9]+$ ]]; then
+            print_error "Could not read fs.inotify.max_user_watches from Kind node ${node}"
+            exit 1
+        fi
+        if (( current_value < MIN_INOTIFY_WATCHES )); then
+            docker exec "${node}" sysctl -w "fs.inotify.max_user_watches=${MIN_INOTIFY_WATCHES}" >/dev/null
+            changed=true
+        fi
+
+        if [[ "${changed}" == true ]]; then
+            final_value="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)"
+            print_step "Kind node ${node}: fs.inotify.max_user_instances=${final_value}"
+            final_value="$(docker exec "${node}" cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)"
+            print_step "Kind node ${node}: fs.inotify.max_user_watches=${final_value}"
+            updated_any=true
         fi
     done
 
-    if (( updated_nodes > 0 )); then
-        print_step "Raised fs.inotify.max_user_instances to ${MIN_INOTIFY_INSTANCES} on ${updated_nodes} Kind node(s)"
+    if [[ "${updated_any}" == true ]]; then
+        print_step "Kind node inotify budget reconciled"
     fi
 }
 

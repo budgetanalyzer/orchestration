@@ -76,9 +76,10 @@ OCI:
   existing production release image set until those images exist.
 - The planned release-image update helper and OCI lockstep verifier are not yet
   implemented in this repo; they remain required script work below.
-- The OCI bootstrap path does not yet converge host inotify limits for
-  k3s/containerd log-follow behavior. Add that before treating `kubectl logs -f`
-  and operator log streaming as reliable on the production host.
+- `deploy/scripts/01-install-k3s.sh` now converges the OCI host inotify budget
+  before installing or reconciling k3s, so rerunning the normal k3s install
+  path keeps `kubectl logs -f` and operator log streaming on the repo-owned
+  baseline.
 - The current sibling backend branches still pin Spring Boot `3.5.7`, Spring
   Cloud `2025.0.0`, and Spring Modulith `1.4.0` through the new platform
   artifacts. If those framework versions are upgraded later, treat that as a
@@ -255,22 +256,21 @@ Document the new script in:
 - `kubernetes/production/README.md`
 - `scripts/README.md`
 
-### 4. Add OCI Host Inotify Budget Convergence
+### 4. Keep OCI Host Inotify Budget Convergence In k3s Bootstrap
 
-Update `deploy/scripts/01-install-k3s.sh` or add a small helper sourced by that
-script so the OCI host converges these sysctls before k3s starts or restarts:
+`deploy/scripts/01-install-k3s.sh` owns OCI host inotify convergence. It
+converges these sysctls before k3s starts or restarts:
 
 ```text
 fs.inotify.max_user_instances = 8192
 fs.inotify.max_user_watches = 524288
 ```
 
-Required behavior:
+Required behavior for future edits:
 
-- write a reviewed file such as `/etc/sysctl.d/90-budget-analyzer-inotify.conf`
-  through `phase4_run_sudo`
-- run `sysctl --system` or targeted `sysctl -w` commands before installing or
-  restarting k3s
+- keep the reviewed `/etc/sysctl.d/90-budget-analyzer-inotify.conf` write
+  behind `phase4_run_sudo`
+- run targeted `sysctl` reconciliation before installing or restarting k3s
 - print the final values with `sysctl fs.inotify.max_user_instances
   fs.inotify.max_user_watches`
 - make reruns idempotent
@@ -309,8 +309,9 @@ shellcheck deploy/scripts/01-install-k3s.sh
    ```bash
    sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
    ```
-   Values below `8192` instances or `524288` watches must be reconciled before
-   relying on `kubectl logs -f` during the upgrade.
+   Values below `8192` instances or `524288` watches must be reconciled with
+   `./deploy/scripts/01-install-k3s.sh` before relying on `kubectl logs -f`
+   during the upgrade.
 
 ### Phase 1: Update Version Contracts
 
@@ -400,7 +401,9 @@ shellcheck deploy/scripts/01-install-k3s.sh
 
 Run these on the OCI host from the updated repo checkout.
 
-1. Reconcile k3s if `PHASE4_K3S_VERSION` changed:
+1. Reconcile the k3s host bootstrap if `PHASE4_K3S_VERSION` changed, the host
+   was rebuilt, or this repo changed host prerequisites such as the inotify
+   budget:
    ```bash
    ./deploy/scripts/01-install-k3s.sh
    kubectl get nodes -o wide

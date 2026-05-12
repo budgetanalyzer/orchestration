@@ -44,10 +44,13 @@ because `kubectl apply` would try to store the full manifest in the
 Verify the current production baseline with:
 
 ```bash
+kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
+./scripts/guardrails/check-secrets-only-handling.sh
 ./scripts/guardrails/verify-production-image-overlay.sh
+./deploy/scripts/09-render-phase-5-secrets.sh
 ```
 
-That verifier now:
+The production image verifier now:
 
 - renders `apps/`, the broad production infrastructure overlay, and the
   reviewed production route/ingress/monitoring/egress output
@@ -61,6 +64,15 @@ That verifier now:
   claim-template path all stay present
 - applies the production image Kyverno policy at
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
+
+Before deploying a transaction-service image that requires
+`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm the phase 5 secret-sync path
+has produced the preview import token credentials Secret:
+
+```bash
+kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
+kubectl get secret -n default transaction-service-preview-import-token-credentials
+```
 
 ## Production Admission Path
 

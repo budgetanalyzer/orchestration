@@ -453,6 +453,7 @@ Current local secret names:
 |--------|-----------|---------|
 | `postgresql-bootstrap-credentials` | `infrastructure` | PostgreSQL bootstrap/admin and init passwords |
 | `transaction-service-postgresql-credentials` | `default` | transaction-service PostgreSQL password |
+| `transaction-service-preview-import-token-credentials` | `default` | transaction-service preview import token encryption secret |
 | `currency-service-postgresql-credentials` | `default` | currency-service PostgreSQL password |
 | `permission-service-postgresql-credentials` | `default` | permission-service PostgreSQL password |
 | `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin password plus boot-time definitions document |

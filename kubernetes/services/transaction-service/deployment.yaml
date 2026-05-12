@@ -59,6 +59,11 @@ spec:
             secretKeyRef:
               name: transaction-service-postgresql-credentials
               key: password
+        - name: PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: transaction-service-preview-import-token-credentials
+              key: encryption-secret
         volumeMounts:
         - name: infra-ca
           mountPath: /etc/ssl/infra

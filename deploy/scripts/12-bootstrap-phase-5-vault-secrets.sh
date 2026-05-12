@@ -21,6 +21,7 @@ GENERATED_SECRET_SPECS=(
     "POSTGRES_TRANSACTION_SERVICE_PASSWORD|budget-analyzer-postgres-transaction-svc"
     "POSTGRES_CURRENCY_SERVICE_PASSWORD|budget-analyzer-postgres-currency-svc"
     "POSTGRES_PERMISSION_SERVICE_PASSWORD|budget-analyzer-postgres-permission-svc"
+    "TRANSACTION_PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET|budget-analyzer-transaction-preview-import-token-encryption-secret"
     "RABBITMQ_ADMIN_PASSWORD|budget-analyzer-rabbitmq-admin-password"
     "RABBITMQ_CURRENCY_SERVICE_PASSWORD|budget-analyzer-rabbitmq-currency-svc"
     "REDIS_DEFAULT_PASSWORD|budget-analyzer-redis-default-password"
@@ -38,7 +39,8 @@ Usage: ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh [options]
 Creates the OCI Vault secret inventory for all plain-text secrets:
   - prompts for AUTH0 client secret and FRED API key only if those OCI secrets
     do not already exist
-  - generates strong random values for PostgreSQL, RabbitMQ, and Redis
+  - generates strong random values for PostgreSQL, RabbitMQ, Redis, and
+    transaction preview import token encryption
   - stores the generated values in an operator-only file outside the repo so
     the RabbitMQ definitions JSON can be assembled manually afterward
   - creates any missing OCI Vault secrets, while leaving existing secrets
@@ -48,7 +50,7 @@ This script intentionally does NOT create:
   - budget-analyzer-rabbitmq-definitions
 
 Options:
-  --generated-env-file FILE  Operator-only file for the generated passwords.
+  --generated-env-file FILE  Operator-only file for the generated secrets.
                              Default: ~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env
   -h, --help                 Show this help text.
 EOF
@@ -117,6 +119,7 @@ POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
 POSTGRES_TRANSACTION_SERVICE_PASSWORD=${POSTGRES_TRANSACTION_SERVICE_PASSWORD}
 POSTGRES_CURRENCY_SERVICE_PASSWORD=${POSTGRES_CURRENCY_SERVICE_PASSWORD}
 POSTGRES_PERMISSION_SERVICE_PASSWORD=${POSTGRES_PERMISSION_SERVICE_PASSWORD}
+TRANSACTION_PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET=${TRANSACTION_PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET}
 RABBITMQ_ADMIN_PASSWORD=${RABBITMQ_ADMIN_PASSWORD}
 RABBITMQ_CURRENCY_SERVICE_PASSWORD=${RABBITMQ_CURRENCY_SERVICE_PASSWORD}
 REDIS_DEFAULT_PASSWORD=${REDIS_DEFAULT_PASSWORD}
@@ -129,31 +132,34 @@ EOF
     chmod 600 "${GENERATED_ENV_FILE}"
 }
 
-load_or_generate_password_material() {
+load_or_generate_secret_material() {
+    local generated_values=()
+    local spec
+    local variable_name
+
     if [[ -f "${GENERATED_ENV_FILE}" ]]; then
-        phase4_info "reusing generated password material from ${GENERATED_ENV_FILE}"
+        phase4_info "reusing generated secret material from ${GENERATED_ENV_FILE}"
         set -a
         # shellcheck disable=SC1090
         source "${GENERATED_ENV_FILE}"
         set +a
-        return 0
+    else
+        phase4_info "generating fresh PostgreSQL, RabbitMQ, Redis, and transaction preview import token secrets"
     fi
 
-    phase4_info "generating fresh PostgreSQL, RabbitMQ, and Redis passwords"
-    POSTGRES_ADMIN_PASSWORD="$(generate_secret_value)"
-    POSTGRES_TRANSACTION_SERVICE_PASSWORD="$(generate_secret_value)"
-    POSTGRES_CURRENCY_SERVICE_PASSWORD="$(generate_secret_value)"
-    POSTGRES_PERMISSION_SERVICE_PASSWORD="$(generate_secret_value)"
-    RABBITMQ_ADMIN_PASSWORD="$(generate_secret_value)"
-    RABBITMQ_CURRENCY_SERVICE_PASSWORD="$(generate_secret_value)"
-    REDIS_DEFAULT_PASSWORD="$(generate_secret_value)"
-    REDIS_OPS_PASSWORD="$(generate_secret_value)"
-    REDIS_SESSION_GATEWAY_PASSWORD="$(generate_secret_value)"
-    REDIS_EXT_AUTHZ_PASSWORD="$(generate_secret_value)"
-    REDIS_CURRENCY_SERVICE_PASSWORD="$(generate_secret_value)"
+    for spec in "${GENERATED_SECRET_SPECS[@]}"; do
+        variable_name="${spec%%|*}"
+        if [[ -z "${!variable_name:-}" ]]; then
+            printf -v "${variable_name}" '%s' "$(generate_secret_value)"
+            generated_values+=("${variable_name}")
+        fi
+    done
 
-    write_generated_env_file
-    phase4_info "stored generated password material in ${GENERATED_ENV_FILE}"
+    if (( ${#generated_values[@]} > 0 )); then
+        write_generated_env_file
+        phase4_info "stored generated secret material in ${GENERATED_ENV_FILE}"
+        phase4_info "generated values: ${generated_values[*]}"
+    fi
 }
 
 require_generated_values() {
@@ -246,7 +252,7 @@ main() {
     phase4_load_instance_env
     phase4_require_env_vars OCI_COMPARTMENT_OCID OCI_VAULT_OCID OCI_VAULT_KEY_OCID
 
-    load_or_generate_password_material
+    load_or_generate_secret_material
     require_generated_values
 
     create_prompted_secret_if_missing \

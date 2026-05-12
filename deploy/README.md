@@ -356,7 +356,7 @@ shell history:
 
    The script intentionally stops short of `budget-analyzer-rabbitmq-definitions`. Build that JSON from `deploy/manifests/phase-5/rabbitmq-definitions.template.json` with the generated RabbitMQ passwords from `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`, then create the final OCI secret manually.
 
-   The template is the checked-in allow-list for the `currency-service` AMQP resources. It currently grants `exchange-rate.import.requested`, `exchange-rate.import.requested.exchange-rate-import-service`, its DLQ, server-named reply queues, `amq.default`, and `DLX`. The service queue and DLQ must be present in `write` as well as `configure` and `read`, because RabbitMQ checks `write` permission during queue declaration.
+   The template is the checked-in allow-list for the `currency-service` AMQP resources. It currently grants `exchange-rate.import.requested`, `exchange-rate.import.requested.exchange-rate-import-service`, its DLQ, server-named reply queues, `amq.default`, and `DLX`. The service queue and DLQ must be present in `write` as well as `configure` and `read`, because RabbitMQ checks `write` permission during queue declaration. `DLX` must also be present in `read`, because RabbitMQ checks `read` on the source exchange during DLQ binding.
 4. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml

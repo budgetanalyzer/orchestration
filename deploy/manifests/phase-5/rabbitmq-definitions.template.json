@@ -29,7 +29,7 @@
       "vhost": "/",
       "configure": "^(amq\\.gen.*|exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?|DLX)$",
       "write": "^(amq\\.default|exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?|DLX)$",
-      "read": "^(exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?)$"
+      "read": "^(exchange-rate\\.import\\.requested|exchange-rate\\.import\\.requested\\.exchange-rate-import-service(\\.dlq)?|DLX)$"
     }
   ]
 }

@@ -130,6 +130,11 @@ Do not duplicate production image refs in `instance.env`. Production image inven
 The deployment scripts assume the host already has `kubectl`, `helm`, OpenSSL,
 and the standard shell tools used by the scripts.
 
+- `./deploy/scripts/01-install-k3s.sh` writes
+  `/etc/sysctl.d/90-budget-analyzer-inotify.conf` and applies the repo baseline
+  for `fs.inotify.max_user_instances` and `fs.inotify.max_user_watches` before
+  k3s starts or restarts. Rerun it after rebuilding a host or when
+  `kubectl logs -f` reports fsnotify watcher exhaustion.
 - `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
 - `./deploy/scripts/14-install-phase-7-kyverno.sh` requires `helm`.
 - `./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` requires the OCI CLI plus `openssl`.
@@ -141,7 +146,7 @@ and the standard shell tools used by the scripts.
 
 | Script | Purpose | Reused Later |
 | --- | --- | --- |
-| `deploy/scripts/01-install-k3s.sh` | Installs the pinned k3s release with the repo's Istio-friendly flags and prints the base cluster snapshot. | Re-run only if the host must be rebuilt or reconciled to the pinned k3s version. |
+| `deploy/scripts/01-install-k3s.sh` | Installs the pinned k3s release with the repo's Istio-friendly flags, converges the host inotify budget for reliable k3s/containerd log-follow streaming, and prints the base cluster snapshot. | Re-run if the host must be rebuilt, reconciled to the pinned k3s version, or repaired after `kubectl logs -f` reports fsnotify watcher exhaustion. |
 | `deploy/scripts/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace the deployment path depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
 | `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the phase-11 public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the phase-4 ingress reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the phase-11 ingress manifests immediately after the Istio reconcile. |

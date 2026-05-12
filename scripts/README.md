@@ -105,15 +105,19 @@ Choose scripts by runtime boundary:
   Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
   after verifying checked-in SHA-256 values.
 - `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
-  versions, certificates, DNS, Docker/Kind prerequisites, pinned Gateway API
-  and Calico state, and optional runtime security state. It reports drift and
-  install commands without performing interactive cluster changes.
+  versions, certificates, DNS, Docker/Kind prerequisites, inotify budgets,
+  pinned Gateway API and Calico state, and optional runtime security state. It
+  reports drift and install commands without performing interactive cluster
+  changes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
   used by `setup.sh` and Tilt. Tilt reruns the host-only
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
   so namespace recreation cannot leave the infrastructure TLS secrets missing.
 - `bootstrap/install-calico.sh` installs or reconciles pinned Calico CNI for
-  Kind clusters created with `disableDefaultCNI`.
+  Kind clusters created with `disableDefaultCNI`. It also converges the Kind
+  node inotify budget used by Tilt and `kubectl logs -f` Kubernetes follow
+  streams. A live `docker exec kind-control-plane sysctl ...` recovery command
+  is diagnostic only; rerun this script for the durable local fix.
 - `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
   certificate bootstrap scripts. Do not run them from an AI container because
   the browser must trust the host mkcert CA.

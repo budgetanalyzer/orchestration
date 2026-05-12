@@ -18,6 +18,8 @@ NC='\033[0m' # No Color
 
 ERRORS=0
 WARNINGS=0
+INOTIFY_MIN_INSTANCES=8192
+INOTIFY_MIN_WATCHES=524288
 
 echo "=============================================="
 echo "  Tilt-Kind Pre-flight Check"
@@ -275,6 +277,93 @@ expected_kind_node_image() {
     awk '/^[[:space:]]*image:[[:space:]]*/ {print $2; exit}' "$ORCHESTRATION_DIR/kind-cluster-config.yaml"
 }
 
+read_inotify_value() {
+    local path=$1
+    local value
+
+    if [ ! -r "$path" ]; then
+        return 1
+    fi
+
+    value="$(cat "$path" 2>/dev/null || true)"
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$value"
+}
+
+report_inotify_value() {
+    local scope=$1
+    local key=$2
+    local value=$3
+    local minimum=$4
+    local remediation=$5
+
+    if [ -z "$value" ]; then
+        echo -e "${YELLOW}!${NC} ${scope} ${key} unavailable"
+        ((WARNINGS++))
+        return 0
+    fi
+
+    if (( value >= minimum )); then
+        echo -e "${GREEN}✓${NC} ${scope} ${key}=${value} (minimum ${minimum})"
+    else
+        echo -e "${YELLOW}!${NC} ${scope} ${key}=${value} is below local baseline ${minimum}"
+        echo "  $remediation"
+        ((WARNINGS++))
+    fi
+}
+
+check_local_inotify_budget() {
+    local instances
+    local watches
+
+    instances="$(read_inotify_value /proc/sys/fs/inotify/max_user_instances || true)"
+    watches="$(read_inotify_value /proc/sys/fs/inotify/max_user_watches || true)"
+
+    report_inotify_value "Local" "fs.inotify.max_user_instances" "$instances" "$INOTIFY_MIN_INSTANCES" \
+        "Raise the host/container inotify budget before relying on Kubernetes log follow mode."
+    report_inotify_value "Local" "fs.inotify.max_user_watches" "$watches" "$INOTIFY_MIN_WATCHES" \
+        "Raise the host/container inotify budget before relying on Kubernetes log follow mode."
+}
+
+check_kind_node_inotify_budget() {
+    if ! command -v kind >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+        echo -e "${YELLOW}!${NC} Skipping Kind node inotify check (kind or docker unavailable)"
+        return 0
+    fi
+
+    local nodes=()
+    local node
+    local instances
+    local watches
+
+    mapfile -t nodes < <(kind get nodes --name kind 2>/dev/null || true)
+
+    if [ ${#nodes[@]} -eq 0 ]; then
+        echo -e "${YELLOW}!${NC} Skipping Kind node inotify check (no reachable Kind nodes)"
+        return 0
+    fi
+
+    for node in "${nodes[@]}"; do
+        instances="$(docker exec "$node" cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || true)"
+        if ! [[ "$instances" =~ ^[0-9]+$ ]]; then
+            instances=""
+        fi
+
+        watches="$(docker exec "$node" cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true)"
+        if ! [[ "$watches" =~ ^[0-9]+$ ]]; then
+            watches=""
+        fi
+
+        report_inotify_value "Kind node ${node}" "fs.inotify.max_user_instances" "$instances" "$INOTIFY_MIN_INSTANCES" \
+            "Run: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
+        report_inotify_value "Kind node ${node}" "fs.inotify.max_user_watches" "$watches" "$INOTIFY_MIN_WATCHES" \
+            "Run: cd $ORCHESTRATION_DIR && ./scripts/bootstrap/install-calico.sh"
+    done
+}
+
 echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
@@ -320,7 +409,15 @@ fi
 
 echo
 
-echo "3. Checking service repositories..."
+echo "3. Checking inotify limits..."
+echo "---------------------------------------------"
+
+check_local_inotify_budget
+check_kind_node_inotify_budget
+
+echo
+
+echo "4. Checking service repositories..."
 echo "---------------------------------------------"
 
 REPOS=(
@@ -348,7 +445,7 @@ fi
 
 echo
 
-echo "4. Checking Dockerfiles..."
+echo "5. Checking Dockerfiles..."
 echo "---------------------------------------------"
 
 SPRING_SERVICES=(
@@ -366,7 +463,7 @@ check_file "budget-analyzer-web/Dockerfile" "$WORKSPACE_DIR/budget-analyzer-web/
 
 echo
 
-echo "5. Checking Gradle build files..."
+echo "6. Checking Gradle build files..."
 echo "---------------------------------------------"
 
 for service in "${SPRING_SERVICES[@]}"; do
@@ -375,7 +472,7 @@ done
 
 echo
 
-echo "6. Checking Kind cluster..."
+echo "7. Checking Kind cluster..."
 echo "---------------------------------------------"
 
 CLUSTER_CONNECTED=false
@@ -464,7 +561,7 @@ fi
 
 echo
 
-echo "7. Checking Gateway API CRDs..."
+echo "8. Checking Gateway API CRDs..."
 echo "---------------------------------------------"
 
 # Only check if the expected local Kind cluster exists and is accessible.
@@ -491,7 +588,7 @@ fi
 
 echo
 
-echo "8. Checking DNS configuration (/etc/hosts)..."
+echo "9. Checking DNS configuration (/etc/hosts)..."
 echo "---------------------------------------------"
 
 if grep -q "budgetanalyzer.localhost" /etc/hosts 2>/dev/null; then
@@ -507,7 +604,7 @@ fi
 
 echo
 
-echo "9. Checking orchestration files..."
+echo "10. Checking orchestration files..."
 echo "---------------------------------------------"
 
 check_file "Tiltfile" "$ORCHESTRATION_DIR/Tiltfile"
@@ -522,7 +619,7 @@ fi
 
 echo
 
-echo "10. Checking infrastructure TLS secrets..."
+echo "11. Checking infrastructure TLS secrets..."
 echo "---------------------------------------------"
 
 if [ "$CLUSTER_CONNECTED" = true ]; then
@@ -566,7 +663,7 @@ fi
 
 echo
 
-echo "11. Verifying runtime security prerequisites..."
+echo "12. Verifying runtime security prerequisites..."
 echo "---------------------------------------------"
 
 VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/smoketest/verify-security-prereqs.sh"

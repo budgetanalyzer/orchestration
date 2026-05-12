@@ -116,6 +116,8 @@ That baseline does three important things:
 - disables Kind's default CNI so `NetworkPolicy` can be enforced with Calico
 - pins the Kind node image for reproducibility
 - maps HTTPS traffic through the repo's ingress contract
+- reconciles the Kind node inotify budget required by Kubernetes log-follow
+  streams
 
 Useful checks:
 
@@ -127,6 +129,21 @@ docker port kind-control-plane
 kubectl get daemonset kindnet -n kube-system || true
 kubectl get daemonset calico-node -n kube-system
 ```
+
+Tilt log streaming and `kubectl logs -f` use Kubernetes follow mode, which can
+allocate fsnotify watchers on the Kubernetes node. If follow mode fails with
+`failed to create fsnotify watcher: too many open files`, plain
+`kubectl logs` may still work and the workload may still be healthy. The durable
+local fix is:
+
+```bash
+./scripts/bootstrap/install-calico.sh
+```
+
+That script raises low Kind node values for both
+`fs.inotify.max_user_instances` and `fs.inotify.max_user_watches`. A one-off
+live command such as `docker exec kind-control-plane sysctl ...` is diagnostic
+recovery only; do not treat it as a persistent setup step.
 
 ### 4. Configure DNS
 

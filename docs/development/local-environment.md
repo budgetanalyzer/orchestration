@@ -133,6 +133,24 @@ The current local platform baseline still works like this:
 5. It applies pinned Gateway API CRDs, configures local DNS plus
    browser-facing and internal transport TLS, and prepares `.env`.
 
+During the Calico reconciliation step, the repo also converges the Kind node
+inotify budget used by Kubernetes log-follow paths. Tilt log streaming and
+`kubectl logs -f` use Kubernetes follow mode; on Kind this can allocate
+fsnotify watchers on the Kubernetes node, even when plain `kubectl logs` still
+works and the workload is healthy. The local baseline is:
+
+```text
+fs.inotify.max_user_instances >= 8192
+fs.inotify.max_user_watches >= 524288
+```
+
+Run `./scripts/bootstrap/check-tilt-prerequisites.sh` for read-only visibility
+into the host/container values and any reachable Kind node values. If a Kind
+node is below baseline, run `./scripts/bootstrap/install-calico.sh` to reconcile
+it. A one-off `docker exec kind-control-plane sysctl ...` can recover a live
+cluster during diagnosis, but the durable repo-owned fix is the Calico bootstrap
+script.
+
 Tilt is the local secret producer for infrastructure credentials and the local
 renderer for non-secret Session Gateway Auth0 config. Kubernetes manifests keep
 passwords, client secrets, and API keys on the secret path, while issuer URIs,
@@ -612,6 +630,26 @@ kubectl logs -n default <pod-name>
 # Check Tilt UI for compile errors
 # http://localhost:10350
 ```
+
+### Log Follow Fails With fsnotify Errors
+
+If `kubectl logs -f` or Tilt log streaming reports
+`failed to create fsnotify watcher: too many open files`, check the inotify
+budget:
+
+```bash
+./scripts/bootstrap/check-tilt-prerequisites.sh
+```
+
+If the Kind node values are below the local baseline, reconcile them with:
+
+```bash
+./scripts/bootstrap/install-calico.sh
+```
+
+Do not patch service manifests or application environment variables for this
+class of failure. The affected workload may be healthy; the failure is in the
+Kubernetes node log-follow path.
 
 ### Database Connection Refused
 

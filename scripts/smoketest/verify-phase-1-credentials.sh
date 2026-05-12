@@ -411,8 +411,11 @@ RMQ_CS_READ=$(echo "$RMQ_CS_PERM_LINE" | awk '{print $4}')
 RMQ_ALLOWED_NAME="amq.gen.phase1.verify.$RANDOM.$RANDOM"
 RMQ_ALLOWED_EXCHANGE="exchange-rate.import.requested"
 RMQ_ALLOWED_QUEUE="exchange-rate.import.requested.exchange-rate-import-service"
+RMQ_ALLOWED_DLQ="${RMQ_ALLOWED_QUEUE}.dlq"
+RMQ_ALLOWED_DLX="DLX"
 RMQ_OLD_EXCHANGE="currency.created"
 RMQ_OLD_QUEUE="currency.created.exchange-rate-import-service"
+RMQ_OLD_DLQ="${RMQ_OLD_QUEUE}.dlq"
 RMQ_FORBIDDEN_NAME="phase1.forbidden.verify.$RANDOM.$RANDOM"
 
 if echo "$RMQ_ALLOWED_NAME" | grep -Eq "^${RMQ_CS_CONFIGURE}$"; then
@@ -439,6 +442,12 @@ else
     fail "${RMQ_CS_USER} write regex does not match ${RMQ_ALLOWED_EXCHANGE} (regex=${RMQ_CS_WRITE})"
 fi
 
+if echo "$RMQ_ALLOWED_EXCHANGE" | grep -Eq "^${RMQ_CS_READ}$"; then
+    pass "${RMQ_CS_USER} read regex matches ${RMQ_ALLOWED_EXCHANGE}"
+else
+    fail "${RMQ_CS_USER} read regex does not match ${RMQ_ALLOWED_EXCHANGE} (regex=${RMQ_CS_READ})"
+fi
+
 if echo "$RMQ_ALLOWED_QUEUE" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
     && echo "$RMQ_ALLOWED_QUEUE" | grep -Eq "^${RMQ_CS_WRITE}$" \
     && echo "$RMQ_ALLOWED_QUEUE" | grep -Eq "^${RMQ_CS_READ}$"; then
@@ -447,8 +456,25 @@ else
     fail "${RMQ_CS_USER} configure/write/read regexes do not match ${RMQ_ALLOWED_QUEUE} (configure=${RMQ_CS_CONFIGURE}, write=${RMQ_CS_WRITE}, read=${RMQ_CS_READ})"
 fi
 
+if echo "$RMQ_ALLOWED_DLQ" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
+    && echo "$RMQ_ALLOWED_DLQ" | grep -Eq "^${RMQ_CS_WRITE}$" \
+    && echo "$RMQ_ALLOWED_DLQ" | grep -Eq "^${RMQ_CS_READ}$"; then
+    pass "${RMQ_CS_USER} configure/write/read regexes match ${RMQ_ALLOWED_DLQ}"
+else
+    fail "${RMQ_CS_USER} configure/write/read regexes do not match ${RMQ_ALLOWED_DLQ} (configure=${RMQ_CS_CONFIGURE}, write=${RMQ_CS_WRITE}, read=${RMQ_CS_READ})"
+fi
+
+if echo "$RMQ_ALLOWED_DLX" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
+    && echo "$RMQ_ALLOWED_DLX" | grep -Eq "^${RMQ_CS_WRITE}$" \
+    && echo "$RMQ_ALLOWED_DLX" | grep -Eq "^${RMQ_CS_READ}$"; then
+    pass "${RMQ_CS_USER} configure/write/read regexes match ${RMQ_ALLOWED_DLX}"
+else
+    fail "${RMQ_CS_USER} configure/write/read regexes do not match ${RMQ_ALLOWED_DLX} (configure=${RMQ_CS_CONFIGURE}, write=${RMQ_CS_WRITE}, read=${RMQ_CS_READ})"
+fi
+
 if echo "$RMQ_OLD_EXCHANGE" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
-    || echo "$RMQ_OLD_EXCHANGE" | grep -Eq "^${RMQ_CS_WRITE}$"; then
+    || echo "$RMQ_OLD_EXCHANGE" | grep -Eq "^${RMQ_CS_WRITE}$" \
+    || echo "$RMQ_OLD_EXCHANGE" | grep -Eq "^${RMQ_CS_READ}$"; then
     fail "${RMQ_CS_USER} regexes still allow old exchange ${RMQ_OLD_EXCHANGE}"
 else
     pass "${RMQ_CS_USER} regexes deny old exchange ${RMQ_OLD_EXCHANGE}"
@@ -460,6 +486,14 @@ if echo "$RMQ_OLD_QUEUE" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
     fail "${RMQ_CS_USER} regexes still allow old queue ${RMQ_OLD_QUEUE}"
 else
     pass "${RMQ_CS_USER} regexes deny old queue ${RMQ_OLD_QUEUE}"
+fi
+
+if echo "$RMQ_OLD_DLQ" | grep -Eq "^${RMQ_CS_CONFIGURE}$" \
+    || echo "$RMQ_OLD_DLQ" | grep -Eq "^${RMQ_CS_WRITE}$" \
+    || echo "$RMQ_OLD_DLQ" | grep -Eq "^${RMQ_CS_READ}$"; then
+    fail "${RMQ_CS_USER} regexes still allow old DLQ ${RMQ_OLD_DLQ}"
+else
+    pass "${RMQ_CS_USER} regexes deny old DLQ ${RMQ_OLD_DLQ}"
 fi
 
 if echo "$RMQ_FORBIDDEN_NAME" | grep -Eq "^${RMQ_CS_CONFIGURE}$"; then

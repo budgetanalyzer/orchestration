@@ -306,6 +306,19 @@ kubectl delete pvc rabbitmq-data-rabbitmq-0 -n infrastructure
 tilt trigger rabbitmq
 ```
 
+For a local recovery that avoids recreating the PVC, apply the corrected
+`currency-service` permissions once and restart the service so AMQP channels
+are refreshed:
+
+```bash
+kubectl exec -it statefulset/rabbitmq -n infrastructure -- \
+  rabbitmqctl set_permissions -p / currency-service \
+  '^(amq\.gen.*|exchange-rate\.import\.requested|exchange-rate\.import\.requested\.exchange-rate-import-service(\.dlq)?|DLX)$' \
+  '^(amq\.default|exchange-rate\.import\.requested|exchange-rate\.import\.requested\.exchange-rate-import-service(\.dlq)?|DLX)$' \
+  '^(exchange-rate\.import\.requested|exchange-rate\.import\.requested\.exchange-rate-import-service(\.dlq)?|DLX)$'
+kubectl rollout restart deployment/currency-service
+```
+
 If only stale broker resources from the former `currency.created` channel need
 cleanup, use the admin identity to inspect and delete those old resources:
 

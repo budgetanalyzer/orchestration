@@ -3393,7 +3393,7 @@
           "endDate": {
             "type": "string",
             "format": "date",
-            "description": "End date for transaction date range (null for open-ended views)"
+            "description": "End date for transaction date range. Omitted for open-ended views."
           },
           "accountIds": {
             "type": "array",
@@ -3747,20 +3747,16 @@
             "example": false
           },
           "warningCode": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Stable warning code for file-level preview status",
+            "type": "string",
+            "description": "Stable warning code for file-level preview status. Omitted when there is no warning.",
             "enum": [
               "FILE_ALREADY_IMPORTED"
             ],
             "example": "FILE_ALREADY_IMPORTED"
           },
           "previousImport": {
-            "type": "null",
             "$ref": "#/components/schemas/PreviousFileImportResponse",
-            "description": "Previous matching import metadata. Null when alreadyImported is false."
+            "description": "Previous matching import metadata. Omitted when alreadyImported is false."
           }
         },
         "required": [
@@ -3864,11 +3860,8 @@
             "example": false
           },
           "duplicateReason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Reason this row was marked as a duplicate. Null when duplicate is false.",
+            "type": "string",
+            "description": "Reason this row was marked as a duplicate. Omitted when duplicate is false.",
             "enum": [
               "EXISTING_TRANSACTION",
               "IN_BATCH"
@@ -3907,11 +3900,8 @@
             "example": "capital-one"
           },
           "accountId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Account ID used for the previous import",
+            "type": "string",
+            "description": "Account ID used for the previous import. Omitted when unavailable.",
             "example": "checking-12345"
           },
           "transactionCount": {

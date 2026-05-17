@@ -3384,13 +3384,13 @@
         "type": "object",
         "description": "Filter criteria for a saved view",
         "properties": {
-          "startDate": {
+          "dateFrom": {
             "type": "string",
             "format": "date",
             "description": "Start date for transaction date range",
             "example": "2024-12-01"
           },
-          "endDate": {
+          "dateTo": {
             "type": "string",
             "format": "date",
             "description": "End date for transaction date range. Omitted for open-ended views."
@@ -3436,6 +3436,15 @@
             "type": "number",
             "description": "Maximum transaction amount",
             "example": 500.0
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of transaction to include",
+            "enum": [
+              "CREDIT",
+              "DEBIT"
+            ],
+            "example": "DEBIT"
           },
           "searchText": {
             "type": "string",

@@ -385,6 +385,77 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/views/{id}/pin:
+    post:
+      tags:
+        - Saved Views
+      summary: Bulk pin transactions
+      description: Pins multiple transactions to the view. Returns updatedCount for
+        unique valid IDs and notFoundIds for IDs that are missing, deleted, or not
+        owned by the caller.
+      operationId: bulkPinTransactions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkViewTransactionRequest'
+        required: true
+      responses:
+        '200':
+          description: Some transactions were not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkViewTransactionResponse'
+              examples:
+                Partial success:
+                  summary: Some IDs were not pinned
+                  description: Partial success
+                  value:
+                    updatedCount: 2
+                    notFoundIds:
+                      - 999
+                      - 1000
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Saved view not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/views/{id}/pin/{txnId}:
     post:
       tags:
@@ -480,6 +551,77 @@ paths:
               example:
                 type: NOT_FOUND
                 message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/exclude:
+    post:
+      tags:
+        - Saved Views
+      summary: Bulk exclude transactions
+      description: Excludes multiple transactions from the view. Returns updatedCount
+        for unique valid IDs and notFoundIds for IDs that are missing, deleted, or
+        not owned by the caller.
+      operationId: bulkExcludeTransactions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkViewTransactionRequest'
+        required: true
+      responses:
+        '200':
+          description: Some transactions were not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkViewTransactionResponse'
+              examples:
+                Partial success:
+                  summary: Some IDs were not excluded
+                  description: Partial success
+                  value:
+                    updatedCount: 2
+                    notFoundIds:
+                      - 999
+                      - 1000
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Saved view not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
         '500':
           description: Internal Server Error
           content:
@@ -620,9 +762,10 @@ paths:
       description: Parses a CSV or PDF file and returns the extracted transactions
         for review and editing before batch import. No data is persisted. The format
         parameter is required and determines which parser to use. The response includes
-        advisory duplicate metadata for existing owner-scoped transactions or earlier
-        rows in the same preview payload, plus file-level import history status for
-        exact reuploads by the authenticated user.
+        advisory duplicate metadata using strict owner-scoped financial identity fields
+        plus normalized exact or conservative fuzzy description matching against existing
+        transactions or earlier rows in the same preview payload, plus file-level
+        import history status for exact reuploads by the authenticated user.
       operationId: previewTransactions
       parameters:
         - name: format
@@ -781,12 +924,13 @@ paths:
       summary: Import a batch of transactions
       description: Imports transactions from a batch request (typically from the preview
         endpoint after user edits). Validates all transactions upfront and rejects
-        the entire batch if any fail. Duplicates matching the owner-scoped transaction
-        key are skipped unless allowDuplicate is true on the row. The response reports
-        skipped duplicates and duplicates intentionally imported. previewImportToken
-        from the preview response is required and is verified before batch import
-        processing starts. If duplicate filtering leaves no rows to create, the request
-        fails with BATCH_IMPORT_NO_TRANSACTIONS_CREATED.
+        the entire batch if any fail. Duplicate filtering uses strict owner-scoped
+        financial identity fields plus normalized exact or conservative fuzzy description
+        matching. Duplicates are skipped unless allowDuplicate is true on the row.
+        The response reports skipped duplicates and duplicates intentionally imported.
+        previewImportToken from the preview response is required and is verified before
+        batch import processing starts. If duplicate filtering leaves no rows to create,
+        the request fails with BATCH_IMPORT_NO_TRANSACTIONS_CREATED.
       operationId: batchImportTransactions
       requestBody:
         content:
@@ -2576,6 +2720,43 @@ components:
       required:
         - criteria
         - name
+    BulkViewTransactionRequest:
+      type: object
+      description: Request to bulk pin or exclude multiple transactions in a saved
+        view
+      properties:
+        ids:
+          type: array
+          description: List of transaction IDs to update
+          example:
+            - 1
+            - 2
+            - 3
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+      required:
+        - ids
+    BulkViewTransactionResponse:
+      type: object
+      description: Response from bulk saved-view transaction update operation
+      properties:
+        updatedCount:
+          type: integer
+          format: int32
+          description: Number of unique transaction IDs successfully updated
+          example: 5
+        notFoundIds:
+          type: array
+          description: List of transaction IDs that were not found, not owned by the
+            user, or deleted
+          example:
+            - 999
+            - 1000
+          items:
+            type: integer
+            format: int64
     PreviewFileImportStatusResponse:
       type: object
       description: File import history status for the previewed upload
@@ -2678,7 +2859,9 @@ components:
         duplicate:
           type: boolean
           description: Whether this row appears to duplicate an existing active owner-owned
-            transaction or an earlier row in the same preview payload
+            transaction or an earlier row in the same preview payload after strict
+            financial identity matching plus normalized exact or conservative fuzzy
+            description matching
           example: false
         duplicateReason:
           type: string
@@ -2830,7 +3013,8 @@ components:
           type: boolean
           default: false
           description: Whether to import this row even when it duplicates an existing
-            transaction or earlier row in the same batch
+            transaction or earlier row in the same batch under the strict financial
+            identity plus normalized exact or conservative fuzzy description rule
           example: false
       required:
         - amount

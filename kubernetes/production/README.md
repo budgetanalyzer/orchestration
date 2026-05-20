@@ -7,7 +7,7 @@ production route, monitoring, storage, and verification inputs.
 ## Production Baseline
 
 `apps/` already renders the repo-managed application workloads with the
-`0.0.12` GHCR release images pinned by digest from
+`0.0.14` GHCR release images pinned by digest from
 `kubernetes/production/apps/image-inventory.yaml`.
 
 That overlay already:

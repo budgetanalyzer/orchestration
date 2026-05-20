@@ -34,7 +34,7 @@ specific upgrade.
 
 The durable operator experience should become:
 
-1. choose a release version, such as `v0.0.13`
+1. choose a release version, such as `v0.0.14`
 2. validate all participating repositories are clean, on `main`, and at the
    intended commits
 3. tag and push the same release tag across the release repository set
@@ -130,14 +130,14 @@ Steps:
    ```
 2. Maintain the service-common version bump helper:
    ```bash
-   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.13
-   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.13
+   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.14
+   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.14
    ```
 3. When the user provides real release image refs, update the production
    baseline with:
    ```bash
    ./deploy/scripts/23-update-production-release-images.sh \
-     --release-manifest tmp/releases/v0.0.13.yaml
+     --release-manifest tmp/releases/v0.0.14.yaml
    ```
    If no live Kubernetes context is available in the current shell, use
    `--skip-live-production-verifier` only as a temporary local limitation and
@@ -166,8 +166,8 @@ Steps:
    ```
 2. Pick the release version:
    ```bash
-   export RELEASE_VERSION=v0.0.13
-   export IMAGE_VERSION=0.0.13
+   export RELEASE_VERSION=v0.0.14
+   export IMAGE_VERSION=0.0.14
    ```
 3. If service-common needs a release or next-snapshot version change, run:
    ```bash
@@ -219,22 +219,22 @@ Steps:
 Owner: human release manager, with AI assistant support allowed for file
 formatting after refs are provided.
 
-Generate `tmp/releases/v0.0.13.yaml` from the published GHCR tags:
+Generate `tmp/releases/v0.0.14.yaml` from the published GHCR tags:
 
 ```bash
-./scripts/repo/generate-release-manifest.sh 0.0.13
+./scripts/repo/generate-release-manifest.sh 0.0.14
 ```
 
 The generated file has this shape:
 
 ```yaml
-release-version: "0.0.13"
-transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.13@sha256:<digest>"
-currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.13@sha256:<digest>"
-permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.13@sha256:<digest>"
-session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.13@sha256:<digest>"
-budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.13@sha256:<digest>"
-ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.13@sha256:<digest>"
+release-version: "0.0.14"
+transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:<digest>"
+currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:<digest>"
+permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:<digest>"
+session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:<digest>"
+budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:<digest>"
+ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:<digest>"
 ```
 
 ### Phase E: AI Assistant Or Human Production Baseline Update
@@ -247,7 +247,7 @@ Steps:
 1. Update the checked-in production baseline:
    ```bash
    ./deploy/scripts/23-update-production-release-images.sh \
-     --release-manifest tmp/releases/v0.0.13.yaml
+     --release-manifest tmp/releases/v0.0.14.yaml
    ```
 2. Review the exact diff:
    ```bash
@@ -343,11 +343,11 @@ above.
 
 ### 2. Tag The Release
 
-- Choose the version, for example `v0.0.13`.
+- Choose the version, for example `v0.0.14`.
 - Use the existing tag helper only after validating that its repository set is
   correct for this release:
   ```bash
-  ./scripts/repo/tag-release.sh v0.0.13
+  ./scripts/repo/tag-release.sh v0.0.14
   ```
 - If `checkstyle-config` should not receive an OCI runtime release tag, update
   the helper first or tag the runtime repos explicitly with documented commands.
@@ -372,7 +372,7 @@ above.
 - Use the production image update helper from the lockstep plan:
   ```bash
   ./deploy/scripts/23-update-production-release-images.sh \
-    --release-manifest tmp/releases/v0.0.13.yaml
+    --release-manifest tmp/releases/v0.0.14.yaml
   ```
 - Run:
   ```bash
@@ -473,7 +473,7 @@ Extend it to accept either explicit image arguments or a release manifest:
 
 ```bash
 ./deploy/scripts/23-update-production-release-images.sh \
-  --release-manifest tmp/releases/v0.0.13.yaml
+  --release-manifest tmp/releases/v0.0.14.yaml
 ```
 
 The explicit image-argument form remains useful for quick operator repair. The

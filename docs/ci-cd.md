@@ -249,11 +249,11 @@ workflows:
   Docker dependency resolution, and do not require `release_ref` to equal the
   checked-in `serviceCommon` version
 - manual release-image rebuilds are supported only for tags created under the
-  `v0.0.12`-forward contract; older tags remain intentionally unsupported
+  `v0.0.14`-forward contract; older tags remain intentionally unsupported
 - the production image inventory lives in
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
-  using those `0.0.12` GHCR refs
+  using those `0.0.14` GHCR refs
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

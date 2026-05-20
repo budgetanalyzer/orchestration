@@ -9,6 +9,7 @@ Related documents:
 - `deploy/README.md`
 - `kubernetes/production/README.md`
 - `scripts/README.md`
+- `docs/runbooks/oci-release-deployment-checklist.md`
 - `scripts/repo/tag-release.sh`
 - `kubernetes/production/apps/image-inventory.yaml`
 - `scripts/guardrails/verify-production-image-overlay.sh`
@@ -443,11 +444,12 @@ or infra TLS has to be generated or rotated, run those host-side only.
 
 ## Reusable Automation Work
 
-This section is future automation work. It is not the live `v0.0.14` runbook.
+This section tracks reusable automation work. Phases 1-6 are complete; later
+phases remain future automation work and are not the live `v0.0.14` runbook.
 
 ### Phase 1: Release Manifest Contract
 
-Status: Implemented for local operator-generated manifests.
+Status: Complete. Implemented for local operator-generated manifests.
 
 Add a release manifest format that can be produced manually at first and later
 by GitHub automation.
@@ -484,7 +486,7 @@ Validation rules:
 
 ### Phase 2: Release Preparation Helper
 
-Status: Implemented as `scripts/repo/prepare-lockstep-release.sh`.
+Status: Complete. Implemented as `scripts/repo/prepare-lockstep-release.sh`.
 
 Add a local helper for the release manager.
 
@@ -508,7 +510,8 @@ preparation.
 
 ### Phase 3: Production Image Update Helper
 
-Status: Implemented for explicit image arguments and release manifest input.
+Status: Complete. Implemented for explicit image arguments and release
+manifest input.
 
 Implement the helper already required by the lockstep plan:
 
@@ -526,7 +529,8 @@ manifest form becomes the normal path.
 
 ### Phase 4: OCI Lockstep Static Verifier
 
-Status: Implemented as `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`.
+Status: Complete. Implemented as
+`deploy/scripts/24-verify-oci-upgrade-lockstep.sh`.
 
 Implement the verifier already required by the lockstep plan:
 
@@ -537,7 +541,7 @@ cluster.
 
 ### Phase 5: Master OCI Deployment Script
 
-Status: Implemented as `deploy/scripts/25-deploy-oci-release.sh`.
+Status: Complete. Implemented as `deploy/scripts/25-deploy-oci-release.sh`.
 
 Add a single operator-facing master script.
 
@@ -591,6 +595,9 @@ The script should compose the existing numbered scripts rather than duplicate
 their implementation.
 
 ### Phase 6: Checklist And Run Log Template
+
+Status: Complete. Implemented as
+`docs/runbooks/oci-release-deployment-checklist.md`.
 
 Add a concise deployment checklist template after the second deployment proves
 which evidence is useful.

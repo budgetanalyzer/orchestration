@@ -182,8 +182,10 @@ setup.
   active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
   internal-only storage/service contract pinned in static review. Its
-  kubeconform pass validates checked-in Kubernetes resource manifests and skips
-  Kustomize patch fragments under `patches/` directories.
+  kubeconform pass validates checked-in Kubernetes resource manifests, skips
+  Kustomize patch fragments under `patches/` directories as standalone
+  resources, and validates the rendered production app and infrastructure
+  overlays that consume those patches.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies

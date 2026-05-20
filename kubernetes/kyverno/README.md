@@ -17,7 +17,8 @@ Run the local policy fixtures with:
 kyverno test kubernetes/kyverno/tests
 ```
 
-The static security guardrail gate wraps those fixtures together with schema validation,
+The static security guardrail gate wraps those fixtures together with schema
+validation for checked-in manifests and rendered production overlays,
 `kube-linter`, and repo-specific guardrail scans:
 
 ```bash

@@ -19,9 +19,9 @@ That overlay already:
   `nginx-gateway-docs` from committed files under `kubernetes/production/`
 - serves `/api-docs/release-metadata.json` from the reviewed release metadata
   generated alongside the production image inventory
-- applies `runtime-release-metadata.yaml` so app Deployments and Pods carry
-  `budgetanalyzer.org/environment-release` labels and digest-pinned image
-  annotations
+- applies `apps/patches/runtime-release-metadata.yaml` so app Deployments and
+  Pods carry `budgetanalyzer.org/environment-release` labels and digest-pinned
+  image annotations
 - patches `nginx-gateway` to serve the released `budget-analyzer-web` static
   bundle instead of the local `budget-analyzer-web-prod-smoke` image or the
   Vite dev server
@@ -80,8 +80,8 @@ refs, and the operator-selected deployment phase flags.
 The update helper reuses that manifest to regenerate
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
-`apps/runtime-release-metadata.yaml` so browser metadata and live pod labels
-cannot drift from the reviewed image baseline.
+`apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
+labels cannot drift from the reviewed image baseline.
 
 The update helper also accepts explicit `--transaction-service`,
 `--currency-service`, `--permission-service`, `--session-gateway`,

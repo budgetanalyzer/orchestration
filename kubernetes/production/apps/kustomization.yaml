@@ -55,7 +55,7 @@ generatorOptions:
   disableNameSuffixHash: true
 
 patches:
-  - path: runtime-release-metadata.yaml
+  - path: patches/runtime-release-metadata.yaml
   - target:
       kind: Deployment
       name: transaction-service

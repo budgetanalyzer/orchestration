@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_DIR="${REPO_DIR}/kubernetes/production/apps"
+PRODUCTION_IMAGE_INVENTORY="${OVERLAY_DIR}/image-inventory.yaml"
 INFRASTRUCTURE_OVERLAY_DIR="${REPO_DIR}/kubernetes/production/infrastructure"
 PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/production/istio/authorization-policies.yaml"
 PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml"
@@ -24,14 +25,15 @@ INSTANCE_ENV_FILE_TMP=""
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
 
-EXPECTED_IMAGE_REFS=(
-    "ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:835e31a29b73c41aaed7a5a4f70703921978b3f4effd1a770cf3d4d0ebf2d4d7"
-    "ghcr.io/budgetanalyzer/currency-service:0.0.12@sha256:7315de56adc51d4887b3d51284c4291f22e520998e16cad43cf93527c1e3403f"
-    "ghcr.io/budgetanalyzer/permission-service:0.0.12@sha256:d4b4e9c58a391a7bbb0e25bb64dfb6ed8fc69b8400f196f7d7b791735f5445a3"
-    "ghcr.io/budgetanalyzer/session-gateway:0.0.12@sha256:0cd9a1af8bff10410125155bbad2c4db0e3d7312655f658e30a79ee5f2b4fbd7"
-    "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.12@sha256:3299d088121fcfca8dc69f0d9de92944b311cc408ccbcb08e1bb5243523eb03e"
-    "ghcr.io/budgetanalyzer/ext-authz:0.0.12@sha256:4a116b9d9598bb23551c6403570bef4310b8b812d1606d27b95a8b7e15d4196d"
+SERVICE_ORDER=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+    "budget-analyzer-web"
+    "ext-authz"
 )
+EXPECTED_IMAGE_REFS=()
 
 LOCAL_IMAGE_REPOS=(
     "transaction-service"
@@ -56,6 +58,39 @@ fail() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+inventory_value() {
+    local key="$1"
+
+    awk -v key="${key}" '
+        $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
+            value = $0
+            sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
+            gsub(/^"/, "", value)
+            gsub(/"$/, "", value)
+            print value
+            exit
+        }
+    ' "${PRODUCTION_IMAGE_INVENTORY}"
+}
+
+load_expected_image_refs() {
+    local service image_ref
+
+    [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || fail "production image inventory not found: ${PRODUCTION_IMAGE_INVENTORY}"
+
+    EXPECTED_IMAGE_REFS=()
+    for service in "${SERVICE_ORDER[@]}"; do
+        image_ref="$(inventory_value "${service}")"
+        [[ -n "${image_ref}" ]] || fail "production image inventory is missing ${service}"
+
+        if [[ ! "${image_ref}" =~ ^ghcr\.io/budgetanalyzer/[a-z0-9-]+:[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}$ ]]; then
+            fail "production image inventory has an invalid digest-pinned image ref for ${service}: ${image_ref}"
+        fi
+
+        EXPECTED_IMAGE_REFS+=("${image_ref}")
+    done
 }
 
 ensure_static_tool() {
@@ -639,6 +674,7 @@ main() {
     [[ -d "${OVERLAY_DIR}" ]] || fail "production overlay directory not found: ${OVERLAY_DIR}"
     [[ -d "${INFRASTRUCTURE_OVERLAY_DIR}" ]] || fail "production infrastructure overlay directory not found: ${INFRASTRUCTURE_OVERLAY_DIR}"
     [[ -f "${PRODUCTION_IMAGE_POLICY}" ]] || fail "production image policy not found: ${PRODUCTION_IMAGE_POLICY}"
+    load_expected_image_refs
 
     TEMP_DIR="$(mktemp -d)"
     RENDERED_APPS_FILE="${TEMP_DIR}/apps.yaml"

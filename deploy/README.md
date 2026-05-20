@@ -80,7 +80,12 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-11. Note the current observability boundary before reviewing or running any
+11. Review the production release-image and OCI lockstep helpers:
+   - `deploy/scripts/23-update-production-release-images.sh`
+   - `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`
+   - `kubernetes/production/apps/image-inventory.yaml`
+   - `kubernetes/production/apps/kustomization.yaml`
+12. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The production Prometheus/Grafana path is owned by
      `deploy/scripts/22-apply-production-monitoring.sh`.
@@ -94,7 +99,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
      `monitoring`, stay `ClusterIP`-only, and use loopback-bound
      `kubectl port-forward` instead of public routes.
    - Do not add Grafana, Kiali, or Jaeger public hostname inputs.
-12. Run the human-owned cluster bootstrap scripts in this exact order:
+13. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/01-install-k3s.sh`
    - `./deploy/scripts/02-bootstrap-cluster.sh`
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
@@ -168,6 +173,8 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
+| `deploy/scripts/23-update-production-release-images.sh` | Updates the checked-in production application image baseline from explicit digest-pinned image refs or a release manifest, then renders the app overlay and runs the OCI lockstep verifier plus the live production verifier unless explicitly skipped. | Run after release workflows publish the six `linux/arm64` application images and before applying the production app overlay. |
+| `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production image inventory and app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, or production render change. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those

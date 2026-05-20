@@ -45,10 +45,22 @@ Verify the current production baseline with:
 
 ```bash
 kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
+./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
 ./scripts/guardrails/check-secrets-only-handling.sh
 ./scripts/guardrails/verify-production-image-overlay.sh
 ./deploy/scripts/09-render-phase-5-secrets.sh
 ```
+
+Update the application image baseline with:
+
+```bash
+./deploy/scripts/23-update-production-release-images.sh --release-manifest tmp/releases/v0.0.x.yaml
+```
+
+The helper also accepts explicit `--transaction-service`,
+`--currency-service`, `--permission-service`, `--session-gateway`,
+`--budget-analyzer-web`, and `--ext-authz` image refs. Every ref must be a
+`ghcr.io/budgetanalyzer/...:<release-version>@sha256:<digest>` release image.
 
 The production image verifier now:
 

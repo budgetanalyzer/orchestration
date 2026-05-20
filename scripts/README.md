@@ -86,6 +86,16 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
+- `../deploy/scripts/23-update-production-release-images.sh` - Updates the
+  checked-in production app image baseline from explicit digest-pinned image
+  refs or a release manifest, then runs the production render and lockstep
+  gates. Use `--skip-live-production-verifier` only when the live-cluster
+  production verifier cannot run in the current shell.
+- `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
+  verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
+  OCI version contracts, production app image inventory alignment, production
+  `/api-docs` render wiring, and digest-pin inputs for production
+  infrastructure and Helm values.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -152,7 +162,7 @@ setup.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies
-  the `0.0.12` digest-pinned GHCR image inventory, rejects local `:latest` /
+  the digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
   `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
   Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, uses a live
@@ -160,6 +170,13 @@ setup.
   RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
   `redis-data` claim template, and applies the production image Kyverno policy
   to the rendered app overlay.
+
+Run the static OCI lockstep verifier before changing or deploying a production
+release image baseline:
+
+```bash
+./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+```
 
 Use the live-cluster production verifier when a cluster is available:
 
@@ -333,7 +350,10 @@ directory without writing outside the repository.
   manually when ready.
 - `repo/update-service-common-version.sh` bumps the checked-in
   `service-common` version literal in `../service-common/build.gradle.kts` and
-  the matching `serviceCommon` catalog entry in each Java consumer repo.
+  the matching `serviceCommon` catalog entry in each Java consumer repo
+  (`transaction-service`, `currency-service`, `permission-service`, and
+  `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
+  edits or before release tagging.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

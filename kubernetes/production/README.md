@@ -7,7 +7,7 @@ production route, monitoring, storage, and verification inputs.
 ## Production Baseline
 
 `apps/` already renders the repo-managed application workloads with the
-`0.0.12` GHCR release images pinned by digest from
+`0.0.14` GHCR release images pinned by digest from
 `kubernetes/production/apps/image-inventory.yaml`.
 
 That overlay already:
@@ -57,7 +57,23 @@ Update the application image baseline with:
 ./deploy/scripts/23-update-production-release-images.sh --release-manifest tmp/releases/v0.0.x.yaml
 ```
 
-The helper also accepts explicit `--transaction-service`,
+Create that manifest after the release image workflows complete:
+
+```bash
+./scripts/repo/generate-release-manifest.sh v0.0.x \
+  --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
+  --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
+  --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
+  --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
+  --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
+  --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
+```
+
+The manifest records both `vX.Y.Z` and `X.Y.Z` release forms, the sibling
+repository commit SHA map, artifact workflow run URLs, digest-pinned image
+refs, and the operator-selected deployment phase flags.
+
+The update helper also accepts explicit `--transaction-service`,
 `--currency-service`, `--permission-service`, `--session-gateway`,
 `--budget-analyzer-web`, and `--ext-authz` image refs. Every ref must be a
 `ghcr.io/budgetanalyzer/...:<release-version>@sha256:<digest>` release image.

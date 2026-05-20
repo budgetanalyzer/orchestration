@@ -7,10 +7,10 @@ metadata:
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/component: production-image-inventory
 data:
-  release-version: "0.0.12"
-  transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.12@sha256:835e31a29b73c41aaed7a5a4f70703921978b3f4effd1a770cf3d4d0ebf2d4d7"
-  currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.12@sha256:7315de56adc51d4887b3d51284c4291f22e520998e16cad43cf93527c1e3403f"
-  permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.12@sha256:d4b4e9c58a391a7bbb0e25bb64dfb6ed8fc69b8400f196f7d7b791735f5445a3"
-  session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.12@sha256:0cd9a1af8bff10410125155bbad2c4db0e3d7312655f658e30a79ee5f2b4fbd7"
-  budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.12@sha256:3299d088121fcfca8dc69f0d9de92944b311cc408ccbcb08e1bb5243523eb03e"
-  ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.12@sha256:4a116b9d9598bb23551c6403570bef4310b8b812d1606d27b95a8b7e15d4196d"
+  release-version: "0.0.14"
+  transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:5ef17ce3696330239b030e607652b0743b95a8f8e03117c2e5511dad0ee8f5e6"
+  currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:80ba38fdff655b3f563bb0a60abf05394fdeae3355ae9f23c022456a28cbf1ff"
+  permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:8d6751662d09bfaa791d66b817f990dcf77c554189e475b726eb3e67f25cf63c"
+  session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:c30612af5c8f9f7e023b5e43698885d87354a859c056b44fd01ca64de73183f9"
+  budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:6977e2bf376ffa44c1706e6282550da7d5fd17a60e1847446c749770297b39c8"
+  ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:85aede7d18be357c25c0155b551f1a391ac9d30c6b2b33716ce23a3d1b6a5213"

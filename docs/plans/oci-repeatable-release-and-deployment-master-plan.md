@@ -9,6 +9,7 @@ Related documents:
 - `deploy/README.md`
 - `kubernetes/production/README.md`
 - `scripts/README.md`
+- `docs/runbooks/oci-release-deployment-checklist.md`
 - `scripts/repo/tag-release.sh`
 - `kubernetes/production/apps/image-inventory.yaml`
 - `scripts/guardrails/verify-production-image-overlay.sh`
@@ -21,9 +22,11 @@ Create a repeatable OCI deployment operating model that supports both:
   plan
 - the normal "deploy this reviewed release version" path for future releases
 
-The concrete first use case is tagging the current Budget Analyzer repository
-heads, publishing the matching release artifacts, updating the production image
-baseline, and deploying that baseline to OCI.
+The concrete first use case is the `v0.0.14` lockstep deployment: tag the
+current Budget Analyzer repository heads, publish the matching release
+artifacts, update the production image baseline, reconcile the OCI
+platform/infrastructure/secret-sync baseline first, and only then roll out the
+application images.
 
 This plan does not replace the lockstep upgrade plan. The lockstep plan owns
 the current dependency/platform compatibility work. This plan owns the reusable
@@ -34,7 +37,7 @@ specific upgrade.
 
 The durable operator experience should become:
 
-1. choose a release version, such as `v0.0.13`
+1. choose a release version, such as `v0.0.14`
 2. validate all participating repositories are clean, on `main`, and at the
    intended commits
 3. tag and push the same release tag across the release repository set
@@ -46,9 +49,9 @@ The durable operator experience should become:
 9. complete a concise deployment checklist with evidence links and rollback
    notes
 
-The master script should make normal app-only releases boring, while still
-allowing explicit platform, infrastructure, secrets, observability, and public
-TLS phases when a lockstep upgrade requires them.
+The master script should eventually make normal future app-only releases
+boring. The current `v0.0.14` release is not app-only; it follows the lockstep
+path.
 
 ## Can GitHub Trigger OCI Deployments?
 
@@ -95,10 +98,11 @@ production deployment, decide whether it remains part of the shared release tag
 contract or whether the script needs a release-runtime mode that excludes
 non-runtime tooling repositories.
 
-## Current Second Deployment Checklist
+## Current v0.0.14 Lockstep Deployment Checklist
 
-Use this checklist for the immediate deployment, even before all automation in
-this plan exists.
+Use this checklist for the immediate deployment. It is the forward path for
+`v0.0.14`; do not use the app-only path until after this lockstep upgrade is
+complete and recorded.
 
 ### Phase A: AI Assistant Repo Automation
 
@@ -130,14 +134,14 @@ Steps:
    ```
 2. Maintain the service-common version bump helper:
    ```bash
-   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.13
-   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.13
+   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.14
+   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.14
    ```
 3. When the user provides real release image refs, update the production
    baseline with:
    ```bash
    ./deploy/scripts/23-update-production-release-images.sh \
-     --release-manifest tmp/releases/v0.0.13.yaml
+     --release-manifest tmp/releases/v0.0.14.yaml
    ```
    If no live Kubernetes context is available in the current shell, use
    `--skip-live-production-verifier` only as a temporary local limitation and
@@ -166,8 +170,8 @@ Steps:
    ```
 2. Pick the release version:
    ```bash
-   export RELEASE_VERSION=v0.0.13
-   export IMAGE_VERSION=0.0.13
+   export RELEASE_VERSION=v0.0.14
+   export IMAGE_VERSION=0.0.14
    ```
 3. If service-common needs a release or next-snapshot version change, run:
    ```bash
@@ -219,22 +223,38 @@ Steps:
 Owner: human release manager, with AI assistant support allowed for file
 formatting after refs are provided.
 
-Generate `tmp/releases/v0.0.13.yaml` from the published GHCR tags:
+Generate `tmp/releases/v0.0.14.yaml` from the published GHCR tags:
 
 ```bash
-./scripts/repo/generate-release-manifest.sh 0.0.13
+./scripts/repo/generate-release-manifest.sh 0.0.14 \
+  --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
+  --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
+  --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
+  --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
+  --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
+  --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
 ```
 
 The generated file has this shape:
 
 ```yaml
-release-version: "0.0.13"
-transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.13@sha256:<digest>"
-currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.13@sha256:<digest>"
-permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.13@sha256:<digest>"
-session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.13@sha256:<digest>"
-budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.13@sha256:<digest>"
-ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.13@sha256:<digest>"
+release:
+  version: "v0.0.14"
+  image_tag: "0.0.14"
+repositories:
+  orchestration:
+    commit: "<sha>"
+artifacts:
+  transaction-service:
+    source_repository: "transaction-service"
+    workflow_run_url: "https://github.com/budgetanalyzer/transaction-service/actions/runs/<id>"
+    image: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:<digest>"
+phase_flags:
+  platform_changed: false
+  infrastructure_changed: false
+  secrets_changed: false
+  observability_changed: false
+  public_tls_reapply_required: false
 ```
 
 ### Phase E: AI Assistant Or Human Production Baseline Update
@@ -247,7 +267,7 @@ Steps:
 1. Update the checked-in production baseline:
    ```bash
    ./deploy/scripts/23-update-production-release-images.sh \
-     --release-manifest tmp/releases/v0.0.13.yaml
+     --release-manifest tmp/releases/v0.0.14.yaml
    ```
 2. Review the exact diff:
    ```bash
@@ -261,16 +281,27 @@ Steps:
    ./scripts/guardrails/verify-production-image-overlay.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh
    ```
+   `./deploy/scripts/09-render-phase-5-secrets.sh` requires the operator
+   `~/.config/budget-analyzer/instance.env`. If that file is not present in the
+   current shell, stop and run this proof on the OCI host or another operator
+   shell where the non-secret instance config exists.
+4. Commit or otherwise review the resulting production baseline before any live
+   OCI mutation.
 
 ### Phase F: Human OCI Deployment
 
 Owner: human operator on the OCI host.
 
+This phase upgrades the live OCI baseline in dependency order. Run
+platform/controller/infrastructure/secret-sync work before applying the
+`v0.0.14` app image overlay.
+
 Steps:
 
 1. SSH to the OCI host, update the repo checkout to the reviewed release
-   baseline, and set:
+   baseline, confirm the non-secret operator config exists, and set:
    ```bash
+   test -f ~/.config/budget-analyzer/instance.env
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ```
 2. Capture the live baseline:
@@ -285,7 +316,94 @@ Steps:
    ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
    ./scripts/guardrails/verify-production-image-overlay.sh
    ```
-4. For an app-only release, apply the production app overlay:
+4. Reconcile the platform and controller baseline before touching app images:
+   ```bash
+   ./deploy/scripts/01-install-k3s.sh
+   ./deploy/scripts/02-bootstrap-cluster.sh
+   ./deploy/scripts/04-install-istio.sh
+   ./deploy/scripts/05-install-platform-controllers.sh
+   ```
+   If the live cluster already has public TLS and Istio must be reconciled,
+   pass `--acknowledge-public-tls-downgrade` to
+   `./deploy/scripts/04-install-istio.sh` only when the phase 11 public TLS
+   manifests will be reapplied immediately in step 5.
+5. If step 4 intentionally reconciled Istio over an already-public TLS host,
+   immediately reapply the phase 11 public TLS manifests:
+   ```bash
+   ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
+   kubectl apply -f tmp/phase-11/cluster-issuer.yaml
+   kubectl apply -f tmp/phase-11/public-certificate.yaml
+   kubectl apply -f tmp/phase-11/reference-grant.yaml
+   kubectl apply -f tmp/phase-11/ingress-gateway-config.yaml
+   kubectl apply -f tmp/phase-11/istio-gateway.yaml
+   ```
+6. Reapply and verify network policies before workloads:
+   ```bash
+   ./deploy/scripts/07-apply-network-policies.sh
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
+   ```
+7. Reconcile secret synchronization and internal TLS before deploying app
+   images that depend on the new secret contract. For `v0.0.14`, RabbitMQ
+   definitions changed: `currency-service` now uses
+   `exchange-rate.import.requested`, and the former `currency.created`
+   destination must not be carried forward in the OCI definitions secret.
+   ```bash
+   set -euo pipefail
+   ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+   ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh
+   ./deploy/scripts/09-render-phase-5-secrets.sh
+   ./deploy/scripts/10-apply-phase-5-secrets.sh
+   kubectl get clustersecretstore budget-analyzer-oci-vault
+   kubectl get externalsecret -A
+   kubectl get externalsecret -n infrastructure rabbitmq-bootstrap-credentials
+   kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials
+   kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
+   kubectl get secret -n default transaction-service-preview-import-token-credentials
+   kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
+     -o jsonpath='{.data.definitions\.json}' \
+     | base64 -d \
+     | grep -F 'exchange-rate\\.import\\.requested'
+   ! kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
+     -o jsonpath='{.data.definitions\.json}' \
+     | base64 -d \
+     | grep -F 'currency\\.created'
+   ```
+   The first grep must show the new `exchange-rate.import.requested`
+   permissions. The second command must produce no `currency.created` entries.
+   If internal PostgreSQL, Redis, or RabbitMQ TLS secrets are missing or
+   intentionally rotating, run
+   `./deploy/scripts/11-generate-phase-5-infra-tls.sh` from the OCI host.
+8. Apply production infrastructure before app images. On a new or already
+   migrated cluster, use the normal infrastructure apply path:
+   ```bash
+   ./deploy/scripts/17-render-production-infrastructure.sh
+   sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
+   ./deploy/scripts/18-apply-production-infrastructure.sh
+   ```
+   If this OCI cluster still has the old Redis Deployment plus standalone
+   `redis-data` PVC, run the guarded migration instead of the normal apply:
+   ```bash
+   ./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis --restart-redis-clients
+   ```
+   Before deploying the matching `currency-service` image, remove obsolete
+   empty RabbitMQ queues from the former destination. Check message counts
+   first:
+   ```bash
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl list_queues -p / name messages \
+     | grep 'currency.created.exchange-rate-import-service' || true
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service.dlq
+   ```
+   Do not delete non-empty queues without an explicit migration or discard
+   decision.
+9. Apply the production route, ingress-policy, and Auth0 egress render output:
+   ```bash
+   ./deploy/scripts/13-render-phase-6-production-manifests.sh
+   kubectl apply -f tmp/phase-6/gateway-routes.yaml
+   kubectl apply -f tmp/phase-6/istio-ingress-policies.yaml
+   kubectl apply -f tmp/phase-6/istio-egress.yaml
+   ```
+10. Apply the `v0.0.14` production app image overlay:
    ```bash
    kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone \
      | kubectl apply --server-side -f -
@@ -296,20 +414,26 @@ Steps:
    kubectl rollout status deployment/ext-authz --timeout=300s
    kubectl rollout status deployment/nginx-gateway --timeout=300s
    ```
-5. Reapply production admission policy after image refs change:
+11. Reapply production admission and observability after image refs and platform
+   resources converge:
    ```bash
+   ./deploy/scripts/14-install-phase-7-kyverno.sh
    ./deploy/scripts/15-apply-phase-7-policies.sh
+   ./deploy/scripts/22-apply-production-monitoring.sh --verify-runtime
    ```
-6. Run focused production verification:
+12. Run focused production verification:
    ```bash
    kubectl get pods -A
    kubectl get gateway,httproute -A
+   kubectl get peerauthentication,authorizationpolicy -A
+   kubectl get networkpolicy -A
    ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
    ./scripts/guardrails/verify-production-image-overlay.sh
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ./scripts/smoketest/verify-observability-port-forward-access.sh
    ./scripts/smoketest/verify-monitoring-runtime.sh --wait-timeout 180
    ```
-7. From a workstation, verify the public route:
+13. From a workstation, verify the public route:
    ```bash
    curl -I https://demo.budgetanalyzer.org/
    curl -I https://demo.budgetanalyzer.org/api-docs
@@ -318,95 +442,14 @@ Steps:
 Do not run certificate-generating scripts from the AI container. If public TLS
 or infra TLS has to be generated or rotated, run those host-side only.
 
-### Legacy Checklist Mapping
-
-The following checklist preserves the original flow and maps to the owner split
-above.
-
-### 1. Pre-Release Validation
-
-- Confirm the current branches are the intended release heads.
-- Run the relevant local validation from the lockstep upgrade plan.
-- Run `./scripts/repo/validate-repos.sh` and resolve failures rather than
-  tagging around them.
-- Use `./scripts/repo/update-service-common-version.sh` when the
-  `service-common` release version or Java consumer version catalogs need to
-  move together.
-- Confirm `service-common` has the intended release version in its Gradle
-  metadata before tagging, because its publish workflow rejects tag/version
-  mismatches.
-- Confirm the sibling service release workflows have access to
-  `SERVICE_COMMON_PACKAGES_USERNAME` and `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
-- Confirm the production secret prerequisites from the lockstep plan are ready,
-  especially any new transaction-service preview import token secret and
-  RabbitMQ definitions changes.
-
-### 2. Tag The Release
-
-- Choose the version, for example `v0.0.13`.
-- Use the existing tag helper only after validating that its repository set is
-  correct for this release:
-  ```bash
-  ./scripts/repo/tag-release.sh v0.0.13
-  ```
-- If `checkstyle-config` should not receive an OCI runtime release tag, update
-  the helper first or tag the runtime repos explicitly with documented commands.
-  Do not silently create an inconsistent release set.
-
-### 3. Publish Release Artifacts
-
-- Confirm the tag push triggered each sibling `publish-release.yml` workflow.
-- Confirm `service-common` packages published successfully before relying on
-  backend service image builds.
-- Confirm the service and frontend workflows published `linux/arm64` GHCR
-  images.
-- Trigger this repo's `publish-ext-authz-release.yml` for the same tag if the
-  tag push does not already do so.
-- Capture the digest-pinned image refs printed by each workflow.
-
-### 4. Update The Production Baseline
-
-- Create a release manifest in a temporary or future checked-in location with
-  the release version, source commits, workflow run URLs, and six application
-  image refs.
-- Use the production image update helper from the lockstep plan:
-  ```bash
-  ./deploy/scripts/23-update-production-release-images.sh \
-    --release-manifest tmp/releases/v0.0.13.yaml
-  ```
-- Run:
-  ```bash
-  kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-  ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
-  ./scripts/guardrails/verify-production-image-overlay.sh
-  ./deploy/scripts/09-render-phase-5-secrets.sh
-  ```
-
-### 5. Deploy To OCI
-
-- Capture the live baseline before applying changes:
-  ```bash
-  kubectl get nodes -o wide
-  kubectl get pods -A
-  helm list -A
-  kubectl get deploy,statefulset -A
-  ```
-- Execute only the deployment phases required by the release:
-  - platform phases when k3s, Gateway API, Istio, cert-manager, External
-    Secrets Operator, Kyverno, Kiali, or Prometheus chart pins changed
-  - infrastructure phases when PostgreSQL, RabbitMQ, Redis, storage, or
-    bootstrap definitions changed
-  - secret-sync phases when Vault inventory, ExternalSecret wiring, or
-    non-secret IDP config changed
-  - app phases for every release image update
-  - observability phases when monitoring, Jaeger, or Kiali changed
-  - public TLS phase immediately after any phase that intentionally reverts the
-    ingress Gateway to the phase-4 HTTP-only baseline
-- Verify rollouts and run the production checks listed in the lockstep plan.
-
 ## Reusable Automation Work
 
+This section tracks reusable automation work. Phases 1-6 are complete; later
+phases remain future automation work and are not the live `v0.0.14` runbook.
+
 ### Phase 1: Release Manifest Contract
+
+Status: Complete. Implemented for local operator-generated manifests.
 
 Add a release manifest format that can be produced manually at first and later
 by GitHub automation.
@@ -443,6 +486,8 @@ Validation rules:
 
 ### Phase 2: Release Preparation Helper
 
+Status: Complete. Implemented as `scripts/repo/prepare-lockstep-release.sh`.
+
 Add a local helper for the release manager.
 
 Proposed script:
@@ -465,6 +510,9 @@ preparation.
 
 ### Phase 3: Production Image Update Helper
 
+Status: Complete. Implemented for explicit image arguments and release
+manifest input.
+
 Implement the helper already required by the lockstep plan:
 
 - `deploy/scripts/23-update-production-release-images.sh`
@@ -473,13 +521,16 @@ Extend it to accept either explicit image arguments or a release manifest:
 
 ```bash
 ./deploy/scripts/23-update-production-release-images.sh \
-  --release-manifest tmp/releases/v0.0.13.yaml
+  --release-manifest tmp/releases/v0.0.14.yaml
 ```
 
 The explicit image-argument form remains useful for quick operator repair. The
 manifest form becomes the normal path.
 
 ### Phase 4: OCI Lockstep Static Verifier
+
+Status: Complete. Implemented as
+`deploy/scripts/24-verify-oci-upgrade-lockstep.sh`.
 
 Implement the verifier already required by the lockstep plan:
 
@@ -489,6 +540,8 @@ This verifier is the main safety gate before any master script mutates the OCI
 cluster.
 
 ### Phase 5: Master OCI Deployment Script
+
+Status: Complete. Implemented as `deploy/scripts/25-deploy-oci-release.sh`.
 
 Add a single operator-facing master script.
 
@@ -542,6 +595,9 @@ The script should compose the existing numbered scripts rather than duplicate
 their implementation.
 
 ### Phase 6: Checklist And Run Log Template
+
+Status: Complete. Implemented as
+`docs/runbooks/oci-release-deployment-checklist.md`.
 
 Add a concise deployment checklist template after the second deployment proves
 which evidence is useful.

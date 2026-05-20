@@ -421,6 +421,8 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'name: nginx-gateway-config' "rendered production overlay is missing the production nginx-gateway-config ConfigMap"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'name: nginx-gateway-docs' "rendered production overlay is missing the production nginx-gateway-docs ConfigMap"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /api-docs {' "rendered production nginx config is missing the /api-docs route"
+    assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /api-docs/release-metadata.json {' "rendered production nginx config is missing the /api-docs/release-metadata.json route"
+    assert_contains_literal "${RENDERED_APPS_FILE}" 'release-metadata.json: |' "rendered production docs ConfigMap is missing release-metadata.json"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /login {' "rendered production nginx config is missing the /login route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = / {' "rendered production nginx config is missing the root route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /@vite/client {' "rendered production nginx config is missing the explicit Vite deny route"

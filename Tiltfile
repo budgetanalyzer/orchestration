@@ -665,6 +665,7 @@ configmap_create(
     namespace=DEFAULT_NAMESPACE,
     from_file=[
         'index.html=docs-aggregator/index.html',
+        'release-metadata.json=docs-aggregator/release-metadata.json',
         'swagger-initializer.js=docs-aggregator/swagger-initializer.js',
         'swagger-ui-overrides.css=docs-aggregator/swagger-ui-overrides.css',
     ],

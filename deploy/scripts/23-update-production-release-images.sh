@@ -11,12 +11,18 @@ source "${SCRIPT_DIR}/lib/common.sh"
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
+PRODUCTION_RUNTIME_METADATA_PATCH="${PRODUCTION_APPS_DIR}/runtime-release-metadata.yaml"
+LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
+PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
 PRODUCTION_IMAGE_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 LOCKSTEP_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 INSTANCE_ENV_TEMPLATE="$(phase4_repo_path "deploy/instance.env.template")"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly PRODUCTION_KUSTOMIZATION
+readonly PRODUCTION_RUNTIME_METADATA_PATCH
+readonly LOCAL_RELEASE_METADATA_JSON
+readonly PRODUCTION_RELEASE_METADATA_JSON
 readonly PRODUCTION_IMAGE_VERIFIER
 readonly LOCKSTEP_VERIFIER
 readonly INSTANCE_ENV_TEMPLATE
@@ -31,6 +37,15 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
+RUNTIME_DEPLOYMENT_ORDER=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+    "ext-authz"
+)
+readonly RUNTIME_DEPLOYMENT_ORDER
+
 declare -A IMAGE_REPOS=(
     ["transaction-service"]="transaction-service"
     ["currency-service"]="currency-service"
@@ -38,6 +53,15 @@ declare -A IMAGE_REPOS=(
     ["session-gateway"]="session-gateway"
     ["budget-analyzer-web"]="budget-analyzer-web"
     ["ext-authz"]="ext-authz"
+)
+
+declare -A ARTIFACT_SOURCE_REPOS=(
+    ["transaction-service"]="transaction-service"
+    ["currency-service"]="currency-service"
+    ["permission-service"]="permission-service"
+    ["session-gateway"]="session-gateway"
+    ["budget-analyzer-web"]="budget-analyzer-web"
+    ["ext-authz"]="orchestration"
 )
 
 RELEASE_REPOS=(
@@ -53,6 +77,8 @@ RELEASE_REPOS=(
 readonly RELEASE_REPOS
 
 declare -A IMAGE_REFS=()
+declare -A SOURCE_REPOS=()
+declare -A COMMIT_SHAS=()
 
 usage() {
     cat <<'EOF'
@@ -307,6 +333,11 @@ load_manifest() {
                 IMAGE_REFS["${service}"]="${value}"
             fi
         fi
+
+        value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "source_repository")"
+        if [[ -n "${value}" ]]; then
+            SOURCE_REPOS["${service}"]="${value}"
+        fi
     done
 
     if [[ "${full_manifest}" != true ]]; then
@@ -336,6 +367,13 @@ load_manifest() {
         value="$(manifest_nested_value "${manifest}" "repositories" "${repo}" "commit")"
         [[ -n "${value}" ]] || phase4_die "release manifest is missing repositories.${repo}.commit"
         valid_commit_sha "${value}" || phase4_die "invalid commit SHA for repositories.${repo}.commit: ${value}"
+        COMMIT_SHAS["${repo}"]="${value}"
+    done
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        value="$(artifact_source_repo "${service}")"
+        [[ -n "${COMMIT_SHAS[${value}]:-}" ]] || \
+            phase4_die "artifacts.${service}.source_repository does not match a repository commit entry: ${value}"
     done
 
     for service in "${SERVICE_ORDER[@]}"; do
@@ -426,6 +464,125 @@ data:
   ext-authz: "${IMAGE_REFS[ext-authz]}"
 EOF
     mv "${temp_file}" "${PRODUCTION_IMAGE_INVENTORY}"
+}
+
+artifact_source_repo() {
+    local service="$1"
+
+    printf '%s\n' "${SOURCE_REPOS[${service}]:-${ARTIFACT_SOURCE_REPOS[${service}]}}"
+}
+
+artifact_revision() {
+    local service="$1"
+    local source_repo
+
+    source_repo="$(artifact_source_repo "${service}")"
+    printf '%s\n' "${COMMIT_SHAS[${source_repo}]:-}"
+}
+
+write_release_metadata_json_file() {
+    local output_path="$1"
+    local temp_file="${output_path}.tmp"
+    local service
+    local index=0
+
+    mkdir -p "$(dirname "${output_path}")"
+
+    {
+        printf '{\n'
+        printf '  "release": {\n'
+        printf '    "version": "v%s",\n' "${release_version}"
+        printf '    "imageTag": "%s"\n' "${release_version}"
+        printf '  },\n'
+        printf '  "artifacts": {\n'
+        for service in "${SERVICE_ORDER[@]}"; do
+            if [[ "${index}" -gt 0 ]]; then
+                printf ',\n'
+            fi
+            printf '    "%s": {\n' "${service}"
+            printf '      "image": "%s"\n' "${IMAGE_REFS[${service}]}"
+            printf '    }'
+            index=$((index + 1))
+        done
+        printf '\n'
+        printf '  }\n'
+        printf '}\n'
+    } > "${temp_file}"
+
+    mv "${temp_file}" "${output_path}"
+}
+
+write_release_metadata_json() {
+    write_release_metadata_json_file "${LOCAL_RELEASE_METADATA_JSON}"
+    write_release_metadata_json_file "${PRODUCTION_RELEASE_METADATA_JSON}"
+}
+
+write_runtime_metadata_document() {
+    local temp_file="$1"
+    local workload="$2"
+    local image_ref="$3"
+    local revision="$4"
+
+    cat >> "${temp_file}" <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${workload}
+  namespace: default
+  labels:
+    app.kubernetes.io/name: ${workload}
+    app.kubernetes.io/part-of: budget-analyzer
+    budgetanalyzer.org/environment-release: v${release_version}
+  annotations:
+    budgetanalyzer.org/release-version: v${release_version}
+    budgetanalyzer.org/image: ${image_ref}
+    org.opencontainers.image.version: ${release_version}
+EOF
+
+    if [[ -n "${revision}" ]]; then
+        cat >> "${temp_file}" <<EOF
+    org.opencontainers.image.revision: ${revision}
+EOF
+    fi
+
+    cat >> "${temp_file}" <<EOF
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${workload}
+        app.kubernetes.io/part-of: budget-analyzer
+        budgetanalyzer.org/environment-release: v${release_version}
+      annotations:
+        budgetanalyzer.org/release-version: v${release_version}
+        budgetanalyzer.org/image: ${image_ref}
+        org.opencontainers.image.version: ${release_version}
+EOF
+
+    if [[ -n "${revision}" ]]; then
+        cat >> "${temp_file}" <<EOF
+        org.opencontainers.image.revision: ${revision}
+EOF
+    fi
+}
+
+write_runtime_release_metadata_patch() {
+    local temp_file="${PRODUCTION_RUNTIME_METADATA_PATCH}.tmp"
+    local service
+    local revision
+
+    : > "${temp_file}"
+
+    for service in "${RUNTIME_DEPLOYMENT_ORDER[@]}"; do
+        revision="$(artifact_revision "${service}")"
+        write_runtime_metadata_document "${temp_file}" "${service}" "${IMAGE_REFS[${service}]}" "${revision}"
+        printf -- '---\n' >> "${temp_file}"
+    done
+
+    revision="$(artifact_revision "budget-analyzer-web")"
+    write_runtime_metadata_document "${temp_file}" "nginx-gateway" "${IMAGE_REFS[budget-analyzer-web]}" "${revision}"
+
+    mv "${temp_file}" "${PRODUCTION_RUNTIME_METADATA_PATCH}"
 }
 
 replace_literal_in_file() {
@@ -566,6 +723,8 @@ main() {
     validate_image_refs
     update_kustomization
     write_image_inventory
+    write_release_metadata_json
+    write_runtime_release_metadata_patch
     update_release_version_references "${old_release_version}"
     verify_updates
 

@@ -402,6 +402,10 @@ directory without writing outside the repository.
   resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and defaults
   all phase flags to `false` unless a corresponding `--*-changed` or
   `--public-tls-reapply-required` flag is passed.
+- `deploy/scripts/23-update-production-release-images.sh` consumes that
+  manifest to update the checked-in production image inventory, production app
+  image overlay, browser-visible `/api-docs/release-metadata.json`, and the
+  generated production runtime release labels/annotations patch.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

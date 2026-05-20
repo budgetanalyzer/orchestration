@@ -40,13 +40,40 @@ body {
     padding: 1.5rem;
 }
 
+.docs-header-top {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+    margin: 0 0 0.75rem;
+}
+
 .docs-kicker {
     color: var(--docs-accent);
     font-size: 0.82rem;
     font-weight: 700;
     letter-spacing: 0.14em;
-    margin: 0 0 0.75rem;
+    margin: 0;
     text-transform: uppercase;
+}
+
+.docs-release {
+    background: #e8f1ef;
+    border: 1px solid rgba(24, 94, 82, 0.2);
+    border-radius: 999px;
+    color: #185e52;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0;
+    padding: 0.42rem 0.72rem;
+}
+
+.docs-release-muted {
+    background: rgba(92, 104, 119, 0.12);
+    border-color: rgba(92, 104, 119, 0.2);
+    color: var(--docs-muted);
 }
 
 .docs-header h1 {

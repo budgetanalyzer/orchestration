@@ -1,7 +1,7 @@
 # Plan: Runtime Release Metadata And Labels
 
 Date: 2026-05-20
-Status: Draft
+Status: Implemented
 
 Related documents:
 
@@ -234,13 +234,12 @@ Optional service/version labels:
 - OpenAPI `info.version` remains API contract metadata and must not be
   rewritten just to match a deployment release.
 
-Apply these to the six production runtime artifacts:
+Apply these to the production runtime Deployments:
 
 - `transaction-service`
 - `currency-service`
 - `permission-service`
 - `session-gateway`
-- `budget-analyzer-web`
 - `ext-authz`
 
 For production, `nginx-gateway` serves the frontend bundle, so it should also

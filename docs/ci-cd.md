@@ -254,14 +254,23 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
-- before changing that inventory for a new lockstep release, run
-  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z` to
-  verify the sibling repository set and tag contract, then create
-  `tmp/releases/vX.Y.Z.yaml` with `./scripts/repo/generate-release-manifest.sh`
-  after the six runtime image workflows complete
+- before changing that inventory for a coordinated source and
+  `service-common` library release, run
+  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; for an
+  ordinary runtime environment release, keep existing Java consumers on their
+  checked-in `serviceCommon` version unless the shared library actually
+  changed
+- create `tmp/releases/vX.Y.Z.yaml` with
+  `./scripts/repo/generate-release-manifest.sh` after the six runtime image
+  workflows complete
 - release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
   form, repository commit SHAs, artifact workflow run URLs, digest-pinned GHCR
   image refs, and operator-selected deployment phase flags
+- `./deploy/scripts/23-update-production-release-images.sh --release-manifest
+  tmp/releases/vX.Y.Z.yaml` updates the production image inventory, production
+  app image overlay, `/api-docs/release-metadata.json`, and runtime
+  Deployment/Pod release labels and image annotations from the same reviewed
+  manifest data
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

@@ -92,6 +92,8 @@ below.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
+| Live runtime release labels | `./scripts/ops/show-pod-version-labels.sh --expected-version vX.Y.Z --tracked-only --strict` |  |
+| Public release metadata, if public TLS is active | `curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json` |  |
 
 ## Scripts Run
 
@@ -132,6 +134,7 @@ master script.
 | Monitoring runtime verifier |  |  |
 | Public root route, if public TLS is active |  |  |
 | Public `/api-docs` route, if public TLS is active |  |  |
+| Public `/api-docs/release-metadata.json`, if public TLS is active |  |  |
 | Browser login/session flow |  |  |
 | Representative API request |  |  |
 
@@ -146,6 +149,8 @@ master script.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
+| Live runtime release labels |  |  |
+| Browser-visible release metadata |  |  |
 | Observability remains internal-only |  |  |
 
 ## Rollback Notes

@@ -96,6 +96,10 @@ scripts/
   OCI version contracts, production app image inventory alignment, production
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
+- `repo/generate-release-manifest.sh` - Resolves GHCR tag digests for the six
+  runtime application images and writes the Phase D release manifest under
+  `tmp/releases/v<version>.yaml` for
+  `../deploy/scripts/23-update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 

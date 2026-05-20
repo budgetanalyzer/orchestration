@@ -219,7 +219,13 @@ Steps:
 Owner: human release manager, with AI assistant support allowed for file
 formatting after refs are provided.
 
-Create `tmp/releases/v0.0.13.yaml`:
+Generate `tmp/releases/v0.0.13.yaml` from the published GHCR tags:
+
+```bash
+./scripts/repo/generate-release-manifest.sh 0.0.13
+```
+
+The generated file has this shape:
 
 ```yaml
 release-version: "0.0.13"
@@ -662,3 +668,22 @@ This plan is complete when:
 - a GitHub-triggered workflow exists or is explicitly deferred with rationale
 - all modified shell scripts pass `bash -n` and `shellcheck`
 - production image overlay and lockstep verifiers pass before OCI apply
+
+## Follow-Up: Runtime Service Version Metadata
+
+The Java runtime service repos currently keep their Gradle project versions at
+`0.0.1-SNAPSHOT`, while release workflows derive deployable image identity from
+the shared release tag and publish digest-pinned images. That is acceptable for
+this deployment path, because production deploys consume immutable image refs,
+not service Gradle project versions.
+
+After the repeatable release path is proven, decide whether to:
+
+- document Java service `project.version` values as local build metadata only
+- derive service build metadata from the release tag during CI
+- update service Gradle project versions as part of a coordinated release
+  preparation helper
+
+Do not make this a Phase B blocker unless runtime endpoints, JAR metadata, or
+operator evidence need the services themselves to report the exact release
+version.

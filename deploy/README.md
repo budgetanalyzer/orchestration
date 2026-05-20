@@ -45,6 +45,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `deploy/manifests/phase-5/external-secrets.yaml`
    - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
    - `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh`
+   - `deploy/scripts/12-update-rabbitmq-definitions-secret.sh`
    - `deploy/scripts/09-render-phase-5-secrets.sh`
    - `deploy/scripts/10-apply-phase-5-secrets.sh`
    - `deploy/scripts/11-generate-phase-5-infra-tls.sh`
@@ -143,6 +144,7 @@ and the standard shell tools used by the scripts.
 - `./deploy/scripts/04-install-istio.sh` and `./deploy/scripts/05-install-platform-controllers.sh` require `helm`.
 - `./deploy/scripts/14-install-phase-7-kyverno.sh` requires `helm`.
 - `./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` requires the OCI CLI plus `openssl`.
+- `./deploy/scripts/12-update-rabbitmq-definitions-secret.sh` requires the OCI CLI.
 - `./deploy/scripts/11-generate-phase-5-infra-tls.sh` requires `openssl`.
 - On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
 - Verify the install before rerunning the cluster bootstrap scripts: `helm version`
@@ -162,7 +164,8 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
 | `deploy/scripts/10-apply-phase-5-secrets.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, checked-in `ExternalSecret` inventory changes, or any `instance.env` change that affects the rendered resources. |
 | `deploy/scripts/11-generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
-| `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, Redis, and generated application secrets such as `budget-analyzer-transaction-preview-import-token-encryption-secret`, while leaving `budget-analyzer-rabbitmq-definitions` as the one manual follow-up. The generated secret material is written to an operator-only file outside the repo so the checked-in RabbitMQ definitions template can be rendered once. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated secret receipt file is reused on subsequent runs. |
+| `deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, Redis, and generated application secrets such as `budget-analyzer-transaction-preview-import-token-encryption-secret`. The generated secret material is written to an operator-only file outside the repo so the RabbitMQ definitions secret can be rendered afterward. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated secret receipt file is reused on subsequent runs. |
+| `deploy/scripts/12-update-rabbitmq-definitions-secret.sh` | Renders the checked-in RabbitMQ definitions template with the generated RabbitMQ passwords, validates the `exchange-rate.import.requested` contract, and creates or updates the OCI Vault `budget-analyzer-rabbitmq-definitions` secret. | Run after `12-bootstrap-phase-5-vault-secrets.sh` and before applying phase 5 secret sync when RabbitMQ destinations or permissions change. |
 | `deploy/scripts/13-render-phase-6-production-manifests.sh` | Renders the reviewed app-only production gateway routes, ingress policies, production Grafana port-forward override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
 | `deploy/scripts/14-install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
 | `deploy/scripts/15-apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared admission policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
@@ -345,6 +348,7 @@ shell history:
    sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
    sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
    sed -n '1,260p' deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+   sed -n '1,260p' deploy/scripts/12-update-rabbitmq-definitions-secret.sh
    sed -n '1,220p' deploy/scripts/09-render-phase-5-secrets.sh
    sed -n '1,220p' deploy/scripts/10-apply-phase-5-secrets.sh
    sed -n '1,260p' deploy/scripts/11-generate-phase-5-infra-tls.sh
@@ -352,6 +356,7 @@ shell history:
 3. After the OCI vault/key exists and `~/.config/budget-analyzer/instance.env` includes `OCI_VAULT_OCID`, populate the plain-text vault secrets and then render the reviewed secret-sync artifacts.
    ```bash
    ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+   ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh
    sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
    sed -n '1,260p' tmp/phase-5/external-secrets.yaml
@@ -361,9 +366,19 @@ shell history:
    for the transaction-service preview import token flow. That is an OCI Vault
    application secret, not a `deploy/instance.env.template` value.
 
-   The script intentionally stops short of `budget-analyzer-rabbitmq-definitions`. Build that JSON from `deploy/manifests/phase-5/rabbitmq-definitions.template.json` with the generated RabbitMQ passwords from `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`, then create the final OCI secret manually.
-
-   The template is the checked-in allow-list for the `currency-service` AMQP resources. It currently grants `exchange-rate.import.requested`, `exchange-rate.import.requested.exchange-rate-import-service`, its DLQ, server-named reply queues, `amq.default`, and `DLX`. The service queue and DLQ must be present in `write` as well as `configure` and `read`, because RabbitMQ checks `write` permission during queue declaration. `DLX` must also be present in `read`, because RabbitMQ checks `read` on the source exchange during DLQ binding.
+   The RabbitMQ definitions script renders
+   `deploy/manifests/phase-5/rabbitmq-definitions.template.json` with the
+   generated RabbitMQ passwords from
+   `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`
+   and writes the rendered secret payload outside the repo. The template is the
+   checked-in allow-list for the `currency-service` AMQP resources. It
+   currently grants `exchange-rate.import.requested`,
+   `exchange-rate.import.requested.exchange-rate-import-service`, its DLQ,
+   server-named reply queues, `amq.default`, and `DLX`. The service queue and
+   DLQ must be present in `write` as well as `configure` and `read`, because
+   RabbitMQ checks `write` permission during queue declaration. `DLX` must also
+   be present in `read`, because RabbitMQ checks `read` on the source exchange
+   during DLQ binding.
 4. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml

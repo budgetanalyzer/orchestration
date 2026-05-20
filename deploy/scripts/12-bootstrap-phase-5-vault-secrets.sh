@@ -42,7 +42,7 @@ Creates the OCI Vault secret inventory for all plain-text secrets:
   - generates strong random values for PostgreSQL, RabbitMQ, Redis, and
     transaction preview import token encryption
   - stores the generated values in an operator-only file outside the repo so
-    the RabbitMQ definitions JSON can be assembled manually afterward
+    12-update-rabbitmq-definitions-secret.sh can render the RabbitMQ definitions
   - creates any missing OCI Vault secrets, while leaving existing secrets
     unchanged
 
@@ -265,7 +265,7 @@ main() {
     create_generated_secrets
 
     phase4_info "created or confirmed every plain-text vault secret except budget-analyzer-rabbitmq-definitions"
-    phase4_warn "next step: build budget-analyzer-rabbitmq-definitions using the RabbitMQ passwords in ${GENERATED_ENV_FILE}, then create that final OCI secret manually"
+    phase4_warn "next step: run deploy/scripts/12-update-rabbitmq-definitions-secret.sh using the RabbitMQ passwords in ${GENERATED_ENV_FILE}"
 }
 
 main "$@"

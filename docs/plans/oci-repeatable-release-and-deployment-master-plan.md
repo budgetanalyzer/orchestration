@@ -326,21 +326,34 @@ Steps:
    ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ```
 7. Reconcile secret synchronization and internal TLS before deploying app
-   images that depend on the new secret contract:
+   images that depend on the new secret contract. For `v0.0.14`, RabbitMQ
+   definitions changed: `currency-service` now uses
+   `exchange-rate.import.requested`, and the former `currency.created`
+   destination must not be carried forward in the OCI definitions secret.
    ```bash
    ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+   ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh
    ./deploy/scripts/10-apply-phase-5-secrets.sh
    kubectl get clustersecretstore budget-analyzer-oci-vault
    kubectl get externalsecret -A
+   kubectl get externalsecret -n infrastructure rabbitmq-bootstrap-credentials
+   kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials
    kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
    kubectl get secret -n default transaction-service-preview-import-token-credentials
+   kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
+     -o jsonpath='{.data.definitions\.json}' \
+     | base64 -d \
+     | grep 'exchange-rate\.import\.requested'
+   ! kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
+     -o jsonpath='{.data.definitions\.json}' \
+     | base64 -d \
+     | grep 'currency\.created'
    ```
-   If RabbitMQ destination permissions changed, update the OCI Vault
-   `budget-analyzer-rabbitmq-definitions` secret from
-   `deploy/manifests/phase-5/rabbitmq-definitions.template.json` before
-   applying secret sync. If internal PostgreSQL, Redis, or RabbitMQ TLS secrets
-   are missing or intentionally rotating, run
+   The first grep must show the new `exchange-rate.import.requested`
+   permissions. The second command must produce no `currency.created` entries.
+   If internal PostgreSQL, Redis, or RabbitMQ TLS secrets are missing or
+   intentionally rotating, run
    `./deploy/scripts/11-generate-phase-5-infra-tls.sh` from the OCI host.
 8. Apply production infrastructure before app images. On a new or already
    migrated cluster, use the normal infrastructure apply path:
@@ -354,6 +367,17 @@ Steps:
    ```bash
    ./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis --restart-redis-clients
    ```
+   Before deploying the matching `currency-service` image, remove obsolete
+   empty RabbitMQ queues from the former destination. Check message counts
+   first:
+   ```bash
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl list_queues -p / name messages \
+     | grep 'currency.created.exchange-rate-import-service' || true
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service
+   kubectl exec -n infrastructure statefulset/rabbitmq -- rabbitmqctl delete_queue -p / currency.created.exchange-rate-import-service.dlq
+   ```
+   Do not delete non-empty queues without an explicit migration or discard
+   decision.
 9. Apply the production route, ingress-policy, and Auth0 egress render output:
    ```bash
    ./deploy/scripts/13-render-phase-6-production-manifests.sh

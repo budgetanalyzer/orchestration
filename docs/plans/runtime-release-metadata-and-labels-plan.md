@@ -117,12 +117,14 @@ If local Tilt needs a development fallback, keep it explicit, for example:
 ## Kubernetes Labels And Annotations
 
 Add release identity to application Deployment metadata and Pod templates.
+Keep environment release identity separate from service artifact or API
+contract versions.
 
 Required labels:
 
 - `app.kubernetes.io/part-of: budget-analyzer`
 - `app.kubernetes.io/name: <workload-name>`
-- `app.kubernetes.io/version: <X.Y.Z>`
+- `budgetanalyzer.org/environment-release: vX.Y.Z`
 
 Required annotations:
 
@@ -133,6 +135,15 @@ Required annotations:
 When the release manifest includes repository commit SHAs, also add:
 
 - `org.opencontainers.image.revision: <40-char commit SHA>`
+
+Optional service/version labels:
+
+- `app.kubernetes.io/version` may be used only when the workload has a real
+  service artifact version. Do not use it as the primary environment release
+  label unless the project intentionally keeps that service artifact version in
+  lockstep with the environment baseline.
+- OpenAPI `info.version` remains API contract metadata and must not be
+  rewritten just to match a deployment release.
 
 Apply these to the six production runtime artifacts:
 
@@ -165,9 +176,9 @@ Expected behavior:
 - read the expected version from
   `kubernetes/production/apps/image-inventory.yaml` by default
 - warn when a Budget Analyzer runtime pod is missing
-  `app.kubernetes.io/version`
-- warn when a Budget Analyzer runtime pod's version label differs from the
-  expected release version
+  `budgetanalyzer.org/environment-release`
+- warn when a Budget Analyzer runtime pod's environment release label differs
+  from the expected release version
 - exit non-zero only when called with `--strict`
 
 Later gate:
@@ -194,4 +205,5 @@ Update the nearest documentation with the implementation:
 - Production app manifests render release labels and image metadata
   annotations.
 - `./scripts/ops/show-pod-version-labels.sh --strict` passes after a correctly
-  labeled deployment and fails on missing or mismatched runtime app labels.
+  labeled deployment and fails on missing or mismatched runtime environment
+  release labels.

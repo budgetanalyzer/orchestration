@@ -16,11 +16,12 @@ usage() {
 Usage: ./scripts/ops/show-pod-version-labels.sh [options]
 
 Lists pod release labels for the current Kubernetes context and warns when
-Budget Analyzer runtime pods do not match the expected release version.
+Budget Analyzer runtime pods do not match the expected environment release.
 
 Options:
-  --expected-version VERSION  Expected app.kubernetes.io/version value. Accepts
-                              X.Y.Z or vX.Y.Z; comparison uses X.Y.Z.
+  --expected-version VERSION  Expected budgetanalyzer.org/environment-release
+                              value. Accepts X.Y.Z or vX.Y.Z; comparison uses
+                              vX.Y.Z.
   --inventory PATH            Image inventory to read release-version from.
                               Default: kubernetes/production/apps/image-inventory.yaml
   --tracked-only              Print only Budget Analyzer runtime pods.
@@ -67,10 +68,13 @@ is_tracked_app() {
     esac
 }
 
-normalize_label_version() {
+normalize_environment_release() {
     local version="$1"
 
-    printf '%s\n' "${version#v}"
+    version="${version#v}"
+    if [[ -n "${version}" ]]; then
+        printf 'v%s\n' "${version}"
+    fi
 }
 
 parse_args() {
@@ -113,10 +117,10 @@ parse_args() {
 }
 
 main() {
-    local expected_label_version
+    local expected_environment_release
     local pod_template
     local pod_rows
-    local namespace pod app version part_of images
+    local namespace pod app environment_release app_version part_of images
     local status tracked
     local warning_count=0
     local printed_count=0
@@ -127,23 +131,23 @@ main() {
     if [[ -z "${EXPECTED_VERSION}" ]]; then
         EXPECTED_VERSION="$(read_inventory_version "${INVENTORY_PATH}")"
     fi
-    expected_label_version="$(normalize_label_version "${EXPECTED_VERSION}")"
+    expected_environment_release="$(normalize_environment_release "${EXPECTED_VERSION}")"
 
-    if [[ -z "${expected_label_version}" ]]; then
+    if [[ -z "${expected_environment_release}" ]]; then
         printf 'WARNING: no expected version supplied and no release-version found in %s; mismatch checks disabled.\n' \
             "${INVENTORY_PATH}" >&2
     else
-        printf 'Expected app.kubernetes.io/version: %s\n' "${expected_label_version}"
+        printf 'Expected budgetanalyzer.org/environment-release: %s\n' "${expected_environment_release}"
     fi
 
-    printf '%-10s %-16s %-52s %-24s %-12s %-18s %s\n' \
-        "STATUS" "NAMESPACE" "POD" "APP" "VERSION" "PART-OF" "IMAGES"
+    printf '%-10s %-16s %-52s %-24s %-14s %-12s %-18s %s\n' \
+        "STATUS" "NAMESPACE" "POD" "APP" "ENV-RELEASE" "APP-VERSION" "PART-OF" "IMAGES"
 
     # shellcheck disable=SC2016 # Go template variables must remain literal for kubectl.
-    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{index .metadata.labels "app"}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/version"}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/part-of"}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
+    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{index .metadata.labels "app"}}{{"\t"}}{{index .metadata.labels "budgetanalyzer.org/environment-release"}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/version"}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/part-of"}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
     pod_rows="$(kubectl get pods -A -o "go-template=${pod_template}")"
 
-    while IFS=$'\t' read -r namespace pod app version part_of images; do
+    while IFS=$'\t' read -r namespace pod app environment_release app_version part_of images; do
         [[ -n "${namespace}" ]] || continue
 
         tracked=false
@@ -156,24 +160,24 @@ main() {
         fi
 
         status="OK"
-        if [[ "${tracked}" == true && -n "${expected_label_version}" ]]; then
-            if [[ -z "${version}" ]]; then
+        if [[ "${tracked}" == true && -n "${expected_environment_release}" ]]; then
+            if [[ -z "${environment_release}" ]]; then
                 status="WARN"
                 warning_count=$((warning_count + 1))
-                printf 'WARNING: %s/%s is missing app.kubernetes.io/version; expected %s\n' \
-                    "${namespace}" "${pod}" "${expected_label_version}" >&2
-            elif [[ "${version}" != "${expected_label_version}" ]]; then
+                printf 'WARNING: %s/%s is missing budgetanalyzer.org/environment-release; expected %s\n' \
+                    "${namespace}" "${pod}" "${expected_environment_release}" >&2
+            elif [[ "${environment_release}" != "${expected_environment_release}" ]]; then
                 status="WARN"
                 warning_count=$((warning_count + 1))
-                printf 'WARNING: %s/%s has app.kubernetes.io/version=%s; expected %s\n' \
-                    "${namespace}" "${pod}" "${version}" "${expected_label_version}" >&2
+                printf 'WARNING: %s/%s has budgetanalyzer.org/environment-release=%s; expected %s\n' \
+                    "${namespace}" "${pod}" "${environment_release}" "${expected_environment_release}" >&2
             fi
         elif [[ "${tracked}" != true ]]; then
             status="INFO"
         fi
 
-        printf '%-10s %-16s %-52s %-24s %-12s %-18s %s\n' \
-            "${status}" "${namespace}" "${pod}" "${app:-<none>}" "${version:-<none>}" "${part_of:-<none>}" "${images:-<none>}"
+        printf '%-10s %-16s %-52s %-24s %-14s %-12s %-18s %s\n' \
+            "${status}" "${namespace}" "${pod}" "${app:-<none>}" "${environment_release:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${images:-<none>}"
         printed_count=$((printed_count + 1))
     done <<< "${pod_rows}"
 

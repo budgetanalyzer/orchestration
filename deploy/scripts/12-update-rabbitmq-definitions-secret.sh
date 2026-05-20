@@ -111,7 +111,7 @@ validate_definitions() {
     fi
 
     if ! grep -Fq 'exchange-rate.import.requested' "${OUTPUT_FILE}"; then
-        phase4_die "RabbitMQ definitions do not include exchange-rate.import.requested"
+        phase4_die "RabbitMQ definitions do not include exchange-rate.import.requested; check that ${TEMPLATE_FILE} is from the current release checkout"
     fi
 
     if grep -Fq 'currency.created' "${OUTPUT_FILE}"; then

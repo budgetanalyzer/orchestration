@@ -489,6 +489,7 @@ Run these on the OCI host from the updated repo checkout.
    confirm the synced `rabbitmq-bootstrap-credentials` secret contains the new
    definitions:
    ```bash
+   set -euo pipefail
    ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh
    ```
 3. If the upgrade removes RabbitMQ application destinations, manually delete

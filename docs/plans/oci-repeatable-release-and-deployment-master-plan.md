@@ -331,6 +331,7 @@ Steps:
    `exchange-rate.import.requested`, and the former `currency.created`
    destination must not be carried forward in the OCI definitions secret.
    ```bash
+   set -euo pipefail
    ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
    ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh

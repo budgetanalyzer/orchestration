@@ -39,8 +39,9 @@ Usage: ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh [options]
 Creates the OCI Vault secret inventory for all plain-text secrets:
   - prompts for AUTH0 client secret and FRED API key only if those OCI secrets
     do not already exist
-  - generates strong random values for PostgreSQL, RabbitMQ, Redis, and
-    transaction preview import token encryption
+  - reuses existing OCI Vault values for PostgreSQL, RabbitMQ, Redis, and
+    transaction preview import token encryption when they already exist
+  - generates strong random values only for missing generated secrets
   - stores the generated values in an operator-only file outside the repo so
     12-update-rabbitmq-definitions-secret.sh can render the RabbitMQ definitions
   - creates any missing OCI Vault secrets, while leaving existing secrets
@@ -99,6 +100,16 @@ vault_secret_exists() {
         --vault-id "${OCI_VAULT_OCID}" >/dev/null 2>&1
 }
 
+vault_secret_value() {
+    local secret_name="$1"
+
+    oci secrets secret-bundle get-secret-bundle-by-name \
+        --secret-name "${secret_name}" \
+        --vault-id "${OCI_VAULT_OCID}" \
+        --query 'data."secret-bundle-content".content' \
+        --raw-output | base64 --decode
+}
+
 base64_encode_secret() {
     printf '%s' "$1" | base64 | tr -d '\n'
 }
@@ -134,8 +145,10 @@ EOF
 
 load_or_generate_secret_material() {
     local generated_values=()
+    local reused_vault_values=()
     local spec
     local variable_name
+    local secret_name
 
     if [[ -f "${GENERATED_ENV_FILE}" ]]; then
         phase4_info "reusing generated secret material from ${GENERATED_ENV_FILE}"
@@ -149,15 +162,26 @@ load_or_generate_secret_material() {
 
     for spec in "${GENERATED_SECRET_SPECS[@]}"; do
         variable_name="${spec%%|*}"
-        if [[ -z "${!variable_name:-}" ]]; then
+        secret_name="${spec#*|}"
+
+        if vault_secret_exists "${secret_name}"; then
+            printf -v "${variable_name}" '%s' "$(vault_secret_value "${secret_name}")"
+            reused_vault_values+=("${variable_name}")
+        elif [[ -z "${!variable_name:-}" ]]; then
             printf -v "${variable_name}" '%s' "$(generate_secret_value)"
             generated_values+=("${variable_name}")
         fi
     done
 
+    write_generated_env_file
+
+    if (( ${#reused_vault_values[@]} > 0 )); then
+        phase4_info "refreshed generated secret material from existing OCI Vault secrets: ${reused_vault_values[*]}"
+    fi
+
+    phase4_info "stored generated secret material in ${GENERATED_ENV_FILE}"
+
     if (( ${#generated_values[@]} > 0 )); then
-        write_generated_env_file
-        phase4_info "stored generated secret material in ${GENERATED_ENV_FILE}"
         phase4_info "generated values: ${generated_values[*]}"
     fi
 }
@@ -248,7 +272,7 @@ main() {
     ensure_not_container_execution
     prepare_output_path
 
-    phase4_require_commands oci openssl
+    phase4_require_commands oci openssl base64
     phase4_load_instance_env
     phase4_require_env_vars OCI_COMPARTMENT_OCID OCI_VAULT_OCID OCI_VAULT_KEY_OCID
 

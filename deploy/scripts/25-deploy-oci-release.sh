@@ -12,6 +12,7 @@ PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 LOCKSTEP_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 PRODUCTION_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
+POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
 OBSERVABILITY_ACCESS_VERIFIER="$(phase4_repo_path "scripts/smoketest/verify-observability-port-forward-access.sh")"
 MONITORING_RUNTIME_VERIFIER="$(phase4_repo_path "scripts/smoketest/verify-monitoring-runtime.sh")"
 SNAPSHOT_ROOT="$(phase4_repo_path "tmp/oci-release-deploy")"
@@ -21,6 +22,7 @@ readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly LOCKSTEP_VERIFIER
 readonly PRODUCTION_VERIFIER
+readonly POD_VERSION_LABELS_SCRIPT
 readonly OBSERVABILITY_ACCESS_VERIFIER
 readonly MONITORING_RUNTIME_VERIFIER
 readonly SNAPSHOT_ROOT
@@ -98,7 +100,9 @@ Options:
 
 The script composes the reviewed deploy/scripts entry points, captures pre and
 post snapshots under tmp/oci-release-deploy/, waits for touched rollouts, and
-prints the final verification checklist. It does not run the host-only
+verifies live runtime release labels after application rollout or verify-only
+checks. It prints the final verification checklist, including the browser
+release metadata endpoint. It does not run the host-only
 deploy/scripts/11-generate-phase-5-infra-tls.sh certificate generation path.
 EOF
 }
@@ -537,6 +541,12 @@ run_live_production_verifier() {
     "${PRODUCTION_VERIFIER}"
 }
 
+run_pod_version_label_verifier() {
+    require_executable "${POD_VERSION_LABELS_SCRIPT}"
+    info "verifying live runtime release labels"
+    run_cmd "${POD_VERSION_LABELS_SCRIPT}" --expected-version "v${RELEASE_VERSION}" --tracked-only --strict
+}
+
 run_platform_phase() {
     local istio_args=()
 
@@ -580,6 +590,8 @@ run_application_phase() {
     for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
         run_cmd kubectl rollout status "deployment/${deployment}" --timeout=300s
     done
+
+    run_pod_version_label_verifier
 }
 
 run_admission_phase() {
@@ -612,6 +624,7 @@ run_verify_only() {
     run_cmd "${SCRIPT_DIR}/08-verify-network-policy-enforcement.sh"
     require_executable "${OBSERVABILITY_ACCESS_VERIFIER}"
     require_executable "${MONITORING_RUNTIME_VERIFIER}"
+    run_pod_version_label_verifier
     run_cmd "${OBSERVABILITY_ACCESS_VERIFIER}"
     run_cmd "${MONITORING_RUNTIME_VERIFIER}" --wait-timeout 180
 }
@@ -636,9 +649,11 @@ print_completion_checklist() {
     printf '\nCompletion checklist:\n'
     printf '  - Review snapshots under %s\n' "${SNAPSHOT_DIR}"
     printf '  - Confirm live images match kubernetes/production/apps/image-inventory.yaml\n'
+    printf '  - Confirm live release labels: ./scripts/ops/show-pod-version-labels.sh --expected-version v%s --tracked-only --strict\n' "${RELEASE_VERSION}"
     printf '  - Confirm observability remains internal-only; no Grafana, Prometheus, Jaeger, or Kiali public routes\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/api-docs\n'
+    printf '  - From a workstation, verify: curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json\n'
 }
 
 main() {

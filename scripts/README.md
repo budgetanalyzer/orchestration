@@ -49,6 +49,11 @@ scripts/
   `--runtime-shape production` on OCI so the helper expects the production
   frontend topology (`nginx-gateway` serves the bundle; no standalone
   `budget-analyzer-web` Deployment).
+- `ops/show-pod-version-labels.sh` - Lists pod release labels for the current
+  Kubernetes context and warns when Budget Analyzer runtime pods are missing
+  `budgetanalyzer.org/environment-release` or do not match the expected release
+  version from `kubernetes/production/apps/image-inventory.yaml`. Use
+  `--strict` when the warning check should fail the command.
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -177,8 +182,10 @@ setup.
   active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
   internal-only storage/service contract pinned in static review. Its
-  kubeconform pass validates checked-in Kubernetes resource manifests and skips
-  Kustomize patch fragments under `patches/` directories.
+  kubeconform pass validates checked-in Kubernetes resource manifests, skips
+  Kustomize patch fragments under `patches/` directories as standalone
+  resources, and validates the rendered production app and infrastructure
+  overlays that consume those patches.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies
@@ -284,6 +291,13 @@ the active context and Tilt resource state from the same host shell first.
   It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
   for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
   when you want the raw JSON and log artifacts for later review.
+- `ops/show-pod-version-labels.sh` prints all pods by default and marks
+  Budget Analyzer runtime pods with `WARN` when their
+  `budgetanalyzer.org/environment-release` label is missing or differs from the
+  expected release version. The expected version defaults to
+  `kubernetes/production/apps/image-inventory.yaml`, and can be overridden with
+  `--expected-version`. Use `--tracked-only` to hide third-party and
+  infrastructure pods, and `--strict` to return non-zero on warnings.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run
@@ -390,6 +404,10 @@ directory without writing outside the repository.
   resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and defaults
   all phase flags to `false` unless a corresponding `--*-changed` or
   `--public-tls-reapply-required` flag is passed.
+- `deploy/scripts/23-update-production-release-images.sh` consumes that
+  manifest to update the checked-in production image inventory, production app
+  image overlay, browser-visible `/api-docs/release-metadata.json`, and the
+  generated production runtime release labels/annotations patch.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

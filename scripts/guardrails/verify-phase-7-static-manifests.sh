@@ -12,6 +12,7 @@ KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-phase-7-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
+KUSTOMIZE_RENDER_DIR=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
@@ -35,6 +36,11 @@ KUBECONFORM_ALLOWED_MISSING_KINDS=(
     Test
     Telemetry
     VirtualService
+)
+
+RENDERED_KUSTOMIZE_OVERLAYS=(
+    "${REPO_DIR}/kubernetes/production/apps"
+    "${REPO_DIR}/kubernetes/production/infrastructure"
 )
 
 ACTIVE_GUIDANCE_PATHS=(
@@ -93,6 +99,7 @@ Usage: scripts/guardrails/verify-phase-7-static-manifests.sh [--self-test]
 
 Runs the static security guardrail suite:
 - kubeconform schema validation for checked-in manifests
+- kubeconform schema validation for rendered production Kustomize overlays
 - kube-linter with the repo-specific security baseline
 - Kyverno CLI tests for the admission fixtures
 - generated Kyverno replay for representative approved local Tilt deploy refs
@@ -107,6 +114,14 @@ EOF
 log_step() {
     printf '\n==> %s\n' "$1"
 }
+
+cleanup_static_guardrails() {
+    if [[ -n "${KUSTOMIZE_RENDER_DIR}" ]]; then
+        rm -rf "${KUSTOMIZE_RENDER_DIR}"
+    fi
+}
+
+trap cleanup_static_guardrails EXIT
 
 remove_stale_stamps() {
     local tool
@@ -157,26 +172,23 @@ kind_is_allowed_missing_schema() {
     return 1
 }
 
-run_kubeconform() {
+run_kubeconform_for_files() {
+    local subject="$1"
+    shift
     local output_file
     local summary_line=""
     local kubeconform_rc=0
-    local -a manifest_files=()
     local -a unexpected_lines=()
     local -a missing_kind_lines=()
     local line
 
-    while IFS= read -r line; do
-        manifest_files+=("${line}")
-    done < <(collect_schema_manifest_files)
-
-    if (( ${#manifest_files[@]} == 0 )); then
-        echo "ERROR: no manifest files found for kubeconform" >&2
+    if (( $# == 0 )); then
+        echo "ERROR: no files provided for ${subject} kubeconform validation" >&2
         exit 1
     fi
 
     output_file="$(mktemp)"
-    if "${STATIC_TOOLS_BIN}/kubeconform" -strict -summary "${manifest_files[@]}" >"${output_file}" 2>&1; then
+    if "${STATIC_TOOLS_BIN}/kubeconform" -strict -summary "$@" >"${output_file}" 2>&1; then
         :
     else
         kubeconform_rc=$?
@@ -204,24 +216,69 @@ run_kubeconform() {
     rm -f "${output_file}"
 
     if (( ${#unexpected_lines[@]} > 0 )); then
-        printf 'kubeconform reported unexpected validation errors:\n' >&2
+        printf '%s kubeconform validation reported unexpected errors:\n' "${subject}" >&2
         printf '  - %s\n' "${unexpected_lines[@]}" >&2
         exit 1
     fi
 
     if (( kubeconform_rc != 0 && ${#missing_kind_lines[@]} == 0 )); then
-        echo "kubeconform failed without a recognized schema-gap exception" >&2
+        printf '%s kubeconform validation failed without a recognized schema-gap exception\n' "${subject}" >&2
         exit "${kubeconform_rc}"
     fi
 
     if [[ -n "${summary_line}" ]]; then
-        printf '%s\n' "${summary_line}"
+        printf '%s: %s\n' "${subject}" "${summary_line}"
     fi
 
     if (( ${#missing_kind_lines[@]} > 0 )); then
-        printf 'Allowed kubeconform schema gaps: %s\n' \
+        printf '%s allowed kubeconform schema gaps: %s\n' "${subject}" \
             "$(printf '%s\n' "${missing_kind_lines[@]}" | sort -u | awk 'BEGIN { first = 1 } { if (!first) { printf ", " } printf "%s", $0; first = 0 } END { printf "\n" }' | tr -d '\n')"
     fi
+}
+
+run_rendered_kustomize_schema_validation() {
+    local overlay overlay_name safe_name rendered_file
+
+    KUSTOMIZE_RENDER_DIR="$(mktemp -d)"
+
+    for overlay in "${RENDERED_KUSTOMIZE_OVERLAYS[@]}"; do
+        if [[ ! -d "${overlay}" ]]; then
+            printf 'ERROR: rendered Kustomize overlay is missing: %s\n' "${overlay#"${REPO_DIR}"/}" >&2
+            exit 1
+        fi
+
+        overlay_name="${overlay#"${REPO_DIR}"/}"
+        safe_name="${overlay_name//\//_}"
+        rendered_file="${KUSTOMIZE_RENDER_DIR}/${safe_name}.yaml"
+
+        printf 'Rendering %s\n' "${overlay_name}"
+        if ! "${STATIC_TOOLS_BIN}/kubectl" kustomize "${overlay}" --load-restrictor=LoadRestrictionsNone > "${rendered_file}"; then
+            printf 'ERROR: failed to render Kustomize overlay: %s\n' "${overlay_name}" >&2
+            exit 1
+        fi
+
+        run_kubeconform_for_files "rendered overlay ${overlay_name}" "${rendered_file}"
+    done
+
+    rm -rf "${KUSTOMIZE_RENDER_DIR}"
+    KUSTOMIZE_RENDER_DIR=""
+}
+
+run_kubeconform() {
+    local -a manifest_files=()
+    local line
+
+    while IFS= read -r line; do
+        manifest_files+=("${line}")
+    done < <(collect_schema_manifest_files)
+
+    if (( ${#manifest_files[@]} == 0 )); then
+        echo "ERROR: no manifest files found for kubeconform" >&2
+        exit 1
+    fi
+
+    run_kubeconform_for_files "checked-in manifests" "${manifest_files[@]}"
+    run_rendered_kustomize_schema_validation
 }
 
 run_kube_linter() {
@@ -1182,6 +1239,7 @@ main() {
     fi
 
     ensure_static_tool kubeconform
+    ensure_static_tool kubectl
     ensure_static_tool kube-linter
     ensure_static_tool kyverno
     ensure_static_tool helm

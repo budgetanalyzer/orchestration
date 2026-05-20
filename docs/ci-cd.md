@@ -91,12 +91,16 @@ What it runs:
 - `./scripts/guardrails/verify-phase-7-static-manifests.sh`
 - `./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test`
 
-The workflow bootstraps repo-pinned `helm`, `kubeconform`, `kube-linter`, and
-`kyverno` binaries through `scripts/bootstrap/install-verified-tool.sh`, then runs:
+The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
+`kube-linter`, and `kyverno` binaries through
+`scripts/bootstrap/install-verified-tool.sh`, then runs:
 
 - schema validation for checked-in manifests, with explicit missing-schema
   allowances for checked-in CRD resources such as Istio, Gateway API, Kyverno,
   and Prometheus Operator `ServiceMonitor` objects
+- rendered Kustomize schema validation for the production app and
+  infrastructure overlays, so partial patch files stay excluded from
+  standalone validation but are still checked after render
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt
@@ -254,14 +258,23 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
-- before changing that inventory for a new lockstep release, run
-  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z` to
-  verify the sibling repository set and tag contract, then create
-  `tmp/releases/vX.Y.Z.yaml` with `./scripts/repo/generate-release-manifest.sh`
-  after the six runtime image workflows complete
+- before changing that inventory for a coordinated source and
+  `service-common` library release, run
+  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; for an
+  ordinary runtime environment release, keep existing Java consumers on their
+  checked-in `serviceCommon` version unless the shared library actually
+  changed
+- create `tmp/releases/vX.Y.Z.yaml` with
+  `./scripts/repo/generate-release-manifest.sh` after the six runtime image
+  workflows complete
 - release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
   form, repository commit SHAs, artifact workflow run URLs, digest-pinned GHCR
   image refs, and operator-selected deployment phase flags
+- `./deploy/scripts/23-update-production-release-images.sh --release-manifest
+  tmp/releases/vX.Y.Z.yaml` updates the production image inventory, production
+  app image overlay, `/api-docs/release-metadata.json`, and runtime
+  Deployment/Pod release labels and image annotations from the same reviewed
+  manifest data
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

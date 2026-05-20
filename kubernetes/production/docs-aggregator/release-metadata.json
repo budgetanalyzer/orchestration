@@ -1,0 +1,26 @@
+{
+  "release": {
+    "version": "v0.0.14",
+    "imageTag": "0.0.14"
+  },
+  "artifacts": {
+    "transaction-service": {
+      "image": "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:5ef17ce3696330239b030e607652b0743b95a8f8e03117c2e5511dad0ee8f5e6"
+    },
+    "currency-service": {
+      "image": "ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:80ba38fdff655b3f563bb0a60abf05394fdeae3355ae9f23c022456a28cbf1ff"
+    },
+    "permission-service": {
+      "image": "ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:8d6751662d09bfaa791d66b817f990dcf77c554189e475b726eb3e67f25cf63c"
+    },
+    "session-gateway": {
+      "image": "ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:c30612af5c8f9f7e023b5e43698885d87354a859c056b44fd01ca64de73183f9"
+    },
+    "budget-analyzer-web": {
+      "image": "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:6977e2bf376ffa44c1706e6282550da7d5fd17a60e1847446c749770297b39c8"
+    },
+    "ext-authz": {
+      "image": "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:85aede7d18be357c25c0155b551f1a391ac9d30c6b2b33716ce23a3d1b6a5213"
+    }
+  }
+}

@@ -21,9 +21,11 @@ Create a repeatable OCI deployment operating model that supports both:
   plan
 - the normal "deploy this reviewed release version" path for future releases
 
-The concrete first use case is tagging the current Budget Analyzer repository
-heads, publishing the matching release artifacts, updating the production image
-baseline, and deploying that baseline to OCI.
+The concrete first use case is the `v0.0.14` lockstep deployment: tag the
+current Budget Analyzer repository heads, publish the matching release
+artifacts, update the production image baseline, reconcile the OCI
+platform/infrastructure/secret-sync baseline first, and only then roll out the
+application images.
 
 This plan does not replace the lockstep upgrade plan. The lockstep plan owns
 the current dependency/platform compatibility work. This plan owns the reusable
@@ -46,9 +48,9 @@ The durable operator experience should become:
 9. complete a concise deployment checklist with evidence links and rollback
    notes
 
-The master script should make normal app-only releases boring, while still
-allowing explicit platform, infrastructure, secrets, observability, and public
-TLS phases when a lockstep upgrade requires them.
+The master script should eventually make normal future app-only releases
+boring. The current `v0.0.14` release is not app-only; it follows the lockstep
+path.
 
 ## Can GitHub Trigger OCI Deployments?
 
@@ -95,10 +97,11 @@ production deployment, decide whether it remains part of the shared release tag
 contract or whether the script needs a release-runtime mode that excludes
 non-runtime tooling repositories.
 
-## Current Second Deployment Checklist
+## Current v0.0.14 Lockstep Deployment Checklist
 
-Use this checklist for the immediate deployment, even before all automation in
-this plan exists.
+Use this checklist for the immediate deployment. It is the forward path for
+`v0.0.14`; do not use the app-only path until after this lockstep upgrade is
+complete and recorded.
 
 ### Phase A: AI Assistant Repo Automation
 
@@ -261,16 +264,27 @@ Steps:
    ./scripts/guardrails/verify-production-image-overlay.sh
    ./deploy/scripts/09-render-phase-5-secrets.sh
    ```
+   `./deploy/scripts/09-render-phase-5-secrets.sh` requires the operator
+   `~/.config/budget-analyzer/instance.env`. If that file is not present in the
+   current shell, stop and run this proof on the OCI host or another operator
+   shell where the non-secret instance config exists.
+4. Commit or otherwise review the resulting production baseline before any live
+   OCI mutation.
 
 ### Phase F: Human OCI Deployment
 
 Owner: human operator on the OCI host.
 
+This phase upgrades the live OCI baseline in dependency order. Run
+platform/controller/infrastructure/secret-sync work before applying the
+`v0.0.14` app image overlay.
+
 Steps:
 
 1. SSH to the OCI host, update the repo checkout to the reviewed release
-   baseline, and set:
+   baseline, confirm the non-secret operator config exists, and set:
    ```bash
+   test -f ~/.config/budget-analyzer/instance.env
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ```
 2. Capture the live baseline:
@@ -285,7 +299,69 @@ Steps:
    ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
    ./scripts/guardrails/verify-production-image-overlay.sh
    ```
-4. For an app-only release, apply the production app overlay:
+4. Reconcile the platform and controller baseline before touching app images:
+   ```bash
+   ./deploy/scripts/01-install-k3s.sh
+   ./deploy/scripts/02-bootstrap-cluster.sh
+   ./deploy/scripts/04-install-istio.sh
+   ./deploy/scripts/05-install-platform-controllers.sh
+   ```
+   If the live cluster already has public TLS and Istio must be reconciled,
+   pass `--acknowledge-public-tls-downgrade` to
+   `./deploy/scripts/04-install-istio.sh` only when the phase 11 public TLS
+   manifests will be reapplied immediately in step 5.
+5. If step 4 intentionally reconciled Istio over an already-public TLS host,
+   immediately reapply the phase 11 public TLS manifests:
+   ```bash
+   ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh
+   kubectl apply -f tmp/phase-11/cluster-issuer.yaml
+   kubectl apply -f tmp/phase-11/public-certificate.yaml
+   kubectl apply -f tmp/phase-11/reference-grant.yaml
+   kubectl apply -f tmp/phase-11/ingress-gateway-config.yaml
+   kubectl apply -f tmp/phase-11/istio-gateway.yaml
+   ```
+6. Reapply and verify network policies before workloads:
+   ```bash
+   ./deploy/scripts/07-apply-network-policies.sh
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
+   ```
+7. Reconcile secret synchronization and internal TLS before deploying app
+   images that depend on the new secret contract:
+   ```bash
+   ./deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh
+   ./deploy/scripts/09-render-phase-5-secrets.sh
+   ./deploy/scripts/10-apply-phase-5-secrets.sh
+   kubectl get clustersecretstore budget-analyzer-oci-vault
+   kubectl get externalsecret -A
+   kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
+   kubectl get secret -n default transaction-service-preview-import-token-credentials
+   ```
+   If RabbitMQ destination permissions changed, update the OCI Vault
+   `budget-analyzer-rabbitmq-definitions` secret from
+   `deploy/manifests/phase-5/rabbitmq-definitions.template.json` before
+   applying secret sync. If internal PostgreSQL, Redis, or RabbitMQ TLS secrets
+   are missing or intentionally rotating, run
+   `./deploy/scripts/11-generate-phase-5-infra-tls.sh` from the OCI host.
+8. Apply production infrastructure before app images. On a new or already
+   migrated cluster, use the normal infrastructure apply path:
+   ```bash
+   ./deploy/scripts/17-render-production-infrastructure.sh
+   sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
+   ./deploy/scripts/18-apply-production-infrastructure.sh
+   ```
+   If this OCI cluster still has the old Redis Deployment plus standalone
+   `redis-data` PVC, run the guarded migration instead of the normal apply:
+   ```bash
+   ./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis --restart-redis-clients
+   ```
+9. Apply the production route, ingress-policy, and Auth0 egress render output:
+   ```bash
+   ./deploy/scripts/13-render-phase-6-production-manifests.sh
+   kubectl apply -f tmp/phase-6/gateway-routes.yaml
+   kubectl apply -f tmp/phase-6/istio-ingress-policies.yaml
+   kubectl apply -f tmp/phase-6/istio-egress.yaml
+   ```
+10. Apply the `v0.0.14` production app image overlay:
    ```bash
    kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone \
      | kubectl apply --server-side -f -
@@ -296,20 +372,26 @@ Steps:
    kubectl rollout status deployment/ext-authz --timeout=300s
    kubectl rollout status deployment/nginx-gateway --timeout=300s
    ```
-5. Reapply production admission policy after image refs change:
+11. Reapply production admission and observability after image refs and platform
+   resources converge:
    ```bash
+   ./deploy/scripts/14-install-phase-7-kyverno.sh
    ./deploy/scripts/15-apply-phase-7-policies.sh
+   ./deploy/scripts/22-apply-production-monitoring.sh --verify-runtime
    ```
-6. Run focused production verification:
+12. Run focused production verification:
    ```bash
    kubectl get pods -A
    kubectl get gateway,httproute -A
+   kubectl get peerauthentication,authorizationpolicy -A
+   kubectl get networkpolicy -A
    ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
    ./scripts/guardrails/verify-production-image-overlay.sh
+   ./deploy/scripts/08-verify-network-policy-enforcement.sh
    ./scripts/smoketest/verify-observability-port-forward-access.sh
    ./scripts/smoketest/verify-monitoring-runtime.sh --wait-timeout 180
    ```
-7. From a workstation, verify the public route:
+13. From a workstation, verify the public route:
    ```bash
    curl -I https://demo.budgetanalyzer.org/
    curl -I https://demo.budgetanalyzer.org/api-docs
@@ -318,93 +400,9 @@ Steps:
 Do not run certificate-generating scripts from the AI container. If public TLS
 or infra TLS has to be generated or rotated, run those host-side only.
 
-### Legacy Checklist Mapping
-
-The following checklist preserves the original flow and maps to the owner split
-above.
-
-### 1. Pre-Release Validation
-
-- Confirm the current branches are the intended release heads.
-- Run the relevant local validation from the lockstep upgrade plan.
-- Run `./scripts/repo/validate-repos.sh` and resolve failures rather than
-  tagging around them.
-- Use `./scripts/repo/update-service-common-version.sh` when the
-  `service-common` release version or Java consumer version catalogs need to
-  move together.
-- Confirm `service-common` has the intended release version in its Gradle
-  metadata before tagging, because its publish workflow rejects tag/version
-  mismatches.
-- Confirm the sibling service release workflows have access to
-  `SERVICE_COMMON_PACKAGES_USERNAME` and `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
-- Confirm the production secret prerequisites from the lockstep plan are ready,
-  especially any new transaction-service preview import token secret and
-  RabbitMQ definitions changes.
-
-### 2. Tag The Release
-
-- Choose the version, for example `v0.0.14`.
-- Use the existing tag helper only after validating that its repository set is
-  correct for this release:
-  ```bash
-  ./scripts/repo/tag-release.sh v0.0.14
-  ```
-- If `checkstyle-config` should not receive an OCI runtime release tag, update
-  the helper first or tag the runtime repos explicitly with documented commands.
-  Do not silently create an inconsistent release set.
-
-### 3. Publish Release Artifacts
-
-- Confirm the tag push triggered each sibling `publish-release.yml` workflow.
-- Confirm `service-common` packages published successfully before relying on
-  backend service image builds.
-- Confirm the service and frontend workflows published `linux/arm64` GHCR
-  images.
-- Trigger this repo's `publish-ext-authz-release.yml` for the same tag if the
-  tag push does not already do so.
-- Capture the digest-pinned image refs printed by each workflow.
-
-### 4. Update The Production Baseline
-
-- Create a release manifest in a temporary or future checked-in location with
-  the release version, source commits, workflow run URLs, and six application
-  image refs.
-- Use the production image update helper from the lockstep plan:
-  ```bash
-  ./deploy/scripts/23-update-production-release-images.sh \
-    --release-manifest tmp/releases/v0.0.14.yaml
-  ```
-- Run:
-  ```bash
-  kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-  ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
-  ./scripts/guardrails/verify-production-image-overlay.sh
-  ./deploy/scripts/09-render-phase-5-secrets.sh
-  ```
-
-### 5. Deploy To OCI
-
-- Capture the live baseline before applying changes:
-  ```bash
-  kubectl get nodes -o wide
-  kubectl get pods -A
-  helm list -A
-  kubectl get deploy,statefulset -A
-  ```
-- Execute only the deployment phases required by the release:
-  - platform phases when k3s, Gateway API, Istio, cert-manager, External
-    Secrets Operator, Kyverno, Kiali, or Prometheus chart pins changed
-  - infrastructure phases when PostgreSQL, RabbitMQ, Redis, storage, or
-    bootstrap definitions changed
-  - secret-sync phases when Vault inventory, ExternalSecret wiring, or
-    non-secret IDP config changed
-  - app phases for every release image update
-  - observability phases when monitoring, Jaeger, or Kiali changed
-  - public TLS phase immediately after any phase that intentionally reverts the
-    ingress Gateway to the phase-4 HTTP-only baseline
-- Verify rollouts and run the production checks listed in the lockstep plan.
-
 ## Reusable Automation Work
+
+This section is future automation work. It is not the live `v0.0.14` runbook.
 
 ### Phase 1: Release Manifest Contract
 

@@ -3,7 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# shellcheck source=scripts/repo/repo-config.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime.
+source "${SCRIPT_DIR}/repo-config.sh"
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -24,21 +27,49 @@ declare -A IMAGE_REPOS=(
     ["ext-authz"]="ext-authz"
 )
 
+declare -A ARTIFACT_SOURCE_REPOS=(
+    ["transaction-service"]="transaction-service"
+    ["currency-service"]="currency-service"
+    ["permission-service"]="permission-service"
+    ["session-gateway"]="session-gateway"
+    ["budget-analyzer-web"]="budget-analyzer-web"
+    ["ext-authz"]="orchestration"
+)
+
+declare -A WORKFLOW_RUN_URLS=()
+
+platform_changed=false
+infrastructure_changed=false
+secrets_changed=false
+observability_changed=false
+public_tls_reapply_required=false
+
 usage() {
     cat <<'EOF'
 Usage:
-  ./scripts/repo/generate-release-manifest.sh 0.0.x
-  ./scripts/repo/generate-release-manifest.sh --release-version v0.0.x
+  ./scripts/repo/generate-release-manifest.sh 0.0.x \
+    --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
+    --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
+    --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
+    --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
+    --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
+    --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
 
 Options:
-  --release-version <version>  Release version as X.Y.Z or vX.Y.Z.
-  --output <path>              Output manifest path. Defaults to
-                               tmp/releases/v<version>.yaml.
-  --force                      Overwrite an existing output file.
-  -h, --help                   Show this help.
+  --release-version <version>            Release version as X.Y.Z or vX.Y.Z.
+  --output <path>                        Output manifest path. Defaults to
+                                         tmp/releases/v<version>.yaml.
+  --workflow-run-url <artifact=url>      Required for each runtime artifact.
+  --platform-changed                     Set phase_flags.platform_changed true.
+  --infrastructure-changed               Set phase_flags.infrastructure_changed true.
+  --secrets-changed                      Set phase_flags.secrets_changed true.
+  --observability-changed                Set phase_flags.observability_changed true.
+  --public-tls-reapply-required          Set phase_flags.public_tls_reapply_required true.
+  --force                                Overwrite an existing output file.
+  -h, --help                             Show this help.
 
 The script resolves GHCR tag digests for the six runtime application images and
-writes the Phase D release manifest consumed by:
+writes the release manifest consumed by:
 
   ./deploy/scripts/23-update-production-release-images.sh --release-manifest <path>
 
@@ -77,6 +108,55 @@ validate_digest() {
     local digest="$1"
 
     [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+}
+
+valid_workflow_run_url() {
+    local url="$1"
+
+    [[ "${url}" =~ ^https://github\.com/budgetanalyzer/[A-Za-z0-9_.-]+/actions/runs/[0-9]+(/.*)?$ ]]
+}
+
+service_exists() {
+    local candidate="$1"
+    local service
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        if [[ "${service}" == "${candidate}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+repo_commit_sha() {
+    local repo="$1"
+    local repo_path="${PARENT_DIR}/${repo}"
+
+    [[ -d "${repo_path}/.git" ]] || die "missing git repository: ../${repo}"
+    git -C "${repo_path}" rev-parse HEAD
+}
+
+validate_required_workflow_urls() {
+    local service url
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        url="${WORKFLOW_RUN_URLS[${service}]:-}"
+        [[ -n "${url}" ]] || die "missing --workflow-run-url ${service}=https://github.com/budgetanalyzer/.../actions/runs/<id>"
+        valid_workflow_run_url "${url}" || die "invalid workflow run URL for ${service}: ${url}"
+    done
+}
+
+parse_workflow_run_url() {
+    local assignment="$1"
+    local service="${assignment%%=*}"
+    local url="${assignment#*=}"
+
+    [[ "${assignment}" == *=* ]] || die "--workflow-run-url must use artifact=url form"
+    service_exists "${service}" || die "unknown artifact for --workflow-run-url: ${service}"
+    valid_workflow_run_url "${url}" || die "invalid workflow run URL for ${service}: ${url}"
+
+    WORKFLOW_RUN_URLS["${service}"]="${url}"
 }
 
 docker_buildx_available() {
@@ -196,17 +276,39 @@ write_manifest() {
     local service
     local repo
     local digest
+    local image_ref
+    local source_repo
 
     mkdir -p "$(dirname "${output_path}")"
 
     {
-        printf 'release-version: "%s"\n' "${version}"
+        printf 'release:\n'
+        printf '  version: "v%s"\n' "${version}"
+        printf '  image_tag: "%s"\n' "${version}"
+        printf 'repositories:\n'
+        # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
+        for repo in "${REPOS[@]}"; do
+            printf '  %s:\n' "${repo}"
+            printf '    commit: "%s"\n' "$(repo_commit_sha "${repo}")"
+        done
+        printf 'artifacts:\n'
         for service in "${SERVICE_ORDER[@]}"; do
             repo="${IMAGE_REPOS[${service}]}"
+            source_repo="${ARTIFACT_SOURCE_REPOS[${service}]}"
             info "resolving ghcr.io/budgetanalyzer/${repo}:${version}" >&2
             digest="$(resolve_digest "${service}" "${repo}" "${version}")"
-            printf '%s: "ghcr.io/budgetanalyzer/%s:%s@%s"\n' "${service}" "${repo}" "${version}" "${digest}"
+            image_ref="ghcr.io/budgetanalyzer/${repo}:${version}@${digest}"
+            printf '  %s:\n' "${service}"
+            printf '    source_repository: "%s"\n' "${source_repo}"
+            printf '    workflow_run_url: "%s"\n' "${WORKFLOW_RUN_URLS[${service}]}"
+            printf '    image: "%s"\n' "${image_ref}"
         done
+        printf 'phase_flags:\n'
+        printf '  platform_changed: %s\n' "${platform_changed}"
+        printf '  infrastructure_changed: %s\n' "${infrastructure_changed}"
+        printf '  secrets_changed: %s\n' "${secrets_changed}"
+        printf '  observability_changed: %s\n' "${observability_changed}"
+        printf '  public_tls_reapply_required: %s\n' "${public_tls_reapply_required}"
     } > "${temp_file}"
 
     mv "${temp_file}" "${output_path}"
@@ -229,6 +331,25 @@ main() {
                 [[ -n "${output_path}" ]] || die "missing value for --output"
                 shift
                 ;;
+            --workflow-run-url)
+                parse_workflow_run_url "${2:-}"
+                shift
+                ;;
+            --platform-changed)
+                platform_changed=true
+                ;;
+            --infrastructure-changed)
+                infrastructure_changed=true
+                ;;
+            --secrets-changed)
+                secrets_changed=true
+                ;;
+            --observability-changed)
+                observability_changed=true
+                ;;
+            --public-tls-reapply-required)
+                public_tls_reapply_required=true
+                ;;
             --force)
                 force=true
                 ;;
@@ -249,6 +370,7 @@ main() {
 
     [[ -n "${release_version}" ]] || die "missing release version"
     release_version="$(normalize_release_version "${release_version}")"
+    validate_required_workflow_urls
 
     if [[ -z "${output_path}" ]]; then
         output_path="${REPO_ROOT}/tmp/releases/v${release_version}.yaml"

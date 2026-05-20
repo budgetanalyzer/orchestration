@@ -254,6 +254,14 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
+- before changing that inventory for a new lockstep release, run
+  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z` to
+  verify the sibling repository set and tag contract, then create
+  `tmp/releases/vX.Y.Z.yaml` with `./scripts/repo/generate-release-manifest.sh`
+  after the six runtime image workflows complete
+- release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
+  form, repository commit SHAs, artifact workflow run URLs, digest-pinned GHCR
+  image refs, and operator-selected deployment phase flags
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

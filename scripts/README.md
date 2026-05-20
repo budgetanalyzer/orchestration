@@ -96,10 +96,17 @@ scripts/
   OCI version contracts, production app image inventory alignment, production
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
+- `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
+  lockstep source release. It validates the sibling repository set, prints the
+  commit SHAs that will enter the release manifest, verifies the
+  `service-common` version contract, checks remote tag availability, and can
+  prompt before delegating to `repo/tag-release.sh`.
 - `repo/generate-release-manifest.sh` - Resolves GHCR tag digests for the six
-  runtime application images and writes the Phase D release manifest under
+  runtime application images and writes the release manifest under
   `tmp/releases/v<version>.yaml` for
-  `../deploy/scripts/23-update-production-release-images.sh`.
+  `../deploy/scripts/23-update-production-release-images.sh`. The manifest
+  includes `release.version`, `release.image_tag`, repository commit SHAs,
+  artifact workflow run URLs, digest-pinned images, and deployment phase flags.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -329,6 +336,14 @@ directory without writing outside the repository.
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state.
 - `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
+- `repo/prepare-lockstep-release.sh` is the release-manager source preflight
+  for lockstep releases. Run it with `--release-version X.Y.Z` after
+  `service-common` and Java consumers are pinned to the released
+  `serviceCommon` version. It checks that configured sibling repos are on clean
+  up-to-date `main`, verifies the requested remote tag is absent everywhere
+  except the documented `service-common` skip case, prints the commit SHA map,
+  and prints the GitHub Actions workflow pages to monitor. Pass `--tag` only
+  when you want it to prompt before calling `repo/tag-release.sh`.
 - `repo/tag-release.sh` creates release tags across configured repositories. If
   the requested tag already exists in `service-common`, it warns and skips
   `service-common` so the all-repo tag flow can run after the earlier
@@ -358,6 +373,14 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
+- `repo/generate-release-manifest.sh` writes the operator-reviewed release
+  manifest consumed by the production image update helper. Provide the
+  completed workflow run URL for each runtime artifact with repeated
+  `--workflow-run-url artifact=https://github.com/budgetanalyzer/.../actions/runs/<id>`
+  arguments. The helper records the local sibling repository commit SHAs,
+  resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and defaults
+  all phase flags to `false` unless a corresponding `--*-changed` or
+  `--public-tls-reapply-required` flag is passed.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

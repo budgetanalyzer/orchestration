@@ -225,19 +225,35 @@ formatting after refs are provided.
 Generate `tmp/releases/v0.0.14.yaml` from the published GHCR tags:
 
 ```bash
-./scripts/repo/generate-release-manifest.sh 0.0.14
+./scripts/repo/generate-release-manifest.sh 0.0.14 \
+  --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
+  --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
+  --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
+  --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
+  --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
+  --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
 ```
 
 The generated file has this shape:
 
 ```yaml
-release-version: "0.0.14"
-transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:<digest>"
-currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:<digest>"
-permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:<digest>"
-session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:<digest>"
-budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:<digest>"
-ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:<digest>"
+release:
+  version: "v0.0.14"
+  image_tag: "0.0.14"
+repositories:
+  orchestration:
+    commit: "<sha>"
+artifacts:
+  transaction-service:
+    source_repository: "transaction-service"
+    workflow_run_url: "https://github.com/budgetanalyzer/transaction-service/actions/runs/<id>"
+    image: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:<digest>"
+phase_flags:
+  platform_changed: false
+  infrastructure_changed: false
+  secrets_changed: false
+  observability_changed: false
+  public_tls_reapply_required: false
 ```
 
 ### Phase E: AI Assistant Or Human Production Baseline Update
@@ -431,6 +447,8 @@ This section is future automation work. It is not the live `v0.0.14` runbook.
 
 ### Phase 1: Release Manifest Contract
 
+Status: Implemented for local operator-generated manifests.
+
 Add a release manifest format that can be produced manually at first and later
 by GitHub automation.
 
@@ -466,6 +484,8 @@ Validation rules:
 
 ### Phase 2: Release Preparation Helper
 
+Status: Implemented as `scripts/repo/prepare-lockstep-release.sh`.
+
 Add a local helper for the release manager.
 
 Proposed script:
@@ -487,6 +507,8 @@ This script should not deploy to OCI. Its boundary is source release
 preparation.
 
 ### Phase 3: Production Image Update Helper
+
+Status: Implemented for explicit image arguments and release manifest input.
 
 Implement the helper already required by the lockstep plan:
 

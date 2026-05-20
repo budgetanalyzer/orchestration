@@ -40,6 +40,18 @@ declare -A IMAGE_REPOS=(
     ["ext-authz"]="ext-authz"
 )
 
+RELEASE_REPOS=(
+    "orchestration"
+    "service-common"
+    "transaction-service"
+    "currency-service"
+    "budget-analyzer-web"
+    "session-gateway"
+    "permission-service"
+    "checkstyle-config"
+)
+readonly RELEASE_REPOS
+
 declare -A IMAGE_REFS=()
 
 usage() {
@@ -58,8 +70,11 @@ Usage:
     --release-manifest tmp/releases/v0.0.x.yaml
 
 Updates the checked-in OCI production application image baseline. The release
-manifest form accepts release-version/version plus the six service keys listed
-above, either at top level or under an images mapping.
+manifest form is the normal release path and requires the Phase 1 contract:
+release.version, release.image_tag, repository commit SHAs, artifact workflow
+run URLs, digest-pinned artifact images, and boolean phase_flags. The legacy
+flat manifest form with release-version/version plus the six service keys is
+still accepted for local repair.
 
 By default the script runs:
   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
@@ -87,6 +102,115 @@ manifest_value() {
     ' "${manifest}"
 }
 
+manifest_section_present() {
+    local manifest="$1"
+    local section="$2"
+
+    awk -v section="${section}" '
+        $0 == section ":" {
+            found = 1
+            exit
+        }
+        END {
+            exit found ? 0 : 1
+        }
+    ' "${manifest}"
+}
+
+manifest_nested_value() {
+    local manifest="$1"
+    local section="$2"
+    local item="$3"
+    local key="$4"
+
+    awk -v section="${section}" -v item="${item}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == section ":" {
+            in_section = 1
+            next
+        }
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
+            in_item = 0
+        }
+        in_section && $0 == "  " item ":" {
+            in_item = 1
+            next
+        }
+        in_section && in_item && $0 ~ /^  [^[:space:]][^:]*:/ {
+            in_item = 0
+        }
+        in_section && in_item && index($0, "    " key ":") == 1 {
+            value = $0
+            sub("^    " key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${manifest}"
+}
+
+manifest_release_value() {
+    local manifest="$1"
+    local key="$2"
+
+    awk -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == "release:" {
+            in_release = 1
+            next
+        }
+        in_release && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_release = 0
+        }
+        in_release && index($0, "  " key ":") == 1 {
+            value = $0
+            sub("^  " key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${manifest}"
+}
+
+manifest_artifact_image_keys() {
+    local manifest="$1"
+
+    awk '
+        $0 == "artifacts:" {
+            in_artifacts = 1
+            next
+        }
+        in_artifacts && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_artifacts = 0
+            current = ""
+        }
+        in_artifacts && $0 ~ /^  [^[:space:]][^:]*:/ {
+            current = $0
+            sub(/^  /, "", current)
+            sub(/:.*/, "", current)
+            next
+        }
+        in_artifacts && current != "" && $0 ~ /^    image:[[:space:]]*/ {
+            print current
+        }
+    ' "${manifest}"
+}
+
 normalize_release_version() {
     local version="$1"
 
@@ -94,6 +218,37 @@ normalize_release_version() {
     [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
         phase4_die "release version must use X.Y.Z or vX.Y.Z format: ${version}"
     printf '%s\n' "${version}"
+}
+
+valid_commit_sha() {
+    local sha="$1"
+
+    [[ "${sha}" =~ ^[0-9a-f]{40}$ ]]
+}
+
+valid_workflow_run_url() {
+    local url="$1"
+
+    [[ "${url}" =~ ^https://github\.com/budgetanalyzer/[A-Za-z0-9_.-]+/actions/runs/[0-9]+(/.*)?$ ]]
+}
+
+valid_bool() {
+    local value="$1"
+
+    [[ "${value}" == "true" || "${value}" == "false" ]]
+}
+
+service_exists() {
+    local candidate="$1"
+    local service
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        if [[ "${service}" == "${candidate}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 inventory_value() {
@@ -113,12 +268,27 @@ inventory_value() {
 
 load_manifest() {
     local manifest="$1"
-    local service value
+    local full_manifest=false
+    local service repo flag value image_key
+    local manifest_release_version
+    local manifest_image_tag
+    local expected_image_key_count
+    local actual_image_key_count
 
     [[ -f "${manifest}" ]] || phase4_die "release manifest not found: ${manifest}"
 
+    if manifest_section_present "${manifest}" "release" || \
+        manifest_section_present "${manifest}" "repositories" || \
+        manifest_section_present "${manifest}" "artifacts" || \
+        manifest_section_present "${manifest}" "phase_flags"; then
+        full_manifest=true
+    fi
+
     if [[ -z "${release_version}" ]]; then
-        release_version="$(manifest_value "${manifest}" "release-version")"
+        release_version="$(manifest_release_value "${manifest}" "version")"
+        if [[ -z "${release_version}" ]]; then
+            release_version="$(manifest_value "${manifest}" "release-version")"
+        fi
         if [[ -z "${release_version}" ]]; then
             release_version="$(manifest_value "${manifest}" "version")"
         fi
@@ -126,12 +296,90 @@ load_manifest() {
 
     for service in "${SERVICE_ORDER[@]}"; do
         if [[ -z "${IMAGE_REFS[${service}]:-}" ]]; then
-            value="$(manifest_value "${manifest}" "${service}")"
+            value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "image")"
+            if [[ -z "${value}" ]]; then
+                value="$(manifest_nested_value "${manifest}" "images" "${service}" "image")"
+            fi
+            if [[ -z "${value}" ]]; then
+                value="$(manifest_value "${manifest}" "${service}")"
+            fi
             if [[ -n "${value}" ]]; then
                 IMAGE_REFS["${service}"]="${value}"
             fi
         fi
     done
+
+    if [[ "${full_manifest}" != true ]]; then
+        return
+    fi
+
+    manifest_release_version="$(manifest_release_value "${manifest}" "version")"
+    manifest_image_tag="$(manifest_release_value "${manifest}" "image_tag")"
+    [[ -n "${manifest_release_version}" ]] || phase4_die "release manifest is missing release.version"
+    [[ -n "${manifest_image_tag}" ]] || phase4_die "release manifest is missing release.image_tag"
+    [[ "${manifest_release_version}" == v* ]] || phase4_die "release manifest release.version must use vX.Y.Z form"
+    [[ "${manifest_image_tag}" != v* ]] || phase4_die "release manifest release.image_tag must use X.Y.Z form"
+
+    manifest_release_version="$(normalize_release_version "${manifest_release_version}")"
+    manifest_image_tag="$(normalize_release_version "${manifest_image_tag}")"
+    [[ "${manifest_release_version}" == "${manifest_image_tag}" ]] || \
+        phase4_die "release manifest release.version and release.image_tag disagree"
+
+    if [[ -n "${release_version}" ]]; then
+        [[ "$(normalize_release_version "${release_version}")" == "${manifest_release_version}" ]] || \
+            phase4_die "release manifest version does not match --release-version"
+    fi
+
+    release_version="${manifest_release_version}"
+
+    for repo in "${RELEASE_REPOS[@]}"; do
+        value="$(manifest_nested_value "${manifest}" "repositories" "${repo}" "commit")"
+        [[ -n "${value}" ]] || phase4_die "release manifest is missing repositories.${repo}.commit"
+        valid_commit_sha "${value}" || phase4_die "invalid commit SHA for repositories.${repo}.commit: ${value}"
+    done
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "workflow_run_url")"
+        [[ -n "${value}" ]] || phase4_die "release manifest is missing artifacts.${service}.workflow_run_url"
+        valid_workflow_run_url "${value}" || phase4_die "invalid workflow run URL for artifacts.${service}: ${value}"
+    done
+
+    for flag in platform_changed infrastructure_changed secrets_changed observability_changed public_tls_reapply_required; do
+        value="$(manifest_nested_value "${manifest}" "phase_flags" "${flag}" "unused")"
+        if [[ -z "${value}" ]]; then
+            value="$(awk -v flag="${flag}" '
+                $0 == "phase_flags:" {
+                    in_flags = 1
+                    next
+                }
+                in_flags && $0 ~ /^[^[:space:]][^:]*:/ {
+                    in_flags = 0
+                }
+                in_flags && index($0, "  " flag ":") == 1 {
+                    value = $0
+                    sub("^  " flag ":[[:space:]]*", "", value)
+                    sub(/^[[:space:]]*/, "", value)
+                    sub(/[[:space:]]*$/, "", value)
+                    gsub(/^"/, "", value)
+                    gsub(/"$/, "", value)
+                    print value
+                    exit
+                }
+            ' "${manifest}")"
+        fi
+        [[ -n "${value}" ]] || phase4_die "release manifest is missing phase_flags.${flag}"
+        valid_bool "${value}" || phase4_die "phase_flags.${flag} must be true or false"
+    done
+
+    expected_image_key_count="${#SERVICE_ORDER[@]}"
+    actual_image_key_count=0
+    while IFS= read -r image_key; do
+        [[ -n "${image_key}" ]] || continue
+        service_exists "${image_key}" || phase4_die "release manifest contains unknown artifact image key: ${image_key}"
+        actual_image_key_count=$((actual_image_key_count + 1))
+    done < <(manifest_artifact_image_keys "${manifest}")
+    [[ "${actual_image_key_count}" == "${expected_image_key_count}" ]] || \
+        phase4_die "release manifest must contain exactly ${expected_image_key_count} artifact image entries; found ${actual_image_key_count}"
 }
 
 validate_image_refs() {
@@ -264,6 +512,7 @@ verify_updates() {
 main() {
     local release_manifest=""
     local old_release_version
+    local explicit_image_count=0
 
     release_version=""
     skip_live_production_verifier=false
@@ -276,10 +525,13 @@ main() {
                 ;;
             --release-manifest)
                 release_manifest="${2:-}"
+                [[ -n "${release_manifest}" ]] || phase4_die "missing value for --release-manifest"
                 shift
                 ;;
             --transaction-service|--currency-service|--permission-service|--session-gateway|--budget-analyzer-web|--ext-authz)
                 IMAGE_REFS["${1#--}"]="${2:-}"
+                [[ -n "${IMAGE_REFS[${1#--}]}" ]] || phase4_die "missing value for $1"
+                explicit_image_count=$((explicit_image_count + 1))
                 shift
                 ;;
             --skip-live-production-verifier)
@@ -300,6 +552,10 @@ main() {
     [[ -f "${PRODUCTION_KUSTOMIZATION}" ]] || phase4_die "missing production kustomization: ${PRODUCTION_KUSTOMIZATION}"
 
     if [[ -n "${release_manifest}" ]]; then
+        [[ "${explicit_image_count}" -eq 0 ]] || phase4_die "use either --release-manifest or explicit image arguments, not both"
+        if [[ "${release_manifest}" != /* && ! -f "${release_manifest}" ]]; then
+            release_manifest="$(phase4_repo_path "${release_manifest}")"
+        fi
         load_manifest "${release_manifest}"
     fi
 

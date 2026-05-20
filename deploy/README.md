@@ -86,6 +86,7 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `scripts/repo/generate-release-manifest.sh`
    - `deploy/scripts/23-update-production-release-images.sh`
    - `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`
+   - `deploy/scripts/25-deploy-oci-release.sh`
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
 12. Note the current observability boundary before reviewing or running any
@@ -180,6 +181,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
 | `deploy/scripts/23-update-production-release-images.sh` | Updates the checked-in production application image baseline from explicit digest-pinned image refs or a release manifest, then renders the app overlay and runs the OCI lockstep verifier plus the live production verifier unless explicitly skipped. Manifest input must satisfy the reusable release contract: `release.version`, `release.image_tag`, repository commit SHAs, artifact workflow run URLs, digest-pinned artifact images, and boolean phase flags. | Run after release workflows publish the six `linux/arm64` application images and before applying the production app overlay. |
 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production image inventory and app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, or production render change. |
+| `deploy/scripts/25-deploy-oci-release.sh` | Operator-facing OCI deployment wrapper for reviewed release modes. It validates the checked-in release baseline, runs the lockstep static gate, captures pre/post cluster snapshots, composes the reviewed platform, infrastructure, secret-sync, application, admission, observability, and optional public TLS paths, and waits for touched rollouts. | Run on the OCI host after the release image baseline is already updated and reviewed. Use `--mode verify-only` for a no-apply verification pass, `--mode app-only` for a workload rollout, or `--mode lockstep --release-manifest tmp/releases/vX.Y.Z.yaml` for manifest-flag-driven reconciliation. The script intentionally does not run the host-only internal TLS certificate generation path. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those

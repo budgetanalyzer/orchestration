@@ -96,6 +96,15 @@ scripts/
   OCI version contracts, production app image inventory alignment, production
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
+- `../deploy/scripts/25-deploy-oci-release.sh` - Operator-facing OCI release
+  deployment wrapper. It requires an explicit mode, validates the checked-in
+  production image baseline, runs the lockstep static gate, captures pre/post
+  cluster snapshots under `tmp/oci-release-deploy/`, composes the reviewed
+  deploy scripts in order, waits for touched rollouts, and prints the final
+  public-route and observability checklist. Use `--mode lockstep` with a
+  release manifest for phase-flag-driven reconciliation, `--mode app-only` for
+  a reviewed workload rollout, or `--mode verify-only` for verification without
+  applying changes.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs that will enter the release manifest, verifies the

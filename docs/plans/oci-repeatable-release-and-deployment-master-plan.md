@@ -526,6 +526,8 @@ manifest form becomes the normal path.
 
 ### Phase 4: OCI Lockstep Static Verifier
 
+Status: Implemented as `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`.
+
 Implement the verifier already required by the lockstep plan:
 
 - `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`
@@ -534,6 +536,8 @@ This verifier is the main safety gate before any master script mutates the OCI
 cluster.
 
 ### Phase 5: Master OCI Deployment Script
+
+Status: Implemented as `deploy/scripts/25-deploy-oci-release.sh`.
 
 Add a single operator-facing master script.
 

@@ -11,6 +11,7 @@ Related documents:
 - `docs/runbooks/oci-release-deployment-checklist.md`
 - `kubernetes/production/apps/image-inventory.yaml`
 - `deploy/scripts/23-update-production-release-images.sh`
+- `scripts/repo/prepare-lockstep-release.sh`
 - `scripts/repo/generate-release-manifest.sh`
 - `scripts/README.md`
 
@@ -27,9 +28,34 @@ This plan covers two changes:
 - Application Deployments and Pods carry release labels and image metadata
   annotations derived from the production release manifest and image inventory.
 
-This plan does not change Java service `project.version` values. The runtime
-deployment identity continues to come from the shared release tag, release
-manifest, and digest-pinned production image refs.
+This plan does not change Java service `project.version` values. It also does
+not require the Java service repos to bump their `serviceCommon` dependency just
+because the environment release version changes. Runtime deployment identity
+comes from the environment release tag, release manifest, and digest-pinned
+production image refs.
+
+## Release Model
+
+Keep these version concepts separate:
+
+| Concept | Example | Owner | Meaning |
+| --- | --- | --- | --- |
+| Environment release | `v0.0.15` | orchestration release flow | One reviewed deployable Budget Analyzer environment baseline. |
+| Service image identity | `ghcr.io/.../transaction-service:0.0.15@sha256:...` | service release workflow plus release manifest | The exact container image deployed for one runtime artifact. |
+| Service source revision | `40-char SHA` | release manifest | The source commit used to build one artifact. |
+| Shared Java library version | `serviceCommon = "0.0.14"` | service-common release flow and Java consumers | The version of the shared Java libraries a service compiles against. |
+| Java project version | `0.0.1-SNAPSHOT` | service repo build metadata | Local Gradle artifact metadata unless a repo intentionally publishes Java artifacts. |
+| API contract version | OpenAPI `info.version` | service API owner | API compatibility/contract metadata, not deployment identity. |
+
+Environment releases may move forward without changing `service-common`.
+`service-common` should be released only when its code changed and services need
+to consume a new shared library artifact. A normal environment release must not
+force every Java repo to update `gradle/libs.versions.toml` just to match the
+environment version.
+
+The existing lockstep release helper is still useful for coordinated
+service-common/library releases, but it is the wrong default for ordinary
+environment release validation.
 
 ## Target Outcome
 
@@ -113,6 +139,69 @@ If local Tilt needs a development fallback, keep it explicit, for example:
 - version: `local`
 - imageTag: `local`
 - artifacts: omitted or local-only
+
+## Environment Release Flow
+
+Add or document a runtime-environment release preparation path that validates
+repository state, release tags, workflow availability, and image publication
+without requiring `serviceCommon` to equal the environment release version.
+
+For a validation release such as `0.0.15`, the intended flow is:
+
+1. Choose the environment release version:
+   ```bash
+   export RELEASE_VERSION=v0.0.15
+   export IMAGE_VERSION=0.0.15
+   ```
+2. Validate the runtime release repository set is clean and at the intended
+   commits.
+3. Tag the runtime artifact repos at `v0.0.15`.
+4. Let the service and frontend release workflows publish images tagged
+   `0.0.15` from those source tags.
+5. Keep Java consumers on their current `serviceCommon` catalog value unless
+   there is an actual service-common change required for this release.
+6. Generate the release manifest from the published image digests:
+   ```bash
+   ./scripts/repo/generate-release-manifest.sh 0.0.15 \
+     --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
+     --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
+     --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
+     --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
+     --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
+     --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
+   ```
+7. Update the production release image baseline from that manifest:
+   ```bash
+   ./deploy/scripts/23-update-production-release-images.sh \
+     --release-manifest tmp/releases/v0.0.15.yaml
+   ```
+8. Deploy the reviewed environment baseline through the existing OCI deployment
+   wrapper.
+9. Verify `/api-docs` release metadata and live pod environment-release labels.
+
+This path should not call `scripts/repo/update-service-common-version.sh`
+unless the release intentionally includes a new `service-common` artifact.
+
+## Script Split
+
+Keep or introduce separate script responsibilities:
+
+- `scripts/repo/prepare-lockstep-release.sh` remains for coordinated source and
+  `service-common` library releases. It may continue to assert that
+  `service-common` and Java consumers are pinned to the requested library
+  release version.
+- Add a runtime environment release prep helper, or add a clearly named mode to
+  an existing helper, that does not validate `serviceCommon == release_version`.
+  Its job is to validate the runtime repo set, tag availability, workflow links,
+  and release-manifest prerequisites.
+- `scripts/repo/generate-release-manifest.sh` remains the bridge from published
+  artifact images to the reviewed environment baseline.
+- `deploy/scripts/23-update-production-release-images.sh` remains the place
+  where browser release metadata, image inventory, and deployment labels are
+  generated from the reviewed manifest.
+
+Update docs so operators do not use the lockstep/service-common helper for
+ordinary environment release validation.
 
 ## Kubernetes Labels And Annotations
 

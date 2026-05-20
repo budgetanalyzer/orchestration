@@ -110,11 +110,11 @@ validate_definitions() {
         phase4_die "unrendered RabbitMQ password placeholders remain in ${OUTPUT_FILE}"
     fi
 
-    if ! grep -Fq 'exchange-rate.import.requested' "${OUTPUT_FILE}"; then
+    if ! grep -Fq 'exchange-rate\\.import\\.requested' "${OUTPUT_FILE}"; then
         phase4_die "RabbitMQ definitions do not include exchange-rate.import.requested; check that ${TEMPLATE_FILE} is from the current release checkout"
     fi
 
-    if grep -Fq 'currency.created' "${OUTPUT_FILE}"; then
+    if grep -Fq 'currency\\.created' "${OUTPUT_FILE}"; then
         phase4_die "RabbitMQ definitions still include removed currency.created destination"
     fi
 }

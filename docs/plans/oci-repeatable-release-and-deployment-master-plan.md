@@ -345,11 +345,11 @@ Steps:
    kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
      -o jsonpath='{.data.definitions\.json}' \
      | base64 -d \
-     | grep 'exchange-rate\.import\.requested'
+     | grep -F 'exchange-rate\\.import\\.requested'
    ! kubectl get secret -n infrastructure rabbitmq-bootstrap-credentials \
      -o jsonpath='{.data.definitions\.json}' \
      | base64 -d \
-     | grep 'currency\.created'
+     | grep -F 'currency\\.created'
    ```
    The first grep must show the new `exchange-rate.import.requested`
    permissions. The second command must produce no `currency.created` entries.

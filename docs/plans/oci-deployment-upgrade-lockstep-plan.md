@@ -72,10 +72,13 @@ OCI:
   `docs/plans/transaction-preview-import-token-secret-plan.md`.
 - `kubernetes/production/apps/image-inventory.yaml`,
   `kubernetes/production/apps/kustomization.yaml`, and
-  `scripts/guardrails/verify-production-image-overlay.sh` still reference the
-  existing production release image set until those images exist.
-- The planned release-image update helper and OCI lockstep verifier are not yet
-  implemented in this repo; they remain required script work below.
+  `scripts/guardrails/verify-production-image-overlay.sh` still use the
+  existing production release image set until new release images exist. The
+  verifier now reads expected application image refs from the inventory.
+- The release-image update helper and OCI lockstep verifier are implemented as
+  `deploy/scripts/23-update-production-release-images.sh` and
+  `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`; they need validation on
+  the final release-image input batch before OCI apply.
 - `deploy/scripts/01-install-k3s.sh` now converges the OCI host inotify budget
   before installing or reconciling k3s, so rerunning the normal k3s install
   path keeps `kubectl logs -f` and operator log streaming on the repo-owned

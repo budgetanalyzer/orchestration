@@ -143,19 +143,18 @@ this plan exists.
 - Create a release manifest in a temporary or future checked-in location with
   the release version, source commits, workflow run URLs, and six application
   image refs.
-- Use the production image update helper from the lockstep plan once it exists.
-  Until then, update the same files manually and keep the diff small:
-  - `kubernetes/production/apps/image-inventory.yaml`
-  - `kubernetes/production/apps/kustomization.yaml`
-  - `scripts/guardrails/verify-production-image-overlay.sh`
+- Use the production image update helper from the lockstep plan:
+  ```bash
+  ./deploy/scripts/23-update-production-release-images.sh \
+    --release-manifest tmp/releases/v0.0.13.yaml
+  ```
 - Run:
   ```bash
   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
+  ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
   ./scripts/guardrails/verify-production-image-overlay.sh
   ./deploy/scripts/09-render-phase-5-secrets.sh
   ```
-- Run `./deploy/scripts/24-verify-oci-upgrade-lockstep.sh` after that verifier
-  exists.
 
 ### 5. Deploy To OCI
 
@@ -443,4 +442,3 @@ This plan is complete when:
 - a GitHub-triggered workflow exists or is explicitly deferred with rationale
 - all modified shell scripts pass `bash -n` and `shellcheck`
 - production image overlay and lockstep verifiers pass before OCI apply
-

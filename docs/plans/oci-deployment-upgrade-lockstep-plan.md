@@ -290,25 +290,45 @@ shellcheck deploy/scripts/01-install-k3s.sh
 
 ## OCI Upgrade Execution Steps
 
+Owner split:
+
+- AI assistant: maintain scripts/docs, update checked-in orchestration
+  baselines from user-provided release inputs, and run non-mutating local
+  verifiers.
+- Human release manager: approve and commit diffs, run git write operations,
+  push release tags, monitor GitHub release workflows, collect image digests,
+  and provide release manifest inputs.
+- Human OCI operator: run OCI-host deployment commands, host-only certificate
+  operations, Vault updates, and live production verification.
+
 ### Phase 0: Preflight
 
 1. Confirm the local dependency upgrade branch has passed the validation in
    `docs/plans/dependency-upgrade-and-centralized-bom-plan.md`.
-2. Confirm every changed service or frontend repo has a release tag and a
+2. If `service-common` and Java consumer version catalogs need to move
+   together, run the repo helper before tagging:
+   ```bash
+   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.x
+   ./scripts/repo/update-service-common-version.sh 0.0.x
+   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.x
+   ```
+   Review and commit the resulting sibling-repo changes in their owning repos
+   before release tags are pushed.
+3. Confirm every changed service or frontend repo has a release tag and a
    `linux/arm64` GHCR image.
-3. Confirm `~/.config/budget-analyzer/instance.env` exists on the OCI host.
-4. Export the production kubeconfig on the OCI host:
+4. Confirm `~/.config/budget-analyzer/instance.env` exists on the OCI host.
+5. Export the production kubeconfig on the OCI host:
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    ```
-5. Capture the live baseline:
+6. Capture the live baseline:
    ```bash
    kubectl get nodes -o wide
    kubectl get pods -A
    helm list -A
    kubectl get deploy,statefulset -A
    ```
-6. Capture the current OCI host inotify baseline:
+7. Capture the current OCI host inotify baseline:
    ```bash
    sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
    ```

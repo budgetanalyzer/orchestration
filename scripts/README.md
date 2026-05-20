@@ -350,7 +350,10 @@ directory without writing outside the repository.
   manually when ready.
 - `repo/update-service-common-version.sh` bumps the checked-in
   `service-common` version literal in `../service-common/build.gradle.kts` and
-  the matching `serviceCommon` catalog entry in each Java consumer repo.
+  the matching `serviceCommon` catalog entry in each Java consumer repo
+  (`transaction-service`, `currency-service`, `permission-service`, and
+  `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
+  edits or before release tagging.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

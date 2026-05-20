@@ -100,12 +100,232 @@ non-runtime tooling repositories.
 Use this checklist for the immediate deployment, even before all automation in
 this plan exists.
 
+### Phase A: AI Assistant Repo Automation
+
+Owner: AI assistant, from the orchestration repo context.
+
+Scope:
+
+- Implement and validate repo-owned scripts and documentation.
+- Update orchestration-owned production image, verification, and deployment
+  automation.
+- Update sibling repository documentation or configuration only when it is part
+  of release/deployment wiring.
+- Do not run git write operations, push tags, publish packages, mutate OCI, or
+  run certificate-generating scripts unless the user explicitly asks from the
+  correct host context.
+
+Steps:
+
+1. Maintain the release-image and lockstep gates:
+   ```bash
+   bash -n deploy/scripts/23-update-production-release-images.sh \
+     deploy/scripts/24-verify-oci-upgrade-lockstep.sh \
+     scripts/guardrails/verify-production-image-overlay.sh
+   shellcheck deploy/scripts/23-update-production-release-images.sh \
+     deploy/scripts/24-verify-oci-upgrade-lockstep.sh \
+     scripts/guardrails/verify-production-image-overlay.sh
+   ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+   ./scripts/guardrails/verify-production-image-overlay.sh
+   ```
+2. Maintain the service-common version bump helper:
+   ```bash
+   ./scripts/repo/update-service-common-version.sh --dry-run 0.0.13
+   ./scripts/repo/update-service-common-version.sh --validate-only 0.0.13
+   ```
+3. When the user provides real release image refs, update the production
+   baseline with:
+   ```bash
+   ./deploy/scripts/23-update-production-release-images.sh \
+     --release-manifest tmp/releases/v0.0.13.yaml
+   ```
+   If no live Kubernetes context is available in the current shell, use
+   `--skip-live-production-verifier` only as a temporary local limitation and
+   run `./scripts/guardrails/verify-production-image-overlay.sh` before OCI
+   apply.
+4. Keep the plan, script catalog, and production README aligned whenever the
+   workflow changes.
+
+### Phase B: Human Release Preparation
+
+Owner: human release manager.
+
+Scope:
+
+- Own git write operations, release tags, GitHub workflow approvals, package
+  publication, and review/commit decisions.
+- Run host-only or OCI-host-only operations from the correct host shell.
+- Provide real image digests and deployment evidence.
+
+Steps:
+
+1. Review and commit the automation diff:
+   ```bash
+   git status --short
+   git diff
+   ```
+2. Pick the release version:
+   ```bash
+   export RELEASE_VERSION=v0.0.13
+   export IMAGE_VERSION=0.0.13
+   ```
+3. If service-common needs a release or next-snapshot version change, run:
+   ```bash
+   ./scripts/repo/update-service-common-version.sh --dry-run "${IMAGE_VERSION}"
+   ./scripts/repo/update-service-common-version.sh "${IMAGE_VERSION}"
+   ./scripts/repo/update-service-common-version.sh --validate-only "${IMAGE_VERSION}"
+   ```
+   Review and commit the resulting changes in the affected repositories before
+   tagging.
+4. Validate sibling repository state:
+   ```bash
+   ./scripts/repo/validate-repos.sh
+   ```
+   Resolve failures rather than tagging around them.
+5. Confirm `service-common` has the intended release version in its Gradle
+   metadata before tagging, because its publish workflow rejects tag/version
+   mismatches.
+6. Confirm the sibling service release workflows have access to
+   `SERVICE_COMMON_PACKAGES_USERNAME` and `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
+7. Confirm the production secret prerequisites from the lockstep plan are ready,
+   especially any new transaction-service preview import token secret and
+   RabbitMQ definitions changes.
+
+### Phase C: Human Tag And Publish
+
+Owner: human release manager.
+
+Steps:
+
+1. Use the existing tag helper only after validating that its repository set is
+   correct for this release:
+   ```bash
+   ./scripts/repo/tag-release.sh "${RELEASE_VERSION}"
+   ```
+2. If `checkstyle-config` should not receive an OCI runtime release tag, update
+   the helper first or tag the runtime repos explicitly with documented
+   commands. Do not silently create an inconsistent release set.
+3. Confirm the tag push triggered each sibling `publish-release.yml` workflow.
+4. Confirm `service-common` packages published successfully before relying on
+   backend service image builds.
+5. Confirm the service and frontend workflows published `linux/arm64` GHCR
+   images.
+6. Trigger this repo's `publish-ext-authz-release.yml` for the same tag if the
+   tag push does not already do so.
+7. Capture the digest-pinned image refs printed by each workflow.
+
+### Phase D: Human Release Manifest Input
+
+Owner: human release manager, with AI assistant support allowed for file
+formatting after refs are provided.
+
+Create `tmp/releases/v0.0.13.yaml`:
+
+```yaml
+release-version: "0.0.13"
+transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.13@sha256:<digest>"
+currency-service: "ghcr.io/budgetanalyzer/currency-service:0.0.13@sha256:<digest>"
+permission-service: "ghcr.io/budgetanalyzer/permission-service:0.0.13@sha256:<digest>"
+session-gateway: "ghcr.io/budgetanalyzer/session-gateway:0.0.13@sha256:<digest>"
+budget-analyzer-web: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.13@sha256:<digest>"
+ext-authz: "ghcr.io/budgetanalyzer/ext-authz:0.0.13@sha256:<digest>"
+```
+
+### Phase E: AI Assistant Or Human Production Baseline Update
+
+Owner: AI assistant may run this locally after the human supplies real image
+refs; human owns review and commit.
+
+Steps:
+
+1. Update the checked-in production baseline:
+   ```bash
+   ./deploy/scripts/23-update-production-release-images.sh \
+     --release-manifest tmp/releases/v0.0.13.yaml
+   ```
+2. Review the exact diff:
+   ```bash
+   git diff -- kubernetes/production/apps deploy/instance.env.template \
+     kubernetes/production/README.md scripts/README.md docs/ci-cd.md
+   ```
+3. Run the local proof:
+   ```bash
+   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
+   ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+   ./scripts/guardrails/verify-production-image-overlay.sh
+   ./deploy/scripts/09-render-phase-5-secrets.sh
+   ```
+
+### Phase F: Human OCI Deployment
+
+Owner: human operator on the OCI host.
+
+Steps:
+
+1. SSH to the OCI host, update the repo checkout to the reviewed release
+   baseline, and set:
+   ```bash
+   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+   ```
+2. Capture the live baseline:
+   ```bash
+   kubectl get nodes -o wide
+   kubectl get pods -A
+   helm list -A
+   kubectl get deploy,statefulset -A
+   ```
+3. Run the OCI pre-apply gates:
+   ```bash
+   ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+   ./scripts/guardrails/verify-production-image-overlay.sh
+   ```
+4. For an app-only release, apply the production app overlay:
+   ```bash
+   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone \
+     | kubectl apply --server-side -f -
+   kubectl rollout status deployment/transaction-service --timeout=300s
+   kubectl rollout status deployment/currency-service --timeout=300s
+   kubectl rollout status deployment/permission-service --timeout=300s
+   kubectl rollout status deployment/session-gateway --timeout=300s
+   kubectl rollout status deployment/ext-authz --timeout=300s
+   kubectl rollout status deployment/nginx-gateway --timeout=300s
+   ```
+5. Reapply production admission policy after image refs change:
+   ```bash
+   ./deploy/scripts/15-apply-phase-7-policies.sh
+   ```
+6. Run focused production verification:
+   ```bash
+   kubectl get pods -A
+   kubectl get gateway,httproute -A
+   ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+   ./scripts/guardrails/verify-production-image-overlay.sh
+   ./scripts/smoketest/verify-observability-port-forward-access.sh
+   ./scripts/smoketest/verify-monitoring-runtime.sh --wait-timeout 180
+   ```
+7. From a workstation, verify the public route:
+   ```bash
+   curl -I https://demo.budgetanalyzer.org/
+   curl -I https://demo.budgetanalyzer.org/api-docs
+   ```
+
+Do not run certificate-generating scripts from the AI container. If public TLS
+or infra TLS has to be generated or rotated, run those host-side only.
+
+### Legacy Checklist Mapping
+
+The following checklist preserves the original flow and maps to the owner split
+above.
+
 ### 1. Pre-Release Validation
 
 - Confirm the current branches are the intended release heads.
 - Run the relevant local validation from the lockstep upgrade plan.
 - Run `./scripts/repo/validate-repos.sh` and resolve failures rather than
   tagging around them.
+- Use `./scripts/repo/update-service-common-version.sh` when the
+  `service-common` release version or Java consumer version catalogs need to
+  move together.
 - Confirm `service-common` has the intended release version in its Gradle
   metadata before tagging, because its publish workflow rejects tag/version
   mismatches.

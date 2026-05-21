@@ -205,6 +205,8 @@ Acceptance:
 
 ### Phase 1: Split Repository Sets And Deprecate All-Repo Tags For Normal Releases
 
+Status: Implemented.
+
 Goals:
 
 - Keep all-repo lockstep tags available for rare coordinated stack releases.

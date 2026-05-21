@@ -72,7 +72,6 @@ RELEASE_REPOS=(
     "budget-analyzer-web"
     "session-gateway"
     "permission-service"
-    "checkstyle-config"
 )
 readonly RELEASE_REPOS
 
@@ -97,10 +96,10 @@ Usage:
 
 Updates the checked-in OCI production application image baseline. The release
 manifest form is the normal release path and requires the Phase 1 contract:
-release.version, release.image_tag, repository commit SHAs, artifact workflow
-run URLs, digest-pinned artifact images, and boolean phase_flags. The legacy
-flat manifest form with release-version/version plus the six service keys is
-still accepted for local repair.
+release.version, release.image_tag, OCI release source repository commit SHAs,
+artifact workflow run URLs, digest-pinned artifact images, and boolean
+phase_flags. The legacy flat manifest form with release-version/version plus
+the six service keys is still accepted for local repair.
 
 By default the script runs:
   kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone

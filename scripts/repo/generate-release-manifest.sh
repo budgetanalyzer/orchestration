@@ -286,8 +286,7 @@ write_manifest() {
         printf '  version: "v%s"\n' "${version}"
         printf '  image_tag: "%s"\n' "${version}"
         printf 'repositories:\n'
-        # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-        for repo in "${REPOS[@]}"; do
+        for repo in "${OCI_RELEASE_SOURCE_REPOS[@]}"; do
             printf '  %s:\n' "${repo}"
             printf '    commit: "%s"\n' "$(repo_commit_sha "${repo}")"
         done

@@ -86,12 +86,13 @@ Create that manifest after the release image workflows complete:
   --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
 ```
 
-The current manifest records both `vX.Y.Z` and `X.Y.Z` release forms, the
-sibling repository commit SHA map, artifact workflow run URLs, digest-pinned
-image refs, and the operator-selected deployment phase flags. It is still the
-right contract for coordinated lockstep image updates. Config-only production
-changes should instead preserve the existing image inventory and prove that
-the rendered overlay contains the intended config change.
+The current manifest records both `vX.Y.Z` and `X.Y.Z` release forms, commit
+SHAs for OCI release source repos, artifact workflow run URLs, digest-pinned
+image refs, and the operator-selected deployment phase flags. Tooling repos
+such as `checkstyle-config` are not part of that OCI manifest source set. The
+contract is still the right fit for coordinated image updates. Config-only
+production changes should instead preserve the existing image inventory and
+prove that the rendered overlay contains the intended config change.
 The update helper reuses that manifest to regenerate
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and

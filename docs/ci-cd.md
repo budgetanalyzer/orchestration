@@ -248,7 +248,7 @@ validation. `tag --push` pushes the matching `vMAJOR.MINOR.PATCH` tag from
 `post` updates Java consumers after `publish-release.yml` completes for the
 tag and leaves `service-common` on the released version until it is manually
 bumped back to the next snapshot. The service-common Maven release tag is
-intentionally separate from the all-repository `repo/tag-release.sh` flow
+intentionally separate from lockstep source tagging
 because Java consumer release workflows also run on tag pushes and must not
 release from source still pinned to the snapshot dependency.
 
@@ -292,16 +292,27 @@ workflows:
   using those `0.0.14` GHCR refs
 - before changing that inventory for a coordinated source and changed
   `service-common` library release, run
-  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; for an
-  ordinary runtime environment release, keep existing Java consumers on their
-  checked-in `serviceCommon` version unless the shared library actually
-  changed
+  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; use
+  `./scripts/repo/tag-lockstep-release.sh vX.Y.Z` only for that rare
+  coordinated all-repo tag path
+- for an ordinary single-artifact release, run
+  `./scripts/repo/prepare-service-release.sh --service <artifact> --version X.Y.Z`;
+  this validates and tags only the selected artifact's source repository when
+  `--tag` is supplied
+- `./scripts/repo/tag-release.sh` is now the normal single-repository tag
+  helper and requires `--repo`; it does not tag every Budget Analyzer repo by
+  default, and it refuses tooling repos such as `checkstyle-config` for OCI
+  runtime release tagging
+- keep existing Java consumers on their checked-in `serviceCommon` version
+  unless the shared library actually changed
 - create `tmp/releases/vX.Y.Z.yaml` with
   `./scripts/repo/generate-release-manifest.sh` after the six runtime image
   workflows complete
 - release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
-  form, repository commit SHAs, artifact workflow run URLs, digest-pinned GHCR
-  image refs, and operator-selected deployment phase flags
+  form, commit SHAs for OCI release source repos, artifact workflow run URLs,
+  digest-pinned GHCR image refs, and operator-selected deployment phase flags;
+  `checkstyle-config` is tooling and is not part of this OCI manifest source
+  set
 - `./deploy/scripts/23-update-production-release-images.sh --release-manifest
   tmp/releases/vX.Y.Z.yaml` updates the production image inventory, production
   app image overlay, `/api-docs/release-metadata.json`, and runtime

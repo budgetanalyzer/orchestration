@@ -8,14 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/repo-config.sh"
 
-JAVA_CONSUMER_REPOS=(
-    "transaction-service"
-    "currency-service"
-    "permission-service"
-    "session-gateway"
-)
-readonly JAVA_CONSUMER_REPOS
-
 PUBLISH_WORKFLOWS=(
     "service-common:publish-release.yml"
     "transaction-service:publish-release.yml"
@@ -36,7 +28,7 @@ Usage:
 Options:
   --release-version <version>  Release version as X.Y.Z or vX.Y.Z.
   --tag                        After validation, prompt before calling
-                               scripts/repo/tag-release.sh vX.Y.Z.
+                               scripts/repo/tag-lockstep-release.sh vX.Y.Z.
   -h, --help                   Show this help.
 
 This helper is source-release preparation only. It does not deploy to OCI and
@@ -157,8 +149,7 @@ print_commit_table() {
     local repo path sha
 
     info "current release repository SHAs:"
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         path="$(repo_path "${repo}")"
         sha="$(git -C "${path}" rev-parse HEAD)"
         printf '  %-24s %s\n' "${repo}" "${sha}"
@@ -168,8 +159,7 @@ print_commit_table() {
 verify_release_repos() {
     local repo
 
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         verify_repo_exists "${repo}"
         verify_repo_clean_and_up_to_date "${repo}"
     done
@@ -185,7 +175,7 @@ verify_service_common_versions() {
     [[ "${service_common_version}" == "${release_version}" ]] || \
         die "../service-common/build.gradle.kts is ${service_common_version}; expected ${release_version}"
 
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         consumer_version="$(read_consumer_service_common_version "${repo}")"
         [[ "${consumer_version}" == "${release_version}" ]] || \
             die "../${repo}/gradle/libs.versions.toml serviceCommon is ${consumer_version}; expected ${release_version}"
@@ -196,12 +186,11 @@ verify_remote_tag_absent_or_skippable() {
     local tag_name="$1"
     local repo path
 
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         path="$(repo_path "${repo}")"
         if git -C "${path}" ls-remote --exit-code --tags origin "refs/tags/${tag_name}" >/dev/null 2>&1; then
             if [[ "${repo}" == "service-common" ]]; then
-                warn "${tag_name} already exists in service-common; repo/tag-release.sh will skip that documented case"
+                warn "${tag_name} already exists in service-common; repo/tag-lockstep-release.sh will skip that documented case"
                 continue
             fi
             die "${tag_name} already exists remotely in ${repo}"
@@ -234,14 +223,14 @@ maybe_tag_release() {
     local tag_name="$1"
     local reply
 
-    printf '[release-prep] Call scripts/repo/tag-release.sh %s now? [y/N] ' "${tag_name}"
+    printf '[release-prep] Call scripts/repo/tag-lockstep-release.sh %s now? [y/N] ' "${tag_name}"
     read -r reply
     if [[ "${reply}" =~ ^[Yy]$ ]]; then
-        "${SCRIPT_DIR}/tag-release.sh" "${tag_name}"
+        "${SCRIPT_DIR}/tag-lockstep-release.sh" "${tag_name}"
         return
     fi
 
-    info "tagging skipped; run ${SCRIPT_DIR}/tag-release.sh ${tag_name} when ready"
+    info "tagging skipped; run ${SCRIPT_DIR}/tag-lockstep-release.sh ${tag_name} when ready"
 }
 
 main() {
@@ -289,7 +278,7 @@ main() {
     if [[ "${tag_after_validation}" == true ]]; then
         maybe_tag_release "${tag_name}"
     else
-        info "tagging not requested; rerun with --tag or run scripts/repo/tag-release.sh ${tag_name}"
+        info "tagging not requested; rerun with --tag or run scripts/repo/tag-lockstep-release.sh ${tag_name}"
     fi
 }
 

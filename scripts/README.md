@@ -114,13 +114,25 @@ scripts/
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs that will enter the release manifest, verifies the
   `service-common` version contract, checks remote tag availability, and can
-  prompt before delegating to `repo/tag-release.sh`.
+  prompt before delegating to `repo/tag-lockstep-release.sh`.
+- `repo/prepare-service-release.sh` - Release-manager preflight for one
+  runtime artifact. It validates only the selected artifact's source
+  repository, prints the source commit, expected image tag, workflow page, and
+  Java `serviceCommon` version when applicable, and can prompt before
+  delegating to `repo/tag-release.sh --repo <repo>`.
+- `repo/tag-release.sh` - Normal single-repository release tag helper. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  such as `checkstyle-config` for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
+  all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set.
 - `repo/generate-release-manifest.sh` - Resolves GHCR tag digests for the six
   runtime application images and writes the release manifest under
   `tmp/releases/v<version>.yaml` for
   `../deploy/scripts/23-update-production-release-images.sh`. The manifest
-  includes `release.version`, `release.image_tag`, repository commit SHAs,
-  artifact workflow run URLs, digest-pinned images, and deployment phase flags.
+  includes `release.version`, `release.image_tag`, commit SHAs for OCI release
+  source repos, artifact workflow run URLs, digest-pinned images, and
+  deployment phase flags. Tooling repos are not part of this OCI manifest
+  source set.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -400,9 +412,9 @@ directory without writing outside the repository.
   manifest consumed by the production image update helper. Provide the
   completed workflow run URL for each runtime artifact with repeated
   `--workflow-run-url artifact=https://github.com/budgetanalyzer/.../actions/runs/<id>`
-  arguments. The helper records the local sibling repository commit SHAs,
-  resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and defaults
-  all phase flags to `false` unless a corresponding `--*-changed` or
+  arguments. The helper records the local commit SHAs for OCI release source
+  repos, resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and
+  defaults all phase flags to `false` unless a corresponding `--*-changed` or
   `--public-tls-reapply-required` flag is passed.
 - `deploy/scripts/23-update-production-release-images.sh` consumes that
   manifest to update the checked-in production image inventory, production app

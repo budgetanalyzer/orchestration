@@ -388,6 +388,91 @@ Acceptance:
   image intended for production, or retagged/rebuilt as a SemVer release if a
   named release artifact is required.
 
+  Phase 4 review:
+
+  • Waited for background terminal
+
+  script.
+
+  Full review comments:
+
+  - [P1] Reject service scoping outside app-only deployments — /workspace/orchestration/deploy/scripts/25-deploy-oci-release.sh:304-307
+    When --services is passed with --mode manifest, the selection is still honored by apply_production_apps, so only those resources are applied and run_pod_metadata_verifier also checks only that subset. For a manifest that updates multiple artifacts, this can report success while
+    unselected workloads remain on the previous images; reject --services outside the selected app-only flow or force full app apply for manifest deployments.
+  - [P2] Preserve service-common versions from the inventory — /workspace/orchestration/scripts/repo/generate-deployment-manifest.sh:298-301
+    For config-only, rollback, or single-service manifests generated from the current production inventory, this loader copies image/source/version fields but never reads existing *.service-common-version keys. Unless the operator manually re-supplies every Java service's value, the next
+    baseline update drops that metadata from the deployment manifest, image inventory, runtime labels, and /api-docs for unchanged Java services.
+  - [P2] Keep lockstep release manifests consumable — /workspace/orchestration/deploy/scripts/23-update-production-release-images.sh:79-81
+    This script now only accepts schema v2 deployment manifests, but the lockstep helpers still produce and point operators at tmp/releases/vX.Y.Z.yaml from generate-release-manifest.sh, which is a different manifest shape and is passed as --release-manifest. The rare lockstep release
+    path therefore ends with unknown option: --release-manifest; either retain support/conversion here or update the lockstep helpers to emit schema v2 deployment manifests.
+
+─ Worked for 5m 38s ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› I want to take all of those issues into account and see if we can design our way out of this rather than fixing those exact bugs.  I feel like things got a little too configurable, i prefer convention over configuration, i'm a spring boot guy.  so the only use case i can see is for me
+  to be running the full system on my machine, and then say "ok now push this exact stack to oci".  i want the system to be able to snapshot my state, figure out which tags/images/shas are unchanged and leave them deployed, and then tag and deploy everything that did change.  that's it.
+  i think i want to discuss this first and integrate the 3 bugs you found to make sure we fix those, but i want to simplify the system.  there is no legacy path to support, i think the existing production release path is causing more harm than good.  it should happen naturally if every
+  service changed, which will happen organically when we upgrade service-common.  but we don't need any special verification around the tag names that i can think of
+
+
+⚠ Heads up, you have less than 5% of your 5h limit left. Run /status for a breakdown.
+
+• I’m going to keep this at design level first and treat the three review findings as symptoms of the same problem: release tooling has too many modes and too many partially valid states.
+
+• I think the right design is: production release has one meaning only.
+
+  “Take the full current stack from my workspace, compare it to what OCI is running, build/push only what changed, then apply a complete production deployment snapshot.”
+
+  That removes the partial-state bugs instead of patching around them.
+
+  Proposed Shape
+
+  One command, something like:
+
+  ./deploy/scripts/promote-current-stack-to-oci.sh
+
+  No --services, no --mode manifest, no lockstep release mode, no separate release-manifest shape.
+
+  The flow should be:
+
+  1. Discover the managed stack by convention from repo-owned sources.
+      - Kubernetes app manifests
+      - Tilt/service registration
+      - image inventory conventions
+      - known sibling repo layout
+  2. Snapshot local desired state for every managed workload.
+      - service name
+      - source repo
+      - source commit
+      - dirty/content hash if the repo is not clean
+      - image repo
+      - build inputs
+      - Java service-common version/hash where applicable
+      - current intended runtime metadata
+  3. Read the current OCI production inventory.
+      - deployed image digest
+      - source metadata
+      - service-common metadata
+      - runtime labels/annotations currently associated with each workload
+  4. Diff full-stack desired state against production.
+      - unchanged workload: carry forward existing immutable image digest and metadata
+      - changed workload: build ARM64 image, push it, record the pushed digest
+      - service-common changed: Java services naturally become changed because their shared input changed
+  6. Apply the full production app set.
+  7. Verify by resolved image digests and runtime metadata, not tag names.
+
+  That directly handles the three review issues:
+
+  - The --services bug disappears because production promotion is always full-stack. There is no valid partial production manifest path.
+  - The dropped service-common-version bug disappears because shared-library metadata becomes part of the full inventory contract and is always preserved or recomputed.
+  - The lockstep release bug disappears because there is no special lockstep release path. If every service changed, every service gets rebuilt and deployed naturally. If only service-common changed, all Java services become changed through the dependency snapshot.
+
+  I would also drop tag-name verification. Tags can remain useful for humans, but correctness should be based on pushed image digests. A tag convention like <service>:<snapshot-id>-<short-hash> is fine, but deploy and verify should use the digest returned by the registry.
+
+  The one design choice I would be strict about: “exact stack from my machine” cannot mean scraping live Tilt pod filesystem state. Tilt live update can make a pod differ from any built image. The promotion command should rebuild from the current workspace contents, including dirty
+  changes if allowed, and use content hashes/labels so OCI represents a reproducible snapshot of the workspace at promotion time.
+  
+
 ### Phase 5: Build Independent Black-Box API And Security Gates
 
 Goals:

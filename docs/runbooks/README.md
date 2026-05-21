@@ -12,10 +12,10 @@ stack is not up yet, start there first.
 |---------|-------------|-------------|
 | [Tilt Debugging](tilt-debugging.md) | Debug Tilt/Kind local development environment | Services not starting, auth failures, network issues |
 | [Kiali Expected Warnings](kiali-expected-warnings.md) | Reference for Kiali warnings this repo intentionally ignores | Kiali triage shows low-signal warnings and you need the repo policy |
-| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Evidence template for OCI release deploys | Running or reviewing `deploy/scripts/25-deploy-oci-release.sh` |
-| [OCI Single-Service Release](oci-single-service-release.md) | Procedure for deploying one changed runtime artifact | One service or frontend image changes and unrelated artifacts stay pinned |
-| [OCI Single-Service Rollback](oci-single-service-rollback.md) | Procedure for restoring one artifact from a previous manifest | A selected app-only rollout needs rollback |
-| [OCI Candidate Deployment](oci-candidate-deployment.md) | Staging-window flow for tag-required candidate images | Testing a candidate image before a SemVer release tag |
+| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Evidence template for OCI promotion | Running or reviewing `deploy/scripts/promote-current-stack-to-oci.sh` |
+| [OCI Single-Service Release](oci-single-service-release.md) | Superseded note for the removed service-scoped release path | Redirecting old single-service release habits to full-stack promotion |
+| [OCI Single-Service Rollback](oci-single-service-rollback.md) | Superseded note for the removed service-scoped rollback path | Redirecting old app-only rollback habits to full-stack promotion |
+| [OCI Candidate Deployment](oci-candidate-deployment.md) | Superseded note for the removed tag-required candidate path | Recording candidate status through full-stack promotion |
 
 ## Runbook Philosophy
 

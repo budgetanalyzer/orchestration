@@ -90,9 +90,17 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
+- `../deploy/scripts/promote-current-stack-to-oci.sh` - Normal OCI production
+  promotion entry point. It snapshots the current workspace stack, compares it
+  with the accepted production baseline, carries forward unchanged digests and
+  metadata, builds and pushes changed `linux/arm64` GHCR images, writes a
+  complete deployment snapshot, updates the checked-in production baseline,
+  and applies the full production app set. Use `--plan-only` for the
+  non-mutating reused/rebuilt diff.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
-  manifest, then runs the production render and static gates. Use
+  manifest, then runs the production render and static gates. It is now a
+  lower-level renderer used by the promotion command. Use
   `--skip-live-production-verifier` only when the live-cluster production
   verifier cannot run in the current shell.
 - `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
@@ -100,23 +108,18 @@ scripts/
   OCI version contracts, production app image inventory alignment, production
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
-- `../deploy/scripts/25-deploy-oci-release.sh` - Operator-facing OCI
-  deployment wrapper. It requires an explicit mode and schema v2
+- `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
+  wrapper used by the promotion command. It requires an explicit mode and schema v2
   `--deployment-manifest`, validates the checked-in production baseline, runs
   the static gate, captures pre/post cluster snapshots under
   `tmp/oci-release-deploy/`, composes the reviewed deploy scripts in order,
-  waits for touched rollouts, and prints the final public-route and
-  observability checklist. Use `--mode manifest` for phase-flag-driven
-  reconciliation, `--mode app-only` for a reviewed workload rollout, or
-  `--mode verify-only` for verification without applying changes. Add
-  `--services transaction-service,currency-service` to scope app-only rollout
-  and metadata verification to selected workloads; `budget-analyzer-web` maps
-  to the production `nginx-gateway` workload.
-- `../deploy/scripts/26-rollback-oci-artifact.sh` - Generates a rollback
-  schema v2 deployment manifest for one artifact by copying that artifact's
-  image and metadata from a previous manifest while preserving every unrelated
-  artifact from the current production baseline. It can optionally delegate to
-  `23-update-production-release-images.sh` after the manifest is reviewed.
+  waits for full app rollouts, and prints the final public-route and
+  observability checklist. It rejects `--services`; production app apply is
+  full-stack.
+- `../deploy/scripts/26-rollback-oci-artifact.sh` - Historical rollback
+  manifest generator for one artifact. Service-scoped production apply has
+  been removed; prefer restoring a complete previous deployment snapshot and
+  promoting the full managed stack.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -434,25 +437,22 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
-- `repo/generate-deployment-manifest.sh` writes the operator-reviewed schema v2
-  deployment manifest consumed by the production image update helper. The
-  helper starts from the current production image inventory, preserves
-  unchanged artifact digests, and accepts selected artifact image, source ref,
-  source commit, artifact version, service-common version, and phase flag
-  overrides. Use `--service` / `--artifact` for single-artifact releases so
-  overrides outside the intended artifact set are rejected.
-- `deploy/scripts/23-update-production-release-images.sh` consumes that
+- `repo/generate-deployment-manifest.sh` is a lower-level schema v2 manifest
+  generator retained for reviewed baseline repair and historical workflows.
+  It now carries forward existing Java `service-common` metadata from the
+  production inventory.
+- `deploy/scripts/promote-current-stack-to-oci.sh` is the normal production
+  promotion entry point and should be used instead of service-scoped manifest
+  generation for OCI app changes.
+- `deploy/scripts/23-update-production-release-images.sh` consumes a complete
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/25-deploy-oci-release.sh --mode app-only --services <list>`
-  applies only the selected production app workload resources from the
-  reviewed overlay, waits only for those rollouts, and verifies live metadata
-  for those selected workloads.
-- `deploy/scripts/26-rollback-oci-artifact.sh` creates a one-artifact rollback
-  manifest from a previous schema v2 manifest. The normal follow-up is the
-  same production baseline update and selected app-only rollout used for a
-  single-service release.
+- `deploy/scripts/25-deploy-oci-release.sh` no longer accepts `--services`;
+  production app apply is full-stack.
+- `deploy/scripts/26-rollback-oci-artifact.sh` is retained as a historical
+  manifest generator, but the durable rollback model is restoring a complete
+  previous deployment snapshot and promoting the full managed stack.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

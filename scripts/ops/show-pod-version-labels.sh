@@ -22,6 +22,14 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
+JAVA_SERVICES=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+)
+readonly JAVA_SERVICES
+
 declare -A EXPECTED_IMAGE_REFS=()
 declare -A EXPECTED_ARTIFACT_VERSIONS=()
 declare -A EXPECTED_SOURCE_REFS=()
@@ -187,6 +195,19 @@ is_tracked_app() {
     esac
 }
 
+is_java_artifact() {
+    local candidate="$1"
+    local service
+
+    for service in "${JAVA_SERVICES[@]}"; do
+        if [[ "${service}" == "${candidate}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 artifact_for_workload() {
     case "$1" in
         nginx-gateway)
@@ -282,6 +303,8 @@ load_expected_from_manifest() {
         value="$(manifest_nested_value "${file}" "artifacts" "${service}" "service_common_version")"
         if [[ -n "${value}" ]]; then
             EXPECTED_SERVICE_COMMON_VERSIONS["${service}"]="${value}"
+        elif is_java_artifact "${service}"; then
+            die "deployment manifest is missing artifacts.${service}.service_common_version"
         fi
     done
 }
@@ -319,6 +342,8 @@ load_expected_from_inventory() {
         value="$(inventory_value "${file}" "${service}.service-common-version")"
         if [[ -n "${value}" ]]; then
             EXPECTED_SERVICE_COMMON_VERSIONS["${service}"]="${value}"
+        elif is_java_artifact "${service}"; then
+            die "inventory is missing ${service}.service-common-version"
         fi
     done
 }

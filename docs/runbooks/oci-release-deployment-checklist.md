@@ -4,37 +4,27 @@ Use this template to record evidence for an OCI release or deployment. It is a
 run-log shape, not a secret store: do not paste kubeconfigs, private keys,
 tokens, passwords, cookie values, or raw secret payloads.
 
-Supported deployment shapes, using the terminology from
-[docs/ci-cd.md](../ci-cd.md):
-
-- **Lockstep release**: coordinated stack release with reviewed source tags and
-  updated digest-pinned runtime images.
-- **Single-service release**: one service or frontend artifact changes while
-  unrelated artifacts stay pinned to their current digests.
-- **Config-only deployment**: orchestration configuration, manifests, routes,
-  policy, docs, or metadata change without rebuilding runtime artifacts.
-- **Candidate deployment**: the single OCI instance is used as a controlled
-  staging window for candidate state.
-- **Promotion**: the verified candidate manifest is recorded as accepted
-  production state. On one OCI instance this may be metadata-only because the
-  verified bits are already live.
+The normal production shape is full-stack OCI promotion, using the terminology
+from [docs/ci-cd.md](../ci-cd.md). The promotion command may rebuild one
+artifact, several artifacts, or none, but the deployment snapshot and apply are
+always complete.
 
 `service-common` is a shared Java library version. Record it where it changed
 or where a Java artifact consumes it, but do not require a `service-common`
 bump for config-only deployments or unrelated service releases.
 
 The recurring deployment commands live in [deploy/README.md](../../deploy/README.md)
-and the script help for [25-deploy-oci-release.sh](../../deploy/scripts/25-deploy-oci-release.sh).
+and the script help for
+[promote-current-stack-to-oci.sh](../../deploy/scripts/promote-current-stack-to-oci.sh).
 Use those sources for the current command sequence, then record the evidence
 below.
 
 ## Prerequisites
 
-- [ ] The production image baseline has been updated and reviewed, or the
-  deployment is explicitly config-only and preserves the existing image
-  inventory.
-- [ ] The release or deployment manifest exists under `tmp/deployments/` or
-  another reviewed operator path when the selected mode requires one.
+- [ ] `deploy/scripts/promote-current-stack-to-oci.sh --plan-only` has been
+  reviewed for reused versus rebuilt artifacts.
+- [ ] Any Java `service-common` change has already been published and Java
+  consumers are pinned to the intended `serviceCommon` version.
 - [ ] The operator shell is on the OCI host, or is explicitly using an OCI
   host kubeconfig with `--kubeconfig`.
 - [ ] `KUBECONFIG` points at the intended OCI k3s cluster.
@@ -46,18 +36,17 @@ below.
 
 | Field | Value |
 | --- | --- |
-| Deployment type | `lockstep release`, `single-service release`, `config-only deployment`, `candidate deployment`, or `promotion` |
+| Deployment type | `full-stack promotion` |
 | Release version, if applicable | `vX.Y.Z` or `n/a` |
 | Deployment revision or candidate id |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
-| Selected mode | `verify-only`, `app-only`, `manifest`, `platform-only`, or `infrastructure-only` |
-| Selected app services, if scoped | comma-separated artifact/workload list or `all` |
-| Dry run first | `yes` or `no` |
-| Release/deployment manifest | `tmp/deployments/oci-YYYYMMDD.N.yaml`, candidate manifest path, or `n/a` |
+| Plan-only first | `yes` or `no` |
+| Deployment snapshot | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.yaml` |
+| Promotion plan | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.plan.yaml` |
 | Production image inventory ref | `kubernetes/production/apps/image-inventory.yaml` |
 | Orchestration checkout ref |  |
-| Snapshot directory | `tmp/oci-release-deploy/<timestamp>-<mode>-<version>` |
+| OCI apply snapshot directory | `tmp/oci-release-deploy/<timestamp>-manifest-<deployment-id>` |
 
 ## Source Commits
 
@@ -124,9 +113,9 @@ below.
 
 | Order | Script or command | Arguments | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` |  |  |  |
-| 2 | `scripts/guardrails/verify-production-image-overlay.sh` |  |  |  |
-| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --services <list-if-app-only> --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml` |  |  |
+| 1 | `deploy/scripts/promote-current-stack-to-oci.sh` | `--plan-only` |  |  |
+| 2 | `deploy/scripts/promote-current-stack-to-oci.sh` | deployment options used |  |  |
+| 3 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after baseline update |  |  |
 
 Add rows for any reviewed lower-level deployment scripts used instead of the
 master script.
@@ -184,8 +173,8 @@ master script.
 | --- | --- |
 | Previous deployment id |  |
 | Previous deployment manifest or image inventory ref |  |
-| Safe app-only rollback candidate | `yes`, `no`, or `needs review` |
-| Rollback artifact, if scoped |  |
+| Complete rollback snapshot available | `yes`, `no`, or `needs review` |
+| Artifact driving rollback, if any |  |
 | Data migration risk |  |
 | RabbitMQ queue migration or discard decision |  |
 | Platform downgrade risk |  |

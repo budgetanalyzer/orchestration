@@ -92,8 +92,9 @@ Options:
   -h, --help                               Show this help.
 
 The script starts from the checked-in production image inventory, preserves
-unchanged artifact digests, and writes a schema_version: 2 deployment manifest.
-Use repeated override flags to describe the artifacts being changed.
+unchanged artifact digests and Java service-common metadata, and writes a
+schema_version: 2 deployment manifest. Use repeated override flags to describe
+the artifacts being changed.
 EOF
 }
 
@@ -280,7 +281,7 @@ parse_assignment() {
 
 load_inventory() {
     local inventory="$1"
-    local service image_ref version source_repo source_commit
+    local service image_ref version source_repo source_commit service_common_version
 
     [[ -f "${inventory}" ]] || die "inventory not found: ${inventory}"
 
@@ -311,6 +312,13 @@ load_inventory() {
             source_commit="$(repo_ref_commit "${source_repo}" "${SOURCE_REFS[${service}]}")"
             if [[ -n "${source_commit}" ]]; then
                 SOURCE_COMMITS["${service}"]="${source_commit}"
+            fi
+        fi
+
+        if is_java_service "${service}"; then
+            service_common_version="$(inventory_value "${inventory}" "${service}.service-common-version")"
+            if [[ -n "${service_common_version}" && -z "${SERVICE_COMMON_VERSIONS[${service}]:-}" ]]; then
+                SERVICE_COMMON_VERSIONS["${service}"]="${service_common_version}"
             fi
         fi
     done
@@ -359,6 +367,11 @@ validate_manifest_inputs() {
         source_commit="${SOURCE_COMMITS[${service}]:-}"
         [[ -n "${source_commit}" ]] || die "missing source commit for ${service}; pass --source-commit ${service}=<sha>"
         valid_commit_sha "${source_commit}" || die "invalid source commit for ${service}: ${source_commit}"
+
+        if is_java_service "${service}"; then
+            [[ -n "${SERVICE_COMMON_VERSIONS[${service}]:-}" ]] || \
+                die "missing service-common version for Java artifact ${service}"
+        fi
     done
 }
 

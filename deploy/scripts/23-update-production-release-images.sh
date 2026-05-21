@@ -37,6 +37,14 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
+JAVA_SERVICES=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+)
+readonly JAVA_SERVICES
+
 RUNTIME_DEPLOYMENT_ORDER=(
     "transaction-service"
     "currency-service"
@@ -81,10 +89,11 @@ Options:
   --skip-live-production-verifier  Skip scripts/guardrails/verify-production-image-overlay.sh.
   -h, --help                       Show this help.
 
-Updates the checked-in OCI production application image baseline from a v2
-deployment manifest. The manifest is the source of truth for deployment id,
-status, orchestration revision, per-artifact source refs, source commits,
-artifact versions, service-common versions, and digest-pinned images.
+Updates the checked-in OCI production application image baseline from a
+complete v2 deployment manifest. The manifest is the source of truth for
+deployment id, status, orchestration revision, per-artifact source refs,
+source commits, artifact versions, Java service-common versions, and
+digest-pinned images.
 EOF
 }
 
@@ -267,6 +276,19 @@ service_exists() {
     return 1
 }
 
+is_java_service() {
+    local candidate="$1"
+    local service
+
+    for service in "${JAVA_SERVICES[@]}"; do
+        if [[ "${service}" == "${candidate}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 image_ref_tag() {
     local image_ref="$1"
 
@@ -365,6 +387,8 @@ load_deployment_manifest() {
         value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "service_common_version")"
         if [[ -n "${value}" ]]; then
             SERVICE_COMMON_VERSIONS["${service}"]="${value}"
+        elif is_java_service "${service}"; then
+            phase4_die "deployment manifest is missing artifacts.${service}.service_common_version"
         fi
     done
 

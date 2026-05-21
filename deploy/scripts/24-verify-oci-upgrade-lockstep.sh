@@ -47,6 +47,14 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
+JAVA_SERVICES=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+)
+readonly JAVA_SERVICES
+
 declare -A IMAGE_REPOS=(
     ["transaction-service"]="transaction-service"
     ["currency-service"]="currency-service"
@@ -91,6 +99,19 @@ info() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+is_java_service() {
+    local candidate="$1"
+    local service
+
+    for service in "${JAVA_SERVICES[@]}"; do
+        if [[ "${service}" == "${candidate}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 cleanup() {
@@ -209,7 +230,7 @@ manifest_nested_value() {
 }
 
 load_inventory_refs() {
-    local schema_version deployment_id service repo image_ref artifact_version source_ref source_commit expected_pattern
+    local schema_version deployment_id service repo image_ref artifact_version source_ref source_commit service_common_version expected_pattern
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || fail "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
 
@@ -239,9 +260,13 @@ load_inventory_refs() {
         artifact_version="$(inventory_value "${service}.artifact-version")"
         source_ref="$(inventory_value "${service}.source-ref")"
         source_commit="$(inventory_value "${service}.source-commit")"
+        service_common_version="$(inventory_value "${service}.service-common-version")"
         [[ -n "${artifact_version}" ]] || fail "production image inventory is missing ${service}.artifact-version"
         [[ -n "${source_ref}" ]] || fail "production image inventory is missing ${service}.source-ref"
         [[ "${source_commit}" =~ ^[0-9a-f]{40}$ ]] || fail "production image inventory is missing a valid ${service}.source-commit"
+        if is_java_service "${service}" && [[ -z "${service_common_version}" ]]; then
+            fail "production image inventory is missing ${service}.service-common-version"
+        fi
 
         INVENTORY_REFS["${service}"]="${image_ref}"
         INVENTORY_ARTIFACT_VERSIONS["${service}"]="${artifact_version}"
@@ -281,6 +306,15 @@ verify_deployment_manifest_alignment() {
         inventory_value_text="$(inventory_value "${service}.source-commit")"
         [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
             fail "deployment manifest source commit for ${service} does not match image inventory"
+
+        if is_java_service "${service}"; then
+            manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "service_common_version")"
+            inventory_value_text="$(inventory_value "${service}.service-common-version")"
+            [[ -n "${manifest_value_text}" ]] || \
+                fail "deployment manifest is missing service_common_version for ${service}"
+            [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+                fail "deployment manifest service_common_version for ${service} does not match image inventory"
+        fi
     done
 }
 
@@ -430,6 +464,12 @@ verify_release_metadata_file() {
             "release metadata artifact version for ${service} does not match image inventory: ${file}"
         assert_contains_literal "${file}" "\"image\": \"${INVENTORY_REFS[${service}]}\"" \
             "release metadata image for ${service} does not match image inventory: ${file}"
+        if is_java_service "${service}"; then
+            assert_contains_literal "${file}" '"serviceCommonVersion":' \
+                "release metadata is missing serviceCommonVersion for Java artifacts: ${file}"
+            assert_contains_literal "${file}" "\"serviceCommonVersion\": \"$(inventory_value "${service}.service-common-version")\"" \
+                "release metadata serviceCommonVersion for ${service} does not match image inventory: ${file}"
+        fi
     done
 }
 

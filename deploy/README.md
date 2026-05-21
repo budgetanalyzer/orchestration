@@ -22,22 +22,19 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 
 ## Deployment Operating Model
 
-The OCI path supports more than one release shape. The canonical terminology
-lives in [docs/ci-cd.md](../docs/ci-cd.md).
+The normal OCI production operation is convention-based full-stack promotion.
+The canonical terminology lives in [docs/ci-cd.md](../docs/ci-cd.md).
 
-- **Lockstep release**: a rare coordinated stack release where all runtime
-  images are updated together and the manifest flags drive any required
-  platform, infrastructure, secret-sync, observability, or public TLS work.
-- **Single-service release**: one runtime image is updated while unrelated
-  services stay on their current digest-pinned image refs.
-- **Config-only deployment**: reviewed orchestration configuration, manifests,
-  policy, routing, docs, or metadata are applied without rebuilding or
-  retagging runtime images.
-- **Candidate deployment**: the single OCI instance enters a staging window and
-  temporarily runs candidate state for verification.
-- **Promotion**: the verified candidate manifest is recorded as the accepted
-  production baseline; on one OCI instance this may be a metadata-only step
-  because the candidate bits are already live.
+```bash
+./deploy/scripts/promote-current-stack-to-oci.sh
+```
+
+That command snapshots the current intended workspace state, compares it with
+the accepted OCI production baseline, carries forward unchanged digest-pinned
+images and metadata, builds and pushes only changed `linux/arm64` images,
+updates the checked-in production baseline from one complete deployment
+snapshot, and applies the full production app set. It has no `--services` and
+no operator-facing deployment `--mode`.
 
 Every durable deployment state must remain repo-owned, repeatable, and
 digest-pinned. `service-common` is released only when the shared Java libraries
@@ -104,33 +101,17 @@ change; do not bump it to force an unrelated OCI deployment.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-11. Review the production deployment-baseline and OCI deployment helpers. The
-   OCI app path is driven by a schema v2 deployment manifest; config-only and
-   single-service changes preserve digest-pinned images for untouched
-   artifacts:
-   - `scripts/repo/prepare-lockstep-release.sh`
-   - `scripts/repo/prepare-service-release.sh`
-   - `scripts/repo/prepare-candidate-deployment.sh`
-   - `scripts/repo/tag-release.sh`
-   - `scripts/repo/tag-lockstep-release.sh`
-   - `scripts/repo/generate-deployment-manifest.sh`
+11. Review the production deployment-baseline and OCI promotion helpers:
+   - `deploy/scripts/promote-current-stack-to-oci.sh`
    - `deploy/scripts/23-update-production-release-images.sh`
    - `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`
    - `deploy/scripts/25-deploy-oci-release.sh`
-   - `deploy/scripts/26-rollback-oci-artifact.sh`
    - `docs/runbooks/oci-release-deployment-checklist.md`
-   - `docs/runbooks/oci-single-service-release.md`
-   - `docs/runbooks/oci-single-service-rollback.md`
-   - `docs/runbooks/oci-candidate-deployment.md`
    - `kubernetes/production/apps/deployment-manifest.yaml`
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
-   When local sibling checkouts are the intended deployable state, preview
-   which runtime image repos still need the tag with
-   `scripts/repo/tag-lockstep-release.sh vX.Y.Z --repo-set runtime-images --current-state --plan-only`.
-   For a pre-SemVer candidate image, prepare the selected repo with
-   `scripts/repo/prepare-candidate-deployment.sh --service <artifact>`, then
-   push the reviewed `candidate-*` tag to trigger the runtime image workflow.
+   Run `deploy/scripts/promote-current-stack-to-oci.sh --plan-only` first when
+   you want a non-mutating diff of reused versus rebuilt artifacts.
 12. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The production Prometheus/Grafana path is owned by
@@ -221,10 +202,11 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
-| `deploy/scripts/23-update-production-release-images.sh` | Updates the checked-in production deployment baseline from a schema v2 deployment manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then renders the app overlay and runs static verification plus the live production verifier unless explicitly skipped. | Run after release workflows publish new `linux/arm64` application images, or after reviewing a config-only manifest that preserves unchanged artifact digests. |
+| `deploy/scripts/promote-current-stack-to-oci.sh` | Normal OCI promotion entry point. It snapshots the current workspace stack, carries forward unchanged image digests and metadata, builds and pushes changed `linux/arm64` GHCR images, writes a complete deployment snapshot, updates the production baseline, and applies the full production app set. | Run `--plan-only` first for a non-mutating reused/rebuilt diff, then run without `--plan-only` from the operator host when the current workspace is the intended OCI state. |
+| `deploy/scripts/23-update-production-release-images.sh` | Lower-level renderer used by the promotion command. It updates the checked-in production deployment baseline from a complete schema v2 deployment manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then renders the app overlay and runs static verification plus the live production verifier unless explicitly skipped. | Use directly only when reviewing or repairing the checked-in baseline from an already complete deployment snapshot. Java artifacts must carry `service_common_version`. |
 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production deployment manifest/image inventory/app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, production render, or config-only deployment change. |
-| `deploy/scripts/25-deploy-oci-release.sh` | Operator-facing OCI deployment wrapper for reviewed deployment modes. It requires a schema v2 `--deployment-manifest`, validates it against the checked-in production baseline, runs the static gate, captures pre/post cluster snapshots, composes the reviewed platform, infrastructure, secret-sync, application, admission, observability, and optional public TLS paths, waits for touched rollouts, and verifies live runtime metadata after app rollout or verify-only checks. With `--services`, app-only mode applies only the selected production app workload resources from the reviewed overlay and waits only for those rollouts. | Run on the OCI host after the deployment baseline is already updated and reviewed. Use `--mode verify-only` for a no-apply verification pass, `--mode app-only --services transaction-service` for a selected workload rollout, or `--mode manifest --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml` for manifest-flag-driven reconciliation. `budget-analyzer-web` maps to the production `nginx-gateway` workload. Record release evidence with `docs/runbooks/oci-release-deployment-checklist.md`, including `/api-docs/release-metadata.json`. The script intentionally does not run the host-only internal TLS certificate generation path. |
-| `deploy/scripts/26-rollback-oci-artifact.sh` | Generates a one-artifact rollback deployment manifest from a previous schema v2 manifest while preserving unrelated artifacts from the current production baseline. It can optionally update the checked-in production baseline after the generated manifest is reviewed. | Use for app-only rollback of a selected service or frontend artifact, then deploy with `25-deploy-oci-release.sh --mode app-only --services <artifact> --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml`. |
+| `deploy/scripts/25-deploy-oci-release.sh` | Lower-level OCI phase reconciler used by the promotion command. It requires a schema v2 `--deployment-manifest`, validates it against the checked-in production baseline, runs the static gate, captures pre/post cluster snapshots, composes reviewed phases, waits for full app rollouts, and verifies live runtime metadata. It rejects `--services`. | Use directly for explicit phase repair or verify-only operations after reviewing the full-stack impact. The normal production path is `promote-current-stack-to-oci.sh`. |
+| `deploy/scripts/26-rollback-oci-artifact.sh` | Historical one-artifact rollback manifest generator. It can still generate a reviewed manifest from a previous schema v2 baseline, but service-scoped production apply has been removed. | Prefer restoring a complete previous deployment snapshot and promoting the full managed stack. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those

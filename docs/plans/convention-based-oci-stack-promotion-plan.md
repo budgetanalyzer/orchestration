@@ -1,7 +1,7 @@
 # Plan: Convention-Based OCI Stack Promotion
 
 Date: 2026-05-21
-Status: Draft
+Status: Implemented
 
 Related documents:
 
@@ -167,7 +167,7 @@ that justifies it.
 
 ### Phase 0: Freeze The Desired Contract
 
-Status: Proposed.
+Status: Complete.
 
 Goals:
 
@@ -187,7 +187,7 @@ Acceptance:
 
 ### Phase 1: Build Snapshot And Diff Primitives
 
-Status: Proposed.
+Status: Complete.
 
 Goals:
 
@@ -204,7 +204,7 @@ Acceptance:
 
 ### Phase 2: Generate Complete Deployment Snapshot
 
-Status: Proposed.
+Status: Complete.
 
 Goals:
 
@@ -224,7 +224,7 @@ Acceptance:
 
 ### Phase 3: Build, Push, Apply, And Verify
 
-Status: Proposed.
+Status: Complete.
 
 Goals:
 
@@ -243,7 +243,7 @@ Acceptance:
 
 ### Phase 4: Remove Superseded Release Paths
 
-Status: Proposed.
+Status: Complete.
 
 Goals:
 
@@ -276,15 +276,18 @@ Acceptance:
 - Do not add orchestration-level workarounds for service-owned build or runtime
   contract defects.
 
-## Open Decisions
+## Implemented Decisions
 
-- Whether dirty workspace promotion is allowed by default, rejected by default,
-  or allowed only with an explicit flag.
-- The exact content identity mechanism for dirty workspaces.
-- Whether the accepted production baseline lives only in
-  `kubernetes/production/apps/image-inventory.yaml` or in a newer complete
-  snapshot file that then renders the inventory.
-- Whether the promotion command runs only from the operator machine or later
-  becomes a GitHub `workflow_dispatch` entry point over SSH to the OCI host.
-- How aggressively to delete old release scripts versus keeping them as
-  explicitly historical utilities during the transition.
+- Dirty workspace promotion is rejected by default and allowed only with
+  `--allow-dirty`; dirty `service-common` can be inspected with `--plan-only`
+  but actual promotion rejects it because release Dockerfiles consume
+  published Maven packages.
+- Dirty and clean workspace identity is recorded as a `sha256:` content
+  identity over tracked and unignored build inputs.
+- The complete deployment snapshot is written under `tmp/deployments/` and
+  renders the accepted production baseline files under
+  `kubernetes/production/apps/`.
+- The promotion command is an operator-machine command:
+  `deploy/scripts/promote-current-stack-to-oci.sh`.
+- Superseded service-scoped runbooks are retained only as redirect notes, and
+  `deploy/scripts/25-deploy-oci-release.sh` rejects `--services`.

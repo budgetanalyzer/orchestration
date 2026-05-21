@@ -81,39 +81,33 @@ Budget Analyzer now separates source tags, runtime artifact versions,
 The production deployment truth is the digest-pinned image inventory rendered
 by the production overlay, not a single global version string.
 
-Use these modes consistently:
+The normal OCI production operation is now **full-stack promotion**:
 
-- **Lockstep release**: a coordinated stack release where every runtime image
-  and any changed shared-library artifacts are prepared together from reviewed
-  source tags. This remains supported for broad platform or contract changes.
-- **Single-service release**: one service or frontend publishes a new runtime
-  artifact while unrelated runtime artifacts stay on their current
-  digest-pinned images. Java consumers keep their checked-in `serviceCommon`
-  version unless the shared library actually changed.
-- **Config-only deployment**: orchestration, manifest, route, docs, policy, or
-  deployment configuration changes are applied on top of the existing runtime
-  image baseline. This does not require rebuilding or retagging every service.
-- **Candidate deployment**: a controlled OCI staging window where the single
-  OCI production slot temporarily runs candidate state selected by source tags,
-  candidate tags, or later commit-derived refs, while verification decides
-  whether to keep or roll back the state.
-- **Promotion**: recording a verified candidate deployment manifest as the
-  accepted production baseline. On the single OCI instance this can be
-  metadata-only because the tested bits may already be live.
+```bash
+./deploy/scripts/promote-current-stack-to-oci.sh
+```
+
+That command snapshots the current intended workspace state, compares it with
+the accepted OCI baseline, reuses unchanged digest-pinned images and metadata,
+builds and pushes only changed `linux/arm64` artifacts, writes one complete
+schema v2 deployment snapshot, updates the checked-in production baseline, and
+applies the complete production app set. It has no service selector and no
+operator-facing deployment mode selector.
+
+Use `--plan-only` for a non-mutating full-stack diff. Dirty workspaces are
+rejected by default and require `--allow-dirty`; actual promotion rejects dirty
+`service-common` because the release Dockerfiles consume published Maven
+packages, not a sibling checkout.
 
 `service-common` is a library release line, not the stack version. Release it
 when `spring-platform`, `spring-cloud-platform`, `service-core`, or
 `service-web` changes. Do not bump it only to ship a service image, route
 change, documentation metadata fix, or production overlay update.
 
-Candidate tags are immutable source selectors for OCI staging windows before a
-SemVer release exists. They are Git tags, not GitHub Releases, and must use the
-`candidate-*` namespace rather than `v*`. Prefer
-`candidate-<artifact>-YYYYMMDD-<short-sha>` so the tag carries the intended
-artifact, date, and source commit hint. Runtime image workflows publish the
-same candidate tag as the Docker image tag and print the digest-pinned image
-reference that deployment manifests consume. Do not deploy arbitrary branch
-names in this phase.
+Tag helpers and historical release workflows remain useful for human source
+management and rare named releases, but tag names are not production
+correctness. OCI apply and verification use the complete deployment snapshot
+and immutable image digests.
 
 ## Orchestration Workflows
 
@@ -263,8 +257,8 @@ release from source still pinned to the snapshot dependency.
 
 ### Release Images
 
-Release image publishing is now wired as tag-driven repo-local
-workflows:
+Release image publishing supports both historical tag-driven workflows and the
+convention-based OCI promotion command:
 
 - `transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway` publish `linux/arm64` GHCR images from
@@ -282,6 +276,10 @@ workflows:
   `.github/workflows/publish-release.yml`
 - orchestration publishes `ext-authz` from
   `.github/workflows/publish-ext-authz-release.yml`
+- `./deploy/scripts/promote-current-stack-to-oci.sh` builds and pushes changed
+  artifacts directly from the current workspace with deterministic
+  `promotion-...` image tags, then records the registry-returned digest in the
+  complete deployment snapshot
 - on `push` of a `v*` tag, the workflows publish the stripped numeric SemVer
   image tag and print a digest-pinned image reference for the production
   inventory step; they do not publish `latest`
@@ -301,55 +299,25 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
-- before changing that inventory for a coordinated source and changed
-  `service-common` library release, run
-  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; use
-  `./scripts/repo/tag-lockstep-release.sh vX.Y.Z` only for that rare
-  coordinated all-repo tag path
-- when the current local sibling checkouts are the intended deployable state,
-  preview the coordinated tag set with
-  `./scripts/repo/tag-lockstep-release.sh vX.Y.Z --repo-set runtime-images --current-state --plan-only`,
-  then rerun without `--plan-only` to create and push only the tags that are
-  absent from the current runtime image repo HEADs
-- for an ordinary single-artifact release, run
-  `./scripts/repo/prepare-service-release.sh --service <artifact> --version X.Y.Z`;
-  this validates and tags only the selected artifact's source repository when
-  `--tag` is supplied
-- for a tag-required OCI candidate deployment before a SemVer release exists,
-  run
-  `./scripts/repo/prepare-candidate-deployment.sh --service <artifact>`;
-  after reviewing the printed source commit and candidate tag, rerun with
-  `--create-tag --push` to trigger the selected artifact workflow
+- before a changed `service-common` library can be promoted, publish the
+  library version and update the Java consumers' checked-in `serviceCommon`
+  value; the promotion command then marks those Java workloads for rebuild
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
   default, and it refuses tooling repos such as `checkstyle-config` for OCI
   runtime release tagging
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
-- create a schema v2 deployment manifest with
-  `./scripts/repo/generate-deployment-manifest.sh --service <artifact>` after
-  the changed runtime image workflow completes; the helper starts from the
-  current production inventory, updates only selected artifact overrides, and
-  preserves unchanged artifact digests. Omit `--service` for broad lockstep or
-  config-only manifests.
 - deployment manifests record deployment id/status, orchestration revision,
-  per-artifact source refs, source commits, artifact versions, optional
-  `service-common` versions, digest-pinned GHCR image refs, and
-  operator-selected deployment phase flags
+  per-artifact source refs, source commits, artifact versions,
+  `service-common` versions for Java workloads, digest-pinned GHCR image refs,
+  build decisions, and content identities
 - `./deploy/scripts/23-update-production-release-images.sh
-  --deployment-manifest <path>` updates the checked-in deployment manifest,
-  production image inventory, production app image overlay,
-  `/api-docs/release-metadata.json`, and runtime Deployment/Pod metadata from
-  the same reviewed manifest data
-- for a selected workload rollout on OCI, run
-  `./deploy/scripts/25-deploy-oci-release.sh --mode app-only --services <artifact> --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml`;
-  `budget-analyzer-web` maps to the `nginx-gateway` workload because
-  production serves the static bundle through NGINX
-- rollback one artifact by generating a manifest from a previous accepted
-  manifest with
-  `./deploy/scripts/26-rollback-oci-artifact.sh --service <artifact> --to-manifest <previous-manifest>`,
-  then update the production baseline and deploy it with the same app-only
-  selected-service path
+  --deployment-manifest <path>` remains the lower-level baseline renderer used
+  by the promotion command
+- `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI phase
+  reconciler used by the promotion command; it no longer accepts `--services`
+  for partial production app applies
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

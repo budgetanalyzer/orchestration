@@ -90,7 +90,6 @@ Required:
   --deployment-manifest PATH
 
 Options:
-  --services LIST
   --kubeconfig PATH
   --dry-run
   --skip-platform
@@ -103,12 +102,12 @@ Options:
 
 The script validates a schema v2 deployment manifest against the checked-in
 production image inventory, captures pre/post snapshots, composes reviewed
-deployment phases, waits for touched rollouts, and verifies live pod metadata
+deployment phases, waits for full app rollouts, and verifies live pod metadata
 against the same manifest. It does not run host-only certificate generation.
 
-Use --services with --mode app-only to roll selected app workloads only. The
-list accepts workload names such as transaction-service and artifact names such
-as budget-analyzer-web, which maps to the nginx-gateway workload.
+Service-scoped production apply has been removed. Use
+deploy/scripts/promote-current-stack-to-oci.sh for the normal OCI promotion
+entry point.
 EOF
 }
 
@@ -302,9 +301,7 @@ parse_args() {
                 shift
                 ;;
             --services)
-                SELECTED_SERVICES="${2:-}"
-                parse_selected_services "${SELECTED_SERVICES}"
-                shift
+                die "--services is no longer supported for OCI production deployment; promote the full managed stack"
                 ;;
             --kubeconfig)
                 export KUBECONFIG="${2:-}"

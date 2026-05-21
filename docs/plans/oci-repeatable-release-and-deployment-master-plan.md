@@ -1,7 +1,7 @@
 # Plan: OCI Repeatable Release And Deployment Automation
 
 Date: 2026-05-20
-Status: Draft
+Status: Superseded by `docs/plans/convention-based-oci-stack-promotion-plan.md`
 
 Related documents:
 

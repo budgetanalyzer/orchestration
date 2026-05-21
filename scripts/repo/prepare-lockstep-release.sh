@@ -204,7 +204,6 @@ verify_remote_tag_absent_or_skippable() {
 }
 
 print_workflow_urls() {
-    local release_tag="$1"
     local entry repo workflow
 
     info "workflow pages to monitor after tags are pushed:"
@@ -214,14 +213,9 @@ print_workflow_urls() {
         printf '  %-24s https://github.com/budgetanalyzer/%s/actions/workflows/%s\n' "${repo}" "${repo}" "${workflow}"
     done
 
-    info "after all runtime image workflows finish, generate the release manifest with the run URLs:"
-    printf '  ./scripts/repo/generate-release-manifest.sh %s \\\n' "${release_tag}"
-    printf '    --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>\n'
+    info "for OCI production, use the convention-based promotion flow instead of the historical release-manifest shape:"
+    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh --plan-only\n'
+    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh\n'
 }
 
 maybe_tag_release() {

@@ -1,7 +1,7 @@
 # Plan: Release Versioning And OCI Deployment Flow Separation
 
 Date: 2026-05-21
-Status: Draft
+Status: Superseded by `docs/plans/convention-based-oci-stack-promotion-plan.md`
 
 Related documents:
 

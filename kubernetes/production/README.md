@@ -12,10 +12,17 @@ reviewed schema v2 deployment record is
 `kubernetes/production/apps/deployment-manifest.yaml`.
 
 The production baseline is allowed to contain mixed runtime artifact versions.
-The digest-pinned image inventory is the deployment truth. A coordinated
-lockstep release can update every artifact together, but a normal
-single-service release or config-only deployment should leave unrelated image
-refs unchanged.
+The digest-pinned image inventory is the deployment truth. The normal way to
+change it is the convention-based promotion command:
+
+```bash
+./deploy/scripts/promote-current-stack-to-oci.sh
+```
+
+That command compares the current workspace stack with this accepted baseline,
+reuses unchanged image digests and metadata, builds only changed artifacts, and
+then applies the complete production app set. Use `--plan-only` for the
+non-mutating diff.
 
 `service-common` versions are library coordinates consumed by Java services.
 Do not bump `service-common` or rebuild every Java runtime just because this
@@ -68,56 +75,27 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ./deploy/scripts/09-render-phase-5-secrets.sh
 ```
 
-Update the application image baseline from a schema v2 deployment manifest
-when runtime images or deployment metadata change:
+The lower-level baseline renderer is still available when a complete schema v2
+deployment snapshot has already been reviewed:
 
 ```bash
 ./deploy/scripts/23-update-production-release-images.sh \
   --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 ```
 
-Create that manifest after release image workflows complete, or to preserve the
-current image inventory while changing only deployment metadata/config:
-
-```bash
-./scripts/repo/generate-deployment-manifest.sh \
-  --deployment-id oci-YYYYMMDD.N \
-  --status candidate \
-  --service transaction-service \
-  --artifact-image transaction-service=ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:<digest>
-```
-
-For a tag-required candidate image, use the same manifest flow with
-`--status candidate`, a `refs/tags/candidate-...` source ref, and the
-candidate digest-pinned image tag printed by the artifact workflow. The
-staging-window procedure lives in
-[docs/runbooks/oci-candidate-deployment.md](../../docs/runbooks/oci-candidate-deployment.md).
-
 The deployment manifest records deployment id/status, orchestration revision,
-per-artifact source refs, source commits, artifact versions, optional
-`service-common` versions, digest-pinned image refs, and operator-selected
-deployment phase flags. The update helper copies the reviewed manifest to
+per-artifact source refs, source commits, artifact versions,
+`service-common` versions for Java workloads, digest-pinned image refs, build
+decisions, content identities, and operator-selected deployment phase flags.
+The update helper copies the reviewed manifest to
 `apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
 `apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
 labels cannot drift from the reviewed deployment baseline.
 
-For a selected app-only OCI rollout, update and review the checked-in
-baseline first, then deploy only the selected workload resources:
-
-```bash
-./deploy/scripts/25-deploy-oci-release.sh \
-  --mode app-only \
-  --services transaction-service \
-  --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml
-```
-
-`budget-analyzer-web` maps to the `nginx-gateway` workload in production
-because the released frontend bundle and `/api-docs` assets are staged and
-served by NGINX. The selected path still applies the production image
-inventory ConfigMap, plus supporting ConfigMaps for selected workloads, but it
-does not intentionally roll unrelated Deployments.
+Service-scoped production rollout has been removed. A production promotion
+always applies the full managed app set from the reviewed snapshot.
 
 The production image verifier now:
 

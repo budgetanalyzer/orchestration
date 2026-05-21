@@ -10,6 +10,7 @@ EXPECTED_SOURCE="inventory"
 EXPECTED_PATH="${DEFAULT_INVENTORY}"
 STRICT=false
 TRACKED_ONLY=false
+SELECTED_SERVICES_ARG=""
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -26,6 +27,7 @@ declare -A EXPECTED_ARTIFACT_VERSIONS=()
 declare -A EXPECTED_SOURCE_REFS=()
 declare -A EXPECTED_SOURCE_COMMITS=()
 declare -A EXPECTED_SERVICE_COMMON_VERSIONS=()
+declare -A SELECTED_WORKLOADS=()
 
 expected_deployment_id=""
 expected_deployment_status=""
@@ -42,6 +44,10 @@ Options:
   --deployment-manifest PATH  Schema v2 deployment manifest to verify against.
   --inventory PATH            Schema v2 image inventory to verify against.
                               Default: kubernetes/production/apps/image-inventory.yaml
+  --services LIST             Comma-separated workload or artifact names to
+                              verify, for example transaction-service or
+                              budget-analyzer-web. budget-analyzer-web maps
+                              to the nginx-gateway workload.
   --tracked-only              Print only Budget Analyzer runtime pods.
   --strict                    Exit non-zero when warnings are found.
   -h, --help                  Show this help text.
@@ -192,6 +198,57 @@ artifact_for_workload() {
     esac
 }
 
+workload_for_selection() {
+    case "$1" in
+        budget-analyzer-web)
+            printf '%s\n' "nginx-gateway"
+            ;;
+        transaction-service|currency-service|permission-service|session-gateway|ext-authz|nginx-gateway)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+selected_workload_count() {
+    local workload count=0
+
+    for workload in transaction-service currency-service permission-service session-gateway ext-authz nginx-gateway; do
+        if [[ -n "${SELECTED_WORKLOADS[${workload}]:-}" ]]; then
+            count=$((count + 1))
+        fi
+    done
+
+    printf '%s\n' "${count}"
+}
+
+workload_is_selected() {
+    local workload="$1"
+
+    if [[ "$(selected_workload_count)" == "0" ]]; then
+        return 0
+    fi
+
+    [[ -n "${SELECTED_WORKLOADS[${workload}]:-}" ]]
+}
+
+parse_selected_services() {
+    local raw="$1"
+    local service workload
+    local selected=()
+
+    [[ -n "${raw}" ]] || die "missing value for --services"
+
+    IFS=',' read -r -a selected <<< "${raw}"
+    for service in "${selected[@]}"; do
+        [[ -n "${service}" ]] || die "empty service in --services: ${raw}"
+        workload="$(workload_for_selection "${service}")" || die "unknown selected service/artifact: ${service}"
+        SELECTED_WORKLOADS["${workload}"]=true
+    done
+}
+
 load_expected_from_manifest() {
     local file="$1"
     local schema_version service value
@@ -281,6 +338,11 @@ parse_args() {
                 [[ -n "${EXPECTED_PATH}" ]] || die "missing value for --inventory"
                 shift
                 ;;
+            --services)
+                SELECTED_SERVICES_ARG="${2:-}"
+                [[ -n "${SELECTED_SERVICES_ARG}" ]] || die "missing value for --services"
+                shift
+                ;;
             --tracked-only)
                 TRACKED_ONLY=true
                 ;;
@@ -302,6 +364,10 @@ parse_args() {
 
     if [[ "${EXPECTED_PATH}" != /* && ! -f "${EXPECTED_PATH}" ]]; then
         EXPECTED_PATH="${REPO_ROOT}/${EXPECTED_PATH}"
+    fi
+
+    if [[ -n "${SELECTED_SERVICES_ARG}" ]]; then
+        parse_selected_services "${SELECTED_SERVICES_ARG}"
     fi
 }
 
@@ -347,6 +413,9 @@ main() {
         fi
 
         if [[ "${TRACKED_ONLY}" == true && "${tracked}" != true ]]; then
+            continue
+        fi
+        if [[ "${tracked}" == true ]] && ! workload_is_selected "${workload}"; then
             continue
         fi
 

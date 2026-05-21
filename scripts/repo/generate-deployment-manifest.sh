@@ -55,6 +55,9 @@ declare -A OVERRIDE_IMAGE_REFS=()
 declare -A OVERRIDE_ARTIFACT_VERSIONS=()
 declare -A OVERRIDE_SOURCE_REFS=()
 declare -A OVERRIDE_SOURCE_COMMITS=()
+declare -A SELECTED_ARTIFACTS=()
+
+GLOBAL_SERVICE_COMMON_VERSION=""
 
 usage() {
     cat <<'EOF'
@@ -70,6 +73,10 @@ Options:
   --deployment-id ID                       Required deployment identity.
   --status STATUS                          Deployment status. Defaults to candidate.
   --output PATH                            Output manifest path.
+  --service service                        Select one artifact for a scoped
+                                           single-artifact manifest. Repeat or
+                                           pass comma-separated values.
+  --artifact service                       Alias for --service.
   --artifact-image service=image           Override one artifact image. Ref must be digest-pinned.
   --artifact-version service=version       Override one artifact version.
   --source-ref service=ref                 Override one artifact source ref.
@@ -110,6 +117,73 @@ service_exists() {
     done
 
     return 1
+}
+
+selected_artifact_count() {
+    local service count=0
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        if [[ -n "${SELECTED_ARTIFACTS[${service}]:-}" ]]; then
+            count=$((count + 1))
+        fi
+    done
+
+    printf '%s\n' "${count}"
+}
+
+artifact_is_selected() {
+    local service="$1"
+
+    if [[ "$(selected_artifact_count)" == "0" ]]; then
+        return 0
+    fi
+
+    [[ -n "${SELECTED_ARTIFACTS[${service}]:-}" ]]
+}
+
+select_artifacts() {
+    local raw="$1"
+    local service
+    local selected=()
+
+    [[ -n "${raw}" ]] || die "missing value for --service/--artifact"
+
+    IFS=',' read -r -a selected <<< "${raw}"
+    for service in "${selected[@]}"; do
+        [[ -n "${service}" ]] || die "empty artifact in selection: ${raw}"
+        service_exists "${service}" || die "unknown selected artifact: ${service}"
+        SELECTED_ARTIFACTS["${service}"]=true
+    done
+}
+
+validate_override_selection() {
+    local service="$1"
+    local option="$2"
+
+    artifact_is_selected "${service}" || \
+        die "${option} targets ${service}, but selected artifacts are limited by --service/--artifact"
+}
+
+validate_selected_overrides() {
+    local service
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        if [[ -n "${OVERRIDE_IMAGE_REFS[${service}]:-}" ]]; then
+            validate_override_selection "${service}" "--artifact-image"
+        fi
+        if [[ -n "${OVERRIDE_ARTIFACT_VERSIONS[${service}]:-}" ]]; then
+            validate_override_selection "${service}" "--artifact-version"
+        fi
+        if [[ -n "${OVERRIDE_SOURCE_REFS[${service}]:-}" ]]; then
+            validate_override_selection "${service}" "--source-ref"
+        fi
+        if [[ -n "${OVERRIDE_SOURCE_COMMITS[${service}]:-}" ]]; then
+            validate_override_selection "${service}" "--source-commit"
+        fi
+        if [[ -n "${SERVICE_COMMON_VERSIONS[${service}]:-}" ]]; then
+            validate_override_selection "${service}" "--service-common-version"
+        fi
+    done
 }
 
 is_java_service() {
@@ -256,8 +330,18 @@ set_service_common_version() {
         return
     fi
 
+    [[ -n "${assignment}" ]] || die "empty service-common version"
+    GLOBAL_SERVICE_COMMON_VERSION="${assignment}"
+}
+
+apply_global_service_common_version() {
+    local service
+
+    [[ -n "${GLOBAL_SERVICE_COMMON_VERSION}" ]] || return 0
+
     for service in "${JAVA_SERVICES[@]}"; do
-        SERVICE_COMMON_VERSIONS["${service}"]="${assignment}"
+        artifact_is_selected "${service}" || continue
+        SERVICE_COMMON_VERSIONS["${service}"]="${GLOBAL_SERVICE_COMMON_VERSION}"
     done
 }
 
@@ -360,6 +444,10 @@ main() {
                 [[ -n "${output_path}" ]] || die "missing value for --output"
                 shift
                 ;;
+            --service|--artifact)
+                select_artifacts "${2:-}"
+                shift
+                ;;
             --artifact-image)
                 parsed="$(parse_assignment "${2:-}")"
                 service="${parsed%%$'\t'*}"
@@ -441,6 +529,8 @@ main() {
         die "output file already exists: ${output_path}; use --force to overwrite"
     fi
 
+    apply_global_service_common_version
+    validate_selected_overrides
     load_inventory "${inventory}"
 
     for service in "${SERVICE_ORDER[@]}"; do

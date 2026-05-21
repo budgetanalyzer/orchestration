@@ -289,6 +289,8 @@ Acceptance:
 
 ### Phase 3: Implement Single-Service Release And Rollback
 
+Status: Implemented.
+
 Goals:
 
 - Make "release one service" a first-class path.

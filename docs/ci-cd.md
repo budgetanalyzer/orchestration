@@ -311,9 +311,11 @@ workflows:
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
 - create a schema v2 deployment manifest with
-  `./scripts/repo/generate-deployment-manifest.sh` after the changed runtime
-  image workflows complete, or when config-only deployment metadata needs to be
-  recorded without changing image digests
+  `./scripts/repo/generate-deployment-manifest.sh --service <artifact>` after
+  the changed runtime image workflow completes; the helper starts from the
+  current production inventory, updates only selected artifact overrides, and
+  preserves unchanged artifact digests. Omit `--service` for broad lockstep or
+  config-only manifests.
 - deployment manifests record deployment id/status, orchestration revision,
   per-artifact source refs, source commits, artifact versions, optional
   `service-common` versions, digest-pinned GHCR image refs, and
@@ -323,6 +325,15 @@ workflows:
   production image inventory, production app image overlay,
   `/api-docs/release-metadata.json`, and runtime Deployment/Pod metadata from
   the same reviewed manifest data
+- for a selected workload rollout on OCI, run
+  `./deploy/scripts/25-deploy-oci-release.sh --mode app-only --services <artifact> --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml`;
+  `budget-analyzer-web` maps to the `nginx-gateway` workload because
+  production serves the static bundle through NGINX
+- rollback one artifact by generating a manifest from a previous accepted
+  manifest with
+  `./deploy/scripts/26-rollback-oci-artifact.sh --service <artifact> --to-manifest <previous-manifest>`,
+  then update the production baseline and deploy it with the same app-only
+  selected-service path
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

@@ -52,6 +52,7 @@ readonly SERVICE_ORDER
 MODE=""
 DEPLOYMENT_MANIFEST=""
 DEPLOYMENT_ID=""
+SELECTED_SERVICES=""
 DRY_RUN=false
 SKIP_PLATFORM=false
 SKIP_INFRASTRUCTURE=false
@@ -76,6 +77,8 @@ RUN_ADMISSION=false
 RUN_OBSERVABILITY=false
 RUN_PUBLIC_TLS=false
 
+declare -A SELECTED_DEPLOYMENTS=()
+
 usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/25-deploy-oci-release.sh --mode MODE --deployment-manifest PATH [options]
@@ -87,6 +90,7 @@ Required:
   --deployment-manifest PATH
 
 Options:
+  --services LIST
   --kubeconfig PATH
   --dry-run
   --skip-platform
@@ -101,6 +105,10 @@ The script validates a schema v2 deployment manifest against the checked-in
 production image inventory, captures pre/post snapshots, composes reviewed
 deployment phases, waits for touched rollouts, and verifies live pod metadata
 against the same manifest. It does not run host-only certificate generation.
+
+Use --services with --mode app-only to roll selected app workloads only. The
+list accepts workload names such as transaction-service and artifact names such
+as budget-analyzer-web, which maps to the nginx-gateway workload.
 EOF
 }
 
@@ -229,6 +237,57 @@ valid_bool() {
     [[ "$1" == "true" || "$1" == "false" ]]
 }
 
+workload_for_selection() {
+    case "$1" in
+        budget-analyzer-web)
+            printf '%s\n' "nginx-gateway"
+            ;;
+        transaction-service|currency-service|permission-service|session-gateway|ext-authz|nginx-gateway)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+selected_deployment_count() {
+    local deployment count=0
+
+    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
+        if [[ -n "${SELECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
+            count=$((count + 1))
+        fi
+    done
+
+    printf '%s\n' "${count}"
+}
+
+deployment_is_selected() {
+    local deployment="$1"
+
+    if [[ "$(selected_deployment_count)" == "0" ]]; then
+        return 0
+    fi
+
+    [[ -n "${SELECTED_DEPLOYMENTS[${deployment}]:-}" ]]
+}
+
+parse_selected_services() {
+    local raw="$1"
+    local service deployment
+    local selected=()
+
+    [[ -n "${raw}" ]] || die "missing value for --services"
+
+    IFS=',' read -r -a selected <<< "${raw}"
+    for service in "${selected[@]}"; do
+        [[ -n "${service}" ]] || die "empty service in --services: ${raw}"
+        deployment="$(workload_for_selection "${service}")" || die "unknown selected service/artifact: ${service}"
+        SELECTED_DEPLOYMENTS["${deployment}"]=true
+    done
+}
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -240,6 +299,11 @@ parse_args() {
             --deployment-manifest)
                 DEPLOYMENT_MANIFEST="${2:-}"
                 [[ -n "${DEPLOYMENT_MANIFEST}" ]] || die "missing value for --deployment-manifest"
+                shift
+                ;;
+            --services)
+                SELECTED_SERVICES="${2:-}"
+                parse_selected_services "${SELECTED_SERVICES}"
                 shift
                 ;;
             --kubeconfig)
@@ -481,9 +545,15 @@ run_live_production_verifier() {
 }
 
 run_pod_metadata_verifier() {
+    local args=(--deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict)
+
+    if [[ "$(selected_deployment_count)" != "0" ]]; then
+        args+=(--services "${SELECTED_SERVICES}")
+    fi
+
     require_executable "${POD_VERSION_LABELS_SCRIPT}"
     info "verifying live runtime deployment metadata"
-    run_cmd "${POD_VERSION_LABELS_SCRIPT}" --deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict
+    run_cmd "${POD_VERSION_LABELS_SCRIPT}" "${args[@]}"
 }
 
 run_platform_phase() {
@@ -514,6 +584,126 @@ run_secrets_phase() {
     run_cmd "${SCRIPT_DIR}/10-apply-phase-5-secrets.sh"
 }
 
+selected_app_resource_keys() {
+    local deployment
+    local keys=(
+        "ConfigMap/production-image-inventory"
+    )
+
+    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
+        deployment_is_selected "${deployment}" || continue
+        keys+=(
+            "Deployment/${deployment}"
+            "Service/${deployment}"
+            "ServiceAccount/${deployment}"
+        )
+
+        case "${deployment}" in
+            permission-service)
+                keys+=("ConfigMap/permission-service-config")
+                ;;
+            session-gateway)
+                keys+=("ConfigMap/session-gateway-config")
+                ;;
+            nginx-gateway)
+                keys+=(
+                    "ConfigMap/nginx-gateway-config"
+                    "ConfigMap/nginx-gateway-includes"
+                    "ConfigMap/nginx-gateway-docs"
+                    "ConfigMap/nginx-gateway-openapi-json"
+                    "ConfigMap/nginx-gateway-openapi-yaml"
+                )
+                ;;
+        esac
+    done
+
+    (IFS=','; printf '%s\n' "${keys[*]}")
+}
+
+extract_selected_app_resources() {
+    local rendered_file="$1"
+    local output_file="$2"
+    local allowed_keys="$3"
+
+    awk -v keys="${allowed_keys}" '
+        BEGIN {
+            split(keys, key_array, ",")
+            for (i in key_array) {
+                allowed[key_array[i]] = 1
+            }
+        }
+        function reset_doc() {
+            doc = ""
+            kind = ""
+            name = ""
+            in_metadata = 0
+        }
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            gsub(/^"/, "", value)
+            gsub(/"$/, "", value)
+            return value
+        }
+        function flush_doc() {
+            key = kind "/" name
+            if (doc != "" && allowed[key]) {
+                printf "%s---\n", doc
+            }
+            reset_doc()
+        }
+        /^---[[:space:]]*$/ {
+            flush_doc()
+            next
+        }
+        {
+            doc = doc $0 "\n"
+            if ($0 ~ /^kind:[[:space:]]*/) {
+                value = $0
+                sub(/^kind:[[:space:]]*/, "", value)
+                kind = clean(value)
+            } else if ($0 ~ /^metadata:[[:space:]]*$/) {
+                in_metadata = 1
+            } else if (in_metadata && $0 ~ /^[^[:space:]][^:]*:/) {
+                in_metadata = 0
+            } else if (in_metadata && $0 ~ /^  name:[[:space:]]*/) {
+                value = $0
+                sub(/^  name:[[:space:]]*/, "", value)
+                name = clean(value)
+            }
+        }
+        END {
+            flush_doc()
+        }
+    ' "${rendered_file}" > "${output_file}"
+
+    [[ -s "${output_file}" ]] || die "selected production app render produced no resources"
+}
+
+apply_production_apps() {
+    local rendered_file selected_file allowed_keys
+
+    if [[ "$(selected_deployment_count)" == "0" ]]; then
+        run_bash "kubectl kustomize '${PRODUCTION_APPS_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
+        return
+    fi
+
+    rendered_file="${SNAPSHOT_DIR}/production-apps-render.yaml"
+    selected_file="${SNAPSHOT_DIR}/production-apps-selected.yaml"
+    allowed_keys="$(selected_app_resource_keys)"
+
+    if [[ "${DRY_RUN}" == "true" ]]; then
+        printf '[dry-run] kubectl kustomize %q --load-restrictor=LoadRestrictionsNone > %q\n' "${PRODUCTION_APPS_DIR}" "${rendered_file}"
+        printf '[dry-run] extract selected app resources (%s) > %q\n' "${allowed_keys}" "${selected_file}"
+        printf '[dry-run] kubectl apply --server-side -f %q\n' "${selected_file}"
+        return
+    fi
+
+    kubectl kustomize "${PRODUCTION_APPS_DIR}" --load-restrictor=LoadRestrictionsNone > "${rendered_file}"
+    extract_selected_app_resources "${rendered_file}" "${selected_file}" "${allowed_keys}"
+    run_cmd kubectl apply --server-side -f "${selected_file}"
+}
+
 run_application_phase() {
     local deployment
 
@@ -524,9 +714,10 @@ run_application_phase() {
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-egress.yaml"
 
     run_live_production_verifier
-    run_bash "kubectl kustomize '${PRODUCTION_APPS_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
+    apply_production_apps
 
     for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
+        deployment_is_selected "${deployment}" || continue
         run_cmd kubectl rollout status "deployment/${deployment}" --timeout=300s
     done
 
@@ -573,6 +764,7 @@ print_plan_summary() {
     printf '  mode: %s\n' "${MODE}"
     printf '  deployment-id: %s\n' "${DEPLOYMENT_ID}"
     printf '  deployment-manifest: %s\n' "${DEPLOYMENT_MANIFEST}"
+    printf '  services: %s\n' "${SELECTED_SERVICES:-all}"
     printf '  dry-run: %s\n' "${DRY_RUN}"
     printf '  platform: %s\n' "${RUN_PLATFORM}"
     printf '  infrastructure: %s\n' "${RUN_INFRASTRUCTURE}"

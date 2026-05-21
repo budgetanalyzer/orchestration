@@ -33,7 +33,7 @@ below.
 - [ ] The production image baseline has been updated and reviewed, or the
   deployment is explicitly config-only and preserves the existing image
   inventory.
-- [ ] The release or deployment manifest exists under `tmp/releases/` or
+- [ ] The release or deployment manifest exists under `tmp/deployments/` or
   another reviewed operator path when the selected mode requires one.
 - [ ] The operator shell is on the OCI host, or is explicitly using an OCI
   host kubeconfig with `--kubeconfig`.
@@ -51,9 +51,10 @@ below.
 | Deployment revision or candidate id |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
-| Selected mode | `verify-only`, `app-only`, `lockstep`, `platform-only`, or `infrastructure-only` |
+| Selected mode | `verify-only`, `app-only`, `manifest`, `platform-only`, or `infrastructure-only` |
+| Selected app services, if scoped | comma-separated artifact/workload list or `all` |
 | Dry run first | `yes` or `no` |
-| Release/deployment manifest | `tmp/releases/vX.Y.Z.yaml`, candidate manifest path, or `n/a` |
+| Release/deployment manifest | `tmp/deployments/oci-YYYYMMDD.N.yaml`, candidate manifest path, or `n/a` |
 | Production image inventory ref | `kubernetes/production/apps/image-inventory.yaml` |
 | Orchestration checkout ref |  |
 | Snapshot directory | `tmp/oci-release-deploy/<timestamp>-<mode>-<version>` |
@@ -69,6 +70,7 @@ below.
 | `permission-service` |  |  |  |  |
 | `session-gateway` |  |  |  |  |
 | `budget-analyzer-web` |  |  |  |  |
+| `ext-authz` |  |  |  |  |
 
 ## Artifact Workflows
 
@@ -124,7 +126,7 @@ below.
 | --- | --- | --- | --- | --- |
 | 1 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` |  |  |  |
 | 2 | `scripts/guardrails/verify-production-image-overlay.sh` |  |  |  |
-| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml` |  |  |
+| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --services <list-if-app-only> --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml` |  |  |
 
 Add rows for any reviewed lower-level deployment scripts used instead of the
 master script.
@@ -183,6 +185,7 @@ master script.
 | Previous deployment id |  |
 | Previous deployment manifest or image inventory ref |  |
 | Safe app-only rollback candidate | `yes`, `no`, or `needs review` |
+| Rollback artifact, if scoped |  |
 | Data migration risk |  |
 | RabbitMQ queue migration or discard decision |  |
 | Platform downgrade risk |  |

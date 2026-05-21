@@ -108,7 +108,15 @@ scripts/
   waits for touched rollouts, and prints the final public-route and
   observability checklist. Use `--mode manifest` for phase-flag-driven
   reconciliation, `--mode app-only` for a reviewed workload rollout, or
-  `--mode verify-only` for verification without applying changes.
+  `--mode verify-only` for verification without applying changes. Add
+  `--services transaction-service,currency-service` to scope app-only rollout
+  and metadata verification to selected workloads; `budget-analyzer-web` maps
+  to the production `nginx-gateway` workload.
+- `../deploy/scripts/26-rollback-oci-artifact.sh` - Generates a rollback
+  schema v2 deployment manifest for one artifact by copying that artifact's
+  image and metadata from a previous manifest while preserving every unrelated
+  artifact from the current production baseline. It can optionally delegate to
+  `23-update-production-release-images.sh` after the manifest is reviewed.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -131,7 +139,9 @@ scripts/
 - `repo/generate-deployment-manifest.sh` - Starts from the checked-in
   production image inventory, preserves unchanged artifact digests, applies
   selected artifact/image metadata overrides, and writes a schema v2 deployment
-  manifest for `deploy/scripts/23-update-production-release-images.sh`.
+  manifest for `deploy/scripts/23-update-production-release-images.sh`. Use
+  `--service` or `--artifact` to make single-artifact intent explicit and to
+  reject accidental overrides outside that selected artifact set.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -423,11 +433,20 @@ directory without writing outside the repository.
   helper starts from the current production image inventory, preserves
   unchanged artifact digests, and accepts selected artifact image, source ref,
   source commit, artifact version, service-common version, and phase flag
-  overrides.
+  overrides. Use `--service` / `--artifact` for single-artifact releases so
+  overrides outside the intended artifact set are rejected.
 - `deploy/scripts/23-update-production-release-images.sh` consumes that
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
+- `deploy/scripts/25-deploy-oci-release.sh --mode app-only --services <list>`
+  applies only the selected production app workload resources from the
+  reviewed overlay, waits only for those rollouts, and verifies live metadata
+  for those selected workloads.
+- `deploy/scripts/26-rollback-oci-artifact.sh` creates a one-artifact rollback
+  manifest from a previous schema v2 manifest. The normal follow-up is the
+  same production baseline update and selected app-only rollout used for a
+  single-service release.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

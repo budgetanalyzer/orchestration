@@ -83,6 +83,7 @@ current image inventory while changing only deployment metadata/config:
 ./scripts/repo/generate-deployment-manifest.sh \
   --deployment-id oci-YYYYMMDD.N \
   --status candidate \
+  --service transaction-service \
   --artifact-image transaction-service=ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:<digest>
 ```
 
@@ -95,6 +96,22 @@ deployment phase flags. The update helper copies the reviewed manifest to
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
 `apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
 labels cannot drift from the reviewed deployment baseline.
+
+For a selected app-only OCI rollout, update and review the checked-in
+baseline first, then deploy only the selected workload resources:
+
+```bash
+./deploy/scripts/25-deploy-oci-release.sh \
+  --mode app-only \
+  --services transaction-service \
+  --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml
+```
+
+`budget-analyzer-web` maps to the `nginx-gateway` workload in production
+because the released frontend bundle and `/api-docs` assets are staged and
+served by NGINX. The selected path still applies the production image
+inventory ConfigMap, plus supporting ConfigMaps for selected workloads, but it
+does not intentionally roll unrelated Deployments.
 
 The production image verifier now:
 

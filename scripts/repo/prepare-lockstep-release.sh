@@ -24,11 +24,16 @@ usage() {
 Usage:
   ./scripts/repo/prepare-lockstep-release.sh --release-version 0.0.x
   ./scripts/repo/prepare-lockstep-release.sh v0.0.x --tag
+  ./scripts/repo/prepare-lockstep-release.sh v0.0.x --tag-current-state
 
 Options:
   --release-version <version>  Release version as X.Y.Z or vX.Y.Z.
   --tag                        After validation, prompt before calling
                                scripts/repo/tag-lockstep-release.sh vX.Y.Z.
+  --tag-current-state          After validation, prompt before calling
+                               scripts/repo/tag-lockstep-release.sh vX.Y.Z
+                               --current-state so already-current tags are
+                               skipped and absent tags are created.
   -h, --help                   Show this help.
 
 This helper is source-release preparation only. It does not deploy to OCI and
@@ -221,21 +226,30 @@ print_workflow_urls() {
 
 maybe_tag_release() {
     local tag_name="$1"
+    local current_state_tagging="$2"
     local reply
+    local tag_args=("${tag_name}")
 
-    printf '[release-prep] Call scripts/repo/tag-lockstep-release.sh %s now? [y/N] ' "${tag_name}"
+    if [[ "${current_state_tagging}" == true ]]; then
+        tag_args+=("--current-state")
+    fi
+
+    printf '[release-prep] Call scripts/repo/tag-lockstep-release.sh'
+    printf ' %s' "${tag_args[@]}"
+    printf ' now? [y/N] '
     read -r reply
     if [[ "${reply}" =~ ^[Yy]$ ]]; then
-        "${SCRIPT_DIR}/tag-lockstep-release.sh" "${tag_name}"
+        "${SCRIPT_DIR}/tag-lockstep-release.sh" "${tag_args[@]}"
         return
     fi
 
-    info "tagging skipped; run ${SCRIPT_DIR}/tag-lockstep-release.sh ${tag_name} when ready"
+    info "tagging skipped; run ${SCRIPT_DIR}/tag-lockstep-release.sh ${tag_args[*]} when ready"
 }
 
 main() {
     local release_version=""
     local tag_after_validation=false
+    local current_state_tagging=false
     local tag_name
 
     while [[ $# -gt 0 ]]; do
@@ -246,7 +260,13 @@ main() {
                 shift
                 ;;
             --tag)
+                [[ "${current_state_tagging}" != true ]] || die "--tag and --tag-current-state are mutually exclusive"
                 tag_after_validation=true
+                ;;
+            --tag-current-state)
+                [[ "${tag_after_validation}" != true ]] || die "--tag and --tag-current-state are mutually exclusive"
+                tag_after_validation=true
+                current_state_tagging=true
                 ;;
             -h|--help)
                 usage
@@ -269,16 +289,20 @@ main() {
 
     verify_release_repos
     verify_service_common_versions "${release_version}"
-    verify_remote_tag_absent_or_skippable "${tag_name}"
+    if [[ "${current_state_tagging}" == true ]]; then
+        info "current-state tagging requested; tag-lockstep-release.sh will decide which repos need ${tag_name}"
+    else
+        verify_remote_tag_absent_or_skippable "${tag_name}"
+    fi
     print_commit_table
     print_workflow_urls "${tag_name}"
 
     info "release preparation checks passed for ${tag_name}"
 
     if [[ "${tag_after_validation}" == true ]]; then
-        maybe_tag_release "${tag_name}"
+        maybe_tag_release "${tag_name}" "${current_state_tagging}"
     else
-        info "tagging not requested; rerun with --tag or run scripts/repo/tag-lockstep-release.sh ${tag_name}"
+        info "tagging not requested; rerun with --tag, --tag-current-state, or run scripts/repo/tag-lockstep-release.sh ${tag_name}"
     fi
 }
 

@@ -238,6 +238,8 @@ Acceptance:
   validating or tagging unrelated runtime repos.
 - Lockstep release tooling still exists and remains explicit.
 - `checkstyle-config` is not treated as an OCI runtime artifact.
+- Lockstep tagging can preview and apply only the tags missing from the
+  current local deployable repo state.
 
 ### Phase 2: Add Deployment Manifest V2 And Mixed Artifact Metadata
 

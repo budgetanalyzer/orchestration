@@ -124,7 +124,11 @@ scripts/
   requires `--repo`, validates only that repository, and refuses tooling repos
   such as `checkstyle-config` for OCI runtime release tagging.
 - `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
-  all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set.
+  all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set. Use
+  `--repo-set runtime-images --current-state --plan-only` to preview which
+  runtime image repos need the requested tag based on the current local HEADs,
+  then rerun without `--plan-only` to tag only the missing repos and skip tags
+  already pointing at current HEAD.
 - `repo/generate-release-manifest.sh` - Resolves GHCR tag digests for the six
   runtime application images and writes the release manifest under
   `tmp/releases/v<version>.yaml` for
@@ -378,12 +382,23 @@ directory without writing outside the repository.
   up-to-date `main`, verifies the requested remote tag is absent everywhere
   except the documented `service-common` skip case, prints the commit SHA map,
   and prints the GitHub Actions workflow pages to monitor. Pass `--tag` only
-  when you want it to prompt before calling `repo/tag-release.sh`.
-- `repo/tag-release.sh` creates release tags across configured repositories. If
-  the requested tag already exists in `service-common`, it warns and skips
-  `service-common` so the all-repo tag flow can run after the earlier
-  service-common Maven release tag; the same existing tag in any other repo
-  remains a hard failure.
+  when you want it to prompt before calling `repo/tag-lockstep-release.sh`.
+  Pass `--tag-current-state` when the current local HEADs are the intended
+  deployable state and the tagger should decide which repos still need the
+  requested tag.
+- `repo/tag-release.sh` creates a normal single-repository release tag. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` creates coordinated lockstep tags across the
+  explicit `LOCKSTEP_RELEASE_REPOS` set by default. `--repo-set runtime-images`
+  narrows the operation to the deployable image source repos, while
+  `--repo-set oci-release` uses the source repo set recorded in OCI release
+  manifests. In the default strict mode, any existing non-`service-common` tag
+  is a hard failure. With `--current-state`, the helper compares the requested
+  tag to each selected repo's current local HEAD, creates and pushes only
+  absent tags, pushes local-only tags that already point at current HEAD, skips
+  tags already present at current HEAD, and fails if an existing tag points
+  somewhere else. Use `--current-state --plan-only` for a non-mutating preview.
 - `repo/release-service-common-snapshot.sh` coordinates the tag-driven
   `service-common` snapshot-to-release flow. Run `prepare` while
   `service-common` and all Java consumers are pinned to the same

@@ -11,15 +11,27 @@ source "${SCRIPT_DIR}/repo-config.sh"
 usage() {
     cat <<'EOF'
 Usage:
-  ./scripts/repo/tag-lockstep-release.sh <vX.Y.Z> [--yes]
+  ./scripts/repo/tag-lockstep-release.sh <vX.Y.Z> [--repo-set lockstep] [--yes]
+  ./scripts/repo/tag-lockstep-release.sh <vX.Y.Z> --repo-set runtime-images --current-state [--plan-only] [--yes]
 
 Options:
-  --yes, -y    Do not prompt before creating and pushing tags.
-  -h, --help   Show this help.
+  --repo-set <set>   Repository set to inspect and tag:
+                     lockstep, runtime-images, or oci-release.
+                     Defaults to lockstep for the historical coordinated path.
+  --current-state  Compare the requested tag with each repo's current local
+                   HEAD. Tag repos where the tag is absent, skip repos where
+                   the tag already points at current HEAD, and fail if the tag
+                   points somewhere else.
+  --plan-only      With --current-state, print what would be tagged and exit
+                   without creating or pushing tags.
+  --yes, -y        Do not prompt before creating and pushing tags.
+  -h, --help       Show this help.
 
-Tags the explicit lockstep release repository set. This helper exists for rare
-coordinated stack releases. Use tag-release.sh --repo <repo> for normal
-single-repository releases.
+Tags an explicit release repository set. This helper exists for rare
+coordinated stack releases and current-state runtime image tagging. Use
+tag-release.sh --repo <repo> for normal single-repository releases. The default
+mode keeps the historical strict release checks. Use --current-state only when
+the current local checked-out state is the intended deployable state.
 EOF
 }
 
@@ -49,6 +61,25 @@ normalize_tag() {
     printf 'v%s\n' "${tag}"
 }
 
+select_repo_set() {
+    local repo_set="$1"
+
+    case "${repo_set}" in
+        lockstep)
+            SELECTED_REPOS=("${LOCKSTEP_RELEASE_REPOS[@]}")
+            ;;
+        runtime-images)
+            SELECTED_REPOS=("${RUNTIME_IMAGE_REPOS[@]}")
+            ;;
+        oci-release)
+            SELECTED_REPOS=("${OCI_RELEASE_SOURCE_REPOS[@]}")
+            ;;
+        *)
+            die "unknown repo set: ${repo_set}. Expected lockstep, runtime-images, or oci-release"
+            ;;
+    esac
+}
+
 repo_is_skipped() {
     local repo="$1"
     local skipped_repo
@@ -60,6 +91,56 @@ repo_is_skipped() {
     done
 
     return 1
+}
+
+repo_is_push_only() {
+    local repo="$1"
+    local push_only_repo
+
+    for push_only_repo in "${PUSH_ONLY_REPOS[@]}"; do
+        if [[ "${repo}" == "${push_only_repo}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+local_tag_commit() {
+    local repo="$1"
+    local path
+
+    path="$(repo_path "${repo}")"
+    git -C "${path}" rev-parse -q --verify "${VERSION}^{commit}" 2>/dev/null || true
+}
+
+remote_tag_commit() {
+    local repo="$1"
+    local path
+    local output
+    local peeled_ref
+    local exact_ref
+
+    path="$(repo_path "${repo}")"
+    peeled_ref="refs/tags/${VERSION}^{}"
+    exact_ref="refs/tags/${VERSION}"
+
+    output="$(git -C "${path}" ls-remote --tags origin "refs/tags/${VERSION}*" 2>/dev/null || true)"
+    awk -v peeled_ref="${peeled_ref}" -v exact_ref="${exact_ref}" '
+        $2 == peeled_ref {
+            peeled = $1
+        }
+        $2 == exact_ref {
+            exact = $1
+        }
+        END {
+            if (peeled != "") {
+                print peeled
+            } else if (exact != "") {
+                print exact
+            }
+        }
+    ' <<< "${output}"
 }
 
 validate_repo_state() {
@@ -100,16 +181,72 @@ validate_repo_state() {
     [[ -z "${status_output}" ]] || die "../${repo} has uncommitted or untracked changes"
 }
 
+validate_repo_current_state() {
+    local repo="$1"
+    local path
+    local branch
+    local status_output
+    local head_commit
+    local local_commit
+    local remote_commit
+    local existing_commit
+
+    path="$(repo_path "${repo}")"
+    [[ -d "${path}/.git" ]] || die "missing git repository: ../${repo}"
+
+    branch="$(git -C "${path}" rev-parse --abbrev-ref HEAD)"
+    if [[ "${branch}" == "HEAD" ]]; then
+        branch="detached"
+    fi
+
+    git -C "${path}" update-index --refresh >/dev/null 2>&1 || true
+    status_output="$(git -C "${path}" status --porcelain)"
+    [[ -z "${status_output}" ]] || die "../${repo} has uncommitted or untracked changes"
+
+    head_commit="$(git -C "${path}" rev-parse HEAD)"
+    local_commit="$(local_tag_commit "${repo}")"
+    remote_commit="$(remote_tag_commit "${repo}")"
+
+    if [[ -n "${local_commit}" && -n "${remote_commit}" && "${local_commit}" != "${remote_commit}" ]]; then
+        die "${VERSION} differs between local and origin for ${repo}; local=${local_commit}, origin=${remote_commit}"
+    fi
+
+    existing_commit="${local_commit:-${remote_commit}}"
+    if [[ -n "${existing_commit}" ]]; then
+        if [[ "${existing_commit}" == "${head_commit}" ]]; then
+            if [[ -n "${local_commit}" && -z "${remote_commit}" ]]; then
+                info "${repo}: ${VERSION} exists locally at current ${branch} HEAD ${head_commit}; will push existing local tag"
+                PUSH_ONLY_REPOS+=("${repo}")
+            else
+                info "${repo}: ${VERSION} already points at current ${branch} HEAD ${head_commit}; skipping"
+                SKIPPED_REPOS+=("${repo}")
+            fi
+            return
+        fi
+
+        die "${repo}: ${VERSION} points at ${existing_commit}, but current ${branch} HEAD is ${head_commit}"
+    fi
+
+    info "${repo}: ${VERSION} is absent; will tag current ${branch} HEAD ${head_commit}"
+}
+
 validate_repos() {
     local repo
     local path
     local validation_failed=false
 
-    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
+    if [[ "${CURRENT_STATE_MODE}" == true ]]; then
+        for repo in "${SELECTED_REPOS[@]}"; do
+            validate_repo_current_state "${repo}"
+        done
+        return
+    fi
+
+    for repo in "${SELECTED_REPOS[@]}"; do
         validate_repo_state "${repo}"
     done
 
-    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
+    for repo in "${SELECTED_REPOS[@]}"; do
         path="$(repo_path "${repo}")"
         if git -C "${path}" rev-parse "${VERSION}" >/dev/null 2>&1 || \
             git -C "${path}" ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
@@ -130,10 +267,16 @@ confirm() {
     local repo
     local reply
 
-    info "The following repositories will be tagged with ${VERSION} and pushed:"
-    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
+    if [[ "${CURRENT_STATE_MODE}" == true ]]; then
+        info "Current-state mode is active. Repositories with ${VERSION} already at current HEAD will be skipped."
+    fi
+
+    info "The following ${REPO_SET} repositories will be tagged with ${VERSION} and pushed:"
+    for repo in "${SELECTED_REPOS[@]}"; do
         if repo_is_skipped "${repo}"; then
-            printf '  - %s (skipped; tag already exists)\n' "${repo}"
+            printf '  - %s (skipped; tag already points at current HEAD)\n' "${repo}"
+        elif repo_is_push_only "${repo}"; then
+            printf '  - %s (push existing local tag)\n' "${repo}"
         else
             printf '  - %s\n' "${repo}"
         fi
@@ -144,13 +287,32 @@ confirm() {
     [[ "${reply}" =~ ^[Yy]$ ]] || die "aborted"
 }
 
+print_plan() {
+    local repo
+
+    info "current-state tag plan for ${VERSION} across ${REPO_SET} repos:"
+    for repo in "${SELECTED_REPOS[@]}"; do
+        if repo_is_skipped "${repo}"; then
+            printf '  - %s: skip, tag already points at current HEAD\n' "${repo}"
+        elif repo_is_push_only "${repo}"; then
+            printf '  - %s: push existing local tag\n' "${repo}"
+        else
+            printf '  - %s: create and push tag\n' "${repo}"
+        fi
+    done
+}
+
 tag_repos() {
     local repo
     local path
 
-    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
+    for repo in "${SELECTED_REPOS[@]}"; do
         if repo_is_skipped "${repo}"; then
             warn "skipping ${repo} because ${VERSION} already exists"
+            continue
+        fi
+        if repo_is_push_only "${repo}"; then
+            warn "not creating ${repo} because ${VERSION} already exists locally at current HEAD"
             continue
         fi
 
@@ -169,7 +331,8 @@ push_tags() {
     local repo
     local path
 
-    for repo in "${TAGGED_REPOS[@]}"; do
+    for repo in "${TAGGED_REPOS[@]}" "${PUSH_ONLY_REPOS[@]}"; do
+        [[ -n "${repo}" ]] || continue
         path="$(repo_path "${repo}")"
         if git -C "${path}" push origin "${VERSION}"; then
             info "pushed ${VERSION} from ${repo}"
@@ -208,7 +371,7 @@ print_summary() {
         done
     fi
 
-    expected_pushed_count=$((${#LOCKSTEP_RELEASE_REPOS[@]} - ${#SKIPPED_REPOS[@]}))
+    expected_pushed_count=$((${#SELECTED_REPOS[@]} - ${#SKIPPED_REPOS[@]}))
     if [[ "${#PUSHED_REPOS[@]}" -eq "${expected_pushed_count}" && \
         "${#FAILED_REPOS[@]}" -eq 0 && \
         "${#PUSH_FAILED_REPOS[@]}" -eq 0 ]]; then
@@ -223,7 +386,12 @@ main() {
     local assume_yes=false
 
     VERSION=""
+    REPO_SET="lockstep"
+    SELECTED_REPOS=()
+    CURRENT_STATE_MODE=false
+    PLAN_ONLY=false
     SKIPPED_REPOS=()
+    PUSH_ONLY_REPOS=()
     TAGGED_REPOS=()
     FAILED_REPOS=()
     PUSHED_REPOS=()
@@ -231,6 +399,17 @@ main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --repo-set)
+                REPO_SET="${2:-}"
+                [[ -n "${REPO_SET}" ]] || die "missing value for --repo-set"
+                shift
+                ;;
+            --current-state)
+                CURRENT_STATE_MODE=true
+                ;;
+            --plan-only)
+                PLAN_ONLY=true
+                ;;
             --yes|-y)
                 assume_yes=true
                 ;;
@@ -251,9 +430,18 @@ main() {
 
     [[ -n "${VERSION}" ]] || die "missing release version"
     VERSION="$(normalize_tag "${VERSION}")"
+    select_repo_set "${REPO_SET}"
+    if [[ "${PLAN_ONLY}" == true && "${CURRENT_STATE_MODE}" != true ]]; then
+        die "--plan-only requires --current-state"
+    fi
 
-    info "preparing lockstep tag ${VERSION}"
+    info "preparing ${REPO_SET} tag ${VERSION}"
     validate_repos
+
+    if [[ "${PLAN_ONLY}" == true ]]; then
+        print_plan
+        exit 0
+    fi
 
     if [[ "${assume_yes}" != true ]]; then
         confirm

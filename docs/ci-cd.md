@@ -295,6 +295,11 @@ workflows:
   `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; use
   `./scripts/repo/tag-lockstep-release.sh vX.Y.Z` only for that rare
   coordinated all-repo tag path
+- when the current local sibling checkouts are the intended deployable state,
+  preview the coordinated tag set with
+  `./scripts/repo/tag-lockstep-release.sh vX.Y.Z --repo-set runtime-images --current-state --plan-only`,
+  then rerun without `--plan-only` to create and push only the tags that are
+  absent from the current runtime image repo HEADs
 - for an ordinary single-artifact release, run
   `./scripts/repo/prepare-service-release.sh --service <artifact> --version X.Y.Z`;
   this validates and tags only the selected artifact's source repository when

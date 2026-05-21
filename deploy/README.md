@@ -110,6 +110,7 @@ change; do not bump it to force an unrelated OCI deployment.
    artifacts:
    - `scripts/repo/prepare-lockstep-release.sh`
    - `scripts/repo/prepare-service-release.sh`
+   - `scripts/repo/prepare-candidate-deployment.sh`
    - `scripts/repo/tag-release.sh`
    - `scripts/repo/tag-lockstep-release.sh`
    - `scripts/repo/generate-deployment-manifest.sh`
@@ -120,12 +121,16 @@ change; do not bump it to force an unrelated OCI deployment.
    - `docs/runbooks/oci-release-deployment-checklist.md`
    - `docs/runbooks/oci-single-service-release.md`
    - `docs/runbooks/oci-single-service-rollback.md`
+   - `docs/runbooks/oci-candidate-deployment.md`
    - `kubernetes/production/apps/deployment-manifest.yaml`
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
    When local sibling checkouts are the intended deployable state, preview
    which runtime image repos still need the tag with
    `scripts/repo/tag-lockstep-release.sh vX.Y.Z --repo-set runtime-images --current-state --plan-only`.
+   For a pre-SemVer candidate image, prepare the selected repo with
+   `scripts/repo/prepare-candidate-deployment.sh --service <artifact>`, then
+   push the reviewed `candidate-*` tag to trigger the runtime image workflow.
 12. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The production Prometheus/Grafana path is owned by

@@ -87,6 +87,12 @@ current image inventory while changing only deployment metadata/config:
   --artifact-image transaction-service=ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:<digest>
 ```
 
+For a tag-required candidate image, use the same manifest flow with
+`--status candidate`, a `refs/tags/candidate-...` source ref, and the
+candidate digest-pinned image tag printed by the artifact workflow. The
+staging-window procedure lives in
+[docs/runbooks/oci-candidate-deployment.md](../../docs/runbooks/oci-candidate-deployment.md).
+
 The deployment manifest records deployment id/status, orchestration revision,
 per-artifact source refs, source commits, artifact versions, optional
 `service-common` versions, digest-pinned image refs, and operator-selected

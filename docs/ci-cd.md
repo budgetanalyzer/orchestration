@@ -106,6 +106,15 @@ when `spring-platform`, `spring-cloud-platform`, `service-core`, or
 `service-web` changes. Do not bump it only to ship a service image, route
 change, documentation metadata fix, or production overlay update.
 
+Candidate tags are immutable source selectors for OCI staging windows before a
+SemVer release exists. They are Git tags, not GitHub Releases, and must use the
+`candidate-*` namespace rather than `v*`. Prefer
+`candidate-<artifact>-YYYYMMDD-<short-sha>` so the tag carries the intended
+artifact, date, and source commit hint. Runtime image workflows publish the
+same candidate tag as the Docker image tag and print the digest-pinned image
+reference that deployment manifests consume. Do not deploy arbitrary branch
+names in this phase.
+
 ## Orchestration Workflows
 
 ### `security-guardrails.yml`
@@ -276,10 +285,12 @@ workflows:
 - on `push` of a `v*` tag, the workflows publish the stripped numeric SemVer
   image tag and print a digest-pinned image reference for the production
   inventory step; they do not publish `latest`
-- on `workflow_dispatch`, `release_ref` selects the existing Git tag to check
-  out and optional `image_tag` selects the published container tag; if
-  `release_ref` is `v*` and `image_tag` is omitted the workflows strip the
-  leading `v`, otherwise they use the raw tag name
+- on `push` of a `candidate-*` tag, the workflows publish the same Docker-safe
+  candidate tag as the image tag and print the digest-pinned reference without
+  creating a GitHub Release
+- on `workflow_dispatch`, `release_ref` must be an existing Git tag and must
+  be either `vX.Y.Z` or `candidate-*`; any `image_tag` override must match the
+  workflow-derived image tag, so candidates and releases remain tag-derived
 - the Java workflows read `serviceCommon` from the checked-out
   `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
   Docker dependency resolution, and do not require `release_ref` to equal the
@@ -304,6 +315,11 @@ workflows:
   `./scripts/repo/prepare-service-release.sh --service <artifact> --version X.Y.Z`;
   this validates and tags only the selected artifact's source repository when
   `--tag` is supplied
+- for a tag-required OCI candidate deployment before a SemVer release exists,
+  run
+  `./scripts/repo/prepare-candidate-deployment.sh --service <artifact>`;
+  after reviewing the printed source commit and candidate tag, rerun with
+  `--create-tag --push` to trigger the selected artifact workflow
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
   default, and it refuses tooling repos such as `checkstyle-config` for OCI

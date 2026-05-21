@@ -339,6 +339,8 @@ Acceptance:
 
 ### Phase 4: Add Tag-Required Candidate Deployments
 
+Status: Implemented.
+
 Goals:
 
 - Allow OCI candidate deployments before SemVer release tags.

@@ -310,19 +310,19 @@ workflows:
   runtime release tagging
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
-- create `tmp/releases/vX.Y.Z.yaml` with
-  `./scripts/repo/generate-release-manifest.sh` after the six runtime image
-  workflows complete
-- release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
-  form, commit SHAs for OCI release source repos, artifact workflow run URLs,
-  digest-pinned GHCR image refs, and operator-selected deployment phase flags;
-  `checkstyle-config` is tooling and is not part of this OCI manifest source
-  set
-- `./deploy/scripts/23-update-production-release-images.sh --release-manifest
-  tmp/releases/vX.Y.Z.yaml` updates the production image inventory, production
-  app image overlay, `/api-docs/release-metadata.json`, and runtime
-  Deployment/Pod release labels and image annotations from the same reviewed
-  manifest data
+- create a schema v2 deployment manifest with
+  `./scripts/repo/generate-deployment-manifest.sh` after the changed runtime
+  image workflows complete, or when config-only deployment metadata needs to be
+  recorded without changing image digests
+- deployment manifests record deployment id/status, orchestration revision,
+  per-artifact source refs, source commits, artifact versions, optional
+  `service-common` versions, digest-pinned GHCR image refs, and
+  operator-selected deployment phase flags
+- `./deploy/scripts/23-update-production-release-images.sh
+  --deployment-manifest <path>` updates the checked-in deployment manifest,
+  production image inventory, production app image overlay,
+  `/api-docs/release-metadata.json`, and runtime Deployment/Pod metadata from
+  the same reviewed manifest data
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

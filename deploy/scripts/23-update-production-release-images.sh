@@ -10,22 +10,22 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
+PRODUCTION_DEPLOYMENT_MANIFEST="${PRODUCTION_APPS_DIR}/deployment-manifest.yaml"
 PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
 PRODUCTION_RUNTIME_METADATA_PATCH="${PRODUCTION_APPS_DIR}/patches/runtime-release-metadata.yaml"
 LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
 PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
 PRODUCTION_IMAGE_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
-LOCKSTEP_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
-INSTANCE_ENV_TEMPLATE="$(phase4_repo_path "deploy/instance.env.template")"
+STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
+readonly PRODUCTION_DEPLOYMENT_MANIFEST
 readonly PRODUCTION_KUSTOMIZATION
 readonly PRODUCTION_RUNTIME_METADATA_PATCH
 readonly LOCAL_RELEASE_METADATA_JSON
 readonly PRODUCTION_RELEASE_METADATA_JSON
 readonly PRODUCTION_IMAGE_VERIFIER
-readonly LOCKSTEP_VERIFIER
-readonly INSTANCE_ENV_TEMPLATE
+readonly STATIC_VERIFIER
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -55,59 +55,36 @@ declare -A IMAGE_REPOS=(
     ["ext-authz"]="ext-authz"
 )
 
-declare -A ARTIFACT_SOURCE_REPOS=(
-    ["transaction-service"]="transaction-service"
-    ["currency-service"]="currency-service"
-    ["permission-service"]="permission-service"
-    ["session-gateway"]="session-gateway"
-    ["budget-analyzer-web"]="budget-analyzer-web"
-    ["ext-authz"]="orchestration"
-)
-
-RELEASE_REPOS=(
-    "orchestration"
-    "service-common"
-    "transaction-service"
-    "currency-service"
-    "budget-analyzer-web"
-    "session-gateway"
-    "permission-service"
-)
-readonly RELEASE_REPOS
-
 declare -A IMAGE_REFS=()
 declare -A SOURCE_REPOS=()
-declare -A COMMIT_SHAS=()
+declare -A SOURCE_REFS=()
+declare -A SOURCE_COMMITS=()
+declare -A ARTIFACT_VERSIONS=()
+declare -A SERVICE_COMMON_VERSIONS=()
+
+deployment_manifest=""
+deployment_id=""
+deployment_status=""
+deployment_environment=""
+orchestration_commit=""
+orchestration_source_ref=""
+skip_live_production_verifier=false
 
 usage() {
     cat <<'EOF'
 Usage:
   ./deploy/scripts/23-update-production-release-images.sh \
-    --release-version 0.0.x \
-    --transaction-service ghcr.io/budgetanalyzer/transaction-service:0.0.x@sha256:<digest> \
-    --currency-service ghcr.io/budgetanalyzer/currency-service:0.0.x@sha256:<digest> \
-    --permission-service ghcr.io/budgetanalyzer/permission-service:0.0.x@sha256:<digest> \
-    --session-gateway ghcr.io/budgetanalyzer/session-gateway:0.0.x@sha256:<digest> \
-    --budget-analyzer-web ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.x@sha256:<digest> \
-    --ext-authz ghcr.io/budgetanalyzer/ext-authz:0.0.x@sha256:<digest>
+    --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 
-  ./deploy/scripts/23-update-production-release-images.sh \
-    --release-manifest tmp/releases/v0.0.x.yaml
+Options:
+  --deployment-manifest PATH       Required schema_version: 2 deployment manifest.
+  --skip-live-production-verifier  Skip scripts/guardrails/verify-production-image-overlay.sh.
+  -h, --help                       Show this help.
 
-Updates the checked-in OCI production application image baseline. The release
-manifest form is the normal release path and requires the Phase 1 contract:
-release.version, release.image_tag, OCI release source repository commit SHAs,
-artifact workflow run URLs, digest-pinned artifact images, and boolean
-phase_flags. The legacy flat manifest form with release-version/version plus
-the six service keys is still accepted for local repair.
-
-By default the script runs:
-  kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-  ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
-  ./scripts/guardrails/verify-production-image-overlay.sh
-
-Use --skip-live-production-verifier only when no live Kubernetes context is
-available for the existing production verifier's Helm server-side Kiali render.
+Updates the checked-in OCI production application image baseline from a v2
+deployment manifest. The manifest is the source of truth for deployment id,
+status, orchestration revision, per-artifact source refs, source commits,
+artifact versions, service-common versions, and digest-pinned images.
 EOF
 }
 
@@ -116,28 +93,91 @@ manifest_value() {
     local key="$2"
 
     awk -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
         $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
             value = $0
             sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
-            gsub(/^"/, "", value)
-            gsub(/"$/, "", value)
-            print value
+            print clean(value)
             exit
         }
     ' "${manifest}"
 }
 
-manifest_section_present() {
+manifest_map_value() {
     local manifest="$1"
     local section="$2"
+    local key="$3"
 
-    awk -v section="${section}" '
+    awk -v section="${section}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
         $0 == section ":" {
-            found = 1
+            in_section = 1
+            next
+        }
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
+        }
+        in_section && index($0, "  " key ":") == 1 {
+            value = $0
+            sub("^  " key ":[[:space:]]*", "", value)
+            print clean(value)
             exit
         }
-        END {
-            exit found ? 0 : 1
+    ' "${manifest}"
+}
+
+manifest_nested_map_value() {
+    local manifest="$1"
+    local section="$2"
+    local subsection="$3"
+    local key="$4"
+
+    awk -v section="${section}" -v subsection="${subsection}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == section ":" {
+            in_section = 1
+            next
+        }
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
+            in_subsection = 0
+        }
+        in_section && $0 == "  " subsection ":" {
+            in_subsection = 1
+            next
+        }
+        in_section && in_subsection && $0 ~ /^  [^[:space:]][^:]*:/ {
+            in_subsection = 0
+        }
+        in_section && in_subsection && index($0, "    " key ":") == 1 {
+            value = $0
+            sub("^    " key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
         }
     ' "${manifest}"
 }
@@ -182,36 +222,6 @@ manifest_nested_value() {
     ' "${manifest}"
 }
 
-manifest_release_value() {
-    local manifest="$1"
-    local key="$2"
-
-    awk -v key="${key}" '
-        function clean(value) {
-            sub(/^[[:space:]]*/, "", value)
-            sub(/[[:space:]]*$/, "", value)
-            if (value ~ /^".*"$/) {
-                sub(/^"/, "", value)
-                sub(/"$/, "", value)
-            }
-            return value
-        }
-        $0 == "release:" {
-            in_release = 1
-            next
-        }
-        in_release && $0 ~ /^[^[:space:]][^:]*:/ {
-            in_release = 0
-        }
-        in_release && index($0, "  " key ":") == 1 {
-            value = $0
-            sub("^  " key ":[[:space:]]*", "", value)
-            print clean(value)
-            exit
-        }
-    ' "${manifest}"
-}
-
 manifest_artifact_image_keys() {
     local manifest="$1"
 
@@ -236,31 +246,12 @@ manifest_artifact_image_keys() {
     ' "${manifest}"
 }
 
-normalize_release_version() {
-    local version="$1"
-
-    version="${version#v}"
-    [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
-        phase4_die "release version must use X.Y.Z or vX.Y.Z format: ${version}"
-    printf '%s\n' "${version}"
-}
-
 valid_commit_sha() {
-    local sha="$1"
-
-    [[ "${sha}" =~ ^[0-9a-f]{40}$ ]]
-}
-
-valid_workflow_run_url() {
-    local url="$1"
-
-    [[ "${url}" =~ ^https://github\.com/budgetanalyzer/[A-Za-z0-9_.-]+/actions/runs/[0-9]+(/.*)?$ ]]
+    [[ "$1" =~ ^[0-9a-f]{40}$ ]]
 }
 
 valid_bool() {
-    local value="$1"
-
-    [[ "${value}" == "true" || "${value}" == "false" ]]
+    [[ "$1" == "true" || "$1" == "false" ]]
 }
 
 service_exists() {
@@ -274,6 +265,12 @@ service_exists() {
     done
 
     return 1
+}
+
+image_ref_tag() {
+    local image_ref="$1"
+
+    printf '%s\n' "${image_ref}" | sed -E 's#^ghcr\.io/budgetanalyzer/[a-z0-9-]+:([^@]+)@sha256:[0-9a-f]{64}$#\1#'
 }
 
 inventory_value() {
@@ -291,120 +288,89 @@ inventory_value() {
     ' "${PRODUCTION_IMAGE_INVENTORY}"
 }
 
-load_manifest() {
-    local manifest="$1"
-    local full_manifest=false
-    local service repo flag value image_key
-    local manifest_release_version
-    local manifest_image_tag
-    local expected_image_key_count
-    local actual_image_key_count
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --deployment-manifest)
+                deployment_manifest="${2:-}"
+                [[ -n "${deployment_manifest}" ]] || phase4_die "missing value for --deployment-manifest"
+                shift
+                ;;
+            --skip-live-production-verifier)
+                skip_live_production_verifier=true
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                phase4_die "unknown option: $1"
+                ;;
+        esac
+        shift
+    done
+}
 
-    [[ -f "${manifest}" ]] || phase4_die "release manifest not found: ${manifest}"
-
-    if manifest_section_present "${manifest}" "release" || \
-        manifest_section_present "${manifest}" "repositories" || \
-        manifest_section_present "${manifest}" "artifacts" || \
-        manifest_section_present "${manifest}" "phase_flags"; then
-        full_manifest=true
+resolve_manifest_path() {
+    [[ -n "${deployment_manifest}" ]] || phase4_die "missing --deployment-manifest"
+    if [[ "${deployment_manifest}" != /* && ! -f "${deployment_manifest}" ]]; then
+        deployment_manifest="$(phase4_repo_path "${deployment_manifest}")"
     fi
+    [[ -f "${deployment_manifest}" ]] || phase4_die "deployment manifest not found: ${deployment_manifest}"
+}
 
-    if [[ -z "${release_version}" ]]; then
-        release_version="$(manifest_release_value "${manifest}" "version")"
-        if [[ -z "${release_version}" ]]; then
-            release_version="$(manifest_value "${manifest}" "release-version")"
-        fi
-        if [[ -z "${release_version}" ]]; then
-            release_version="$(manifest_value "${manifest}" "version")"
-        fi
-    fi
+load_deployment_manifest() {
+    local schema_version
+    local service value image_key flag
+    local expected_image_key_count actual_image_key_count
+
+    schema_version="$(manifest_value "${deployment_manifest}" "schema_version")"
+    [[ "${schema_version}" == "2" ]] || phase4_die "deployment manifest must use schema_version: 2"
+
+    deployment_id="$(manifest_map_value "${deployment_manifest}" "deployment" "id")"
+    deployment_status="$(manifest_map_value "${deployment_manifest}" "deployment" "status")"
+    deployment_environment="$(manifest_map_value "${deployment_manifest}" "deployment" "environment")"
+    orchestration_commit="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "commit")"
+    orchestration_source_ref="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "source_ref")"
+
+    [[ -n "${deployment_id}" ]] || phase4_die "deployment manifest is missing deployment.id"
+    [[ -n "${deployment_status}" ]] || phase4_die "deployment manifest is missing deployment.status"
+    [[ -n "${deployment_environment}" ]] || phase4_die "deployment manifest is missing deployment.environment"
+    [[ -n "${orchestration_commit}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.commit"
+    [[ -n "${orchestration_source_ref}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.source_ref"
+    valid_commit_sha "${orchestration_commit}" || phase4_die "invalid deployment orchestration commit: ${orchestration_commit}"
 
     for service in "${SERVICE_ORDER[@]}"; do
-        if [[ -z "${IMAGE_REFS[${service}]:-}" ]]; then
-            value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "image")"
-            if [[ -z "${value}" ]]; then
-                value="$(manifest_nested_value "${manifest}" "images" "${service}" "image")"
-            fi
-            if [[ -z "${value}" ]]; then
-                value="$(manifest_value "${manifest}" "${service}")"
-            fi
-            if [[ -n "${value}" ]]; then
-                IMAGE_REFS["${service}"]="${value}"
-            fi
-        fi
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "source_repository")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing artifacts.${service}.source_repository"
+        SOURCE_REPOS["${service}"]="${value}"
 
-        value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "source_repository")"
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "source_ref")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing artifacts.${service}.source_ref"
+        SOURCE_REFS["${service}"]="${value}"
+
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "source_commit")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing artifacts.${service}.source_commit"
+        valid_commit_sha "${value}" || phase4_die "invalid source commit for artifacts.${service}: ${value}"
+        SOURCE_COMMITS["${service}"]="${value}"
+
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "artifact_version")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing artifacts.${service}.artifact_version"
+        ARTIFACT_VERSIONS["${service}"]="${value}"
+
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "image")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing artifacts.${service}.image"
+        IMAGE_REFS["${service}"]="${value}"
+
+        value="$(manifest_nested_value "${deployment_manifest}" "artifacts" "${service}" "service_common_version")"
         if [[ -n "${value}" ]]; then
-            SOURCE_REPOS["${service}"]="${value}"
+            SERVICE_COMMON_VERSIONS["${service}"]="${value}"
         fi
-    done
-
-    if [[ "${full_manifest}" != true ]]; then
-        return
-    fi
-
-    manifest_release_version="$(manifest_release_value "${manifest}" "version")"
-    manifest_image_tag="$(manifest_release_value "${manifest}" "image_tag")"
-    [[ -n "${manifest_release_version}" ]] || phase4_die "release manifest is missing release.version"
-    [[ -n "${manifest_image_tag}" ]] || phase4_die "release manifest is missing release.image_tag"
-    [[ "${manifest_release_version}" == v* ]] || phase4_die "release manifest release.version must use vX.Y.Z form"
-    [[ "${manifest_image_tag}" != v* ]] || phase4_die "release manifest release.image_tag must use X.Y.Z form"
-
-    manifest_release_version="$(normalize_release_version "${manifest_release_version}")"
-    manifest_image_tag="$(normalize_release_version "${manifest_image_tag}")"
-    [[ "${manifest_release_version}" == "${manifest_image_tag}" ]] || \
-        phase4_die "release manifest release.version and release.image_tag disagree"
-
-    if [[ -n "${release_version}" ]]; then
-        [[ "$(normalize_release_version "${release_version}")" == "${manifest_release_version}" ]] || \
-            phase4_die "release manifest version does not match --release-version"
-    fi
-
-    release_version="${manifest_release_version}"
-
-    for repo in "${RELEASE_REPOS[@]}"; do
-        value="$(manifest_nested_value "${manifest}" "repositories" "${repo}" "commit")"
-        [[ -n "${value}" ]] || phase4_die "release manifest is missing repositories.${repo}.commit"
-        valid_commit_sha "${value}" || phase4_die "invalid commit SHA for repositories.${repo}.commit: ${value}"
-        COMMIT_SHAS["${repo}"]="${value}"
-    done
-
-    for service in "${SERVICE_ORDER[@]}"; do
-        value="$(artifact_source_repo "${service}")"
-        [[ -n "${COMMIT_SHAS[${value}]:-}" ]] || \
-            phase4_die "artifacts.${service}.source_repository does not match a repository commit entry: ${value}"
-    done
-
-    for service in "${SERVICE_ORDER[@]}"; do
-        value="$(manifest_nested_value "${manifest}" "artifacts" "${service}" "workflow_run_url")"
-        [[ -n "${value}" ]] || phase4_die "release manifest is missing artifacts.${service}.workflow_run_url"
-        valid_workflow_run_url "${value}" || phase4_die "invalid workflow run URL for artifacts.${service}: ${value}"
     done
 
     for flag in platform_changed infrastructure_changed secrets_changed observability_changed public_tls_reapply_required; do
-        value="$(manifest_nested_value "${manifest}" "phase_flags" "${flag}" "unused")"
-        if [[ -z "${value}" ]]; then
-            value="$(awk -v flag="${flag}" '
-                $0 == "phase_flags:" {
-                    in_flags = 1
-                    next
-                }
-                in_flags && $0 ~ /^[^[:space:]][^:]*:/ {
-                    in_flags = 0
-                }
-                in_flags && index($0, "  " flag ":") == 1 {
-                    value = $0
-                    sub("^  " flag ":[[:space:]]*", "", value)
-                    sub(/^[[:space:]]*/, "", value)
-                    sub(/[[:space:]]*$/, "", value)
-                    gsub(/^"/, "", value)
-                    gsub(/"$/, "", value)
-                    print value
-                    exit
-                }
-            ' "${manifest}")"
-        fi
-        [[ -n "${value}" ]] || phase4_die "release manifest is missing phase_flags.${flag}"
+        value="$(manifest_map_value "${deployment_manifest}" "phase_flags" "${flag}")"
+        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing phase_flags.${flag}"
         valid_bool "${value}" || phase4_die "phase_flags.${flag} must be true or false"
     done
 
@@ -412,39 +378,38 @@ load_manifest() {
     actual_image_key_count=0
     while IFS= read -r image_key; do
         [[ -n "${image_key}" ]] || continue
-        service_exists "${image_key}" || phase4_die "release manifest contains unknown artifact image key: ${image_key}"
+        service_exists "${image_key}" || phase4_die "deployment manifest contains unknown artifact image key: ${image_key}"
         actual_image_key_count=$((actual_image_key_count + 1))
-    done < <(manifest_artifact_image_keys "${manifest}")
+    done < <(manifest_artifact_image_keys "${deployment_manifest}")
     [[ "${actual_image_key_count}" == "${expected_image_key_count}" ]] || \
-        phase4_die "release manifest must contain exactly ${expected_image_key_count} artifact image entries; found ${actual_image_key_count}"
+        phase4_die "deployment manifest must contain exactly ${expected_image_key_count} artifact image entries; found ${actual_image_key_count}"
 }
 
 validate_image_refs() {
-    local service repo image_ref expected_pattern
-
-    release_version="$(normalize_release_version "${release_version}")"
+    local service repo image_ref expected_pattern tag
 
     for service in "${SERVICE_ORDER[@]}"; do
         repo="${IMAGE_REPOS[${service}]}"
-        image_ref="${IMAGE_REFS[${service}]:-}"
-        [[ -n "${image_ref}" ]] || phase4_die "missing image ref for ${service}"
+        image_ref="${IMAGE_REFS[${service}]}"
+        expected_pattern="^ghcr\\.io/budgetanalyzer/${repo}:[A-Za-z0-9_.-]+@sha256:[0-9a-f]{64}$"
+        [[ "${image_ref}" =~ ${expected_pattern} ]] || \
+            phase4_die "invalid image ref for ${service}; expected digest-pinned ghcr.io/budgetanalyzer/${repo}:<tag>@sha256:<64 lowercase hex>, got: ${image_ref}"
 
-        expected_pattern="^ghcr\\.io/budgetanalyzer/${repo}:${release_version}@sha256:[0-9a-f]{64}$"
-        if [[ ! "${image_ref}" =~ ${expected_pattern} ]]; then
-            phase4_die "invalid image ref for ${service}; expected ghcr.io/budgetanalyzer/${repo}:${release_version}@sha256:<64 lowercase hex>, got: ${image_ref}"
-        fi
-
-        if [[ "${image_ref}" == *":latest"* || "${image_ref}" == *":tilt-"* ]]; then
+        [[ "${image_ref}" != *":latest@"* && "${image_ref}" != *":tilt-"* ]] || \
             phase4_die "mutable image ref is not allowed for ${service}: ${image_ref}"
-        fi
+
+        tag="$(image_ref_tag "${image_ref}")"
+        [[ "${ARTIFACT_VERSIONS[${service}]}" == "${tag}" ]] || \
+            phase4_die "artifact version for ${service} (${ARTIFACT_VERSIONS[${service}]}) does not match image tag (${tag})"
     done
 }
 
 write_image_inventory() {
-    local temp_file
+    local temp_file="${PRODUCTION_IMAGE_INVENTORY}.tmp"
+    local service
 
-    temp_file="${PRODUCTION_IMAGE_INVENTORY}.tmp"
-    cat > "${temp_file}" <<EOF
+    {
+        cat <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -454,44 +419,54 @@ metadata:
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/component: production-image-inventory
 data:
-  release-version: "${release_version}"
-  transaction-service: "${IMAGE_REFS[transaction-service]}"
-  currency-service: "${IMAGE_REFS[currency-service]}"
-  permission-service: "${IMAGE_REFS[permission-service]}"
-  session-gateway: "${IMAGE_REFS[session-gateway]}"
-  budget-analyzer-web: "${IMAGE_REFS[budget-analyzer-web]}"
-  ext-authz: "${IMAGE_REFS[ext-authz]}"
+  schema-version: "2"
+  deployment-id: "${deployment_id}"
+  deployment-status: "${deployment_status}"
+  deployment-environment: "${deployment_environment}"
+  orchestration-commit: "${orchestration_commit}"
+  orchestration-source-ref: "${orchestration_source_ref}"
 EOF
+        for service in "${SERVICE_ORDER[@]}"; do
+            printf '  %s: "%s"\n' "${service}" "${IMAGE_REFS[${service}]}"
+            printf '  %s.artifact-version: "%s"\n' "${service}" "${ARTIFACT_VERSIONS[${service}]}"
+            printf '  %s.source-repository: "%s"\n' "${service}" "${SOURCE_REPOS[${service}]}"
+            printf '  %s.source-ref: "%s"\n' "${service}" "${SOURCE_REFS[${service}]}"
+            printf '  %s.source-commit: "%s"\n' "${service}" "${SOURCE_COMMITS[${service}]}"
+            if [[ -n "${SERVICE_COMMON_VERSIONS[${service}]:-}" ]]; then
+                printf '  %s.service-common-version: "%s"\n' "${service}" "${SERVICE_COMMON_VERSIONS[${service}]}"
+            fi
+        done
+    } > "${temp_file}"
+
     mv "${temp_file}" "${PRODUCTION_IMAGE_INVENTORY}"
 }
 
-artifact_source_repo() {
-    local service="$1"
+write_deployment_manifest_baseline() {
+    local temp_file="${PRODUCTION_DEPLOYMENT_MANIFEST}.tmp"
 
-    printf '%s\n' "${SOURCE_REPOS[${service}]:-${ARTIFACT_SOURCE_REPOS[${service}]}}"
-}
-
-artifact_revision() {
-    local service="$1"
-    local source_repo
-
-    source_repo="$(artifact_source_repo "${service}")"
-    printf '%s\n' "${COMMIT_SHAS[${source_repo}]:-}"
+    cp "${deployment_manifest}" "${temp_file}"
+    mv "${temp_file}" "${PRODUCTION_DEPLOYMENT_MANIFEST}"
 }
 
 write_release_metadata_json_file() {
     local output_path="$1"
     local temp_file="${output_path}.tmp"
-    local service
+    local service service_common_version
     local index=0
 
     mkdir -p "$(dirname "${output_path}")"
 
     {
         printf '{\n'
-        printf '  "release": {\n'
-        printf '    "version": "v%s",\n' "${release_version}"
-        printf '    "imageTag": "%s"\n' "${release_version}"
+        printf '  "schemaVersion": 2,\n'
+        printf '  "deployment": {\n'
+        printf '    "id": "%s",\n' "${deployment_id}"
+        printf '    "environment": "%s",\n' "${deployment_environment}"
+        printf '    "status": "%s",\n' "${deployment_status}"
+        printf '    "orchestrationRepository": {\n'
+        printf '      "commit": "%s",\n' "${orchestration_commit}"
+        printf '      "sourceRef": "%s"\n' "${orchestration_source_ref}"
+        printf '    }\n'
         printf '  },\n'
         printf '  "artifacts": {\n'
         for service in "${SERVICE_ORDER[@]}"; do
@@ -499,6 +474,14 @@ write_release_metadata_json_file() {
                 printf ',\n'
             fi
             printf '    "%s": {\n' "${service}"
+            printf '      "sourceRepository": "%s",\n' "${SOURCE_REPOS[${service}]}"
+            printf '      "sourceRef": "%s",\n' "${SOURCE_REFS[${service}]}"
+            printf '      "sourceCommit": "%s",\n' "${SOURCE_COMMITS[${service}]}"
+            printf '      "artifactVersion": "%s",\n' "${ARTIFACT_VERSIONS[${service}]}"
+            service_common_version="${SERVICE_COMMON_VERSIONS[${service}]:-}"
+            if [[ -n "${service_common_version}" ]]; then
+                printf '      "serviceCommonVersion": "%s",\n' "${service_common_version}"
+            fi
             printf '      "image": "%s"\n' "${IMAGE_REFS[${service}]}"
             printf '    }'
             index=$((index + 1))
@@ -519,8 +502,7 @@ write_release_metadata_json() {
 write_runtime_metadata_document() {
     local temp_file="$1"
     local workload="$2"
-    local image_ref="$3"
-    local revision="$4"
+    local artifact="$3"
 
     cat >> "${temp_file}" <<EOF
 apiVersion: apps/v1
@@ -531,19 +513,20 @@ metadata:
   labels:
     app.kubernetes.io/name: ${workload}
     app.kubernetes.io/part-of: budget-analyzer
-    budgetanalyzer.org/environment-release: v${release_version}
+    app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
+    budgetanalyzer.org/deployment-id: ${deployment_id}
   annotations:
-    budgetanalyzer.org/release-version: v${release_version}
-    budgetanalyzer.org/image: ${image_ref}
-    org.opencontainers.image.version: ${release_version}
+    budgetanalyzer.org/deployment-status: ${deployment_status}
+    budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
+    budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
+    org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}
+    org.opencontainers.image.revision: ${SOURCE_COMMITS[${artifact}]}
 EOF
-
-    if [[ -n "${revision}" ]]; then
+    if [[ -n "${SERVICE_COMMON_VERSIONS[${artifact}]:-}" ]]; then
         cat >> "${temp_file}" <<EOF
-    org.opencontainers.image.revision: ${revision}
+    budgetanalyzer.org/service-common-version: ${SERVICE_COMMON_VERSIONS[${artifact}]}
 EOF
     fi
-
     cat >> "${temp_file}" <<EOF
 spec:
   template:
@@ -551,16 +534,18 @@ spec:
       labels:
         app.kubernetes.io/name: ${workload}
         app.kubernetes.io/part-of: budget-analyzer
-        budgetanalyzer.org/environment-release: v${release_version}
+        app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
+        budgetanalyzer.org/deployment-id: ${deployment_id}
       annotations:
-        budgetanalyzer.org/release-version: v${release_version}
-        budgetanalyzer.org/image: ${image_ref}
-        org.opencontainers.image.version: ${release_version}
+        budgetanalyzer.org/deployment-status: ${deployment_status}
+        budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
+        budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
+        org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}
+        org.opencontainers.image.revision: ${SOURCE_COMMITS[${artifact}]}
 EOF
-
-    if [[ -n "${revision}" ]]; then
+    if [[ -n "${SERVICE_COMMON_VERSIONS[${artifact}]:-}" ]]; then
         cat >> "${temp_file}" <<EOF
-        org.opencontainers.image.revision: ${revision}
+        budgetanalyzer.org/service-common-version: ${SERVICE_COMMON_VERSIONS[${artifact}]}
 EOF
     fi
 }
@@ -568,39 +553,17 @@ EOF
 write_runtime_release_metadata_patch() {
     local temp_file="${PRODUCTION_RUNTIME_METADATA_PATCH}.tmp"
     local service
-    local revision
 
     : > "${temp_file}"
 
     for service in "${RUNTIME_DEPLOYMENT_ORDER[@]}"; do
-        revision="$(artifact_revision "${service}")"
-        write_runtime_metadata_document "${temp_file}" "${service}" "${IMAGE_REFS[${service}]}" "${revision}"
+        write_runtime_metadata_document "${temp_file}" "${service}" "${service}"
         printf -- '---\n' >> "${temp_file}"
     done
 
-    revision="$(artifact_revision "budget-analyzer-web")"
-    write_runtime_metadata_document "${temp_file}" "nginx-gateway" "${IMAGE_REFS[budget-analyzer-web]}" "${revision}"
+    write_runtime_metadata_document "${temp_file}" "nginx-gateway" "budget-analyzer-web"
 
     mv "${temp_file}" "${PRODUCTION_RUNTIME_METADATA_PATCH}"
-}
-
-replace_literal_in_file() {
-    local file="$1"
-    local old="$2"
-    local new="$3"
-    local temp_file
-    local escaped_old
-    local escaped_new
-
-    [[ -f "${file}" ]] || return 0
-    [[ "${old}" != "${new}" ]] || return 0
-
-    escaped_old="$(phase4_escape_sed_replacement "${old}")"
-    escaped_new="$(phase4_escape_sed_replacement "${new}")"
-    temp_file="${file}.tmp"
-
-    sed "s/${escaped_old}/${escaped_new}/g" "${file}" > "${temp_file}"
-    mv "${temp_file}" "${file}"
 }
 
 replace_image_ref_in_kustomization() {
@@ -630,33 +593,11 @@ update_kustomization() {
     done
 }
 
-update_release_version_references() {
-    local old_release_version="$1"
-    local doc
-
-    replace_literal_in_file "${INSTANCE_ENV_TEMPLATE}" \
-        "PRODUCTION_RELEASE_VERSION=${old_release_version}" \
-        "PRODUCTION_RELEASE_VERSION=${release_version}"
-
-    for doc in \
-        "$(phase4_repo_path "kubernetes/production/README.md")" \
-        "$(phase4_repo_path "scripts/README.md")" \
-        "$(phase4_repo_path "docs/ci-cd.md")"; do
-        replace_literal_in_file "${doc}" "${old_release_version}" "${release_version}"
-        replace_literal_in_file "${doc}" "v${old_release_version}" "v${release_version}"
-    done
-}
-
 verify_updates() {
     phase4_require_commands kubectl
 
     kubectl kustomize "${PRODUCTION_APPS_DIR}" --load-restrictor=LoadRestrictionsNone >/dev/null
-
-    if [[ -x "${LOCKSTEP_VERIFIER}" ]]; then
-        "${LOCKSTEP_VERIFIER}"
-    else
-        phase4_warn "lockstep verifier is not executable yet: ${LOCKSTEP_VERIFIER}"
-    fi
+    "${STATIC_VERIFIER}"
 
     if [[ "${skip_live_production_verifier}" == false ]]; then
         "${PRODUCTION_IMAGE_VERIFIER}"
@@ -666,69 +607,23 @@ verify_updates() {
 }
 
 main() {
-    local release_manifest=""
-    local old_release_version
-    local explicit_image_count=0
-
-    release_version=""
-    skip_live_production_verifier=false
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --release-version)
-                release_version="${2:-}"
-                shift
-                ;;
-            --release-manifest)
-                release_manifest="${2:-}"
-                [[ -n "${release_manifest}" ]] || phase4_die "missing value for --release-manifest"
-                shift
-                ;;
-            --transaction-service|--currency-service|--permission-service|--session-gateway|--budget-analyzer-web|--ext-authz)
-                IMAGE_REFS["${1#--}"]="${2:-}"
-                [[ -n "${IMAGE_REFS[${1#--}]}" ]] || phase4_die "missing value for $1"
-                explicit_image_count=$((explicit_image_count + 1))
-                shift
-                ;;
-            --skip-live-production-verifier)
-                skip_live_production_verifier=true
-                ;;
-            -h|--help)
-                usage
-                exit 0
-                ;;
-            *)
-                phase4_die "unknown option: $1"
-                ;;
-        esac
-        shift
-    done
+    parse_args "$@"
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || phase4_die "missing image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
     [[ -f "${PRODUCTION_KUSTOMIZATION}" ]] || phase4_die "missing production kustomization: ${PRODUCTION_KUSTOMIZATION}"
 
-    if [[ -n "${release_manifest}" ]]; then
-        [[ "${explicit_image_count}" -eq 0 ]] || phase4_die "use either --release-manifest or explicit image arguments, not both"
-        if [[ "${release_manifest}" != /* && ! -f "${release_manifest}" ]]; then
-            release_manifest="$(phase4_repo_path "${release_manifest}")"
-        fi
-        load_manifest "${release_manifest}"
-    fi
-
-    [[ -n "${release_version}" ]] || phase4_die "missing --release-version or release-version in manifest"
-    old_release_version="$(inventory_value "release-version")"
-    [[ -n "${old_release_version}" ]] || phase4_die "current production image inventory is missing release-version"
-
+    resolve_manifest_path
+    load_deployment_manifest
     validate_image_refs
     update_kustomization
+    write_deployment_manifest_baseline
     write_image_inventory
     write_release_metadata_json
     write_runtime_release_metadata_patch
-    update_release_version_references "${old_release_version}"
     verify_updates
 
-    phase4_info "updated production release image baseline to ${release_version}"
-    phase4_info "review the diff before tagging or deploying to OCI"
+    phase4_info "updated production deployment baseline to ${deployment_id}"
+    phase4_info "review the diff before deploying to OCI"
 }
 
 main "$@"

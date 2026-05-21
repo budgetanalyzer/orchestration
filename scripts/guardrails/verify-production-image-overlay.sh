@@ -85,7 +85,7 @@ load_expected_image_refs() {
         image_ref="$(inventory_value "${service}")"
         [[ -n "${image_ref}" ]] || fail "production image inventory is missing ${service}"
 
-        if [[ ! "${image_ref}" =~ ^ghcr\.io/budgetanalyzer/[a-z0-9-]+:[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}$ ]]; then
+        if [[ ! "${image_ref}" =~ ^ghcr\.io/budgetanalyzer/[a-z0-9-]+:[A-Za-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]]; then
             fail "production image inventory has an invalid digest-pinned image ref for ${service}: ${image_ref}"
         fi
 
@@ -423,6 +423,9 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /api-docs {' "rendered production nginx config is missing the /api-docs route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /api-docs/release-metadata.json {' "rendered production nginx config is missing the /api-docs/release-metadata.json route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'release-metadata.json: |' "rendered production docs ConfigMap is missing release-metadata.json"
+    assert_contains_literal "${RENDERED_APPS_FILE}" '"schemaVersion": 2' "rendered production release metadata is not schema v2"
+    assert_contains_literal "${RENDERED_APPS_FILE}" '"deployment": {' "rendered production release metadata is missing deployment identity"
+    assert_contains_literal "${RENDERED_APPS_FILE}" '"artifactVersion":' "rendered production release metadata is missing artifact versions"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /login {' "rendered production nginx config is missing the /login route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = / {' "rendered production nginx config is missing the root route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /@vite/client {' "rendered production nginx config is missing the explicit Vite deny route"

@@ -1,0 +1,55 @@
+schema_version: 2
+deployment:
+  id: "oci-20260521.1"
+  environment: "oci-production"
+  status: "accepted"
+  orchestration_repository:
+    commit: "4eae2fb0640728437652c773777f7b8abb0d7b42"
+    source_ref: "refs/heads/allow-candidate-releases"
+artifacts:
+  transaction-service:
+    source_repository: "transaction-service"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "3c67b2c21e31d12d08508161cd11f8d4f0e1248e"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:5ef17ce3696330239b030e607652b0743b95a8f8e03117c2e5511dad0ee8f5e6"
+    service_common_version: "0.0.14"
+  currency-service:
+    source_repository: "currency-service"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "de925269030e4b6583e786cff4e5cbff92d2aee8"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:80ba38fdff655b3f563bb0a60abf05394fdeae3355ae9f23c022456a28cbf1ff"
+    service_common_version: "0.0.14"
+  permission-service:
+    source_repository: "permission-service"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "8670f38641aca8b11d24d6127892392692cb521d"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:8d6751662d09bfaa791d66b817f990dcf77c554189e475b726eb3e67f25cf63c"
+    service_common_version: "0.0.14"
+  session-gateway:
+    source_repository: "session-gateway"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "86dde52ca6008c3751b6f580c2d7d8e9eb0b66ec"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:c30612af5c8f9f7e023b5e43698885d87354a859c056b44fd01ca64de73183f9"
+    service_common_version: "0.0.14"
+  budget-analyzer-web:
+    source_repository: "budget-analyzer-web"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "3e74050cb082aea63e4625316e1eba959cbba026"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:6977e2bf376ffa44c1706e6282550da7d5fd17a60e1847446c749770297b39c8"
+  ext-authz:
+    source_repository: "orchestration"
+    source_ref: "refs/tags/v0.0.14"
+    source_commit: "1a6b3f8e80035a25a1208780ddd4e99d1a30e0a3"
+    artifact_version: "0.0.14"
+    image: "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:85aede7d18be357c25c0155b551f1a391ac9d30c6b2b33716ce23a3d1b6a5213"
+phase_flags:
+  platform_changed: false
+  infrastructure_changed: false
+  secrets_changed: false
+  observability_changed: false
+  public_tls_reapply_required: false

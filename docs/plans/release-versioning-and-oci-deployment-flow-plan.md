@@ -243,6 +243,8 @@ Acceptance:
 
 ### Phase 2: Add Deployment Manifest V2 And Mixed Artifact Metadata
 
+Status: Implemented.
+
 Goals:
 
 - Replace the single global production `release-version` assumption with a
@@ -253,8 +255,7 @@ Goals:
 
 Script changes:
 
-- Extend `scripts/repo/generate-release-manifest.sh` or add
-  `scripts/repo/generate-deployment-manifest.sh`.
+- Add `scripts/repo/generate-deployment-manifest.sh`.
 - Update `deploy/scripts/23-update-production-release-images.sh`, or replace it
   with a clearer `deploy/scripts/23-update-production-deployment-baseline.sh`,
   to:
@@ -265,9 +266,8 @@ Script changes:
   - write runtime labels and annotations per workload
 - Update `scripts/ops/show-pod-version-labels.sh` to accept a deployment
   manifest and verify per-workload expected labels/annotations.
-- Update `deploy/scripts/25-deploy-oci-release.sh` to accept
-  `--deployment-manifest` as the preferred input while keeping current
-  `--release-manifest` compatibility during migration.
+- Update `deploy/scripts/25-deploy-oci-release.sh` to require
+  `--deployment-manifest`; the v1 release-manifest deployment path is removed.
 
 Manifest and metadata changes:
 
@@ -571,7 +571,7 @@ Expected script changes:
 | `scripts/repo/tag-release.sh` | Deprecate as the default normal release path or make lockstep explicit. |
 | `scripts/repo/prepare-lockstep-release.sh` | Keep for rare lockstep releases; update docs to stop using it for normal service releases. |
 | `scripts/repo/prepare-service-release.sh` | New helper for one service's release validation and tag guidance. |
-| `scripts/repo/generate-release-manifest.sh` | Extend or replace with deployment-manifest v2 generation and partial artifact updates. |
+| `scripts/repo/generate-deployment-manifest.sh` | Generate deployment-manifest v2 records and partial artifact updates. |
 | `deploy/scripts/23-update-production-release-images.sh` | Extend or replace to update mixed artifact production baselines. |
 | `deploy/scripts/25-deploy-oci-release.sh` | Accept deployment-manifest v2, selected services, and candidate status. |
 | `scripts/ops/show-pod-version-labels.sh` | Verify per-workload manifest metadata instead of one global expected version. |

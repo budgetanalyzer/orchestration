@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
-LOCKSTEP_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
+STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 PRODUCTION_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
 OBSERVABILITY_ACCESS_VERIFIER="$(phase4_repo_path "scripts/smoketest/verify-observability-port-forward-access.sh")"
@@ -20,7 +20,7 @@ PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/phase-6")"
 PHASE11_RENDER_ROOT="$(phase4_repo_path "tmp/phase-11")"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
-readonly LOCKSTEP_VERIFIER
+readonly STATIC_VERIFIER
 readonly PRODUCTION_VERIFIER
 readonly POD_VERSION_LABELS_SCRIPT
 readonly OBSERVABILITY_ACCESS_VERIFIER
@@ -50,8 +50,8 @@ SERVICE_ORDER=(
 readonly SERVICE_ORDER
 
 MODE=""
-RELEASE_VERSION=""
-RELEASE_MANIFEST=""
+DEPLOYMENT_MANIFEST=""
+DEPLOYMENT_ID=""
 DRY_RUN=false
 SKIP_PLATFORM=false
 SKIP_INFRASTRUCTURE=false
@@ -62,11 +62,11 @@ ACKNOWLEDGE_PUBLIC_TLS_DOWNGRADE=false
 EXPLICIT_KUBECONFIG=false
 SNAPSHOT_DIR=""
 
-FLAG_PLATFORM_CHANGED=""
-FLAG_INFRASTRUCTURE_CHANGED=""
-FLAG_SECRETS_CHANGED=""
-FLAG_OBSERVABILITY_CHANGED=""
-FLAG_PUBLIC_TLS_REAPPLY_REQUIRED=""
+FLAG_PLATFORM_CHANGED=false
+FLAG_INFRASTRUCTURE_CHANGED=false
+FLAG_SECRETS_CHANGED=false
+FLAG_OBSERVABILITY_CHANGED=false
+FLAG_PUBLIC_TLS_REAPPLY_REQUIRED=false
 
 RUN_PLATFORM=false
 RUN_INFRASTRUCTURE=false
@@ -78,16 +78,15 @@ RUN_PUBLIC_TLS=false
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/25-deploy-oci-release.sh --mode MODE [options]
+Usage: ./deploy/scripts/25-deploy-oci-release.sh --mode MODE --deployment-manifest PATH [options]
 
-Operator-facing OCI release deployment wrapper.
+Operator-facing OCI deployment wrapper.
 
 Required:
-  --mode app-only|lockstep|platform-only|infrastructure-only|verify-only
+  --mode app-only|manifest|platform-only|infrastructure-only|verify-only
+  --deployment-manifest PATH
 
 Options:
-  --release-version VERSION
-  --release-manifest PATH
   --kubeconfig PATH
   --dry-run
   --skip-platform
@@ -98,12 +97,10 @@ Options:
   --acknowledge-public-tls-downgrade
   -h, --help
 
-The script composes the reviewed deploy/scripts entry points, captures pre and
-post snapshots under tmp/oci-release-deploy/, waits for touched rollouts, and
-verifies live runtime release labels after application rollout or verify-only
-checks. It prints the final verification checklist, including the browser
-release metadata endpoint. It does not run the host-only
-deploy/scripts/11-generate-phase-5-infra-tls.sh certificate generation path.
+The script validates a schema v2 deployment manifest against the checked-in
+production image inventory, captures pre/post snapshots, composes reviewed
+deployment phases, waits for touched rollouts, and verifies live pod metadata
+against the same manifest. It does not run host-only certificate generation.
 EOF
 }
 
@@ -119,22 +116,7 @@ warn() {
     phase4_warn "$*"
 }
 
-inventory_value() {
-    local key="$1"
-
-    awk -v key="${key}" '
-        $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
-            value = $0
-            sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
-            gsub(/^"/, "", value)
-            gsub(/"$/, "", value)
-            print value
-            exit
-        }
-    ' "${PRODUCTION_IMAGE_INVENTORY}"
-}
-
-manifest_release_value() {
+manifest_value() {
     local manifest="$1"
     local key="$2"
 
@@ -148,14 +130,38 @@ manifest_release_value() {
             }
             return value
         }
-        $0 == "release:" {
-            in_release = 1
+        $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
+            value = $0
+            sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${manifest}"
+}
+
+manifest_map_value() {
+    local manifest="$1"
+    local section="$2"
+    local key="$3"
+
+    awk -v section="${section}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == section ":" {
+            in_section = 1
             next
         }
-        in_release && $0 ~ /^[^[:space:]][^:]*:/ {
-            in_release = 0
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
         }
-        in_release && index($0, "  " key ":") == 1 {
+        in_section && index($0, "  " key ":") == 1 {
             value = $0
             sub("^  " key ":[[:space:]]*", "", value)
             print clean(value)
@@ -204,44 +210,23 @@ manifest_nested_value() {
     ' "${manifest}"
 }
 
-manifest_flag_value() {
-    local manifest="$1"
-    local flag="$2"
+inventory_value() {
+    local key="$1"
 
-    awk -v flag="${flag}" '
-        $0 == "phase_flags:" {
-            in_flags = 1
-            next
-        }
-        in_flags && $0 ~ /^[^[:space:]][^:]*:/ {
-            in_flags = 0
-        }
-        in_flags && index($0, "  " flag ":") == 1 {
+    awk -v key="${key}" '
+        $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
             value = $0
-            sub("^  " flag ":[[:space:]]*", "", value)
-            sub(/^[[:space:]]*/, "", value)
-            sub(/[[:space:]]*$/, "", value)
+            sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
             gsub(/^"/, "", value)
             gsub(/"$/, "", value)
             print value
             exit
         }
-    ' "${manifest}"
-}
-
-normalize_release_version() {
-    local version="$1"
-
-    version="${version#v}"
-    [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
-        die "release version must use X.Y.Z or vX.Y.Z format: ${version}"
-    printf '%s\n' "${version}"
+    ' "${PRODUCTION_IMAGE_INVENTORY}"
 }
 
 valid_bool() {
-    local value="$1"
-
-    [[ "${value}" == "true" || "${value}" == "false" ]]
+    [[ "$1" == "true" || "$1" == "false" ]]
 }
 
 parse_args() {
@@ -252,14 +237,9 @@ parse_args() {
                 [[ -n "${MODE}" ]] || die "missing value for --mode"
                 shift
                 ;;
-            --release-version)
-                RELEASE_VERSION="${2:-}"
-                [[ -n "${RELEASE_VERSION}" ]] || die "missing value for --release-version"
-                shift
-                ;;
-            --release-manifest)
-                RELEASE_MANIFEST="${2:-}"
-                [[ -n "${RELEASE_MANIFEST}" ]] || die "missing value for --release-manifest"
+            --deployment-manifest)
+                DEPLOYMENT_MANIFEST="${2:-}"
+                [[ -n "${DEPLOYMENT_MANIFEST}" ]] || die "missing value for --deployment-manifest"
                 shift
                 ;;
             --kubeconfig)
@@ -301,48 +281,27 @@ parse_args() {
     done
 }
 
-resolve_release_manifest_path() {
-    if [[ -z "${RELEASE_MANIFEST}" ]]; then
-        return
+resolve_deployment_manifest_path() {
+    [[ -n "${DEPLOYMENT_MANIFEST}" ]] || die "missing --deployment-manifest"
+    if [[ "${DEPLOYMENT_MANIFEST}" != /* && ! -f "${DEPLOYMENT_MANIFEST}" ]]; then
+        DEPLOYMENT_MANIFEST="$(phase4_repo_path "${DEPLOYMENT_MANIFEST}")"
     fi
-
-    if [[ "${RELEASE_MANIFEST}" != /* && ! -f "${RELEASE_MANIFEST}" ]]; then
-        RELEASE_MANIFEST="$(phase4_repo_path "${RELEASE_MANIFEST}")"
-    fi
-
-    [[ -f "${RELEASE_MANIFEST}" ]] || die "release manifest not found: ${RELEASE_MANIFEST}"
+    [[ -f "${DEPLOYMENT_MANIFEST}" ]] || die "deployment manifest not found: ${DEPLOYMENT_MANIFEST}"
 }
 
-load_release_manifest() {
-    local manifest_version
-    local manifest_image_tag
-    local flag
-    local value
+load_deployment_manifest() {
+    local schema_version flag value
 
-    resolve_release_manifest_path
-    [[ -n "${RELEASE_MANIFEST}" ]] || return
+    resolve_deployment_manifest_path
+    schema_version="$(manifest_value "${DEPLOYMENT_MANIFEST}" "schema_version")"
+    [[ "${schema_version}" == "2" ]] || die "deployment manifest must use schema_version: 2"
 
-    manifest_version="$(manifest_release_value "${RELEASE_MANIFEST}" "version")"
-    manifest_image_tag="$(manifest_release_value "${RELEASE_MANIFEST}" "image_tag")"
-    [[ -n "${manifest_version}" ]] || die "release manifest is missing release.version"
-    [[ -n "${manifest_image_tag}" ]] || die "release manifest is missing release.image_tag"
-    [[ "${manifest_version}" == v* ]] || die "release manifest release.version must use vX.Y.Z form"
-    [[ "${manifest_image_tag}" != v* ]] || die "release manifest release.image_tag must use X.Y.Z form"
-
-    manifest_version="$(normalize_release_version "${manifest_version}")"
-    manifest_image_tag="$(normalize_release_version "${manifest_image_tag}")"
-    [[ "${manifest_version}" == "${manifest_image_tag}" ]] || \
-        die "release manifest release.version and release.image_tag disagree"
-
-    if [[ -n "${RELEASE_VERSION}" ]]; then
-        [[ "$(normalize_release_version "${RELEASE_VERSION}")" == "${manifest_version}" ]] || \
-            die "release manifest version does not match --release-version"
-    fi
-    RELEASE_VERSION="${manifest_version}"
+    DEPLOYMENT_ID="$(manifest_map_value "${DEPLOYMENT_MANIFEST}" "deployment" "id")"
+    [[ -n "${DEPLOYMENT_ID}" ]] || die "deployment manifest is missing deployment.id"
 
     for flag in platform_changed infrastructure_changed secrets_changed observability_changed public_tls_reapply_required; do
-        value="$(manifest_flag_value "${RELEASE_MANIFEST}" "${flag}")"
-        [[ -n "${value}" ]] || die "release manifest is missing phase_flags.${flag}"
+        value="$(manifest_map_value "${DEPLOYMENT_MANIFEST}" "phase_flags" "${flag}")"
+        [[ -n "${value}" ]] || die "deployment manifest is missing phase_flags.${flag}"
         valid_bool "${value}" || die "phase_flags.${flag} must be true or false"
         case "${flag}" in
             platform_changed)
@@ -364,39 +323,30 @@ load_release_manifest() {
     done
 }
 
-validate_manifest_images_match_inventory() {
-    local service
-    local manifest_ref
-    local inventory_ref
-
-    [[ -n "${RELEASE_MANIFEST}" ]] || return
-
-    for service in "${SERVICE_ORDER[@]}"; do
-        manifest_ref="$(manifest_nested_value "${RELEASE_MANIFEST}" "artifacts" "${service}" "image")"
-        [[ -n "${manifest_ref}" ]] || die "release manifest is missing artifacts.${service}.image"
-        inventory_ref="$(inventory_value "${service}")"
-        [[ "${manifest_ref}" == "${inventory_ref}" ]] || \
-            die "release manifest image for ${service} does not match the checked-in production image inventory"
-    done
-}
-
-resolve_release_version() {
-    local inventory_version
+validate_manifest_matches_inventory() {
+    local service manifest_ref inventory_ref manifest_version inventory_version
+    local manifest_deployment_id inventory_deployment_id
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || die "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
+    [[ "$(inventory_value "schema-version")" == "2" ]] || die "production image inventory must use schema-version: \"2\""
 
-    inventory_version="$(inventory_value "release-version")"
-    [[ -n "${inventory_version}" ]] || die "production image inventory is missing release-version"
+    manifest_deployment_id="$(manifest_map_value "${DEPLOYMENT_MANIFEST}" "deployment" "id")"
+    inventory_deployment_id="$(inventory_value "deployment-id")"
+    [[ "${manifest_deployment_id}" == "${inventory_deployment_id}" ]] || \
+        die "deployment manifest id ${manifest_deployment_id} does not match checked-in inventory deployment-id ${inventory_deployment_id}"
 
-    if [[ -z "${RELEASE_VERSION}" ]]; then
-        RELEASE_VERSION="${inventory_version}"
-    fi
+    for service in "${SERVICE_ORDER[@]}"; do
+        manifest_ref="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "image")"
+        inventory_ref="$(inventory_value "${service}")"
+        [[ -n "${manifest_ref}" ]] || die "deployment manifest is missing artifacts.${service}.image"
+        [[ "${manifest_ref}" == "${inventory_ref}" ]] || \
+            die "deployment manifest image for ${service} does not match the checked-in production image inventory"
 
-    RELEASE_VERSION="$(normalize_release_version "${RELEASE_VERSION}")"
-    [[ "${RELEASE_VERSION}" == "$(normalize_release_version "${inventory_version}")" ]] || \
-        die "release version ${RELEASE_VERSION} does not match the checked-in production image inventory ${inventory_version}; update and review the image baseline first"
-
-    validate_manifest_images_match_inventory
+        manifest_version="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "artifact_version")"
+        inventory_version="$(inventory_value "${service}.artifact-version")"
+        [[ "${manifest_version}" == "${inventory_version}" ]] || \
+            die "deployment manifest artifact version for ${service} does not match the checked-in production image inventory"
+    done
 }
 
 configure_kubeconfig() {
@@ -418,8 +368,7 @@ configure_mode() {
         app-only)
             RUN_APP=true
             ;;
-        lockstep)
-            [[ -n "${RELEASE_MANIFEST}" ]] || die "--mode lockstep requires --release-manifest so phase flags are explicit"
+        manifest)
             RUN_PLATFORM="${FLAG_PLATFORM_CHANGED}"
             RUN_INFRASTRUCTURE="${FLAG_INFRASTRUCTURE_CHANGED}"
             RUN_SECRETS="${FLAG_SECRETS_CHANGED}"
@@ -447,25 +396,15 @@ configure_mode() {
             ;;
     esac
 
-    if [[ "${SKIP_PLATFORM}" == "true" ]]; then
-        RUN_PLATFORM=false
-    fi
-    if [[ "${SKIP_INFRASTRUCTURE}" == "true" ]]; then
-        RUN_INFRASTRUCTURE=false
-    fi
-    if [[ "${SKIP_SECRETS}" == "true" ]]; then
-        RUN_SECRETS=false
-    fi
-    if [[ "${SKIP_OBSERVABILITY}" == "true" ]]; then
-        RUN_OBSERVABILITY=false
-    fi
-    if [[ "${REAPPLY_PUBLIC_TLS}" == "true" ]]; then
-        RUN_PUBLIC_TLS=true
-    fi
+    [[ "${SKIP_PLATFORM}" == "true" ]] && RUN_PLATFORM=false
+    [[ "${SKIP_INFRASTRUCTURE}" == "true" ]] && RUN_INFRASTRUCTURE=false
+    [[ "${SKIP_SECRETS}" == "true" ]] && RUN_SECRETS=false
+    [[ "${SKIP_OBSERVABILITY}" == "true" ]] && RUN_OBSERVABILITY=false
+    [[ "${REAPPLY_PUBLIC_TLS}" == "true" ]] && RUN_PUBLIC_TLS=true
 }
 
 selected_apply_count() {
-    local count=0
+    local count=0 selected
 
     for selected in \
         "${RUN_PLATFORM}" \
@@ -530,9 +469,9 @@ capture_snapshot() {
 }
 
 run_static_preflight() {
-    require_executable "${LOCKSTEP_VERIFIER}"
-    info "running OCI lockstep static verifier"
-    "${LOCKSTEP_VERIFIER}"
+    require_executable "${STATIC_VERIFIER}"
+    info "running OCI static verifier"
+    "${STATIC_VERIFIER}"
 }
 
 run_live_production_verifier() {
@@ -541,10 +480,10 @@ run_live_production_verifier() {
     "${PRODUCTION_VERIFIER}"
 }
 
-run_pod_version_label_verifier() {
+run_pod_metadata_verifier() {
     require_executable "${POD_VERSION_LABELS_SCRIPT}"
-    info "verifying live runtime release labels"
-    run_cmd "${POD_VERSION_LABELS_SCRIPT}" --expected-version "v${RELEASE_VERSION}" --tracked-only --strict
+    info "verifying live runtime deployment metadata"
+    run_cmd "${POD_VERSION_LABELS_SCRIPT}" --deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict
 }
 
 run_platform_phase() {
@@ -591,7 +530,7 @@ run_application_phase() {
         run_cmd kubectl rollout status "deployment/${deployment}" --timeout=300s
     done
 
-    run_pod_version_label_verifier
+    run_pod_metadata_verifier
 }
 
 run_admission_phase() {
@@ -624,7 +563,7 @@ run_verify_only() {
     run_cmd "${SCRIPT_DIR}/08-verify-network-policy-enforcement.sh"
     require_executable "${OBSERVABILITY_ACCESS_VERIFIER}"
     require_executable "${MONITORING_RUNTIME_VERIFIER}"
-    run_pod_version_label_verifier
+    run_pod_metadata_verifier
     run_cmd "${OBSERVABILITY_ACCESS_VERIFIER}"
     run_cmd "${MONITORING_RUNTIME_VERIFIER}" --wait-timeout 180
 }
@@ -632,8 +571,8 @@ run_verify_only() {
 print_plan_summary() {
     info "deployment selection"
     printf '  mode: %s\n' "${MODE}"
-    printf '  release-version: %s\n' "${RELEASE_VERSION}"
-    printf '  release-manifest: %s\n' "${RELEASE_MANIFEST:-none}"
+    printf '  deployment-id: %s\n' "${DEPLOYMENT_ID}"
+    printf '  deployment-manifest: %s\n' "${DEPLOYMENT_MANIFEST}"
     printf '  dry-run: %s\n' "${DRY_RUN}"
     printf '  platform: %s\n' "${RUN_PLATFORM}"
     printf '  infrastructure: %s\n' "${RUN_INFRASTRUCTURE}"
@@ -645,11 +584,11 @@ print_plan_summary() {
 }
 
 print_completion_checklist() {
-    info "OCI release deployment wrapper complete"
+    info "OCI deployment wrapper complete"
     printf '\nCompletion checklist:\n'
     printf '  - Review snapshots under %s\n' "${SNAPSHOT_DIR}"
     printf '  - Confirm live images match kubernetes/production/apps/image-inventory.yaml\n'
-    printf '  - Confirm live release labels: ./scripts/ops/show-pod-version-labels.sh --expected-version v%s --tracked-only --strict\n' "${RELEASE_VERSION}"
+    printf '  - Confirm live deployment metadata: ./scripts/ops/show-pod-version-labels.sh --deployment-manifest %s --tracked-only --strict\n' "${DEPLOYMENT_MANIFEST}"
     printf '  - Confirm observability remains internal-only; no Grafana, Prometheus, Jaeger, or Kiali public routes\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/api-docs\n'
@@ -658,15 +597,15 @@ print_completion_checklist() {
 
 main() {
     parse_args "$@"
-    load_release_manifest
-    resolve_release_version
+    load_deployment_manifest
+    validate_manifest_matches_inventory
     configure_mode
     configure_kubeconfig
     phase4_load_instance_env
     phase4_require_commands kubectl helm
     phase4_require_cluster_access
 
-    SNAPSHOT_DIR="${SNAPSHOT_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-${MODE}-${RELEASE_VERSION}"
+    SNAPSHOT_DIR="${SNAPSHOT_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-${MODE}-${DEPLOYMENT_ID}"
     mkdir -p "${SNAPSHOT_DIR}"
 
     print_plan_summary

@@ -13,12 +13,13 @@ function renderReleaseMetadata() {
             return response.json();
         })
         .then(function(metadata) {
+            var deployment = metadata.deployment || {};
             var release = metadata.release || {};
-            var version = release.version || "unknown";
-            var imageTag = release.imageTag || "unknown";
+            var version = deployment.id || release.version || "unknown";
+            var status = deployment.status || release.imageTag || "unknown";
 
-            label.textContent = "Release " + version;
-            label.title = "Image tag " + imageTag;
+            label.textContent = "Deployment " + version;
+            label.title = "Status " + status;
             label.classList.remove("docs-release-muted");
         })
         .catch(function() {

@@ -115,7 +115,7 @@ below.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime release labels | Lockstep: `./scripts/ops/show-pod-version-labels.sh --expected-version vX.Y.Z --tracked-only --strict`; mixed/config-only: record the per-workload label and image evidence |  |
+| Live runtime deployment metadata | `./scripts/ops/show-pod-version-labels.sh --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml --tracked-only --strict` |  |
 | Public release metadata, if public TLS is active | `curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json` |  |
 
 ## Scripts Run
@@ -124,7 +124,7 @@ below.
 | --- | --- | --- | --- | --- |
 | 1 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` |  |  |  |
 | 2 | `scripts/guardrails/verify-production-image-overlay.sh` |  |  |  |
-| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --release-version ...` for lockstep, or reviewed mode/config arguments |  |  |
+| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml` |  |  |
 
 Add rows for any reviewed lower-level deployment scripts used instead of the
 master script.
@@ -172,16 +172,16 @@ master script.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime release labels |  |  |
-| Browser-visible release metadata |  |  |
+| Live runtime deployment metadata |  |  |
+| Browser-visible deployment metadata |  |  |
 | Observability remains internal-only |  |  |
 
 ## Rollback Notes
 
 | Field | Value |
 | --- | --- |
-| Previous release version |  |
-| Previous release manifest or image inventory ref |  |
+| Previous deployment id |  |
+| Previous deployment manifest or image inventory ref |  |
 | Safe app-only rollback candidate | `yes`, `no`, or `needs review` |
 | Data migration risk |  |
 | RabbitMQ queue migration or discard decision |  |

@@ -10,6 +10,17 @@ production route, monitoring, storage, and verification inputs.
 `0.0.14` GHCR release images pinned by digest from
 `kubernetes/production/apps/image-inventory.yaml`.
 
+The production baseline is allowed to contain mixed runtime artifact versions.
+The digest-pinned image inventory is the deployment truth. A coordinated
+lockstep release can update every artifact together, but a normal
+single-service release or config-only deployment should leave unrelated image
+refs unchanged.
+
+`service-common` versions are library coordinates consumed by Java services.
+Do not bump `service-common` or rebuild every Java runtime just because this
+overlay, `/api-docs` metadata, routing, policy, or other orchestration config
+changed.
+
 That overlay already:
 
 - keeps the production app route on the `nginx/nginx.production.k8s.conf`
@@ -56,7 +67,8 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ./deploy/scripts/09-render-phase-5-secrets.sh
 ```
 
-Update the application image baseline with:
+Update the application image baseline with the current lockstep-shaped helper
+when new runtime images have been published:
 
 ```bash
 ./deploy/scripts/23-update-production-release-images.sh --release-manifest tmp/releases/v0.0.x.yaml
@@ -74,9 +86,12 @@ Create that manifest after the release image workflows complete:
   --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
 ```
 
-The manifest records both `vX.Y.Z` and `X.Y.Z` release forms, the sibling
-repository commit SHA map, artifact workflow run URLs, digest-pinned image
-refs, and the operator-selected deployment phase flags.
+The current manifest records both `vX.Y.Z` and `X.Y.Z` release forms, the
+sibling repository commit SHA map, artifact workflow run URLs, digest-pinned
+image refs, and the operator-selected deployment phase flags. It is still the
+right contract for coordinated lockstep image updates. Config-only production
+changes should instead preserve the existing image inventory and prove that
+the rendered overlay contains the intended config change.
 The update helper reuses that manifest to regenerate
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and

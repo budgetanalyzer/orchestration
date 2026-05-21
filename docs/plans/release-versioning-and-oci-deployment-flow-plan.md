@@ -176,7 +176,7 @@ Evidence to capture:
 
 ### Phase 0: Document The New Operating Model
 
-Status: In progress with this plan.
+Status: Implemented.
 
 Goals:
 
@@ -614,4 +614,3 @@ This plan is complete when:
   commit-SHA candidate deployment.
 - The system can later move to continuous deployment without redesigning the
   manifest contract.
-

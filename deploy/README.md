@@ -20,6 +20,29 @@ touching the OCI instance or Vault.
 
 Runtime render output still belongs under `tmp/`, not under `deploy/`.
 
+## Deployment Operating Model
+
+The OCI path supports more than one release shape. The canonical terminology
+lives in [docs/ci-cd.md](../docs/ci-cd.md).
+
+- **Lockstep release**: a rare coordinated stack release where all runtime
+  images are updated together and the manifest flags drive any required
+  platform, infrastructure, secret-sync, observability, or public TLS work.
+- **Single-service release**: one runtime image is updated while unrelated
+  services stay on their current digest-pinned image refs.
+- **Config-only deployment**: reviewed orchestration configuration, manifests,
+  policy, routing, docs, or metadata are applied without rebuilding or
+  retagging runtime images.
+- **Candidate deployment**: the single OCI instance enters a staging window and
+  temporarily runs candidate state for verification.
+- **Promotion**: the verified candidate manifest is recorded as the accepted
+  production baseline; on one OCI instance this may be a metadata-only step
+  because the candidate bits are already live.
+
+Every durable deployment state must remain repo-owned, repeatable, and
+digest-pinned. `service-common` is released only when the shared Java libraries
+change; do not bump it to force an unrelated OCI deployment.
+
 ## Review And Run Order
 
 1. Copy `deploy/instance.env.template` to `~/.config/budget-analyzer/instance.env` and fill in only the deployment-specific non-secret values.
@@ -81,7 +104,10 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-11. Review the production release-image and OCI lockstep helpers:
+11. Review the production release-image and OCI deployment helpers. The current
+   scripts still include lockstep-named gates for the coordinated stack path,
+   while config-only and single-service changes should keep the existing
+   digest-pinned image baseline for untouched artifacts:
    - `scripts/repo/prepare-lockstep-release.sh`
    - `scripts/repo/generate-release-manifest.sh`
    - `deploy/scripts/23-update-production-release-images.sh`
@@ -180,8 +206,8 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
-| `deploy/scripts/23-update-production-release-images.sh` | Updates the checked-in production application image baseline from explicit digest-pinned image refs or a release manifest, regenerates `/api-docs/release-metadata.json` and the production runtime release label patch, then renders the app overlay and runs the OCI lockstep verifier plus the live production verifier unless explicitly skipped. Manifest input must satisfy the reusable release contract: `release.version`, `release.image_tag`, repository commit SHAs, artifact workflow run URLs, digest-pinned artifact images, and boolean phase flags. | Run after release workflows publish the six `linux/arm64` application images and before applying the production app overlay. |
-| `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production image inventory and app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, or production render change. |
+| `deploy/scripts/23-update-production-release-images.sh` | Updates the checked-in production application image baseline from explicit digest-pinned image refs or a release manifest, regenerates `/api-docs/release-metadata.json` and the production runtime release label patch, then renders the app overlay and runs the OCI lockstep verifier plus the live production verifier unless explicitly skipped. Manifest input must satisfy the reusable release contract: `release.version`, `release.image_tag`, repository commit SHAs, artifact workflow run URLs, digest-pinned artifact images, and boolean phase flags. The current manifest contract is still lockstep-shaped; config-only deployments should not run this just to restate unchanged images. | Run after release workflows publish new `linux/arm64` application images and before applying the production app overlay. |
+| `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production image inventory and app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. Despite the current name, it is also the static safety gate for config-only and single-service OCI deployment review until the manifest v2 flow lands. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, production render, or config-only deployment change. |
 | `deploy/scripts/25-deploy-oci-release.sh` | Operator-facing OCI deployment wrapper for reviewed release modes. It validates the checked-in release baseline, runs the lockstep static gate, captures pre/post cluster snapshots, composes the reviewed platform, infrastructure, secret-sync, application, admission, observability, and optional public TLS paths, waits for touched rollouts, and verifies live runtime release labels after app rollout or verify-only checks. | Run on the OCI host after the release image baseline is already updated and reviewed. Use `--mode verify-only` for a no-apply verification pass, `--mode app-only` for a workload rollout, or `--mode lockstep --release-manifest tmp/releases/vX.Y.Z.yaml` for manifest-flag-driven reconciliation. Record release evidence with `docs/runbooks/oci-release-deployment-checklist.md`, including `/api-docs/release-metadata.json`. The script intentionally does not run the host-only internal TLS certificate generation path. |
 
 External Secrets Operator values intentionally leave service account token

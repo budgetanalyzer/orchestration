@@ -1,8 +1,27 @@
 # OCI Release Deployment Checklist
 
-Use this template to record evidence for an OCI release deployment. It is a
+Use this template to record evidence for an OCI release or deployment. It is a
 run-log shape, not a secret store: do not paste kubeconfigs, private keys,
 tokens, passwords, cookie values, or raw secret payloads.
+
+Supported deployment shapes, using the terminology from
+[docs/ci-cd.md](../ci-cd.md):
+
+- **Lockstep release**: coordinated stack release with reviewed source tags and
+  updated digest-pinned runtime images.
+- **Single-service release**: one service or frontend artifact changes while
+  unrelated artifacts stay pinned to their current digests.
+- **Config-only deployment**: orchestration configuration, manifests, routes,
+  policy, docs, or metadata change without rebuilding runtime artifacts.
+- **Candidate deployment**: the single OCI instance is used as a controlled
+  staging window for candidate state.
+- **Promotion**: the verified candidate manifest is recorded as accepted
+  production state. On one OCI instance this may be metadata-only because the
+  verified bits are already live.
+
+`service-common` is a shared Java library version. Record it where it changed
+or where a Java artifact consumes it, but do not require a `service-common`
+bump for config-only deployments or unrelated service releases.
 
 The recurring deployment commands live in [deploy/README.md](../../deploy/README.md)
 and the script help for [25-deploy-oci-release.sh](../../deploy/scripts/25-deploy-oci-release.sh).
@@ -11,9 +30,11 @@ below.
 
 ## Prerequisites
 
-- [ ] The production image baseline has been updated and reviewed.
-- [ ] The release manifest exists under `tmp/releases/` or another reviewed
-  operator path.
+- [ ] The production image baseline has been updated and reviewed, or the
+  deployment is explicitly config-only and preserves the existing image
+  inventory.
+- [ ] The release or deployment manifest exists under `tmp/releases/` or
+  another reviewed operator path when the selected mode requires one.
 - [ ] The operator shell is on the OCI host, or is explicitly using an OCI
   host kubeconfig with `--kubeconfig`.
 - [ ] `KUBECONFIG` points at the intended OCI k3s cluster.
@@ -25,27 +46,29 @@ below.
 
 | Field | Value |
 | --- | --- |
-| Release version | `vX.Y.Z` |
+| Deployment type | `lockstep release`, `single-service release`, `config-only deployment`, `candidate deployment`, or `promotion` |
+| Release version, if applicable | `vX.Y.Z` or `n/a` |
+| Deployment revision or candidate id |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
 | Selected mode | `verify-only`, `app-only`, `lockstep`, `platform-only`, or `infrastructure-only` |
 | Dry run first | `yes` or `no` |
-| Release manifest | `tmp/releases/vX.Y.Z.yaml` |
+| Release/deployment manifest | `tmp/releases/vX.Y.Z.yaml`, candidate manifest path, or `n/a` |
 | Production image inventory ref | `kubernetes/production/apps/image-inventory.yaml` |
 | Orchestration checkout ref |  |
 | Snapshot directory | `tmp/oci-release-deploy/<timestamp>-<mode>-<version>` |
 
 ## Source Commits
 
-| Repository | Commit SHA | Release tag present | Notes |
-| --- | --- | --- | --- |
-| `orchestration` |  |  |  |
-| `service-common` |  |  |  |
-| `transaction-service` |  |  |  |
-| `currency-service` |  |  |  |
-| `permission-service` |  |  |  |
-| `session-gateway` |  |  |  |
-| `budget-analyzer-web` |  |  |  |
+| Repository | Commit SHA | Source ref or tag | `service-common` version, if consumed | Notes |
+| --- | --- | --- | --- | --- |
+| `orchestration` |  |  |  |  |
+| `service-common` |  |  |  |  |
+| `transaction-service` |  |  |  |  |
+| `currency-service` |  |  |  |  |
+| `permission-service` |  |  |  |  |
+| `session-gateway` |  |  |  |  |
+| `budget-analyzer-web` |  |  |  |  |
 
 ## Artifact Workflows
 
@@ -60,14 +83,14 @@ below.
 
 ## Digest-Pinned Images
 
-| Artifact | Digest-pinned image ref |
-| --- | --- |
-| `transaction-service` | `ghcr.io/budgetanalyzer/transaction-service:X.Y.Z@sha256:...` |
-| `currency-service` | `ghcr.io/budgetanalyzer/currency-service:X.Y.Z@sha256:...` |
-| `permission-service` | `ghcr.io/budgetanalyzer/permission-service:X.Y.Z@sha256:...` |
-| `session-gateway` | `ghcr.io/budgetanalyzer/session-gateway:X.Y.Z@sha256:...` |
-| `budget-analyzer-web` | `ghcr.io/budgetanalyzer/budget-analyzer-web:X.Y.Z@sha256:...` |
-| `ext-authz` | `ghcr.io/budgetanalyzer/ext-authz:X.Y.Z@sha256:...` |
+| Artifact | Status | Digest-pinned image ref |
+| --- | --- | --- |
+| `transaction-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/transaction-service:X.Y.Z@sha256:...` |
+| `currency-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/currency-service:X.Y.Z@sha256:...` |
+| `permission-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/permission-service:X.Y.Z@sha256:...` |
+| `session-gateway` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/session-gateway:X.Y.Z@sha256:...` |
+| `budget-analyzer-web` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/budget-analyzer-web:X.Y.Z@sha256:...` |
+| `ext-authz` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/ext-authz:X.Y.Z@sha256:...` |
 
 ## Release Manifest Flags
 
@@ -92,7 +115,7 @@ below.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime release labels | `./scripts/ops/show-pod-version-labels.sh --expected-version vX.Y.Z --tracked-only --strict` |  |
+| Live runtime release labels | Lockstep: `./scripts/ops/show-pod-version-labels.sh --expected-version vX.Y.Z --tracked-only --strict`; mixed/config-only: record the per-workload label and image evidence |  |
 | Public release metadata, if public TLS is active | `curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json` |  |
 
 ## Scripts Run
@@ -101,7 +124,7 @@ below.
 | --- | --- | --- | --- | --- |
 | 1 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` |  |  |  |
 | 2 | `scripts/guardrails/verify-production-image-overlay.sh` |  |  |  |
-| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --release-version ...` |  |  |
+| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --release-version ...` for lockstep, or reviewed mode/config arguments |  |  |
 
 Add rows for any reviewed lower-level deployment scripts used instead of the
 master script.

@@ -74,6 +74,38 @@ The checked-in `serviceCommon` entry in each consumer repo's
 `gradle/libs.versions.toml` remains the source of truth for the version that CI
 expects to exist remotely.
 
+## Release And Deployment Model
+
+Budget Analyzer now separates source tags, runtime artifact versions,
+`service-common` Maven versions, image digests, and OCI deployment identity.
+The production deployment truth is the digest-pinned image inventory rendered
+by the production overlay, not a single global version string.
+
+Use these modes consistently:
+
+- **Lockstep release**: a coordinated stack release where every runtime image
+  and any changed shared-library artifacts are prepared together from reviewed
+  source tags. This remains supported for broad platform or contract changes.
+- **Single-service release**: one service or frontend publishes a new runtime
+  artifact while unrelated runtime artifacts stay on their current
+  digest-pinned images. Java consumers keep their checked-in `serviceCommon`
+  version unless the shared library actually changed.
+- **Config-only deployment**: orchestration, manifest, route, docs, policy, or
+  deployment configuration changes are applied on top of the existing runtime
+  image baseline. This does not require rebuilding or retagging every service.
+- **Candidate deployment**: a controlled OCI staging window where the single
+  OCI production slot temporarily runs candidate state selected by source tags,
+  candidate tags, or later commit-derived refs, while verification decides
+  whether to keep or roll back the state.
+- **Promotion**: recording a verified candidate deployment manifest as the
+  accepted production baseline. On the single OCI instance this can be
+  metadata-only because the tested bits may already be live.
+
+`service-common` is a library release line, not the stack version. Release it
+when `spring-platform`, `spring-cloud-platform`, `service-core`, or
+`service-web` changes. Do not bump it only to ship a service image, route
+change, documentation metadata fix, or production overlay update.
+
 ## Orchestration Workflows
 
 ### `security-guardrails.yml`
@@ -258,7 +290,7 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
-- before changing that inventory for a coordinated source and
+- before changing that inventory for a coordinated source and changed
   `service-common` library release, run
   `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; for an
   ordinary runtime environment release, keep existing Java consumers on their

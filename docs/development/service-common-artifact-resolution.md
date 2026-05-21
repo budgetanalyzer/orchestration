@@ -3,6 +3,20 @@
 This document explains the split between local `mavenLocal()` resolution and
 the GitHub Packages path used by GitHub Actions and release builds.
 
+## Version Scope
+
+`service-common` is a shared Java library version, not the deployment version
+for the whole Budget Analyzer stack. Bump and release it when
+`spring-platform`, `spring-cloud-platform`, `service-core`, or `service-web`
+changes. Do not change it only because a service image, frontend artifact,
+route, production overlay, `/api-docs` metadata file, or OCI deployment
+configuration changed.
+
+Java services can release runtime artifacts while continuing to consume the
+same checked-in `serviceCommon` coordinate from `gradle/libs.versions.toml`.
+The production deployment identity is the digest-pinned image inventory and
+deployment manifest, which may contain mixed service artifact versions.
+
 ## Local Contributor Flow
 
 The supported side-by-side workspace flow must stay credential-free.
@@ -50,7 +64,7 @@ Typical examples:
 
 - default GitHub Actions `build.yml` runs in `transaction-service`,
   `currency-service`, `permission-service`, and `session-gateway`
-- release-version Docker builds
+- release-image Docker builds
 - isolated CI or clean-builder image builds
 - manual clean-shell verification of remote published artifacts
 

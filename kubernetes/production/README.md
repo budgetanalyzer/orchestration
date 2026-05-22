@@ -13,16 +13,20 @@ reviewed schema v2 deployment record is
 
 The production baseline is allowed to contain mixed runtime artifact versions.
 The digest-pinned image inventory is the deployment truth. The normal way to
-change it is the convention-based promotion command:
+change it is the local desired-state preparation command:
 
 ```bash
-./deploy/scripts/promote-current-stack-to-oci.sh
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
 ```
 
-That command compares the current workspace stack with this accepted baseline,
-reuses unchanged image digests and metadata, builds only changed artifacts, and
-then applies the managed production app set. Use `--plan-only` for the
-non-mutating diff.
+That command creates and pushes missing source tags, waits for GitHub Actions
+images, updates the checked-in manifest, inventory, app overlay, release
+metadata, and runtime metadata patch, then stops for review. Apply the reviewed
+desired state on the OCI host with:
+
+```bash
+./deploy/scripts/deploy-current-oci-manifest.sh
+```
 
 `service-common` versions are library coordinates consumed by Java services.
 Do not bump `service-common` or rebuild every Java runtime just because this
@@ -76,17 +80,16 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ```
 
 The lower-level baseline renderer is still available when a complete schema v2
-deployment snapshot has already been reviewed:
+desired-state manifest has already been reviewed:
 
 ```bash
 ./deploy/scripts/23-update-production-release-images.sh \
   --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 ```
 
-The deployment manifest records deployment id, accepted status, orchestration
-revision, per-artifact source refs, source commits, artifact versions,
-`service-common` versions for Java workloads, digest-pinned image refs, build
-decisions, and content identities.
+The deployment manifest records deployment id, orchestration revision,
+per-artifact source refs, source commits, artifact versions, `service-common`
+versions for Java workloads, and digest-pinned image refs.
 The update helper copies the reviewed manifest to
 `apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,

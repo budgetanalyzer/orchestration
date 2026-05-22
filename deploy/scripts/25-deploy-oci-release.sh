@@ -52,7 +52,7 @@ usage() {
     cat <<'EOF'
 Usage: ./deploy/scripts/25-deploy-oci-release.sh --deployment-manifest PATH [options]
 
-OCI deployment snapshot applier.
+OCI desired-state deployment applier.
 
 Required:
   --deployment-manifest PATH
@@ -352,7 +352,7 @@ run_application_phase() {
 }
 
 print_plan_summary() {
-    info "deployment snapshot"
+    info "deployment desired state"
     printf '  deployment-id: %s\n' "${DEPLOYMENT_ID}"
     printf '  deployment-manifest: %s\n' "${DEPLOYMENT_MANIFEST}"
 }

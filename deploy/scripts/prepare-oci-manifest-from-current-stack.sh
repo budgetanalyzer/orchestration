@@ -584,7 +584,7 @@ print_completion() {
     printf '\nNext steps:\n'
     printf '  1. Review the orchestration diff.\n'
     printf '  2. Commit and push the orchestration desired-state update.\n'
-    printf '  3. On the OCI host, pull the repo and run deploy/scripts/deploy-current-oci-manifest.sh after phase 3 adds it.\n'
+    printf '  3. On the OCI host, pull the repo and run deploy/scripts/deploy-current-oci-manifest.sh.\n'
 }
 
 main() {

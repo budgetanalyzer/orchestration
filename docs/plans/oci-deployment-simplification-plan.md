@@ -219,11 +219,15 @@ Status: Complete as of 2026-05-22.
 
 ### Phase 3: Build The OCI Apply Command
 
+Status: Complete as of 2026-05-22.
+
 - Create the OCI deployment script that applies the checked-in manifest.
 - Keep it free of source repo discovery and image publishing behavior.
 - Keep live verification strict: if pods do not match the manifest, fail.
 
 ### Phase 4: Delete The Promotion Path
+
+Status: Complete as of 2026-05-22.
 
 - Remove or retire `deploy/scripts/promote-current-stack-to-oci.sh`.
 - Remove generated promotion-plan language from active docs.

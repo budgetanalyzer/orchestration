@@ -11,12 +11,12 @@ Status:
   Superseded. The historical lockstep release-manifest shape is no longer a
   production deployment input.
 
-Use the convention-based OCI promotion flow instead:
+Use the OCI desired-state preparation flow instead:
 
-  ./deploy/scripts/promote-current-stack-to-oci.sh --plan-only
-  ./deploy/scripts/promote-current-stack-to-oci.sh
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
 
-The promotion command writes the complete schema v2 deployment snapshot
+The preparation command writes the complete schema v2 desired-state manifest
 consumed by the production baseline renderer.
 EOF
 }
@@ -32,7 +32,7 @@ main() {
         exit 0
     fi
 
-    die "generate-release-manifest.sh is superseded; use deploy/scripts/promote-current-stack-to-oci.sh"
+    die "generate-release-manifest.sh is superseded; use deploy/scripts/prepare-oci-manifest-from-current-stack.sh"
 }
 
 main "$@"

@@ -204,6 +204,7 @@ verify_remote_tag_absent_or_skippable() {
 }
 
 print_workflow_urls() {
+    local tag_name="$1"
     local entry repo workflow
 
     info "workflow pages to monitor after tags are pushed:"
@@ -213,9 +214,9 @@ print_workflow_urls() {
         printf '  %-24s https://github.com/budgetanalyzer/%s/actions/workflows/%s\n' "${repo}" "${repo}" "${workflow}"
     done
 
-    info "for OCI production, use the convention-based promotion flow instead of the historical release-manifest shape:"
-    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh --plan-only\n'
-    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh\n'
+    info "for OCI production, use the desired-state preparation flow instead of the historical release-manifest shape:"
+    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --plan-only\n' "${tag_name}"
+    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s\n' "${tag_name}"
 }
 
 maybe_tag_release() {

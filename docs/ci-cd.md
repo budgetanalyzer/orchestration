@@ -116,13 +116,9 @@ push GHCR images directly, deploy to OCI, require OCI kubeconfig access, or
 write lifecycle status.
 
 The OCI deployment command applies the checked-in desired state from the
-orchestration repo on the OCI host and verifies that live pods match it. Until
-that phase is implemented, the lower-level apply script remains a recovery
-surface, not the canonical operator entry point.
-
-`deploy/scripts/promote-current-stack-to-oci.sh` and its `promotion-*` image
-tag model are obsolete for the normal deployment path. Do not use them for new
-OCI releases unless you are deliberately repairing an older deployment flow.
+orchestration repo on the OCI host and verifies that live pods match it. The
+old combined local-build/live-apply path is removed from the active deployment
+surface.
 
 `service-common` is a library release line, not the stack version. Release it
 when `spring-platform`, `spring-cloud-platform`, `service-core`, or
@@ -319,7 +315,7 @@ Release image publishing is tag-driven and owned by the source repositories:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   from that inventory
-- before a changed `service-common` library can be promoted, publish the
+- before a changed `service-common` library can be deployed, publish the
   library version and update the Java consumers' checked-in `serviceCommon`
   value before preparing OCI desired state
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
@@ -335,8 +331,10 @@ Release image publishing is tag-driven and owned by the source repositories:
 - `./deploy/scripts/23-update-production-release-images.sh
   --deployment-manifest <path>` remains the lower-level baseline renderer used
   by the local preparation command
+- `./deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host
+  apply command for the checked-in production manifest
 - `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
-  applier until the phase-3 `deploy-current-oci-manifest.sh` wrapper is added
+  applier for replaying an explicit reviewed desired-state manifest
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

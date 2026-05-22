@@ -208,7 +208,7 @@ print_release_summary() {
         info "checked-in serviceCommon version: ${service_common_version}"
     fi
     info "workflow page: https://github.com/budgetanalyzer/${source_repo}/actions/workflows/${workflow}"
-    info "after the workflow publishes, run deploy/scripts/promote-current-stack-to-oci.sh from the intended workspace state"
+    info "after the workflow publishes, run deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag ${tag_name} from the intended workspace state"
 }
 
 maybe_tag_release() {

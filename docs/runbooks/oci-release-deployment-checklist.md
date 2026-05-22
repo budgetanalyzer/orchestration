@@ -117,7 +117,7 @@ below.
 | 2 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z` plus options used |  |  |
 | 3 | `git diff` | review production desired-state files |  |  |
 | 4 | `git pull` | on OCI host |  |  |
-| 5 | `deploy/scripts/deploy-current-oci-manifest.sh` | phase-3 target command |  |  |
+| 5 | `deploy/scripts/deploy-current-oci-manifest.sh` | checked-in manifest apply |  |  |
 | 6 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after pull |  |  |
 
 Add rows only for reviewed lower-level recovery commands used to replay the

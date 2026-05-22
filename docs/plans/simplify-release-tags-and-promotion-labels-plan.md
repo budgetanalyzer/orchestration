@@ -196,6 +196,8 @@ Acceptance:
 
 ### Phase 4: Cross-Repo Alignment
 
+Status: Completed 2026-05-22.
+
 Goals:
 
 - Apply the workflow cleanup consistently in:

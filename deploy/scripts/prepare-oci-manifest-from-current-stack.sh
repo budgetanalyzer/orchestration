@@ -67,9 +67,7 @@ declare -a CURL_AUTH_ARGS=()
 
 source_tag="${OCI_SOURCE_TAG:-}"
 deployment_id="${OCI_DEPLOYMENT_ID:-}"
-wait_timeout_seconds="${OCI_IMAGE_WAIT_TIMEOUT_SECONDS:-1800}"
-poll_interval_seconds="${OCI_IMAGE_POLL_INTERVAL_SECONDS:-30}"
-plan_only=false
+command_mode="${OCI_PREPARE_MODE:-}"
 assume_yes=false
 deployment_output_path=""
 docker_label=""
@@ -78,7 +76,13 @@ usage() {
     cat <<'EOF'
 Usage:
   ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
-    --source-tag vX.Y.Z [options]
+    --source-tag vX.Y.Z --plan-only
+
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
+    --source-tag vX.Y.Z --push-tags [options]
+
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
+    --source-tag vX.Y.Z --resolve-images [options]
 
 Options:
   --source-tag vX.Y.Z              Source tag to ensure in each deployable
@@ -86,23 +90,29 @@ Options:
                                    OCI_SOURCE_TAG.
   --deployment-id ID               Desired OCI deployment id. Defaults to
                                    oci-<UTC timestamp>.
-  --wait-timeout SECONDS           Maximum time to wait for GHCR images.
-                                   Defaults to 1800.
-  --poll-interval SECONDS          GHCR polling interval. Defaults to 30.
   --plan-only                      Validate and print the intended tag/image
                                    work without creating tags, waiting for
                                    GHCR, or changing the manifest.
+  --push-tags                      Create and push any missing source tags,
+                                   then stop so the operator can wait for
+                                   GitHub Actions image workflows.
+  --resolve-images                 Read already-published GHCR image tags,
+                                   resolve digests, update checked-in
+                                   production desired state, and stop for
+                                   review.
   --yes, -y                        Do not prompt before creating and pushing
                                    missing source tags.
   -h, --help                       Show this help.
 
 The command prepares checked-in OCI desired state from the current clean source
 workspace. It does not build Docker images, push images, require OCI
-kubeconfig access, or deploy to OCI. GitHub Actions builds images after source
-tags are pushed; this command waits for the corresponding GHCR tags, resolves
-their digests, updates the production manifest, inventory, app overlay,
-runtime metadata patch, and release metadata, then stops for human review,
-commit, and push.
+kubeconfig access, or deploy to OCI.
+
+Use --plan-only first to preview source tag actions and expected GHCR image
+tags. Use --push-tags to create or push the missing source tags, then wait for
+the owning GitHub Actions release-image workflows to publish the expected GHCR
+tags. Use --resolve-images after those tags exist; missing GHCR tags are a
+direct prerequisite failure rather than a retry loop.
 
 If GHCR requires authentication for manifest reads, set GHCR_USERNAME and
 GHCR_TOKEN. GITHUB_ACTOR and GITHUB_TOKEN are accepted as fallbacks.
@@ -154,8 +164,12 @@ normalize_source_tag() {
     printf 'v%s\n' "${tag}"
 }
 
-valid_positive_integer() {
-    [[ "$1" =~ ^[1-9][0-9]*$ ]]
+set_command_mode() {
+    local requested="$1"
+
+    [[ -z "${command_mode}" || "${command_mode}" == "${requested}" ]] || \
+        die "choose exactly one mode: --plan-only, --push-tags, or --resolve-images"
+    command_mode="${requested}"
 }
 
 parse_args() {
@@ -172,17 +186,19 @@ parse_args() {
                 shift
                 ;;
             --wait-timeout)
-                wait_timeout_seconds="${2:-}"
-                valid_positive_integer "${wait_timeout_seconds}" || die "--wait-timeout must be a positive integer"
-                shift
+                die "--wait-timeout was removed; wait for GitHub Actions manually, then rerun with --resolve-images"
                 ;;
             --poll-interval)
-                poll_interval_seconds="${2:-}"
-                valid_positive_integer "${poll_interval_seconds}" || die "--poll-interval must be a positive integer"
-                shift
+                die "--poll-interval was removed; wait for GitHub Actions manually, then rerun with --resolve-images"
                 ;;
             --plan-only)
-                plan_only=true
+                set_command_mode "plan"
+                ;;
+            --push-tags)
+                set_command_mode "push-tags"
+                ;;
+            --resolve-images)
+                set_command_mode "resolve-images"
                 ;;
             --yes|-y)
                 assume_yes=true
@@ -201,6 +217,14 @@ parse_args() {
 
 initialize_defaults() {
     [[ -n "${source_tag}" ]] || die "missing --source-tag vX.Y.Z"
+    [[ -n "${command_mode}" ]] || die "choose one mode: --plan-only, --push-tags, or --resolve-images"
+    case "${command_mode}" in
+        plan|push-tags|resolve-images)
+            ;;
+        *)
+            die "unknown mode from OCI_PREPARE_MODE: ${command_mode}"
+            ;;
+    esac
     source_tag="$(normalize_source_tag "${source_tag}")"
     docker_label="${source_tag#v}"
 
@@ -209,8 +233,18 @@ initialize_defaults() {
     fi
 
     deployment_output_path="${DEPLOYMENT_OUTPUT_ROOT}/${deployment_id}.yaml"
-    [[ ! -e "${deployment_output_path}" || "${plan_only}" == true ]] || \
+    [[ "${command_mode}" != "resolve-images" || ! -e "${deployment_output_path}" ]] || \
         die "deployment manifest output already exists: ${deployment_output_path}"
+}
+
+require_mode_commands() {
+    local commands=(git awk sed date)
+
+    if [[ "${command_mode}" == "resolve-images" ]]; then
+        commands+=(curl kubectl)
+    fi
+
+    phase4_require_commands "${commands[@]}"
 }
 
 repo_is_dirty() {
@@ -351,7 +385,7 @@ print_plan() {
     printf '  deployment-id: %s\n' "${deployment_id}"
     printf '  source-tag: %s\n' "${source_tag}"
     printf '  docker-label: %s\n' "${docker_label}"
-    printf '  plan-only: %s\n' "${plan_only}"
+    printf '  mode: %s\n' "${command_mode}"
     printf '\n'
     printf '%-24s %-20s %-42s %s\n' "ARTIFACT" "TAG ACTION" "SOURCE COMMIT" "EXPECTED IMAGE TAG"
     for artifact in "${ARTIFACT_ORDER[@]}"; do
@@ -406,6 +440,22 @@ ensure_source_tags() {
     done
 }
 
+validate_source_tags_ready_for_resolve() {
+    local artifact action
+    local pending_actions=()
+
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        action="${TAG_ACTIONS[${artifact}]}"
+        if [[ "${action}" != "exists" ]]; then
+            pending_actions+=("${SOURCE_REPOS[${artifact}]}:${action}")
+        fi
+    done
+
+    if (( ${#pending_actions[@]} > 0 )); then
+        die "source tags must exist on origin before --resolve-images; run --push-tags first. Pending tag actions: ${pending_actions[*]}"
+    fi
+}
+
 initialize_ghcr_auth() {
     local username="${GHCR_USERNAME:-${GITHUB_ACTOR:-}}"
     local token="${GHCR_TOKEN:-${GITHUB_TOKEN:-}}"
@@ -428,7 +478,7 @@ ghcr_manifest_url() {
     printf 'https://ghcr.io/v2/budgetanalyzer/%s/manifests/%s\n' "${image_repo}" "${tag}"
 }
 
-resolve_ghcr_digest_once() {
+resolve_ghcr_digest() {
     local image_repo="$1"
     local tag="$2"
     local headers_file="$3"
@@ -464,13 +514,12 @@ validate_manifest_mentions_arm64() {
     warn "could not confirm linux/arm64 from GHCR manifest body for ${image_ref}; digest was resolved"
 }
 
-wait_for_ghcr_images() {
-    local artifact image_repo tag_ref digest deadline now
+resolve_ghcr_images() {
+    local artifact image_repo tag_ref digest
     local temp_dir headers_file body_file
 
     initialize_ghcr_auth
     temp_dir="$(mktemp -d)"
-    deadline=$(( $(date +%s) + wait_timeout_seconds ))
 
     for artifact in "${ARTIFACT_ORDER[@]}"; do
         image_repo="${IMAGE_REPOS[${artifact}]}"
@@ -478,19 +527,10 @@ wait_for_ghcr_images() {
         headers_file="${temp_dir}/${artifact}.headers"
         body_file="${temp_dir}/${artifact}.json"
 
-        info "waiting for ${tag_ref}"
-        digest=""
-        while [[ -z "${digest}" ]]; do
-            if digest="$(resolve_ghcr_digest_once "${image_repo}" "${docker_label}" "${headers_file}" "${body_file}")"; then
-                break
-            fi
-
-            now="$(date +%s)"
-            if (( now >= deadline )); then
-                die "timed out waiting for ${tag_ref}; confirm the ${source_tag} GitHub Actions release workflow succeeded"
-            fi
-            sleep "${poll_interval_seconds}"
-        done
+        info "resolving ${tag_ref}"
+        if ! digest="$(resolve_ghcr_digest "${image_repo}" "${docker_label}" "${headers_file}" "${body_file}")"; then
+            die "missing GHCR image tag prerequisite: ${tag_ref}; wait for the ${source_tag} GitHub Actions release-image workflow in ${SOURCE_REPOS[${artifact}]} to publish it, then rerun with --resolve-images"
+        fi
 
         IMAGE_REFS["${artifact}"]="${tag_ref}@${digest}"
         validate_manifest_mentions_arm64 "${body_file}" "${IMAGE_REFS[${artifact}]}"
@@ -567,6 +607,20 @@ verify_no_lifecycle_status_in_desired_state() {
     fi
 }
 
+print_tag_completion() {
+    info "source tag step complete"
+    printf '\nNext steps:\n'
+    printf '  1. Wait for the owning GitHub Actions release-image workflows to publish these GHCR tags:\n'
+
+    local artifact
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        printf '     - ghcr.io/budgetanalyzer/%s:%s\n' "${IMAGE_REPOS[${artifact}]}" "${docker_label}"
+    done
+
+    printf '  2. Rerun:\n'
+    printf '     ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --resolve-images\n' "${source_tag}"
+}
+
 print_completion() {
     info "prepared OCI desired state"
     printf '  deployment-manifest: %s\n' "${deployment_output_path}"
@@ -581,20 +635,26 @@ print_completion() {
 main() {
     parse_args "$@"
     initialize_defaults
-    phase4_require_commands git curl awk sed date kubectl
+    require_mode_commands
 
     validate_repo_layout
     discover_source_state
     plan_source_tags
     print_plan
 
-    if [[ "${plan_only}" == true ]]; then
+    if [[ "${command_mode}" == "plan" ]]; then
         info "plan-only complete; no tags were pushed, no GHCR images were read, and no files were changed"
         return
     fi
 
-    ensure_source_tags
-    wait_for_ghcr_images
+    if [[ "${command_mode}" == "push-tags" ]]; then
+        ensure_source_tags
+        print_tag_completion
+        return
+    fi
+
+    validate_source_tags_ready_for_resolve
+    resolve_ghcr_images
     validate_resolved_images
     write_deployment_manifest
     update_production_desired_state

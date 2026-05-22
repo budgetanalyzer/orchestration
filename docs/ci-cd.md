@@ -96,24 +96,37 @@ Terminology:
 - Live deployment status is observed from OCI by comparing running pods and
   runtime metadata with the checked-in desired state.
 
-The normal OCI production flow has two operator commands separated by human
-review:
+The normal OCI production flow has explicit local preparation steps, human
+review, and one OCI-host apply command:
 
 ```bash
 # Local workstation
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+
+# After the owning GitHub Actions image workflows publish the expected GHCR tags
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 
 # OCI host, after the orchestration diff is reviewed, committed, pushed, and pulled
 ./deploy/scripts/deploy-current-oci-manifest.sh
 ```
 
 The local preparation command validates the expected sibling repositories,
-requires clean source workspaces, creates and pushes any missing source tags,
-waits for the corresponding GHCR images, resolves immutable digests, updates
-the production manifest, image inventory, app overlay, runtime metadata patch,
-and `/api-docs` release metadata, then stops. It does not build Docker images,
-push GHCR images directly, deploy to OCI, require OCI kubeconfig access, or
-write lifecycle status.
+requires clean source workspaces, previews source tag actions, creates and
+pushes any missing source tags when explicitly requested, then stops so the
+operator can wait for the owning GitHub Actions image workflows. The
+`--resolve-images` mode reads already-published GHCR tags, resolves immutable
+digests, updates the production manifest, image inventory, app overlay, runtime
+metadata patch, and `/api-docs` release metadata, then stops. Missing GHCR tags
+are a prerequisite failure in resolve mode, not a polling loop. The local
+preparation command does not build Docker images, push GHCR images directly,
+deploy to OCI, require OCI kubeconfig access, or write lifecycle status.
+
+The final orchestration manifest commit necessarily happens after the source
+tag that builds `ext-authz`. Do not try to make the checked-in desired-state
+manifest self-reference the commit that contains itself. Treat per-artifact
+source commits in the manifest as image build inputs; the orchestration commit
+pulled by the OCI host is deploy evidence captured during apply.
 
 The OCI deployment command applies the checked-in desired state from the
 orchestration repo on the OCI host and verifies that live pods match it. The

@@ -14,7 +14,9 @@ Status:
 Use the OCI desired-state preparation flow instead:
 
   ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
-  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+  # After GitHub Actions publishes the expected GHCR tags:
+  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 
 The preparation command writes the complete schema v2 desired-state manifest
 consumed by the production baseline renderer.

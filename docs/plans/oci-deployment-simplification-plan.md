@@ -33,10 +33,10 @@ The durable workflow should be:
 
 ```text
 Local workstation:
-  1. Run one script that declares the intended OCI deployment.
-  2. The script creates and pushes any missing source tags.
-  3. GitHub Actions builds the required images.
-  4. The script waits for the images, reads their GHCR digests, and updates the
+  1. Preview the intended source tag actions and expected GHCR image tags.
+  2. Run the tag-push step that creates and pushes any missing source tags.
+  3. Wait for GitHub Actions to build the required images.
+  4. Run the resolve/update step that reads GHCR digests and updates the
      orchestration production manifest locally.
   5. The operator reviews, commits, and pushes the orchestration diff.
 
@@ -66,7 +66,10 @@ sibling source repositories. Neither script should need to understand
 Local workstation:
 
 ```bash
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+# Wait for the owning GitHub Actions image workflows to publish the expected GHCR tags.
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 ```
 
 OCI host:
@@ -98,16 +101,18 @@ The local script should:
    - `ext-authz` from this repo
 4. Create and push missing source tags when a new image build is needed.
 5. Trigger or rely on the existing GitHub image-build workflows for those tags.
-6. Wait until the expected GHCR image tags exist.
-7. Resolve each expected image to an immutable digest.
-8. Update the checked-in production desired-state files:
+6. Stop so the operator can wait for the expected GHCR image tags.
+7. In the resolve/update step, fail directly if an expected GHCR tag is still
+   missing.
+8. Resolve each expected image to an immutable digest.
+9. Update the checked-in production desired-state files:
    - `kubernetes/production/apps/deployment-manifest.yaml`
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
    - `kubernetes/production/apps/patches/runtime-release-metadata.yaml`
    - `kubernetes/production/docs-aggregator/release-metadata.json`
-9. Run the static production verifiers that do not require OCI mutation.
-10. Stop and tell the operator to review, commit, and push the diff.
+10. Run the static production verifiers that do not require OCI mutation.
+11. Stop and tell the operator to review, commit, and push the diff.
 
 The local script should not:
 
@@ -246,6 +251,29 @@ Status: Complete as of 2026-05-22.
   manifest?
 - Update scripts and docs so the happy path is short and the failure messages
   name the missing prerequisite directly.
+
+### Phase 6: Replace GHCR Polling With Manual Build Wait
+
+Status: Complete as of 2026-05-22.
+
+- Split local desired-state preparation into explicit operator steps:
+  1. preview source tag actions and expected GHCR image tags
+  2. create and push missing source tags
+  3. stop and tell the operator to wait for the owning GitHub Actions image
+     workflows to publish the expected GHCR tags
+  4. rerun a resolve/update command that reads the published GHCR digests and
+     updates the checked-in production desired-state files
+- Remove long-running GHCR polling from
+  `deploy/scripts/prepare-oci-manifest-from-current-stack.sh`.
+- Make missing image tags a direct prerequisite failure in the resolve/update
+  command, not a retry loop.
+- Keep the local script free of Docker, Buildx, QEMU, GHCR image pushes, OCI
+  kubeconfig access, and SSH tunnels.
+- Document that the final orchestration manifest commit necessarily comes
+  after the source tag used to build `ext-authz`. Do not try to make the
+  checked-in manifest self-reference the commit that contains itself.
+- Treat image source commit fields as build inputs and treat the orchestration
+  commit pulled by the OCI host as deploy evidence captured at apply time.
 
 ## Completion Criteria
 

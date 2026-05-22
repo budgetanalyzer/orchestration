@@ -16,13 +16,19 @@ The digest-pinned image inventory is the deployment truth. The normal way to
 change it is the local desired-state preparation command:
 
 ```bash
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+
+# After GitHub Actions publishes the expected GHCR tags
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 ```
 
-That command creates and pushes missing source tags, waits for GitHub Actions
-images, updates the checked-in manifest, inventory, app overlay, release
-metadata, and runtime metadata patch, then stops for review. Apply the reviewed
-desired state on the OCI host with:
+The local command previews tag actions, creates and pushes missing source tags
+only in `--push-tags` mode, and intentionally stops before reading GHCR. After
+the owning GitHub Actions workflows publish the expected image tags,
+`--resolve-images` reads those tags once, updates the checked-in manifest,
+inventory, app overlay, release metadata, and runtime metadata patch, then
+stops for review. Apply the reviewed desired state on the OCI host with:
 
 ```bash
 ./deploy/scripts/deploy-current-oci-manifest.sh

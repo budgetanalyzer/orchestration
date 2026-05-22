@@ -12,7 +12,7 @@ data:
   deployment-status: "accepted"
   deployment-environment: "oci-production"
   orchestration-commit: "4eae2fb0640728437652c773777f7b8abb0d7b42"
-  orchestration-source-ref: "refs/heads/allow-candidate-releases"
+  orchestration-source-ref: "4eae2fb0640728437652c773777f7b8abb0d7b42"
   transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:5ef17ce3696330239b030e607652b0743b95a8f8e03117c2e5511dad0ee8f5e6"
   transaction-service.artifact-version: "0.0.14"
   transaction-service.source-repository: "transaction-service"

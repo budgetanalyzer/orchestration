@@ -148,12 +148,6 @@ scripts/
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
-Retired discoverability stubs:
-
-- `repo/prepare-candidate-deployment.sh` exits with guidance to the full-stack
-  OCI promotion command. Candidate Git tag prep is no longer an active
-  deployment workflow.
-
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
@@ -213,9 +207,10 @@ setup.
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
   internal-only storage/service contract pinned in static review. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
-  Kustomize patch fragments under `patches/` directories as standalone
-  resources, and validates the rendered production app and infrastructure
-  overlays that consume those patches.
+  Kustomize patch fragments under `patches/` directories and the schema-v2
+  production deployment snapshot as standalone Kubernetes resources, and
+  validates the rendered production app and infrastructure overlays that
+  consume the Kubernetes inputs.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies

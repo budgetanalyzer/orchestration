@@ -145,7 +145,9 @@ The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
   and Prometheus Operator `ServiceMonitor` objects
 - rendered Kustomize schema validation for the production app and
   infrastructure overlays, so partial patch files stay excluded from
-  standalone validation but are still checked after render
+  standalone validation but are still checked after render; the schema-v2
+  production deployment snapshot is also excluded because it is release
+  metadata, not a Kubernetes resource
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt

@@ -6,7 +6,7 @@
     "status": "accepted",
     "orchestrationRepository": {
       "commit": "4eae2fb0640728437652c773777f7b8abb0d7b42",
-      "sourceRef": "refs/heads/allow-candidate-releases"
+      "sourceRef": "4eae2fb0640728437652c773777f7b8abb0d7b42"
     }
   },
   "artifacts": {

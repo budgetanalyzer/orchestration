@@ -21,7 +21,7 @@ change it is the convention-based promotion command:
 
 That command compares the current workspace stack with this accepted baseline,
 reuses unchanged image digests and metadata, builds only changed artifacts, and
-then applies the complete production app set. Use `--plan-only` for the
+then applies the managed production app set. Use `--plan-only` for the
 non-mutating diff.
 
 `service-common` versions are library coordinates consumed by Java services.
@@ -86,16 +86,13 @@ deployment snapshot has already been reviewed:
 The deployment manifest records deployment id, accepted status, orchestration
 revision, per-artifact source refs, source commits, artifact versions,
 `service-common` versions for Java workloads, digest-pinned image refs, build
-decisions, content identities, and operator-selected deployment phase flags.
+decisions, and content identities.
 The update helper copies the reviewed manifest to
 `apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
 `apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
 labels cannot drift from the reviewed deployment baseline.
-
-Service-scoped production rollout has been removed. A production promotion
-always applies the full managed app set from the reviewed snapshot.
 
 The production image verifier now:
 
@@ -106,7 +103,7 @@ The production image verifier now:
   in that checked-in production path
 - verifies the production NGINX/public-route contract is coming from
   `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
-- verifies the production docs bundle, app-only gateway route render, loopback
+- verifies the production docs bundle, application gateway route render, loopback
   Grafana override, Auth0 egress render, and Redis StatefulSet `5Gi`
   claim-template path all stay present
 - applies the production image Kyverno policy at
@@ -245,8 +242,8 @@ sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 ```
 
 If a live OCI cluster was previously applied from an older observability render,
-explicitly delete any stale observability route after applying the new app-only
-route render:
+explicitly delete any stale observability route after applying the current
+application route render:
 
 ```bash
 kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found

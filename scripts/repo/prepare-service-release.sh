@@ -90,11 +90,11 @@ normalize_release_version() {
 }
 
 artifact_exists() {
-    local candidate="$1"
+    local target="$1"
     local artifact
 
     for artifact in "${RUNTIME_ARTIFACTS[@]}"; do
-        if [[ "${artifact}" == "${candidate}" ]]; then
+        if [[ "${artifact}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -105,10 +105,10 @@ artifact_exists() {
 repo_in_set() {
     local repo="$1"
     shift
-    local candidate
+    local target
 
-    for candidate in "$@"; do
-        if [[ "${repo}" == "${candidate}" ]]; then
+    for target in "$@"; do
+        if [[ "${repo}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -208,7 +208,7 @@ print_release_summary() {
         info "checked-in serviceCommon version: ${service_common_version}"
     fi
     info "workflow page: https://github.com/budgetanalyzer/${source_repo}/actions/workflows/${workflow}"
-    info "after the workflow publishes, update the deployment baseline with a reviewed manifest or the single-service deployment flow"
+    info "after the workflow publishes, run deploy/scripts/promote-current-stack-to-oci.sh from the intended workspace state"
 }
 
 maybe_tag_release() {

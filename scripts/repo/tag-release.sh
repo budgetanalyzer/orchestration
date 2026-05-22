@@ -57,10 +57,10 @@ normalize_tag() {
 repo_in_set() {
     local repo="$1"
     shift
-    local candidate
+    local target
 
-    for candidate in "$@"; do
-        if [[ "${repo}" == "${candidate}" ]]; then
+    for target in "$@"; do
+        if [[ "${repo}" == "${target}" ]]; then
             return 0
         fi
     done

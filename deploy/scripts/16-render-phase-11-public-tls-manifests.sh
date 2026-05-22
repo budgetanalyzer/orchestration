@@ -24,8 +24,8 @@ This render path intentionally stays on the current production hostname
 contract:
   - demo.budgetanalyzer.org
 
-The public TLS cutover is intentionally app-only. It does not publish
-Grafana, Kiali, or Jaeger.
+The public TLS cutover is intentionally limited to the application hostname.
+It does not publish Grafana, Kiali, or Jaeger.
 
 If you want to move production to the apex domain or another hostname, change
 the reviewed production and public TLS contract first instead of editing the live

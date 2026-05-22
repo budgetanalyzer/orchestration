@@ -95,7 +95,7 @@ scripts/
   with the accepted production baseline, carries forward unchanged digests and
   metadata, builds and pushes changed `linux/arm64` GHCR images, writes a
   complete deployment snapshot, updates the checked-in production baseline,
-  and applies the full production app set. Use `--plan-only` for the
+  and applies the managed production app set. Use `--plan-only` for the
   non-mutating reused/rebuilt diff.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
@@ -109,17 +109,12 @@ scripts/
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
 - `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
-  wrapper used by the promotion command. It requires an explicit mode and schema v2
+  snapshot applier used by the promotion command. It requires a schema v2
   `--deployment-manifest`, validates the checked-in production baseline, runs
   the static gate, captures pre/post cluster snapshots under
-  `tmp/oci-release-deploy/`, composes the reviewed deploy scripts in order,
-  waits for full app rollouts, and prints the final public-route and
-  observability checklist. It rejects `--services`; production app apply is
-  full-stack.
-- `../deploy/scripts/26-rollback-oci-artifact.sh` - Historical rollback
-  manifest generator for one artifact. Service-scoped production apply has
-  been removed; prefer restoring a complete previous deployment snapshot and
-  promoting the full managed stack.
+  `tmp/oci-release-deploy/`, applies the managed production app set, waits for
+  rollouts, and prints the final
+  public-route and observability checklist.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -141,10 +136,9 @@ scripts/
   already pointing at current HEAD.
 - `repo/generate-deployment-manifest.sh` - Starts from the checked-in
   production image inventory, preserves unchanged artifact digests, applies
-  selected artifact/image metadata overrides, and writes a schema v2 deployment
-  manifest for `deploy/scripts/23-update-production-release-images.sh`. Use
-  `--service` or `--artifact` to make single-artifact intent explicit and to
-  reject accidental overrides outside that selected artifact set.
+  explicit artifact/image metadata overrides, and writes a complete schema v2
+  deployment manifest for
+  `deploy/scripts/23-update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -437,17 +431,14 @@ directory without writing outside the repository.
   It now carries forward existing Java `service-common` metadata from the
   production inventory.
 - `deploy/scripts/promote-current-stack-to-oci.sh` is the normal production
-  promotion entry point and should be used instead of service-scoped manifest
-  generation for OCI app changes.
+  promotion entry point for OCI app changes.
 - `deploy/scripts/23-update-production-release-images.sh` consumes a complete
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/25-deploy-oci-release.sh` no longer accepts `--services`;
-  production app apply is full-stack.
-- `deploy/scripts/26-rollback-oci-artifact.sh` is retained as a historical
-  manifest generator, but the durable rollback model is restoring a complete
-  previous deployment snapshot and promoting the full managed stack.
+- `deploy/scripts/25-deploy-oci-release.sh` consumes the checked-in deployment
+  manifest, applies the managed production app set, and verifies live runtime
+  metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

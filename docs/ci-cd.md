@@ -88,10 +88,10 @@ Terminology:
 - Image digests are the deployable artifact identity.
 - Deployment snapshots are the OCI production contract.
 - Promotion labels are the deterministic `promotion-...` Docker tags created
-  by the full-stack promotion command for push and traceability; they are not
-  release identifiers.
+  by the workspace snapshot promotion command for push and traceability; they
+  are not release identifiers.
 
-The normal OCI production operation is now **full-stack promotion**:
+The normal OCI production operation is **workspace snapshot promotion**:
 
 ```bash
 ./deploy/scripts/promote-current-stack-to-oci.sh
@@ -101,10 +101,9 @@ That command snapshots the current intended workspace state, compares it with
 the accepted OCI baseline, reuses unchanged digest-pinned images and metadata,
 builds and pushes only changed `linux/arm64` artifacts, writes one complete
 schema v2 deployment snapshot, updates the checked-in production baseline, and
-applies the complete production app set. It has no service selector and no
-operator-facing deployment mode selector.
+applies the managed production app set to OCI.
 
-Use `--plan-only` for a non-mutating full-stack diff. Dirty workspaces are
+Use `--plan-only` for a non-mutating change-set diff. Dirty workspaces are
 rejected by default and require `--allow-dirty`; actual promotion rejects dirty
 `service-common` because the release Dockerfiles consume published Maven
 packages, not a sibling checkout.
@@ -326,9 +325,9 @@ convention-based OCI promotion command:
 - `./deploy/scripts/23-update-production-release-images.sh
   --deployment-manifest <path>` remains the lower-level baseline renderer used
   by the promotion command
-- `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI phase
-  reconciler used by the promotion command; it no longer accepts `--services`
-  for partial production app applies
+- `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
+  snapshot applier used by the promotion command; it applies the complete
+  deployment snapshot to the managed production app set
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

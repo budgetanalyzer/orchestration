@@ -259,16 +259,12 @@ valid_commit_sha() {
     [[ "$1" =~ ^[0-9a-f]{40}$ ]]
 }
 
-valid_bool() {
-    [[ "$1" == "true" || "$1" == "false" ]]
-}
-
 service_exists() {
-    local candidate="$1"
+    local target="$1"
     local service
 
     for service in "${SERVICE_ORDER[@]}"; do
-        if [[ "${service}" == "${candidate}" ]]; then
+        if [[ "${service}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -277,11 +273,11 @@ service_exists() {
 }
 
 is_java_service() {
-    local candidate="$1"
+    local target="$1"
     local service
 
     for service in "${JAVA_SERVICES[@]}"; do
-        if [[ "${service}" == "${candidate}" ]]; then
+        if [[ "${service}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -343,7 +339,7 @@ resolve_manifest_path() {
 
 load_deployment_manifest() {
     local schema_version
-    local service value image_key flag
+    local service value image_key
     local expected_image_key_count actual_image_key_count
 
     schema_version="$(manifest_value "${deployment_manifest}" "schema_version")"
@@ -390,12 +386,6 @@ load_deployment_manifest() {
         elif is_java_service "${service}"; then
             phase4_die "deployment manifest is missing artifacts.${service}.service_common_version"
         fi
-    done
-
-    for flag in platform_changed infrastructure_changed secrets_changed observability_changed public_tls_reapply_required; do
-        value="$(manifest_map_value "${deployment_manifest}" "phase_flags" "${flag}")"
-        [[ -n "${value}" ]] || phase4_die "deployment manifest is missing phase_flags.${flag}"
-        valid_bool "${value}" || phase4_die "phase_flags.${flag} must be true or false"
     done
 
     expected_image_key_count="${#SERVICE_ORDER[@]}"

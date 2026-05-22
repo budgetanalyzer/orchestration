@@ -102,11 +102,11 @@ require_command() {
 }
 
 is_java_service() {
-    local candidate="$1"
+    local target="$1"
     local service
 
     for service in "${JAVA_SERVICES[@]}"; do
-        if [[ "${service}" == "${candidate}" ]]; then
+        if [[ "${service}" == "${target}" ]]; then
             return 0
         fi
     done

@@ -55,7 +55,6 @@ declare -A OVERRIDE_IMAGE_REFS=()
 declare -A OVERRIDE_ARTIFACT_VERSIONS=()
 declare -A OVERRIDE_SOURCE_REFS=()
 declare -A OVERRIDE_SOURCE_COMMITS=()
-declare -A SELECTED_ARTIFACTS=()
 
 GLOBAL_SERVICE_COMMON_VERSION=""
 
@@ -71,28 +70,20 @@ Options:
                                            Defaults to kubernetes/production/apps/image-inventory.yaml.
   --deployment-id ID                       Required deployment identity.
   --output PATH                            Output manifest path.
-  --service service                        Select one artifact for a scoped
-                                           single-artifact manifest. Repeat or
-                                           pass comma-separated values.
-  --artifact service                       Alias for --service.
-  --artifact-image service=image           Override one artifact image. Ref must be digest-pinned.
-  --artifact-version service=version       Override one artifact version.
-  --source-ref service=ref                 Override one artifact source ref.
-  --source-commit service=sha              Override one artifact source commit.
+  --artifact-image service=image           Override an artifact image. Ref must be digest-pinned.
+  --artifact-version service=version       Override an artifact version.
+  --source-ref service=ref                 Override an artifact source ref.
+  --source-commit service=sha              Override an artifact source commit.
   --service-common-version version         Set the Java services' shared-library version.
   --service-common-version service=version Set one Java service shared-library version.
-  --platform-changed                       Set phase_flags.platform_changed true.
-  --infrastructure-changed                 Set phase_flags.infrastructure_changed true.
-  --secrets-changed                        Set phase_flags.secrets_changed true.
-  --observability-changed                  Set phase_flags.observability_changed true.
-  --public-tls-reapply-required            Set phase_flags.public_tls_reapply_required true.
   --force                                  Overwrite an existing output file.
   -h, --help                               Show this help.
 
 The script starts from the checked-in production image inventory, preserves
 unchanged artifact digests and Java service-common metadata, and writes a
 schema_version: 2 deployment manifest. Use repeated override flags to describe
-the artifacts being changed.
+changed artifacts. The output manifest always contains the complete managed
+artifact set.
 EOF
 }
 
@@ -106,11 +97,11 @@ die() {
 }
 
 service_exists() {
-    local candidate="$1"
+    local target="$1"
     local service
 
     for service in "${SERVICE_ORDER[@]}"; do
-        if [[ "${service}" == "${candidate}" ]]; then
+        if [[ "${service}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -118,79 +109,12 @@ service_exists() {
     return 1
 }
 
-selected_artifact_count() {
-    local service count=0
-
-    for service in "${SERVICE_ORDER[@]}"; do
-        if [[ -n "${SELECTED_ARTIFACTS[${service}]:-}" ]]; then
-            count=$((count + 1))
-        fi
-    done
-
-    printf '%s\n' "${count}"
-}
-
-artifact_is_selected() {
-    local service="$1"
-
-    if [[ "$(selected_artifact_count)" == "0" ]]; then
-        return 0
-    fi
-
-    [[ -n "${SELECTED_ARTIFACTS[${service}]:-}" ]]
-}
-
-select_artifacts() {
-    local raw="$1"
-    local service
-    local selected=()
-
-    [[ -n "${raw}" ]] || die "missing value for --service/--artifact"
-
-    IFS=',' read -r -a selected <<< "${raw}"
-    for service in "${selected[@]}"; do
-        [[ -n "${service}" ]] || die "empty artifact in selection: ${raw}"
-        service_exists "${service}" || die "unknown selected artifact: ${service}"
-        SELECTED_ARTIFACTS["${service}"]=true
-    done
-}
-
-validate_override_selection() {
-    local service="$1"
-    local option="$2"
-
-    artifact_is_selected "${service}" || \
-        die "${option} targets ${service}, but selected artifacts are limited by --service/--artifact"
-}
-
-validate_selected_overrides() {
-    local service
-
-    for service in "${SERVICE_ORDER[@]}"; do
-        if [[ -n "${OVERRIDE_IMAGE_REFS[${service}]:-}" ]]; then
-            validate_override_selection "${service}" "--artifact-image"
-        fi
-        if [[ -n "${OVERRIDE_ARTIFACT_VERSIONS[${service}]:-}" ]]; then
-            validate_override_selection "${service}" "--artifact-version"
-        fi
-        if [[ -n "${OVERRIDE_SOURCE_REFS[${service}]:-}" ]]; then
-            validate_override_selection "${service}" "--source-ref"
-        fi
-        if [[ -n "${OVERRIDE_SOURCE_COMMITS[${service}]:-}" ]]; then
-            validate_override_selection "${service}" "--source-commit"
-        fi
-        if [[ -n "${SERVICE_COMMON_VERSIONS[${service}]:-}" ]]; then
-            validate_override_selection "${service}" "--service-common-version"
-        fi
-    done
-}
-
 is_java_service() {
-    local candidate="$1"
+    local target="$1"
     local service
 
     for service in "${JAVA_SERVICES[@]}"; do
-        if [[ "${service}" == "${candidate}" ]]; then
+        if [[ "${service}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -346,7 +270,6 @@ apply_global_service_common_version() {
     [[ -n "${GLOBAL_SERVICE_COMMON_VERSION}" ]] || return 0
 
     for service in "${JAVA_SERVICES[@]}"; do
-        artifact_is_selected "${service}" || continue
         SERVICE_COMMON_VERSIONS["${service}"]="${GLOBAL_SERVICE_COMMON_VERSION}"
     done
 }
@@ -376,11 +299,6 @@ validate_manifest_inputs() {
 write_manifest() {
     local output_path="$1"
     local deployment_id="$2"
-    local platform_changed="$3"
-    local infrastructure_changed="$4"
-    local secrets_changed="$5"
-    local observability_changed="$6"
-    local public_tls_reapply_required="$7"
     local temp_file="${output_path}.tmp"
     local service source_repo
 
@@ -408,12 +326,6 @@ write_manifest() {
                 printf '    service_common_version: "%s"\n' "${SERVICE_COMMON_VERSIONS[${service}]}"
             fi
         done
-        printf 'phase_flags:\n'
-        printf '  platform_changed: %s\n' "${platform_changed}"
-        printf '  infrastructure_changed: %s\n' "${infrastructure_changed}"
-        printf '  secrets_changed: %s\n' "${secrets_changed}"
-        printf '  observability_changed: %s\n' "${observability_changed}"
-        printf '  public_tls_reapply_required: %s\n' "${public_tls_reapply_required}"
     } > "${temp_file}"
 
     mv "${temp_file}" "${output_path}"
@@ -424,11 +336,6 @@ main() {
     local deployment_id=""
     local output_path=""
     local force=false
-    local platform_changed=false
-    local infrastructure_changed=false
-    local secrets_changed=false
-    local observability_changed=false
-    local public_tls_reapply_required=false
     local parsed service value source_repo source_commit
 
     while [[ $# -gt 0 ]]; do
@@ -446,10 +353,6 @@ main() {
             --output)
                 output_path="${2:-}"
                 [[ -n "${output_path}" ]] || die "missing value for --output"
-                shift
-                ;;
-            --service|--artifact)
-                select_artifacts "${2:-}"
                 shift
                 ;;
             --artifact-image)
@@ -490,21 +393,6 @@ main() {
                 set_service_common_version "${2:-}"
                 shift
                 ;;
-            --platform-changed)
-                platform_changed=true
-                ;;
-            --infrastructure-changed)
-                infrastructure_changed=true
-                ;;
-            --secrets-changed)
-                secrets_changed=true
-                ;;
-            --observability-changed)
-                observability_changed=true
-                ;;
-            --public-tls-reapply-required)
-                public_tls_reapply_required=true
-                ;;
             --force)
                 force=true
                 ;;
@@ -534,7 +422,6 @@ main() {
     fi
 
     apply_global_service_common_version
-    validate_selected_overrides
     load_inventory "${inventory}"
 
     for service in "${SERVICE_ORDER[@]}"; do
@@ -553,14 +440,7 @@ main() {
     done
 
     validate_manifest_inputs
-    write_manifest \
-        "${output_path}" \
-        "${deployment_id}" \
-        "${platform_changed}" \
-        "${infrastructure_changed}" \
-        "${secrets_changed}" \
-        "${observability_changed}" \
-        "${public_tls_reapply_required}"
+    write_manifest "${output_path}" "${deployment_id}"
 
     info "wrote ${output_path}"
 }

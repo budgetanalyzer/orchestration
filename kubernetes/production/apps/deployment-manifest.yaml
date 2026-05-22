@@ -47,9 +47,3 @@ artifacts:
     source_commit: "1a6b3f8e80035a25a1208780ddd4e99d1a30e0a3"
     artifact_version: "0.0.14"
     image: "ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:85aede7d18be357c25c0155b551f1a391ac9d30c6b2b33716ce23a3d1b6a5213"
-phase_flags:
-  platform_changed: false
-  infrastructure_changed: false
-  secrets_changed: false
-  observability_changed: false
-  public_tls_reapply_required: false

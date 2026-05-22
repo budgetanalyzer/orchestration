@@ -128,7 +128,7 @@ Options:
                                      rejected for actual promotion because
                                      release Dockerfiles consume published
                                      packages.
-  --plan-only                        Generate and print the full-stack diff
+  --plan-only                        Generate and print the change-set diff
                                      without building, pushing, updating the
                                      production baseline, or applying OCI.
   --skip-live-production-verifier    Pass through to the production baseline
@@ -142,10 +142,9 @@ all managed workloads are discovered from the repository map, unchanged
 digest-pinned images and runtime metadata are carried forward, changed
 workloads are built and pushed as linux/arm64 GHCR images, one complete
 schema v2 deployment snapshot is written, the checked-in production baseline
-is updated from that snapshot, and the full production app set is applied.
+is updated from that snapshot, and the managed production app set is applied.
 
-There is no service selector and no deployment mode selector on this entry
-point. Use --plan-only when you need a non-mutating diff.
+Use --plan-only when you need a non-mutating diff before changing OCI.
 EOF
 }
 
@@ -196,11 +195,11 @@ parse_args() {
 }
 
 is_java_artifact() {
-    local candidate="$1"
+    local target="$1"
     local artifact
 
     for artifact in "${JAVA_ARTIFACTS[@]}"; do
-        if [[ "${artifact}" == "${candidate}" ]]; then
+        if [[ "${artifact}" == "${target}" ]]; then
             return 0
         fi
     done
@@ -872,12 +871,6 @@ write_deployment_manifest() {
             printf '    content_identity: "%s"\n' "${CURRENT_CONTENT_IDENTITIES[${artifact}]}"
             printf '    baseline_image: "%s"\n' "${BASELINE_IMAGES[${artifact}]}"
         done
-        printf 'phase_flags:\n'
-        printf '  platform_changed: false\n'
-        printf '  infrastructure_changed: false\n'
-        printf '  secrets_changed: false\n'
-        printf '  observability_changed: false\n'
-        printf '  public_tls_reapply_required: false\n'
     } > "${temp_file}"
     mv "${temp_file}" "${deployment_output_path}"
 }
@@ -910,7 +903,7 @@ update_production_baseline() {
 }
 
 apply_to_oci() {
-    local args=(--mode manifest --deployment-manifest "${PRODUCTION_DEPLOYMENT_MANIFEST}")
+    local args=(--deployment-manifest "${PRODUCTION_DEPLOYMENT_MANIFEST}")
 
     if [[ -n "${explicit_kubeconfig}" ]]; then
         args+=(--kubeconfig "${explicit_kubeconfig}")

@@ -4,10 +4,11 @@ Use this template to record evidence for an OCI release or deployment. It is a
 run-log shape, not a secret store: do not paste kubeconfigs, private keys,
 tokens, passwords, cookie values, or raw secret payloads.
 
-The normal production shape is full-stack OCI promotion, using the terminology
-from [docs/ci-cd.md](../ci-cd.md). The promotion command may rebuild one
-artifact, several artifacts, or none, but the deployment snapshot and apply are
-always complete.
+The normal production shape is workspace snapshot promotion, using the
+terminology from [docs/ci-cd.md](../ci-cd.md). The promotion command may
+rebuild only changed artifacts or reuse all existing artifacts, but the
+deployment snapshot is always complete and OCI receives the managed production
+app set.
 
 `service-common` is a shared Java library version. Record it where it changed
 or where a Java artifact consumes it, but do not require a `service-common`
@@ -36,7 +37,7 @@ below.
 
 | Field | Value |
 | --- | --- |
-| Deployment type | `full-stack promotion` |
+| Deployment type | `workspace snapshot promotion` |
 | Release version, if applicable | `vX.Y.Z` or `n/a` |
 | Deployment id or release label |  |
 | Deployment date | `YYYY-MM-DD` |
@@ -83,16 +84,6 @@ below.
 | `budget-analyzer-web` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/budget-analyzer-web:X.Y.Z@sha256:...` |
 | `ext-authz` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/ext-authz:X.Y.Z@sha256:...` |
 
-## Release Manifest Flags
-
-| Flag | Value | Action taken |
-| --- | --- | --- |
-| `platform_changed` | `true` or `false` |  |
-| `infrastructure_changed` | `true` or `false` |  |
-| `secrets_changed` | `true` or `false` |  |
-| `observability_changed` | `true` or `false` |  |
-| `public_tls_reapply_required` | `true` or `false` |  |
-
 ## Preflight Snapshot
 
 | Check | Evidence | Result |
@@ -117,8 +108,8 @@ below.
 | 2 | `deploy/scripts/promote-current-stack-to-oci.sh` | deployment options used |  |  |
 | 3 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after baseline update |  |  |
 
-Add rows for any reviewed lower-level deployment scripts used instead of the
-master script.
+Add rows only for reviewed lower-level recovery commands used to replay the
+same complete deployment snapshot.
 
 ## Rollout Results
 

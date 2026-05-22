@@ -13,21 +13,15 @@ PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 PRODUCTION_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
-OBSERVABILITY_ACCESS_VERIFIER="$(phase4_repo_path "scripts/smoketest/verify-observability-port-forward-access.sh")"
-MONITORING_RUNTIME_VERIFIER="$(phase4_repo_path "scripts/smoketest/verify-monitoring-runtime.sh")"
 SNAPSHOT_ROOT="$(phase4_repo_path "tmp/oci-release-deploy")"
 PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/phase-6")"
-PHASE11_RENDER_ROOT="$(phase4_repo_path "tmp/phase-11")"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly STATIC_VERIFIER
 readonly PRODUCTION_VERIFIER
 readonly POD_VERSION_LABELS_SCRIPT
-readonly OBSERVABILITY_ACCESS_VERIFIER
-readonly MONITORING_RUNTIME_VERIFIER
 readonly SNAPSHOT_ROOT
 readonly PHASE6_RENDER_ROOT
-readonly PHASE11_RENDER_ROOT
 
 SERVICE_DEPLOYMENTS=(
     "transaction-service"
@@ -49,65 +43,28 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
-MODE=""
 DEPLOYMENT_MANIFEST=""
 DEPLOYMENT_ID=""
-SELECTED_SERVICES=""
-DRY_RUN=false
-SKIP_PLATFORM=false
-SKIP_INFRASTRUCTURE=false
-SKIP_SECRETS=false
-SKIP_OBSERVABILITY=false
-REAPPLY_PUBLIC_TLS=false
-ACKNOWLEDGE_PUBLIC_TLS_DOWNGRADE=false
 EXPLICIT_KUBECONFIG=false
 SNAPSHOT_DIR=""
 
-FLAG_PLATFORM_CHANGED=false
-FLAG_INFRASTRUCTURE_CHANGED=false
-FLAG_SECRETS_CHANGED=false
-FLAG_OBSERVABILITY_CHANGED=false
-FLAG_PUBLIC_TLS_REAPPLY_REQUIRED=false
-
-RUN_PLATFORM=false
-RUN_INFRASTRUCTURE=false
-RUN_SECRETS=false
-RUN_APP=false
-RUN_ADMISSION=false
-RUN_OBSERVABILITY=false
-RUN_PUBLIC_TLS=false
-
-declare -A SELECTED_DEPLOYMENTS=()
-
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/25-deploy-oci-release.sh --mode MODE --deployment-manifest PATH [options]
+Usage: ./deploy/scripts/25-deploy-oci-release.sh --deployment-manifest PATH [options]
 
-Operator-facing OCI deployment wrapper.
+OCI deployment snapshot applier.
 
 Required:
-  --mode app-only|manifest|platform-only|infrastructure-only|verify-only
   --deployment-manifest PATH
 
 Options:
   --kubeconfig PATH
-  --dry-run
-  --skip-platform
-  --skip-infrastructure
-  --skip-secrets
-  --skip-observability
-  --reapply-public-tls
-  --acknowledge-public-tls-downgrade
   -h, --help
 
 The script validates a schema v2 deployment manifest against the checked-in
-production image inventory, captures pre/post snapshots, composes reviewed
-deployment phases, waits for full app rollouts, and verifies live pod metadata
+production image inventory, captures pre/post cluster snapshots, applies the
+managed production app set, waits for rollouts, and verifies live pod metadata
 against the same manifest. It does not run host-only certificate generation.
-
-Service-scoped production apply has been removed. Use
-deploy/scripts/promote-current-stack-to-oci.sh for the normal OCI promotion
-entry point.
 EOF
 }
 
@@ -232,103 +189,19 @@ inventory_value() {
     ' "${PRODUCTION_IMAGE_INVENTORY}"
 }
 
-valid_bool() {
-    [[ "$1" == "true" || "$1" == "false" ]]
-}
-
-workload_for_selection() {
-    case "$1" in
-        budget-analyzer-web)
-            printf '%s\n' "nginx-gateway"
-            ;;
-        transaction-service|currency-service|permission-service|session-gateway|ext-authz|nginx-gateway)
-            printf '%s\n' "$1"
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-selected_deployment_count() {
-    local deployment count=0
-
-    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
-        if [[ -n "${SELECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
-            count=$((count + 1))
-        fi
-    done
-
-    printf '%s\n' "${count}"
-}
-
-deployment_is_selected() {
-    local deployment="$1"
-
-    if [[ "$(selected_deployment_count)" == "0" ]]; then
-        return 0
-    fi
-
-    [[ -n "${SELECTED_DEPLOYMENTS[${deployment}]:-}" ]]
-}
-
-parse_selected_services() {
-    local raw="$1"
-    local service deployment
-    local selected=()
-
-    [[ -n "${raw}" ]] || die "missing value for --services"
-
-    IFS=',' read -r -a selected <<< "${raw}"
-    for service in "${selected[@]}"; do
-        [[ -n "${service}" ]] || die "empty service in --services: ${raw}"
-        deployment="$(workload_for_selection "${service}")" || die "unknown selected service/artifact: ${service}"
-        SELECTED_DEPLOYMENTS["${deployment}"]=true
-    done
-}
-
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --mode)
-                MODE="${2:-}"
-                [[ -n "${MODE}" ]] || die "missing value for --mode"
-                shift
-                ;;
             --deployment-manifest)
                 DEPLOYMENT_MANIFEST="${2:-}"
                 [[ -n "${DEPLOYMENT_MANIFEST}" ]] || die "missing value for --deployment-manifest"
                 shift
-                ;;
-            --services)
-                die "--services is no longer supported for OCI production deployment; promote the full managed stack"
                 ;;
             --kubeconfig)
                 export KUBECONFIG="${2:-}"
                 [[ -n "${KUBECONFIG}" ]] || die "missing value for --kubeconfig"
                 EXPLICIT_KUBECONFIG=true
                 shift
-                ;;
-            --dry-run)
-                DRY_RUN=true
-                ;;
-            --skip-platform)
-                SKIP_PLATFORM=true
-                ;;
-            --skip-infrastructure)
-                SKIP_INFRASTRUCTURE=true
-                ;;
-            --skip-secrets)
-                SKIP_SECRETS=true
-                ;;
-            --skip-observability)
-                SKIP_OBSERVABILITY=true
-                ;;
-            --reapply-public-tls)
-                REAPPLY_PUBLIC_TLS=true
-                ;;
-            --acknowledge-public-tls-downgrade)
-                ACKNOWLEDGE_PUBLIC_TLS_DOWNGRADE=true
                 ;;
             -h|--help)
                 usage
@@ -351,7 +224,7 @@ resolve_deployment_manifest_path() {
 }
 
 load_deployment_manifest() {
-    local schema_version flag value
+    local schema_version
 
     resolve_deployment_manifest_path
     schema_version="$(manifest_value "${DEPLOYMENT_MANIFEST}" "schema_version")"
@@ -359,29 +232,6 @@ load_deployment_manifest() {
 
     DEPLOYMENT_ID="$(manifest_map_value "${DEPLOYMENT_MANIFEST}" "deployment" "id")"
     [[ -n "${DEPLOYMENT_ID}" ]] || die "deployment manifest is missing deployment.id"
-
-    for flag in platform_changed infrastructure_changed secrets_changed observability_changed public_tls_reapply_required; do
-        value="$(manifest_map_value "${DEPLOYMENT_MANIFEST}" "phase_flags" "${flag}")"
-        [[ -n "${value}" ]] || die "deployment manifest is missing phase_flags.${flag}"
-        valid_bool "${value}" || die "phase_flags.${flag} must be true or false"
-        case "${flag}" in
-            platform_changed)
-                FLAG_PLATFORM_CHANGED="${value}"
-                ;;
-            infrastructure_changed)
-                FLAG_INFRASTRUCTURE_CHANGED="${value}"
-                ;;
-            secrets_changed)
-                FLAG_SECRETS_CHANGED="${value}"
-                ;;
-            observability_changed)
-                FLAG_OBSERVABILITY_CHANGED="${value}"
-                ;;
-            public_tls_reapply_required)
-                FLAG_PUBLIC_TLS_REAPPLY_REQUIRED="${value}"
-                ;;
-        esac
-    done
 }
 
 validate_manifest_matches_inventory() {
@@ -424,83 +274,12 @@ configure_kubeconfig() {
     fi
 }
 
-configure_mode() {
-    case "${MODE}" in
-        app-only)
-            RUN_APP=true
-            ;;
-        manifest)
-            RUN_PLATFORM="${FLAG_PLATFORM_CHANGED}"
-            RUN_INFRASTRUCTURE="${FLAG_INFRASTRUCTURE_CHANGED}"
-            RUN_SECRETS="${FLAG_SECRETS_CHANGED}"
-            RUN_APP=true
-            RUN_ADMISSION=true
-            RUN_OBSERVABILITY="${FLAG_OBSERVABILITY_CHANGED}"
-            RUN_PUBLIC_TLS="${FLAG_PUBLIC_TLS_REAPPLY_REQUIRED}"
-            ;;
-        platform-only)
-            RUN_PLATFORM=true
-            RUN_ADMISSION=true
-            RUN_OBSERVABILITY=true
-            ;;
-        infrastructure-only)
-            RUN_INFRASTRUCTURE=true
-            RUN_SECRETS=true
-            ;;
-        verify-only)
-            ;;
-        "")
-            die "missing --mode"
-            ;;
-        *)
-            die "unsupported --mode: ${MODE}"
-            ;;
-    esac
-
-    [[ "${SKIP_PLATFORM}" == "true" ]] && RUN_PLATFORM=false
-    [[ "${SKIP_INFRASTRUCTURE}" == "true" ]] && RUN_INFRASTRUCTURE=false
-    [[ "${SKIP_SECRETS}" == "true" ]] && RUN_SECRETS=false
-    [[ "${SKIP_OBSERVABILITY}" == "true" ]] && RUN_OBSERVABILITY=false
-    [[ "${REAPPLY_PUBLIC_TLS}" == "true" ]] && RUN_PUBLIC_TLS=true
-}
-
-selected_apply_count() {
-    local count=0 selected
-
-    for selected in \
-        "${RUN_PLATFORM}" \
-        "${RUN_INFRASTRUCTURE}" \
-        "${RUN_SECRETS}" \
-        "${RUN_APP}" \
-        "${RUN_ADMISSION}" \
-        "${RUN_OBSERVABILITY}" \
-        "${RUN_PUBLIC_TLS}"; do
-        if [[ "${selected}" == "true" ]]; then
-            count=$((count + 1))
-        fi
-    done
-
-    printf '%s\n' "${count}"
-}
-
 run_cmd() {
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        printf '[dry-run] '
-        printf '%q ' "$@"
-        printf '\n'
-        return
-    fi
-
     "$@"
 }
 
 run_bash() {
     local command="$1"
-
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        printf '[dry-run] %s\n' "${command}"
-        return
-    fi
 
     bash -c "${command}"
 }
@@ -544,161 +323,13 @@ run_live_production_verifier() {
 run_pod_metadata_verifier() {
     local args=(--deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict)
 
-    if [[ "$(selected_deployment_count)" != "0" ]]; then
-        args+=(--services "${SELECTED_SERVICES}")
-    fi
-
     require_executable "${POD_VERSION_LABELS_SCRIPT}"
     info "verifying live runtime deployment metadata"
     run_cmd "${POD_VERSION_LABELS_SCRIPT}" "${args[@]}"
 }
 
-run_platform_phase() {
-    local istio_args=()
-
-    if [[ "${ACKNOWLEDGE_PUBLIC_TLS_DOWNGRADE}" == "true" ]]; then
-        istio_args+=("--acknowledge-public-tls-downgrade")
-    fi
-
-    info "running platform phase"
-    run_cmd "${SCRIPT_DIR}/01-install-k3s.sh"
-    run_cmd "${SCRIPT_DIR}/02-bootstrap-cluster.sh"
-    run_cmd "${SCRIPT_DIR}/03-render-phase-4-istio-manifests.sh"
-    run_cmd "${SCRIPT_DIR}/04-install-istio.sh" "${istio_args[@]}"
-    run_cmd "${SCRIPT_DIR}/05-install-platform-controllers.sh"
-    run_cmd "${SCRIPT_DIR}/07-apply-network-policies.sh"
-    run_cmd "${SCRIPT_DIR}/08-verify-network-policy-enforcement.sh"
-}
-
-run_infrastructure_phase() {
-    info "running infrastructure phase"
-    run_cmd "${SCRIPT_DIR}/18-apply-production-infrastructure.sh"
-}
-
-run_secrets_phase() {
-    info "running secret-sync phase"
-    run_cmd "${SCRIPT_DIR}/09-render-phase-5-secrets.sh"
-    run_cmd "${SCRIPT_DIR}/10-apply-phase-5-secrets.sh"
-}
-
-selected_app_resource_keys() {
-    local deployment
-    local keys=(
-        "ConfigMap/production-image-inventory"
-    )
-
-    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
-        deployment_is_selected "${deployment}" || continue
-        keys+=(
-            "Deployment/${deployment}"
-            "Service/${deployment}"
-            "ServiceAccount/${deployment}"
-        )
-
-        case "${deployment}" in
-            permission-service)
-                keys+=("ConfigMap/permission-service-config")
-                ;;
-            session-gateway)
-                keys+=("ConfigMap/session-gateway-config")
-                ;;
-            nginx-gateway)
-                keys+=(
-                    "ConfigMap/nginx-gateway-config"
-                    "ConfigMap/nginx-gateway-includes"
-                    "ConfigMap/nginx-gateway-docs"
-                    "ConfigMap/nginx-gateway-openapi-json"
-                    "ConfigMap/nginx-gateway-openapi-yaml"
-                )
-                ;;
-        esac
-    done
-
-    (IFS=','; printf '%s\n' "${keys[*]}")
-}
-
-extract_selected_app_resources() {
-    local rendered_file="$1"
-    local output_file="$2"
-    local allowed_keys="$3"
-
-    awk -v keys="${allowed_keys}" '
-        BEGIN {
-            split(keys, key_array, ",")
-            for (i in key_array) {
-                allowed[key_array[i]] = 1
-            }
-        }
-        function reset_doc() {
-            doc = ""
-            kind = ""
-            name = ""
-            in_metadata = 0
-        }
-        function clean(value) {
-            sub(/^[[:space:]]*/, "", value)
-            sub(/[[:space:]]*$/, "", value)
-            gsub(/^"/, "", value)
-            gsub(/"$/, "", value)
-            return value
-        }
-        function flush_doc() {
-            key = kind "/" name
-            if (doc != "" && allowed[key]) {
-                printf "%s---\n", doc
-            }
-            reset_doc()
-        }
-        /^---[[:space:]]*$/ {
-            flush_doc()
-            next
-        }
-        {
-            doc = doc $0 "\n"
-            if ($0 ~ /^kind:[[:space:]]*/) {
-                value = $0
-                sub(/^kind:[[:space:]]*/, "", value)
-                kind = clean(value)
-            } else if ($0 ~ /^metadata:[[:space:]]*$/) {
-                in_metadata = 1
-            } else if (in_metadata && $0 ~ /^[^[:space:]][^:]*:/) {
-                in_metadata = 0
-            } else if (in_metadata && $0 ~ /^  name:[[:space:]]*/) {
-                value = $0
-                sub(/^  name:[[:space:]]*/, "", value)
-                name = clean(value)
-            }
-        }
-        END {
-            flush_doc()
-        }
-    ' "${rendered_file}" > "${output_file}"
-
-    [[ -s "${output_file}" ]] || die "selected production app render produced no resources"
-}
-
 apply_production_apps() {
-    local rendered_file selected_file allowed_keys
-
-    if [[ "$(selected_deployment_count)" == "0" ]]; then
-        run_bash "kubectl kustomize '${PRODUCTION_APPS_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
-        return
-    fi
-
-    rendered_file="${SNAPSHOT_DIR}/production-apps-render.yaml"
-    selected_file="${SNAPSHOT_DIR}/production-apps-selected.yaml"
-    allowed_keys="$(selected_app_resource_keys)"
-
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        printf '[dry-run] kubectl kustomize %q --load-restrictor=LoadRestrictionsNone > %q\n' "${PRODUCTION_APPS_DIR}" "${rendered_file}"
-        printf '[dry-run] extract selected app resources (%s) > %q\n' "${allowed_keys}" "${selected_file}"
-        printf '[dry-run] kubectl apply --server-side -f %q\n' "${selected_file}"
-        return
-    fi
-
-    kubectl kustomize "${PRODUCTION_APPS_DIR}" --load-restrictor=LoadRestrictionsNone > "${rendered_file}"
-    extract_selected_app_resources "${rendered_file}" "${selected_file}" "${allowed_keys}"
-    run_cmd kubectl apply --server-side -f "${selected_file}"
+    run_bash "kubectl kustomize '${PRODUCTION_APPS_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
 }
 
 run_application_phase() {
@@ -714,62 +345,16 @@ run_application_phase() {
     apply_production_apps
 
     for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
-        deployment_is_selected "${deployment}" || continue
         run_cmd kubectl rollout status "deployment/${deployment}" --timeout=300s
     done
 
     run_pod_metadata_verifier
 }
 
-run_admission_phase() {
-    info "running admission phase"
-    run_cmd "${SCRIPT_DIR}/14-install-phase-7-kyverno.sh"
-    run_cmd "${SCRIPT_DIR}/15-apply-phase-7-policies.sh"
-}
-
-run_observability_phase() {
-    info "running observability phase"
-    run_cmd "${SCRIPT_DIR}/22-apply-production-monitoring.sh" --verify-runtime
-}
-
-run_public_tls_phase() {
-    info "running public TLS reapply phase"
-    run_cmd "${SCRIPT_DIR}/16-render-phase-11-public-tls-manifests.sh"
-    run_cmd kubectl apply -f "${PHASE11_RENDER_ROOT}/cluster-issuer.yaml"
-    run_cmd kubectl apply -f "${PHASE11_RENDER_ROOT}/public-certificate.yaml"
-    run_cmd kubectl apply -f "${PHASE11_RENDER_ROOT}/reference-grant.yaml"
-    run_cmd kubectl apply -f "${PHASE11_RENDER_ROOT}/ingress-gateway-config.yaml"
-    run_cmd kubectl apply -f "${PHASE11_RENDER_ROOT}/istio-gateway.yaml"
-    run_cmd kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=180s
-    run_cmd kubectl rollout status deployment/istio-ingress-gateway-istio -n istio-ingress --timeout=180s
-    run_cmd kubectl wait --for=condition=Ready certificate/budgetanalyzer-org-public -n default --timeout=300s
-}
-
-run_verify_only() {
-    info "running verify-only checks"
-    run_live_production_verifier
-    run_cmd "${SCRIPT_DIR}/08-verify-network-policy-enforcement.sh"
-    require_executable "${OBSERVABILITY_ACCESS_VERIFIER}"
-    require_executable "${MONITORING_RUNTIME_VERIFIER}"
-    run_pod_metadata_verifier
-    run_cmd "${OBSERVABILITY_ACCESS_VERIFIER}"
-    run_cmd "${MONITORING_RUNTIME_VERIFIER}" --wait-timeout 180
-}
-
 print_plan_summary() {
-    info "deployment selection"
-    printf '  mode: %s\n' "${MODE}"
+    info "deployment snapshot"
     printf '  deployment-id: %s\n' "${DEPLOYMENT_ID}"
     printf '  deployment-manifest: %s\n' "${DEPLOYMENT_MANIFEST}"
-    printf '  services: %s\n' "${SELECTED_SERVICES:-all}"
-    printf '  dry-run: %s\n' "${DRY_RUN}"
-    printf '  platform: %s\n' "${RUN_PLATFORM}"
-    printf '  infrastructure: %s\n' "${RUN_INFRASTRUCTURE}"
-    printf '  secrets: %s\n' "${RUN_SECRETS}"
-    printf '  app: %s\n' "${RUN_APP}"
-    printf '  admission: %s\n' "${RUN_ADMISSION}"
-    printf '  observability: %s\n' "${RUN_OBSERVABILITY}"
-    printf '  public-tls: %s\n' "${RUN_PUBLIC_TLS}"
 }
 
 print_completion_checklist() {
@@ -788,34 +373,19 @@ main() {
     parse_args "$@"
     load_deployment_manifest
     validate_manifest_matches_inventory
-    configure_mode
     configure_kubeconfig
     phase4_load_instance_env
     phase4_require_commands kubectl helm
     phase4_require_cluster_access
 
-    SNAPSHOT_DIR="${SNAPSHOT_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-${MODE}-${DEPLOYMENT_ID}"
+    SNAPSHOT_DIR="${SNAPSHOT_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-manifest-${DEPLOYMENT_ID}"
     mkdir -p "${SNAPSHOT_DIR}"
 
     print_plan_summary
     run_static_preflight
     capture_snapshot preflight
 
-    if [[ "${MODE}" == "verify-only" ]]; then
-        run_verify_only
-    else
-        if [[ "$(selected_apply_count)" == "0" ]]; then
-            warn "no apply phases selected after mode and skip flags"
-        fi
-
-        [[ "${RUN_PLATFORM}" == "true" ]] && run_platform_phase
-        [[ "${RUN_INFRASTRUCTURE}" == "true" ]] && run_infrastructure_phase
-        [[ "${RUN_SECRETS}" == "true" ]] && run_secrets_phase
-        [[ "${RUN_APP}" == "true" ]] && run_application_phase
-        [[ "${RUN_ADMISSION}" == "true" ]] && run_admission_phase
-        [[ "${RUN_OBSERVABILITY}" == "true" ]] && run_observability_phase
-        [[ "${RUN_PUBLIC_TLS}" == "true" ]] && run_public_tls_phase
-    fi
+    run_application_phase
 
     capture_snapshot post-deploy
     print_completion_checklist

@@ -1,7 +1,7 @@
 # Plan: Simplify Release Tags And Promotion Labels
 
 Date: 2026-05-21
-Status: In Progress
+Status: Completed 2026-05-22
 
 Related documents:
 
@@ -218,6 +218,8 @@ Acceptance:
 
 ### Phase 5: Verification
 
+Status: Completed 2026-05-22.
+
 Goals:
 
 - Validate modified shell scripts with:
@@ -250,11 +252,10 @@ Acceptance:
 - Do not change service logic in sibling repositories.
 - Do not add a second OCI environment.
 
-## Open Decisions
+## Resolved Decisions
 
-1. Should manual publish workflows support ad hoc Docker labels, or should they
-   accept only SemVer Git release tags?
-2. If ad hoc labels are supported, should the label format be fully free-form
-   Docker-safe text or a constrained prefix such as `manual-...`?
-3. Should retired candidate scripts be deleted outright or replaced with
-   superseded stubs for operator discoverability?
+1. Manual publish workflows support ad hoc Docker labels through the
+   `docker_label` input when `release_ref` is not a SemVer Git tag.
+2. Ad hoc labels use Docker-safe free-form tag syntax and reject `latest`.
+3. The retired candidate-prep helper remains as a superseded discoverability
+   stub that points operators to full-stack OCI promotion.

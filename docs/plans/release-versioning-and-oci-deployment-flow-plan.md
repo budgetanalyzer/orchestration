@@ -33,8 +33,7 @@ This plan evolves the current lockstep release machinery toward:
 
 - config-only orchestration deployments
 - single-service release and rollback
-- tag-required OCI candidate deployments
-- later commit-SHA candidate deployments
+- digest-pinned full-stack promotion snapshots
 - eventual continuous deployment after independent black-box gates are strong
   enough
 
@@ -58,15 +57,13 @@ Use these terms consistently in scripts and docs.
 | Term | Meaning |
 | --- | --- |
 | `service-common` version | Maven coordinate for the shared Java libraries, for example `0.0.14` or `0.0.15-SNAPSHOT`. |
-| Artifact version | A deployable runtime artifact version for one service or frontend image. This may be SemVer, a candidate tag, or later a commit-derived image tag. |
-| Source ref | The Git ref used to build an artifact: SemVer tag, candidate tag, or commit SHA. |
+| Artifact version | A deployable runtime artifact version for one service or frontend image. This may be SemVer or an ad hoc Docker label used before resolving the image digest. |
+| Source ref | The Git ref used to build an artifact, such as a SemVer tag, branch, or commit SHA. |
 | Image digest | The immutable container image identity used for deployment. This is the real deployable artifact identity. |
 | Deployment manifest | The reviewed record of exactly which artifact digests, source refs, config flags, and orchestration revision are intended for OCI. |
 | Deployment revision | The environment state identifier for OCI. It may contain mixed service versions. |
 | Release tag | A SemVer tag such as `v0.0.15` that marks a named release. |
-| Candidate tag | A non-SemVer tag that marks a deployable test candidate, for example `candidate-transaction-service-20260521-abc123`. |
-| OCI staging window | A controlled period where the single OCI production slot runs candidate state for verification before it is recorded as accepted production state or rolled back. |
-| Promotion | Recording a tested deployment manifest as the accepted production baseline. On one OCI instance, promotion may be metadata-only because the tested bits are already live. |
+| Promotion | Recording and applying the complete accepted production baseline from a digest-pinned deployment snapshot. |
 
 ## Guiding Decisions
 
@@ -82,10 +79,10 @@ Use these terms consistently in scripts and docs.
    changed or the service intentionally consumes a newer shared-library
    version.
 
-4. **Tags remain useful, but not every tag is a release.**
-   SemVer tags are named releases. Candidate tags are deployable source
-   selectors. Later, commit SHAs can become deployable source selectors after
-   the independent test harness is strong enough.
+4. **Tags remain useful, but they are not deployment truth.**
+   SemVer tags are named releases. Ad hoc Docker labels can help inspect
+   images, but deployment correctness comes from the resolved image digest and
+   deployment snapshot.
 
 5. **One OCI instance means staging is a workflow, not a second environment.**
    The first durable step is a controlled staging window on the same production
@@ -108,7 +105,7 @@ schema_version: 2
 deployment:
   id: "oci-20260521.1"
   environment: "oci-production"
-  status: "candidate"
+  status: "accepted"
   orchestration_repository:
     commit: "<orchestration-sha>"
     source_ref: "refs/heads/main"
@@ -199,7 +196,7 @@ Docs to update:
 Acceptance:
 
 - Docs distinguish lockstep release, single-service release, config-only
-  deployment, candidate deployment, and promotion.
+  deployment, and full-stack promotion.
 - Docs no longer imply that every production deployment must bump
   `service-common` or every runtime artifact.
 
@@ -337,7 +334,7 @@ Acceptance:
 - Rollback can restore the previous digest for one service without reverting
   unrelated artifacts.
 
-### Phase 4: Add Tag-Required Candidate Deployments
+### Phase 4: Retire Tag-Required Pre-Release Deployments
 
 Status: Superseded by
 [`simplify-release-tags-and-promotion-labels-plan.md`](simplify-release-tags-and-promotion-labels-plan.md).
@@ -352,21 +349,12 @@ Historical note:
 - Current workflows should follow the simplified model: SemVer tag pushes for
   named releases, optional manual `docker_label` values for ad hoc image
   labels, and digest-pinned deployment snapshots as production truth.
-- Document the staging-window protocol:
-  - announce candidate window
-  - capture preflight state
-  - deploy candidate manifest
-  - run gates
-  - accept and record, or roll back
-  - capture post-window state
 
 Acceptance:
 
-- A non-SemVer candidate tag can build and publish a digest-pinned image.
-- OCI can deploy a candidate manifest with status `candidate`.
-- The candidate can be accepted without rebuilding if the digest is the same
-  image intended for production, or retagged/rebuilt as a SemVer release if a
-  named release artifact is required.
+- Tag-triggered publishing is limited to SemVer source release tags.
+- Manual publishing uses explicit Docker labels for ad hoc image labels.
+- OCI promotion records accepted full-stack deployment snapshots.
 
   Phase 4 review:
 
@@ -486,22 +474,23 @@ Script and CI changes:
 - Add `scripts/smoketest/verify-oci-api-black-box.sh` or a dedicated test
   runner wrapper.
 - Add CI support to run the suite against local Tilt/Kind for fast feedback.
-- Add OCI candidate-window support to run the same suite against the public OCI
-  endpoint.
+- Add OCI support to run the same suite against the public endpoint before or
+  after a production promotion.
 - Store non-secret evidence in the deployment checklist.
 
 Acceptance:
 
 - The suite can fail a bad deployment without relying on service-local tests.
-- It runs against both local full-stack and OCI candidate deployments.
+- It runs against both local full-stack and OCI production deployments.
 - It proves auth, routing, and representative business workflows from outside
   the service code under test.
 
-### Phase 6: Support Commit-SHA Candidate Images After Gates Mature
+### Phase 6: Support Commit-SHA Images After Gates Mature
 
 Goals:
 
-- Move from tag-required candidates toward source commits as deployable inputs.
+- Move from tag-only image publishing toward source commits as deployable
+  inputs.
 - Preserve immutable auditability through commit SHA and image digest.
 - Keep arbitrary branch deployment out of the production path until governance
   is explicit.
@@ -517,12 +506,11 @@ Workflow changes:
 - Add workflow input for `source_sha`.
 - Verify the SHA belongs to an allowed protected ref before building.
 - Publish image tags such as `sha-abc1234`, with digest as deployment truth.
-- Generate candidate deployment manifests with `source_ref: <sha>`.
+- Generate deployment manifests with `source_ref: <sha>`.
 
 Acceptance:
 
-- A `main` commit SHA can produce a digest-pinned candidate image without a Git
-  tag.
+- A `main` commit SHA can produce a digest-pinned image without a Git tag.
 - The deployment manifest records the exact source SHA and image digest.
 - The black-box gate is mandatory before acceptance.
 
@@ -536,10 +524,8 @@ Goals:
 
 Promotion model on one OCI instance:
 
-- Deploying a candidate changes the live slot.
-- Promotion records the already-tested live manifest as the accepted production
-  baseline.
-- Rejection rolls the live slot back to the previous accepted manifest.
+- Promotion records the reviewed manifest as the accepted production baseline.
+- Rollback restores a previous accepted manifest.
 
 Script changes:
 
@@ -551,8 +537,8 @@ Script changes:
 
 CI/CD changes:
 
-- Add protected GitHub Environment approval for candidate deploy and promotion
-  when GitHub-triggered deployment is enabled.
+- Add protected GitHub Environment approval when GitHub-triggered deployment is
+  enabled.
 - Later, allow automatic promotion only when:
   - source ref is an allowed `main` commit
   - image build succeeded
@@ -564,7 +550,7 @@ Acceptance:
 
 - Operators can answer "what is production running?" from the accepted
   deployment manifest and live pod metadata.
-- A candidate can be rejected and rolled back from manifest history.
+- A deployment can be rolled back from manifest history.
 - CD can be enabled later by changing policy, not by redesigning the deployment
   manifest.
 
@@ -605,7 +591,6 @@ Git tags and GitHub Releases should not be assumed to be the same thing.
 Recommended policy:
 
 - SemVer `v*` tags can create GitHub Releases and changelog entries.
-- Candidate tags do not create GitHub Releases.
 - Commit-SHA deployments do not create GitHub Releases by default.
 - Deployment manifests and OCI run logs are the operational release evidence.
 - GitHub Releases are human-facing named milestones, not the only production
@@ -657,11 +642,7 @@ Expected workflow changes:
 
 ## Risks
 
-- Candidate deployments on the single OCI instance can briefly expose candidate
-  behavior to real users of the demo endpoint.
 - Mixed versions can hide compatibility problems if the black-box gate is weak.
-- Candidate tag cleanup can destroy useful evidence if manifests and workflow
-  links are not retained.
 - Partial service rollback is unsafe when the release includes schema, data, or
   message-contract migrations without a service-owned rollback plan.
 - Supporting both old lockstep manifests and new deployment manifests during
@@ -680,10 +661,7 @@ This plan is complete when:
   metadata accurately.
 - A single service can be released, deployed, verified, and rolled back without
   bumping unrelated services.
-- Candidate tags can produce deployable digest-pinned images without creating
-  GitHub Releases.
-- The OCI staging-window runbook exists and has been used at least once.
 - Independent black-box API/security gates exist and are required before
-  commit-SHA candidate deployment.
+  commit-SHA deployment.
 - The system can later move to continuous deployment without redesigning the
   manifest contract.

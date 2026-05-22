@@ -317,8 +317,8 @@ convention-based OCI promotion command:
   runtime release tagging
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
-- deployment manifests record deployment id/status, orchestration revision,
-  per-artifact source refs, source commits, artifact versions,
+- deployment manifests record deployment id, accepted status, orchestration
+  revision, per-artifact source refs, source commits, artifact versions,
   `service-common` versions for Java workloads, digest-pinned GHCR image refs,
   build decisions, and content identities
 - `./deploy/scripts/23-update-production-release-images.sh

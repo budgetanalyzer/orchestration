@@ -26,7 +26,6 @@ readonly ARTIFACT_ORDER
 artifact=""
 to_manifest=""
 deployment_id=""
-status="candidate"
 output_path=""
 force=false
 update_production_baseline=false
@@ -45,7 +44,6 @@ Options:
   --to-manifest PATH                 Previous schema v2 deployment manifest.
   --deployment-id ID                 Rollback deployment id. Defaults to
                                      rollback-<UTC timestamp>-<artifact>.
-  --status STATUS                    Deployment status. Defaults to candidate.
   --output PATH                      Output rollback manifest path. Defaults
                                      to tmp/deployments/<deployment-id>.yaml.
   --force                            Overwrite an existing output manifest.
@@ -165,11 +163,6 @@ parse_args() {
                 [[ -n "${deployment_id}" ]] || die "missing value for --deployment-id"
                 shift
                 ;;
-            --status)
-                status="${2:-}"
-                [[ -n "${status}" ]] || die "missing value for --status"
-                shift
-                ;;
             --output)
                 output_path="${2:-}"
                 [[ -n "${output_path}" ]] || die "missing value for --output"
@@ -234,7 +227,6 @@ generate_rollback_manifest() {
 
     args=(
         --deployment-id "${deployment_id}"
-        --status "${status}"
         --output "${output_path}"
         --artifact "${artifact}"
         --artifact-image "${artifact}=${image}"

@@ -102,7 +102,6 @@ declare -A BUILD_DECISIONS=()
 declare -A BUILD_REASONS=()
 
 deployment_id=""
-deployment_status="accepted"
 allow_dirty=false
 plan_only=false
 skip_live_production_verifier=false
@@ -123,8 +122,6 @@ Usage:
 Options:
   --deployment-id ID                 Deployment id. Defaults to
                                      oci-<UTC timestamp>.
-  --status accepted|candidate        Deployment status recorded in the
-                                     snapshot. Defaults to accepted.
   --allow-dirty                      Allow dirty app/orchestration workspaces
                                      to be promoted. Dirty service-common can
                                      be inspected with --plan-only but is
@@ -170,11 +167,6 @@ parse_args() {
             --deployment-id)
                 deployment_id="${2:-}"
                 [[ -n "${deployment_id}" ]] || die "missing value for --deployment-id"
-                shift
-                ;;
-            --status)
-                deployment_status="${2:-}"
-                [[ -n "${deployment_status}" ]] || die "missing value for --status"
                 shift
                 ;;
             --allow-dirty)
@@ -251,10 +243,6 @@ artifact_dockerfile_path() {
 
 valid_commit_sha() {
     [[ "$1" =~ ^[0-9a-f]{40}$ ]]
-}
-
-valid_status() {
-    [[ "$1" == "accepted" || "$1" == "candidate" ]]
 }
 
 manifest_value() {
@@ -717,7 +705,7 @@ print_diff_summary() {
 
     info "OCI stack promotion diff"
     printf '  deployment-id: %s\n' "${deployment_id}"
-    printf '  status: %s\n' "${deployment_status}"
+    printf '  status: accepted\n'
     printf '  baseline: %s\n' "${baseline_deployment_id}"
     printf '  plan-only: %s\n' "${plan_only}"
     printf '\n'
@@ -736,7 +724,7 @@ write_plan_file() {
         printf 'schema_version: 1\n'
         printf 'promotion:\n'
         printf '  deployment_id: "%s"\n' "${deployment_id}"
-        printf '  status: "%s"\n' "${deployment_status}"
+        printf '  status: "accepted"\n'
         printf '  target_environment: "oci-production"\n'
         printf '  baseline_deployment_id: "%s"\n' "${baseline_deployment_id}"
         printf '  orchestration_repository:\n'
@@ -858,7 +846,7 @@ write_deployment_manifest() {
         printf 'deployment:\n'
         printf '  id: "%s"\n' "${deployment_id}"
         printf '  environment: "oci-production"\n'
-        printf '  status: "%s"\n' "${deployment_status}"
+        printf '  status: "accepted"\n'
         printf '  created_at: "%s"\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         printf '  production_baseline_input: "%s"\n' "${PRODUCTION_DEPLOYMENT_MANIFEST#"${REPO_ROOT}"/}"
         printf '  production_baseline_deployment_id: "%s"\n' "${baseline_deployment_id}"
@@ -932,8 +920,6 @@ apply_to_oci() {
 }
 
 initialize_defaults() {
-    valid_status "${deployment_status}" || die "--status must be accepted or candidate"
-
     if [[ -z "${deployment_id}" ]]; then
         deployment_id="oci-$(date -u +%Y%m%dT%H%M%SZ)"
     fi

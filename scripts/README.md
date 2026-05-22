@@ -130,10 +130,6 @@ scripts/
   repository, prints the source commit, expected image tag, workflow page, and
   Java `serviceCommon` version when applicable, and can prompt before
   delegating to `repo/tag-release.sh --repo <repo>`.
-- `repo/prepare-candidate-deployment.sh` - Superseded preflight for the old
-  tag-required candidate artifact path. It remains only until the candidate
-  script cleanup is completed; use the full-stack OCI promotion command for
-  current deployments.
 - `repo/tag-release.sh` - Normal single-repository release tag helper. It
   requires `--repo`, validates only that repository, and refuses tooling repos
   such as `checkstyle-config` for OCI runtime release tagging.
@@ -151,6 +147,12 @@ scripts/
   reject accidental overrides outside that selected artifact set.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
+
+Retired discoverability stubs:
+
+- `repo/prepare-candidate-deployment.sh` exits with guidance to the full-stack
+  OCI promotion command. Candidate Git tag prep is no longer an active
+  deployment workflow.
 
 Choose scripts by runtime boundary:
 

@@ -83,8 +83,8 @@ deployment snapshot has already been reviewed:
   --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 ```
 
-The deployment manifest records deployment id/status, orchestration revision,
-per-artifact source refs, source commits, artifact versions,
+The deployment manifest records deployment id, accepted status, orchestration
+revision, per-artifact source refs, source commits, artifact versions,
 `service-common` versions for Java workloads, digest-pinned image refs, build
 decisions, content identities, and operator-selected deployment phase flags.
 The update helper copies the reviewed manifest to

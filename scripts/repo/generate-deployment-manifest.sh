@@ -64,14 +64,12 @@ usage() {
 Usage:
   ./scripts/repo/generate-deployment-manifest.sh \
     --deployment-id oci-YYYYMMDD.N \
-    --status candidate|accepted \
     --output tmp/deployments/oci-YYYYMMDD.N.yaml
 
 Options:
   --inventory PATH                         Existing production image inventory.
                                            Defaults to kubernetes/production/apps/image-inventory.yaml.
   --deployment-id ID                       Required deployment identity.
-  --status STATUS                          Deployment status. Defaults to candidate.
   --output PATH                            Output manifest path.
   --service service                        Select one artifact for a scoped
                                            single-artifact manifest. Repeat or
@@ -378,12 +376,11 @@ validate_manifest_inputs() {
 write_manifest() {
     local output_path="$1"
     local deployment_id="$2"
-    local status="$3"
-    local platform_changed="$4"
-    local infrastructure_changed="$5"
-    local secrets_changed="$6"
-    local observability_changed="$7"
-    local public_tls_reapply_required="$8"
+    local platform_changed="$3"
+    local infrastructure_changed="$4"
+    local secrets_changed="$5"
+    local observability_changed="$6"
+    local public_tls_reapply_required="$7"
     local temp_file="${output_path}.tmp"
     local service source_repo
 
@@ -394,7 +391,7 @@ write_manifest() {
         printf 'deployment:\n'
         printf '  id: "%s"\n' "${deployment_id}"
         printf '  environment: "oci-production"\n'
-        printf '  status: "%s"\n' "${status}"
+        printf '  status: "accepted"\n'
         printf '  orchestration_repository:\n'
         printf '    commit: "%s"\n' "$(repo_commit_sha "orchestration")"
         printf '    source_ref: "%s"\n' "$(repo_symbolic_ref "orchestration")"
@@ -425,7 +422,6 @@ write_manifest() {
 main() {
     local inventory="${DEFAULT_INVENTORY}"
     local deployment_id=""
-    local status="candidate"
     local output_path=""
     local force=false
     local platform_changed=false
@@ -445,11 +441,6 @@ main() {
             --deployment-id)
                 deployment_id="${2:-}"
                 [[ -n "${deployment_id}" ]] || die "missing value for --deployment-id"
-                shift
-                ;;
-            --status)
-                status="${2:-}"
-                [[ -n "${status}" ]] || die "missing value for --status"
                 shift
                 ;;
             --output)
@@ -565,7 +556,6 @@ main() {
     write_manifest \
         "${output_path}" \
         "${deployment_id}" \
-        "${status}" \
         "${platform_changed}" \
         "${infrastructure_changed}" \
         "${secrets_changed}" \

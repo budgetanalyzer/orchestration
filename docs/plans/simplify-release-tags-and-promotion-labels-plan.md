@@ -175,6 +175,8 @@ Acceptance:
 
 ### Phase 3: Script Cleanup
 
+Status: Completed 2026-05-22.
+
 Goals:
 
 - Remove or retire `scripts/repo/prepare-candidate-deployment.sh`.

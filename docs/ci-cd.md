@@ -81,6 +81,16 @@ Budget Analyzer now separates source tags, runtime artifact versions,
 The production deployment truth is the digest-pinned image inventory rendered
 by the production overlay, not a single global version string.
 
+Terminology:
+
+- Git tags are optional source bookmarks for named releases.
+- Docker tags are registry labels used to push, find, and inspect images.
+- Image digests are the deployable artifact identity.
+- Deployment snapshots are the OCI production contract.
+- Promotion labels are the deterministic `promotion-...` Docker tags created
+  by the full-stack promotion command for push and traceability; they are not
+  release identifiers.
+
 The normal OCI production operation is now **full-stack promotion**:
 
 ```bash
@@ -280,15 +290,14 @@ convention-based OCI promotion command:
   artifacts directly from the current workspace with deterministic
   `promotion-...` image tags, then records the registry-returned digest in the
   complete deployment snapshot
-- on `push` of a `v*` tag, the workflows publish the stripped numeric SemVer
-  image tag and print a digest-pinned image reference for the production
-  inventory step; they do not publish `latest`
-- on `push` of a `candidate-*` tag, the workflows publish the same Docker-safe
-  candidate tag as the image tag and print the digest-pinned reference without
-  creating a GitHub Release
-- on `workflow_dispatch`, `release_ref` must be an existing Git tag and must
-  be either `vX.Y.Z` or `candidate-*`; any `image_tag` override must match the
-  workflow-derived image tag, so candidates and releases remain tag-derived
+- on `push` of a strict `vX.Y.Z` tag, the workflows publish the stripped
+  numeric SemVer Docker tag and print a digest-pinned image reference for the
+  production inventory step; they do not publish `latest`
+- on `workflow_dispatch`, `release_ref` identifies the source ref to build; a
+  SemVer tag defaults to Docker label `X.Y.Z`, while non-SemVer source refs
+  require an explicit Docker-safe `docker_label`
+- ad hoc Docker labels are registry labels only; deployment correctness still
+  comes from the digest-pinned reference recorded in the deployment snapshot
 - the Java workflows read `serviceCommon` from the checked-out
   `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
   Docker dependency resolution, and do not require `release_ref` to equal the

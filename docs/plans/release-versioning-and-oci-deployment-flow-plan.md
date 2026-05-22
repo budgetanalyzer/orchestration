@@ -1,7 +1,7 @@
 # Plan: Release Versioning And OCI Deployment Flow Separation
 
 Date: 2026-05-21
-Status: Superseded by `docs/plans/convention-based-oci-stack-promotion-plan.md`
+Status: Superseded by `docs/plans/simplify-release-tags-and-promotion-labels-plan.md`
 
 Related documents:
 
@@ -339,39 +339,19 @@ Acceptance:
 
 ### Phase 4: Add Tag-Required Candidate Deployments
 
-Status: Implemented.
+Status: Superseded by
+[`simplify-release-tags-and-promotion-labels-plan.md`](simplify-release-tags-and-promotion-labels-plan.md).
 
-Goals:
+This section documents the earlier implemented design. Do not use it as the
+current release workflow policy.
 
-- Allow OCI candidate deployments before SemVer release tags.
-- Keep source selection immutable and auditable.
-- Avoid arbitrary branch deploys until independent gates are strong enough.
+Historical note:
 
-Candidate tag policy:
-
-- Candidate tags are Git tags, not GitHub Releases.
-- Candidate tags must not start with `v`.
-- Candidate tags should encode service, date, and short commit:
-  `candidate-transaction-service-20260521-abc123`.
-- Candidate images use Docker-safe tags derived from the candidate tag:
-  `candidate-transaction-service-20260521-abc123`.
-- Candidate manifests set deployment status to `candidate`.
-- Candidate tags may be cleaned up only after the manifest and workflow evidence
-  are no longer needed.
-
-Workflow changes:
-
-- Extend runtime image workflows to support tag patterns:
-  - `v*` for SemVer releases
-  - `candidate-*` for candidate images
-- Keep `workflow_dispatch` restricted to existing tags in this phase.
-- Do not publish `latest`.
-- Do not create a GitHub Release for candidate tags.
-- Print digest-pinned image refs exactly as release workflows do today.
-
-Runbook changes:
-
-- Add `docs/runbooks/oci-candidate-deployment.md`.
+- The earlier design added a tag-required pre-release deployment lane before
+  the full-stack promotion model existed.
+- Current workflows should follow the simplified model: SemVer tag pushes for
+  named releases, optional manual `docker_label` values for ad hoc image
+  labels, and digest-pinned deployment snapshots as production truth.
 - Document the staging-window protocol:
   - announce candidate window
   - capture preflight state
@@ -662,16 +642,16 @@ Expected script changes:
 | `scripts/repo/prepare-service-release.sh` | New helper for one service's release validation and tag guidance. |
 | `scripts/repo/generate-deployment-manifest.sh` | Generate deployment-manifest v2 records and partial artifact updates. |
 | `deploy/scripts/23-update-production-release-images.sh` | Extend or replace to update mixed artifact production baselines. |
-| `deploy/scripts/25-deploy-oci-release.sh` | Accept deployment-manifest v2, selected services, and candidate status. |
+| `deploy/scripts/25-deploy-oci-release.sh` | Accept deployment-manifest v2 and reconcile the reviewed production baseline. |
 | `scripts/ops/show-pod-version-labels.sh` | Verify per-workload manifest metadata instead of one global expected version. |
 | `scripts/smoketest/verify-oci-api-black-box.sh` | New independent deployment-facing API/security gate. |
 
 Expected workflow changes:
 
-- Runtime service `publish-release.yml` workflows accept `v*` and
-  `candidate-*` tags.
-- Candidate workflow runs do not create GitHub Releases.
-- Later workflow versions accept allowed commit SHAs after Phase 5 gates exist.
+- Runtime service `publish-release.yml` workflows now accept strict SemVer
+  `vX.Y.Z` tag pushes.
+- Manual workflow runs can use a Docker-safe `docker_label` for ad hoc image
+  labels when the source ref is not a SemVer release tag.
 - Any GitHub-triggered OCI deployment workflow uses protected environments and
   calls repo-owned deploy scripts rather than duplicating deployment logic.
 

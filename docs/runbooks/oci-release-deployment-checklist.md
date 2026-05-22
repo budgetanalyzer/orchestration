@@ -38,7 +38,7 @@ below.
 | --- | --- |
 | Deployment type | `full-stack promotion` |
 | Release version, if applicable | `vX.Y.Z` or `n/a` |
-| Deployment revision or candidate id |  |
+| Deployment id or release label |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
 | Plan-only first | `yes` or `no` |

@@ -130,12 +130,10 @@ scripts/
   repository, prints the source commit, expected image tag, workflow page, and
   Java `serviceCommon` version when applicable, and can prompt before
   delegating to `repo/tag-release.sh --repo <repo>`.
-- `repo/prepare-candidate-deployment.sh` - Release-manager preflight for one
-  tag-required candidate artifact. It validates the selected source repository,
-  prints the default `candidate-<artifact>-YYYYMMDD-<short-sha>` tag, expected
-  image tag, workflow page, and Java `serviceCommon` version when applicable,
-  and can create and push the candidate tag when `--create-tag --push` is
-  supplied after review.
+- `repo/prepare-candidate-deployment.sh` - Superseded preflight for the old
+  tag-required candidate artifact path. It remains only until the candidate
+  script cleanup is completed; use the full-stack OCI promotion command for
+  current deployments.
 - `repo/tag-release.sh` - Normal single-repository release tag helper. It
   requires `--repo`, validates only that repository, and refuses tooling repos
   such as `checkstyle-config` for OCI runtime release tagging.

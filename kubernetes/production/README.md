@@ -6,9 +6,28 @@ production route, monitoring, storage, and verification inputs.
 
 ## Production Baseline
 
-`apps/` already renders the repo-managed application workloads with the
-`0.0.14` GHCR release images pinned by digest from
-`kubernetes/production/apps/image-inventory.yaml`.
+`apps/` already renders the repo-managed application workloads with GHCR images
+pinned by digest from `kubernetes/production/apps/image-inventory.yaml`. The
+reviewed schema v2 deployment record is
+`kubernetes/production/apps/deployment-manifest.yaml`.
+
+The production baseline is allowed to contain mixed runtime artifact versions.
+The digest-pinned image inventory is the deployment truth. The normal way to
+change it is the convention-based promotion command:
+
+```bash
+./deploy/scripts/promote-current-stack-to-oci.sh
+```
+
+That command compares the current workspace stack with this accepted baseline,
+reuses unchanged image digests and metadata, builds only changed artifacts, and
+then applies the managed production app set. Use `--plan-only` for the
+non-mutating diff.
+
+`service-common` versions are library coordinates consumed by Java services.
+Do not bump `service-common` or rebuild every Java runtime just because this
+overlay, `/api-docs` metadata, routing, policy, or other orchestration config
+changed.
 
 That overlay already:
 
@@ -17,11 +36,11 @@ That overlay already:
   `kubernetes/production/nginx/nginx.production.k8s.conf`
 - generates `nginx-gateway-config`, `nginx-gateway-includes`, and
   `nginx-gateway-docs` from committed files under `kubernetes/production/`
-- serves `/api-docs/release-metadata.json` from the reviewed release metadata
-  generated alongside the production image inventory
+- serves `/api-docs/release-metadata.json` from the reviewed deployment
+  metadata generated alongside the production image inventory
 - applies `apps/patches/runtime-release-metadata.yaml` so app Deployments and
-  Pods carry `budgetanalyzer.org/environment-release` labels and digest-pinned
-  image annotations
+  Pods carry deployment id labels, per-artifact versions, source commits, and
+  digest-pinned image annotations
 - patches `nginx-gateway` to serve the released `budget-analyzer-web` static
   bundle instead of the local `budget-analyzer-web-prod-smoke` image or the
   Vite dev server
@@ -56,37 +75,24 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ./deploy/scripts/09-render-phase-5-secrets.sh
 ```
 
-Update the application image baseline with:
+The lower-level baseline renderer is still available when a complete schema v2
+deployment snapshot has already been reviewed:
 
 ```bash
-./deploy/scripts/23-update-production-release-images.sh --release-manifest tmp/releases/v0.0.x.yaml
+./deploy/scripts/23-update-production-release-images.sh \
+  --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 ```
 
-Create that manifest after the release image workflows complete:
-
-```bash
-./scripts/repo/generate-release-manifest.sh v0.0.x \
-  --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \
-  --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \
-  --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \
-  --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \
-  --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \
-  --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>
-```
-
-The manifest records both `vX.Y.Z` and `X.Y.Z` release forms, the sibling
-repository commit SHA map, artifact workflow run URLs, digest-pinned image
-refs, and the operator-selected deployment phase flags.
-The update helper reuses that manifest to regenerate
+The deployment manifest records deployment id, accepted status, orchestration
+revision, per-artifact source refs, source commits, artifact versions,
+`service-common` versions for Java workloads, digest-pinned image refs, build
+decisions, and content identities.
+The update helper copies the reviewed manifest to
+`apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
 `apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
-labels cannot drift from the reviewed image baseline.
-
-The update helper also accepts explicit `--transaction-service`,
-`--currency-service`, `--permission-service`, `--session-gateway`,
-`--budget-analyzer-web`, and `--ext-authz` image refs. Every ref must be a
-`ghcr.io/budgetanalyzer/...:<release-version>@sha256:<digest>` release image.
+labels cannot drift from the reviewed deployment baseline.
 
 The production image verifier now:
 
@@ -97,7 +103,7 @@ The production image verifier now:
   in that checked-in production path
 - verifies the production NGINX/public-route contract is coming from
   `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
-- verifies the production docs bundle, app-only gateway route render, loopback
+- verifies the production docs bundle, application gateway route render, loopback
   Grafana override, Auth0 egress render, and Redis StatefulSet `5Gi`
   claim-template path all stay present
 - applies the production image Kyverno policy at
@@ -236,8 +242,8 @@ sed -n '1,260p' tmp/phase-6/istio-egress.yaml
 ```
 
 If a live OCI cluster was previously applied from an older observability render,
-explicitly delete any stale observability route after applying the new app-only
-route render:
+explicitly delete any stale observability route after applying the current
+application route render:
 
 ```bash
 kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found

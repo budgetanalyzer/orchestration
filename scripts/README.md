@@ -49,11 +49,10 @@ scripts/
   `--runtime-shape production` on OCI so the helper expects the production
   frontend topology (`nginx-gateway` serves the bundle; no standalone
   `budget-analyzer-web` Deployment).
-- `ops/show-pod-version-labels.sh` - Lists pod release labels for the current
-  Kubernetes context and warns when Budget Analyzer runtime pods are missing
-  `budgetanalyzer.org/environment-release` or do not match the expected release
-  version from `kubernetes/production/apps/image-inventory.yaml`. Use
-  `--strict` when the warning check should fail the command.
+- `ops/show-pod-version-labels.sh` - Lists pod deployment metadata for the
+  current Kubernetes context and warns when Budget Analyzer runtime pods do not
+  match a schema v2 deployment manifest or the checked-in production image
+  inventory. Use `--strict` when the warning check should fail the command.
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -91,36 +90,55 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
+- `../deploy/scripts/promote-current-stack-to-oci.sh` - Normal OCI production
+  promotion entry point. It snapshots the current workspace stack, compares it
+  with the accepted production baseline, carries forward unchanged digests and
+  metadata, builds and pushes changed `linux/arm64` GHCR images, writes a
+  complete deployment snapshot, updates the checked-in production baseline,
+  and applies the managed production app set. Use `--plan-only` for the
+  non-mutating reused/rebuilt diff.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
-  checked-in production app image baseline from explicit digest-pinned image
-  refs or a release manifest, then runs the production render and lockstep
-  gates. Use `--skip-live-production-verifier` only when the live-cluster
-  production verifier cannot run in the current shell.
+  checked-in production app deployment baseline from a schema v2 deployment
+  manifest, then runs the production render and static gates. It is now a
+  lower-level renderer used by the promotion command. Use
+  `--skip-live-production-verifier` only when the live-cluster production
+  verifier cannot run in the current shell.
 - `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
   OCI version contracts, production app image inventory alignment, production
   `/api-docs` render wiring, and digest-pin inputs for production
   infrastructure and Helm values.
-- `../deploy/scripts/25-deploy-oci-release.sh` - Operator-facing OCI release
-  deployment wrapper. It requires an explicit mode, validates the checked-in
-  production image baseline, runs the lockstep static gate, captures pre/post
-  cluster snapshots under `tmp/oci-release-deploy/`, composes the reviewed
-  deploy scripts in order, waits for touched rollouts, and prints the final
-  public-route and observability checklist. Use `--mode lockstep` with a
-  release manifest for phase-flag-driven reconciliation, `--mode app-only` for
-  a reviewed workload rollout, or `--mode verify-only` for verification without
-  applying changes.
+- `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
+  snapshot applier used by the promotion command. It requires a schema v2
+  `--deployment-manifest`, validates the checked-in production baseline, runs
+  the static gate, captures pre/post cluster snapshots under
+  `tmp/oci-release-deploy/`, applies the managed production app set, waits for
+  rollouts, and prints the final
+  public-route and observability checklist.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
-  commit SHAs that will enter the release manifest, verifies the
+  commit SHAs for the coordinated source state, verifies the
   `service-common` version contract, checks remote tag availability, and can
-  prompt before delegating to `repo/tag-release.sh`.
-- `repo/generate-release-manifest.sh` - Resolves GHCR tag digests for the six
-  runtime application images and writes the release manifest under
-  `tmp/releases/v<version>.yaml` for
-  `../deploy/scripts/23-update-production-release-images.sh`. The manifest
-  includes `release.version`, `release.image_tag`, repository commit SHAs,
-  artifact workflow run URLs, digest-pinned images, and deployment phase flags.
+  prompt before delegating to `repo/tag-lockstep-release.sh`.
+- `repo/prepare-service-release.sh` - Release-manager preflight for one
+  runtime artifact. It validates only the selected artifact's source
+  repository, prints the source commit, expected image tag, workflow page, and
+  Java `serviceCommon` version when applicable, and can prompt before
+  delegating to `repo/tag-release.sh --repo <repo>`.
+- `repo/tag-release.sh` - Normal single-repository release tag helper. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  such as `checkstyle-config` for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
+  all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set. Use
+  `--repo-set runtime-images --current-state --plan-only` to preview which
+  runtime image repos need the requested tag based on the current local HEADs,
+  then rerun without `--plan-only` to tag only the missing repos and skip tags
+  already pointing at current HEAD.
+- `repo/generate-deployment-manifest.sh` - Starts from the checked-in
+  production image inventory, preserves unchanged artifact digests, applies
+  explicit artifact/image metadata overrides, and writes a complete schema v2
+  deployment manifest for
+  `deploy/scripts/23-update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -183,9 +201,10 @@ setup.
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
   internal-only storage/service contract pinned in static review. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
-  Kustomize patch fragments under `patches/` directories as standalone
-  resources, and validates the rendered production app and infrastructure
-  overlays that consume those patches.
+  Kustomize patch fragments under `patches/` directories and the schema-v2
+  production deployment snapshot as standalone Kubernetes resources, and
+  validates the rendered production app and infrastructure overlays that
+  consume the Kubernetes inputs.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/ingress/monitoring/egress output, verifies
@@ -199,7 +218,7 @@ setup.
   to the rendered app overlay.
 
 Run the static OCI lockstep verifier before changing or deploying a production
-release image baseline:
+deployment baseline:
 
 ```bash
 ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
@@ -292,12 +311,12 @@ the active context and Tilt resource state from the same host shell first.
   for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
   when you want the raw JSON and log artifacts for later review.
 - `ops/show-pod-version-labels.sh` prints all pods by default and marks
-  Budget Analyzer runtime pods with `WARN` when their
-  `budgetanalyzer.org/environment-release` label is missing or differs from the
-  expected release version. The expected version defaults to
-  `kubernetes/production/apps/image-inventory.yaml`, and can be overridden with
-  `--expected-version`. Use `--tracked-only` to hide third-party and
-  infrastructure pods, and `--strict` to return non-zero on warnings.
+  Budget Analyzer runtime pods with `WARN` when deployment id, artifact
+  version, source ref, source commit, service-common version, or image
+  annotation differs from the expected schema v2 manifest/inventory metadata.
+  Use `--deployment-manifest <path>` for an explicit reviewed manifest,
+  `--tracked-only` to hide third-party and infrastructure pods, and `--strict`
+  to return non-zero on warnings.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run
@@ -366,12 +385,23 @@ directory without writing outside the repository.
   up-to-date `main`, verifies the requested remote tag is absent everywhere
   except the documented `service-common` skip case, prints the commit SHA map,
   and prints the GitHub Actions workflow pages to monitor. Pass `--tag` only
-  when you want it to prompt before calling `repo/tag-release.sh`.
-- `repo/tag-release.sh` creates release tags across configured repositories. If
-  the requested tag already exists in `service-common`, it warns and skips
-  `service-common` so the all-repo tag flow can run after the earlier
-  service-common Maven release tag; the same existing tag in any other repo
-  remains a hard failure.
+  when you want it to prompt before calling `repo/tag-lockstep-release.sh`.
+  Pass `--tag-current-state` when the current local HEADs are the intended
+  deployable state and the tagger should decide which repos still need the
+  requested tag.
+- `repo/tag-release.sh` creates a normal single-repository release tag. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` creates coordinated lockstep tags across the
+  explicit `LOCKSTEP_RELEASE_REPOS` set by default. `--repo-set runtime-images`
+  narrows the operation to the deployable image source repos, while
+  `--repo-set oci-release` uses the source repo set recorded in OCI release
+  manifests. In the default strict mode, any existing non-`service-common` tag
+  is a hard failure. With `--current-state`, the helper compares the requested
+  tag to each selected repo's current local HEAD, creates and pushes only
+  absent tags, pushes local-only tags that already point at current HEAD, skips
+  tags already present at current HEAD, and fails if an existing tag points
+  somewhere else. Use `--current-state --plan-only` for a non-mutating preview.
 - `repo/release-service-common-snapshot.sh` coordinates the tag-driven
   `service-common` snapshot-to-release flow. Run `prepare` while
   `service-common` and all Java consumers are pinned to the same
@@ -396,18 +426,19 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
-- `repo/generate-release-manifest.sh` writes the operator-reviewed release
-  manifest consumed by the production image update helper. Provide the
-  completed workflow run URL for each runtime artifact with repeated
-  `--workflow-run-url artifact=https://github.com/budgetanalyzer/.../actions/runs/<id>`
-  arguments. The helper records the local sibling repository commit SHAs,
-  resolves each `ghcr.io/budgetanalyzer/...:<version>` digest, and defaults
-  all phase flags to `false` unless a corresponding `--*-changed` or
-  `--public-tls-reapply-required` flag is passed.
-- `deploy/scripts/23-update-production-release-images.sh` consumes that
-  manifest to update the checked-in production image inventory, production app
-  image overlay, browser-visible `/api-docs/release-metadata.json`, and the
-  generated production runtime release labels/annotations patch.
+- `repo/generate-deployment-manifest.sh` is a lower-level schema v2 manifest
+  generator retained for reviewed baseline repair and historical workflows.
+  It now carries forward existing Java `service-common` metadata from the
+  production inventory.
+- `deploy/scripts/promote-current-stack-to-oci.sh` is the normal production
+  promotion entry point for OCI app changes.
+- `deploy/scripts/23-update-production-release-images.sh` consumes a complete
+  manifest to update the checked-in production deployment manifest, production
+  image inventory, production app image overlay, browser-visible
+  `/api-docs/release-metadata.json`, and generated runtime metadata patch.
+- `deploy/scripts/25-deploy-oci-release.sh` consumes the checked-in deployment
+  manifest, applies the managed production app set, and verifies live runtime
+  metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

@@ -74,6 +74,50 @@ The checked-in `serviceCommon` entry in each consumer repo's
 `gradle/libs.versions.toml` remains the source of truth for the version that CI
 expects to exist remotely.
 
+## Release And Deployment Model
+
+Budget Analyzer now separates source tags, runtime artifact versions,
+`service-common` Maven versions, image digests, and OCI deployment identity.
+The production deployment truth is the digest-pinned image inventory rendered
+by the production overlay, not a single global version string.
+
+Terminology:
+
+- Git tags are optional source bookmarks for named releases.
+- Docker tags are registry labels used to push, find, and inspect images.
+- Image digests are the deployable artifact identity.
+- Deployment snapshots are the OCI production contract.
+- Promotion labels are the deterministic `promotion-...` Docker tags created
+  by the workspace snapshot promotion command for push and traceability; they
+  are not release identifiers.
+
+The normal OCI production operation is **workspace snapshot promotion**:
+
+```bash
+./deploy/scripts/promote-current-stack-to-oci.sh
+```
+
+That command snapshots the current intended workspace state, compares it with
+the accepted OCI baseline, reuses unchanged digest-pinned images and metadata,
+builds and pushes only changed `linux/arm64` artifacts, writes one complete
+schema v2 deployment snapshot, updates the checked-in production baseline, and
+applies the managed production app set to OCI.
+
+Use `--plan-only` for a non-mutating change-set diff. Dirty workspaces are
+rejected by default and require `--allow-dirty`; actual promotion rejects dirty
+`service-common` because the release Dockerfiles consume published Maven
+packages, not a sibling checkout.
+
+`service-common` is a library release line, not the stack version. Release it
+when `spring-platform`, `spring-cloud-platform`, `service-core`, or
+`service-web` changes. Do not bump it only to ship a service image, route
+change, documentation metadata fix, or production overlay update.
+
+Tag helpers and historical release workflows remain useful for human source
+management and rare named releases, but tag names are not production
+correctness. OCI apply and verification use the complete deployment snapshot
+and immutable image digests.
+
 ## Orchestration Workflows
 
 ### `security-guardrails.yml`
@@ -100,7 +144,9 @@ The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
   and Prometheus Operator `ServiceMonitor` objects
 - rendered Kustomize schema validation for the production app and
   infrastructure overlays, so partial patch files stay excluded from
-  standalone validation but are still checked after render
+  standalone validation but are still checked after render; the schema-v2
+  production deployment snapshot is also excluded because it is release
+  metadata, not a Kubernetes resource
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt
@@ -216,14 +262,14 @@ validation. `tag --push` pushes the matching `vMAJOR.MINOR.PATCH` tag from
 `post` updates Java consumers after `publish-release.yml` completes for the
 tag and leaves `service-common` on the released version until it is manually
 bumped back to the next snapshot. The service-common Maven release tag is
-intentionally separate from the all-repository `repo/tag-release.sh` flow
+intentionally separate from lockstep source tagging
 because Java consumer release workflows also run on tag pushes and must not
 release from source still pinned to the snapshot dependency.
 
 ### Release Images
 
-Release image publishing is now wired as tag-driven repo-local
-workflows:
+Release image publishing supports both historical tag-driven workflows and the
+convention-based OCI promotion command:
 
 - `transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway` publish `linux/arm64` GHCR images from
@@ -241,13 +287,18 @@ workflows:
   `.github/workflows/publish-release.yml`
 - orchestration publishes `ext-authz` from
   `.github/workflows/publish-ext-authz-release.yml`
-- on `push` of a `v*` tag, the workflows publish the stripped numeric SemVer
-  image tag and print a digest-pinned image reference for the production
-  inventory step; they do not publish `latest`
-- on `workflow_dispatch`, `release_ref` selects the existing Git tag to check
-  out and optional `image_tag` selects the published container tag; if
-  `release_ref` is `v*` and `image_tag` is omitted the workflows strip the
-  leading `v`, otherwise they use the raw tag name
+- `./deploy/scripts/promote-current-stack-to-oci.sh` builds and pushes changed
+  artifacts directly from the current workspace with deterministic
+  `promotion-...` image tags, then records the registry-returned digest in the
+  complete deployment snapshot
+- on `push` of a strict `vX.Y.Z` tag, the workflows publish the stripped
+  numeric SemVer Docker tag and print a digest-pinned image reference for the
+  production inventory step; they do not publish `latest`
+- on `workflow_dispatch`, `release_ref` identifies the source ref to build; a
+  SemVer tag defaults to Docker label `X.Y.Z`, while non-SemVer source refs
+  require an explicit Docker-safe `docker_label`
+- ad hoc Docker labels are registry labels only; deployment correctness still
+  comes from the digest-pinned reference recorded in the deployment snapshot
 - the Java workflows read `serviceCommon` from the checked-out
   `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
   Docker dependency resolution, and do not require `release_ref` to equal the
@@ -258,23 +309,25 @@ workflows:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   using those `0.0.14` GHCR refs
-- before changing that inventory for a coordinated source and
-  `service-common` library release, run
-  `./scripts/repo/prepare-lockstep-release.sh --release-version X.Y.Z`; for an
-  ordinary runtime environment release, keep existing Java consumers on their
-  checked-in `serviceCommon` version unless the shared library actually
-  changed
-- create `tmp/releases/vX.Y.Z.yaml` with
-  `./scripts/repo/generate-release-manifest.sh` after the six runtime image
-  workflows complete
-- release manifests record the `vX.Y.Z` Git tag form, the `X.Y.Z` image tag
-  form, repository commit SHAs, artifact workflow run URLs, digest-pinned GHCR
-  image refs, and operator-selected deployment phase flags
-- `./deploy/scripts/23-update-production-release-images.sh --release-manifest
-  tmp/releases/vX.Y.Z.yaml` updates the production image inventory, production
-  app image overlay, `/api-docs/release-metadata.json`, and runtime
-  Deployment/Pod release labels and image annotations from the same reviewed
-  manifest data
+- before a changed `service-common` library can be promoted, publish the
+  library version and update the Java consumers' checked-in `serviceCommon`
+  value; the promotion command then marks those Java workloads for rebuild
+- `./scripts/repo/tag-release.sh` is now the normal single-repository tag
+  helper and requires `--repo`; it does not tag every Budget Analyzer repo by
+  default, and it refuses tooling repos such as `checkstyle-config` for OCI
+  runtime release tagging
+- keep existing Java consumers on their checked-in `serviceCommon` version
+  unless the shared library actually changed
+- deployment manifests record deployment id, accepted status, orchestration
+  revision, per-artifact source refs, source commits, artifact versions,
+  `service-common` versions for Java workloads, digest-pinned GHCR image refs,
+  build decisions, and content identities
+- `./deploy/scripts/23-update-production-release-images.sh
+  --deployment-manifest <path>` remains the lower-level baseline renderer used
+  by the promotion command
+- `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
+  snapshot applier used by the promotion command; it applies the complete
+  deployment snapshot to the managed production app set
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

@@ -8,14 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/repo-config.sh"
 
-JAVA_CONSUMER_REPOS=(
-    "transaction-service"
-    "currency-service"
-    "permission-service"
-    "session-gateway"
-)
-readonly JAVA_CONSUMER_REPOS
-
 PUBLISH_WORKFLOWS=(
     "service-common:publish-release.yml"
     "transaction-service:publish-release.yml"
@@ -32,11 +24,16 @@ usage() {
 Usage:
   ./scripts/repo/prepare-lockstep-release.sh --release-version 0.0.x
   ./scripts/repo/prepare-lockstep-release.sh v0.0.x --tag
+  ./scripts/repo/prepare-lockstep-release.sh v0.0.x --tag-current-state
 
 Options:
   --release-version <version>  Release version as X.Y.Z or vX.Y.Z.
   --tag                        After validation, prompt before calling
-                               scripts/repo/tag-release.sh vX.Y.Z.
+                               scripts/repo/tag-lockstep-release.sh vX.Y.Z.
+  --tag-current-state          After validation, prompt before calling
+                               scripts/repo/tag-lockstep-release.sh vX.Y.Z
+                               --current-state so already-current tags are
+                               skipped and absent tags are created.
   -h, --help                   Show this help.
 
 This helper is source-release preparation only. It does not deploy to OCI and
@@ -157,8 +154,7 @@ print_commit_table() {
     local repo path sha
 
     info "current release repository SHAs:"
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         path="$(repo_path "${repo}")"
         sha="$(git -C "${path}" rev-parse HEAD)"
         printf '  %-24s %s\n' "${repo}" "${sha}"
@@ -168,8 +164,7 @@ print_commit_table() {
 verify_release_repos() {
     local repo
 
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         verify_repo_exists "${repo}"
         verify_repo_clean_and_up_to_date "${repo}"
     done
@@ -185,7 +180,7 @@ verify_service_common_versions() {
     [[ "${service_common_version}" == "${release_version}" ]] || \
         die "../service-common/build.gradle.kts is ${service_common_version}; expected ${release_version}"
 
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         consumer_version="$(read_consumer_service_common_version "${repo}")"
         [[ "${consumer_version}" == "${release_version}" ]] || \
             die "../${repo}/gradle/libs.versions.toml serviceCommon is ${consumer_version}; expected ${release_version}"
@@ -196,12 +191,11 @@ verify_remote_tag_absent_or_skippable() {
     local tag_name="$1"
     local repo path
 
-    # shellcheck disable=SC2153 # REPOS is defined by repo-config.sh.
-    for repo in "${REPOS[@]}"; do
+    for repo in "${LOCKSTEP_RELEASE_REPOS[@]}"; do
         path="$(repo_path "${repo}")"
         if git -C "${path}" ls-remote --exit-code --tags origin "refs/tags/${tag_name}" >/dev/null 2>&1; then
             if [[ "${repo}" == "service-common" ]]; then
-                warn "${tag_name} already exists in service-common; repo/tag-release.sh will skip that documented case"
+                warn "${tag_name} already exists in service-common; repo/tag-lockstep-release.sh will skip that documented case"
                 continue
             fi
             die "${tag_name} already exists remotely in ${repo}"
@@ -210,7 +204,6 @@ verify_remote_tag_absent_or_skippable() {
 }
 
 print_workflow_urls() {
-    local release_tag="$1"
     local entry repo workflow
 
     info "workflow pages to monitor after tags are pushed:"
@@ -220,33 +213,37 @@ print_workflow_urls() {
         printf '  %-24s https://github.com/budgetanalyzer/%s/actions/workflows/%s\n' "${repo}" "${repo}" "${workflow}"
     done
 
-    info "after all runtime image workflows finish, generate the release manifest with the run URLs:"
-    printf '  ./scripts/repo/generate-release-manifest.sh %s \\\n' "${release_tag}"
-    printf '    --workflow-run-url transaction-service=https://github.com/budgetanalyzer/transaction-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url currency-service=https://github.com/budgetanalyzer/currency-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url permission-service=https://github.com/budgetanalyzer/permission-service/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url session-gateway=https://github.com/budgetanalyzer/session-gateway/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url budget-analyzer-web=https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/<id> \\\n'
-    printf '    --workflow-run-url ext-authz=https://github.com/budgetanalyzer/orchestration/actions/runs/<id>\n'
+    info "for OCI production, use the convention-based promotion flow instead of the historical release-manifest shape:"
+    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh --plan-only\n'
+    printf '  ./deploy/scripts/promote-current-stack-to-oci.sh\n'
 }
 
 maybe_tag_release() {
     local tag_name="$1"
+    local current_state_tagging="$2"
     local reply
+    local tag_args=("${tag_name}")
 
-    printf '[release-prep] Call scripts/repo/tag-release.sh %s now? [y/N] ' "${tag_name}"
+    if [[ "${current_state_tagging}" == true ]]; then
+        tag_args+=("--current-state")
+    fi
+
+    printf '[release-prep] Call scripts/repo/tag-lockstep-release.sh'
+    printf ' %s' "${tag_args[@]}"
+    printf ' now? [y/N] '
     read -r reply
     if [[ "${reply}" =~ ^[Yy]$ ]]; then
-        "${SCRIPT_DIR}/tag-release.sh" "${tag_name}"
+        "${SCRIPT_DIR}/tag-lockstep-release.sh" "${tag_args[@]}"
         return
     fi
 
-    info "tagging skipped; run ${SCRIPT_DIR}/tag-release.sh ${tag_name} when ready"
+    info "tagging skipped; run ${SCRIPT_DIR}/tag-lockstep-release.sh ${tag_args[*]} when ready"
 }
 
 main() {
     local release_version=""
     local tag_after_validation=false
+    local current_state_tagging=false
     local tag_name
 
     while [[ $# -gt 0 ]]; do
@@ -257,7 +254,13 @@ main() {
                 shift
                 ;;
             --tag)
+                [[ "${current_state_tagging}" != true ]] || die "--tag and --tag-current-state are mutually exclusive"
                 tag_after_validation=true
+                ;;
+            --tag-current-state)
+                [[ "${tag_after_validation}" != true ]] || die "--tag and --tag-current-state are mutually exclusive"
+                tag_after_validation=true
+                current_state_tagging=true
                 ;;
             -h|--help)
                 usage
@@ -280,16 +283,20 @@ main() {
 
     verify_release_repos
     verify_service_common_versions "${release_version}"
-    verify_remote_tag_absent_or_skippable "${tag_name}"
+    if [[ "${current_state_tagging}" == true ]]; then
+        info "current-state tagging requested; tag-lockstep-release.sh will decide which repos need ${tag_name}"
+    else
+        verify_remote_tag_absent_or_skippable "${tag_name}"
+    fi
     print_commit_table
     print_workflow_urls "${tag_name}"
 
     info "release preparation checks passed for ${tag_name}"
 
     if [[ "${tag_after_validation}" == true ]]; then
-        maybe_tag_release "${tag_name}"
+        maybe_tag_release "${tag_name}" "${current_state_tagging}"
     else
-        info "tagging not requested; rerun with --tag or run scripts/repo/tag-release.sh ${tag_name}"
+        info "tagging not requested; rerun with --tag, --tag-current-state, or run scripts/repo/tag-lockstep-release.sh ${tag_name}"
     fi
 }
 

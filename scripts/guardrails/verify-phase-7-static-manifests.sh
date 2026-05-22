@@ -155,6 +155,7 @@ collect_schema_manifest_files() {
         ! -name '*values.yaml' \
         ! -name '*values.override.yaml' \
         ! -path '*/patches/*' \
+        ! -path "${REPO_DIR}/kubernetes/production/apps/deployment-manifest.yaml" \
         ! -path "${REPO_DIR}/kubernetes/production/docs-aggregator/*" \
         | sort
 }

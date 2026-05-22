@@ -11,7 +11,10 @@ source "${SCRIPT_DIR}/lib/common.sh"
 TILTFILE="$(phase4_repo_path "Tiltfile")"
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
+PRODUCTION_DEPLOYMENT_MANIFEST="${PRODUCTION_APPS_DIR}/deployment-manifest.yaml"
 PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
+LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
+PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
 PRODUCTION_IMAGE_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 PRODUCTION_INFRASTRUCTURE_DIR="$(phase4_repo_path "kubernetes/production/infrastructure")"
 PROMETHEUS_VALUES_FILE="$(phase4_repo_path "kubernetes/monitoring/prometheus-stack-values.yaml")"
@@ -22,7 +25,10 @@ CERT_MANAGER_VALUES_FILE="$(phase4_repo_path "deploy/helm-values/cert-manager.va
 readonly TILTFILE
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
+readonly PRODUCTION_DEPLOYMENT_MANIFEST
 readonly PRODUCTION_KUSTOMIZATION
+readonly LOCAL_RELEASE_METADATA_JSON
+readonly PRODUCTION_RELEASE_METADATA_JSON
 readonly PRODUCTION_IMAGE_VERIFIER
 readonly PRODUCTION_INFRASTRUCTURE_DIR
 readonly PROMETHEUS_VALUES_FILE
@@ -41,6 +47,14 @@ SERVICE_ORDER=(
 )
 readonly SERVICE_ORDER
 
+JAVA_SERVICES=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+)
+readonly JAVA_SERVICES
+
 declare -A IMAGE_REPOS=(
     ["transaction-service"]="transaction-service"
     ["currency-service"]="currency-service"
@@ -51,6 +65,7 @@ declare -A IMAGE_REPOS=(
 )
 
 declare -A INVENTORY_REFS=()
+declare -A INVENTORY_ARTIFACT_VERSIONS=()
 TEMP_DIR=""
 
 usage() {
@@ -86,6 +101,19 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
 }
 
+is_java_service() {
+    local target="$1"
+    local service
+
+    for service in "${JAVA_SERVICES[@]}"; do
+        if [[ "${service}" == "${target}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 cleanup() {
     if [[ -n "${TEMP_DIR}" ]]; then
         rm -rf "${TEMP_DIR}"
@@ -107,26 +135,186 @@ inventory_value() {
     ' "${PRODUCTION_IMAGE_INVENTORY}"
 }
 
+manifest_value() {
+    local file="$1"
+    local key="$2"
+
+    awk -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 ~ "^[[:space:]]*" key ":[[:space:]]*" {
+            value = $0
+            sub("^[[:space:]]*" key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${file}"
+}
+
+manifest_map_value() {
+    local file="$1"
+    local section="$2"
+    local key="$3"
+
+    awk -v section="${section}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == section ":" {
+            in_section = 1
+            next
+        }
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
+        }
+        in_section && index($0, "  " key ":") == 1 {
+            value = $0
+            sub("^  " key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${file}"
+}
+
+manifest_nested_value() {
+    local file="$1"
+    local section="$2"
+    local item="$3"
+    local key="$4"
+
+    awk -v section="${section}" -v item="${item}" -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        $0 == section ":" {
+            in_section = 1
+            next
+        }
+        in_section && $0 ~ /^[^[:space:]][^:]*:/ {
+            in_section = 0
+            in_item = 0
+        }
+        in_section && $0 == "  " item ":" {
+            in_item = 1
+            next
+        }
+        in_section && in_item && $0 ~ /^  [^[:space:]][^:]*:/ {
+            in_item = 0
+        }
+        in_section && in_item && index($0, "    " key ":") == 1 {
+            value = $0
+            sub("^    " key ":[[:space:]]*", "", value)
+            print clean(value)
+            exit
+        }
+    ' "${file}"
+}
+
 load_inventory_refs() {
-    local release_version service repo image_ref expected_pattern
+    local schema_version deployment_id service repo image_ref artifact_version source_ref source_commit service_common_version expected_pattern
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || fail "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
 
-    release_version="$(inventory_value "release-version")"
-    [[ "${release_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
-        fail "production image inventory release-version must use X.Y.Z format"
+    schema_version="$(inventory_value "schema-version")"
+    [[ "${schema_version}" == "2" ]] || fail "production image inventory must use schema-version: \"2\""
+    deployment_id="$(inventory_value "deployment-id")"
+    [[ -n "${deployment_id}" ]] || fail "production image inventory is missing deployment-id"
+    [[ -n "$(inventory_value "deployment-status")" ]] || fail "production image inventory is missing deployment-status"
+    [[ -n "$(inventory_value "deployment-environment")" ]] || fail "production image inventory is missing deployment-environment"
+    [[ "$(inventory_value "orchestration-commit")" =~ ^[0-9a-f]{40}$ ]] || \
+        fail "production image inventory is missing a valid orchestration-commit"
+    [[ -n "$(inventory_value "orchestration-source-ref")" ]] || fail "production image inventory is missing orchestration-source-ref"
 
     for service in "${SERVICE_ORDER[@]}"; do
         repo="${IMAGE_REPOS[${service}]}"
         image_ref="$(inventory_value "${service}")"
         [[ -n "${image_ref}" ]] || fail "production image inventory is missing ${service}"
 
-        expected_pattern="^ghcr\\.io/budgetanalyzer/${repo}:${release_version}@sha256:[0-9a-f]{64}$"
+        expected_pattern="^ghcr\\.io/budgetanalyzer/${repo}:[A-Za-z0-9_.-]+@sha256:[0-9a-f]{64}$"
         if [[ ! "${image_ref}" =~ ${expected_pattern} ]]; then
             fail "invalid production image ref for ${service}: ${image_ref}"
         fi
+        if [[ "${image_ref}" == *":latest@"* || "${image_ref}" == *":tilt-"* ]]; then
+            fail "mutable production image ref for ${service}: ${image_ref}"
+        fi
+
+        artifact_version="$(inventory_value "${service}.artifact-version")"
+        source_ref="$(inventory_value "${service}.source-ref")"
+        source_commit="$(inventory_value "${service}.source-commit")"
+        service_common_version="$(inventory_value "${service}.service-common-version")"
+        [[ -n "${artifact_version}" ]] || fail "production image inventory is missing ${service}.artifact-version"
+        [[ -n "${source_ref}" ]] || fail "production image inventory is missing ${service}.source-ref"
+        [[ "${source_commit}" =~ ^[0-9a-f]{40}$ ]] || fail "production image inventory is missing a valid ${service}.source-commit"
+        if is_java_service "${service}" && [[ -z "${service_common_version}" ]]; then
+            fail "production image inventory is missing ${service}.service-common-version"
+        fi
 
         INVENTORY_REFS["${service}"]="${image_ref}"
+        INVENTORY_ARTIFACT_VERSIONS["${service}"]="${artifact_version}"
+    done
+}
+
+verify_deployment_manifest_alignment() {
+    local service manifest_value_text inventory_value_text
+    local manifest_deployment_id inventory_deployment_id
+
+    [[ -f "${PRODUCTION_DEPLOYMENT_MANIFEST}" ]] || fail "missing production deployment manifest: ${PRODUCTION_DEPLOYMENT_MANIFEST}"
+    [[ "$(manifest_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "schema_version")" == "2" ]] || \
+        fail "production deployment manifest must use schema_version: 2"
+
+    manifest_deployment_id="$(manifest_map_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "deployment" "id")"
+    inventory_deployment_id="$(inventory_value "deployment-id")"
+    [[ "${manifest_deployment_id}" == "${inventory_deployment_id}" ]] || \
+        fail "deployment manifest id does not match image inventory deployment-id"
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "image")"
+        inventory_value_text="$(inventory_value "${service}")"
+        [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+            fail "deployment manifest image for ${service} does not match image inventory"
+
+        manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "artifact_version")"
+        inventory_value_text="$(inventory_value "${service}.artifact-version")"
+        [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+            fail "deployment manifest artifact version for ${service} does not match image inventory"
+
+        manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "source_ref")"
+        inventory_value_text="$(inventory_value "${service}.source-ref")"
+        [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+            fail "deployment manifest source ref for ${service} does not match image inventory"
+
+        manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "source_commit")"
+        inventory_value_text="$(inventory_value "${service}.source-commit")"
+        [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+            fail "deployment manifest source commit for ${service} does not match image inventory"
+
+        if is_java_service "${service}"; then
+            manifest_value_text="$(manifest_nested_value "${PRODUCTION_DEPLOYMENT_MANIFEST}" "artifacts" "${service}" "service_common_version")"
+            inventory_value_text="$(inventory_value "${service}.service-common-version")"
+            [[ -n "${manifest_value_text}" ]] || \
+                fail "deployment manifest is missing service_common_version for ${service}"
+            [[ "${manifest_value_text}" == "${inventory_value_text}" ]] || \
+                fail "deployment manifest service_common_version for ${service} does not match image inventory"
+        fi
     done
 }
 
@@ -259,6 +447,37 @@ assert_contains_literal() {
     grep -Fq "${needle}" "${file}" || fail "${description}"
 }
 
+verify_release_metadata_file() {
+    local file="$1"
+    local service
+
+    [[ -f "${file}" ]] || fail "missing release metadata file: ${file}"
+    assert_contains_literal "${file}" '"schemaVersion": 2' \
+        "release metadata is not schema v2: ${file}"
+    assert_contains_literal "${file}" "\"id\": \"$(inventory_value "deployment-id")\"" \
+        "release metadata deployment id does not match image inventory: ${file}"
+
+    for service in "${SERVICE_ORDER[@]}"; do
+        assert_contains_literal "${file}" "\"${service}\": {" \
+            "release metadata is missing artifact ${service}: ${file}"
+        assert_contains_literal "${file}" "\"artifactVersion\": \"${INVENTORY_ARTIFACT_VERSIONS[${service}]}\"" \
+            "release metadata artifact version for ${service} does not match image inventory: ${file}"
+        assert_contains_literal "${file}" "\"image\": \"${INVENTORY_REFS[${service}]}\"" \
+            "release metadata image for ${service} does not match image inventory: ${file}"
+        if is_java_service "${service}"; then
+            assert_contains_literal "${file}" '"serviceCommonVersion":' \
+                "release metadata is missing serviceCommonVersion for Java artifacts: ${file}"
+            assert_contains_literal "${file}" "\"serviceCommonVersion\": \"$(inventory_value "${service}.service-common-version")\"" \
+                "release metadata serviceCommonVersion for ${service} does not match image inventory: ${file}"
+        fi
+    done
+}
+
+verify_release_metadata_files() {
+    verify_release_metadata_file "${LOCAL_RELEASE_METADATA_JSON}"
+    verify_release_metadata_file "${PRODUCTION_RELEASE_METADATA_JSON}"
+}
+
 verify_api_docs_render_wiring() {
     local rendered_apps_file="$1"
 
@@ -280,6 +499,12 @@ verify_api_docs_render_wiring() {
         "nginx-gateway docs init command no longer copies OpenAPI JSON"
     assert_contains_literal "${rendered_apps_file}" 'cp /custom-openapi-yaml/* /workdir/docs/' \
         "nginx-gateway docs init command no longer copies OpenAPI YAML"
+    assert_contains_literal "${rendered_apps_file}" '"schemaVersion": 2' \
+        "rendered release metadata is not using deployment manifest schema v2"
+    assert_contains_literal "${rendered_apps_file}" '"deployment": {' \
+        "rendered release metadata is missing deployment identity"
+    assert_contains_literal "${rendered_apps_file}" '"artifactVersion":' \
+        "rendered release metadata is missing per-artifact versions"
 }
 
 verify_rendered_images_are_digest_pinned() {
@@ -380,6 +605,7 @@ main() {
 
     require_command kubectl
     load_inventory_refs
+    verify_deployment_manifest_alignment
     verify_version_lockstep
 
     TEMP_DIR="$(mktemp -d)"
@@ -392,6 +618,7 @@ main() {
     kubectl kustomize "${PRODUCTION_INFRASTRUCTURE_DIR}" --load-restrictor=LoadRestrictionsNone > "${rendered_infrastructure_file}"
 
     verify_image_alignment "${rendered_apps_file}" "${image_fields_file}"
+    verify_release_metadata_files
     verify_api_docs_render_wiring "${rendered_apps_file}"
     verify_rendered_images_are_digest_pinned "${rendered_infrastructure_file}" "production infrastructure overlay"
     verify_helm_values_digest_inputs

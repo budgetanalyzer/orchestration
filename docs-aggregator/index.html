@@ -28,6 +28,50 @@
             <strong>Read-only route.</strong> "Try it out" and request submission are disabled.
         </section>
         <div id="swagger-ui"></div>
+        <section class="deployment-shape" aria-labelledby="deployment-shape-title">
+            <div class="deployment-shape-header">
+                <div>
+                    <p class="docs-section-kicker">Deployment Shape</p>
+                    <h2 id="deployment-shape-title">Runtime Manifest</h2>
+                </div>
+                <p class="deployment-summary" id="deployment-summary">Loading deployment metadata</p>
+            </div>
+            <dl class="deployment-facts">
+                <div>
+                    <dt>Environment</dt>
+                    <dd id="deployment-environment">unknown</dd>
+                </div>
+                <div>
+                    <dt>Status</dt>
+                    <dd id="deployment-status">unknown</dd>
+                </div>
+                <div>
+                    <dt>Orchestration</dt>
+                    <dd id="deployment-orchestration">unknown</dd>
+                </div>
+            </dl>
+            <div class="deployment-table-wrap">
+                <table class="deployment-table">
+                    <caption>Deployed repository manifest</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Runtime</th>
+                            <th scope="col">Repository</th>
+                            <th scope="col">Version</th>
+                            <th scope="col">Source ref</th>
+                            <th scope="col">Commit</th>
+                            <th scope="col">Image</th>
+                            <th scope="col">Shared library</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deployment-artifacts">
+                        <tr>
+                            <td colspan="7">Loading deployment metadata</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </main>
 
     <script src="/api-docs/swagger-ui-bundle.js"></script>

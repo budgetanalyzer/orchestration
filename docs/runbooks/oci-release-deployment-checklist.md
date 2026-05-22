@@ -1,19 +1,31 @@
 # OCI Release Deployment Checklist
 
-Use this template to record evidence for an OCI release deployment. It is a
+Use this template to record evidence for an OCI release or deployment. It is a
 run-log shape, not a secret store: do not paste kubeconfigs, private keys,
 tokens, passwords, cookie values, or raw secret payloads.
 
+The normal production shape is workspace snapshot promotion, using the
+terminology from [docs/ci-cd.md](../ci-cd.md). The promotion command may
+rebuild only changed artifacts or reuse all existing artifacts, but the
+deployment snapshot is always complete and OCI receives the managed production
+app set.
+
+`service-common` is a shared Java library version. Record it where it changed
+or where a Java artifact consumes it, but do not require a `service-common`
+bump for config-only deployments or unrelated service releases.
+
 The recurring deployment commands live in [deploy/README.md](../../deploy/README.md)
-and the script help for [25-deploy-oci-release.sh](../../deploy/scripts/25-deploy-oci-release.sh).
+and the script help for
+[promote-current-stack-to-oci.sh](../../deploy/scripts/promote-current-stack-to-oci.sh).
 Use those sources for the current command sequence, then record the evidence
 below.
 
 ## Prerequisites
 
-- [ ] The production image baseline has been updated and reviewed.
-- [ ] The release manifest exists under `tmp/releases/` or another reviewed
-  operator path.
+- [ ] `deploy/scripts/promote-current-stack-to-oci.sh --plan-only` has been
+  reviewed for reused versus rebuilt artifacts.
+- [ ] Any Java `service-common` change has already been published and Java
+  consumers are pinned to the intended `serviceCommon` version.
 - [ ] The operator shell is on the OCI host, or is explicitly using an OCI
   host kubeconfig with `--kubeconfig`.
 - [ ] `KUBECONFIG` points at the intended OCI k3s cluster.
@@ -25,27 +37,30 @@ below.
 
 | Field | Value |
 | --- | --- |
-| Release version | `vX.Y.Z` |
+| Deployment type | `workspace snapshot promotion` |
+| Release version, if applicable | `vX.Y.Z` or `n/a` |
+| Deployment id or release label |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
-| Selected mode | `verify-only`, `app-only`, `lockstep`, `platform-only`, or `infrastructure-only` |
-| Dry run first | `yes` or `no` |
-| Release manifest | `tmp/releases/vX.Y.Z.yaml` |
+| Plan-only first | `yes` or `no` |
+| Deployment snapshot | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.yaml` |
+| Promotion plan | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.plan.yaml` |
 | Production image inventory ref | `kubernetes/production/apps/image-inventory.yaml` |
 | Orchestration checkout ref |  |
-| Snapshot directory | `tmp/oci-release-deploy/<timestamp>-<mode>-<version>` |
+| OCI apply snapshot directory | `tmp/oci-release-deploy/<timestamp>-manifest-<deployment-id>` |
 
 ## Source Commits
 
-| Repository | Commit SHA | Release tag present | Notes |
-| --- | --- | --- | --- |
-| `orchestration` |  |  |  |
-| `service-common` |  |  |  |
-| `transaction-service` |  |  |  |
-| `currency-service` |  |  |  |
-| `permission-service` |  |  |  |
-| `session-gateway` |  |  |  |
-| `budget-analyzer-web` |  |  |  |
+| Repository | Commit SHA | Source ref or tag | `service-common` version, if consumed | Notes |
+| --- | --- | --- | --- | --- |
+| `orchestration` |  |  |  |  |
+| `service-common` |  |  |  |  |
+| `transaction-service` |  |  |  |  |
+| `currency-service` |  |  |  |  |
+| `permission-service` |  |  |  |  |
+| `session-gateway` |  |  |  |  |
+| `budget-analyzer-web` |  |  |  |  |
+| `ext-authz` |  |  |  |  |
 
 ## Artifact Workflows
 
@@ -60,24 +75,14 @@ below.
 
 ## Digest-Pinned Images
 
-| Artifact | Digest-pinned image ref |
-| --- | --- |
-| `transaction-service` | `ghcr.io/budgetanalyzer/transaction-service:X.Y.Z@sha256:...` |
-| `currency-service` | `ghcr.io/budgetanalyzer/currency-service:X.Y.Z@sha256:...` |
-| `permission-service` | `ghcr.io/budgetanalyzer/permission-service:X.Y.Z@sha256:...` |
-| `session-gateway` | `ghcr.io/budgetanalyzer/session-gateway:X.Y.Z@sha256:...` |
-| `budget-analyzer-web` | `ghcr.io/budgetanalyzer/budget-analyzer-web:X.Y.Z@sha256:...` |
-| `ext-authz` | `ghcr.io/budgetanalyzer/ext-authz:X.Y.Z@sha256:...` |
-
-## Release Manifest Flags
-
-| Flag | Value | Action taken |
+| Artifact | Status | Digest-pinned image ref |
 | --- | --- | --- |
-| `platform_changed` | `true` or `false` |  |
-| `infrastructure_changed` | `true` or `false` |  |
-| `secrets_changed` | `true` or `false` |  |
-| `observability_changed` | `true` or `false` |  |
-| `public_tls_reapply_required` | `true` or `false` |  |
+| `transaction-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/transaction-service:X.Y.Z@sha256:...` |
+| `currency-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/currency-service:X.Y.Z@sha256:...` |
+| `permission-service` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/permission-service:X.Y.Z@sha256:...` |
+| `session-gateway` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/session-gateway:X.Y.Z@sha256:...` |
+| `budget-analyzer-web` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/budget-analyzer-web:X.Y.Z@sha256:...` |
+| `ext-authz` | `changed` or `unchanged` | `ghcr.io/budgetanalyzer/ext-authz:X.Y.Z@sha256:...` |
 
 ## Preflight Snapshot
 
@@ -92,19 +97,19 @@ below.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime release labels | `./scripts/ops/show-pod-version-labels.sh --expected-version vX.Y.Z --tracked-only --strict` |  |
+| Live runtime deployment metadata | `./scripts/ops/show-pod-version-labels.sh --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml --tracked-only --strict` |  |
 | Public release metadata, if public TLS is active | `curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json` |  |
 
 ## Scripts Run
 
 | Order | Script or command | Arguments | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` |  |  |  |
-| 2 | `scripts/guardrails/verify-production-image-overlay.sh` |  |  |  |
-| 3 | `deploy/scripts/25-deploy-oci-release.sh` | `--mode ... --release-version ...` |  |  |
+| 1 | `deploy/scripts/promote-current-stack-to-oci.sh` | `--plan-only` |  |  |
+| 2 | `deploy/scripts/promote-current-stack-to-oci.sh` | deployment options used |  |  |
+| 3 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after baseline update |  |  |
 
-Add rows for any reviewed lower-level deployment scripts used instead of the
-master script.
+Add rows only for reviewed lower-level recovery commands used to replay the
+same complete deployment snapshot.
 
 ## Rollout Results
 
@@ -149,17 +154,18 @@ master script.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime release labels |  |  |
-| Browser-visible release metadata |  |  |
+| Live runtime deployment metadata |  |  |
+| Browser-visible deployment metadata |  |  |
 | Observability remains internal-only |  |  |
 
 ## Rollback Notes
 
 | Field | Value |
 | --- | --- |
-| Previous release version |  |
-| Previous release manifest or image inventory ref |  |
-| Safe app-only rollback candidate | `yes`, `no`, or `needs review` |
+| Previous deployment id |  |
+| Previous deployment manifest or image inventory ref |  |
+| Complete rollback snapshot available | `yes`, `no`, or `needs review` |
+| Artifact driving rollback, if any |  |
 | Data migration risk |  |
 | RabbitMQ queue migration or discard decision |  |
 | Platform downgrade risk |  |

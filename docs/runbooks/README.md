@@ -12,7 +12,7 @@ stack is not up yet, start there first.
 |---------|-------------|-------------|
 | [Tilt Debugging](tilt-debugging.md) | Debug Tilt/Kind local development environment | Services not starting, auth failures, network issues |
 | [Kiali Expected Warnings](kiali-expected-warnings.md) | Reference for Kiali warnings this repo intentionally ignores | Kiali triage shows low-signal warnings and you need the repo policy |
-| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Evidence template for OCI release deploys | Running or reviewing `deploy/scripts/25-deploy-oci-release.sh` |
+| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Evidence template for OCI promotion | Running or reviewing `deploy/scripts/promote-current-stack-to-oci.sh` |
 
 ## Runbook Philosophy
 

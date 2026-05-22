@@ -100,14 +100,13 @@ scripts/
   rollouts, and verifies live runtime metadata against that manifest.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
-  manifest, then runs the production render and static gates. It is now a
-  lower-level renderer used by the local preparation command. Use
-  `--skip-live-production-verifier` only when the live-cluster production
-  verifier cannot run in the current shell.
+  manifest, then runs the static agreement gate. It is now a lower-level
+  renderer used by the local preparation command.
 - `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
-  OCI version contracts, production app image inventory alignment, production
-  `/api-docs` render wiring, and digest-pin inputs for production
+  OCI version contracts; production deployment manifest, image inventory, app
+  kustomization, runtime metadata patch, and release metadata agreement;
+  production `/api-docs` render wiring; and digest-pin inputs for production
   infrastructure and Helm values.
 - `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
   desired-state applier. It requires a schema v2

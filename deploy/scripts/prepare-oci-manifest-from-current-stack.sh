@@ -71,7 +71,6 @@ wait_timeout_seconds="${OCI_IMAGE_WAIT_TIMEOUT_SECONDS:-1800}"
 poll_interval_seconds="${OCI_IMAGE_POLL_INTERVAL_SECONDS:-30}"
 plan_only=false
 assume_yes=false
-run_cluster_verifier=false
 deployment_output_path=""
 docker_label=""
 
@@ -95,16 +94,15 @@ Options:
                                    GHCR, or changing the manifest.
   --yes, -y                        Do not prompt before creating and pushing
                                    missing source tags.
-  --run-cluster-verifier           Also run the cluster-backed production
-                                   render verifier from the baseline updater.
   -h, --help                       Show this help.
 
 The command prepares checked-in OCI desired state from the current clean source
 workspace. It does not build Docker images, push images, require OCI
 kubeconfig access, or deploy to OCI. GitHub Actions builds images after source
 tags are pushed; this command waits for the corresponding GHCR tags, resolves
-their digests, updates the production manifest and inventory, then stops for
-human review, commit, and push.
+their digests, updates the production manifest, inventory, app overlay,
+runtime metadata patch, and release metadata, then stops for human review,
+commit, and push.
 
 If GHCR requires authentication for manifest reads, set GHCR_USERNAME and
 GHCR_TOKEN. GITHUB_ACTOR and GITHUB_TOKEN are accepted as fallbacks.
@@ -188,9 +186,6 @@ parse_args() {
                 ;;
             --yes|-y)
                 assume_yes=true
-                ;;
-            --run-cluster-verifier)
-                run_cluster_verifier=true
                 ;;
             -h|--help)
                 usage
@@ -557,10 +552,6 @@ write_deployment_manifest() {
 
 update_production_desired_state() {
     local args=(--deployment-manifest "${deployment_output_path}")
-
-    if [[ "${run_cluster_verifier}" != true ]]; then
-        args+=(--skip-live-production-verifier)
-    fi
 
     "${UPDATE_PRODUCTION_BASELINE}" "${args[@]}"
 }

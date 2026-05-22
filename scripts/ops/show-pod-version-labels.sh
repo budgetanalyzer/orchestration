@@ -29,6 +29,16 @@ JAVA_SERVICES=(
 )
 readonly JAVA_SERVICES
 
+EXPECTED_RUNTIME_WORKLOADS=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+    "ext-authz"
+    "nginx-gateway"
+)
+readonly EXPECTED_RUNTIME_WORKLOADS
+
 declare -A EXPECTED_IMAGE_REFS=()
 declare -A EXPECTED_ARTIFACT_VERSIONS=()
 declare -A EXPECTED_SOURCE_REFS=()
@@ -354,6 +364,8 @@ main() {
     local status tracked
     local warning_count=0
     local printed_count=0
+    local expected_workload
+    declare -A seen_runtime_workloads=()
 
     parse_args "$@"
     require_command kubectl
@@ -388,6 +400,7 @@ main() {
 
         status="OK"
         if [[ "${tracked}" == true ]]; then
+            seen_runtime_workloads["${workload}"]=true
             artifact="$(artifact_for_workload "${workload}")"
             if [[ -z "${EXPECTED_IMAGE_REFS[${artifact}]:-}" ]]; then
                 status="WARN"
@@ -433,6 +446,13 @@ main() {
             "${status}" "${namespace}" "${pod}" "${workload:-<none>}" "${deployment_id:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${all_images:-<none>}"
         printed_count=$((printed_count + 1))
     done <<< "${pod_rows}"
+
+    for expected_workload in "${EXPECTED_RUNTIME_WORKLOADS[@]}"; do
+        if [[ -z "${seen_runtime_workloads[${expected_workload}]:-}" ]]; then
+            warning_count=$((warning_count + 1))
+            warn_mismatch "missing tracked runtime workload pod: ${expected_workload}"
+        fi
+    done
 
     printf '\nPrinted pods: %s\n' "${printed_count}"
     printf 'Warnings: %s\n' "${warning_count}"

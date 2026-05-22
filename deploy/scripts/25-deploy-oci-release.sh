@@ -11,17 +11,17 @@ source "${SCRIPT_DIR}/lib/common.sh"
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
-PRODUCTION_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
 SNAPSHOT_ROOT="$(phase4_repo_path "tmp/oci-release-deploy")"
 PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/phase-6")"
+APP_NAMESPACE="default"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly STATIC_VERIFIER
-readonly PRODUCTION_VERIFIER
 readonly POD_VERSION_LABELS_SCRIPT
 readonly SNAPSHOT_ROOT
 readonly PHASE6_RENDER_ROOT
+readonly APP_NAMESPACE
 
 SERVICE_DEPLOYMENTS=(
     "transaction-service"
@@ -314,12 +314,6 @@ run_static_preflight() {
     "${STATIC_VERIFIER}"
 }
 
-run_live_production_verifier() {
-    require_executable "${PRODUCTION_VERIFIER}"
-    info "running production image/render verifier"
-    "${PRODUCTION_VERIFIER}"
-}
-
 run_pod_metadata_verifier() {
     local args=(--deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict)
 
@@ -341,11 +335,10 @@ run_application_phase() {
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-ingress-policies.yaml"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-egress.yaml"
 
-    run_live_production_verifier
     apply_production_apps
 
     for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
-        run_cmd kubectl rollout status "deployment/${deployment}" --timeout=300s
+        run_cmd kubectl rollout status "deployment/${deployment}" -n "${APP_NAMESPACE}" --timeout=300s
     done
 
     run_pod_metadata_verifier
@@ -361,8 +354,7 @@ print_completion_checklist() {
     info "OCI deployment wrapper complete"
     printf '\nCompletion checklist:\n'
     printf '  - Review snapshots under %s\n' "${SNAPSHOT_DIR}"
-    printf '  - Confirm live images match kubernetes/production/apps/image-inventory.yaml\n'
-    printf '  - Confirm live deployment metadata: ./scripts/ops/show-pod-version-labels.sh --deployment-manifest %s --tracked-only --strict\n' "${DEPLOYMENT_MANIFEST}"
+    printf '  - Confirm OCI pods match the checked-in manifest: ./scripts/ops/show-pod-version-labels.sh --deployment-manifest %s --tracked-only --strict\n' "${DEPLOYMENT_MANIFEST}"
     printf '  - Confirm observability remains internal-only; no Grafana, Prometheus, Jaeger, or Kiali public routes\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/api-docs\n'

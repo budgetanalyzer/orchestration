@@ -238,6 +238,8 @@ Status: Complete as of 2026-05-22.
 
 ### Phase 5: Tighten Verification
 
+Status: Complete as of 2026-05-22.
+
 - Make the production manifest, image inventory, kustomization, runtime metadata
   patch, and release metadata agreement checks the main gate.
 - Keep the live verifier focused on one question: does OCI match the checked-in

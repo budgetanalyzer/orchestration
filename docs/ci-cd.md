@@ -335,6 +335,10 @@ Release image publishing is tag-driven and owned by the source repositories:
   apply command for the checked-in production manifest
 - `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
   applier for replaying an explicit reviewed desired-state manifest
+- `./deploy/scripts/24-verify-oci-upgrade-lockstep.sh` is the main static
+  agreement gate for the checked-in production desired state: deployment
+  manifest, image inventory, app kustomization, runtime metadata patch, and
+  release metadata must agree before OCI apply
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed

@@ -13,6 +13,7 @@ PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 PRODUCTION_DEPLOYMENT_MANIFEST="${PRODUCTION_APPS_DIR}/deployment-manifest.yaml"
 PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
+PRODUCTION_RUNTIME_METADATA_PATCH="${PRODUCTION_APPS_DIR}/patches/runtime-release-metadata.yaml"
 LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
 PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
 PRODUCTION_IMAGE_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
@@ -27,6 +28,7 @@ readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
 readonly PRODUCTION_KUSTOMIZATION
+readonly PRODUCTION_RUNTIME_METADATA_PATCH
 readonly LOCAL_RELEASE_METADATA_JSON
 readonly PRODUCTION_RELEASE_METADATA_JSON
 readonly PRODUCTION_IMAGE_VERIFIER
@@ -66,6 +68,9 @@ declare -A IMAGE_REPOS=(
 
 declare -A INVENTORY_REFS=()
 declare -A INVENTORY_ARTIFACT_VERSIONS=()
+declare -A INVENTORY_SOURCE_REFS=()
+declare -A INVENTORY_SOURCE_COMMITS=()
+declare -A INVENTORY_SERVICE_COMMON_VERSIONS=()
 TEMP_DIR=""
 
 usage() {
@@ -74,7 +79,8 @@ Usage: ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
 
 Runs static OCI lockstep checks before release or deployment work:
   - local Tilt chart pins match OCI phase version contracts
-  - production image inventory and production app kustomization agree
+  - production deployment manifest, image inventory, app kustomization,
+    runtime metadata patch, and release metadata agree
   - production image verifier consumes the inventory instead of hardcoded refs
   - production /api-docs ConfigMaps and nginx-gateway volume wiring render
   - production infrastructure images are digest-pinned
@@ -230,7 +236,7 @@ manifest_nested_value() {
 }
 
 load_inventory_refs() {
-    local schema_version deployment_id service repo image_ref artifact_version source_ref source_commit service_common_version expected_pattern
+    local schema_version deployment_id service repo image_ref artifact_version source_repository source_ref source_commit service_common_version expected_pattern
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || fail "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
 
@@ -257,10 +263,12 @@ load_inventory_refs() {
         fi
 
         artifact_version="$(inventory_value "${service}.artifact-version")"
+        source_repository="$(inventory_value "${service}.source-repository")"
         source_ref="$(inventory_value "${service}.source-ref")"
         source_commit="$(inventory_value "${service}.source-commit")"
         service_common_version="$(inventory_value "${service}.service-common-version")"
         [[ -n "${artifact_version}" ]] || fail "production image inventory is missing ${service}.artifact-version"
+        [[ -n "${source_repository}" ]] || fail "production image inventory is missing ${service}.source-repository"
         [[ -n "${source_ref}" ]] || fail "production image inventory is missing ${service}.source-ref"
         [[ "${source_commit}" =~ ^[0-9a-f]{40}$ ]] || fail "production image inventory is missing a valid ${service}.source-commit"
         if is_java_service "${service}" && [[ -z "${service_common_version}" ]]; then
@@ -269,6 +277,9 @@ load_inventory_refs() {
 
         INVENTORY_REFS["${service}"]="${image_ref}"
         INVENTORY_ARTIFACT_VERSIONS["${service}"]="${artifact_version}"
+        INVENTORY_SOURCE_REFS["${service}"]="${source_ref}"
+        INVENTORY_SOURCE_COMMITS["${service}"]="${source_commit}"
+        INVENTORY_SERVICE_COMMON_VERSIONS["${service}"]="${service_common_version}"
     done
 }
 
@@ -446,6 +457,157 @@ assert_contains_literal() {
     grep -Fq "${needle}" "${file}" || fail "${description}"
 }
 
+extract_yaml_document() {
+    local file="$1"
+    local kind="$2"
+    local name="$3"
+
+    awk -v expected_kind="${kind}" -v expected_name="${name}" '
+        function reset_doc() {
+            resource_kind = ""
+            resource_name = ""
+            resource_text = ""
+            in_metadata = 0
+        }
+        function finish_doc() {
+            if (resource_kind == expected_kind && resource_name == expected_name) {
+                printf "%s", resource_text
+                found = 1
+            }
+        }
+        BEGIN {
+            reset_doc()
+        }
+        /^---$/ {
+            finish_doc()
+            reset_doc()
+            next
+        }
+        {
+            resource_text = resource_text $0 "\n"
+            if ($0 ~ /^kind:[[:space:]]*/) {
+                resource_kind = $0
+                sub(/^kind:[[:space:]]*/, "", resource_kind)
+            }
+            if ($0 ~ /^metadata:[[:space:]]*$/) {
+                in_metadata = 1
+                next
+            }
+            if ($0 ~ /^[^[:space:]]/ && $0 !~ /^metadata:/) {
+                in_metadata = 0
+            }
+            if (in_metadata && $0 ~ /^[[:space:]]+name:[[:space:]]*/) {
+                resource_name = $0
+                sub(/^[[:space:]]+name:[[:space:]]*/, "", resource_name)
+            }
+        }
+        END {
+            finish_doc()
+            exit found ? 0 : 1
+        }
+    ' "${file}"
+}
+
+assert_yaml_document_contains_literal() {
+    local file="$1"
+    local kind="$2"
+    local name="$3"
+    local needle="$4"
+    local description="$5"
+    local document_file
+
+    document_file="${TEMP_DIR}/$(printf '%s-%s.yaml' "${kind}" "${name}" | tr '/ ' '__')"
+    extract_yaml_document "${file}" "${kind}" "${name}" > "${document_file}" || \
+        fail "${file} is missing ${kind}/${name}"
+    assert_contains_literal "${document_file}" "${needle}" "${description}"
+}
+
+extract_release_metadata_artifact() {
+    local file="$1"
+    local service="$2"
+
+    awk -v service="${service}" '
+        $0 == "    \"" service "\": {" {
+            in_artifact = 1
+        }
+        in_artifact {
+            print
+        }
+        in_artifact && $0 ~ /^    }[,]?$/ {
+            found = 1
+            exit
+        }
+        END {
+            exit found ? 0 : 1
+        }
+    ' "${file}"
+}
+
+assert_release_metadata_artifact_contains_literal() {
+    local file="$1"
+    local service="$2"
+    local needle="$3"
+    local description="$4"
+    local artifact_file
+
+    artifact_file="${TEMP_DIR}/release-metadata-${service}.json"
+    extract_release_metadata_artifact "${file}" "${service}" > "${artifact_file}" || \
+        fail "release metadata is missing artifact ${service}: ${file}"
+    assert_contains_literal "${artifact_file}" "${needle}" "${description}"
+}
+
+artifact_for_runtime_workload() {
+    case "$1" in
+        nginx-gateway)
+            printf '%s\n' "budget-analyzer-web"
+            ;;
+        *)
+            printf '%s\n' "$1"
+            ;;
+    esac
+}
+
+verify_runtime_metadata_patch_alignment() {
+    local workload artifact service_common_version
+    local runtime_workloads=(
+        "transaction-service"
+        "currency-service"
+        "permission-service"
+        "session-gateway"
+        "ext-authz"
+        "nginx-gateway"
+    )
+
+    [[ -f "${PRODUCTION_RUNTIME_METADATA_PATCH}" ]] || \
+        fail "missing production runtime metadata patch: ${PRODUCTION_RUNTIME_METADATA_PATCH}"
+
+    for workload in "${runtime_workloads[@]}"; do
+        artifact="$(artifact_for_runtime_workload "${workload}")"
+        assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+            "app.kubernetes.io/version: ${INVENTORY_ARTIFACT_VERSIONS[${artifact}]}" \
+            "runtime metadata patch version for ${workload} does not match image inventory"
+        assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+            "budgetanalyzer.org/deployment-id: $(inventory_value "deployment-id")" \
+            "runtime metadata patch deployment id for ${workload} does not match image inventory"
+        assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+            "budgetanalyzer.org/image: ${INVENTORY_REFS[${artifact}]}" \
+            "runtime metadata patch image for ${workload} does not match image inventory"
+        assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+            "budgetanalyzer.org/source-ref: ${INVENTORY_SOURCE_REFS[${artifact}]}" \
+            "runtime metadata patch source ref for ${workload} does not match image inventory"
+        assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+            "org.opencontainers.image.revision: ${INVENTORY_SOURCE_COMMITS[${artifact}]}" \
+            "runtime metadata patch source revision for ${workload} does not match image inventory"
+
+        service_common_version="${INVENTORY_SERVICE_COMMON_VERSIONS[${artifact}]:-}"
+        if [[ -n "${service_common_version}" ]]; then
+            assert_yaml_document_contains_literal "${PRODUCTION_RUNTIME_METADATA_PATCH}" Deployment "${workload}" \
+                "budgetanalyzer.org/service-common-version: ${service_common_version}" \
+                "runtime metadata patch service-common version for ${workload} does not match image inventory"
+        fi
+    done
+}
+
 verify_release_metadata_file() {
     local file="$1"
     local service
@@ -459,14 +621,20 @@ verify_release_metadata_file() {
     for service in "${SERVICE_ORDER[@]}"; do
         assert_contains_literal "${file}" "\"${service}\": {" \
             "release metadata is missing artifact ${service}: ${file}"
-        assert_contains_literal "${file}" "\"artifactVersion\": \"${INVENTORY_ARTIFACT_VERSIONS[${service}]}\"" \
+        assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"sourceRepository\": \"$(inventory_value "${service}.source-repository")\"" \
+            "release metadata source repository for ${service} does not match image inventory: ${file}"
+        assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"sourceRef\": \"${INVENTORY_SOURCE_REFS[${service}]}\"" \
+            "release metadata source ref for ${service} does not match image inventory: ${file}"
+        assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"sourceCommit\": \"${INVENTORY_SOURCE_COMMITS[${service}]}\"" \
+            "release metadata source commit for ${service} does not match image inventory: ${file}"
+        assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"artifactVersion\": \"${INVENTORY_ARTIFACT_VERSIONS[${service}]}\"" \
             "release metadata artifact version for ${service} does not match image inventory: ${file}"
-        assert_contains_literal "${file}" "\"image\": \"${INVENTORY_REFS[${service}]}\"" \
+        assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"image\": \"${INVENTORY_REFS[${service}]}\"" \
             "release metadata image for ${service} does not match image inventory: ${file}"
         if is_java_service "${service}"; then
-            assert_contains_literal "${file}" '"serviceCommonVersion":' \
+            assert_release_metadata_artifact_contains_literal "${file}" "${service}" '"serviceCommonVersion":' \
                 "release metadata is missing serviceCommonVersion for Java artifacts: ${file}"
-            assert_contains_literal "${file}" "\"serviceCommonVersion\": \"$(inventory_value "${service}.service-common-version")\"" \
+            assert_release_metadata_artifact_contains_literal "${file}" "${service}" "\"serviceCommonVersion\": \"$(inventory_value "${service}.service-common-version")\"" \
                 "release metadata serviceCommonVersion for ${service} does not match image inventory: ${file}"
         fi
     done
@@ -475,6 +643,18 @@ verify_release_metadata_file() {
 verify_release_metadata_files() {
     verify_release_metadata_file "${LOCAL_RELEASE_METADATA_JSON}"
     verify_release_metadata_file "${PRODUCTION_RELEASE_METADATA_JSON}"
+}
+
+verify_no_lifecycle_status_in_desired_state() {
+    if grep -R -n 'deployment-status\|status: "accepted"\|budgetanalyzer.org/deployment-status' \
+        "${PRODUCTION_DEPLOYMENT_MANIFEST}" \
+        "${PRODUCTION_IMAGE_INVENTORY}" \
+        "${PRODUCTION_KUSTOMIZATION}" \
+        "${PRODUCTION_RUNTIME_METADATA_PATCH}" \
+        "${LOCAL_RELEASE_METADATA_JSON}" \
+        "${PRODUCTION_RELEASE_METADATA_JSON}" >/dev/null; then
+        fail "production desired-state files still contain deployment lifecycle status"
+    fi
 }
 
 verify_api_docs_render_wiring() {
@@ -617,10 +797,12 @@ main() {
     kubectl kustomize "${PRODUCTION_INFRASTRUCTURE_DIR}" --load-restrictor=LoadRestrictionsNone > "${rendered_infrastructure_file}"
 
     verify_image_alignment "${rendered_apps_file}" "${image_fields_file}"
+    verify_runtime_metadata_patch_alignment
     verify_release_metadata_files
     verify_api_docs_render_wiring "${rendered_apps_file}"
     verify_rendered_images_are_digest_pinned "${rendered_infrastructure_file}" "production infrastructure overlay"
     verify_helm_values_digest_inputs
+    verify_no_lifecycle_status_in_desired_state
 
     info "OCI upgrade lockstep verification passed"
 }

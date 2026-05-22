@@ -27,6 +27,7 @@ body {
 
 .docs-header,
 .docs-notice,
+.deployment-shape,
 #swagger-ui {
     margin: 0 auto;
     max-width: 1200px;
@@ -120,6 +121,124 @@ body {
     padding: 1rem 1.2rem;
 }
 
+.deployment-shape {
+    background: rgba(255, 250, 242, 0.96);
+    border: 1px solid var(--docs-border);
+    border-radius: 1rem;
+    margin-top: 1rem;
+    overflow: hidden;
+}
+
+.deployment-shape-header {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--docs-border);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 1.2rem;
+}
+
+.docs-section-kicker {
+    color: var(--docs-accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+}
+
+.deployment-shape h2 {
+    font-size: 1.35rem;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.deployment-summary {
+    color: var(--docs-muted);
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0.15rem 0 0;
+    text-align: right;
+}
+
+.deployment-facts {
+    display: grid;
+    gap: 1px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+}
+
+.deployment-facts div {
+    background: rgba(31, 42, 55, 0.03);
+    min-width: 0;
+    padding: 0.95rem 1.2rem;
+}
+
+.deployment-facts dt {
+    color: var(--docs-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+}
+
+.deployment-facts dd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.88rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.deployment-table-wrap {
+    overflow-x: auto;
+}
+
+.deployment-table {
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    min-width: 980px;
+    width: 100%;
+}
+
+.deployment-table caption {
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.deployment-table th,
+.deployment-table td {
+    border-top: 1px solid var(--docs-border);
+    padding: 0.72rem 0.85rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.deployment-table th {
+    background: rgba(31, 42, 55, 0.06);
+    color: var(--docs-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+
+.deployment-table code {
+    background: transparent;
+    color: var(--docs-ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.deployment-runtime code,
+.deployment-image code,
+.deployment-ref code {
+    font-weight: 700;
+}
+
 #swagger-ui {
     background: var(--docs-panel);
     border: 1px solid var(--docs-border);
@@ -163,8 +282,27 @@ body {
     }
 
     .docs-notice,
+    .deployment-shape,
     #swagger-ui {
         border-radius: 1.1rem;
+    }
+
+    .deployment-shape-header {
+        display: block;
+        padding: 1rem;
+    }
+
+    .deployment-summary {
+        margin-top: 0.7rem;
+        text-align: left;
+    }
+
+    .deployment-facts {
+        grid-template-columns: 1fr;
+    }
+
+    .deployment-facts div {
+        padding: 0.85rem 1rem;
     }
 
     .swagger-ui .wrapper {

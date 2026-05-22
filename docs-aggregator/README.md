@@ -9,6 +9,7 @@ The machine-readable contract stays first-class on the same public route:
 - `/api-docs/openapi.json` is the unified JSON contract
 - `/api-docs/openapi.yaml` is the unified YAML contract
 - `/api-docs/release-metadata.json` is the non-secret runtime release metadata
+  that also drives the visible deployment-shape table on the docs page
 
 ## Overview
 
@@ -29,6 +30,10 @@ The route is intentionally read-only:
 - the wrapper hides the authorize button
 - raw JSON and YAML downloads remain first-class on the same route for tooling
   and direct download use
+- the deployment-shape section renders the reviewed deployment manifest metadata
+  for every managed artifact repository, including source refs, source commits,
+  artifact versions, service-common versions where applicable, and digest-pinned
+  image refs
 
 The generated unified downloads remain checked in here:
 
@@ -46,7 +51,7 @@ service-local verifier.
 - `/api-docs/openapi.json` is the machine-readable JSON contract.
 - `/api-docs/openapi.yaml` is the machine-readable YAML contract.
 - `/api-docs/release-metadata.json` is the machine-readable deployment
-  identity document used by the page header.
+  identity document used by the page header and deployment-shape table.
 
 ## Runtime Shape
 
@@ -65,6 +70,8 @@ remain available for browser download, local inspection, or tooling use.
 `/api-docs/release-metadata.json` is served on the same docs-only CSP profile
 with `Cache-Control: no-store` and is intentionally limited to non-secret
 release version and digest-pinned artifact image refs.
+The page fetches that metadata once and renders the current deployment id,
+environment, orchestration revision, and the full managed artifact manifest.
 
 `/api-docs` now carries its own docs-only relaxed CSP include. That profile is
 limited to what the self-hosted Swagger UI bundle needs and does not change the

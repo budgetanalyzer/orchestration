@@ -133,19 +133,17 @@ function renderDeploymentMetadata() {
             var deployment = metadata.deployment || {};
             var release = metadata.release || {};
             var version = deployment.id || release.version || "unknown";
-            var status = deployment.status || release.imageTag || "unknown";
             var environment = deployment.environment || "unknown";
             var orchestration = deployment.orchestrationRepository || {};
 
             if (label) {
                 label.textContent = "Deployment " + version;
-                label.title = "Status " + status;
+                label.title = "Deployment " + version;
                 label.classList.remove("docs-release-muted");
             }
 
             setElementText("deployment-summary", "Deployment " + version);
             setElementText("deployment-environment", environment);
-            setElementText("deployment-status", status);
             setElementText("deployment-orchestration", orchestrationLabel(orchestration));
             renderDeploymentArtifacts(metadata);
         })

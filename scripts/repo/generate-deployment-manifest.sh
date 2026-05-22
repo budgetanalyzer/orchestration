@@ -309,7 +309,6 @@ write_manifest() {
         printf 'deployment:\n'
         printf '  id: "%s"\n' "${deployment_id}"
         printf '  environment: "oci-production"\n'
-        printf '  status: "accepted"\n'
         printf '  orchestration_repository:\n'
         printf '    commit: "%s"\n' "$(repo_commit_sha "orchestration")"
         printf '    source_ref: "%s"\n' "$(repo_symbolic_ref "orchestration")"

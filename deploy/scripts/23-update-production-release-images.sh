@@ -15,7 +15,6 @@ PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
 PRODUCTION_RUNTIME_METADATA_PATCH="${PRODUCTION_APPS_DIR}/patches/runtime-release-metadata.yaml"
 LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
 PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
-PRODUCTION_IMAGE_VERIFIER="$(phase4_repo_path "scripts/guardrails/verify-production-image-overlay.sh")"
 STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
@@ -24,7 +23,6 @@ readonly PRODUCTION_KUSTOMIZATION
 readonly PRODUCTION_RUNTIME_METADATA_PATCH
 readonly LOCAL_RELEASE_METADATA_JSON
 readonly PRODUCTION_RELEASE_METADATA_JSON
-readonly PRODUCTION_IMAGE_VERIFIER
 readonly STATIC_VERIFIER
 
 SERVICE_ORDER=(
@@ -72,11 +70,9 @@ declare -A SERVICE_COMMON_VERSIONS=()
 
 deployment_manifest=""
 deployment_id=""
-deployment_status=""
 deployment_environment=""
 orchestration_commit=""
 orchestration_source_ref=""
-skip_live_production_verifier=false
 
 usage() {
     cat <<'EOF'
@@ -86,14 +82,15 @@ Usage:
 
 Options:
   --deployment-manifest PATH       Required schema_version: 2 deployment manifest.
-  --skip-live-production-verifier  Skip scripts/guardrails/verify-production-image-overlay.sh.
   -h, --help                       Show this help.
 
 Updates the checked-in OCI production application image baseline from a
 complete v2 deployment manifest. The manifest is the source of truth for
-deployment id, status, orchestration revision, per-artifact source refs,
-source commits, artifact versions, Java service-common versions, and
-digest-pinned images.
+deployment id, orchestration revision, per-artifact source refs, source
+commits, artifact versions, Java service-common versions, and digest-pinned
+images. The static agreement gate validates the production deployment
+manifest, image inventory, app kustomization, runtime metadata patch, and
+release metadata before the update is considered complete.
 EOF
 }
 
@@ -314,9 +311,6 @@ parse_args() {
                 [[ -n "${deployment_manifest}" ]] || phase4_die "missing value for --deployment-manifest"
                 shift
                 ;;
-            --skip-live-production-verifier)
-                skip_live_production_verifier=true
-                ;;
             -h|--help)
                 usage
                 exit 0
@@ -346,13 +340,11 @@ load_deployment_manifest() {
     [[ "${schema_version}" == "2" ]] || phase4_die "deployment manifest must use schema_version: 2"
 
     deployment_id="$(manifest_map_value "${deployment_manifest}" "deployment" "id")"
-    deployment_status="$(manifest_map_value "${deployment_manifest}" "deployment" "status")"
     deployment_environment="$(manifest_map_value "${deployment_manifest}" "deployment" "environment")"
     orchestration_commit="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "commit")"
     orchestration_source_ref="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "source_ref")"
 
     [[ -n "${deployment_id}" ]] || phase4_die "deployment manifest is missing deployment.id"
-    [[ -n "${deployment_status}" ]] || phase4_die "deployment manifest is missing deployment.status"
     [[ -n "${deployment_environment}" ]] || phase4_die "deployment manifest is missing deployment.environment"
     [[ -n "${orchestration_commit}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.commit"
     [[ -n "${orchestration_source_ref}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.source_ref"
@@ -435,7 +427,6 @@ metadata:
 data:
   schema-version: "2"
   deployment-id: "${deployment_id}"
-  deployment-status: "${deployment_status}"
   deployment-environment: "${deployment_environment}"
   orchestration-commit: "${orchestration_commit}"
   orchestration-source-ref: "${orchestration_source_ref}"
@@ -476,7 +467,6 @@ write_release_metadata_json_file() {
         printf '  "deployment": {\n'
         printf '    "id": "%s",\n' "${deployment_id}"
         printf '    "environment": "%s",\n' "${deployment_environment}"
-        printf '    "status": "%s",\n' "${deployment_status}"
         printf '    "orchestrationRepository": {\n'
         printf '      "commit": "%s",\n' "${orchestration_commit}"
         printf '      "sourceRef": "%s"\n' "${orchestration_source_ref}"
@@ -530,7 +520,6 @@ metadata:
     app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
     budgetanalyzer.org/deployment-id: ${deployment_id}
   annotations:
-    budgetanalyzer.org/deployment-status: ${deployment_status}
     budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
     budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
     org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}
@@ -551,7 +540,6 @@ spec:
         app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
         budgetanalyzer.org/deployment-id: ${deployment_id}
       annotations:
-        budgetanalyzer.org/deployment-status: ${deployment_status}
         budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
         budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
         org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}
@@ -612,12 +600,6 @@ verify_updates() {
 
     kubectl kustomize "${PRODUCTION_APPS_DIR}" --load-restrictor=LoadRestrictionsNone >/dev/null
     "${STATIC_VERIFIER}"
-
-    if [[ "${skip_live_production_verifier}" == false ]]; then
-        "${PRODUCTION_IMAGE_VERIFIER}"
-    else
-        phase4_warn "skipped live production verifier; run ${PRODUCTION_IMAGE_VERIFIER} before OCI apply"
-    fi
 }
 
 main() {

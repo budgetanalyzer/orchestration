@@ -90,26 +90,27 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
-- `../deploy/scripts/promote-current-stack-to-oci.sh` - Normal OCI production
-  promotion entry point. It snapshots the current workspace stack, compares it
-  with the accepted production baseline, carries forward unchanged digests and
-  metadata, builds and pushes changed `linux/arm64` GHCR images, writes a
-  complete deployment snapshot, updates the checked-in production baseline,
-  and applies the managed production app set. Use `--plan-only` for the
-  non-mutating reused/rebuilt diff.
+- `../deploy/scripts/prepare-oci-manifest-from-current-stack.sh` - Normal
+  local OCI desired-state preparation entry point. It validates clean source
+  workspaces, previews tag actions, creates and pushes missing source tags in
+  `--push-tags` mode, then stops. After GitHub Actions publishes the expected
+  GHCR tags, `--resolve-images` reads them once, resolves digest-pinned refs,
+  updates the checked-in production desired state, and stops for review.
+- `../deploy/scripts/deploy-current-oci-manifest.sh` - Normal OCI-host apply
+  entry point. It applies the checked-in production manifest, waits for managed
+  rollouts, and verifies live runtime metadata against that manifest.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
-  manifest, then runs the production render and static gates. It is now a
-  lower-level renderer used by the promotion command. Use
-  `--skip-live-production-verifier` only when the live-cluster production
-  verifier cannot run in the current shell.
+  manifest, then runs the static agreement gate. It is now a lower-level
+  renderer used by the local preparation command.
 - `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
-  OCI version contracts, production app image inventory alignment, production
-  `/api-docs` render wiring, and digest-pin inputs for production
+  OCI version contracts; production deployment manifest, image inventory, app
+  kustomization, runtime metadata patch, and release metadata agreement;
+  production `/api-docs` render wiring; and digest-pin inputs for production
   infrastructure and Helm values.
 - `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
-  snapshot applier used by the promotion command. It requires a schema v2
+  desired-state applier. It requires a schema v2
   `--deployment-manifest`, validates the checked-in production baseline, runs
   the static gate, captures pre/post cluster snapshots under
   `tmp/oci-release-deploy/`, applies the managed production app set, waits for
@@ -202,7 +203,7 @@ setup.
   internal-only storage/service contract pinned in static review. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
   Kustomize patch fragments under `patches/` directories and the schema-v2
-  production deployment snapshot as standalone Kubernetes resources, and
+  production desired-state manifest as a standalone Kubernetes resource, and
   validates the rendered production app and infrastructure overlays that
   consume the Kubernetes inputs.
 - `guardrails/verify-production-image-overlay.sh` renders
@@ -430,15 +431,19 @@ directory without writing outside the repository.
   generator retained for reviewed baseline repair and historical workflows.
   It now carries forward existing Java `service-common` metadata from the
   production inventory.
-- `deploy/scripts/promote-current-stack-to-oci.sh` is the normal production
-  promotion entry point for OCI app changes.
+- `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` is the normal
+  local desired-state preparation entry point for OCI app changes; use
+  `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
+  steps.
+- `deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host apply
+  entry point for the checked-in production manifest.
 - `deploy/scripts/23-update-production-release-images.sh` consumes a complete
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/25-deploy-oci-release.sh` consumes the checked-in deployment
-  manifest, applies the managed production app set, and verifies live runtime
-  metadata.
+- `deploy/scripts/25-deploy-oci-release.sh` consumes an explicit reviewed
+  deployment manifest, applies the managed production app set, and verifies
+  live runtime metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

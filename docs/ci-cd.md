@@ -76,47 +76,71 @@ expects to exist remotely.
 
 ## Release And Deployment Model
 
-Budget Analyzer now separates source tags, runtime artifact versions,
+Budget Analyzer separates source tags, runtime artifact versions,
 `service-common` Maven versions, image digests, and OCI deployment identity.
-The production deployment truth is the digest-pinned image inventory rendered
-by the production overlay, not a single global version string.
+The production deployment truth is the checked-in, digest-pinned desired state
+under `kubernetes/production/apps`, not a single global version string and not
+live cluster status.
 
 Terminology:
 
-- Git tags are optional source bookmarks for named releases.
-- Docker tags are registry labels used to push, find, and inspect images.
+- Source tags are Git tags pushed to the deployable source repositories. A
+  pushed `vX.Y.Z` source tag triggers the owning repository's release-image
+  workflow.
+- Docker tags are registry labels used to find and inspect images. For a
+  `vX.Y.Z` source tag, the release-image workflows publish Docker label
+  `X.Y.Z`.
 - Image digests are the deployable artifact identity.
-- Deployment snapshots are the OCI production contract.
-- Promotion labels are the deterministic `promotion-...` Docker tags created
-  by the workspace snapshot promotion command for push and traceability; they
-  are not release identifiers.
+- The production manifest and image inventory are desired-state files. They do
+  not record lifecycle status such as `accepted`, `pending`, or `deployed`.
+- Live deployment status is observed from OCI by comparing running pods and
+  runtime metadata with the checked-in desired state.
 
-The normal OCI production operation is **workspace snapshot promotion**:
+The normal OCI production flow has explicit local preparation steps, human
+review, and one OCI-host apply command:
 
 ```bash
-./deploy/scripts/promote-current-stack-to-oci.sh
+# Local workstation
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+
+# After the owning GitHub Actions image workflows publish the expected GHCR tags
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
+
+# OCI host, after the orchestration diff is reviewed, committed, pushed, and pulled
+./deploy/scripts/deploy-current-oci-manifest.sh
 ```
 
-That command snapshots the current intended workspace state, compares it with
-the accepted OCI baseline, reuses unchanged digest-pinned images and metadata,
-builds and pushes only changed `linux/arm64` artifacts, writes one complete
-schema v2 deployment snapshot, updates the checked-in production baseline, and
-applies the managed production app set to OCI.
+The local preparation command validates the expected sibling repositories,
+requires clean source workspaces, previews source tag actions, creates and
+pushes any missing source tags when explicitly requested, then stops so the
+operator can wait for the owning GitHub Actions image workflows. The
+`--resolve-images` mode reads already-published GHCR tags, resolves immutable
+digests, updates the production manifest, image inventory, app overlay, runtime
+metadata patch, and `/api-docs` release metadata, then stops. Missing GHCR tags
+are a prerequisite failure in resolve mode, not a polling loop. The local
+preparation command does not build Docker images, push GHCR images directly,
+deploy to OCI, require OCI kubeconfig access, or write lifecycle status.
 
-Use `--plan-only` for a non-mutating change-set diff. Dirty workspaces are
-rejected by default and require `--allow-dirty`; actual promotion rejects dirty
-`service-common` because the release Dockerfiles consume published Maven
-packages, not a sibling checkout.
+The final orchestration manifest commit necessarily happens after the source
+tag that builds `ext-authz`. Do not try to make the checked-in desired-state
+manifest self-reference the commit that contains itself. Treat per-artifact
+source commits in the manifest as image build inputs; the orchestration commit
+pulled by the OCI host is deploy evidence captured during apply.
+
+The OCI deployment command applies the checked-in desired state from the
+orchestration repo on the OCI host and verifies that live pods match it. The
+old combined local-build/live-apply path is removed from the active deployment
+surface.
 
 `service-common` is a library release line, not the stack version. Release it
 when `spring-platform`, `spring-cloud-platform`, `service-core`, or
 `service-web` changes. Do not bump it only to ship a service image, route
 change, documentation metadata fix, or production overlay update.
 
-Tag helpers and historical release workflows remain useful for human source
-management and rare named releases, but tag names are not production
-correctness. OCI apply and verification use the complete deployment snapshot
-and immutable image digests.
+Tag helpers remain useful for human source management and rare named releases,
+but tag names are not production correctness. OCI apply and verification use
+the checked-in desired state and immutable image digests.
 
 ## Orchestration Workflows
 
@@ -145,7 +169,7 @@ The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
 - rendered Kustomize schema validation for the production app and
   infrastructure overlays, so partial patch files stay excluded from
   standalone validation but are still checked after render; the schema-v2
-  production deployment snapshot is also excluded because it is release
+  production deployment manifest is also excluded because it is desired-state
   metadata, not a Kubernetes resource
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
@@ -268,8 +292,7 @@ release from source still pinned to the snapshot dependency.
 
 ### Release Images
 
-Release image publishing supports both historical tag-driven workflows and the
-convention-based OCI promotion command:
+Release image publishing is tag-driven and owned by the source repositories:
 
 - `transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway` publish `linux/arm64` GHCR images from
@@ -287,10 +310,6 @@ convention-based OCI promotion command:
   `.github/workflows/publish-release.yml`
 - orchestration publishes `ext-authz` from
   `.github/workflows/publish-ext-authz-release.yml`
-- `./deploy/scripts/promote-current-stack-to-oci.sh` builds and pushes changed
-  artifacts directly from the current workspace with deterministic
-  `promotion-...` image tags, then records the registry-returned digest in the
-  complete deployment snapshot
 - on `push` of a strict `vX.Y.Z` tag, the workflows publish the stripped
   numeric SemVer Docker tag and print a digest-pinned image reference for the
   production inventory step; they do not publish `latest`
@@ -298,7 +317,7 @@ convention-based OCI promotion command:
   SemVer tag defaults to Docker label `X.Y.Z`, while non-SemVer source refs
   require an explicit Docker-safe `docker_label`
 - ad hoc Docker labels are registry labels only; deployment correctness still
-  comes from the digest-pinned reference recorded in the deployment snapshot
+  comes from the digest-pinned reference recorded in checked-in desired state
 - the Java workflows read `serviceCommon` from the checked-out
   `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
   Docker dependency resolution, and do not require `release_ref` to equal the
@@ -308,26 +327,31 @@ convention-based OCI promotion command:
 - the production image inventory lives in
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
-  using those `0.0.14` GHCR refs
-- before a changed `service-common` library can be promoted, publish the
+  from that inventory
+- before a changed `service-common` library can be deployed, publish the
   library version and update the Java consumers' checked-in `serviceCommon`
-  value; the promotion command then marks those Java workloads for rebuild
+  value before preparing OCI desired state
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
   default, and it refuses tooling repos such as `checkstyle-config` for OCI
   runtime release tagging
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
-- deployment manifests record deployment id, accepted status, orchestration
-  revision, per-artifact source refs, source commits, artifact versions,
-  `service-common` versions for Java workloads, digest-pinned GHCR image refs,
-  build decisions, and content identities
+- deployment manifests record deployment id, orchestration revision,
+  per-artifact source refs, source commits, artifact versions,
+  `service-common` versions for Java workloads, and digest-pinned GHCR image
+  refs
 - `./deploy/scripts/23-update-production-release-images.sh
   --deployment-manifest <path>` remains the lower-level baseline renderer used
-  by the promotion command
+  by the local preparation command
+- `./deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host
+  apply command for the checked-in production manifest
 - `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
-  snapshot applier used by the promotion command; it applies the complete
-  deployment snapshot to the managed production app set
+  applier for replaying an explicit reviewed desired-state manifest
+- `./deploy/scripts/24-verify-oci-upgrade-lockstep.sh` is the main static
+  agreement gate for the checked-in production desired state: deployment
+  manifest, image inventory, app kustomization, runtime metadata patch, and
+  release metadata must agree before OCI apply
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
   checked-in production baseline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed
@@ -341,7 +365,7 @@ convention-based OCI promotion command:
 
 ### Manual validation from a clean environment
 
-The snapshot and tag-driven workflows cover every remote publish path that
+The GitHub Actions and tag-driven workflows cover every remote publish path that
 contributors consume. For a one-off manual validation that the remote publish
 path still works from a clean environment (for example, reproducing a CI
 failure without sibling-repo state), check out `service-common`, export

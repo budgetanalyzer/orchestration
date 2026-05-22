@@ -29,6 +29,16 @@ JAVA_SERVICES=(
 )
 readonly JAVA_SERVICES
 
+EXPECTED_RUNTIME_WORKLOADS=(
+    "transaction-service"
+    "currency-service"
+    "permission-service"
+    "session-gateway"
+    "ext-authz"
+    "nginx-gateway"
+)
+readonly EXPECTED_RUNTIME_WORKLOADS
+
 declare -A EXPECTED_IMAGE_REFS=()
 declare -A EXPECTED_ARTIFACT_VERSIONS=()
 declare -A EXPECTED_SOURCE_REFS=()
@@ -36,7 +46,6 @@ declare -A EXPECTED_SOURCE_COMMITS=()
 declare -A EXPECTED_SERVICE_COMMON_VERSIONS=()
 
 expected_deployment_id=""
-expected_deployment_status=""
 
 usage() {
     cat <<'EOF'
@@ -222,9 +231,7 @@ load_expected_from_manifest() {
     [[ "${schema_version}" == "2" ]] || die "deployment manifest must use schema_version: 2"
 
     expected_deployment_id="$(manifest_map_value "${file}" "deployment" "id")"
-    expected_deployment_status="$(manifest_map_value "${file}" "deployment" "status")"
     [[ -n "${expected_deployment_id}" ]] || die "deployment manifest is missing deployment.id"
-    [[ -n "${expected_deployment_status}" ]] || die "deployment manifest is missing deployment.status"
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(manifest_nested_value "${file}" "artifacts" "${service}" "image")"
@@ -261,9 +268,7 @@ load_expected_from_inventory() {
     [[ "${schema_version}" == "2" ]] || die "inventory must use schema-version: \"2\""
 
     expected_deployment_id="$(inventory_value "${file}" "deployment-id")"
-    expected_deployment_status="$(inventory_value "${file}" "deployment-status")"
     [[ -n "${expected_deployment_id}" ]] || die "inventory is missing deployment-id"
-    [[ -n "${expected_deployment_status}" ]] || die "inventory is missing deployment-status"
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(inventory_value "${file}" "${service}")"
@@ -336,13 +341,31 @@ warn_mismatch() {
     printf 'WARNING: %s\n' "${message}" >&2
 }
 
+image_list_contains() {
+    local image_list="$1"
+    local expected_image="$2"
+    local image
+    local -a images_array=()
+
+    IFS=',' read -r -a images_array <<< "${image_list}"
+    for image in "${images_array[@]}"; do
+        if [[ "${image}" == "${expected_image}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 main() {
     local pod_template pod_rows
-    local namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation images
+    local namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images all_images
     local workload artifact expected_service_common
     local status tracked
     local warning_count=0
     local printed_count=0
+    local expected_workload
+    declare -A seen_runtime_workloads=()
 
     parse_args "$@"
     require_command kubectl
@@ -354,16 +377,16 @@ main() {
     fi
 
     printf 'Expected deployment id: %s\n' "${expected_deployment_id}"
-    printf 'Expected deployment status: %s\n' "${expected_deployment_status}"
     printf '%-10s %-16s %-52s %-24s %-20s %-12s %-18s %s\n' \
         "STATUS" "NAMESPACE" "POD" "APP" "DEPLOYMENT-ID" "VERSION" "PART-OF" "IMAGES"
 
     # shellcheck disable=SC2016 # Go template variables must remain literal for kubectl.
-    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{with .metadata.labels}}{{index . "app"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/name"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "budgetanalyzer.org/deployment-id"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/version"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/part-of"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/image"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "org.opencontainers.image.revision"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/source-ref"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/service-common-version"}}{{end}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
+    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{with .metadata.labels}}{{index . "app"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/name"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "budgetanalyzer.org/deployment-id"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/version"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/part-of"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/image"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "org.opencontainers.image.revision"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/source-ref"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/service-common-version"}}{{end}}{{"\t"}}{{range $index, $container := .spec.initContainers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
     pod_rows="$(kubectl get pods -A -o "go-template=${pod_template}")"
 
-    while IFS=$'\t' read -r namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation images; do
+    while IFS=$'\t' read -r namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images; do
         [[ -n "${namespace}" ]] || continue
+        all_images="${init_images}${init_images:+,}${images}"
 
         workload="${app:-${app_name}}"
         tracked=false
@@ -377,6 +400,7 @@ main() {
 
         status="OK"
         if [[ "${tracked}" == true ]]; then
+            seen_runtime_workloads["${workload}"]=true
             artifact="$(artifact_for_workload "${workload}")"
             if [[ -z "${EXPECTED_IMAGE_REFS[${artifact}]:-}" ]]; then
                 status="WARN"
@@ -394,6 +418,10 @@ main() {
                 status="WARN"
                 warning_count=$((warning_count + 1))
                 warn_mismatch "${namespace}/${pod} has budgetanalyzer.org/image=${image_annotation:-<none>}; expected ${EXPECTED_IMAGE_REFS[${artifact}]}"
+            elif ! image_list_contains "${all_images}" "${EXPECTED_IMAGE_REFS[${artifact}]}"; then
+                status="WARN"
+                warning_count=$((warning_count + 1))
+                warn_mismatch "${namespace}/${pod} does not run expected image ${EXPECTED_IMAGE_REFS[${artifact}]}; actual images: ${all_images:-<none>}"
             elif [[ "${revision_annotation}" != "${EXPECTED_SOURCE_COMMITS[${artifact}]}" ]]; then
                 status="WARN"
                 warning_count=$((warning_count + 1))
@@ -415,9 +443,16 @@ main() {
         fi
 
         printf '%-10s %-16s %-52s %-24s %-20s %-12s %-18s %s\n' \
-            "${status}" "${namespace}" "${pod}" "${workload:-<none>}" "${deployment_id:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${images:-<none>}"
+            "${status}" "${namespace}" "${pod}" "${workload:-<none>}" "${deployment_id:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${all_images:-<none>}"
         printed_count=$((printed_count + 1))
     done <<< "${pod_rows}"
+
+    for expected_workload in "${EXPECTED_RUNTIME_WORKLOADS[@]}"; do
+        if [[ -z "${seen_runtime_workloads[${expected_workload}]:-}" ]]; then
+            warning_count=$((warning_count + 1))
+            warn_mismatch "missing tracked runtime workload pod: ${expected_workload}"
+        fi
+    done
 
     printf '\nPrinted pods: %s\n' "${printed_count}"
     printf 'Warnings: %s\n' "${warning_count}"

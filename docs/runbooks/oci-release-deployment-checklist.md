@@ -4,11 +4,11 @@ Use this template to record evidence for an OCI release or deployment. It is a
 run-log shape, not a secret store: do not paste kubeconfigs, private keys,
 tokens, passwords, cookie values, or raw secret payloads.
 
-The normal production shape is workspace snapshot promotion, using the
-terminology from [docs/ci-cd.md](../ci-cd.md). The promotion command may
-rebuild only changed artifacts or reuse all existing artifacts, but the
-deployment snapshot is always complete and OCI receives the managed production
-app set.
+The normal production shape is local desired-state preparation, human review,
+and OCI-host apply, using the terminology from [docs/ci-cd.md](../ci-cd.md).
+GitHub Actions builds release images from source tags; the checked-in
+production manifest and image inventory record the desired digest-pinned
+artifact set.
 
 `service-common` is a shared Java library version. Record it where it changed
 or where a Java artifact consumes it, but do not require a `service-common`
@@ -16,20 +16,24 @@ bump for config-only deployments or unrelated service releases.
 
 The recurring deployment commands live in [deploy/README.md](../../deploy/README.md)
 and the script help for
-[promote-current-stack-to-oci.sh](../../deploy/scripts/promote-current-stack-to-oci.sh).
+[prepare-oci-manifest-from-current-stack.sh](../../deploy/scripts/prepare-oci-manifest-from-current-stack.sh).
 Use those sources for the current command sequence, then record the evidence
 below.
 
 ## Prerequisites
 
-- [ ] `deploy/scripts/promote-current-stack-to-oci.sh --plan-only` has been
-  reviewed for reused versus rebuilt artifacts.
+- [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
+  vX.Y.Z --plan-only` has been reviewed for tag actions and expected GHCR
+  image tags.
 - [ ] Any Java `service-common` change has already been published and Java
   consumers are pinned to the intended `serviceCommon` version.
-- [ ] The operator shell is on the OCI host, or is explicitly using an OCI
-  host kubeconfig with `--kubeconfig`.
-- [ ] `KUBECONFIG` points at the intended OCI k3s cluster.
-- [ ] `~/.config/budget-analyzer/instance.env` exists on the OCI host.
+- [ ] The local preparation command completed and produced a reviewed
+  orchestration diff.
+- [ ] The orchestration desired-state diff was committed and pushed.
+- [ ] The OCI host has pulled the orchestration commit that contains the
+  reviewed desired-state files.
+- [ ] On the OCI host, `KUBECONFIG` points at the intended k3s cluster.
+- [ ] On the OCI host, `~/.config/budget-analyzer/instance.env` exists.
 - [ ] Any required certificate generation is run by the human operator on the
   host, not from the AI container.
 
@@ -37,17 +41,17 @@ below.
 
 | Field | Value |
 | --- | --- |
-| Deployment type | `workspace snapshot promotion` |
+| Deployment type | `checked-in desired-state apply` |
 | Release version, if applicable | `vX.Y.Z` or `n/a` |
 | Deployment id or release label |  |
 | Deployment date | `YYYY-MM-DD` |
 | Operator |  |
-| Plan-only first | `yes` or `no` |
-| Deployment snapshot | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.yaml` |
-| Promotion plan | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.plan.yaml` |
+| Local plan-only first | `yes` or `no` |
+| Source tag | `vX.Y.Z` |
+| Local desired-state manifest | `tmp/deployments/oci-YYYYMMDDTHHMMSSZ.yaml` |
 | Production image inventory ref | `kubernetes/production/apps/image-inventory.yaml` |
 | Orchestration checkout ref |  |
-| OCI apply snapshot directory | `tmp/oci-release-deploy/<timestamp>-manifest-<deployment-id>` |
+| OCI apply evidence directory | `tmp/oci-release-deploy/<timestamp>-manifest-<deployment-id>` |
 
 ## Source Commits
 
@@ -88,6 +92,11 @@ below.
 
 | Check | Evidence | Result |
 | --- | --- | --- |
+| Local preparation plan | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only` |  |
+| Local preparation command | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z` |  |
+| Orchestration diff reviewed | `git diff` |  |
+| Orchestration commit pushed | commit SHA |  |
+| OCI host pulled commit | `git rev-parse HEAD` |  |
 | Current Kubernetes context |  |  |
 | Node summary |  |  |
 | Pod summary |  |  |
@@ -104,12 +113,15 @@ below.
 
 | Order | Script or command | Arguments | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | `deploy/scripts/promote-current-stack-to-oci.sh` | `--plan-only` |  |  |
-| 2 | `deploy/scripts/promote-current-stack-to-oci.sh` | deployment options used |  |  |
-| 3 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after baseline update |  |  |
+| 1 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --plan-only` |  |  |
+| 2 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z` plus options used |  |  |
+| 3 | `git diff` | review production desired-state files |  |  |
+| 4 | `git pull` | on OCI host |  |  |
+| 5 | `deploy/scripts/deploy-current-oci-manifest.sh` | phase-3 target command |  |  |
+| 6 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after pull |  |  |
 
 Add rows only for reviewed lower-level recovery commands used to replay the
-same complete deployment snapshot.
+same complete desired-state manifest.
 
 ## Rollout Results
 
@@ -164,7 +176,7 @@ same complete deployment snapshot.
 | --- | --- |
 | Previous deployment id |  |
 | Previous deployment manifest or image inventory ref |  |
-| Complete rollback snapshot available | `yes`, `no`, or `needs review` |
+| Complete rollback desired-state manifest available | `yes`, `no`, or `needs review` |
 | Artifact driving rollback, if any |  |
 | Data migration risk |  |
 | RabbitMQ queue migration or discard decision |  |

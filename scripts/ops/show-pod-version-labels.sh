@@ -36,7 +36,6 @@ declare -A EXPECTED_SOURCE_COMMITS=()
 declare -A EXPECTED_SERVICE_COMMON_VERSIONS=()
 
 expected_deployment_id=""
-expected_deployment_status=""
 
 usage() {
     cat <<'EOF'
@@ -222,9 +221,7 @@ load_expected_from_manifest() {
     [[ "${schema_version}" == "2" ]] || die "deployment manifest must use schema_version: 2"
 
     expected_deployment_id="$(manifest_map_value "${file}" "deployment" "id")"
-    expected_deployment_status="$(manifest_map_value "${file}" "deployment" "status")"
     [[ -n "${expected_deployment_id}" ]] || die "deployment manifest is missing deployment.id"
-    [[ -n "${expected_deployment_status}" ]] || die "deployment manifest is missing deployment.status"
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(manifest_nested_value "${file}" "artifacts" "${service}" "image")"
@@ -261,9 +258,7 @@ load_expected_from_inventory() {
     [[ "${schema_version}" == "2" ]] || die "inventory must use schema-version: \"2\""
 
     expected_deployment_id="$(inventory_value "${file}" "deployment-id")"
-    expected_deployment_status="$(inventory_value "${file}" "deployment-status")"
     [[ -n "${expected_deployment_id}" ]] || die "inventory is missing deployment-id"
-    [[ -n "${expected_deployment_status}" ]] || die "inventory is missing deployment-status"
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(inventory_value "${file}" "${service}")"
@@ -354,7 +349,6 @@ main() {
     fi
 
     printf 'Expected deployment id: %s\n' "${expected_deployment_id}"
-    printf 'Expected deployment status: %s\n' "${expected_deployment_status}"
     printf '%-10s %-16s %-52s %-24s %-20s %-12s %-18s %s\n' \
         "STATUS" "NAMESPACE" "POD" "APP" "DEPLOYMENT-ID" "VERSION" "PART-OF" "IMAGES"
 

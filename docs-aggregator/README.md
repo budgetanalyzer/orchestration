@@ -8,8 +8,8 @@ The machine-readable contract stays first-class on the same public route:
 
 - `/api-docs/openapi.json` is the unified JSON contract
 - `/api-docs/openapi.yaml` is the unified YAML contract
-- `/api-docs/release-metadata.json` is the non-secret runtime release metadata
-  that also drives the visible deployment-shape table on the docs page
+- `/api-docs/release-metadata.json` is the non-secret deployment desired-state
+  metadata that also drives the visible deployment-shape table on the docs page
 
 ## Overview
 
@@ -69,7 +69,8 @@ The direct downloads at `/api-docs/openapi.json` and `/api-docs/openapi.yaml`
 remain available for browser download, local inspection, or tooling use.
 `/api-docs/release-metadata.json` is served on the same docs-only CSP profile
 with `Cache-Control: no-store` and is intentionally limited to non-secret
-release version and digest-pinned artifact image refs.
+deployment identity and digest-pinned artifact image refs. It does not report
+live deployment lifecycle status; live status is verified separately from OCI.
 The page fetches that metadata once and renders the current deployment id,
 environment, orchestration revision, and the full managed artifact manifest.
 

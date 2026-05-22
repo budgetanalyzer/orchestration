@@ -2,7 +2,6 @@ schema_version: 2
 deployment:
   id: "oci-20260521.1"
   environment: "oci-production"
-  status: "accepted"
   orchestration_repository:
     commit: "4eae2fb0640728437652c773777f7b8abb0d7b42"
     source_ref: "4eae2fb0640728437652c773777f7b8abb0d7b42"

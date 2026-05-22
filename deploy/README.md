@@ -22,19 +22,25 @@ Runtime render output still belongs under `tmp/`, not under `deploy/`.
 
 ## Deployment Operating Model
 
-The normal OCI production operation is convention-based workspace snapshot
-promotion.
-The canonical terminology lives in [docs/ci-cd.md](../docs/ci-cd.md).
+The normal OCI production operation is a local desired-state preparation step,
+human review, and an OCI-host apply step. The canonical terminology lives in
+[docs/ci-cd.md](../docs/ci-cd.md).
 
 ```bash
-./deploy/scripts/promote-current-stack-to-oci.sh
+# Local workstation
+./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z
+
+# OCI host, after the orchestration diff is reviewed, committed, pushed, and pulled
+./deploy/scripts/deploy-current-oci-manifest.sh
 ```
 
-That command snapshots the current intended workspace state, compares it with
-the accepted OCI production baseline, carries forward unchanged digest-pinned
-images and metadata, builds and pushes only changed `linux/arm64` images,
-updates the checked-in production baseline from one complete deployment
-snapshot, and applies the managed production app set to OCI.
+The local preparation command creates and pushes missing source tags, waits for
+GitHub Actions to publish the corresponding GHCR images, resolves immutable
+digests, updates the checked-in production desired state, and stops for review.
+It does not build Docker images, deploy to OCI, or require OCI kubeconfig
+access. The OCI host command is the phase-3 target command; until it lands,
+`deploy/scripts/25-deploy-oci-release.sh` remains a lower-level recovery
+surface.
 
 Every durable deployment state must remain repo-owned, repeatable, and
 digest-pinned. `service-common` is released only when the shared Java libraries
@@ -101,8 +107,8 @@ change; do not bump it to force an unrelated OCI deployment.
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
    - `deploy/scripts/14-install-phase-7-kyverno.sh`
    - `deploy/scripts/15-apply-phase-7-policies.sh`
-11. Review the production deployment-baseline and OCI promotion helpers:
-   - `deploy/scripts/promote-current-stack-to-oci.sh`
+11. Review the production desired-state preparation and OCI apply helpers:
+   - `deploy/scripts/prepare-oci-manifest-from-current-stack.sh`
    - `deploy/scripts/23-update-production-release-images.sh`
    - `deploy/scripts/24-verify-oci-upgrade-lockstep.sh`
    - `deploy/scripts/25-deploy-oci-release.sh`
@@ -110,8 +116,9 @@ change; do not bump it to force an unrelated OCI deployment.
    - `kubernetes/production/apps/deployment-manifest.yaml`
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
-   Run `deploy/scripts/promote-current-stack-to-oci.sh --plan-only` first when
-   you want a non-mutating diff of reused versus rebuilt artifacts.
+   Run `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
+   vX.Y.Z --plan-only` first when you want a non-mutating preview of tag
+   actions and expected GHCR image tags.
 12. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The production Prometheus/Grafana path is owned by
@@ -202,10 +209,11 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
-| `deploy/scripts/promote-current-stack-to-oci.sh` | Normal OCI promotion entry point. It snapshots the current workspace stack, carries forward unchanged image digests and metadata, builds and pushes changed `linux/arm64` GHCR images, writes a complete deployment snapshot, updates the production baseline, and applies the managed production app set. | Run `--plan-only` first for a non-mutating reused/rebuilt diff, then run without `--plan-only` from the operator host when the current workspace is the intended OCI state. |
-| `deploy/scripts/23-update-production-release-images.sh` | Lower-level renderer used by the promotion command. It updates the checked-in production deployment baseline from a complete schema v2 deployment manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then renders the app overlay and runs static verification plus the live production verifier unless explicitly skipped. | Use directly only when reviewing or repairing the checked-in baseline from an already complete deployment snapshot. Java artifacts must carry `service_common_version`. |
+| `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | Normal local OCI desired-state preparation entry point. It requires clean source workspaces, creates and pushes missing `vX.Y.Z` source tags, waits for GHCR images from GitHub Actions, resolves digests, writes a complete desired-state manifest, updates the production image inventory, release metadata, runtime metadata patch, and app overlay, then stops for review. | Run from the local workstation before an OCI deployment. Use `--plan-only` first to preview tag actions without pushing tags or editing files. |
+| `deploy/scripts/promote-current-stack-to-oci.sh` | Obsolete promotion-path entry point retained temporarily for old-flow repair only. It builds and pushes `promotion-*` images and combines local desired-state preparation with live OCI apply, which is no longer the normal operator model. | Do not use for new OCI deployments. Remove after the promotion path cleanup phase. |
+| `deploy/scripts/23-update-production-release-images.sh` | Lower-level renderer used by the preparation command. It updates the checked-in production deployment baseline from a complete schema v2 desired-state manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then renders the app overlay and runs static verification plus the cluster-backed production verifier unless explicitly skipped. | Use directly only when repairing the checked-in baseline from an already complete desired-state manifest. Java artifacts must carry `service_common_version`. |
 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts, production deployment manifest/image inventory/app patches agree, production `/api-docs` render wiring remains intact, and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, production render, or config-only deployment change. |
-| `deploy/scripts/25-deploy-oci-release.sh` | Lower-level OCI snapshot applier used by the promotion command. It requires a schema v2 `--deployment-manifest`, validates it against the checked-in production baseline, runs the static gate, captures pre/post cluster snapshots, applies the managed production app set, waits for rollouts, and verifies live runtime metadata. | Use directly only when replaying a reviewed complete deployment snapshot. The normal production path is `promote-current-stack-to-oci.sh`. |
+| `deploy/scripts/25-deploy-oci-release.sh` | Lower-level OCI desired-state applier. It requires a schema v2 `--deployment-manifest`, validates it against the checked-in production baseline, runs the static gate, captures pre/post cluster snapshots, applies the managed production app set, waits for rollouts, and verifies live runtime metadata. | Use directly only until the phase-3 `deploy-current-oci-manifest.sh` wrapper is available or when replaying a reviewed desired-state manifest. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those

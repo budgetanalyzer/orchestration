@@ -238,7 +238,6 @@ load_inventory_refs() {
     [[ "${schema_version}" == "2" ]] || fail "production image inventory must use schema-version: \"2\""
     deployment_id="$(inventory_value "deployment-id")"
     [[ -n "${deployment_id}" ]] || fail "production image inventory is missing deployment-id"
-    [[ -n "$(inventory_value "deployment-status")" ]] || fail "production image inventory is missing deployment-status"
     [[ -n "$(inventory_value "deployment-environment")" ]] || fail "production image inventory is missing deployment-environment"
     [[ "$(inventory_value "orchestration-commit")" =~ ^[0-9a-f]{40}$ ]] || \
         fail "production image inventory is missing a valid orchestration-commit"

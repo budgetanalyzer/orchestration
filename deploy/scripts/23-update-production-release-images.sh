@@ -72,7 +72,6 @@ declare -A SERVICE_COMMON_VERSIONS=()
 
 deployment_manifest=""
 deployment_id=""
-deployment_status=""
 deployment_environment=""
 orchestration_commit=""
 orchestration_source_ref=""
@@ -91,9 +90,9 @@ Options:
 
 Updates the checked-in OCI production application image baseline from a
 complete v2 deployment manifest. The manifest is the source of truth for
-deployment id, status, orchestration revision, per-artifact source refs,
-source commits, artifact versions, Java service-common versions, and
-digest-pinned images.
+deployment id, orchestration revision, per-artifact source refs, source
+commits, artifact versions, Java service-common versions, and digest-pinned
+images.
 EOF
 }
 
@@ -346,13 +345,11 @@ load_deployment_manifest() {
     [[ "${schema_version}" == "2" ]] || phase4_die "deployment manifest must use schema_version: 2"
 
     deployment_id="$(manifest_map_value "${deployment_manifest}" "deployment" "id")"
-    deployment_status="$(manifest_map_value "${deployment_manifest}" "deployment" "status")"
     deployment_environment="$(manifest_map_value "${deployment_manifest}" "deployment" "environment")"
     orchestration_commit="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "commit")"
     orchestration_source_ref="$(manifest_nested_map_value "${deployment_manifest}" "deployment" "orchestration_repository" "source_ref")"
 
     [[ -n "${deployment_id}" ]] || phase4_die "deployment manifest is missing deployment.id"
-    [[ -n "${deployment_status}" ]] || phase4_die "deployment manifest is missing deployment.status"
     [[ -n "${deployment_environment}" ]] || phase4_die "deployment manifest is missing deployment.environment"
     [[ -n "${orchestration_commit}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.commit"
     [[ -n "${orchestration_source_ref}" ]] || phase4_die "deployment manifest is missing deployment.orchestration_repository.source_ref"
@@ -435,7 +432,6 @@ metadata:
 data:
   schema-version: "2"
   deployment-id: "${deployment_id}"
-  deployment-status: "${deployment_status}"
   deployment-environment: "${deployment_environment}"
   orchestration-commit: "${orchestration_commit}"
   orchestration-source-ref: "${orchestration_source_ref}"
@@ -476,7 +472,6 @@ write_release_metadata_json_file() {
         printf '  "deployment": {\n'
         printf '    "id": "%s",\n' "${deployment_id}"
         printf '    "environment": "%s",\n' "${deployment_environment}"
-        printf '    "status": "%s",\n' "${deployment_status}"
         printf '    "orchestrationRepository": {\n'
         printf '      "commit": "%s",\n' "${orchestration_commit}"
         printf '      "sourceRef": "%s"\n' "${orchestration_source_ref}"
@@ -530,7 +525,6 @@ metadata:
     app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
     budgetanalyzer.org/deployment-id: ${deployment_id}
   annotations:
-    budgetanalyzer.org/deployment-status: ${deployment_status}
     budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
     budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
     org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}
@@ -551,7 +545,6 @@ spec:
         app.kubernetes.io/version: ${ARTIFACT_VERSIONS[${artifact}]}
         budgetanalyzer.org/deployment-id: ${deployment_id}
       annotations:
-        budgetanalyzer.org/deployment-status: ${deployment_status}
         budgetanalyzer.org/image: ${IMAGE_REFS[${artifact}]}
         budgetanalyzer.org/source-ref: ${SOURCE_REFS[${artifact}]}
         org.opencontainers.image.version: ${ARTIFACT_VERSIONS[${artifact}]}

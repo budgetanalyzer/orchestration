@@ -62,7 +62,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/transaction-service:0.0.14@sha256:5ef17ce3696330239b030e607652b0743b95a8f8e03117c2e5511dad0ee8f5e6
+        value: ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:ee1bacc5a97ed04d4bd7edcf0b2335e0ce8eb2f78f6e4d4f1c6fb356de30c5b1
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:
@@ -71,7 +71,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/currency-service:0.0.14@sha256:80ba38fdff655b3f563bb0a60abf05394fdeae3355ae9f23c022456a28cbf1ff
+        value: ghcr.io/budgetanalyzer/currency-service:0.0.15@sha256:8352eb2d6898ee74a20d46f20e5cf6e8f9aa8694abc943e38f962af4397bfa69
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:
@@ -80,7 +80,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/permission-service:0.0.14@sha256:8d6751662d09bfaa791d66b817f990dcf77c554189e475b726eb3e67f25cf63c
+        value: ghcr.io/budgetanalyzer/permission-service:0.0.15@sha256:8cd82bed5cd381080c346640eacabb058b23ccd2b3a2ff68a503159c0493f5cc
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:
@@ -89,7 +89,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/session-gateway:0.0.14@sha256:c30612af5c8f9f7e023b5e43698885d87354a859c056b44fd01ca64de73183f9
+        value: ghcr.io/budgetanalyzer/session-gateway:0.0.15@sha256:aeef64ec48521fbc14c87ae032c0b94d0e8a90735c83e3fea7a8ff5d22abd86e
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:
@@ -98,7 +98,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/ext-authz:0.0.14@sha256:85aede7d18be357c25c0155b551f1a391ac9d30c6b2b33716ce23a3d1b6a5213
+        value: ghcr.io/budgetanalyzer/ext-authz:0.0.15@sha256:a0b8d58f2eb8cd89623954731628d1dd2051fb279686f6a286827a3fc8c52b90
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:
@@ -122,7 +122,7 @@ patches:
         value: web-assets
       - op: replace
         path: /spec/template/spec/initContainers/1/image
-        value: ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.14@sha256:6977e2bf376ffa44c1706e6282550da7d5fd17a60e1847446c749770297b39c8
+        value: ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.15@sha256:6c1030872b4c68d5b442d2f979116fe5a272dd42b1c5da8fb943292bcd9ab40f
       - op: remove
         path: /spec/template/spec/initContainers/1/imagePullPolicy
       - op: replace

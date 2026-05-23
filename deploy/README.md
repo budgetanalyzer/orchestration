@@ -57,6 +57,10 @@ Every durable deployment state must remain repo-owned, repeatable, and
 digest-pinned. `service-common` is released only when the shared Java libraries
 change; do not bump it to force an unrelated OCI deployment.
 
+The `ext-authz` image is sourced from this orchestration repository. During a
+release, its source tag can intentionally point at an earlier commit than the
+later orchestration commit that records the reviewed desired state.
+
 ## Review And Run Order
 
 1. Copy `deploy/instance.env.template` to `~/.config/budget-analyzer/instance.env` and fill in only the deployment-specific non-secret values.

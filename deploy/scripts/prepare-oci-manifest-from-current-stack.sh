@@ -367,8 +367,13 @@ plan_source_tags() {
 
         existing_commit="${local_commit:-${remote_commit}}"
         if [[ -n "${existing_commit}" ]]; then
-            [[ "${existing_commit}" == "${head_commit}" ]] || \
-                die "${source_repo}: ${source_tag} points at ${existing_commit}, but current HEAD is ${head_commit}"
+            if [[ "${existing_commit}" != "${head_commit}" ]]; then
+                if [[ "${artifact}" == "ext-authz" && "${source_repo}" == "orchestration" ]]; then
+                    SOURCE_COMMITS["${artifact}"]="${existing_commit}"
+                else
+                    die "${source_repo}: ${source_tag} points at ${existing_commit}, but current HEAD is ${head_commit}"
+                fi
+            fi
             if [[ -n "${local_commit}" && -z "${remote_commit}" ]]; then
                 TAG_ACTIONS["${artifact}"]="push-existing"
             else
@@ -424,7 +429,7 @@ ensure_source_tags() {
 
         case "${action}" in
             exists)
-                info "${source_repo}: ${source_tag} already exists at current HEAD"
+                info "${source_repo}: ${source_tag} already exists at ${SOURCE_COMMITS[${artifact}]}"
                 ;;
             push-existing)
                 info "${source_repo}: pushing existing local ${source_tag}"

@@ -63,7 +63,7 @@ declare -A SERVICE_COMMON_VERSIONS=()
 declare -A IMAGE_REFS=()
 declare -A TAG_ACTIONS=()
 
-declare -a CURL_AUTH_ARGS=()
+declare -a GHCR_TOKEN_AUTH_ARGS=()
 
 source_tag="${OCI_SOURCE_TAG:-}"
 deployment_id="${OCI_DEPLOYMENT_ID:-}"
@@ -114,8 +114,10 @@ the owning GitHub Actions release-image workflows to publish the expected GHCR
 tags. Use --resolve-images after those tags exist; missing GHCR tags are a
 direct prerequisite failure rather than a retry loop.
 
-If GHCR requires authentication for manifest reads, set GHCR_USERNAME and
-GHCR_TOKEN. GITHUB_ACTOR and GITHUB_TOKEN are accepted as fallbacks.
+GHCR image reads use the Docker Registry API token flow. Public packages can
+resolve without credentials. For private packages, set GHCR_USERNAME and
+GHCR_TOKEN to a GitHub token with read:packages. GITHUB_ACTOR and GITHUB_TOKEN
+are accepted as fallbacks.
 EOF
 }
 
@@ -461,13 +463,13 @@ initialize_ghcr_auth() {
     local token="${GHCR_TOKEN:-${GITHUB_TOKEN:-}}"
     local encoded
 
-    CURL_AUTH_ARGS=()
+    GHCR_TOKEN_AUTH_ARGS=()
     if [[ -n "${username}" && -n "${token}" ]]; then
         phase4_require_commands base64
         encoded="$(printf '%s:%s' "${username}" "${token}" | base64 | tr -d '\n')"
-        CURL_AUTH_ARGS=(-H "Authorization: Basic ${encoded}")
+        GHCR_TOKEN_AUTH_ARGS=(-H "Authorization: Basic ${encoded}")
     elif [[ -n "${token}" ]]; then
-        CURL_AUTH_ARGS=(-H "Authorization: Bearer ${token}")
+        warn "GHCR token is set without a username; using anonymous GHCR token flow. Set GHCR_USERNAME with GHCR_TOKEN for private packages."
     fi
 }
 
@@ -478,18 +480,41 @@ ghcr_manifest_url() {
     printf 'https://ghcr.io/v2/budgetanalyzer/%s/manifests/%s\n' "${image_repo}" "${tag}"
 }
 
+request_ghcr_pull_token() {
+    local image_repo="$1"
+    local token_file="$2"
+    local token
+
+    if ! curl -fsSL \
+        -o "${token_file}" \
+        "${GHCR_TOKEN_AUTH_ARGS[@]}" \
+        --get \
+        --data-urlencode 'service=ghcr.io' \
+        --data-urlencode "scope=repository:budgetanalyzer/${image_repo}:pull" \
+        'https://ghcr.io/token'; then
+        return 1
+    fi
+
+    token="$(sed -nE 's/.*"(token|access_token)"[[:space:]]*:[[:space:]]*"([^"]+)".*/\2/p' "${token_file}" | head -n 1)"
+    [[ -n "${token}" ]] || return 1
+    printf '%s\n' "${token}"
+}
+
 resolve_ghcr_digest() {
     local image_repo="$1"
     local tag="$2"
     local headers_file="$3"
     local body_file="$4"
-    local url digest
+    local token_file="$5"
+    local url digest token
 
     url="$(ghcr_manifest_url "${image_repo}" "${tag}")"
+    token="$(request_ghcr_pull_token "${image_repo}" "${token_file}")" || return 2
+
     if ! curl -fsSL \
         -D "${headers_file}" \
         -o "${body_file}" \
-        "${CURL_AUTH_ARGS[@]}" \
+        -H "Authorization: Bearer ${token}" \
         -H 'Accept: application/vnd.oci.image.index.v1+json' \
         -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
         -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
@@ -499,7 +524,7 @@ resolve_ghcr_digest() {
     fi
 
     digest="$(awk 'BEGIN {IGNORECASE = 1} /^docker-content-digest:/ {gsub(/\r/, "", $2); print $2; exit}' "${headers_file}")"
-    [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+    [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || return 3
     printf '%s\n' "${digest}"
 }
 
@@ -516,7 +541,7 @@ validate_manifest_mentions_arm64() {
 
 resolve_ghcr_images() {
     local artifact image_repo tag_ref digest
-    local temp_dir headers_file body_file
+    local temp_dir headers_file body_file token_file resolve_status
 
     initialize_ghcr_auth
     temp_dir="$(mktemp -d)"
@@ -526,10 +551,17 @@ resolve_ghcr_images() {
         tag_ref="ghcr.io/budgetanalyzer/${image_repo}:${docker_label}"
         headers_file="${temp_dir}/${artifact}.headers"
         body_file="${temp_dir}/${artifact}.json"
+        token_file="${temp_dir}/${artifact}.token.json"
 
         info "resolving ${tag_ref}"
-        if ! digest="$(resolve_ghcr_digest "${image_repo}" "${docker_label}" "${headers_file}" "${body_file}")"; then
-            die "missing GHCR image tag prerequisite: ${tag_ref}; wait for the ${source_tag} GitHub Actions release-image workflow in ${SOURCE_REPOS[${artifact}]} to publish it, then rerun with --resolve-images"
+        resolve_status=0
+        digest="$(resolve_ghcr_digest "${image_repo}" "${docker_label}" "${headers_file}" "${body_file}" "${token_file}")" || resolve_status=$?
+        if [[ "${resolve_status}" -ne 0 ]]; then
+            if [[ "${resolve_status}" -eq 2 ]]; then
+                die "could not get GHCR pull token for ${tag_ref}; if the package is private, set GHCR_USERNAME and GHCR_TOKEN to a GitHub token with read:packages"
+            fi
+
+            die "missing or inaccessible GHCR image tag prerequisite: ${tag_ref}; wait for the ${source_tag} GitHub Actions release-image workflow in ${SOURCE_REPOS[${artifact}]} to publish it, then rerun with --resolve-images"
         fi
 
         IMAGE_REFS["${artifact}"]="${tag_ref}@${digest}"

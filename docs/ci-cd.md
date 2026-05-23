@@ -121,6 +121,10 @@ metadata patch, and `/api-docs` release metadata, then stops. Missing GHCR tags
 are a prerequisite failure in resolve mode, not a polling loop. The local
 preparation command does not build Docker images, push GHCR images directly,
 deploy to OCI, require OCI kubeconfig access, or write lifecycle status.
+GHCR image reads use the Docker Registry API bearer-token flow. Public packages
+can resolve anonymously; private packages require `GHCR_USERNAME` and
+`GHCR_TOKEN` with `read:packages` scope. GitHub SSH keys are not used by GHCR
+image reads.
 
 The final orchestration manifest commit necessarily happens after the source
 tag that builds `ext-authz`. Do not try to make the checked-in desired-state

@@ -48,6 +48,11 @@ images, deploy to OCI, or require OCI kubeconfig access. The OCI host command
 applies the checked-in production manifest and fails if live pods do not match
 it.
 
+`--resolve-images` uses the Docker Registry API with GHCR bearer tokens. Public
+packages can resolve anonymously; private packages require `GHCR_USERNAME` and
+`GHCR_TOKEN` with `read:packages` scope. GitHub SSH keys are not used by GHCR
+image reads.
+
 Every durable deployment state must remain repo-owned, repeatable, and
 digest-pinned. `service-common` is released only when the shared Java libraries
 change; do not bump it to force an unrelated OCI deployment.

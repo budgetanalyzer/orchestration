@@ -546,12 +546,14 @@ rg -n "orchestration/ext-authz|publish-ext-authz-release|source.*orchestration|s
 Every remaining match should either be historical context in this plan or an
 intentional reference to pre-cutover production metadata.
 
-## Phase 6: Release The First Image From The New Repository
+## Phase 6: Create The First Release Tag In The New Repository
 
 ### Work
 
 After the new repo is merged and Actions are configured, create the first
-release tag in `../ext-authz`:
+release tag in `../ext-authz`. The package authority move and image publish are
+handled in Phase 7 so the first post-split image is published from the
+`ext-authz` package/repository surface.
 
 ```bash
 cd ../ext-authz
@@ -566,26 +568,62 @@ cd ../orchestration
 ./scripts/repo/prepare-service-release.sh --service ext-authz --version 0.0.16 --tag
 ```
 
-Wait for:
+### Validation
+
+```bash
+git -C ../ext-authz rev-parse --verify v0.0.16^{commit}
+```
+
+Confirm the tag points at the intended `../ext-authz` release commit.
+
+## Phase 7: Move GHCR Package Authority And Cut Production Desired State
+
+### Work
+
+Move the existing `ghcr.io/budgetanalyzer/ext-authz` package so the new
+repository is the package-connected source of truth before publishing the first
+post-split image.
+
+In GitHub package settings for `ext-authz`:
+
+- connect the package to `budgetanalyzer/ext-authz`
+- ensure package visibility matches the rest of the runtime image packages
+- ensure `budgetanalyzer/ext-authz` Actions can publish the package through
+  its own `GITHUB_TOKEN`
+- remove orchestration publish/write authority from the package as part of this
+  cutover, not as deferred cleanup
+
+After this step, the package UI should no longer redirect through:
+
+```text
+https://github.com/budgetanalyzer/orchestration/pkgs/container/ext-authz
+```
+
+It should resolve from the new repository/package surface instead:
+
+```text
+https://github.com/budgetanalyzer/ext-authz/pkgs/container/ext-authz
+```
+
+Then publish or rerun the first release image from `budgetanalyzer/ext-authz`:
 
 ```text
 https://github.com/budgetanalyzer/ext-authz/actions/workflows/publish-release.yml
 ```
 
-Record the digest-pinned image reference printed by the workflow.
+For a failed tag-triggered run, rerun the failed workflow after package authority
+is moved. If a manual dispatch is needed, use:
 
-### Validation
-
-```bash
-docker buildx imagetools inspect ghcr.io/budgetanalyzer/ext-authz:0.0.16
+```text
+release_ref: v0.0.16
+docker_label: <empty>
 ```
 
-Confirm the image has a `linux/arm64` manifest and the OCI source label points
-to `https://github.com/budgetanalyzer/ext-authz`.
+The workflow must publish:
 
-## Phase 7: Cut Production Desired State To The New Source Repo
-
-### Work
+```text
+ghcr.io/budgetanalyzer/ext-authz:0.0.16
+```
 
 Use the normal desired-state preparation flow after the new image exists:
 
@@ -594,6 +632,10 @@ cd ../orchestration
 ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag v0.0.16 --plan-only
 ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag v0.0.16 --resolve-images
 ```
+
+The preparation command's default changed-artifact mode should preserve the
+existing `0.0.15` images for unchanged services and only move `ext-authz` to
+`0.0.16`.
 
 Review the generated diff. For `ext-authz`, the production files should now
 record:
@@ -617,9 +659,13 @@ Expected files updated by the production desired-state flow:
 ### Validation
 
 ```bash
+docker buildx imagetools inspect ghcr.io/budgetanalyzer/ext-authz:0.0.16
 ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
 ./scripts/guardrails/verify-production-image-overlay.sh
 ```
+
+Confirm the image has a `linux/arm64` manifest and the OCI source label points
+to `https://github.com/budgetanalyzer/ext-authz`.
 
 If deploying to OCI as part of the same work:
 
@@ -636,25 +682,29 @@ kubectl rollout status deployment/ext-authz -n default --timeout=120s
 ./scripts/smoketest/verify-session-architecture-phase-5.sh
 ```
 
-## Phase 8: Clean Up Transitional Access
+## Phase 8: Verify Orchestration No Longer Publishes Ext Authz
 
 ### Work
 
-After at least one successful local Tilt run and one successful image publish
-from the new repo:
+After the package cutover, successful `ext-authz` image publish, and production
+desired-state update:
 
-- remove orchestration repository write access from the
-  `ghcr.io/budgetanalyzer/ext-authz` package if it is no longer needed
-- keep package read access as required by deployment flows
+- confirm the package is connected to `budgetanalyzer/ext-authz`, not
+  `budgetanalyzer/orchestration`
+- confirm orchestration has no package publish/write authority for
+  `ghcr.io/budgetanalyzer/ext-authz`
+- keep only package read access required by deployment and verification flows
 - confirm orchestration no longer has an ext-authz publish workflow
 - confirm release helper output points to the new workflow URL
 - close or update any GitHub branch protection rules that still mention the old
   orchestration workflow
+- confirm at least one local Tilt run still uses the unchanged local image name
+  and Kubernetes object names
 
 ### Validation
 
 ```bash
-rg -n "publish-ext-authz-release|orchestration:publish-ext-authz|orchestration/ext-authz" .
+rg -n "publish-ext-authz-release|orchestration:publish-ext-authz|orchestration/ext-authz|orchestration/pkgs/container/ext-authz" .
 ```
 
 Expected remaining matches:

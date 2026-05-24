@@ -11,12 +11,14 @@ source "${SCRIPT_DIR}/lib/common.sh"
 REPO_ROOT="${PHASE4_REPO_ROOT}"
 PARENT_DIR="$(dirname "${REPO_ROOT}")"
 PRODUCTION_DEPLOYMENT_MANIFEST="${REPO_ROOT}/kubernetes/production/apps/deployment-manifest.yaml"
+PRODUCTION_IMAGE_INVENTORY="${REPO_ROOT}/kubernetes/production/apps/image-inventory.yaml"
 UPDATE_PRODUCTION_BASELINE="${SCRIPT_DIR}/23-update-production-release-images.sh"
 STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
 DEPLOYMENT_OUTPUT_ROOT="${REPO_ROOT}/tmp/deployments"
 readonly REPO_ROOT
 readonly PARENT_DIR
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
+readonly PRODUCTION_IMAGE_INVENTORY
 readonly UPDATE_PRODUCTION_BASELINE
 readonly STATIC_VERIFIER
 readonly DEPLOYMENT_OUTPUT_ROOT
@@ -57,10 +59,21 @@ declare -A SOURCE_REPOS=(
     ["ext-authz"]="ext-authz"
 )
 
+declare -A CURRENT_SOURCE_COMMITS=()
+declare -A CURRENT_SERVICE_COMMON_VERSIONS=()
+declare -A INVENTORY_IMAGE_REFS=()
+declare -A INVENTORY_SOURCE_REPOS=()
+declare -A INVENTORY_SOURCE_REFS=()
+declare -A INVENTORY_SOURCE_COMMITS=()
+declare -A INVENTORY_ARTIFACT_VERSIONS=()
+declare -A INVENTORY_SERVICE_COMMON_VERSIONS=()
+declare -A DESIRED_SOURCE_REPOS=()
 declare -A SOURCE_COMMITS=()
 declare -A SOURCE_REFS=()
 declare -A SERVICE_COMMON_VERSIONS=()
+declare -A ARTIFACT_VERSIONS=()
 declare -A IMAGE_REFS=()
+declare -A ARTIFACT_CHANGED=()
 declare -A TAG_ACTIONS=()
 
 declare -a GHCR_TOKEN_AUTH_ARGS=()
@@ -69,6 +82,7 @@ source_tag="${OCI_SOURCE_TAG:-}"
 deployment_id="${OCI_DEPLOYMENT_ID:-}"
 command_mode="${OCI_PREPARE_MODE:-}"
 assume_yes=false
+release_scope="${OCI_RELEASE_SCOPE:-changed-only}"
 deployment_output_path=""
 docker_label=""
 
@@ -85,34 +99,45 @@ Usage:
     --source-tag vX.Y.Z --resolve-images [options]
 
 Options:
-  --source-tag vX.Y.Z              Source tag to ensure in each deployable
-                                   source repository. May also be set with
-                                   OCI_SOURCE_TAG.
+  --source-tag vX.Y.Z              Source tag to ensure in each changed
+                                   deployable source repository. May also be
+                                   set with OCI_SOURCE_TAG.
   --deployment-id ID               Desired OCI deployment id. Defaults to
                                    oci-<UTC timestamp>.
   --plan-only                      Validate and print the intended tag/image
                                    work without creating tags, waiting for
                                    GHCR, or changing the manifest.
-  --push-tags                      Create and push any missing source tags,
-                                   then stop so the operator can wait for
-                                   GitHub Actions image workflows.
+  --push-tags                      Create and push any missing source tags for
+                                   changed artifacts, then stop so the
+                                   operator can wait for GitHub Actions image
+                                   workflows.
   --resolve-images                 Read already-published GHCR image tags,
                                    resolve digests, update checked-in
                                    production desired state, and stop for
                                    review.
+  --lockstep                       Force every managed artifact onto
+                                   --source-tag and Docker label X.Y.Z.
+                                   Without this flag, unchanged artifacts are
+                                   preserved from the checked-in production
+                                   image inventory and only changed artifacts
+                                   are tagged and resolved.
   --yes, -y                        Do not prompt before creating and pushing
                                    missing source tags.
   -h, --help                       Show this help.
 
 The command prepares checked-in OCI desired state from the current clean source
-workspace. It does not build Docker images, push images, require OCI
-kubeconfig access, or deploy to OCI.
+workspace. By default, it compares each artifact's current source repository
+and commit with kubernetes/production/apps/image-inventory.yaml, tags only
+changed artifacts, and preserves unchanged digest-pinned image refs. Use
+--lockstep for the rare coordinated path that moves every managed artifact to
+the requested source tag and Docker label. The command does not build Docker
+images, push images, require OCI kubeconfig access, or deploy to OCI.
 
 Use --plan-only first to preview source tag actions and expected GHCR image
-tags. Use --push-tags to create or push the missing source tags, then wait for
-the owning GitHub Actions release-image workflows to publish the expected GHCR
-tags. Use --resolve-images after those tags exist; missing GHCR tags are a
-direct prerequisite failure rather than a retry loop.
+tags. Use --push-tags to create or push the missing source tags for changed
+artifacts, then wait for the owning GitHub Actions release-image workflows to
+publish the expected GHCR tags. Use --resolve-images after those tags exist;
+missing GHCR tags are a direct prerequisite failure rather than a retry loop.
 
 GHCR image reads use the Docker Registry API token flow. Public packages can
 resolve without credentials. For private packages, set GHCR_USERNAME and
@@ -202,6 +227,9 @@ parse_args() {
             --resolve-images)
                 set_command_mode "resolve-images"
                 ;;
+            --lockstep)
+                release_scope="lockstep"
+                ;;
             --yes|-y)
                 assume_yes=true
                 ;;
@@ -225,6 +253,13 @@ initialize_defaults() {
             ;;
         *)
             die "unknown mode from OCI_PREPARE_MODE: ${command_mode}"
+            ;;
+    esac
+    case "${release_scope}" in
+        changed-only|lockstep)
+            ;;
+        *)
+            die "unknown release scope from OCI_RELEASE_SCOPE: ${release_scope}; expected changed-only or lockstep"
             ;;
     esac
     source_tag="$(normalize_source_tag "${source_tag}")"
@@ -266,8 +301,45 @@ validate_repo_layout() {
     done
 
     [[ -d "${service_common_repo}/.git" ]] || die "missing git repository: ${service_common_repo}"
+    [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || die "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
     [[ -x "${UPDATE_PRODUCTION_BASELINE}" ]] || die "missing executable: ${UPDATE_PRODUCTION_BASELINE}"
     [[ -x "${STATIC_VERIFIER}" ]] || die "missing executable: ${STATIC_VERIFIER}"
+}
+
+inventory_value() {
+    local key="$1"
+
+    awk -v key="${key}" '
+        function clean(value) {
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            if (value ~ /^".*"$/) {
+                sub(/^"/, "", value)
+                sub(/"$/, "", value)
+            }
+            return value
+        }
+        {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            if (index(line, key ":") == 1) {
+                value = line
+                sub("^" key ":[[:space:]]*", "", value)
+                print clean(value)
+                exit
+            }
+        }
+    ' "${PRODUCTION_IMAGE_INVENTORY}"
+}
+
+image_tag() {
+    local image_ref="$1"
+
+    printf '%s\n' "${image_ref}" | sed -E 's#^ghcr\.io/budgetanalyzer/[a-z0-9-]+:([^@]+)@sha256:[0-9a-f]{64}$#\1#'
+}
+
+valid_commit_sha() {
+    [[ "$1" =~ ^[0-9a-f]{40}$ ]]
 }
 
 read_service_common_version() {
@@ -288,6 +360,44 @@ read_service_common_version() {
     ' "${version_file}"
 }
 
+load_production_inventory() {
+    local artifact image_ref version source_repo source_ref source_commit service_common_version
+
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        image_ref="$(inventory_value "${artifact}")"
+        [[ -n "${image_ref}" ]] || die "production image inventory is missing ${artifact}"
+        valid_digest_pinned_image "${artifact}" "${image_ref}" || \
+            die "production image inventory has invalid digest-pinned image for ${artifact}: ${image_ref}"
+
+        version="$(inventory_value "${artifact}.artifact-version")"
+        if [[ -z "${version}" ]]; then
+            version="$(image_tag "${image_ref}")"
+        fi
+        [[ -n "${version}" ]] || die "production image inventory is missing artifact version for ${artifact}"
+
+        source_repo="$(inventory_value "${artifact}.source-repository")"
+        source_ref="$(inventory_value "${artifact}.source-ref")"
+        source_commit="$(inventory_value "${artifact}.source-commit")"
+        [[ -n "${source_repo}" ]] || die "production image inventory is missing source repository for ${artifact}"
+        [[ -n "${source_ref}" ]] || die "production image inventory is missing source ref for ${artifact}"
+        [[ -n "${source_commit}" ]] || die "production image inventory is missing source commit for ${artifact}"
+        valid_commit_sha "${source_commit}" || die "production image inventory has invalid source commit for ${artifact}: ${source_commit}"
+
+        INVENTORY_IMAGE_REFS["${artifact}"]="${image_ref}"
+        INVENTORY_ARTIFACT_VERSIONS["${artifact}"]="${version}"
+        INVENTORY_SOURCE_REPOS["${artifact}"]="${source_repo}"
+        INVENTORY_SOURCE_REFS["${artifact}"]="${source_ref}"
+        INVENTORY_SOURCE_COMMITS["${artifact}"]="${source_commit}"
+
+        if is_java_artifact "${artifact}"; then
+            service_common_version="$(inventory_value "${artifact}.service-common-version")"
+            [[ -n "${service_common_version}" ]] || \
+                die "production image inventory is missing service-common version for ${artifact}"
+            INVENTORY_SERVICE_COMMON_VERSIONS["${artifact}"]="${service_common_version}"
+        fi
+    done
+}
+
 discover_source_state() {
     local artifact source_repo repo_path service_common_version
     local dirty_repos=()
@@ -300,13 +410,12 @@ discover_source_state() {
             dirty_repos+=("${source_repo}")
         fi
 
-        SOURCE_COMMITS["${artifact}"]="$(git -C "${repo_path}" rev-parse HEAD)"
-        SOURCE_REFS["${artifact}"]="refs/tags/${source_tag}"
+        CURRENT_SOURCE_COMMITS["${artifact}"]="$(git -C "${repo_path}" rev-parse HEAD)"
 
         if is_java_artifact "${artifact}"; then
             service_common_version="$(read_service_common_version "${repo_path}")"
             [[ -n "${service_common_version}" ]] || die "missing serviceCommon version for ${artifact}"
-            SERVICE_COMMON_VERSIONS["${artifact}"]="${service_common_version}"
+            CURRENT_SERVICE_COMMON_VERSIONS["${artifact}"]="${service_common_version}"
         fi
     done
 
@@ -317,6 +426,38 @@ discover_source_state() {
     if (( ${#dirty_repos[@]} > 0 )); then
         die "source workspaces must be clean before preparing OCI desired state: ${dirty_repos[*]}"
     fi
+}
+
+plan_desired_artifacts() {
+    local artifact source_repo current_commit inventory_repo inventory_commit
+
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        source_repo="${SOURCE_REPOS[${artifact}]}"
+        current_commit="${CURRENT_SOURCE_COMMITS[${artifact}]}"
+        inventory_repo="${INVENTORY_SOURCE_REPOS[${artifact}]}"
+        inventory_commit="${INVENTORY_SOURCE_COMMITS[${artifact}]}"
+
+        if [[ "${release_scope}" == "lockstep" || "${source_repo}" != "${inventory_repo}" || "${current_commit}" != "${inventory_commit}" ]]; then
+            ARTIFACT_CHANGED["${artifact}"]="true"
+            DESIRED_SOURCE_REPOS["${artifact}"]="${source_repo}"
+            SOURCE_COMMITS["${artifact}"]="${current_commit}"
+            SOURCE_REFS["${artifact}"]="refs/tags/${source_tag}"
+            ARTIFACT_VERSIONS["${artifact}"]="${docker_label}"
+            if is_java_artifact "${artifact}"; then
+                SERVICE_COMMON_VERSIONS["${artifact}"]="${CURRENT_SERVICE_COMMON_VERSIONS[${artifact}]}"
+            fi
+        else
+            ARTIFACT_CHANGED["${artifact}"]="false"
+            DESIRED_SOURCE_REPOS["${artifact}"]="${inventory_repo}"
+            SOURCE_COMMITS["${artifact}"]="${inventory_commit}"
+            SOURCE_REFS["${artifact}"]="${INVENTORY_SOURCE_REFS[${artifact}]}"
+            ARTIFACT_VERSIONS["${artifact}"]="${INVENTORY_ARTIFACT_VERSIONS[${artifact}]}"
+            IMAGE_REFS["${artifact}"]="${INVENTORY_IMAGE_REFS[${artifact}]}"
+            if is_java_artifact "${artifact}"; then
+                SERVICE_COMMON_VERSIONS["${artifact}"]="${INVENTORY_SERVICE_COMMON_VERSIONS[${artifact}]}"
+            fi
+        fi
+    done
 }
 
 local_tag_commit() {
@@ -355,9 +496,14 @@ plan_source_tags() {
     local artifact source_repo repo_path head_commit local_commit remote_commit existing_commit
 
     for artifact in "${ARTIFACT_ORDER[@]}"; do
+        if [[ "${ARTIFACT_CHANGED[${artifact}]}" != "true" ]]; then
+            TAG_ACTIONS["${artifact}"]="unchanged"
+            continue
+        fi
+
         source_repo="${SOURCE_REPOS[${artifact}]}"
         repo_path="$(repo_path_for_source_repo "${source_repo}")"
-        head_commit="${SOURCE_COMMITS[${artifact}]}"
+        head_commit="${CURRENT_SOURCE_COMMITS[${artifact}]}"
         local_commit="$(local_tag_commit "${repo_path}")"
         remote_commit="$(remote_tag_commit "${repo_path}")"
 
@@ -388,21 +534,47 @@ print_plan() {
     printf '  deployment-id: %s\n' "${deployment_id}"
     printf '  source-tag: %s\n' "${source_tag}"
     printf '  docker-label: %s\n' "${docker_label}"
+    printf '  release-scope: %s\n' "${release_scope}"
     printf '  mode: %s\n' "${command_mode}"
     printf '\n'
-    printf '%-24s %-20s %-42s %s\n' "ARTIFACT" "TAG ACTION" "SOURCE COMMIT" "EXPECTED IMAGE TAG"
+    printf '%-24s %-20s %-42s %s\n' "ARTIFACT" "TAG ACTION" "SOURCE COMMIT" "EXPECTED IMAGE"
     for artifact in "${ARTIFACT_ORDER[@]}"; do
-        printf '%-24s %-20s %-42s ghcr.io/budgetanalyzer/%s:%s\n' \
-            "${artifact}" \
-            "${TAG_ACTIONS[${artifact}]}" \
-            "${SOURCE_COMMITS[${artifact}]}" \
-            "${IMAGE_REPOS[${artifact}]}" \
-            "${docker_label}"
+        if [[ "${ARTIFACT_CHANGED[${artifact}]}" == "true" ]]; then
+            printf '%-24s %-20s %-42s ghcr.io/budgetanalyzer/%s:%s\n' \
+                "${artifact}" \
+                "${TAG_ACTIONS[${artifact}]}" \
+                "${SOURCE_COMMITS[${artifact}]}" \
+                "${IMAGE_REPOS[${artifact}]}" \
+                "${docker_label}"
+        else
+            printf '%-24s %-20s %-42s %s\n' \
+                "${artifact}" \
+                "${TAG_ACTIONS[${artifact}]}" \
+                "${SOURCE_COMMITS[${artifact}]}" \
+                "${IMAGE_REFS[${artifact}]}"
+        fi
     done
+}
+
+has_tag_mutation() {
+    local artifact action
+
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        action="${TAG_ACTIONS[${artifact}]}"
+        if [[ "${action}" == "create-and-push" || "${action}" == "push-existing" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 confirm_tag_mutation() {
     local reply
+
+    if ! has_tag_mutation; then
+        return
+    fi
 
     if [[ "${assume_yes}" == true ]]; then
         return
@@ -427,6 +599,9 @@ ensure_source_tags() {
             exists)
                 info "${source_repo}: ${source_tag} already exists at ${SOURCE_COMMITS[${artifact}]}"
                 ;;
+            unchanged)
+                info "${source_repo}: unchanged; preserving ${IMAGE_REFS[${artifact}]}"
+                ;;
             push-existing)
                 info "${source_repo}: pushing existing local ${source_tag}"
                 git -C "${repo_path}" push origin "${source_tag}"
@@ -449,7 +624,7 @@ validate_source_tags_ready_for_resolve() {
 
     for artifact in "${ARTIFACT_ORDER[@]}"; do
         action="${TAG_ACTIONS[${artifact}]}"
-        if [[ "${action}" != "exists" ]]; then
+        if [[ "${action}" != "exists" && "${action}" != "unchanged" ]]; then
             pending_actions+=("${SOURCE_REPOS[${artifact}]}:${action}")
         fi
     done
@@ -548,6 +723,11 @@ resolve_ghcr_images() {
     temp_dir="$(mktemp -d)"
 
     for artifact in "${ARTIFACT_ORDER[@]}"; do
+        if [[ "${ARTIFACT_CHANGED[${artifact}]}" != "true" ]]; then
+            info "preserving ${artifact} image ${IMAGE_REFS[${artifact}]}"
+            continue
+        fi
+
         image_repo="${IMAGE_REPOS[${artifact}]}"
         tag_ref="ghcr.io/budgetanalyzer/${image_repo}:${docker_label}"
         headers_file="${temp_dir}/${artifact}.headers"
@@ -562,7 +742,7 @@ resolve_ghcr_images() {
                 die "could not get GHCR pull token for ${tag_ref}; if the package is private, set GHCR_USERNAME and GHCR_TOKEN to a GitHub token with read:packages"
             fi
 
-            die "missing or inaccessible GHCR image tag prerequisite: ${tag_ref}; wait for the ${source_tag} GitHub Actions release-image workflow in ${SOURCE_REPOS[${artifact}]} to publish it, then rerun with --resolve-images"
+            die "missing or inaccessible GHCR image tag prerequisite: ${tag_ref}; wait for the ${source_tag} GitHub Actions release-image workflow in ${DESIRED_SOURCE_REPOS[${artifact}]} to publish it, then rerun with --resolve-images"
         fi
 
         IMAGE_REFS["${artifact}"]="${tag_ref}@${digest}"
@@ -610,10 +790,10 @@ write_deployment_manifest() {
         printf 'artifacts:\n'
         for artifact in "${ARTIFACT_ORDER[@]}"; do
             printf '  %s:\n' "${artifact}"
-            printf '    source_repository: "%s"\n' "${SOURCE_REPOS[${artifact}]}"
+            printf '    source_repository: "%s"\n' "${DESIRED_SOURCE_REPOS[${artifact}]}"
             printf '    source_ref: "%s"\n' "${SOURCE_REFS[${artifact}]}"
             printf '    source_commit: "%s"\n' "${SOURCE_COMMITS[${artifact}]}"
-            printf '    artifact_version: "%s"\n' "${docker_label}"
+            printf '    artifact_version: "%s"\n' "${ARTIFACT_VERSIONS[${artifact}]}"
             printf '    image: "%s"\n' "${IMAGE_REFS[${artifact}]}"
             if is_java_artifact "${artifact}"; then
                 printf '    service_common_version: "%s"\n' "${SERVICE_COMMON_VERSIONS[${artifact}]}"
@@ -641,17 +821,39 @@ verify_no_lifecycle_status_in_desired_state() {
 }
 
 print_tag_completion() {
+    local artifact changed_count=0
+    local scope_args=()
+
+    if [[ "${release_scope}" == "lockstep" ]]; then
+        scope_args=(--lockstep)
+    fi
+
     info "source tag step complete"
     printf '\nNext steps:\n'
-    printf '  1. Wait for the owning GitHub Actions release-image workflows to publish these GHCR tags:\n'
 
-    local artifact
     for artifact in "${ARTIFACT_ORDER[@]}"; do
+        if [[ "${ARTIFACT_CHANGED[${artifact}]}" == "true" ]]; then
+            changed_count=$((changed_count + 1))
+        fi
+    done
+
+    if (( changed_count == 0 )); then
+        printf '  1. No artifacts changed; no new GHCR tags are required.\n'
+    else
+        printf '  1. Wait for the owning GitHub Actions release-image workflows to publish these GHCR tags:\n'
+    fi
+
+    for artifact in "${ARTIFACT_ORDER[@]}"; do
+        [[ "${ARTIFACT_CHANGED[${artifact}]}" == "true" ]] || continue
         printf '     - ghcr.io/budgetanalyzer/%s:%s\n' "${IMAGE_REPOS[${artifact}]}" "${docker_label}"
     done
 
     printf '  2. Rerun:\n'
-    printf '     ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --resolve-images\n' "${source_tag}"
+    printf '     ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s' "${source_tag}"
+    if (( ${#scope_args[@]} > 0 )); then
+        printf ' %s' "${scope_args[@]}"
+    fi
+    printf ' --resolve-images\n'
 }
 
 print_completion() {
@@ -671,7 +873,9 @@ main() {
     require_mode_commands
 
     validate_repo_layout
+    load_production_inventory
     discover_source_state
+    plan_desired_artifacts
     plan_source_tags
     print_plan
 

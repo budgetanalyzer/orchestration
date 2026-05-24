@@ -38,15 +38,18 @@ human review, and an OCI-host apply step. The canonical terminology lives in
 ./deploy/scripts/deploy-current-oci-manifest.sh
 ```
 
-The local preparation command previews tag work, creates and pushes missing
-source tags only in `--push-tags` mode, then stops. After the owning GitHub
-Actions workflows publish the expected GHCR image tags, `--resolve-images`
-reads those tags once, resolves immutable digests, updates the checked-in
-production desired state, and stops for review. Missing GHCR image tags are a
-prerequisite failure, not a retry loop. The local flow does not build Docker
-images, deploy to OCI, or require OCI kubeconfig access. The OCI host command
-applies the checked-in production manifest and fails if live pods do not match
-it.
+The local preparation command previews tag work against the checked-in
+production image inventory. By default, it tags and resolves only artifacts
+whose current source repository or source commit differs from the inventory,
+while unchanged artifacts keep their existing digest-pinned images. Use
+`--lockstep` when a coordinated release should force every managed artifact to
+the requested source tag and Docker label. After the owning GitHub Actions
+workflows publish the expected GHCR image tags, `--resolve-images` reads those
+tags once, resolves immutable digests, updates the checked-in production
+desired state, and stops for review. Missing GHCR image tags are a prerequisite
+failure, not a retry loop. The local flow does not build Docker images, deploy
+to OCI, or require OCI kubeconfig access. The OCI host command applies the
+checked-in production manifest and fails if live pods do not match it.
 
 `--resolve-images` uses the Docker Registry API with GHCR bearer tokens. Public
 packages can resolve anonymously; private packages require `GHCR_USERNAME` and
@@ -134,9 +137,9 @@ desired state.
    - `kubernetes/production/apps/image-inventory.yaml`
    - `kubernetes/production/apps/kustomization.yaml`
    Run `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
-   vX.Y.Z --plan-only` first to preview tag actions and expected GHCR image
-   tags, then use `--push-tags` and wait for GitHub Actions before
-   `--resolve-images` updates the checked-in desired state.
+   vX.Y.Z --plan-only` first to preview changed-artifact tag actions and
+   expected GHCR image tags, then use `--push-tags` and wait for GitHub
+   Actions before `--resolve-images` updates the checked-in desired state.
 12. Note the current observability boundary before reviewing or running any
    later observability artifacts:
    - The production Prometheus/Grafana path is owned by
@@ -227,7 +230,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
-| `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | Normal local OCI desired-state preparation entry point. It requires clean source workspaces, previews tag actions with `--plan-only`, creates and pushes missing `vX.Y.Z` source tags with `--push-tags`, and reads already-published GHCR tags with `--resolve-images` to resolve digests, write a complete desired-state manifest, update the production image inventory, release metadata, runtime metadata patch, and app overlay, then stop for review. | Run from the local workstation before an OCI deployment. Missing GHCR image tags are a prerequisite failure in `--resolve-images`; wait for GitHub Actions manually instead of leaving the script in a polling loop. |
+| `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | Normal local OCI desired-state preparation entry point. It requires clean source workspaces, compares current artifact source state with the production image inventory, previews changed-artifact tag actions with `--plan-only`, creates and pushes missing `vX.Y.Z` source tags for changed artifacts with `--push-tags`, and reads already-published GHCR tags with `--resolve-images` to resolve digests, write a complete desired-state manifest, update the production image inventory, release metadata, runtime metadata patch, and app overlay, then stop for review. Use `--lockstep` only when every managed artifact must move to the requested tag. | Run from the local workstation before an OCI deployment. Missing GHCR image tags are a prerequisite failure in `--resolve-images`; wait for GitHub Actions manually instead of leaving the script in a polling loop. |
 | `deploy/scripts/deploy-current-oci-manifest.sh` | Normal OCI-host apply entry point. It applies the checked-in production manifest, validates manifest/inventory agreement, runs the static gate, applies the managed production app set, waits for rollouts, and verifies live runtime metadata against the checked-in manifest. | Run on the OCI host after the reviewed orchestration desired-state diff has been pulled. |
 | `deploy/scripts/23-update-production-release-images.sh` | Lower-level renderer used by the preparation command. It updates the checked-in production deployment baseline from a complete schema v2 desired-state manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then runs the static agreement gate. | Use directly only when repairing the checked-in baseline from an already complete desired-state manifest. Java artifacts must carry `service_common_version`. |
 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts; production deployment manifest, image inventory, app kustomization, runtime metadata patch, and release metadata agree; production `/api-docs` render wiring remains intact; and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, production render, or config-only deployment change. |

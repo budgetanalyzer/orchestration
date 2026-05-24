@@ -92,9 +92,11 @@ scripts/
   dry run and capture the full namespace-scoped RBAC footprint.
 - `../deploy/scripts/prepare-oci-manifest-from-current-stack.sh` - Normal
   local OCI desired-state preparation entry point. It validates clean source
-  workspaces, previews tag actions, creates and pushes missing source tags in
-  `--push-tags` mode, then stops. After GitHub Actions publishes the expected
-  GHCR tags, `--resolve-images` reads them once, resolves digest-pinned refs,
+  workspaces, compares current artifact source state with the production image
+  inventory, previews tag actions for changed artifacts, creates and pushes
+  missing source tags in `--push-tags` mode, then stops. After GitHub Actions
+  publishes the expected GHCR tags, `--resolve-images` reads changed-artifact
+  tags once, resolves digest-pinned refs, preserves unchanged artifact images,
   updates the checked-in production desired state, and stops for review.
 - `../deploy/scripts/deploy-current-oci-manifest.sh` - Normal OCI-host apply
   entry point. It applies the checked-in production manifest, waits for managed
@@ -434,7 +436,8 @@ directory without writing outside the repository.
 - `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` is the normal
   local desired-state preparation entry point for OCI app changes; use
   `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
-  steps.
+  steps. Add `--lockstep` only when every managed artifact should move to the
+  requested tag instead of preserving unchanged artifacts.
 - `deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host apply
   entry point for the checked-in production manifest.
 - `deploy/scripts/23-update-production-release-images.sh` consumes a complete

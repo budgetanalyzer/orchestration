@@ -23,10 +23,11 @@ below.
 ## Prerequisites
 
 - [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
-  vX.Y.Z --plan-only` has been reviewed for tag actions and expected GHCR
-  image tags.
+  vX.Y.Z --plan-only` has been reviewed for changed-artifact tag actions,
+  preserved unchanged artifacts, and expected GHCR image tags.
 - [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
-  vX.Y.Z --push-tags` has created or pushed any missing source tags.
+  vX.Y.Z --push-tags` has created or pushed any missing source tags for
+  changed artifacts.
 - [ ] The owning GitHub Actions image workflows have published the expected
   GHCR image tags.
 - [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag

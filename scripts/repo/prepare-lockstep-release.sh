@@ -215,10 +215,10 @@ print_workflow_urls() {
     done
 
     info "for OCI production, use the desired-state preparation flow instead of the historical release-manifest shape:"
-    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --plan-only\n' "${tag_name}"
-    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --push-tags\n' "${tag_name}"
+    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --plan-only\n' "${tag_name}"
+    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --push-tags\n' "${tag_name}"
     printf '  # After GitHub Actions publishes the expected GHCR tags:\n'
-    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --resolve-images\n' "${tag_name}"
+    printf '  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --resolve-images\n' "${tag_name}"
 }
 
 maybe_tag_release() {

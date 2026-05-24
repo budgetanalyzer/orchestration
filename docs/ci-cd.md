@@ -113,13 +113,18 @@ review, and one OCI-host apply command:
 ```
 
 The local preparation command validates the expected sibling repositories,
-requires clean source workspaces, previews source tag actions, creates and
-pushes any missing source tags when explicitly requested, then stops so the
-operator can wait for the owning GitHub Actions image workflows. The
-`--resolve-images` mode reads already-published GHCR tags, resolves immutable
-digests, updates the production manifest, image inventory, app overlay, runtime
-metadata patch, and `/api-docs` release metadata, then stops. Missing GHCR tags
-are a prerequisite failure in resolve mode, not a polling loop. The local
+requires clean source workspaces, compares current artifact source state with
+the checked-in production image inventory, previews source tag actions only for
+changed artifacts, creates and pushes missing source tags when explicitly
+requested, then stops so the operator can wait for the owning GitHub Actions
+image workflows. Unchanged artifacts keep their existing digest-pinned images
+and source metadata. Use `--lockstep` only for coordinated releases that should
+force every managed artifact onto the requested source tag and Docker label.
+The `--resolve-images` mode reads already-published GHCR tags for changed
+artifacts, resolves immutable digests, updates the production manifest, image
+inventory, app overlay, runtime metadata patch, and `/api-docs` release
+metadata, then stops. Missing GHCR tags are a prerequisite failure in resolve
+mode, not a polling loop. The local
 preparation command does not build Docker images, push GHCR images directly,
 deploy to OCI, require OCI kubeconfig access, or write lifecycle status.
 GHCR image reads use the Docker Registry API bearer-token flow. Public packages

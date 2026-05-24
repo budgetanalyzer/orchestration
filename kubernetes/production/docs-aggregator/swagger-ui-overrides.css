@@ -239,6 +239,14 @@ body {
     font-weight: 700;
 }
 
+.deployment-row-dirty td {
+    background: rgba(159, 58, 32, 0.08);
+}
+
+.deployment-row-dirty td:first-child {
+    box-shadow: inset 4px 0 0 var(--docs-accent);
+}
+
 #swagger-ui {
     background: var(--docs-panel);
     border: 1px solid var(--docs-border);

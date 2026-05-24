@@ -95,6 +95,9 @@ function renderDeploymentArtifacts(metadata) {
         }
 
         row = document.createElement("tr");
+        if (artifact.localSource && artifact.localSource.dirty) {
+            row.className = "deployment-row-dirty";
+        }
         appendCell(row, name, "deployment-runtime");
         appendCell(row, artifact.sourceRepository, "");
         appendCell(row, artifact.artifactVersion, "");
@@ -134,15 +137,29 @@ function renderDeploymentMetadata() {
             var release = metadata.release || {};
             var version = deployment.id || release.version || "unknown";
             var environment = deployment.environment || "unknown";
+            var baseline = deployment.productionBaselineId || "";
+            var runtime = deployment.runtime || "";
             var orchestration = deployment.orchestrationRepository || {};
+            var summary = "Deployment " + version;
+            var labelText = "Deployment " + version;
+            var labelTitle = summary;
+
+            if (runtime === "tilt" || environment === "local-development") {
+                summary = "Tilt local-development";
+                labelText = "Tilt local-development";
+                labelTitle = summary;
+                if (baseline) {
+                    labelTitle = summary + " (baseline " + baseline + ")";
+                }
+            }
 
             if (label) {
-                label.textContent = "Deployment " + version;
-                label.title = "Deployment " + version;
+                label.textContent = labelText;
+                label.title = labelTitle;
                 label.classList.remove("docs-release-muted");
             }
 
-            setElementText("deployment-summary", "Deployment " + version);
+            setElementText("deployment-summary", summary);
             setElementText("deployment-environment", environment);
             setElementText("deployment-orchestration", orchestrationLabel(orchestration));
             renderDeploymentArtifacts(metadata);

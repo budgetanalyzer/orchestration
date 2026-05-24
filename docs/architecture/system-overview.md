@@ -109,7 +109,8 @@ control plane at the application edge:
   `ext_authz` on browser API traffic.
 - Session Gateway owns OAuth2 login, logout, and browser session renewal.
 - `ext_authz` converts the Redis-backed browser session into trusted identity
-  headers on every API request.
+  headers on every API request. Its Go implementation lives in sibling
+  `../ext-authz`; orchestration owns the deployment and mesh wiring.
 - NGINX maps resource routes to backend services and applies backend/API rate
   limiting.
 - Istio egress owns the approved outbound paths to external providers such as

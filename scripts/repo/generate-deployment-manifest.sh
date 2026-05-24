@@ -43,7 +43,7 @@ declare -A ARTIFACT_SOURCE_REPOS=(
     ["permission-service"]="permission-service"
     ["session-gateway"]="session-gateway"
     ["budget-analyzer-web"]="budget-analyzer-web"
-    ["ext-authz"]="orchestration"
+    ["ext-authz"]="ext-authz"
 )
 
 declare -A IMAGE_REFS=()

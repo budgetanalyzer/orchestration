@@ -30,7 +30,8 @@ checked-in `./gradlew` wrappers.
 Repo-managed pinned prerequisites are `kubectl`, Kind, Tilt, `mkcert`, Calico,
 and Gateway API CRDs. Helm is repo-installed when missing or outside the
 supported Helm 3 range. Host-managed prerequisites remain Docker, Git, OpenSSL,
-JDK, Node.js, npm, sibling repository checkouts, and frontend `node_modules`.
+JDK, Node.js, npm, sibling repository checkouts including `../ext-authz`, and
+frontend `node_modules`.
 
 The sibling `budget-analyzer-web` repo must also have local npm dependencies
 installed because `budget-analyzer-web-prod-smoke-build` runs on the host:
@@ -96,6 +97,7 @@ parent-directory/
 ├── currency-service/
 ├── session-gateway/
 ├── permission-service/
+├── ext-authz/
 └── budget-analyzer-web/
 ```
 
@@ -311,6 +313,14 @@ That seam is deliberately local-only. The checked-in production cutover now
 lives in `nginx/nginx.production.k8s.conf`, where `/` and `/login` serve the
 built frontend bundle directly and the Vite-only public paths plus
 `/_prod-smoke/` are not exposed.
+
+### ext-authz (Go)
+
+Tilt builds the local `ext-authz` image from the sibling `../ext-authz`
+repository using that repo's Dockerfile. Orchestration keeps the Kubernetes
+Deployment, Service, ServiceAccount, Redis credential Secret, network policy,
+and Istio `ext_authz` wiring. Service implementation changes belong in
+`../ext-authz`; deployment and environment wiring changes belong here.
 
 The frontend strict-CSP audit is now repeatable from this repo with:
 

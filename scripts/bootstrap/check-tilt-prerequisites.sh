@@ -426,6 +426,7 @@ REPOS=(
     "session-gateway"
     "permission-service"
     "budget-analyzer-web"
+    "ext-authz"
 )
 
 for repo in "${REPOS[@]}"; do
@@ -460,6 +461,7 @@ for service in "${SPRING_SERVICES[@]}"; do
 done
 
 check_file "budget-analyzer-web/Dockerfile" "$WORKSPACE_DIR/budget-analyzer-web/Dockerfile"
+check_file "ext-authz/Dockerfile" "$WORKSPACE_DIR/ext-authz/Dockerfile"
 
 echo
 

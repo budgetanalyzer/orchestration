@@ -13,6 +13,10 @@ Open the workspace in VS Code and choose **Reopen in Container**. After the
 devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
 
+Full local Tilt expects the Budget Analyzer repositories to be cloned
+side-by-side. That includes `../ext-authz`, which owns the Go external
+authorization service source that Tilt builds into the local `ext-authz` image.
+
 ## Supported Local Happy Path
 
 Run the platform bootstrap from your host terminal, not from inside the

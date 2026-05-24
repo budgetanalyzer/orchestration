@@ -22,11 +22,10 @@ fi
 set_topics() {
     local repo="$1"
     shift
-    local topics="$*"
 
     # Convert space-separated topics to JSON array
     local json_topics
-    json_topics=$(printf '%s\n' $topics | jq -R . | jq -s '{"names": .}')
+    json_topics=$(printf '%s\n' "$@" | jq -R . | jq -s '{"names": .}')
 
     echo "Setting topics for $repo..."
 
@@ -60,6 +59,9 @@ set_topics "orchestration" \
 
 set_topics "session-gateway" \
     bff spring-cloud-gateway oauth2 redis-session spring-boot ai-native ai-assisted-development
+
+set_topics "ext-authz" \
+    external-authorization istio envoy golang microservice runtime-security ai-native ai-assisted-development
 
 set_topics "permission-service" \
     spring-boot microservice permissions rbac ai-native ai-assisted-development

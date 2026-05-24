@@ -55,11 +55,16 @@ Once the stack is running:
 
 ## Service Repositories
 
+This repository deploys the services below, but their application source lives
+in sibling repositories. `ext-authz` is deployed by orchestration while its Go
+source, Dockerfile, tests, and release workflow live in its own repo.
+
 - [service-common](https://github.com/budgetanalyzer/service-common) — Shared library
 - [transaction-service](https://github.com/budgetanalyzer/transaction-service) — Transaction API
 - [currency-service](https://github.com/budgetanalyzer/currency-service) — Currency API
 - [budget-analyzer-web](https://github.com/budgetanalyzer/budget-analyzer-web) — React frontend
 - [session-gateway](https://github.com/budgetanalyzer/session-gateway) — OAuth2 authentication and session management
+- [ext-authz](https://github.com/budgetanalyzer/ext-authz) — Go external authorization service for Istio ingress
 
 ## License
 

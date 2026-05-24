@@ -15,7 +15,6 @@ kubernetes/services/permission-service/deployment.yaml
 kubernetes/services/session-gateway/deployment.yaml
 kubernetes/services/transaction-service/deployment.yaml
 Tiltfile
-ext-authz/Dockerfile
 tests/setup-flow/kind-cluster-test-config.yaml
 tests/shared/Dockerfile.test-env
 tests/setup-flow/docker-compose.test.yml

@@ -11,6 +11,7 @@ KUBE_CONTEXT="kind-kind"
 REQUIRED_SIBLING_PATHS=(
     "budget-analyzer-web/Dockerfile"
     "currency-service/build.gradle.kts"
+    "ext-authz/Dockerfile"
     "permission-service/build.gradle.kts"
     "service-common/build.gradle.kts"
     "session-gateway/build.gradle.kts"

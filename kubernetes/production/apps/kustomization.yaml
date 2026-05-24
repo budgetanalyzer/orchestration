@@ -98,7 +98,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/budgetanalyzer/ext-authz:0.0.15@sha256:a0b8d58f2eb8cd89623954731628d1dd2051fb279686f6a286827a3fc8c52b90
+        value: ghcr.io/budgetanalyzer/ext-authz:0.0.16@sha256:bdd853111aca0ee47ec1d4fcdf45f38d4bc7507e701d8d3041ba20e346008447
       - op: remove
         path: /spec/template/spec/containers/0/imagePullPolicy
   - target:

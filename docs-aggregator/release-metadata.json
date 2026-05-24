@@ -1,11 +1,11 @@
 {
   "schemaVersion": 2,
   "deployment": {
-    "id": "oci-20260523T010804Z",
+    "id": "oci-20260524T050351Z",
     "environment": "oci-production",
     "orchestrationRepository": {
-      "commit": "4d43db7167c54bde063d46db0698bed83bd71da6",
-      "sourceRef": "4d43db7167c54bde063d46db0698bed83bd71da6"
+      "commit": "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f",
+      "sourceRef": "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"
     }
   },
   "artifacts": {
@@ -49,11 +49,11 @@
       "image": "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.15@sha256:6c1030872b4c68d5b442d2f979116fe5a272dd42b1c5da8fb943292bcd9ab40f"
     },
     "ext-authz": {
-      "sourceRepository": "orchestration",
-      "sourceRef": "refs/tags/v0.0.15",
-      "sourceCommit": "24b349ba6c146501cd97d65add91a5fcb3ee21bd",
-      "artifactVersion": "0.0.15",
-      "image": "ghcr.io/budgetanalyzer/ext-authz:0.0.15@sha256:a0b8d58f2eb8cd89623954731628d1dd2051fb279686f6a286827a3fc8c52b90"
+      "sourceRepository": "ext-authz",
+      "sourceRef": "refs/tags/v0.0.16",
+      "sourceCommit": "4007e771e68895a2e3fbe1fba698aa776aa801e2",
+      "artifactVersion": "0.0.16",
+      "image": "ghcr.io/budgetanalyzer/ext-authz:0.0.16@sha256:bdd853111aca0ee47ec1d4fcdf45f38d4bc7507e701d8d3041ba20e346008447"
     }
   }
 }

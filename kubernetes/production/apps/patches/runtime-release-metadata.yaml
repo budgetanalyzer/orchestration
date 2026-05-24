@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: transaction-service
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
     budgetanalyzer.org/image: ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:ee1bacc5a97ed04d4bd7edcf0b2335e0ce8eb2f78f6e4d4f1c6fb356de30c5b1
     budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -21,7 +21,7 @@ spec:
         app.kubernetes.io/name: transaction-service
         app.kubernetes.io/part-of: budget-analyzer
         app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
         budgetanalyzer.org/image: ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:ee1bacc5a97ed04d4bd7edcf0b2335e0ce8eb2f78f6e4d4f1c6fb356de30c5b1
         budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -38,7 +38,7 @@ metadata:
     app.kubernetes.io/name: currency-service
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
     budgetanalyzer.org/image: ghcr.io/budgetanalyzer/currency-service:0.0.15@sha256:8352eb2d6898ee74a20d46f20e5cf6e8f9aa8694abc943e38f962af4397bfa69
     budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -52,7 +52,7 @@ spec:
         app.kubernetes.io/name: currency-service
         app.kubernetes.io/part-of: budget-analyzer
         app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
         budgetanalyzer.org/image: ghcr.io/budgetanalyzer/currency-service:0.0.15@sha256:8352eb2d6898ee74a20d46f20e5cf6e8f9aa8694abc943e38f962af4397bfa69
         budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -69,7 +69,7 @@ metadata:
     app.kubernetes.io/name: permission-service
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
     budgetanalyzer.org/image: ghcr.io/budgetanalyzer/permission-service:0.0.15@sha256:8cd82bed5cd381080c346640eacabb058b23ccd2b3a2ff68a503159c0493f5cc
     budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -83,7 +83,7 @@ spec:
         app.kubernetes.io/name: permission-service
         app.kubernetes.io/part-of: budget-analyzer
         app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
         budgetanalyzer.org/image: ghcr.io/budgetanalyzer/permission-service:0.0.15@sha256:8cd82bed5cd381080c346640eacabb058b23ccd2b3a2ff68a503159c0493f5cc
         budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -100,7 +100,7 @@ metadata:
     app.kubernetes.io/name: session-gateway
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
     budgetanalyzer.org/image: ghcr.io/budgetanalyzer/session-gateway:0.0.15@sha256:aeef64ec48521fbc14c87ae032c0b94d0e8a90735c83e3fea7a8ff5d22abd86e
     budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -114,7 +114,7 @@ spec:
         app.kubernetes.io/name: session-gateway
         app.kubernetes.io/part-of: budget-analyzer
         app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
         budgetanalyzer.org/image: ghcr.io/budgetanalyzer/session-gateway:0.0.15@sha256:aeef64ec48521fbc14c87ae032c0b94d0e8a90735c83e3fea7a8ff5d22abd86e
         budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -130,26 +130,26 @@ metadata:
   labels:
     app.kubernetes.io/name: ext-authz
     app.kubernetes.io/part-of: budget-analyzer
-    app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    app.kubernetes.io/version: 0.0.16
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
-    budgetanalyzer.org/image: ghcr.io/budgetanalyzer/ext-authz:0.0.15@sha256:a0b8d58f2eb8cd89623954731628d1dd2051fb279686f6a286827a3fc8c52b90
-    budgetanalyzer.org/source-ref: refs/tags/v0.0.15
-    org.opencontainers.image.version: 0.0.15
-    org.opencontainers.image.revision: 24b349ba6c146501cd97d65add91a5fcb3ee21bd
+    budgetanalyzer.org/image: ghcr.io/budgetanalyzer/ext-authz:0.0.16@sha256:bdd853111aca0ee47ec1d4fcdf45f38d4bc7507e701d8d3041ba20e346008447
+    budgetanalyzer.org/source-ref: refs/tags/v0.0.16
+    org.opencontainers.image.version: 0.0.16
+    org.opencontainers.image.revision: 4007e771e68895a2e3fbe1fba698aa776aa801e2
 spec:
   template:
     metadata:
       labels:
         app.kubernetes.io/name: ext-authz
         app.kubernetes.io/part-of: budget-analyzer
-        app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        app.kubernetes.io/version: 0.0.16
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
-        budgetanalyzer.org/image: ghcr.io/budgetanalyzer/ext-authz:0.0.15@sha256:a0b8d58f2eb8cd89623954731628d1dd2051fb279686f6a286827a3fc8c52b90
-        budgetanalyzer.org/source-ref: refs/tags/v0.0.15
-        org.opencontainers.image.version: 0.0.15
-        org.opencontainers.image.revision: 24b349ba6c146501cd97d65add91a5fcb3ee21bd
+        budgetanalyzer.org/image: ghcr.io/budgetanalyzer/ext-authz:0.0.16@sha256:bdd853111aca0ee47ec1d4fcdf45f38d4bc7507e701d8d3041ba20e346008447
+        budgetanalyzer.org/source-ref: refs/tags/v0.0.16
+        org.opencontainers.image.version: 0.0.16
+        org.opencontainers.image.revision: 4007e771e68895a2e3fbe1fba698aa776aa801e2
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -160,7 +160,7 @@ metadata:
     app.kubernetes.io/name: nginx-gateway
     app.kubernetes.io/part-of: budget-analyzer
     app.kubernetes.io/version: 0.0.15
-    budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+    budgetanalyzer.org/deployment-id: oci-20260524T050351Z
   annotations:
     budgetanalyzer.org/image: ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.15@sha256:6c1030872b4c68d5b442d2f979116fe5a272dd42b1c5da8fb943292bcd9ab40f
     budgetanalyzer.org/source-ref: refs/tags/v0.0.15
@@ -173,7 +173,7 @@ spec:
         app.kubernetes.io/name: nginx-gateway
         app.kubernetes.io/part-of: budget-analyzer
         app.kubernetes.io/version: 0.0.15
-        budgetanalyzer.org/deployment-id: oci-20260523T010804Z
+        budgetanalyzer.org/deployment-id: oci-20260524T050351Z
       annotations:
         budgetanalyzer.org/image: ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.15@sha256:6c1030872b4c68d5b442d2f979116fe5a272dd42b1c5da8fb943292bcd9ab40f
         budgetanalyzer.org/source-ref: refs/tags/v0.0.15

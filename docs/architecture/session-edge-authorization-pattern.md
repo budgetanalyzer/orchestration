@@ -73,6 +73,11 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 
 **Key Benefit**: Centralized session validation, instant revocation via Redis key deletion
 
+**Repository**: https://github.com/budgetanalyzer/ext-authz owns the Go source,
+Dockerfile, tests, and service-local release workflow. Orchestration owns the
+Kubernetes deployment, Istio `ext_authz` provider wiring, Redis ACL wiring, and
+shared session-edge contract documented here.
+
 **Discovery**:
 ```bash
 # Check ext_authz service status
@@ -168,7 +173,7 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 - Orchestration also sets `SESSION_COOKIE_NAME=BA_SESSION` explicitly on the checked-in `ext-authz` deployment so the live cluster does not depend on the compiled default.
 - Session Gateway owns the session hash contents and expiry behavior. `ext_authz` only assumes the hash exists, that it contains a parseable `expires_at` field, and that the current time is still before that timestamp.
 
-`./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in `orchestration/ext-authz` and the sibling `session-gateway` repo before any live-cluster checks run.
+`./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in sibling `../ext-authz` and `../session-gateway` before any live-cluster checks run.
 
 ## Why This Pattern?
 

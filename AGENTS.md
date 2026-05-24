@@ -19,7 +19,7 @@
 ```bash
 # Sibling repos expected next to this repo
 find .. -maxdepth 1 -mindepth 1 -type d \
-  \( -name '*-service' -o -name 'session-gateway' -o -name 'budget-analyzer-web' -o -name 'service-common' -o -name 'workspace' \) \
+  \( -name '*-service' -o -name 'session-gateway' -o -name 'ext-authz' -o -name 'budget-analyzer-web' -o -name 'service-common' -o -name 'workspace' \) \
   | sort
 
 # Repo structure
@@ -66,6 +66,11 @@ Prefer discovery commands over static inventories:
 This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
 This project is designed for AI-assisted development. The containerized development environment lives in the sibling `../workspace` repository; that repo owns the devcontainer configuration.
+
+The `ext-authz` Go service implementation lives in the sibling `../ext-authz`
+repository. This orchestration repository owns its Kubernetes manifests, Istio
+`ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
+policy, and deployment documentation.
 
 The default debugging model is split across host and container:
 - Tilt runs on the host machine
@@ -132,6 +137,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
 - Containerized dev environment setup: sibling `../workspace` repository
+- `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
 - NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
 - Production overlays and OCI deployment inputs: `kubernetes/production/README.md`

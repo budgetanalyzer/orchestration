@@ -20,6 +20,7 @@ All backend services use GitHub Actions for continuous integration. Each service
 | transaction-service | [![Build](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/transaction-service/actions/workflows/build.yml) |
 | currency-service | [![Build](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/currency-service/actions/workflows/build.yml) |
 | permission-service | [![Build](https://github.com/budgetanalyzer/permission-service/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/permission-service/actions/workflows/build.yml) |
+| ext-authz | [![Build](https://github.com/budgetanalyzer/ext-authz/actions/workflows/build.yml/badge.svg)](https://github.com/budgetanalyzer/ext-authz/actions/workflows/build.yml) |
 
 ## Workflow Details
 
@@ -126,10 +127,11 @@ can resolve anonymously; private packages require `GHCR_USERNAME` and
 `GHCR_TOKEN` with `read:packages` scope. GitHub SSH keys are not used by GHCR
 image reads.
 
-The final orchestration manifest commit necessarily happens after the source
-tag that builds `ext-authz`. Do not try to make the checked-in desired-state
+The final orchestration manifest commit necessarily happens after source tags
+that build deployable images, including the `ext-authz` tag in the sibling
+`budgetanalyzer/ext-authz` repo. Do not try to make the checked-in desired-state
 manifest self-reference the commit that contains itself. Treat per-artifact
-source commits in the manifest as image build inputs; the orchestration commit
+commit fields in the manifest as image build inputs; the orchestration revision
 pulled by the OCI host is deploy evidence captured during apply.
 
 The OCI deployment command applies the checked-in desired state from the
@@ -312,8 +314,8 @@ Release image publishing is tag-driven and owned by the source repositories:
 - `budget-analyzer-web` keeps `Dockerfile` for the local Vite/Tilt path and
   uses `Dockerfile.production` for the GHCR release image built by its own
   `.github/workflows/publish-release.yml`
-- orchestration publishes `ext-authz` from
-  `.github/workflows/publish-ext-authz-release.yml`
+- `ext-authz` publishes from
+  `budgetanalyzer/ext-authz/.github/workflows/publish-release.yml`
 - on `push` of a strict `vX.Y.Z` tag, the workflows publish the stripped
   numeric SemVer Docker tag and print a digest-pinned image reference for the
   production inventory step; they do not publish `latest`

@@ -45,6 +45,7 @@ shape of the topic and link outward.
 | Manual Tilt/Kind bootstrap internals | [docs/tilt-kind-setup-guide.md](tilt-kind-setup-guide.md) | Treat it as a manual/deep-dive reference, not a competing default path. |
 | High-level system orientation | [docs/architecture/system-overview.md](architecture/system-overview.md) | Keep this high level and defer exact contracts to the topic owners below. |
 | Browser request flow and shared session contract | [docs/architecture/session-edge-authorization-pattern.md](architecture/session-edge-authorization-pattern.md) | Other docs may summarize the flow, but detailed route ownership and session contract behavior belong there. |
+| `ext-authz` service implementation and release workflow | [../ext-authz/README.md](../../ext-authz/README.md) | Orchestration docs own deployment, Istio wiring, Redis ACLs, production policy, and cross-cutting session-edge behavior. |
 | Security controls and layered posture | [docs/architecture/security-architecture.md](architecture/security-architecture.md) | Link there for detailed control rationale and layered defenses. |
 | Ports and service exposure | [docs/architecture/port-reference.md](architecture/port-reference.md) | Do not maintain competing port tables elsewhere. |
 | Observability access model and operator entry points | [docs/architecture/observability.md](architecture/observability.md) | Keep exact access posture and port-forward commands there. |

@@ -254,7 +254,7 @@ Node 20 LTS reaches end-of-life April 2026. Plan migration to Node 22 LTS before
 | **Current version** | 1.24 |
 | **Releases** | https://github.com/golang/go |
 | **Download page** | https://go.dev/dl/ |
-| **Defined in** | `orchestration/ext-authz/Dockerfile`, `orchestration/ext-authz/go.mod`, `workspace/ai-agent-sandbox/Dockerfile` |
+| **Defined in** | `ext-authz/Dockerfile`, `ext-authz/go.mod`, `workspace/ai-agent-sandbox/Dockerfile` |
 
 Only used for ext-authz (small codebase, ~200 lines). Go has excellent backward compatibility. Check when upgrading the devcontainer.
 
@@ -324,7 +324,7 @@ Helm 4 is explicitly blocked in this repo. Watch only to monitor the Helm 4 GA t
 |---|---|
 | **Current version** | v9.7.0 |
 | **Releases** | https://github.com/redis/go-redis |
-| **Defined in** | `orchestration/ext-authz/go.mod` |
+| **Defined in** | `ext-authz/go.mod` |
 
 Only used by ext-authz. Low urgency unless security patches are published.
 
@@ -344,7 +344,7 @@ Base image for all Spring Boot services. Updates when JDK patch versions are rel
 |---|---|
 | **Current version** | static:nonroot |
 | **Releases** | https://github.com/GoogleContainerTools/distroless |
-| **Defined in** | `orchestration/ext-authz/Dockerfile` |
+| **Defined in** | `ext-authz/Dockerfile` |
 
 Minimal runtime image for ext-authz. Updated infrequently.
 
@@ -488,8 +488,8 @@ table below tracks the human-readable tags; the checked-in refs now use
 |---|---|---|
 | eclipse-temurin | 25-jre-alpine | `orchestration/Tiltfile` (inline Dockerfiles) |
 | node | 20-alpine | `budget-analyzer-web/Dockerfile`, `budget-analyzer-web/Dockerfile.dev` |
-| golang | 1.24-alpine | `orchestration/ext-authz/Dockerfile` |
-| distroless/static | nonroot | `orchestration/ext-authz/Dockerfile` |
+| golang | 1.24-alpine | `ext-authz/Dockerfile` |
+| distroless/static | nonroot | `ext-authz/Dockerfile` |
 | postgres | 16-alpine | `orchestration/kubernetes/infrastructure/postgresql/statefulset.yaml` |
 | redis | 7-alpine | `orchestration/kubernetes/infrastructure/redis/statefulset.yaml` |
 | rabbitmq | 3.13-management | `orchestration/kubernetes/infrastructure/rabbitmq/statefulset.yaml` |
@@ -521,8 +521,8 @@ table below tracks the human-readable tags; the checked-in refs now use
 
 | Dependency | Version | Where Defined |
 |---|---|---|
-| Go | 1.24 | `orchestration/ext-authz/go.mod`, `orchestration/ext-authz/Dockerfile` |
-| go-redis | v9.7.0 | `orchestration/ext-authz/go.mod` |
+| Go | 1.24 | `ext-authz/go.mod`, `ext-authz/Dockerfile` |
+| go-redis | v9.7.0 | `ext-authz/go.mod` |
 
 ### Frontend
 

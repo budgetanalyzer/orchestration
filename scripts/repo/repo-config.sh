@@ -19,7 +19,7 @@ RUNTIME_IMAGE_REPOS=(
     "permission-service"
     "session-gateway"
     "budget-analyzer-web"
-    "orchestration"
+    "ext-authz"
 )
 
 JAVA_RUNTIME_REPOS=(
@@ -49,6 +49,7 @@ LOCKSTEP_RELEASE_REPOS=(
     "budget-analyzer-web"
     "session-gateway"
     "permission-service"
+    "ext-authz"
     "checkstyle-config"
 )
 
@@ -60,6 +61,7 @@ OCI_RELEASE_SOURCE_REPOS=(
     "budget-analyzer-web"
     "session-gateway"
     "permission-service"
+    "ext-authz"
 )
 
 # Backward-compatible alias for older repo-wide maintenance helpers. New

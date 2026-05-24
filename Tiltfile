@@ -552,10 +552,12 @@ k8s_resource(
 # EXT-AUTHZ SERVICE (Go, HTTP external authorization)
 # ============================================================================
 
+ext_authz_repo = get_repo_path('ext-authz')
+
 docker_build(
     'ext-authz',
-    context='ext-authz',
-    dockerfile='ext-authz/Dockerfile',
+    context=ext_authz_repo,
+    dockerfile=ext_authz_repo + '/Dockerfile',
 )
 
 k8s_yaml([

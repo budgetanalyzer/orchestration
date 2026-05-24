@@ -15,7 +15,7 @@ PUBLISH_WORKFLOWS=(
     "permission-service:publish-release.yml"
     "session-gateway:publish-release.yml"
     "budget-analyzer-web:publish-release.yml"
-    "orchestration:publish-ext-authz-release.yml"
+    "ext-authz:publish-release.yml"
 )
 readonly PUBLISH_WORKFLOWS
 

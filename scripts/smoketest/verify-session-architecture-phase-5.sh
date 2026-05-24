@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Verify the shared session contract in the orchestration repo.
+# Verify the shared session contract across the orchestration, session-gateway,
+# and ext-authz repos.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PARENT_DIR="$(dirname "${REPO_ROOT}")"
 
 STATIC_ONLY=false
 REQUIRE_LIVE_SESSION=false
@@ -15,7 +17,8 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/smoketest/verify-session-architecture-phase-5.sh [options]
 
-Verifies the shared session contract:
+Verifies the shared session contract across the orchestration, session-gateway,
+and ext-authz repos:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
@@ -92,8 +95,10 @@ assert_file_exists() {
 
     if [[ -f "$file" ]]; then
         pass "$label"
+        return 0
     else
         fail "$label"
+        return 1
     fi
 }
 
@@ -494,14 +499,16 @@ run_static_checks() {
     local ext_authz_config_file ext_authz_deployment_file session_gateway_application_file session_gateway_cookie_helper_file
     local session_gateway_key_prefix_default ext_authz_key_prefix_default
     local session_gateway_cookie_name_yaml_default ext_authz_deployment_cookie_name
-    local ext_authz_cookie_name_default
+    local ext_authz_cookie_name_default ext_authz_repo_dir static_prereq_failed
 
     section "Static Contract"
 
-    ext_authz_config_file="${REPO_ROOT}/ext-authz/config.go"
+    ext_authz_repo_dir="${PARENT_DIR}/ext-authz"
+    ext_authz_config_file="${ext_authz_repo_dir}/config.go"
     ext_authz_deployment_file="${REPO_ROOT}/kubernetes/services/ext-authz/deployment.yaml"
-    session_gateway_application_file="${REPO_ROOT}/../session-gateway/src/main/resources/application.yml"
-    session_gateway_cookie_helper_file="${REPO_ROOT}/../session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session/SessionCookieHelper.java"
+    session_gateway_application_file="${PARENT_DIR}/session-gateway/src/main/resources/application.yml"
+    session_gateway_cookie_helper_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session/SessionCookieHelper.java"
+    static_prereq_failed=false
 
     # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
     assert_file_contains \
@@ -522,15 +529,37 @@ run_static_checks() {
         "~extauthz:session:*" \
         "Redis ACL bootstrap no longer references extauthz:session:*"
 
-    assert_file_exists \
+    if assert_file_exists \
         "$session_gateway_application_file" \
-        "Session Gateway application.yml is available for the shared session contract check"
-    assert_file_exists \
+        "Session Gateway application.yml is available for the shared session contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
+    if assert_file_exists \
         "$session_gateway_cookie_helper_file" \
-        "Session Gateway SessionCookieHelper is available for the shared session contract check"
-    assert_file_exists \
+        "Session Gateway SessionCookieHelper is available for the shared session contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
+    if [[ -d "${ext_authz_repo_dir}/.git" ]]; then
+        pass "ext-authz sibling repository is cloned at ../ext-authz"
+    else
+        fail "ext-authz sibling repository is missing; clone ../ext-authz for static contract checks"
+        static_prereq_failed=true
+    fi
+    if assert_file_exists \
         "$ext_authz_config_file" \
-        "ext-authz config.go is available for the shared session contract check"
+        "ext-authz config.go is available for the shared session contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
+
+    if [[ "$static_prereq_failed" == true ]]; then
+        return
+    fi
 
     session_gateway_key_prefix_default="$(extract_session_gateway_key_prefix_default "$session_gateway_application_file")"
     ext_authz_key_prefix_default="$(extract_ext_authz_session_key_prefix_default "$ext_authz_config_file")"

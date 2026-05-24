@@ -14,7 +14,7 @@ declare -A ARTIFACT_SOURCE_REPOS=(
     ["permission-service"]="permission-service"
     ["session-gateway"]="session-gateway"
     ["budget-analyzer-web"]="budget-analyzer-web"
-    ["ext-authz"]="orchestration"
+    ["ext-authz"]="ext-authz"
 )
 
 declare -A ARTIFACT_IMAGE_REPOS=(
@@ -32,7 +32,7 @@ declare -A ARTIFACT_WORKFLOWS=(
     ["permission-service"]="publish-release.yml"
     ["session-gateway"]="publish-release.yml"
     ["budget-analyzer-web"]="publish-release.yml"
-    ["ext-authz"]="publish-ext-authz-release.yml"
+    ["ext-authz"]="publish-release.yml"
 )
 
 RUNTIME_ARTIFACTS=(

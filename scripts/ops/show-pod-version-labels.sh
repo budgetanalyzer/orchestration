@@ -10,6 +10,7 @@ EXPECTED_SOURCE="inventory"
 EXPECTED_PATH="${DEFAULT_INVENTORY}"
 STRICT=false
 TRACKED_ONLY=false
+ALLOW_MIXED_DEPLOYMENT_ID=false
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -61,6 +62,9 @@ Options:
                               Default: kubernetes/production/apps/image-inventory.yaml
   --tracked-only              Print only Budget Analyzer runtime pods.
   --strict                    Exit non-zero when warnings are found.
+  --allow-mixed-deployment-id Allow already-current pods from earlier
+                              deployment ids. Image, source, version, and
+                              service-common metadata are still verified.
   -h, --help                  Show this help text.
 EOF
 }
@@ -317,6 +321,9 @@ parse_args() {
             --strict)
                 STRICT=true
                 ;;
+            --allow-mixed-deployment-id)
+                ALLOW_MIXED_DEPLOYMENT_ID=true
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -406,10 +413,6 @@ main() {
                 status="WARN"
                 warning_count=$((warning_count + 1))
                 warn_mismatch "${namespace}/${pod} maps to unknown deployment artifact ${artifact}"
-            elif [[ "${deployment_id}" != "${expected_deployment_id}" ]]; then
-                status="WARN"
-                warning_count=$((warning_count + 1))
-                warn_mismatch "${namespace}/${pod} has deployment-id=${deployment_id:-<none>}; expected ${expected_deployment_id}"
             elif [[ "${app_version}" != "${EXPECTED_ARTIFACT_VERSIONS[${artifact}]}" ]]; then
                 status="WARN"
                 warning_count=$((warning_count + 1))
@@ -436,6 +439,10 @@ main() {
                     status="WARN"
                     warning_count=$((warning_count + 1))
                     warn_mismatch "${namespace}/${pod} has service-common-version=${service_common_annotation:-<none>}; expected ${expected_service_common}"
+                elif [[ "${ALLOW_MIXED_DEPLOYMENT_ID}" != true && "${deployment_id}" != "${expected_deployment_id}" ]]; then
+                    status="WARN"
+                    warning_count=$((warning_count + 1))
+                    warn_mismatch "${namespace}/${pod} has deployment-id=${deployment_id:-<none>}; expected ${expected_deployment_id}"
                 fi
             fi
         elif [[ "${tracked}" != true ]]; then

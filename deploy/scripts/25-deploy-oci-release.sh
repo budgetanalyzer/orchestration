@@ -47,6 +47,9 @@ DEPLOYMENT_MANIFEST=""
 DEPLOYMENT_ID=""
 EXPLICIT_KUBECONFIG=false
 SNAPSHOT_DIR=""
+SELECTIVE_APPS_OVERLAY_DIR=""
+declare -a CHANGED_DEPLOYMENTS=()
+declare -a UNCHANGED_DEPLOYMENTS=()
 
 usage() {
     cat <<'EOF'
@@ -63,8 +66,9 @@ Options:
 
 The script validates a schema v2 deployment manifest against the checked-in
 production image inventory, captures pre/post cluster snapshots, applies the
-managed production app set, waits for rollouts, and verifies live pod metadata
-against the same manifest. It does not run host-only certificate generation.
+managed production app set without restarting already-current workloads, waits
+for changed workload rollouts, and verifies live pod metadata against the same
+manifest. It does not run host-only certificate generation.
 EOF
 }
 
@@ -290,6 +294,148 @@ require_executable() {
     [[ -x "${path}" ]] || die "missing executable: ${path}"
 }
 
+artifact_for_workload() {
+    case "$1" in
+        nginx-gateway)
+            printf '%s\n' "budget-analyzer-web"
+            ;;
+        *)
+            printf '%s\n' "$1"
+            ;;
+    esac
+}
+
+image_list_contains() {
+    local image_list="$1"
+    local expected_image="$2"
+    local image
+    local -a images_array=()
+
+    IFS=',' read -r -a images_array <<< "${image_list}"
+    for image in "${images_array[@]}"; do
+        if [[ "${image}" == "${expected_image}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+kubectl_jsonpath() {
+    local jsonpath="$1"
+    shift
+
+    kubectl get "$@" -o "jsonpath=${jsonpath}" 2>/dev/null || true
+}
+
+live_deployment_template_value() {
+    local deployment="$1"
+    local jsonpath="$2"
+
+    kubectl_jsonpath "${jsonpath}" "deployment/${deployment}" -n "${APP_NAMESPACE}"
+}
+
+deployment_matches_manifest() {
+    local deployment="$1"
+    local artifact expected_image expected_version expected_revision expected_source_ref expected_service_common
+    local live_deployment_id live_version live_image_annotation live_revision live_source_ref live_service_common live_init_images live_images live_all_images
+
+    if ! kubectl get "deployment/${deployment}" -n "${APP_NAMESPACE}" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    artifact="$(artifact_for_workload "${deployment}")"
+    expected_image="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${artifact}" "image")"
+    expected_version="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${artifact}" "artifact_version")"
+    expected_revision="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${artifact}" "source_commit")"
+    expected_source_ref="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${artifact}" "source_ref")"
+    expected_service_common="$(manifest_nested_value "${DEPLOYMENT_MANIFEST}" "artifacts" "${artifact}" "service_common_version")"
+
+    live_deployment_id="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.labels.budgetanalyzer\.org/deployment-id}')"
+    live_version="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.labels.app\.kubernetes\.io/version}')"
+    live_image_annotation="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.annotations.budgetanalyzer\.org/image}')"
+    live_revision="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.annotations.org\.opencontainers\.image\.revision}')"
+    live_source_ref="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.annotations.budgetanalyzer\.org/source-ref}')"
+    live_service_common="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.annotations.budgetanalyzer\.org/service-common-version}')"
+    # shellcheck disable=SC2016 # Go template variables must remain literal for kubectl.
+    live_init_images="$(live_deployment_template_value "${deployment}" '{range $index, $container := .spec.template.spec.initContainers}{if $index},{end}{$container.image}{end}')"
+    # shellcheck disable=SC2016 # Go template variables must remain literal for kubectl.
+    live_images="$(live_deployment_template_value "${deployment}" '{range $index, $container := .spec.template.spec.containers}{if $index},{end}{$container.image}{end}')"
+    live_all_images="${live_init_images}${live_init_images:+,}${live_images}"
+
+    [[ -n "${live_deployment_id}" ]] || return 1
+    [[ "${live_version}" == "${expected_version}" ]] || return 1
+    [[ "${live_image_annotation}" == "${expected_image}" ]] || return 1
+    [[ "${live_revision}" == "${expected_revision}" ]] || return 1
+    [[ "${live_source_ref}" == "${expected_source_ref}" ]] || return 1
+    image_list_contains "${live_all_images}" "${expected_image}" || return 1
+
+    if [[ -n "${expected_service_common}" && "${live_service_common}" != "${expected_service_common}" ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+classify_deployments_for_selective_apply() {
+    local deployment
+
+    CHANGED_DEPLOYMENTS=()
+    UNCHANGED_DEPLOYMENTS=()
+
+    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
+        if deployment_matches_manifest "${deployment}"; then
+            UNCHANGED_DEPLOYMENTS+=("${deployment}")
+        else
+            CHANGED_DEPLOYMENTS+=("${deployment}")
+        fi
+    done
+}
+
+yaml_double_quote() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'
+}
+
+relative_path() {
+    local from_dir="$1"
+    local to_path="$2"
+
+    realpath --relative-to="${from_dir}" "${to_path}"
+}
+
+write_selective_apps_overlay() {
+    local production_apps_relative
+    local deployment live_deployment_id quoted_deployment_id
+
+    SELECTIVE_APPS_OVERLAY_DIR="${SNAPSHOT_DIR}/selective-apps-kustomize"
+    mkdir -p "${SELECTIVE_APPS_OVERLAY_DIR}"
+
+    production_apps_relative="$(relative_path "${SELECTIVE_APPS_OVERLAY_DIR}" "${PRODUCTION_APPS_DIR}")"
+
+    {
+        printf 'apiVersion: kustomize.config.k8s.io/v1beta1\n'
+        printf 'kind: Kustomization\n'
+        printf 'resources:\n'
+        printf '  - %s\n' "${production_apps_relative}"
+
+        if (( ${#UNCHANGED_DEPLOYMENTS[@]} > 0 )); then
+            printf 'patches:\n'
+        fi
+
+        for deployment in "${UNCHANGED_DEPLOYMENTS[@]}"; do
+            live_deployment_id="$(live_deployment_template_value "${deployment}" '{.spec.template.metadata.labels.budgetanalyzer\.org/deployment-id}')"
+            quoted_deployment_id="$(yaml_double_quote "${live_deployment_id}")"
+            printf '  - target:\n'
+            printf '      kind: Deployment\n'
+            printf '      name: %s\n' "${deployment}"
+            printf '    patch: |-\n'
+            printf '      - op: replace\n'
+            printf '        path: /spec/template/metadata/labels/budgetanalyzer.org~1deployment-id\n'
+            printf '        value: %s\n' "${quoted_deployment_id}"
+        done
+    } > "${SELECTIVE_APPS_OVERLAY_DIR}/kustomization.yaml"
+}
+
 capture_snapshot() {
     local label="$1"
     local output_dir="${SNAPSHOT_DIR}/${label}"
@@ -315,7 +461,7 @@ run_static_preflight() {
 }
 
 run_pod_metadata_verifier() {
-    local args=(--deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict)
+    local args=(--deployment-manifest "${DEPLOYMENT_MANIFEST}" --tracked-only --strict --allow-mixed-deployment-id)
 
     require_executable "${POD_VERSION_LABELS_SCRIPT}"
     info "verifying live runtime deployment metadata"
@@ -323,7 +469,22 @@ run_pod_metadata_verifier() {
 }
 
 apply_production_apps() {
-    run_bash "kubectl kustomize '${PRODUCTION_APPS_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
+    classify_deployments_for_selective_apply
+    write_selective_apps_overlay
+
+    info "applying production apps with selective workload rollout"
+    if (( ${#CHANGED_DEPLOYMENTS[@]} == 0 )); then
+        printf '  changed deployments: <none>\n'
+    else
+        printf '  changed deployments: %s\n' "${CHANGED_DEPLOYMENTS[*]}"
+    fi
+    if (( ${#UNCHANGED_DEPLOYMENTS[@]} == 0 )); then
+        printf '  already-current deployments: <none>\n'
+    else
+        printf '  already-current deployments: %s\n' "${UNCHANGED_DEPLOYMENTS[*]}"
+    fi
+
+    run_bash "kubectl kustomize '${SELECTIVE_APPS_OVERLAY_DIR}' --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -"
 }
 
 run_application_phase() {
@@ -337,7 +498,7 @@ run_application_phase() {
 
     apply_production_apps
 
-    for deployment in "${SERVICE_DEPLOYMENTS[@]}"; do
+    for deployment in "${CHANGED_DEPLOYMENTS[@]}"; do
         run_cmd kubectl rollout status "deployment/${deployment}" -n "${APP_NAMESPACE}" --timeout=300s
     done
 
@@ -354,7 +515,7 @@ print_completion_checklist() {
     info "OCI deployment wrapper complete"
     printf '\nCompletion checklist:\n'
     printf '  - Review snapshots under %s\n' "${SNAPSHOT_DIR}"
-    printf '  - Confirm OCI pods match the checked-in manifest: ./scripts/ops/show-pod-version-labels.sh --deployment-manifest %s --tracked-only --strict\n' "${DEPLOYMENT_MANIFEST}"
+    printf '  - Confirm OCI pods match the checked-in manifest: ./scripts/ops/show-pod-version-labels.sh --deployment-manifest %s --tracked-only --strict --allow-mixed-deployment-id\n' "${DEPLOYMENT_MANIFEST}"
     printf '  - Confirm observability remains internal-only; no Grafana, Prometheus, Jaeger, or Kiali public routes\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/\n'
     printf '  - From a workstation, verify: curl -I https://demo.budgetanalyzer.org/api-docs\n'
@@ -367,7 +528,7 @@ main() {
     validate_manifest_matches_inventory
     configure_kubeconfig
     phase4_load_instance_env
-    phase4_require_commands kubectl helm
+    phase4_require_commands kubectl helm realpath
     phase4_require_cluster_access
 
     SNAPSHOT_DIR="${SNAPSHOT_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)-manifest-${DEPLOYMENT_ID}"

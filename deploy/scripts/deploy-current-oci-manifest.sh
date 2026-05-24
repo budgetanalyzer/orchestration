@@ -25,10 +25,10 @@ Options:
   -h, --help         Show this help.
 
 Applies the checked-in OCI production desired state from
-kubernetes/production/apps/deployment-manifest.yaml, waits for managed
-application rollouts, and verifies live pod metadata against that manifest.
-It does not inspect sibling source repositories, create tags, build images,
-push images, or mutate the production manifest.
+kubernetes/production/apps/deployment-manifest.yaml, waits only for changed
+managed application rollouts, and verifies live pod metadata against that
+manifest. It does not inspect sibling source repositories, create tags, build
+images, push images, or mutate the production manifest.
 EOF
 }
 

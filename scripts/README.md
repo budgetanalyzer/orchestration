@@ -52,7 +52,9 @@ scripts/
 - `ops/show-pod-version-labels.sh` - Lists pod deployment metadata for the
   current Kubernetes context and warns when Budget Analyzer runtime pods do not
   match a schema v2 deployment manifest or the checked-in production image
-  inventory. Use `--strict` when the warning check should fail the command.
+  inventory. Use `--allow-mixed-deployment-id` for selective OCI rollouts where
+  unchanged pods are allowed to retain an earlier deployment id. Use `--strict`
+  when the warning check should fail the command.
 - `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
   tunnel helper for production OCI/k3s observability access. It takes the OCI
   host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
@@ -99,8 +101,9 @@ scripts/
   tags once, resolves digest-pinned refs, preserves unchanged artifact images,
   updates the checked-in production desired state, and stops for review.
 - `../deploy/scripts/deploy-current-oci-manifest.sh` - Normal OCI-host apply
-  entry point. It applies the checked-in production manifest, waits for managed
-  rollouts, and verifies live runtime metadata against that manifest.
+  entry point. It applies the checked-in production manifest, waits only for
+  changed managed rollouts, and verifies live runtime metadata against that
+  manifest.
 - `../deploy/scripts/23-update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
   manifest, then runs the static agreement gate. It is now a lower-level
@@ -115,8 +118,8 @@ scripts/
   desired-state applier. It requires a schema v2
   `--deployment-manifest`, validates the checked-in production baseline, runs
   the static gate, captures pre/post cluster snapshots under
-  `tmp/oci-release-deploy/`, applies the managed production app set, waits for
-  rollouts, and prints the final
+  `tmp/oci-release-deploy/`, applies the managed production app set, waits only
+  for changed rollouts, and prints the final
   public-route and observability checklist.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
@@ -319,7 +322,9 @@ the active context and Tilt resource state from the same host shell first.
   annotation differs from the expected schema v2 manifest/inventory metadata.
   Use `--deployment-manifest <path>` for an explicit reviewed manifest,
   `--tracked-only` to hide third-party and infrastructure pods, and `--strict`
-  to return non-zero on warnings.
+  to return non-zero on warnings. Use `--allow-mixed-deployment-id` when a
+  selective OCI rollout should accept already-current pods from an earlier
+  deployment id.
 - `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
   for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
   host, then from the workstation run
@@ -439,14 +444,15 @@ directory without writing outside the repository.
   steps. Add `--lockstep` only when every managed artifact should move to the
   requested tag instead of preserving unchanged artifacts.
 - `deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host apply
-  entry point for the checked-in production manifest.
+  entry point for the checked-in production manifest and waits only for changed
+  managed rollouts.
 - `deploy/scripts/23-update-production-release-images.sh` consumes a complete
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
 - `deploy/scripts/25-deploy-oci-release.sh` consumes an explicit reviewed
-  deployment manifest, applies the managed production app set, and verifies
-  live runtime metadata.
+  deployment manifest, applies the managed production app set with selective
+  workload rollout, and verifies live runtime metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

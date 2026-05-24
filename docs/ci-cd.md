@@ -356,9 +356,11 @@ Release image publishing is tag-driven and owned by the source repositories:
   --deployment-manifest <path>` remains the lower-level baseline renderer used
   by the local preparation command
 - `./deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host
-  apply command for the checked-in production manifest
+  apply command for the checked-in production manifest and waits only for
+  changed managed rollouts
 - `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
-  applier for replaying an explicit reviewed desired-state manifest
+  applier for replaying an explicit reviewed desired-state manifest with
+  selective workload rollout
 - `./deploy/scripts/24-verify-oci-upgrade-lockstep.sh` is the main static
   agreement gate for the checked-in production desired state: deployment
   manifest, image inventory, app kustomization, runtime metadata patch, and

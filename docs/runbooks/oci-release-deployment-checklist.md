@@ -114,7 +114,7 @@ below.
 | NetworkPolicy summary |  |  |
 | Helm release summary |  |  |
 | Live image summary |  |  |
-| Live runtime deployment metadata | `./scripts/ops/show-pod-version-labels.sh --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml --tracked-only --strict` |  |
+| Live runtime deployment metadata | `./scripts/ops/show-pod-version-labels.sh --deployment-manifest kubernetes/production/apps/deployment-manifest.yaml --tracked-only --strict --allow-mixed-deployment-id` |  |
 | Public release metadata, if public TLS is active | `curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json` |  |
 
 ## Scripts Run

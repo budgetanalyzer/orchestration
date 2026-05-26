@@ -196,6 +196,12 @@ libraries, and sourced libraries were made non-executable.
 
 ### 7. Validate The Cleanup
 
+**Status:** Complete.
+
+Validation passed after updating the runtime hardening verifier to recognize
+Istio native sidecar injection, where `istio-proxy` appears as a restartable
+init container instead of a regular container.
+
 Run at minimum:
 
 ```bash

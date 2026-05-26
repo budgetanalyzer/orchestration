@@ -503,6 +503,28 @@ assert_no_istio_init() {
     fi
 }
 
+assert_istio_sidecar_present() {
+    local namespace="$1"
+    local pod="$2"
+    local label="$3"
+    local containers native_sidecars
+
+    containers=$(get_pod_value "$namespace" "$pod" '{.spec.containers[*].name}')
+    if printf '%s\n' "$containers" | grep -qw 'istio-proxy'; then
+        pass "$label receives the Istio sidecar"
+        return
+    fi
+
+    native_sidecars=$(kubectl get pod "$pod" -n "$namespace" \
+        -o jsonpath='{range .spec.initContainers[?(@.name=="istio-proxy")]}{.name}{"|"}{.restartPolicy}{"\n"}{end}' \
+        2>/dev/null || true)
+    if printf '%s\n' "$native_sidecars" | grep -Fxq 'istio-proxy|Always'; then
+        pass "$label receives the Istio native sidecar"
+    else
+        fail "$label did not receive the Istio sidecar"
+    fi
+}
+
 pod_service_account() {
     local namespace="$1"
     local pod="$2"
@@ -803,13 +825,7 @@ MANIFEST
         pass "Restricted meshed smoke pod does not contain istio-init"
     fi
 
-    local containers
-    containers=$(get_pod_value "${TEMP_NAMESPACE}" secure-meshed-smoke '{.spec.containers[*].name}')
-    if printf '%s\n' "$containers" | grep -qw 'istio-proxy'; then
-        pass "Restricted meshed smoke pod still receives the Istio sidecar"
-    else
-        fail "Restricted meshed smoke pod did not receive the Istio sidecar"
-    fi
+    assert_istio_sidecar_present "${TEMP_NAMESPACE}" secure-meshed-smoke "Restricted meshed smoke pod"
 
     set +e
     output=$(kubectl apply -n "${TEMP_NAMESPACE}" -f - 2>&1 <<MANIFEST

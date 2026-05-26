@@ -14,15 +14,15 @@ usage() {
 Usage: ./scripts/smoketest/smoketest.sh [options]
 
 Runs the local live-cluster validation sequence:
-  1. ./scripts/guardrails/verify-phase-7-static-manifests.sh
+  1. ./scripts/guardrails/verify-static-security-manifests.sh
   2. ./scripts/smoketest/verify-security-prereqs.sh
   3. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
   4. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
   5. ./scripts/smoketest/verify-istio-tracing-config.sh
   6. ./scripts/smoketest/verify-monitoring-runtime.sh
   7. ./scripts/smoketest/verify-observability-port-forward-access.sh
-  8. ./scripts/smoketest/verify-session-architecture-phase-5.sh
-  9. ./scripts/smoketest/verify-phase-7-security-guardrails.sh
+  8. ./scripts/smoketest/verify-session-architecture.sh
+  9. ./scripts/smoketest/verify-security-guardrails.sh
 
 Options:
   --observability-grafana-port <port>
@@ -34,9 +34,9 @@ Options:
   --observability-kiali-port <port>
       Pass through to verify-observability-port-forward-access.sh.
   --runtime-wait-timeout <duration>
-      Pass through to verify-phase-7-security-guardrails.sh.
+      Pass through to verify-security-guardrails.sh.
   --runtime-regression-timeout <duration>
-      Pass through to verify-phase-7-security-guardrails.sh.
+      Pass through to verify-security-guardrails.sh.
   -h, --help
       Show this help text.
 EOF
@@ -101,7 +101,7 @@ run_step() {
 }
 
 run_step "Static security manifest guardrails" \
-    "${REPO_DIR}/scripts/guardrails/verify-phase-7-static-manifests.sh"
+    "${REPO_DIR}/scripts/guardrails/verify-static-security-manifests.sh"
 run_step "Platform security baseline" \
     "${REPO_DIR}/scripts/smoketest/verify-security-prereqs.sh"
 run_step "Clean Tilt deployment admission" \
@@ -115,8 +115,8 @@ run_step "Monitoring runtime" \
 run_step "Observability port-forward access" \
     "${SCRIPT_DIR}/verify-observability-port-forward-access.sh" "${OBSERVABILITY_ARGS[@]}"
 run_step "Shared session contract" \
-    "${SCRIPT_DIR}/verify-session-architecture-phase-5.sh"
+    "${SCRIPT_DIR}/verify-session-architecture.sh"
 run_step "Security guardrails" \
-    "${REPO_DIR}/scripts/smoketest/verify-phase-7-security-guardrails.sh" "${PHASE7_ARGS[@]}"
+    "${REPO_DIR}/scripts/smoketest/verify-security-guardrails.sh" "${PHASE7_ARGS[@]}"
 
 printf '\nSmoketest passed.\n'

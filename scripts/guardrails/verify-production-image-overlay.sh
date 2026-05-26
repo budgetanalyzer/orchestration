@@ -557,17 +557,17 @@ verify_production_istio_authorization_policies() {
 
 render_phase6_manifests() {
     create_temp_instance_env
-    PHASE6_RENDER_DIR="${TEMP_DIR}/phase-6"
+    PHASE6_RENDER_DIR="${TEMP_DIR}/production-routes"
 
     INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
-        "${REPO_DIR}/deploy/scripts/13-render-phase-6-production-manifests.sh" \
+        "${REPO_DIR}/deploy/scripts/render/production-routes.sh" \
         --output-dir "${PHASE6_RENDER_DIR}" >/dev/null
 }
 
 render_phase7_observability_manifests() {
-    PHASE7_OBSERVABILITY_RENDER_DIR="${TEMP_DIR}/phase-7-observability"
+    PHASE7_OBSERVABILITY_RENDER_DIR="${TEMP_DIR}/observability"
 
-    "${REPO_DIR}/deploy/scripts/20-render-phase-7-observability.sh" \
+    "${REPO_DIR}/deploy/scripts/render/observability.sh" \
         --output-dir "${PHASE7_OBSERVABILITY_RENDER_DIR}" >/dev/null
 }
 

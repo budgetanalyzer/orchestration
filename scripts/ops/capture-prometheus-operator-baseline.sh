@@ -8,8 +8,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck disable=SC1091
 # Repo-relative helper; resolved from REPO_DIR at runtime.
-# shellcheck source=deploy/scripts/lib/phase-4-version-contract.sh
-source "${REPO_DIR}/deploy/scripts/lib/phase-4-version-contract.sh"
+# shellcheck source=deploy/scripts/lib/version-contract.sh
+source "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
 
 CHART="prometheus-community/kube-prometheus-stack"
 RELEASE_NAME="prometheus-stack"

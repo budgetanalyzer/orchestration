@@ -31,27 +31,27 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 ./scripts/smoketest/verify-security-prereqs.sh
 
 # Validate credential isolation
-./scripts/smoketest/verify-phase-1-credentials.sh
+./scripts/smoketest/verify-credential-isolation.sh
 
 # Validate the shared session contract
-./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only
+./scripts/smoketest/verify-session-architecture.sh --static-only
 
 # Validate NetworkPolicy enforcement
-./scripts/smoketest/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-network-policies.sh
 
 # Validate Istio ingress and egress hardening
-./scripts/smoketest/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-istio-ingress.sh
 ```
 
 `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security
-baseline. `./scripts/smoketest/verify-session-architecture-phase-5.sh` proves the
+baseline. `./scripts/smoketest/verify-session-architecture.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
 deployment, and the full Session Gateway auth-route ownership contract for
 `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`, with no standalone
 `/user` match.
-`./scripts/smoketest/verify-phase-3-istio-ingress.sh` verifies Istio ingress and
+`./scripts/smoketest/verify-istio-ingress.sh` verifies Istio ingress and
 egress hardening. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/v1/session`. The browser only
@@ -254,7 +254,7 @@ curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/aut
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
 
 # Verify the full shared session contract
-./scripts/smoketest/verify-session-architecture-phase-5.sh
+./scripts/smoketest/verify-session-architecture.sh
 
 # Flush all Redis data (clears all sessions)
 ./scripts/ops/flush-redis.sh
@@ -562,7 +562,7 @@ kubectl get authorizationpolicy -n default -o yaml | rg 'cluster.local/ns/istio-
 
 **Cause**: The ingress-facing `AuthorizationPolicy` principals no longer match the rendered ingress gateway ServiceAccount. The current auto-provisioned identity is `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`; older manifests that allow `.../sa/istio-ingress-gateway` deny the real ingress workload.
 
-**Fix**: Update the principals in `kubernetes/istio/authorization-policies.yaml` to `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`, then re-apply and rerun `./scripts/smoketest/verify-phase-3-istio-ingress.sh`.
+**Fix**: Update the principals in `kubernetes/istio/authorization-policies.yaml` to `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`, then re-apply and rerun `./scripts/smoketest/verify-istio-ingress.sh`.
 
 ### Missing Istiod Egress
 
@@ -602,7 +602,7 @@ kubectl patch felixconfiguration default --type=merge -p '{"spec":{"defaultEndpo
 
 Run the NetworkPolicy verifier to confirm policies are enforced (not just present):
 ```bash
-./scripts/smoketest/verify-phase-2-network-policies.sh
+./scripts/smoketest/verify-network-policies.sh
 ```
 
 This script uses disposable probe pods to test both positive (allowed) and negative (blocked) connectivity paths. Allowed paths pass within a bounded retry window; blocked paths must fail consistently across repeated attempts.
@@ -665,7 +665,7 @@ tilt up
 ./scripts/smoketest/verify-security-prereqs.sh
 
 # Verify Istio ingress and egress hardening after ingress resources are ready
-./scripts/smoketest/verify-phase-3-istio-ingress.sh
+./scripts/smoketest/verify-istio-ingress.sh
 ```
 
 ### Reset Single Service

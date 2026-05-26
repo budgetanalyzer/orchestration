@@ -270,7 +270,7 @@ Before implementing a plan or feature:
 ## Image Pinning And Supply Chain Guardrails
 
 - Treat checked-in third-party image refs and Dockerfile base images as digest-pinning targets unless an exception is explicitly documented in the executable inventories
-- The executable inventories live in `scripts/lib/phase-7-image-pinning-targets.txt` and `scripts/lib/phase-7-allowed-latest.txt`
+- The executable inventories live in `scripts/lib/image-pinning-targets.txt` and `scripts/lib/allowed-latest-image-refs.txt`
 - Keep those inventories aligned with the static security guardrail checks
 - Only the documented local image repos may remain on `:latest` in checked-in manifests
 - Live Tilt deploys rewrite those same repos to immutable `:tilt-<hash>` refs and currently force `imagePullPolicy: IfNotPresent` on those managed deploys

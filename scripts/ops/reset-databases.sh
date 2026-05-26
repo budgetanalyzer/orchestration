@@ -38,6 +38,7 @@ postgres_psql() {
     local database="$1"
     local sql="$2"
 
+    # shellcheck disable=SC2016 # Variables expand inside the remote shell, not before kubectl exec.
     kubectl exec -n infrastructure "$POSTGRES_POD" -- /bin/sh -ceu \
         'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -c "$2"' \
         sh "$database" "$sql"
@@ -47,6 +48,7 @@ postgres_query() {
     local database="$1"
     local sql="$2"
 
+    # shellcheck disable=SC2016 # Variables expand inside the remote shell, not before kubectl exec.
     kubectl exec -n infrastructure "$POSTGRES_POD" -- /bin/sh -ceu \
         'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -tAc "$2" -U "$POSTGRES_USER" -d "$1"' \
         sh "$database" "$sql"
@@ -83,7 +85,8 @@ else
 fi
 echo ""
 
-read -p "$(echo -e ${RED}WARNING: This will delete ALL data. Continue? [y/N]:${NC} )" -n 1 -r
+printf -v confirm_prompt "%bWARNING: This will delete ALL data. Continue? [y/N]:%b " "$RED" "$NC"
+read -r -p "$confirm_prompt" -n 1
 echo
 [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Aborted." && exit 0
 

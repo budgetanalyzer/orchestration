@@ -20,15 +20,15 @@ jobs:
 
       - name: Validate changed shell syntax
         run: |
-          bash -n scripts/guardrails/check-phase-7-image-pinning.sh
+          bash -n scripts/guardrails/check-image-pinning.sh
           bash -n scripts/guardrails/check-tilt-resource-roots.sh
           bash -n scripts/bootstrap/install-verified-tool.sh
           bash -n scripts/lib/pinned-tool-versions.sh
           bash -n scripts/ops/render-istio-egress-config.sh
-          bash -n scripts/guardrails/verify-phase-7-static-manifests.sh
+          bash -n scripts/guardrails/verify-static-security-manifests.sh
 
       - name: Run static security guardrails
-        run: ./scripts/guardrails/verify-phase-7-static-manifests.sh
+        run: ./scripts/guardrails/verify-static-security-manifests.sh
 
       - name: Prove bad fixtures are rejected
-        run: ./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
+        run: ./scripts/guardrails/verify-static-security-manifests.sh --self-test

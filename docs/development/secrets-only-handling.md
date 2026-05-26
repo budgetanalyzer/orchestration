@@ -62,6 +62,6 @@ Run:
 ./scripts/guardrails/check-secrets-only-handling.sh
 ```
 
-`./scripts/guardrails/verify-phase-7-static-manifests.sh` now includes that check, so
+`./scripts/guardrails/verify-static-security-manifests.sh` now includes that check, so
 secret/config boundary regressions fail in the normal local static guardrail
 path too.

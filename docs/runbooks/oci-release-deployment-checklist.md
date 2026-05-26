@@ -16,21 +16,21 @@ bump for config-only deployments or unrelated service releases.
 
 The recurring deployment commands live in [deploy/README.md](../../deploy/README.md)
 and the script help for
-[prepare-oci-manifest-from-current-stack.sh](../../deploy/scripts/prepare-oci-manifest-from-current-stack.sh).
+[prepare-oci-manifest-from-current-stack.sh](../../deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh).
 Use those sources for the current command sequence, then record the evidence
 below.
 
 ## Prerequisites
 
-- [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
+- [ ] `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag
   vX.Y.Z --plan-only` has been reviewed for changed-artifact tag actions,
   preserved unchanged artifacts, and expected GHCR image tags.
-- [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
+- [ ] `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag
   vX.Y.Z --push-tags` has created or pushed any missing source tags for
   changed artifacts.
 - [ ] The owning GitHub Actions image workflows have published the expected
   GHCR image tags.
-- [ ] `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag
+- [ ] `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag
   vX.Y.Z --resolve-images` completed and produced a reviewed orchestration
   diff.
 - [ ] Any Java `service-common` change has already been published and Java
@@ -98,10 +98,10 @@ below.
 
 | Check | Evidence | Result |
 | --- | --- | --- |
-| Local preparation plan | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only` |  |
-| Source tag push step | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags` |  |
+| Local preparation plan | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only` |  |
+| Source tag push step | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags` |  |
 | GitHub Actions image workflows | workflow run URLs show expected GHCR tags published |  |
-| Local resolve/update step | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images` |  |
+| Local resolve/update step | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images` |  |
 | Orchestration diff reviewed | `git diff` |  |
 | Orchestration commit pushed | commit SHA |  |
 | OCI host pulled commit | `git rev-parse HEAD` |  |
@@ -121,14 +121,14 @@ below.
 
 | Order | Script or command | Arguments | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --plan-only` |  |  |
-| 2 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --push-tags` plus options used |  |  |
+| 1 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --plan-only` |  |  |
+| 2 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --push-tags` plus options used |  |  |
 | 3 | GitHub Actions | wait for expected GHCR tags |  |  |
-| 4 | `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --resolve-images` plus options used |  |  |
+| 4 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | `--source-tag vX.Y.Z --resolve-images` plus options used |  |  |
 | 5 | `git diff` | review production desired-state files |  |  |
 | 6 | `git pull` | on OCI host |  |  |
-| 7 | `deploy/scripts/deploy-current-oci-manifest.sh` | checked-in manifest apply |  |  |
-| 8 | `deploy/scripts/24-verify-oci-upgrade-lockstep.sh` | optional rerun after pull |  |  |
+| 7 | `deploy/scripts/release/deploy-current-oci-manifest.sh` | checked-in manifest apply |  |  |
+| 8 | `deploy/scripts/verify/oci-upgrade-lockstep.sh` | optional rerun after pull |  |  |
 
 Add rows only for reviewed lower-level recovery commands used to replay the
 same complete desired-state manifest.

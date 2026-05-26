@@ -19,6 +19,8 @@
 *.keystore
 *.truststore
 secrets/
+!deploy/scripts/secrets/
+!deploy/scripts/secrets/*.sh
 credentials/
 config/secrets/
 .secrets

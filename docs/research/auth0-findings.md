@@ -376,9 +376,9 @@ Once the tenant and DNS are ready:
 2. Store `AUTH0_CLIENT_SECRET` in OCI Vault as
    `budget-analyzer-auth0-client-secret`.
 3. After the OCI vault/key exists and `instance.env` includes
-   `OCI_VAULT_OCID`, run `./deploy/scripts/09-render-phase-5-secrets.sh`,
+   `OCI_VAULT_OCID`, run `./deploy/scripts/secrets/render-secret-sync.sh`,
    review the rendered `session-gateway-idp-config`, then apply it with
-   `./deploy/scripts/10-apply-phase-5-secrets.sh`.
+   `./deploy/scripts/secrets/apply-secret-sync.sh`.
 4. Render and apply Istio egress from the same `AUTH0_ISSUER_URI`.
 
 If the Auth0 custom domain or demo hostname changes later, update

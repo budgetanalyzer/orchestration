@@ -4,6 +4,12 @@ This directory contains automation for the Budget Analyzer orchestration
 repository. Scripts are grouped by purpose so setup, validation, operational,
 loadtest, and repository-management tasks have stable entry points.
 
+This README is the canonical catalog for the `scripts/` tree and for
+cross-cutting verifier entry points. The detailed OCI deployment operator
+surface under `../deploy/scripts/` is owned by
+[../deploy/README.md](../deploy/README.md); this file calls out only the deploy
+commands that are part of the normal release or verification boundary.
+
 ## Layout
 
 ```
@@ -84,7 +90,7 @@ scripts/
   rendered-manifest proof, checks the live operator RBAC object set, enforces
   the required positive and negative `kubectl auth can-i` matrix, reruns the
   monitoring runtime proof, and captures Kiali triage artifacts under `tmp/`.
-- `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
+- `guardrails/verify-static-security-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
@@ -92,7 +98,7 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
-- `../deploy/scripts/prepare-oci-manifest-from-current-stack.sh` - Normal
+- `../deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` - Normal
   local OCI desired-state preparation entry point. It validates clean source
   workspaces, compares current artifact source state with the production image
   inventory, previews tag actions for changed artifacts, creates and pushes
@@ -100,27 +106,16 @@ scripts/
   publishes the expected GHCR tags, `--resolve-images` reads changed-artifact
   tags once, resolves digest-pinned refs, preserves unchanged artifact images,
   updates the checked-in production desired state, and stops for review.
-- `../deploy/scripts/deploy-current-oci-manifest.sh` - Normal OCI-host apply
+- `../deploy/scripts/release/deploy-current-oci-manifest.sh` - Normal OCI-host apply
   entry point. It applies the checked-in production manifest, waits only for
   changed managed rollouts, and verifies live runtime metadata against that
   manifest.
-- `../deploy/scripts/23-update-production-release-images.sh` - Updates the
-  checked-in production app deployment baseline from a schema v2 deployment
-  manifest, then runs the static agreement gate. It is now a lower-level
-  renderer used by the local preparation command.
-- `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
+- `../deploy/scripts/verify/oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
   OCI version contracts; production deployment manifest, image inventory, app
   kustomization, runtime metadata patch, and release metadata agreement;
   production `/api-docs` render wiring; and digest-pin inputs for production
   infrastructure and Helm values.
-- `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
-  desired-state applier. It requires a schema v2
-  `--deployment-manifest`, validates the checked-in production baseline, runs
-  the static gate, captures pre/post cluster snapshots under
-  `tmp/oci-release-deploy/`, applies the managed production app set, waits only
-  for changed rollouts, and prints the final
-  public-route and observability checklist.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -140,11 +135,6 @@ scripts/
   runtime image repos need the requested tag based on the current local HEADs,
   then rerun without `--plan-only` to tag only the missing repos and skip tags
   already pointing at current HEAD.
-- `repo/generate-deployment-manifest.sh` - Starts from the checked-in
-  production image inventory, preserves unchanged artifact digests, applies
-  explicit artifact/image metadata overrides, and writes a complete schema v2
-  deployment manifest for
-  `deploy/scripts/23-update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -189,9 +179,9 @@ setup.
 
 ## Guardrails
 
-- `guardrails/check-phase-7-image-pinning.sh` verifies the image-pinning
-  contract using `lib/phase-7-image-pinning-targets.txt` and
-  `lib/phase-7-allowed-latest.txt`.
+- `guardrails/check-image-pinning.sh` verifies the image-pinning
+  contract using `lib/image-pinning-targets.txt` and
+  `lib/allowed-latest-image-refs.txt`.
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
   secret payload inventory in `lib/secrets-only-expected-keys.txt`.
 - `guardrails/check-tilt-resource-roots.sh` evaluates the Tiltfile and verifies
@@ -199,7 +189,7 @@ setup.
   `lib/tilt-intentional-root-resources.txt`. It requires the standard
   side-by-side workspace checkout because Tiltfile evaluation references
   sibling service repositories.
-- `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
+- `guardrails/verify-static-security-manifests.sh` runs kubeconform,
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
@@ -227,7 +217,7 @@ Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:
 
 ```bash
-./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+./deploy/scripts/verify/oci-upgrade-lockstep.sh
 ```
 
 Use the live-cluster production verifier when a cluster is available:
@@ -239,23 +229,23 @@ Use the live-cluster production verifier when a cluster is available:
 CI should keep calling the fully static guardrail directly:
 
 ```bash
-./scripts/guardrails/verify-phase-7-static-manifests.sh
-./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
+./scripts/guardrails/verify-static-security-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh --self-test
 ```
 
 ## Smoketest
 
 `smoketest/smoketest.sh` is a thin dispatcher for live local validation. It runs:
 
-1. `guardrails/verify-phase-7-static-manifests.sh`
+1. `guardrails/verify-static-security-manifests.sh`
 2. `smoketest/verify-security-prereqs.sh`
 3. `smoketest/verify-clean-tilt-deployment-admission.sh`
 4. `smoketest/verify-monitoring-rendered-manifests.sh`
 5. `smoketest/verify-istio-tracing-config.sh`
 6. `smoketest/verify-monitoring-runtime.sh`
 7. `smoketest/verify-observability-port-forward-access.sh`
-8. `smoketest/verify-session-architecture-phase-5.sh`
-9. `smoketest/verify-phase-7-security-guardrails.sh`
+8. `smoketest/verify-session-architecture.sh`
+9. `smoketest/verify-security-guardrails.sh`
 
 Use targeted verifiers when debugging one capability, and the umbrella when
 proving the current cluster:
@@ -264,8 +254,8 @@ proving the current cluster:
 ./scripts/smoketest/smoketest.sh
 ./scripts/smoketest/verify-istio-tracing-config.sh
 ./scripts/smoketest/verify-observability-port-forward-access.sh
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 `smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for
@@ -347,7 +337,7 @@ the active context and Tilt resource state from the same host shell first.
   `configmaps`, service mutation, and pod-delete authority outside
   `monitoring` while retaining the documented cluster-read exceptions for
   `namespaces`, `nodes`, `ingresses`, and `storageclasses`.
-- `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
+- `deploy/scripts/verify/network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing
   is rendered and applied later in the production plan.
@@ -384,8 +374,7 @@ directory without writing outside the repository.
 ## Repo Management
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
-  state.
-- `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
+  state without changing branches or pulling.
 - `repo/prepare-lockstep-release.sh` is the release-manager source preflight
   for lockstep releases. Run it with `--release-version X.Y.Z` after
   `service-common` and Java consumers are pinned to the released
@@ -434,30 +423,18 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
-- `repo/generate-deployment-manifest.sh` is a lower-level schema v2 manifest
-  generator retained for reviewed baseline repair and historical workflows.
-  It now carries forward existing Java `service-common` metadata from the
-  production inventory.
-- `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` is the normal
+- `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` is the normal
   local desired-state preparation entry point for OCI app changes; use
   `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
   steps. Add `--lockstep` only when every managed artifact should move to the
   requested tag instead of preserving unchanged artifacts.
-- `deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host apply
+- `deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host apply
   entry point for the checked-in production manifest and waits only for changed
   managed rollouts.
-- `deploy/scripts/23-update-production-release-images.sh` consumes a complete
-  manifest to update the checked-in production deployment manifest, production
-  image inventory, production app image overlay, browser-visible
-  `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/25-deploy-oci-release.sh` consumes an explicit reviewed
-  deployment manifest, applies the managed production app set with selective
-  workload rollout, and verifies live runtime metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`
   when that sibling repo is present.
-- `repo/github/add-repo-topics.sh` manages GitHub repository topics.
 
 The repo-management scripts source `repo/repo-config.sh`, which derives the
 orchestration root from `scripts/repo/` and then resolves sibling repos from

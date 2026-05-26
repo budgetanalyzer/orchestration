@@ -16,11 +16,11 @@ The digest-pinned image inventory is the deployment truth. The normal way to
 change it is the local desired-state preparation command:
 
 ```bash
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
 
 # After GitHub Actions publishes the expected GHCR tags
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 ```
 
 The local command previews tag actions, creates and pushes missing source tags
@@ -31,8 +31,11 @@ inventory, app overlay, release metadata, and runtime metadata patch, then
 stops for review. Apply the reviewed desired state on the OCI host with:
 
 ```bash
-./deploy/scripts/deploy-current-oci-manifest.sh
+./deploy/scripts/release/deploy-current-oci-manifest.sh
 ```
+
+The detailed OCI deploy script map, bootstrap order, render/reconcile paths,
+and release operator flow live in [../../deploy/README.md](../../deploy/README.md).
 
 `service-common` versions are library coordinates consumed by Java services.
 Do not bump `service-common` or rebuild every Java runtime just because this
@@ -79,24 +82,16 @@ Verify the current production baseline with:
 
 ```bash
 kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+./deploy/scripts/verify/oci-upgrade-lockstep.sh
 ./scripts/guardrails/check-secrets-only-handling.sh
 ./scripts/guardrails/verify-production-image-overlay.sh
-./deploy/scripts/09-render-phase-5-secrets.sh
-```
-
-The lower-level baseline renderer is still available when a complete schema v2
-desired-state manifest has already been reviewed:
-
-```bash
-./deploy/scripts/23-update-production-release-images.sh \
-  --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
+./deploy/scripts/secrets/render-secret-sync.sh
 ```
 
 The deployment manifest records deployment id, orchestration revision,
 per-artifact source refs, source commits, artifact versions, `service-common`
 versions for Java workloads, and digest-pinned image refs.
-The update helper copies the reviewed manifest to
+The local desired-state preparation command copies the reviewed manifest to
 `apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and
@@ -119,8 +114,8 @@ The production image verifier now:
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
 Before deploying a transaction-service image that requires
-`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm the phase 5 secret-sync path
-has produced the preview import token credentials Secret:
+`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm secret sync has produced the
+preview import token credentials Secret:
 
 ```bash
 kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
@@ -134,10 +129,10 @@ checked-in Kyverno controller values and the production-only policy set.
 
 - `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
   instead of relying on mutable chart defaults.
-- `deploy/scripts/14-install-phase-7-kyverno.sh` creates or relabels the
+- `deploy/scripts/reconcile/install-kyverno.sh` creates or relabels the
   `kyverno` namespace for baseline Pod Security admission, then installs the
   pinned Kyverno chart version with those checked-in values.
-- `deploy/scripts/15-apply-phase-7-policies.sh` reruns
+- `deploy/scripts/reconcile/apply-admission-policies.sh` reruns
   `./scripts/guardrails/verify-production-image-overlay.sh` and then applies
   the shared admission policies plus the production-only `50` variant.
 
@@ -194,8 +189,8 @@ artifacts:
   server domain and root URL for loopback port-forward access while preserving
   the checked-in `prometheus-stack` Helm release name contract that yields the
   `prometheus-stack-grafana` Service
-- `deploy/scripts/13-render-phase-6-production-manifests.sh` renders the
-  production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
+- `deploy/scripts/render/production-routes.sh` renders the
+  production outputs under `tmp/production-routes/`, including the Auth0/FRED Istio
   egress manifests derived from the production `AUTH0_ISSUER_URI`
 
 The checked-in production monitoring overlay in this directory stays narrow:
@@ -216,13 +211,13 @@ The checked-in production monitoring overlay in this directory stays narrow:
   RBAC stays on the repo-owned least-privilege split instead of the chart's
   upstream broad cluster role
 - reapply the full internal monitoring stack with
-  `./deploy/scripts/22-apply-production-monitoring.sh`; use
+  `./deploy/scripts/reconcile/production-monitoring.sh`; use
   `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh or
   `--verify-runtime` when the rollout should also prove the dashboard input
   metrics
 - Jaeger and Kiali have a separate reviewed OCI rollout path through
-  `deploy/scripts/20-render-phase-7-observability.sh` and
-  `deploy/scripts/21-apply-phase-7-observability.sh`; those scripts reuse the
+  `deploy/scripts/render/observability.sh` and
+  `deploy/scripts/reconcile/observability.sh`; those scripts reuse the
   shared `kubernetes/monitoring/jaeger/*.yaml`,
   `kubernetes/monitoring/kiali-values.yaml`, and
   `scripts/ops/post-render-kiali-server.sh` inputs instead of adding a second
@@ -243,11 +238,11 @@ The checked-in production monitoring overlay in this directory stays narrow:
 Render and review the current production hostname/egress slice with:
 
 ```bash
-./deploy/scripts/13-render-phase-6-production-manifests.sh
-sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
-sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
-sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
-sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+./deploy/scripts/render/production-routes.sh
+sed -n '1,260p' tmp/production-routes/gateway-routes.yaml
+sed -n '1,220p' tmp/production-routes/istio-ingress-policies.yaml
+sed -n '1,120p' tmp/production-routes/prometheus-stack-values.override.yaml
+sed -n '1,260p' tmp/production-routes/istio-egress.yaml
 ```
 
 If a live OCI cluster was previously applied from an older observability render,
@@ -261,7 +256,7 @@ kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-rout
 The same "delete stale drift once, then rely on the repo-owned baseline"
 principle also applies to Istio authz. If an older OCI cluster still has
 `AuthorizationPolicy/default/budget-analyzer-web-policy`, delete it after
-reconciling with `./deploy/scripts/04-install-istio.sh`; that script now
+reconciling with `./deploy/scripts/bootstrap/04-install-istio.sh`; that script now
 reapplies the production-specific authz baseline that excludes the
 frontend-only policy.
 
@@ -286,14 +281,14 @@ That production overlay includes:
 Render it for review with:
 
 ```bash
-./deploy/scripts/17-render-production-infrastructure.sh
+./deploy/scripts/render/production-infrastructure.sh
 sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
 ```
 
 On a new or already migrated cluster, apply that rendered target with:
 
 ```bash
-./deploy/scripts/18-apply-production-infrastructure.sh
+./deploy/scripts/reconcile/production-infrastructure.sh
 ```
 
 Use these repo-owned scripts as the production infrastructure path. They render
@@ -302,16 +297,12 @@ can reuse the shared `kubernetes/infrastructure` baseline without duplicating
 PostgreSQL, RabbitMQ, or Redis manifests.
 
 The old production-only Redis Deployment/PVC overlay under
-`kubernetes/production/infrastructure/redis/` has been removed. Replacing an
-existing OCI Redis Deployment with the StatefulSet shape is destructive for
-Redis session/cache data and must use the guarded migration script:
-
-```bash
-./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
-```
-
-Add `--restart-redis-clients` when Redis clients should be rolled after the
-new StatefulSet passes its TLS `PING` check.
+`kubernetes/production/infrastructure/redis/` has been removed, and the
+one-time migration to the shared Redis StatefulSet baseline has been completed.
+New or already migrated OCI clusters should use the normal production
+infrastructure render/apply scripts. If an unexpected host still has the old
+Redis Deployment plus standalone `redis-data` PVC shape, treat replacement as
+incident recovery because Redis session/cache data may be destroyed.
 
 ## Production Verification
 

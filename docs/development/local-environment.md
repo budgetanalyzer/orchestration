@@ -325,7 +325,7 @@ and Istio `ext_authz` wiring. Service implementation changes belong in
 The frontend strict-CSP audit is now repeatable from this repo with:
 
 ```bash
-./scripts/smoketest/audit-phase-6-session-3-frontend-csp.sh
+./scripts/smoketest/audit-frontend-csp.sh
 ```
 
 That audit rebuilds the sibling smoke bundle and proves the repo-owned
@@ -336,7 +336,7 @@ edge and browser security plan.
 The API rate-limit identity runtime proof is also repeatable from this repo:
 
 ```bash
-./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
+./scripts/smoketest/verify-api-rate-limit-identity.sh
 ```
 
 That verifier creates two temporary no-sidecar probe pods, sends authenticated
@@ -348,7 +348,7 @@ the same NGINX API rate-limit bucket.
 The full edge and browser security verifier is:
 
 ```bash
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
 ```
 
 That verifier checks the checked-in dev/strict CSP split on the real app

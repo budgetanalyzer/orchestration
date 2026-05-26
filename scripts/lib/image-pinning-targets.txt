@@ -1,0 +1,29 @@
+# Image pinning targets.
+# Keep this list aligned with the supply-chain guardrail documentation.
+
+kind-cluster-config.yaml
+kubernetes/infrastructure/postgresql/statefulset.yaml
+kubernetes/infrastructure/redis/statefulset.yaml
+kubernetes/infrastructure/rabbitmq/statefulset.yaml
+kubernetes/monitoring/jaeger/deployment.yaml
+kubernetes/monitoring/kiali-values.yaml
+kubernetes/services/budget-analyzer-web/deployment.yaml
+kubernetes/services/currency-service/deployment.yaml
+kubernetes/services/ext-authz/deployment.yaml
+kubernetes/services/nginx-gateway/deployment.yaml
+kubernetes/services/permission-service/deployment.yaml
+kubernetes/services/session-gateway/deployment.yaml
+kubernetes/services/transaction-service/deployment.yaml
+Tiltfile
+tests/setup-flow/kind-cluster-test-config.yaml
+tests/shared/Dockerfile.test-env
+tests/setup-flow/docker-compose.test.yml
+tests/security-preflight/docker-compose.test.yml
+scripts/smoketest/verify-security-prereqs.sh
+scripts/smoketest/verify-network-policies.sh
+scripts/smoketest/verify-istio-ingress.sh
+scripts/smoketest/verify-transport-encryption.sh
+scripts/smoketest/verify-runtime-hardening.sh
+scripts/smoketest/verify-edge-browser-hardening.sh
+scripts/smoketest/verify-api-rate-limit-identity.sh
+scripts/smoketest/verify-runtime-security-guardrails.sh

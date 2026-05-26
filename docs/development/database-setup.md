@@ -120,9 +120,9 @@ Tilt will:
 Run the credential isolation verifier after `tilt up`:
 
 ```bash
-./scripts/smoketest/verify-phase-1-credentials.sh
-./scripts/smoketest/verify-phase-4-transport-encryption.sh
-./scripts/smoketest/verify-phase-5-runtime-hardening.sh
+./scripts/smoketest/verify-credential-isolation.sh
+./scripts/smoketest/verify-transport-encryption.sh
+./scripts/smoketest/verify-runtime-hardening.sh
 ```
 
 For targeted PostgreSQL checks:

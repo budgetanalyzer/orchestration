@@ -9,6 +9,8 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../lib/redis-cli.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x from repo root.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 RED='\033[0;31m'

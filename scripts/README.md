@@ -4,6 +4,12 @@ This directory contains automation for the Budget Analyzer orchestration
 repository. Scripts are grouped by purpose so setup, validation, operational,
 loadtest, and repository-management tasks have stable entry points.
 
+This README is the canonical catalog for the `scripts/` tree and for
+cross-cutting verifier entry points. The detailed OCI deployment operator
+surface under `../deploy/scripts/` is owned by
+[../deploy/README.md](../deploy/README.md); this file calls out only the deploy
+commands that are part of the normal release or verification boundary.
+
 ## Layout
 
 ```

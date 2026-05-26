@@ -183,6 +183,8 @@ libraries, and sourced libraries were made non-executable.
 
 ### 6. Update Documentation Ownership
 
+**Status:** Complete.
+
 - Update `scripts/README.md` as the canonical script catalog.
 - Update `deploy/README.md` as the canonical OCI/deploy operator surface.
 - Update `docs/OWNERSHIP.md` only if the cleanup changes the canonical owner

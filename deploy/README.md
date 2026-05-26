@@ -20,6 +20,11 @@ touching the OCI instance or Vault.
 
 Runtime render output still belongs under `tmp/`, not under `deploy/`.
 
+This README is the canonical owner for the OCI deployment operator surface:
+bootstrap ordering, lifecycle directories under `deploy/scripts/`, reviewed
+render outputs, reconcile/apply entry points, release commands, and deployment
+verification commands.
+
 ## Deployment Operating Model
 
 The normal OCI production operation is a local desired-state preparation step,
@@ -229,7 +234,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/bootstrap/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace the deployment path depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
 | `deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/ingress-bootstrap/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
 | `deploy/scripts/bootstrap/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the ingress bootstrap reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the public TLS ingress manifests immediately after the Istio reconcile. |
-| `deploy/scripts/bootstrap/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script logs Helm repo-update vs install stages separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when secret synchronization or public TLS needs controller value changes. For the public TLS cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
+| `deploy/scripts/bootstrap/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script logs Helm repo-update vs install stages separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when secret synchronization or public TLS needs controller value changes. For the public TLS cert-manager solver refresh path, use `PLATFORM_CONTROLLERS=cert-manager`. |
 | `deploy/scripts/bootstrap/06-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/verify/network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before treating NetworkPolicy enforcement as verified. |
 | `deploy/scripts/secrets/render-secret-sync.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/secret-sync/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
@@ -624,7 +629,7 @@ portion before retrying public certificate issuance so the live cert-manager
 release picks up the digest-pinned solver image:
 
 ```bash
-PHASE4_PLATFORM_CONTROLLERS=cert-manager ./deploy/scripts/bootstrap/05-install-platform-controllers.sh
+PLATFORM_CONTROLLERS=cert-manager ./deploy/scripts/bootstrap/05-install-platform-controllers.sh
 ./deploy/scripts/bootstrap/06-apply-network-policies.sh
 ```
 

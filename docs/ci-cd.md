@@ -112,6 +112,10 @@ review, and one OCI-host apply command:
 ./deploy/scripts/release/deploy-current-oci-manifest.sh
 ```
 
+The recurring deploy script map and operator run order live in
+[deploy/README.md](../deploy/README.md). This document owns the release and
+deployment terminology.
+
 The local preparation command validates the expected sibling repositories,
 requires clean source workspaces, compares current artifact source state with
 the checked-in production image inventory, previews source tag actions only for

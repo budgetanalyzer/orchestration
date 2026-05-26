@@ -50,7 +50,8 @@ shape of the topic and link outward.
 | Ports and service exposure | [docs/architecture/port-reference.md](architecture/port-reference.md) | Do not maintain competing port tables elsewhere. |
 | Observability access model and operator entry points | [docs/architecture/observability.md](architecture/observability.md) | Keep exact access posture and port-forward commands there. |
 | Resource-routing authoring and NGINX route work | [nginx/README.md](../nginx/README.md) | Architecture docs may reference the pattern, but NGINX route authoring detail belongs there. |
-| Script catalog and verifier entry points | [scripts/README.md](../scripts/README.md) | Other docs may call out specific scripts, but the script tree map and canonical entry points belong there. |
+| Local script catalog and verifier entry points | [scripts/README.md](../scripts/README.md) | Other docs may call out specific scripts, but the `scripts/` tree map and canonical verifier entry points belong there. |
+| OCI deployment operator surface and deploy script map | [deploy/README.md](../deploy/README.md) | Other docs may summarize OCI bootstrap, render, reconcile, release, and verification commands, but detailed deploy run order and `deploy/scripts/` lifecycle mapping belong there. |
 | Unified API docs surface (`/api-docs`) | [docs-aggregator/README.md](../docs-aggregator/README.md) | Keep exact route behavior, generated outputs, and docs-surface details there. |
 
 ## `AGENTS.md` Special Case

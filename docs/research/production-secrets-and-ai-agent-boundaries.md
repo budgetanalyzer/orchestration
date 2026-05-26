@@ -29,11 +29,11 @@ The existing `.env` / `.gitignore` approach works for local dev: Tilt reads `.en
 
 But `.gitignore` only prevents git commits. It does not prevent:
 
-- **AI agents reading the file.** Any file under `/workspace/` is readable by Claude Code and any other AI coding assistant with filesystem access. A gitignored `deploy/secrets.env` in the workspace is fully visible to every AI session.
+- **AI agents reading the file.** Any file under the workspace checkout is readable by Claude Code and any other AI coding assistant with filesystem access. A gitignored `deploy/secrets.env` in the workspace is fully visible to every AI session.
 - **Accidental exposure in conversation context.** If an agent reads a file containing secrets, those values enter the conversation context and are transmitted to the LLM provider's servers. Even if the agent doesn't *display* the values, they've left the machine.
 - **Persistence across sessions.** Every new AI session that happens to read (or be asked about) a secrets file sees those values independently.
 
-**Conclusion:** Production secrets must not exist as files anywhere under `/workspace/`. The workspace is the AI agent's domain. Secrets belong in infrastructure the agent cannot reach.
+**Conclusion:** Production secrets must not exist as files anywhere under the workspace checkout. The workspace is the AI agent's domain. Secrets belong in infrastructure the agent cannot reach.
 
 ---
 
@@ -131,7 +131,7 @@ Non-secret but deployment-specific values — OCIDs, compartment ID, public IP, 
 - Are specific to one deployment, not useful to other contributors
 - Should not clutter the committed repo
 
-These live at **`~/.config/budget-analyzer/instance.env`** on the project owner's machine, outside `/workspace/` entirely. Deployment scripts source this file. The repo contains only a template documenting the expected keys:
+These live at **`~/.config/budget-analyzer/instance.env`** on the project owner's machine, outside the workspace checkout entirely. Deployment scripts source this file. The repo contains only a template documenting the expected keys:
 
 ```bash
 # deploy/instance.env.template — committed to repo
@@ -183,14 +183,15 @@ For non-secret, non-destructive, local-only operations. The AI agent runs comman
 ```
 deploy/
   instance.env.template              # committed — documents expected keys
-  vault-bootstrap.sh.template        # committed — OCI Vault population (Pattern A)
+  manifests/                         # committed non-secret render templates
   scripts/
-    01-install-k3s.sh                # committed — pinned k3s install
-    02-bootstrap-cluster.sh          # committed — Gateway API CRDs + namespaces
-    03-render-ingress-bootstrap-manifests.sh
-    04-install-istio.sh              # committed — Istio + mesh policy install
-    05-install-platform-controllers.sh
-    07-apply-network-policies.sh
+    bootstrap/                       # committed ordered OCI host/cluster bootstrap
+    secrets/                         # committed Vault, ExternalSecret, and infra TLS helpers
+    render/                          # committed reviewable non-secret render entry points
+    reconcile/                       # committed live cluster reconcile/apply entry points
+    release/                         # committed desired-state preparation and OCI apply entry points
+    verify/                          # committed deployment verifiers
+    lib/                             # committed sourced helpers/internal implementations
 ```
 
 ---

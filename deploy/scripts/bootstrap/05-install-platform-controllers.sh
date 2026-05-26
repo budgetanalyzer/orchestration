@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HELM_WAIT_TIMEOUT="${PHASE4_HELM_WAIT_TIMEOUT:-10m}"
-PLATFORM_CONTROLLERS="${PHASE4_PLATFORM_CONTROLLERS:-all}"
+HELM_WAIT_TIMEOUT="${PLATFORM_CONTROLLER_HELM_WAIT_TIMEOUT:-${PHASE4_HELM_WAIT_TIMEOUT:-10m}}"
+PLATFORM_CONTROLLERS="${PLATFORM_CONTROLLERS:-${PHASE4_PLATFORM_CONTROLLERS:-all}}"
 readonly HELM_WAIT_TIMEOUT
 readonly PLATFORM_CONTROLLERS
 
@@ -49,7 +49,7 @@ require_valid_controller_selection() {
     IFS=',' read -r -a selection <<< "${PLATFORM_CONTROLLERS}"
 
     if (( ${#selection[@]} == 0 )); then
-        phase4_die "PHASE4_PLATFORM_CONTROLLERS must be all, cert-manager, external-secrets, or cert-manager,external-secrets"
+        phase4_die "PLATFORM_CONTROLLERS must be all, cert-manager, external-secrets, or cert-manager,external-secrets"
     fi
 
     for selected_controller in "${selection[@]}"; do
@@ -57,7 +57,7 @@ require_valid_controller_selection() {
             all|cert-manager|external-secrets)
                 ;;
             *)
-                phase4_die "unsupported PHASE4_PLATFORM_CONTROLLERS value: ${selected_controller}"
+                phase4_die "unsupported PLATFORM_CONTROLLERS value: ${selected_controller}"
                 ;;
         esac
     done

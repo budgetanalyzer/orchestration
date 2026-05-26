@@ -34,6 +34,9 @@ stops for review. Apply the reviewed desired state on the OCI host with:
 ./deploy/scripts/release/deploy-current-oci-manifest.sh
 ```
 
+The detailed OCI deploy script map, bootstrap order, render/reconcile paths,
+and release operator flow live in [../../deploy/README.md](../../deploy/README.md).
+
 `service-common` versions are library coordinates consumed by Java services.
 Do not bump `service-common` or rebuild every Java runtime just because this
 overlay, `/api-docs` metadata, routing, policy, or other orchestration config

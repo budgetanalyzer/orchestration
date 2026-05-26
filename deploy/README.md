@@ -2,7 +2,7 @@
 
 This directory is the committed, operator-facing install surface for the Oracle
 Cloud deployment path. k3s/Istio bootstrap, secret synchronization,
-production rendering, infrastructure render/apply/migration, public TLS, and
+production rendering, infrastructure render/apply, public TLS, and
 production Kyverno install/apply operations all have first-class, reviewable
 artifacts here so a human can inspect the exact cluster mutations before
 touching the OCI instance or Vault.
@@ -14,7 +14,7 @@ touching the OCI instance or Vault.
 - checked-in non-secret render templates under `deploy/manifests/phase-4/`
 - checked-in non-secret secret-sync templates and manifests under `deploy/manifests/phase-5/`
 - the production render entry point under `deploy/scripts/`
-- the production infrastructure render/apply and guarded Redis migration entry points under `deploy/scripts/`
+- the production infrastructure render/apply entry points under `deploy/scripts/`
 - the production Kyverno install/apply entry points under `deploy/scripts/`
 - the non-secret instance config template at `deploy/instance.env.template`
 
@@ -105,7 +105,6 @@ desired state.
 8. Review the production infrastructure operation scripts:
    - `deploy/scripts/17-render-production-infrastructure.sh`
    - `deploy/scripts/18-apply-production-infrastructure.sh`
-   - `deploy/scripts/19-migrate-production-redis-statefulset.sh`
 9. Review the production observability rollout inputs:
    - `kubernetes/monitoring/jaeger/configmap.yaml`
    - `kubernetes/monitoring/jaeger/pvc.yaml`
@@ -160,7 +159,6 @@ desired state.
    - `./deploy/scripts/03-render-phase-4-istio-manifests.sh`
    - `./deploy/scripts/04-install-istio.sh`
    - `./deploy/scripts/05-install-platform-controllers.sh`
-   - `./deploy/scripts/06-configure-host-redirects.sh`
    - `./deploy/scripts/07-apply-network-policies.sh`
    - `./deploy/scripts/08-verify-network-policy-enforcement.sh`
 
@@ -212,7 +210,6 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
 | `deploy/scripts/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the phase-11 public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the phase-4 ingress reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the phase-11 ingress manifests immediately after the Istio reconcile. |
 | `deploy/scripts/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script logs Helm repo-update vs install stages separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when secret synchronization or public TLS needs controller value changes. For the public TLS cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
-| `deploy/scripts/06-configure-host-redirects.sh` | Runs the Step 15 host-redirect experiment by adding persistent host `iptables` redirects for any ingress NodePorts that currently exist, replacing stale redirects on rerun if a NodePort changes or disappears. Step 16 later removes these rules before the OCI NLB path becomes the steady-state design. | Re-run only while reproducing or comparing the rejected host-redirect path; do not treat it as the steady-state public ingress design. |
 | `deploy/scripts/07-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before treating NetworkPolicy enforcement as verified. |
 | `deploy/scripts/09-render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
@@ -226,7 +223,6 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/16-render-phase-11-public-tls-manifests.sh` | Renders the reviewed public TLS artifacts into `tmp/phase-11/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the app TLS cutover or whenever the reviewed public hostname/TLS contract changes. |
 | `deploy/scripts/17-render-production-infrastructure.sh` | Renders `kubernetes/production/infrastructure` with Kustomize load restrictions disabled into `tmp/production-infrastructure/infrastructure.yaml` for review. | Re-run before applying infrastructure, after changing the shared infrastructure baseline, or after changing the production Redis storage patch. |
 | `deploy/scripts/18-apply-production-infrastructure.sh` | Refreshes the production infrastructure render, applies it to the current cluster, and waits for PostgreSQL, RabbitMQ, and Redis StatefulSets when present. | Re-run on a new or already migrated cluster, or after infrastructure manifest changes. |
-| `deploy/scripts/19-migrate-production-redis-statefulset.sh` | Requires `--confirm-destroy-redis`, removes the old Redis Deployment and standalone `redis-data` PVC when present, applies the broad infrastructure target, verifies Redis TLS `PING`, and can optionally restart Redis clients with `--restart-redis-clients`. | Run once for an existing OCI Redis Deployment-to-StatefulSet migration; safe to rerun after migration because absent old Redis resources are ignored. |
 | `deploy/scripts/20-render-phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/22-apply-production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
@@ -296,7 +292,7 @@ real Auth0-derived egress config is applied.
    kubectl get pods -n external-secrets
    kubectl get pods -n cert-manager
    ```
-3. Step 15 is historical only. Do not rerun `./deploy/scripts/06-configure-host-redirects.sh` on the forward path unless you are explicitly reproducing the rejected host-redirect design from the 2026-04-16 OCI debugging thread.
+3. The host-redirect experiment from the 2026-04-16 OCI debugging thread is historical only and is no longer retained as an executable path.
 4. If you are rebuilding or reconciling the environment, make sure any stale host redirects, debug-only `INPUT` rules, and direct-instance public `80/443` exposure are gone before creating the NLB.
    ```bash
    while sudo iptables -C INPUT -p tcp --dport 30080 -j ACCEPT 2>/dev/null; do
@@ -349,7 +345,7 @@ real Auth0-derived egress config is applied.
 
 `deploy/scripts/03-render-phase-4-istio-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single host-agnostic listener and omits `spec.listeners[].hostname`. That keeps the checked-in localhost `HTTPRoute` manifests attachable during bootstrap while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in the public TLS cutover.
 
-`deploy/scripts/06-configure-host-redirects.sh` is kept in the repo because Step 15 is still recorded as the original host-redirect experiment. The 2026-04-16 OCI debugging thread proved that `nat/PREROUTING REDIRECT` to the ingress NodePort did not become a real NodePort service flow on this host, and it did not satisfy the requirement to preserve the original client IP at the ingress gateway. Do not rerun that experiment during the normal forward path. If the host still carries any Step 15 mutations, Step 16 host cleanup and Step 17 OCI-networking rollback are mandatory before the steady-state OCI Network Load Balancer plus `externalTrafficPolicy: Local` path begins.
+The rejected host-redirect experiment from the 2026-04-16 OCI debugging thread is retained only as operational context. That run proved that `nat/PREROUTING REDIRECT` to the ingress NodePort did not become a real NodePort service flow on this host, and it did not satisfy the requirement to preserve the original client IP at the ingress gateway. Do not recreate that experiment during the normal forward path. If the host still carries any mutations from that experiment, host cleanup and OCI-networking rollback are mandatory before the steady-state OCI Network Load Balancer plus `externalTrafficPolicy: Local` path begins.
 
 The bootstrap ingress path stays HTTP-only even after the NLB pivot. The public
 NLB needs only the listener and backend path for port `80 -> 30080` until the
@@ -517,21 +513,17 @@ overwrites the review artifact under `tmp/production-infrastructure/`, and the
 apply script refreshes that render before applying it and waiting for the
 StatefulSets that are present.
 
-The old production-only Redis Deployment/PVC overlay is superseded. Migrating
-an existing OCI Redis Deployment to the StatefulSet shape is destructive for
-Redis session/cache data; use the guarded migration script rather than applying
-ad hoc deletes:
-
-```bash
-./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
-```
-
-Add `--restart-redis-clients` when you want the script to roll out
-`session-gateway`, `ext-authz`, and `currency-service` after Redis passes the
-TLS `PING` check.
-The migration script ignores already-absent old Redis resources, so a rerun
-after the first migration should converge on the same broad infrastructure
-target without deleting PostgreSQL or RabbitMQ data.
+The old production-only Redis Deployment/PVC overlay is superseded, and the
+one-time migration to the shared Redis StatefulSet baseline has been completed.
+Do not reintroduce the old standalone Redis Deployment or PVC. New or already
+migrated OCI clusters should use the normal production infrastructure render
+and apply scripts above; the apply script waits for Redis when the StatefulSet
+is present. If an unexpected host still has the pre-StatefulSet Redis shape,
+treat that as incident recovery: confirm the desired data-retention posture,
+delete only the obsolete Redis Deployment and standalone `redis-data` PVC, apply
+`./deploy/scripts/18-apply-production-infrastructure.sh`, verify Redis with a
+TLS `PING` from `redis-0`, and roll Redis clients only if reconnect behavior
+needs a forced reset.
 
 For monitoring, keep the Helm release name `prometheus-stack` when
 kube-prometheus-stack is installed. The checked-in production override at

@@ -38,7 +38,6 @@ for usage text or a recursive dispatch path.
 | `deploy/scripts/03-render-phase-4-istio-manifests.sh` | `deploy/README.md`; called by `deploy/scripts/04-install-istio.sh`; `docs/research/production-secrets-and-ai-agent-boundaries.md` | bootstrap order | tmp | cluster/platform bootstrap render |
 | `deploy/scripts/04-install-istio.sh` | `deploy/README.md`; self-usage; `kubernetes/production/README.md`; `docs/research/production-secrets-and-ai-agent-boundaries.md` | bootstrap order | cluster, tmp | cluster/platform bootstrap |
 | `deploy/scripts/05-install-platform-controllers.sh` | `deploy/README.md`; `docs/research/production-secrets-and-ai-agent-boundaries.md` | bootstrap order | cluster | cluster/platform bootstrap |
-| `deploy/scripts/06-configure-host-redirects.sh` | `deploy/README.md`; cleanup plan; `docs/research/production-secrets-and-ai-agent-boundaries.md` | no, historical path still listed in run order | host, cluster read | historical experiment; delete candidate |
 | `deploy/scripts/07-apply-network-policies.sh` | `deploy/README.md`; referenced by `deploy/scripts/08-verify-network-policy-enforcement.sh`; `docs/research/production-secrets-and-ai-agent-boundaries.md` | bootstrap order | cluster | cluster/platform bootstrap |
 | `deploy/scripts/08-verify-network-policy-enforcement.sh` | `deploy/README.md`; `scripts/README.md`; referenced by `deploy/scripts/07-apply-network-policies.sh` | bootstrap order | cluster temporary probes | verification |
 | `deploy/scripts/09-render-phase-5-secrets.sh` | `deploy/README.md`; called by `deploy/scripts/10-apply-phase-5-secrets.sh`; `docs/research/auth0-findings.md`; `kubernetes/production/README.md` | yes | tmp | continuing deployment; secret sync render |
@@ -51,8 +50,7 @@ for usage text or a recursive dispatch path.
 | `deploy/scripts/15-apply-phase-7-policies.sh` | `deploy/README.md`; `kubernetes/kyverno/README.md`; `kubernetes/production/README.md` | yes | cluster | continuing deployment; admission policy apply |
 | `deploy/scripts/16-render-phase-11-public-tls-manifests.sh` | `deploy/README.md`; referenced by `deploy/scripts/04-install-istio.sh` | yes | tmp | continuing deployment; public TLS render |
 | `deploy/scripts/17-render-production-infrastructure.sh` | `deploy/README.md`; called by `deploy/scripts/18-apply-production-infrastructure.sh`; `kubernetes/production/README.md` | yes | tmp | continuing deployment; infrastructure render |
-| `deploy/scripts/18-apply-production-infrastructure.sh` | `deploy/README.md`; called by `deploy/scripts/19-migrate-production-redis-statefulset.sh`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; infrastructure apply |
-| `deploy/scripts/19-migrate-production-redis-statefulset.sh` | `deploy/README.md`; cleanup plan; `kubernetes/production/README.md` | no | cluster destructive, tmp | one-time repair; delete candidate |
+| `deploy/scripts/18-apply-production-infrastructure.sh` | `deploy/README.md`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; infrastructure apply |
 | `deploy/scripts/20-render-phase-7-observability.sh` | `deploy/README.md`; called by `deploy/scripts/21-apply-phase-7-observability.sh`; `kubernetes/production/README.md`; `scripts/guardrails/verify-production-image-overlay.sh` | yes | tmp | continuing deployment; observability render |
 | `deploy/scripts/21-apply-phase-7-observability.sh` | `deploy/README.md`; called by `deploy/scripts/22-apply-production-monitoring.sh`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; observability apply |
 | `deploy/scripts/22-apply-production-monitoring.sh` | `deploy/README.md`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; monitoring apply |
@@ -62,7 +60,7 @@ for usage text or a recursive dispatch path.
 | `deploy/scripts/deploy-current-oci-manifest.sh` | `deploy/README.md`; called by `deploy/scripts/prepare-oci-manifest-from-current-stack.sh`; `docs/ci-cd.md`; cleanup plan; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | cluster via `25-deploy-oci-release.sh`, tmp | continuing deployment; normal OCI apply |
 | `deploy/scripts/lib/common.sh` | sourced by nearly every `deploy/scripts/*.sh`; `deploy/README.md`; `scripts/README.md` | library | none directly | library |
 | `deploy/scripts/lib/phase-4-version-contract.sh` | sourced by `deploy/scripts/lib/common.sh`; `scripts/guardrails/verify-phase-7-static-manifests.sh`; `scripts/ops/capture-prometheus-operator-baseline.sh`; `scripts/smoketest/verify-monitoring-rendered-manifests.sh`; `deploy/README.md` | library | none | library; version contract |
-| `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `deploy/README.md`; `docs/ci-cd.md`; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md`; referenced by `scripts/repo/generate-release-manifest.sh`, `scripts/repo/prepare-lockstep-release.sh`, and `scripts/repo/prepare-service-release.sh` | yes | git tags/push in `--push-tags`, repo files in `--resolve-images`, tmp, GHCR reads | continuing deployment; normal local desired-state preparation |
+| `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` | `deploy/README.md`; `docs/ci-cd.md`; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md`; referenced by `scripts/repo/prepare-lockstep-release.sh` and `scripts/repo/prepare-service-release.sh` | yes | git tags/push in `--push-tags`, repo files in `--resolve-images`, tmp, GHCR reads | continuing deployment; normal local desired-state preparation |
 
 ## Repository Scripts
 
@@ -101,9 +99,7 @@ for usage text or a recursive dispatch path.
 | `scripts/repo/checkout-main.sh` | cleanup plan; `scripts/README.md` | no | git checkout/pull in sibling repos | repo management; review candidate |
 | `scripts/repo/checkout-tag.sh` | cleanup plan; `scripts/README.md` | no | git checkout in sibling repos | repo management; review candidate |
 | `scripts/repo/generate-deployment-manifest.sh` | cleanup plan; `scripts/README.md` | lower-level | local manifest output under `tmp/` by default | release management; review candidate |
-| `scripts/repo/generate-release-manifest.sh` | cleanup plan only, plus its own superseded usage text | no | none; exits with error | obsolete; delete candidate |
 | `scripts/repo/generate-unified-api-docs.sh` | `docs-aggregator/README.md`; `scripts/README.md`; ADR context mention | yes | repo docs, sibling web docs when present | repo management; docs/API generation |
-| `scripts/repo/github/add-repo-topics.sh` | cleanup plan; `scripts/README.md` | no | GitHub repository topics | one-time GitHub admin; delete candidate |
 | `scripts/repo/prepare-lockstep-release.sh` | `scripts/README.md` | yes | none by default; delegates git tagging with `--tag` | release management |
 | `scripts/repo/prepare-service-release.sh` | `scripts/README.md` | yes | none by default; delegates git tagging with `--tag` | release management |
 | `scripts/repo/release-service-common-snapshot.sh` | `docs/ci-cd.md`; `scripts/README.md` | yes | sibling repo files, git tag/push, Gradle validation | release management |
@@ -134,17 +130,10 @@ for usage text or a recursive dispatch path.
 
 ## Cleanup Signals From The Inventory
 
-- `scripts/repo/generate-release-manifest.sh` has no active caller and exits
-  with an error. The only useful active reference is the cleanup plan.
-- `deploy/scripts/06-configure-host-redirects.sh` is still referenced by
-  active deployment docs even though its described behavior is the rejected
-  host-redirect experiment.
-- `deploy/scripts/19-migrate-production-redis-statefulset.sh` is still
-  documented as a production infrastructure operation, but its lifecycle is a
-  completed one-time repair.
-- `scripts/repo/github/add-repo-topics.sh` is documented only as a repo
-  management helper and the cleanup plan already marks it as a likely one-time
-  GitHub admin script.
+- The confirmed obsolete script deletion pass has been completed. It removed
+  the superseded release-manifest generator, the rejected host-redirect
+  experiment executable, the completed one-time Redis migration helper, and the
+  one-off GitHub repository-topic admin helper.
 - The broad git write helpers remain active only as documented repo-management
   commands or review candidates: `checkout-main.sh`, `checkout-tag.sh`, and
   the optional `--fix`/`--clean` paths in `validate-repos.sh`.

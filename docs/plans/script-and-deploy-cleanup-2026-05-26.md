@@ -86,15 +86,10 @@ source of truth in the script body and `deploy/README.md`.
 
 ## Deletion Candidates
 
-Delete these unless implementation discovers an active caller that cannot be
-removed safely:
-
-| Path | Reason |
-| --- | --- |
-| `scripts/repo/generate-release-manifest.sh` | Superseded; it exits with an error and has no active caller. |
-| `deploy/scripts/06-configure-host-redirects.sh` | Historical rejected host-redirect experiment; keep the lesson in `deploy/README.md` or an ADR/runbook note, not as an executable. |
-| `deploy/scripts/19-migrate-production-redis-statefulset.sh` | One-time Redis Deployment-to-StatefulSet repair has already been run. Retain any useful migration note in docs, then delete the script. |
-| `scripts/repo/github/add-repo-topics.sh` | One-off GitHub admin helper; delete unless there is a clear recurring maintenance need. |
+The confirmed obsolete script deletion pass is complete. It removed the
+superseded release-manifest generator, the rejected host-redirect experiment
+executable, the completed one-time Redis StatefulSet migration helper, and the
+one-off GitHub repository-topic admin helper.
 
 Review these for deletion, narrowing, or conversion to read-only docs before
 renaming anything around them:
@@ -127,15 +122,16 @@ renaming anything around them:
 
 ### 2. Delete Confirmed Obsolete Scripts
 
-- Delete `scripts/repo/generate-release-manifest.sh`.
-- Delete `deploy/scripts/06-configure-host-redirects.sh` after preserving the
-  rejected-host-redirect lesson in active docs.
-- Delete `deploy/scripts/19-migrate-production-redis-statefulset.sh` after
-  preserving any still-useful Redis migration context in active docs.
-- Delete `scripts/repo/github/add-repo-topics.sh` unless a recurring ownership
-  need is identified.
-- Remove every reference to deleted scripts from active docs and executable
-  code.
+**Status:** Complete.
+
+- Removed the superseded release-manifest generator.
+- Removed the rejected host-redirect experiment executable after preserving
+  the lesson in `deploy/README.md`.
+- Removed the one-time Redis StatefulSet migration helper after preserving the
+  incident-recovery context in `deploy/README.md` and
+  `kubernetes/production/README.md`.
+- Removed the one-off GitHub repository-topic admin helper.
+- Removed references to deleted scripts from active docs and executable code.
 
 ### 3. Normalize Deploy Script Layout
 
@@ -195,7 +191,7 @@ renaming anything around them:
 Run at minimum:
 
 ```bash
-rg -n "phase-|phase_|PHASE|06-configure-host-redirects|19-migrate-production-redis-statefulset|generate-release-manifest" \
+rg -n "phase-|phase_|PHASE" \
   scripts deploy docs kubernetes nginx .github Tiltfile
 
 find scripts deploy/scripts -type f -name "*.sh" -print0 |
@@ -217,8 +213,8 @@ is available, also run the relevant live verifier for any touched runtime path.
 - `deploy/scripts/` no longer presents continuing operations as a misleading
   numbered sequence.
 - Active docs reference only current script paths.
-- The Redis StatefulSet migration script is deleted.
-- The superseded release-manifest script is deleted.
+- The obsolete one-time Redis migration and release-manifest scripts are
+  deleted.
 - Any retained lower-level executable is documented as either a normal entry
   point or an intentional internal helper.
 - `bash -n` passes for all remaining shell scripts.

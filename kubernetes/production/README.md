@@ -302,16 +302,12 @@ can reuse the shared `kubernetes/infrastructure` baseline without duplicating
 PostgreSQL, RabbitMQ, or Redis manifests.
 
 The old production-only Redis Deployment/PVC overlay under
-`kubernetes/production/infrastructure/redis/` has been removed. Replacing an
-existing OCI Redis Deployment with the StatefulSet shape is destructive for
-Redis session/cache data and must use the guarded migration script:
-
-```bash
-./deploy/scripts/19-migrate-production-redis-statefulset.sh --confirm-destroy-redis
-```
-
-Add `--restart-redis-clients` when Redis clients should be rolled after the
-new StatefulSet passes its TLS `PING` check.
+`kubernetes/production/infrastructure/redis/` has been removed, and the
+one-time migration to the shared Redis StatefulSet baseline has been completed.
+New or already migrated OCI clusters should use the normal production
+infrastructure render/apply scripts. If an unexpected host still has the old
+Redis Deployment plus standalone `redis-data` PVC shape, treat replacement as
+incident recovery because Redis session/cache data may be destroyed.
 
 ## Production Verification
 

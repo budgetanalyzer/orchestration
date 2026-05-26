@@ -190,7 +190,6 @@ deploy/
     03-render-phase-4-istio-manifests.sh
     04-install-istio.sh              # committed — Istio + mesh policy install
     05-install-platform-controllers.sh
-    06-configure-host-redirects.sh
     07-apply-network-policies.sh
 ```
 

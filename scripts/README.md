@@ -457,7 +457,6 @@ directory without writing outside the repository.
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`
   when that sibling repo is present.
-- `repo/github/add-repo-topics.sh` manages GitHub repository topics.
 
 The repo-management scripts source `repo/repo-config.sh`, which derives the
 orchestration root from `scripts/repo/` and then resolves sibling repos from

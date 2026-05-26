@@ -112,6 +112,9 @@ renaming anything around them:
 
 ### 1. Build The Active Caller Inventory
 
+**Status:** Complete. The inventory lives in
+`docs/plans/script-and-deploy-cleanup-active-caller-inventory-2026-05-26.md`.
+
 - Generate a complete script list for `scripts/` and `deploy/scripts/`.
 - For each script, record:
   - active repo references from `rg`

@@ -167,8 +167,8 @@ the workflow when a new file path is added to the static scope.
 
 What it runs:
 
-- `./scripts/guardrails/verify-phase-7-static-manifests.sh`
-- `./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test`
+- `./scripts/guardrails/verify-static-security-manifests.sh`
+- `./scripts/guardrails/verify-static-security-manifests.sh --self-test`
 
 The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
 `kube-linter`, and `kyverno` binaries through
@@ -200,14 +200,14 @@ static-only substitute for the local runtime gate.
 Use the same command locally to reproduce workflow failures without a cluster:
 
 ```bash
-./scripts/guardrails/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh
 ```
 
 For full local security guardrail proof on a live cluster, use the separate
 final gate:
 
 ```bash
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 That wrapper intentionally stays out of GitHub Actions because the runtime
@@ -238,13 +238,13 @@ To run the same checks locally:
 For orchestration static security guardrails:
 
 ```bash
-./scripts/guardrails/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh
 ```
 
 For the full local security guardrail proof on a running cluster:
 
 ```bash
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 ## Future Enhancements

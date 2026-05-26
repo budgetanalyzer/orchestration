@@ -77,7 +77,7 @@ Use names that describe the current operational contract:
 
 - `phase-4` -> `mesh-bootstrap` or `ingress-bootstrap`
 - `phase-5` -> `secret-sync` or `infra-tls`
-- `phase-6` -> `production-routes`
+- `production-routes` -> `production-routes`
 - `phase-7` -> `security-guardrails` or `observability`
 - `phase-11` -> `public-tls`
 
@@ -149,12 +149,16 @@ renaming anything around them:
 
 ### 4. Replace Legacy Phase Names
 
+**Status:** Complete.
+
 - Rename deploy manifest directories:
-  - `deploy/manifests/phase-4/`
-  - `deploy/manifests/phase-5/`
-  - `deploy/manifests/phase-11/`
-- Rename phase-labeled deploy scripts and temp output paths where practical.
-- Rename phase-labeled guardrail and smoketest scripts only after updating the
+  - `deploy/manifests/phase-4/` -> `deploy/manifests/ingress-bootstrap/`
+  - `deploy/manifests/phase-5/` -> `deploy/manifests/secret-sync/`
+  - `deploy/manifests/phase-11/` -> `deploy/manifests/public-tls/`
+- Renamed phase-labeled deploy scripts and temp output paths for ingress
+  bootstrap, secret sync, production routes, public TLS, observability, and
+  admission policies.
+- Renamed phase-labeled guardrail and smoketest entry points after updating the
   umbrella verifiers that call them.
 - Rename phase-labeled helper variables only when doing so does not create a
   noisy, high-risk mechanical change. Prefer external filenames and docs first;

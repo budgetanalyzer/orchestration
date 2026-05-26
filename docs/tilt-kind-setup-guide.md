@@ -199,7 +199,7 @@ Common focused checks after manual bring-up:
 ```bash
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 ./scripts/smoketest/verify-security-prereqs.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 ## Manual Verification

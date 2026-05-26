@@ -5,8 +5,8 @@ Stay informed about dependency updates to avoid painful catch-up upgrades. This 
 ## Supply-Chain Contract
 
 The active pinning scope is enforced by
-[`scripts/lib/phase-7-image-pinning-targets.txt`](../scripts/lib/phase-7-image-pinning-targets.txt)
-and [`scripts/lib/phase-7-allowed-latest.txt`](../scripts/lib/phase-7-allowed-latest.txt).
+[`scripts/lib/image-pinning-targets.txt`](../scripts/lib/image-pinning-targets.txt)
+and [`scripts/lib/allowed-latest-image-refs.txt`](../scripts/lib/allowed-latest-image-refs.txt).
 
 - Only the seven explicit local Tilt image repos may remain on `:latest` in
   checked-in manifests, and only with `imagePullPolicy: Never`. Live Tilt

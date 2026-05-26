@@ -25,7 +25,7 @@ TEMP_PODS=()
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-3-istio-ingress.sh
+Usage: ./scripts/smoketest/verify-istio-ingress.sh
 
 Options:
   -h, --help    Show this help text.
@@ -53,9 +53,9 @@ section() { printf '\n=== %s ===\n' "$1"; }
 cleanup_temp_resources() {
     kubectl delete \
         deployment,service,networkpolicy,authorizationpolicy.security.istio.io,httproute.gateway.networking.k8s.io \
-        -n default -l verify-phase3-temp=true --ignore-not-found --wait=false >/dev/null 2>&1 || true
+        -n default -l verify-istio-ingress-temp=true --ignore-not-found --wait=false >/dev/null 2>&1 || true
     kubectl delete networkpolicy \
-        -n istio-ingress -l verify-phase3-temp=true --ignore-not-found --wait=false >/dev/null 2>&1 || true
+        -n istio-ingress -l verify-istio-ingress-temp=true --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 
 cleanup() {
@@ -365,7 +365,7 @@ metadata:
   namespace: default
   labels:
     app: p3-header-echo
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   replicas: 1
   selector:
@@ -375,7 +375,7 @@ spec:
     metadata:
       labels:
         app: p3-header-echo
-        verify-phase3-temp: "true"
+        verify-istio-ingress-temp: "true"
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -406,7 +406,7 @@ metadata:
   name: p3-header-echo
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   selector:
     app: p3-header-echo
@@ -421,7 +421,7 @@ metadata:
   name: p3-header-echo-route
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   parentRefs:
     - name: istio-ingress-gateway
@@ -443,7 +443,7 @@ metadata:
   name: p3-header-echo-policy
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   selector:
     matchLabels:
@@ -460,7 +460,7 @@ metadata:
   name: p3-header-echo-allow
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   podSelector:
     matchLabels:
@@ -509,7 +509,7 @@ metadata:
   name: p3-header-echo-egress
   namespace: istio-ingress
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   podSelector:
     matchLabels:
@@ -545,7 +545,7 @@ metadata:
   namespace: default
   labels:
     app: p3-mtls-echo
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   replicas: 1
   selector:
@@ -555,7 +555,7 @@ spec:
     metadata:
       labels:
         app: p3-mtls-echo
-        verify-phase3-temp: "true"
+        verify-istio-ingress-temp: "true"
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -586,7 +586,7 @@ metadata:
   name: p3-mtls-echo
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   selector:
     app: p3-mtls-echo
@@ -601,7 +601,7 @@ metadata:
   name: p3-mtls-echo-allow
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   podSelector:
     matchLabels:
@@ -616,7 +616,7 @@ spec:
               kubernetes.io/metadata.name: default
           podSelector:
             matchLabels:
-              verify-phase3-temp: "true"
+              verify-istio-ingress-temp: "true"
               phase3-role: mtls-client
       ports:
         - protocol: TCP
@@ -651,11 +651,11 @@ metadata:
   name: p3-mtls-client-egress
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   podSelector:
     matchLabels:
-      verify-phase3-temp: "true"
+      verify-istio-ingress-temp: "true"
       phase3-role: mtls-client
   policyTypes:
     - Egress
@@ -699,7 +699,7 @@ metadata:
   name: p3-mtls-echo-allow
   namespace: default
   labels:
-    verify-phase3-temp: "true"
+    verify-istio-ingress-temp: "true"
 spec:
   selector:
     matchLabels:
@@ -1038,11 +1038,11 @@ main() {
 
     echo "  Creating sidecar and no-sidecar probes for HTTP-level mTLS verification..."
     create_sidecar_probe default "p3-mtls-sidecar" "default" \
-        "verify-phase3-temp=true" \
+        "verify-istio-ingress-temp=true" \
         "app=p3-mtls-sidecar" \
         "phase3-role=mtls-client"
     create_probe default "p3-mtls-probe" \
-        "verify-phase3-temp=true" \
+        "verify-istio-ingress-temp=true" \
         "app=p3-mtls-probe" \
         "phase3-role=mtls-client"
     wait_for_pod_ready default p3-mtls-sidecar 90s

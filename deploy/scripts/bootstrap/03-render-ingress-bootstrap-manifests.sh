@@ -12,10 +12,10 @@ OUTPUT_DIR="${PHASE4_RENDER_ROOT}"
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh [--output-dir DIR]
+Usage: ./deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh [--output-dir DIR]
 
 Renders the production ingress ConfigMap and Gateway manifests into
-tmp/phase-4/ for operator review.
+tmp/ingress-bootstrap/ for operator review.
 
 The rendered Gateway is intentionally HTTP-only for the initial ingress step and keeps a single
 host-agnostic listener with the hostname omitted so the checked-in localhost
@@ -48,11 +48,11 @@ phase4_load_instance_env
 mkdir -p "${OUTPUT_DIR}"
 
 phase4_render_template \
-    "$(phase4_repo_path "deploy/manifests/phase-4/ingress-gateway-config.yaml.template")" \
+    "$(phase4_repo_path "deploy/manifests/ingress-bootstrap/ingress-gateway-config.yaml.template")" \
     "${OUTPUT_DIR}/ingress-gateway-config.yaml"
 
 phase4_render_template \
-    "$(phase4_repo_path "deploy/manifests/phase-4/istio-gateway.yaml.template")" \
+    "$(phase4_repo_path "deploy/manifests/ingress-bootstrap/istio-gateway.yaml.template")" \
     "${OUTPUT_DIR}/istio-gateway.yaml"
 
 phase4_info "rendered ingress manifests into ${OUTPUT_DIR}"

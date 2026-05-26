@@ -134,7 +134,7 @@ main() {
 
     if [[ "${APPLY_JAEGER_KIALI}" == "true" ]]; then
         phase4_info "reapplying Jaeger and Kiali"
-        "/phase-7-observability.sh"
+        "${SCRIPT_DIR}/observability.sh"
     fi
 
     if [[ "${VERIFY_RUNTIME}" == "true" ]]; then

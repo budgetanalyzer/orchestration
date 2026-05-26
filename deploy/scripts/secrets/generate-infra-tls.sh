@@ -21,7 +21,7 @@ trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/secrets/generate-phase-5-infra-tls.sh [options]
+Usage: ./deploy/scripts/secrets/generate-infra-tls.sh [options]
 
 Generates the private production infrastructure CA and service certificates
 outside the repo, then applies the expected Kubernetes Secret objects:

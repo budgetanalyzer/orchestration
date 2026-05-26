@@ -52,7 +52,7 @@ browser, and preserves the same gateway layering in local Tilt and OCI/k3s.
 
 Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the
 platform security prerequisites. Treat Istio ingress and egress hardening as
-verified only after `./scripts/smoketest/verify-phase-3-istio-ingress.sh` and
+verified only after `./scripts/smoketest/verify-istio-ingress.sh` and
 the live validation checklist pass.
 
 ## Architecture Overview

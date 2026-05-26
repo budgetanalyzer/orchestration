@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-phase-4-transport-encryption.sh
+# verify-transport-encryption.sh
 #
 # Runtime verification for infrastructure transport encryption.
 # Proves client-side TLS validation for Redis, PostgreSQL, and RabbitMQ,
@@ -12,7 +12,7 @@
 # host via ./scripts/bootstrap/setup-infra-tls.sh.
 #
 # Usage:
-#   ./scripts/smoketest/verify-phase-4-transport-encryption.sh
+#   ./scripts/smoketest/verify-transport-encryption.sh
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ REDIS_PROBE="phase4-redis-client"
 POSTGRES_PROBE="phase4-postgresql-client"
 RABBITMQ_PROBE="phase4-rabbitmq-client"
 WAIT_TIMEOUT="120s"
-TEMP_LABEL_KEY="verify-phase4-temp"
+TEMP_LABEL_KEY="verify-transport-encryption-temp"
 TEMP_LABEL_VALUE="true"
 REDIS_SESSION_GATEWAY_USERNAME="session-gateway"
 POSTGRES_TRANSACTION_USERNAME="transaction_service"
@@ -35,7 +35,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-4-transport-encryption.sh
+Usage: ./scripts/smoketest/verify-transport-encryption.sh
 
 Options:
   -h, --help                    Show this help text.
@@ -186,7 +186,7 @@ metadata:
   namespace: default
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase4-role: redis-client
+    verify-transport-encryption-role: redis-client
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -226,7 +226,7 @@ metadata:
   namespace: default
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase4-role: postgresql-client
+    verify-transport-encryption-role: postgresql-client
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -266,7 +266,7 @@ metadata:
   namespace: default
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase4-role: rabbitmq-client
+    verify-transport-encryption-role: rabbitmq-client
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -309,7 +309,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      verify-phase4-role: redis-client
+      verify-transport-encryption-role: redis-client
   policyTypes:
     - Egress
   egress:
@@ -334,7 +334,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      verify-phase4-role: postgresql-client
+      verify-transport-encryption-role: postgresql-client
   policyTypes:
     - Egress
   egress:
@@ -359,7 +359,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      verify-phase4-role: rabbitmq-client
+      verify-transport-encryption-role: rabbitmq-client
   policyTypes:
     - Egress
   egress:
@@ -394,7 +394,7 @@ spec:
               kubernetes.io/metadata.name: default
           podSelector:
             matchLabels:
-              verify-phase4-role: redis-client
+              verify-transport-encryption-role: redis-client
       ports:
         - protocol: TCP
           port: 6379
@@ -419,7 +419,7 @@ spec:
               kubernetes.io/metadata.name: default
           podSelector:
             matchLabels:
-              verify-phase4-role: postgresql-client
+              verify-transport-encryption-role: postgresql-client
       ports:
         - protocol: TCP
           port: 5432
@@ -444,7 +444,7 @@ spec:
               kubernetes.io/metadata.name: default
           podSelector:
             matchLabels:
-              verify-phase4-role: rabbitmq-client
+              verify-transport-encryption-role: rabbitmq-client
       ports:
         - protocol: TCP
           port: 5671
@@ -698,7 +698,7 @@ main() {
 
     section "Regression: Earlier Security Phases"
 
-    if "${SCRIPT_DIR}/verify-phase-1-credentials.sh"; then
+    if "${SCRIPT_DIR}/verify-credential-isolation.sh"; then
         pass "Credential verification still passes after transport-TLS cutover"
     else
         fail "Credential verification failed after transport-TLS cutover"
@@ -709,7 +709,7 @@ main() {
     # slightly longer warmup budget so it validates policy intent instead of
     # flaking on probe startup timing.
     if PHASE2_ALLOW_ATTEMPTS=8 PHASE2_PROBE_STABILIZATION_SECONDS=8 \
-        "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"; then
+        "${SCRIPT_DIR}/verify-network-policies.sh"; then
         pass "NetworkPolicy verification still passes after RabbitMQ port cutover"
     else
         fail "NetworkPolicy verification failed after RabbitMQ port cutover"

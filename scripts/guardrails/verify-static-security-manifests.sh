@@ -9,7 +9,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
-IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-phase-7-image-pinning.sh"
+IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
 KUSTOMIZE_RENDER_DIR=""
@@ -18,8 +18,8 @@ KUSTOMIZE_RENDER_DIR=""
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
-# shellcheck source=../../deploy/scripts/lib/phase-4-version-contract.sh
-. "${REPO_DIR}/deploy/scripts/lib/phase-4-version-contract.sh"
+# shellcheck source=../../deploy/scripts/lib/version-contract.sh
+. "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
 
 KUBECONFORM_ALLOWED_MISSING_KINDS=(
     AuthorizationPolicy
@@ -95,7 +95,7 @@ KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
 
 usage() {
     cat <<'EOF'
-Usage: scripts/guardrails/verify-phase-7-static-manifests.sh [--self-test]
+Usage: scripts/guardrails/verify-static-security-manifests.sh [--self-test]
 
 Runs the static security guardrail suite:
 - kubeconform schema validation for checked-in manifests

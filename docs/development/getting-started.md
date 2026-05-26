@@ -60,7 +60,7 @@ Use targeted verifiers only when you are debugging one capability:
 ```bash
 ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
 ./scripts/smoketest/verify-security-prereqs.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 For the full verifier catalog, use

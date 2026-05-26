@@ -15,7 +15,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-session-architecture-phase-5.sh [options]
+Usage: ./scripts/smoketest/verify-session-architecture.sh [options]
 
 Verifies the shared session contract across the orchestration, session-gateway,
 and ext-authz repos:

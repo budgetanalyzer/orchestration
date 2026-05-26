@@ -22,15 +22,15 @@ validation for checked-in manifests and rendered production overlays,
 `kube-linter`, and repo-specific guardrail scans:
 
 ```bash
-./scripts/guardrails/verify-phase-7-static-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh
 ```
 
 That script stays under `scripts/guardrails/` because it is CI-safe. The
 live-cluster runtime proof stays separate under
-`./scripts/smoketest/verify-phase-7-security-guardrails.sh`.
+`./scripts/smoketest/verify-security-guardrails.sh`.
 
 That static gate also generates a small Kyverno replay from
-`scripts/lib/phase-7-allowed-latest.txt` so representative approved local
+`scripts/lib/allowed-latest-image-refs.txt` so representative approved local
 Tilt `:tilt-<hash>` deploy refs are rechecked even if the checked-in fixtures
 stop matching the live apply path.
 
@@ -46,9 +46,9 @@ Use the checked-in operator surface for that path:
 - `deploy/helm-values/kyverno.values.yaml` pins the production controller
   replica counts, runtime-hardening values, and immutable digests for every
   rendered Kyverno controller and hook image.
-- `deploy/scripts/reconcile/install-phase-7-kyverno.sh` installs the pinned chart
+- `deploy/scripts/reconcile/install-kyverno.sh` installs the pinned chart
   version into the `kyverno` namespace with those reviewed values.
-- `deploy/scripts/reconcile/apply-phase-7-policies.sh` runs
+- `deploy/scripts/reconcile/apply-admission-policies.sh` runs
   `./scripts/guardrails/verify-production-image-overlay.sh` first, then applies:
   - `policies/00-smoke-disallow-privileged.yaml`
   - `policies/10-require-namespace-pod-security-labels.yaml`

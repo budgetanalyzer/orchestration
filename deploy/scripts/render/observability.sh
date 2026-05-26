@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/../lib/common.sh"
 
-PHASE7_OBSERVABILITY_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-7-observability"
+PHASE7_OBSERVABILITY_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/observability"
 readonly PHASE7_OBSERVABILITY_RENDER_ROOT
 MONITORING_NAMESPACE="monitoring"
 readonly MONITORING_NAMESPACE
@@ -33,13 +33,13 @@ readonly KIALI_POST_RENDERER
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/render/phase-7-observability.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/observability.sh [--output-dir DIR]
 
 Renders the reviewed production Jaeger and Kiali observability artifacts for
 operator review. The Kiali render uses a Helm server-side dry run against the
 current cluster so namespace-scoped RBAC matches the live install footprint.
 
-By default the render output goes to tmp/phase-7-observability/ under the repo
+By default the render output goes to tmp/observability/ under the repo
 root.
 EOF
 }

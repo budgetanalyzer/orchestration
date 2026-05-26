@@ -124,7 +124,7 @@ curl -kI https://app.budgetanalyzer.localhost/ | grep -i content-security-policy
 curl -kI https://app.budgetanalyzer.localhost/_prod-smoke/ | grep -i content-security-policy
 
 # Run the edge and browser hardening verifier
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
 ```
 
 The surrounding script layout is purpose-split: gateway day-two helpers such as
@@ -239,7 +239,7 @@ The Kubernetes access log now includes the derived `remote_addr`, the trusted pr
 The API rate-limit identity runtime proof is:
 
 ```bash
-./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
+./scripts/smoketest/verify-api-rate-limit-identity.sh
 ```
 
 That verifier creates two temporary no-sidecar probe pods, sends authenticated API traffic through the live ingress gateway, confirms NGINX derives distinct client identities from the ingress-appended downstream hop, proves a forged external `X-Forwarded-For` value cannot pick a new bucket, and checks that separate real clients do not share one API limiter bucket.
@@ -247,7 +247,7 @@ That verifier creates two temporary no-sidecar probe pods, sends authenticated A
 The edge and browser hardening verifier is:
 
 ```bash
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
 ```
 
 It verifies the dev/strict CSP split on the real app paths, warning-only docs visibility,

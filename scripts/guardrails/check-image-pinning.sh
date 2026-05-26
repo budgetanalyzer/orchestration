@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# check-phase-7-image-pinning.sh
+# check-image-pinning.sh
 #
 # Static verification for image pinning. This is scoped to
 # orchestration-owned active assets plus the retained DinD test assets covered
@@ -10,8 +10,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-TARGET_LIST_FILE="${SCRIPT_DIR}/../lib/phase-7-image-pinning-targets.txt"
-ALLOWED_LATEST_FILE="${SCRIPT_DIR}/../lib/phase-7-allowed-latest.txt"
+TARGET_LIST_FILE="${SCRIPT_DIR}/../lib/image-pinning-targets.txt"
+ALLOWED_LATEST_FILE="${SCRIPT_DIR}/../lib/allowed-latest-image-refs.txt"
 
 TARGET_FILES=()
 ALLOWED_LATEST_REFS=()
@@ -145,7 +145,7 @@ print_approved_local_tilt_refs() {
 
 usage() {
     cat <<'EOF'
-Usage: scripts/guardrails/check-phase-7-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
+Usage: scripts/guardrails/check-image-pinning.sh [--print-approved-local-repos|--print-approved-local-tilt-refs]
 
 Without flags, scans the image-pinning inventory for unexpected
 checked-in :latest refs and missing third-party @sha256 digests.
@@ -153,7 +153,7 @@ checked-in :latest refs and missing third-party @sha256 digests.
 Optional output modes:
   --print-approved-local-repos
       Print the approved local Tilt-built repo names derived from
-      scripts/lib/phase-7-allowed-latest.txt.
+      scripts/lib/allowed-latest-image-refs.txt.
   --print-approved-local-tilt-refs
       Print representative bare and docker.io/library Tilt deploy refs for the
       approved local repos using the contract hash pattern.

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-phase-6-edge-browser-hardening.sh
+# verify-edge-browser-hardening.sh
 #
 # Runtime verifier for edge/browser hardening.
 # Proves the checked-in dev/production edge contract, the live CSP/header
@@ -11,9 +11,9 @@
 # are warning-only and do not block edge/browser verification.
 #
 # Usage:
-#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
-#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh --subverifier-timeout 20m
-#   ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh --phase5-regression-timeout 10m
+#   ./scripts/smoketest/verify-edge-browser-hardening.sh
+#   ./scripts/smoketest/verify-edge-browser-hardening.sh --subverifier-timeout 20m
+#   ./scripts/smoketest/verify-edge-browser-hardening.sh --phase5-regression-timeout 10m
 
 set -euo pipefail
 
@@ -36,10 +36,10 @@ PORT_FORWARD_PORT=""
 PORT_FORWARD_LOG=""
 
 PROBE_NAMESPACE="default"
-PROBE_LABEL_KEY="verify-phase6-temp"
+PROBE_LABEL_KEY="verify-edge-browser-temp"
 PROBE_LABEL_VALUE="true"
-PROBE_POD_NAME="phase6-edge-browser-probe"
-PROBE_POLICY_NAME="allow-phase6-edge-browser-egress-to-istio-ingress"
+PROBE_POD_NAME="edge-browser-probe"
+PROBE_POLICY_NAME="allow-edge-browser-egress-to-istio-ingress"
 PROBE_IMAGE="curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6"
 INGRESS_NAMESPACE="istio-ingress"
 INGRESS_SERVICE_NAME="istio-ingress-gateway-istio"
@@ -53,7 +53,7 @@ WARNED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
+Usage: ./scripts/smoketest/verify-edge-browser-hardening.sh
 
 Options:
   --subverifier-timeout <dur>         Timeout for each nested verifier
@@ -534,7 +534,7 @@ verify_production_nginx_syntax() {
         return
     fi
 
-    if ! tmpdir="$(kubectl exec -n "${NGINX_NAMESPACE}" "${pod_name}" -- sh -lc 'mktemp -d /tmp/phase6-prod-nginx.XXXXXX' 2>/dev/null)"; then
+    if ! tmpdir="$(kubectl exec -n "${NGINX_NAMESPACE}" "${pod_name}" -- sh -lc 'mktemp -d /tmp/edge-browser-prod-nginx.XXXXXX' 2>/dev/null)"; then
         fail "Could not create a temporary validation directory inside ${pod_name}"
         return
     fi
@@ -925,15 +925,15 @@ verify_nested_verifiers() {
 
     run_subverifier \
         "Frontend strict-CSP audit" \
-        "${SCRIPT_DIR}/audit-phase-6-session-3-frontend-csp.sh"
+        "${SCRIPT_DIR}/audit-frontend-csp.sh"
 
     run_subverifier \
         "API rate-limit identity verifier" \
-        "${SCRIPT_DIR}/verify-phase-6-session-7-api-rate-limit-identity.sh"
+        "${SCRIPT_DIR}/verify-api-rate-limit-identity.sh"
 
     run_subverifier \
         "Runtime-hardening regression cascade" \
-        "${SCRIPT_DIR}/verify-phase-5-runtime-hardening.sh" \
+        "${SCRIPT_DIR}/verify-runtime-hardening.sh" \
         --regression-timeout "${PHASE5_REGRESSION_TIMEOUT}"
 }
 

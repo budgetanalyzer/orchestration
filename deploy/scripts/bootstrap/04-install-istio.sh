@@ -27,19 +27,19 @@ usage() {
     cat <<EOF
 Usage: ./deploy/scripts/bootstrap/04-install-istio.sh [${PUBLIC_TLS_ACKNOWLEDGE_FLAG}]
 
-Installs or reconciles the repo-owned Istio control plane plus the phase-4
-HTTP ingress baseline.
+Installs or reconciles the repo-owned Istio control plane plus the HTTP ingress
+bootstrap baseline.
 
-If the live cluster already serves the phase-11 public TLS path, this script
+If the live cluster already serves the public TLS path, this script
 refuses to continue unless ${PUBLIC_TLS_ACKNOWLEDGE_FLAG} is passed. The
-phase-4 reconcile path is HTTP-only and can remove the live 443 -> 30443
-listener until the phase-11 public TLS manifests are reapplied.
+ingress bootstrap reconcile path is HTTP-only and can remove the live 443 -> 30443
+listener until the public TLS manifests are reapplied.
 EOF
 }
 
 require_rendered_manifests() {
-    [[ -f "${RENDERED_INGRESS_CONFIG}" ]] || phase4_die "missing ${RENDERED_INGRESS_CONFIG}; run deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh first"
-    [[ -f "${RENDERED_GATEWAY}" ]] || phase4_die "missing ${RENDERED_GATEWAY}; run deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh first"
+    [[ -f "${RENDERED_INGRESS_CONFIG}" ]] || phase4_die "missing ${RENDERED_INGRESS_CONFIG}; run deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh first"
+    [[ -f "${RENDERED_GATEWAY}" ]] || phase4_die "missing ${RENDERED_GATEWAY}; run deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh first"
     [[ -f "${PEER_AUTHENTICATION_FILE}" ]] || phase4_die "missing ${PEER_AUTHENTICATION_FILE}"
     [[ -f "${PRODUCTION_AUTHORIZATION_POLICIES_FILE}" ]] || phase4_die "missing ${PRODUCTION_AUTHORIZATION_POLICIES_FILE}"
 }
@@ -91,11 +91,11 @@ guard_live_public_tls_reconcile() {
     PUBLIC_TLS_WAS_DETECTED=true
 
     if [[ "${ACKNOWLEDGE_PUBLIC_TLS_DOWNGRADE}" == "true" ]]; then
-        phase4_warn "live ingress already exposes the phase-11 public TLS path. This phase-4 reconcile is HTTP-only; rerun the phase-11 public TLS apply path immediately after this script completes."
+        phase4_warn "live ingress already exposes the public TLS path. This ingress bootstrap reconcile is HTTP-only; rerun the public TLS apply path immediately after this script completes."
         return
     fi
 
-    phase4_die "live ingress already exposes the phase-11 public TLS path (443 -> 30443). Rerunning this script can remove that listener until the phase-11 manifests are reapplied. Rerun with ${PUBLIC_TLS_ACKNOWLEDGE_FLAG} only if you intend to reconcile Istio and then immediately reapply the phase-11 public TLS manifests."
+    phase4_die "live ingress already exposes the public TLS path (443 -> 30443). Rerunning this script can remove that listener until the public TLS manifests are reapplied. Rerun with ${PUBLIC_TLS_ACKNOWLEDGE_FLAG} only if you intend to reconcile Istio and then immediately reapply the public TLS manifests."
 }
 
 parse_args "$@"
@@ -104,7 +104,7 @@ phase4_require_commands helm kubectl
 phase4_require_cluster_access
 guard_live_public_tls_reconcile
 phase4_info "refreshing the rendered ingress manifests"
-"${SCRIPT_DIR}/03-render-phase-4-istio-manifests.sh" --output-dir "${RENDERED_OUTPUT_DIR}" >/dev/null
+"${SCRIPT_DIR}/03-render-ingress-bootstrap-manifests.sh" --output-dir "${RENDERED_OUTPUT_DIR}" >/dev/null
 require_rendered_manifests
 
 phase4_info "installing Istio charts ${PHASE4_ISTIO_CHART_VERSION}"
@@ -159,5 +159,5 @@ kubectl apply -f "${PRODUCTION_AUTHORIZATION_POLICIES_FILE}" >/dev/null
 
 phase4_info "Istio mesh and ingress path are installed"
 if [[ "${PUBLIC_TLS_WAS_DETECTED}" == "true" ]]; then
-    phase4_warn "phase-11 public TLS was detected before this reconcile. Rerun ./deploy/scripts/render/phase-11-public-tls-manifests.sh and reapply tmp/phase-11/{cluster-issuer.yaml,public-certificate.yaml,reference-grant.yaml,ingress-gateway-config.yaml,istio-gateway.yaml} to restore the 443 -> 30443 public listener path."
+    phase4_warn "public TLS was detected before this reconcile. Rerun ./deploy/scripts/render/public-tls.sh and reapply tmp/public-tls/{cluster-issuer.yaml,public-certificate.yaml,reference-grant.yaml,ingress-gateway-config.yaml,istio-gateway.yaml} to restore the 443 -> 30443 public listener path."
 fi

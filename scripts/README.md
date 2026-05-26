@@ -84,7 +84,7 @@ scripts/
   rendered-manifest proof, checks the live operator RBAC object set, enforces
   the required positive and negative `kubectl auth can-i` matrix, reruns the
   monitoring runtime proof, and captures Kiali triage artifacts under `tmp/`.
-- `guardrails/verify-phase-7-static-manifests.sh` - Static manifest and
+- `guardrails/verify-static-security-manifests.sh` - Static manifest and
   security guardrail gate used by CI and local preflight.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
@@ -189,9 +189,9 @@ setup.
 
 ## Guardrails
 
-- `guardrails/check-phase-7-image-pinning.sh` verifies the image-pinning
-  contract using `lib/phase-7-image-pinning-targets.txt` and
-  `lib/phase-7-allowed-latest.txt`.
+- `guardrails/check-image-pinning.sh` verifies the image-pinning
+  contract using `lib/image-pinning-targets.txt` and
+  `lib/allowed-latest-image-refs.txt`.
 - `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
   secret payload inventory in `lib/secrets-only-expected-keys.txt`.
 - `guardrails/check-tilt-resource-roots.sh` evaluates the Tiltfile and verifies
@@ -199,7 +199,7 @@ setup.
   `lib/tilt-intentional-root-resources.txt`. It requires the standard
   side-by-side workspace checkout because Tiltfile evaluation references
   sibling service repositories.
-- `guardrails/verify-phase-7-static-manifests.sh` runs kubeconform,
+- `guardrails/verify-static-security-manifests.sh` runs kubeconform,
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
@@ -239,23 +239,23 @@ Use the live-cluster production verifier when a cluster is available:
 CI should keep calling the fully static guardrail directly:
 
 ```bash
-./scripts/guardrails/verify-phase-7-static-manifests.sh
-./scripts/guardrails/verify-phase-7-static-manifests.sh --self-test
+./scripts/guardrails/verify-static-security-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh --self-test
 ```
 
 ## Smoketest
 
 `smoketest/smoketest.sh` is a thin dispatcher for live local validation. It runs:
 
-1. `guardrails/verify-phase-7-static-manifests.sh`
+1. `guardrails/verify-static-security-manifests.sh`
 2. `smoketest/verify-security-prereqs.sh`
 3. `smoketest/verify-clean-tilt-deployment-admission.sh`
 4. `smoketest/verify-monitoring-rendered-manifests.sh`
 5. `smoketest/verify-istio-tracing-config.sh`
 6. `smoketest/verify-monitoring-runtime.sh`
 7. `smoketest/verify-observability-port-forward-access.sh`
-8. `smoketest/verify-session-architecture-phase-5.sh`
-9. `smoketest/verify-phase-7-security-guardrails.sh`
+8. `smoketest/verify-session-architecture.sh`
+9. `smoketest/verify-security-guardrails.sh`
 
 Use targeted verifiers when debugging one capability, and the umbrella when
 proving the current cluster:
@@ -264,8 +264,8 @@ proving the current cluster:
 ./scripts/smoketest/smoketest.sh
 ./scripts/smoketest/verify-istio-tracing-config.sh
 ./scripts/smoketest/verify-observability-port-forward-access.sh
-./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
-./scripts/smoketest/verify-phase-7-security-guardrails.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
+./scripts/smoketest/verify-security-guardrails.sh
 ```
 
 `smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for

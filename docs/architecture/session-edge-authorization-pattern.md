@@ -121,7 +121,7 @@ kubectl logs deployment/nginx-gateway
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
 
-**Runtime proof**: [`./scripts/smoketest/verify-phase-6-edge-browser-hardening.sh`](../../scripts/smoketest/verify-phase-6-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
+**Runtime proof**: [`./scripts/smoketest/verify-edge-browser-hardening.sh`](../../scripts/smoketest/verify-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
 
 ### Session Gateway - Auth Layer
 
@@ -173,7 +173,7 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 - Orchestration also sets `SESSION_COOKIE_NAME=BA_SESSION` explicitly on the checked-in `ext-authz` deployment so the live cluster does not depend on the compiled default.
 - Session Gateway owns the session hash contents and expiry behavior. `ext_authz` only assumes the hash exists, that it contains a parseable `expires_at` field, and that the current time is still before that timestamp.
 
-`./scripts/smoketest/verify-session-architecture-phase-5.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in sibling `../ext-authz` and `../session-gateway` before any live-cluster checks run.
+`./scripts/smoketest/verify-session-architecture.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in sibling `../ext-authz` and `../session-gateway` before any live-cluster checks run.
 
 ## Why This Pattern?
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-phase-1-credentials.sh
+# verify-credential-isolation.sh
 #
 # Runtime verification for credential isolation.
 # Tests that per-service identities are enforced across PostgreSQL, RabbitMQ,
@@ -9,7 +9,7 @@
 # Prerequisites: Tilt running with all infrastructure pods healthy.
 #
 # Usage:
-#   ./scripts/smoketest/verify-phase-1-credentials.sh
+#   ./scripts/smoketest/verify-credential-isolation.sh
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ REDIS_CS_USER="currency-service"
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-1-credentials.sh
+Usage: ./scripts/smoketest/verify-credential-isolation.sh
 
 Options:
   -h, --help                    Show this help text.

@@ -7,11 +7,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PROBE_NAMESPACE="default"
-PROBE_LABEL_KEY="verify-phase6-session7-temp"
+PROBE_LABEL_KEY="verify-api-rate-limit-identity-temp"
 PROBE_LABEL_VALUE="true"
-PROBE_POD_A="phase6-session7-probe-a"
-PROBE_POD_B="phase6-session7-probe-b"
-PROBE_POLICY_NAME="allow-phase6-session7-egress-to-istio-ingress"
+PROBE_POD_A="api-rate-limit-probe-a"
+PROBE_POD_B="api-rate-limit-probe-b"
+PROBE_POLICY_NAME="allow-api-rate-limit-egress-to-istio-ingress"
 PROBE_IMAGE="curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6"
 NGINX_DEPLOYMENT="deployment/nginx-gateway"
 NGINX_LOG_TAIL_LINES=1200
@@ -30,7 +30,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
+Usage: ./scripts/smoketest/verify-api-rate-limit-identity.sh
 
 Options:
   -h, --help    Show this help text.

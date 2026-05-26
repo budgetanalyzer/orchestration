@@ -187,7 +187,7 @@ deploy/
   scripts/
     01-install-k3s.sh                # committed — pinned k3s install
     02-bootstrap-cluster.sh          # committed — Gateway API CRDs + namespaces
-    03-render-phase-4-istio-manifests.sh
+    03-render-ingress-bootstrap-manifests.sh
     04-install-istio.sh              # committed — Istio + mesh policy install
     05-install-platform-controllers.sh
     07-apply-network-policies.sh

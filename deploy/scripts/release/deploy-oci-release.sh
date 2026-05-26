@@ -13,7 +13,7 @@ PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
 STATIC_VERIFIER="${SCRIPT_DIR}/../verify/oci-upgrade-lockstep.sh"
 POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
 SNAPSHOT_ROOT="$(phase4_repo_path "tmp/oci-release-deploy")"
-PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/phase-6")"
+PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/production-routes")"
 APP_NAMESPACE="default"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
@@ -491,7 +491,7 @@ run_application_phase() {
     local deployment
 
     info "running application phase"
-    run_cmd "${SCRIPT_DIR}/../render/phase-6-production-manifests.sh"
+    run_cmd "${SCRIPT_DIR}/../render/production-routes.sh"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/gateway-routes.yaml"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-ingress-policies.yaml"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-egress.yaml"

@@ -8,12 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/../lib/common.sh"
 
-PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-5"
+PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/secret-sync"
 readonly PHASE5_RENDER_ROOT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/secrets/render-phase-5-secrets.sh [--output-dir DIR]
+Usage: ./deploy/scripts/secrets/render-secret-sync.sh [--output-dir DIR]
 
 Renders the reviewed production secret-sync artifacts into a local output
 directory:
@@ -21,7 +21,7 @@ directory:
   - ExternalSecret resources for the exact production native Secret contract
   - production ConfigMap/session-gateway-idp-config
 
-By default the render output goes to tmp/phase-5/ under the repo root.
+By default the render output goes to tmp/secret-sync/ under the repo root.
 EOF
 }
 
@@ -64,18 +64,18 @@ main() {
     mkdir -p "${output_dir}"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-5/cluster-secret-store.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/secret-sync/cluster-secret-store.yaml.template")" \
         "${output_dir}/cluster-secret-store.yaml" \
         "OCI_REGION=${OCI_REGION}" \
         "OCI_COMPARTMENT_OCID=${OCI_COMPARTMENT_OCID}" \
         "OCI_VAULT_OCID=${OCI_VAULT_OCID}"
 
     install -m 0644 \
-        "$(phase4_repo_path "deploy/manifests/phase-5/external-secrets.yaml")" \
+        "$(phase4_repo_path "deploy/manifests/secret-sync/external-secrets.yaml")" \
         "${output_dir}/external-secrets.yaml"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-5/session-gateway-idp-config.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/secret-sync/session-gateway-idp-config.yaml.template")" \
         "${output_dir}/session-gateway-idp-config.yaml" \
         "AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}" \
         "AUTH0_ISSUER_URI=${AUTH0_ISSUER_URI}" \

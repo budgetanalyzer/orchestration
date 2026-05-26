@@ -20,10 +20,10 @@ tests/shared/Dockerfile.test-env
 tests/setup-flow/docker-compose.test.yml
 tests/security-preflight/docker-compose.test.yml
 scripts/smoketest/verify-security-prereqs.sh
-scripts/smoketest/verify-phase-2-network-policies.sh
-scripts/smoketest/verify-phase-3-istio-ingress.sh
-scripts/smoketest/verify-phase-4-transport-encryption.sh
-scripts/smoketest/verify-phase-5-runtime-hardening.sh
-scripts/smoketest/verify-phase-6-edge-browser-hardening.sh
-scripts/smoketest/verify-phase-6-session-7-api-rate-limit-identity.sh
-scripts/smoketest/verify-phase-7-runtime-guardrails.sh
+scripts/smoketest/verify-network-policies.sh
+scripts/smoketest/verify-istio-ingress.sh
+scripts/smoketest/verify-transport-encryption.sh
+scripts/smoketest/verify-runtime-hardening.sh
+scripts/smoketest/verify-edge-browser-hardening.sh
+scripts/smoketest/verify-api-rate-limit-identity.sh
+scripts/smoketest/verify-runtime-security-guardrails.sh

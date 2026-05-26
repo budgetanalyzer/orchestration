@@ -8,16 +8,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/../lib/common.sh"
 
-PHASE11_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-11"
+PHASE11_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/public-tls"
 readonly PHASE11_RENDER_ROOT
 PHASE11_LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
 readonly PHASE11_LOCKED_DEMO_DOMAIN
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/render/phase-11-public-tls-manifests.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/public-tls.sh [--output-dir DIR]
 
-Renders the reviewed public TLS manifests into tmp/phase-11/ for
+Renders the reviewed public TLS manifests into tmp/public-tls/ for
 operator review before apply.
 
 This render path intentionally stays on the current production hostname
@@ -68,25 +68,25 @@ main() {
     mkdir -p "${output_dir}"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-11/cluster-issuer.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/public-tls/cluster-issuer.yaml.template")" \
         "${output_dir}/cluster-issuer.yaml" \
         "LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-11/public-certificate.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/public-tls/public-certificate.yaml.template")" \
         "${output_dir}/public-certificate.yaml" \
         "DEMO_DOMAIN=${DEMO_DOMAIN}"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-11/reference-grant.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/public-tls/reference-grant.yaml.template")" \
         "${output_dir}/reference-grant.yaml"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-11/ingress-gateway-config.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/public-tls/ingress-gateway-config.yaml.template")" \
         "${output_dir}/ingress-gateway-config.yaml"
 
     phase4_render_template \
-        "$(phase4_repo_path "deploy/manifests/phase-11/istio-gateway.yaml.template")" \
+        "$(phase4_repo_path "deploy/manifests/public-tls/istio-gateway.yaml.template")" \
         "${output_dir}/istio-gateway.yaml" \
         "DEMO_DOMAIN=${DEMO_DOMAIN}"
 

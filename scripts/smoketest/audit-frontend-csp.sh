@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# audit-phase-6-session-3-frontend-csp.sh
+# audit-frontend-csp.sh
 #
 # Static stop-gate audit for the frontend strict-CSP contract.
 # Rebuilds the sibling production-smoke frontend bundle and checks for the

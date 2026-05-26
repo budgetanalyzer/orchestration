@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-phase-5-runtime-hardening.sh
+# verify-runtime-hardening.sh
 #
 # Runtime verification for runtime hardening and Pod Security. Proves the
 # Istio CNI cutover, namespace PSA posture,
@@ -9,9 +9,9 @@
 # earlier security verifiers unless explicitly skipped.
 #
 # Usage:
-#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
-#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh --skip-regressions
-#   ./scripts/smoketest/verify-phase-5-runtime-hardening.sh --regression-timeout 10m
+#   ./scripts/smoketest/verify-runtime-hardening.sh
+#   ./scripts/smoketest/verify-runtime-hardening.sh --skip-regressions
+#   ./scripts/smoketest/verify-runtime-hardening.sh --regression-timeout 10m
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ FAILED=0
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-5-runtime-hardening.sh
+Usage: ./scripts/smoketest/verify-runtime-hardening.sh
 
 Options:
   --skip-regressions          Skip credential, NetworkPolicy, ingress, and
@@ -868,10 +868,10 @@ run_regressions() {
         fi
     }
 
-    run_regression_verifier "Credential isolation verification" "${SCRIPT_DIR}/verify-phase-1-credentials.sh"
-    run_regression_verifier "NetworkPolicy verification" "${SCRIPT_DIR}/verify-phase-2-network-policies.sh"
-    run_regression_verifier "Istio ingress verification" "${SCRIPT_DIR}/verify-phase-3-istio-ingress.sh"
-    run_regression_verifier "Transport-encryption verification" "${SCRIPT_DIR}/verify-phase-4-transport-encryption.sh"
+    run_regression_verifier "Credential isolation verification" "${SCRIPT_DIR}/verify-credential-isolation.sh"
+    run_regression_verifier "NetworkPolicy verification" "${SCRIPT_DIR}/verify-network-policies.sh"
+    run_regression_verifier "Istio ingress verification" "${SCRIPT_DIR}/verify-istio-ingress.sh"
+    run_regression_verifier "Transport-encryption verification" "${SCRIPT_DIR}/verify-transport-encryption.sh"
 }
 
 main() {

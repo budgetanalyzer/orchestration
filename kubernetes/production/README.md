@@ -82,7 +82,7 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ./deploy/scripts/verify/oci-upgrade-lockstep.sh
 ./scripts/guardrails/check-secrets-only-handling.sh
 ./scripts/guardrails/verify-production-image-overlay.sh
-./deploy/scripts/secrets/render-phase-5-secrets.sh
+./deploy/scripts/secrets/render-secret-sync.sh
 ```
 
 The lower-level baseline renderer is still available when a complete schema v2
@@ -119,8 +119,8 @@ The production image verifier now:
   `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
 
 Before deploying a transaction-service image that requires
-`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm the phase 5 secret-sync path
-has produced the preview import token credentials Secret:
+`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm secret sync has produced the
+preview import token credentials Secret:
 
 ```bash
 kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
@@ -134,10 +134,10 @@ checked-in Kyverno controller values and the production-only policy set.
 
 - `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
   instead of relying on mutable chart defaults.
-- `deploy/scripts/reconcile/install-phase-7-kyverno.sh` creates or relabels the
+- `deploy/scripts/reconcile/install-kyverno.sh` creates or relabels the
   `kyverno` namespace for baseline Pod Security admission, then installs the
   pinned Kyverno chart version with those checked-in values.
-- `deploy/scripts/reconcile/apply-phase-7-policies.sh` reruns
+- `deploy/scripts/reconcile/apply-admission-policies.sh` reruns
   `./scripts/guardrails/verify-production-image-overlay.sh` and then applies
   the shared admission policies plus the production-only `50` variant.
 
@@ -194,8 +194,8 @@ artifacts:
   server domain and root URL for loopback port-forward access while preserving
   the checked-in `prometheus-stack` Helm release name contract that yields the
   `prometheus-stack-grafana` Service
-- `deploy/scripts/render/phase-6-production-manifests.sh` renders the
-  production outputs under `tmp/phase-6/`, including the Auth0/FRED Istio
+- `deploy/scripts/render/production-routes.sh` renders the
+  production outputs under `tmp/production-routes/`, including the Auth0/FRED Istio
   egress manifests derived from the production `AUTH0_ISSUER_URI`
 
 The checked-in production monitoring overlay in this directory stays narrow:
@@ -221,8 +221,8 @@ The checked-in production monitoring overlay in this directory stays narrow:
   `--verify-runtime` when the rollout should also prove the dashboard input
   metrics
 - Jaeger and Kiali have a separate reviewed OCI rollout path through
-  `deploy/scripts/render/phase-7-observability.sh` and
-  `deploy/scripts/reconcile/phase-7-observability.sh`; those scripts reuse the
+  `deploy/scripts/render/observability.sh` and
+  `deploy/scripts/reconcile/observability.sh`; those scripts reuse the
   shared `kubernetes/monitoring/jaeger/*.yaml`,
   `kubernetes/monitoring/kiali-values.yaml`, and
   `scripts/ops/post-render-kiali-server.sh` inputs instead of adding a second
@@ -243,11 +243,11 @@ The checked-in production monitoring overlay in this directory stays narrow:
 Render and review the current production hostname/egress slice with:
 
 ```bash
-./deploy/scripts/render/phase-6-production-manifests.sh
-sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
-sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
-sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
-sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+./deploy/scripts/render/production-routes.sh
+sed -n '1,260p' tmp/production-routes/gateway-routes.yaml
+sed -n '1,220p' tmp/production-routes/istio-ingress-policies.yaml
+sed -n '1,120p' tmp/production-routes/prometheus-stack-values.override.yaml
+sed -n '1,260p' tmp/production-routes/istio-egress.yaml
 ```
 
 If a live OCI cluster was previously applied from an older observability render,

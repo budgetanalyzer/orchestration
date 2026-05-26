@@ -8,12 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/../lib/common.sh"
 
-PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-5"
+PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/secret-sync"
 readonly PHASE5_RENDER_ROOT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/secrets/apply-phase-5-secrets.sh [--output-dir DIR]
+Usage: ./deploy/scripts/secrets/apply-secret-sync.sh [--output-dir DIR]
 
 Refreshes the reviewed production secret render output and applies:
   - ClusterSecretStore/budget-analyzer-oci-vault
@@ -25,9 +25,9 @@ EOF
 require_rendered_manifests() {
     local output_dir="$1"
 
-    [[ -f "${output_dir}/cluster-secret-store.yaml" ]] || phase4_die "missing ${output_dir}/cluster-secret-store.yaml; run deploy/scripts/secrets/render-phase-5-secrets.sh first"
-    [[ -f "${output_dir}/external-secrets.yaml" ]] || phase4_die "missing ${output_dir}/external-secrets.yaml; run deploy/scripts/secrets/render-phase-5-secrets.sh first"
-    [[ -f "${output_dir}/session-gateway-idp-config.yaml" ]] || phase4_die "missing ${output_dir}/session-gateway-idp-config.yaml; run deploy/scripts/secrets/render-phase-5-secrets.sh first"
+    [[ -f "${output_dir}/cluster-secret-store.yaml" ]] || phase4_die "missing ${output_dir}/cluster-secret-store.yaml; run deploy/scripts/secrets/render-secret-sync.sh first"
+    [[ -f "${output_dir}/external-secrets.yaml" ]] || phase4_die "missing ${output_dir}/external-secrets.yaml; run deploy/scripts/secrets/render-secret-sync.sh first"
+    [[ -f "${output_dir}/session-gateway-idp-config.yaml" ]] || phase4_die "missing ${output_dir}/session-gateway-idp-config.yaml; run deploy/scripts/secrets/render-secret-sync.sh first"
 }
 
 main() {
@@ -55,7 +55,7 @@ main() {
     phase4_require_cluster_access
 
     phase4_info "refreshing the rendered production secrets artifacts"
-    "${SCRIPT_DIR}/render-phase-5-secrets.sh" --output-dir "${output_dir}" >/dev/null
+    "${SCRIPT_DIR}/render-secret-sync.sh" --output-dir "${output_dir}" >/dev/null
     require_rendered_manifests "${output_dir}"
 
     phase4_info "applying ClusterSecretStore"

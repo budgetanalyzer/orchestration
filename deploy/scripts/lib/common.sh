@@ -5,8 +5,8 @@ PHASE4_REPO_ROOT="$(cd "${PHASE4_COMMON_DIR}/../../.." && pwd)"
 readonly PHASE4_COMMON_DIR
 readonly PHASE4_REPO_ROOT
 
-# shellcheck source=deploy/scripts/lib/phase-4-version-contract.sh
-source "${PHASE4_COMMON_DIR}/phase-4-version-contract.sh"
+# shellcheck source=deploy/scripts/lib/version-contract.sh
+source "${PHASE4_COMMON_DIR}/version-contract.sh"
 # shellcheck source=scripts/lib/pinned-tool-versions.sh
 source "${PHASE4_REPO_ROOT}/scripts/lib/pinned-tool-versions.sh"
 
@@ -14,7 +14,7 @@ PHASE4_INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE:-${HOME}/.config/budget-analyzer/i
 readonly PHASE4_INSTANCE_ENV_FILE
 PHASE4_DEFAULT_KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
 readonly PHASE4_DEFAULT_KUBECONFIG
-PHASE4_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-4"
+PHASE4_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/ingress-bootstrap"
 readonly PHASE4_RENDER_ROOT
 PHASE4_INGRESS_GATEWAY_NAMESPACE="istio-ingress"
 readonly PHASE4_INGRESS_GATEWAY_NAMESPACE

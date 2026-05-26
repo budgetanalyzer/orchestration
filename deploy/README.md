@@ -11,8 +11,8 @@ touching the OCI instance or Vault.
 
 - reviewed scripts under `deploy/scripts/`
 - checked-in Helm values under `deploy/helm-values/`
-- checked-in non-secret render templates under `deploy/manifests/phase-4/`
-- checked-in non-secret secret-sync templates and manifests under `deploy/manifests/phase-5/`
+- checked-in non-secret render templates under `deploy/manifests/ingress-bootstrap/`
+- checked-in non-secret secret-sync templates and manifests under `deploy/manifests/secret-sync/`
 - production render entry points under `deploy/scripts/render/`
 - production reconciliation and apply entry points under `deploy/scripts/reconcile/`
 - production release preparation and OCI apply entry points under `deploy/scripts/release/`
@@ -91,15 +91,15 @@ desired state.
 1. Copy `deploy/instance.env.template` to `~/.config/budget-analyzer/instance.env` and fill in only the deployment-specific non-secret values.
 2. Review the deployment scripts and checked-in values before running them on the OCI host.
 3. Review the shared contract files:
-   - `deploy/scripts/lib/phase-4-version-contract.sh`
+   - `deploy/scripts/lib/version-contract.sh`
    - `deploy/scripts/lib/common.sh`
 4. Review the pinned Helm values:
    - `deploy/helm-values/external-secrets.values.yaml`
    - `deploy/helm-values/cert-manager.values.yaml`
    - `deploy/helm-values/kyverno.values.yaml`
 5. Review the k3s/Istio bootstrap render templates:
-   - `deploy/manifests/phase-4/ingress-gateway-config.yaml.template`
-   - `deploy/manifests/phase-4/istio-gateway.yaml.template`
+   - `deploy/manifests/ingress-bootstrap/ingress-gateway-config.yaml.template`
+   - `deploy/manifests/ingress-bootstrap/istio-gateway.yaml.template`
    - `kubernetes/istio/cni-common-values.yaml`
    - `kubernetes/istio/cni-k3s-values.yaml`
    - `kubernetes/istio/istiod-values.yaml`
@@ -107,14 +107,14 @@ desired state.
    - `kubernetes/istio/peer-authentication.yaml`
    - `kubernetes/production/istio/authorization-policies.yaml`
 6. Review the secret synchronization artifacts:
-   - `deploy/manifests/phase-5/cluster-secret-store.yaml.template`
-   - `deploy/manifests/phase-5/external-secrets.yaml`
-   - `deploy/manifests/phase-5/session-gateway-idp-config.yaml.template`
-   - `deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh`
+   - `deploy/manifests/secret-sync/cluster-secret-store.yaml.template`
+   - `deploy/manifests/secret-sync/external-secrets.yaml`
+   - `deploy/manifests/secret-sync/session-gateway-idp-config.yaml.template`
+   - `deploy/scripts/secrets/bootstrap-vault-secrets.sh`
    - `deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh`
-   - `deploy/scripts/secrets/render-phase-5-secrets.sh`
-   - `deploy/scripts/secrets/apply-phase-5-secrets.sh`
-   - `deploy/scripts/secrets/generate-phase-5-infra-tls.sh`
+   - `deploy/scripts/secrets/render-secret-sync.sh`
+   - `deploy/scripts/secrets/apply-secret-sync.sh`
+   - `deploy/scripts/secrets/generate-infra-tls.sh`
 7. Review the production render inputs:
    - `kubernetes/production/README.md`
    - `kubernetes/production/gateway-routes/kustomization.yaml`
@@ -122,7 +122,7 @@ desired state.
    - `kubernetes/production/monitoring/prometheus-stack-values.override.yaml`
    - `kubernetes/production/infrastructure/kustomization.yaml`
    - `kubernetes/production/infrastructure/patches/redis-storage.yaml`
-   - `deploy/scripts/render/phase-6-production-manifests.sh`
+   - `deploy/scripts/render/production-routes.sh`
 8. Review the production infrastructure operation scripts:
    - `deploy/scripts/render/production-infrastructure.sh`
    - `deploy/scripts/reconcile/production-infrastructure.sh`
@@ -133,8 +133,8 @@ desired state.
    - `kubernetes/monitoring/jaeger/services.yaml`
    - `kubernetes/monitoring/kiali-values.yaml`
    - `scripts/ops/post-render-kiali-server.sh`
-   - `deploy/scripts/render/phase-7-observability.sh`
-   - `deploy/scripts/reconcile/phase-7-observability.sh`
+   - `deploy/scripts/render/observability.sh`
+   - `deploy/scripts/reconcile/observability.sh`
    - `deploy/scripts/reconcile/production-monitoring.sh`
 10. Review the production admission inputs:
    - `kubernetes/kyverno/README.md`
@@ -144,8 +144,8 @@ desired state.
    - `kubernetes/kyverno/policies/30-require-workload-security-context.yaml`
    - `kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml`
    - `kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml`
-   - `deploy/scripts/reconcile/install-phase-7-kyverno.sh`
-   - `deploy/scripts/reconcile/apply-phase-7-policies.sh`
+   - `deploy/scripts/reconcile/install-kyverno.sh`
+   - `deploy/scripts/reconcile/apply-admission-policies.sh`
 11. Review the production desired-state preparation and OCI apply helpers:
    - `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`
    - `deploy/scripts/release/deploy-current-oci-manifest.sh`
@@ -165,8 +165,8 @@ desired state.
    - The production Prometheus/Grafana path is owned by
      `deploy/scripts/reconcile/production-monitoring.sh`.
    - The reviewed OCI rollout path for Jaeger and Kiali uses
-     `deploy/scripts/render/phase-7-observability.sh` and
-     `deploy/scripts/reconcile/phase-7-observability.sh`.
+     `deploy/scripts/render/observability.sh` and
+     `deploy/scripts/reconcile/observability.sh`.
    - Production Grafana is internal-only and accessed with
      `kubectl port-forward`; the production route render does not publish a
      Grafana `HTTPRoute`.
@@ -177,7 +177,7 @@ desired state.
 13. Run the human-owned cluster bootstrap scripts in this exact order:
    - `./deploy/scripts/bootstrap/01-install-k3s.sh`
    - `./deploy/scripts/bootstrap/02-bootstrap-cluster.sh`
-   - `./deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh`
+   - `./deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh`
    - `./deploy/scripts/bootstrap/04-install-istio.sh`
    - `./deploy/scripts/bootstrap/05-install-platform-controllers.sh`
    - `./deploy/scripts/bootstrap/06-apply-network-policies.sh`
@@ -197,7 +197,7 @@ file outside the repo. It holds non-secret deployment metadata:
 Do not put secret payloads in `instance.env`. Secret values stay in OCI
 Vault and later `ExternalSecret` resources. Generated application secrets,
 including the transaction-service preview import token encryption secret, are
-created by the phase 5 Vault bootstrap script rather than added to
+created by the Vault bootstrap script rather than added to
 `deploy/instance.env.template`.
 
 Only the non-secret IDP values belong here. `AUTH0_CLIENT_SECRET` still belongs in OCI Vault.
@@ -215,10 +215,10 @@ and the standard shell tools used by the scripts.
   k3s starts or restarts. Rerun it after rebuilding a host or when
   `kubectl logs -f` reports fsnotify watcher exhaustion.
 - `./deploy/scripts/bootstrap/04-install-istio.sh` and `./deploy/scripts/bootstrap/05-install-platform-controllers.sh` require `helm`.
-- `./deploy/scripts/reconcile/install-phase-7-kyverno.sh` requires `helm`.
-- `./deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh` requires the OCI CLI plus `openssl`.
+- `./deploy/scripts/reconcile/install-kyverno.sh` requires `helm`.
+- `./deploy/scripts/secrets/bootstrap-vault-secrets.sh` requires the OCI CLI plus `openssl`.
 - `./deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh` requires the OCI CLI.
-- `./deploy/scripts/secrets/generate-phase-5-infra-tls.sh` requires `openssl`.
+- `./deploy/scripts/secrets/generate-infra-tls.sh` requires `openssl`.
 - On a fresh OCI Ubuntu host, install the repo-pinned Helm build with `./scripts/bootstrap/install-verified-tool.sh helm`.
 - Verify the install before rerunning the cluster bootstrap scripts: `helm version`
 
@@ -228,24 +228,24 @@ and the standard shell tools used by the scripts.
 | --- | --- | --- |
 | `deploy/scripts/bootstrap/01-install-k3s.sh` | Installs the pinned k3s release with the repo's Istio-friendly flags, converges the host inotify budget for reliable k3s/containerd log-follow streaming, and prints the base cluster snapshot. | Re-run if the host must be rebuilt, reconciled to the pinned k3s version, or repaired after `kubectl logs -f` reports fsnotify watcher exhaustion. |
 | `deploy/scripts/bootstrap/02-bootstrap-cluster.sh` | Installs the pinned Gateway API CRDs and creates or labels every namespace the deployment path depends on. | Re-run after a cluster rebuild or if namespace labels drift. |
-| `deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/phase-4/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
-| `deploy/scripts/bootstrap/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the phase-11 public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the phase-4 ingress reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the phase-11 ingress manifests immediately after the Istio reconcile. |
+| `deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh` | Renders the ingress ConfigMap and host-agnostic HTTP Gateway into `tmp/ingress-bootstrap/`. | Re-run before public TLS adds the TLS listener or whenever the reviewed ingress render output changes. |
+| `deploy/scripts/bootstrap/04-install-istio.sh` | Refreshes the rendered ingress output, installs `istio-base`, installs `istio-cni` with the common values plus k3s overlay, installs `istiod`, installs the egress gateway, then applies the rendered ingress manifests plus the shared `PeerAuthentication` baseline and the OCI-specific `AuthorizationPolicy` baseline. The OCI authz baseline intentionally omits `budget-analyzer-web-policy` because production serves the frontend from `nginx-gateway`. The script now refuses to continue when the live cluster already exposes the public TLS path unless you pass `--acknowledge-public-tls-downgrade`, because the ingress bootstrap reconcile is intentionally HTTP-only. | Re-run after changing Istio pins, values, the rendered ingress manifests, or the OCI authz baseline. If the host already completed the public TLS cutover, pass `--acknowledge-public-tls-downgrade` only when you intend to reapply the public TLS ingress manifests immediately after the Istio reconcile. |
 | `deploy/scripts/bootstrap/05-install-platform-controllers.sh` | Installs External Secrets Operator and cert-manager from the pinned charts and checked-in values. The script logs Helm repo-update vs install stages separately, waits up to `10m` per release, dumps `helm status`, workloads, and recent namespace events if either install fails, and accepts `PHASE4_PLATFORM_CONTROLLERS=cert-manager`, `external-secrets`, or `all` (default). | Re-run when secret synchronization or public TLS needs controller value changes. For the public TLS cert-manager solver refresh path, use `PHASE4_PLATFORM_CONTROLLERS=cert-manager`. |
 | `deploy/scripts/bootstrap/06-apply-network-policies.sh` | Applies the checked-in NetworkPolicy manifests after namespaces and controllers exist. | Re-run after policy edits or after rebuilding the cluster. |
 | `deploy/scripts/verify/network-policy-enforcement.sh` | Creates disposable probe/listener pods and proves the checked-in allow/deny contract against the live k3s NetworkPolicy implementation. | Re-run after policy edits, CNI changes, or any cluster rebuild before treating NetworkPolicy enforcement as verified. |
-| `deploy/scripts/secrets/render-phase-5-secrets.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/phase-5/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
-| `deploy/scripts/secrets/apply-phase-5-secrets.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, checked-in `ExternalSecret` inventory changes, or any `instance.env` change that affects the rendered resources. |
-| `deploy/scripts/secrets/generate-phase-5-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
-| `deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, Redis, and generated application secrets such as `budget-analyzer-transaction-preview-import-token-encryption-secret`. The generated secret material is written to an operator-only file outside the repo so the RabbitMQ definitions secret can be rendered afterward; existing OCI Vault values are hydrated back into that file on rerun. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated secret receipt file is reconciled from Vault before RabbitMQ definitions are rendered. |
-| `deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh` | Renders the checked-in RabbitMQ definitions template with the generated RabbitMQ passwords, validates the `exchange-rate.import.requested` contract, and creates or updates the OCI Vault `budget-analyzer-rabbitmq-definitions` secret. | Run after `deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh` and before applying phase 5 secret sync when RabbitMQ destinations or permissions change. |
-| `deploy/scripts/render/phase-6-production-manifests.sh` | Renders the reviewed production application gateway routes, ingress policies, production Grafana port-forward override, and Auth0-derived Istio egress manifests into `tmp/phase-6/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
-| `deploy/scripts/reconcile/install-phase-7-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
-| `deploy/scripts/reconcile/apply-phase-7-policies.sh` | Runs the repo-owned production image verifier, then applies the shared admission policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
-| `deploy/scripts/render/phase-11-public-tls-manifests.sh` | Renders the reviewed public TLS artifacts into `tmp/phase-11/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the app TLS cutover or whenever the reviewed public hostname/TLS contract changes. |
+| `deploy/scripts/secrets/render-secret-sync.sh` | Renders the OCI `ClusterSecretStore`, the exact `ExternalSecret` inventory, and the production `session-gateway-idp-config` into `tmp/secret-sync/`, including the transaction-service preview import token credentials sync target. | Re-run after any `instance.env` update that changes Vault identifiers or non-secret Auth0/IDP values, or after checked-in `ExternalSecret` inventory changes. |
+| `deploy/scripts/secrets/apply-secret-sync.sh` | Refreshes the secret-sync render output, then applies the `ClusterSecretStore`, production IDP `ConfigMap`, and the full `ExternalSecret` set. | Re-run after IAM propagation, Vault secret inventory changes, checked-in `ExternalSecret` inventory changes, or any `instance.env` change that affects the rendered resources. |
+| `deploy/scripts/secrets/generate-infra-tls.sh` | Generates the private `infra-ca` plus the PostgreSQL, Redis, and RabbitMQ server keypairs outside the repo, refuses container/AI-workspace execution, and applies the expected TLS Secret objects. | Re-run to restore the internal TLS secrets, or pass `--rotate` when intentionally replacing the CA and service certificates. |
+| `deploy/scripts/secrets/bootstrap-vault-secrets.sh` | Creates the OCI Vault secrets for Auth0, FRED, PostgreSQL, RabbitMQ, Redis, and generated application secrets such as `budget-analyzer-transaction-preview-import-token-encryption-secret`. The generated secret material is written to an operator-only file outside the repo so the RabbitMQ definitions secret can be rendered afterward; existing OCI Vault values are hydrated back into that file on rerun. | Re-run to create any missing plain-text vault secrets. Existing OCI secrets are left unchanged, and the generated secret receipt file is reconciled from Vault before RabbitMQ definitions are rendered. |
+| `deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh` | Renders the checked-in RabbitMQ definitions template with the generated RabbitMQ passwords, validates the `exchange-rate.import.requested` contract, and creates or updates the OCI Vault `budget-analyzer-rabbitmq-definitions` secret. | Run after `deploy/scripts/secrets/bootstrap-vault-secrets.sh` and before applying secret sync when RabbitMQ destinations or permissions change. |
+| `deploy/scripts/render/production-routes.sh` | Renders the reviewed production application gateway routes, ingress policies, production Grafana port-forward override, and Auth0-derived Istio egress manifests into `tmp/production-routes/` for operator review before live apply. | Re-run after changing the reviewed production overlay files or the non-secret production `AUTH0_ISSUER_URI`. |
+| `deploy/scripts/reconcile/install-kyverno.sh` | Creates or relabels the `kyverno` namespace, then installs the pinned Kyverno chart with the checked-in production values. | Re-run after changing the Kyverno chart pin or `deploy/helm-values/kyverno.values.yaml`, or after rebuilding the cluster. |
+| `deploy/scripts/reconcile/apply-admission-policies.sh` | Runs the repo-owned production image verifier, then applies the shared admission policies plus the production-only image-digest variant. | Re-run after changing any `kubernetes/kyverno/policies/*.yaml`, the production `50-...` variant, or the checked-in production image baseline. |
+| `deploy/scripts/render/public-tls.sh` | Renders the reviewed public TLS artifacts into `tmp/public-tls/`, including the Let's Encrypt `ClusterIssuer`, the app `Certificate`, the `ReferenceGrant`, and the `80/443` ingress Gateway manifests. | Re-run before the app TLS cutover or whenever the reviewed public hostname/TLS contract changes. |
 | `deploy/scripts/render/production-infrastructure.sh` | Renders `kubernetes/production/infrastructure` with Kustomize load restrictions disabled into `tmp/production-infrastructure/infrastructure.yaml` for review. | Re-run before applying infrastructure, after changing the shared infrastructure baseline, or after changing the production Redis storage patch. |
 | `deploy/scripts/reconcile/production-infrastructure.sh` | Refreshes the production infrastructure render, applies it to the current cluster, and waits for PostgreSQL, RabbitMQ, and Redis StatefulSets when present. | Re-run on a new or already migrated cluster, or after infrastructure manifest changes. |
-| `deploy/scripts/render/phase-7-observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/phase-7-observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
-| `deploy/scripts/reconcile/phase-7-observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
+| `deploy/scripts/render/observability.sh` | Copies the reviewed Jaeger manifests and renders the pinned Kiali Helm output into `tmp/observability/` for operator review using a Helm server-side dry run, so the reviewed Kiali RBAC matches the live namespace-scoped install footprint. | Re-run before live Jaeger/Kiali install, after changing shared Jaeger manifests, or after changing the Kiali values/post-renderer contract. |
+| `deploy/scripts/reconcile/observability.sh` | Reruns the production static verifier, refreshes the reviewed observability render, applies the shared Jaeger manifests, installs Kiali from the pinned chart and values, waits for both Deployments, and fails if any stale observability `HTTPRoute` still exists. | Re-run on a new or existing OCI cluster after changing the Jaeger manifests, the Kiali values/post-renderer, or the production observability contract. |
 | `deploy/scripts/reconcile/production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | Normal local OCI desired-state preparation entry point. It requires clean source workspaces, compares current artifact source state with the production image inventory, previews changed-artifact tag actions with `--plan-only`, creates and pushes missing `vX.Y.Z` source tags for changed artifacts with `--push-tags`, and reads already-published GHCR tags with `--resolve-images` to resolve digests, write a complete desired-state manifest, update the production image inventory, release metadata, runtime metadata patch, and app overlay, then stop for review. Use `--lockstep` only when every managed artifact must move to the requested tag. | Run from the local workstation before an OCI deployment. Missing GHCR image tags are a prerequisite failure in `--resolve-images`; wait for GitHub Actions manually instead of leaving the script in a polling loop. |
 | `deploy/scripts/release/deploy-current-oci-manifest.sh` | Normal OCI-host apply entry point. It applies the checked-in production manifest, validates manifest/inventory agreement, runs the static gate, applies the managed production app set with selective workload rollout, waits only for changed deployments, and verifies live runtime metadata against the checked-in manifest while allowing unchanged pods to retain an earlier deployment id. | Run on the OCI host after the reviewed orchestration desired-state diff has been pulled. |
@@ -270,11 +270,11 @@ re-reading shell history:
    kubectl get namespace \
      default infrastructure monitoring istio-system istio-ingress istio-egress external-secrets cert-manager
    ```
-2. Render the reviewed ingress manifests into `tmp/phase-4/`.
+2. Render the reviewed ingress manifests into `tmp/ingress-bootstrap/`.
    ```bash
-   ./deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh
-   sed -n '1,220p' tmp/phase-4/ingress-gateway-config.yaml
-   sed -n '1,220p' tmp/phase-4/istio-gateway.yaml
+   ./deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh
+   sed -n '1,220p' tmp/ingress-bootstrap/ingress-gateway-config.yaml
+   sed -n '1,220p' tmp/ingress-bootstrap/istio-gateway.yaml
    ```
 3. Run the mesh install script. It covers the remaining human-owned Chunk 3 work in order.
    ```bash
@@ -364,7 +364,7 @@ real Auth0-derived egress config is applied.
 
 ## Deployment Boundary Notes
 
-`deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single host-agnostic listener and omits `spec.listeners[].hostname`. That keeps the checked-in localhost `HTTPRoute` manifests attachable during bootstrap while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in the public TLS cutover.
+`deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh` intentionally renders an HTTP-only `Gateway` with a single host-agnostic listener and omits `spec.listeners[].hostname`. That keeps the checked-in localhost `HTTPRoute` manifests attachable during bootstrap while still leaving room for later host-specific route renders and ACME HTTP-01 challenge routes. Public certificate issuance and the final HTTPS listener secret wiring stay in the public TLS cutover.
 
 The rejected host-redirect experiment from the 2026-04-16 OCI debugging thread is retained only as operational context. That run proved that `nat/PREROUTING REDIRECT` to the ingress NodePort did not become a real NodePort service flow on this host, and it did not satisfy the requirement to preserve the original client IP at the ingress gateway. Do not recreate that experiment during the normal forward path. If the host still carries any mutations from that experiment, host cleanup and OCI-networking rollback are mandatory before the steady-state OCI Network Load Balancer plus `externalTrafficPolicy: Local` path begins.
 
@@ -375,12 +375,12 @@ public TLS cutover. The instance itself should no longer accept direct public
 HTTPS listener, the `30443` backend path, and the matching certificate/TLS
 wiring.
 
-Because `deploy/scripts/bootstrap/04-install-istio.sh` reapplies that HTTP-only phase-4
-ingress baseline, it now blocks by default when the live cluster already
-exposes the phase-11 `443 -> 30443` listener. Use
+Because `deploy/scripts/bootstrap/04-install-istio.sh` reapplies that HTTP-only
+ingress bootstrap baseline, it now blocks by default when the live cluster already
+exposes the public TLS `443 -> 30443` listener. Use
 `--acknowledge-public-tls-downgrade` only for an intentional Istio reconcile on
-an already-cut-over host, then immediately rerender and reapply the phase-11
-public TLS manifests.
+an already-cut-over host, then immediately rerender and reapply the public TLS
+manifests.
 
 On OCI, the public listener path also needs the frontend NSG to egress to the backend NSG on TCP `30080`. The 2026-04-16 operator run needed that explicit rule before the backend health check on `30080` would turn healthy.
 
@@ -410,41 +410,41 @@ shell history:
    test -f ~/.config/budget-analyzer/instance.env
    grep -E '^(OCI_REGION|OCI_COMPARTMENT_OCID|AUTH0_CLIENT_ID|AUTH0_ISSUER_URI|IDP_AUDIENCE|IDP_LOGOUT_RETURN_TO)=' \
      ~/.config/budget-analyzer/instance.env
-   ls deploy/manifests/phase-5 deploy/scripts/secrets/render-phase-5-secrets.sh \
-     deploy/scripts/secrets/apply-phase-5-secrets.sh deploy/scripts/secrets/generate-phase-5-infra-tls.sh
+   ls deploy/manifests/secret-sync deploy/scripts/secrets/render-secret-sync.sh \
+     deploy/scripts/secrets/apply-secret-sync.sh deploy/scripts/secrets/generate-infra-tls.sh
    ```
    `OCI_COMPARTMENT_OCID` is the compartment that contains the deployment
    vault, key, and secrets. If you are using the tenancy root compartment for those
    resources, `OCI_COMPARTMENT_OCID` should equal `OCI_TENANCY_OCID`.
 2. Review the checked-in secret-sync artifacts first. Do not run the render step yet if the OCI vault/key work is still pending.
    ```bash
-   sed -n '1,220p' deploy/manifests/phase-5/cluster-secret-store.yaml.template
-   sed -n '1,260p' deploy/manifests/phase-5/external-secrets.yaml
-   sed -n '1,220p' deploy/manifests/phase-5/session-gateway-idp-config.yaml.template
-   sed -n '1,260p' deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh
+   sed -n '1,220p' deploy/manifests/secret-sync/cluster-secret-store.yaml.template
+   sed -n '1,260p' deploy/manifests/secret-sync/external-secrets.yaml
+   sed -n '1,220p' deploy/manifests/secret-sync/session-gateway-idp-config.yaml.template
+   sed -n '1,260p' deploy/scripts/secrets/bootstrap-vault-secrets.sh
    sed -n '1,260p' deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh
-   sed -n '1,220p' deploy/scripts/secrets/render-phase-5-secrets.sh
-   sed -n '1,220p' deploy/scripts/secrets/apply-phase-5-secrets.sh
-   sed -n '1,260p' deploy/scripts/secrets/generate-phase-5-infra-tls.sh
+   sed -n '1,220p' deploy/scripts/secrets/render-secret-sync.sh
+   sed -n '1,220p' deploy/scripts/secrets/apply-secret-sync.sh
+   sed -n '1,260p' deploy/scripts/secrets/generate-infra-tls.sh
    ```
 3. After the OCI vault/key exists and `~/.config/budget-analyzer/instance.env` includes `OCI_VAULT_OCID`, populate the plain-text vault secrets and then render the reviewed secret-sync artifacts.
    ```bash
    set -euo pipefail
-   ./deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh
+   ./deploy/scripts/secrets/bootstrap-vault-secrets.sh
    ./deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh
-   ./deploy/scripts/secrets/render-phase-5-secrets.sh
-   sed -n '1,220p' tmp/phase-5/cluster-secret-store.yaml
-   sed -n '1,260p' tmp/phase-5/external-secrets.yaml
-   sed -n '1,220p' tmp/phase-5/session-gateway-idp-config.yaml
+   ./deploy/scripts/secrets/render-secret-sync.sh
+   sed -n '1,220p' tmp/secret-sync/cluster-secret-store.yaml
+   sed -n '1,260p' tmp/secret-sync/external-secrets.yaml
+   sed -n '1,220p' tmp/secret-sync/session-gateway-idp-config.yaml
    ```
    The script generates `budget-analyzer-transaction-preview-import-token-encryption-secret`
    for the transaction-service preview import token flow. That is an OCI Vault
    application secret, not a `deploy/instance.env.template` value.
 
    The RabbitMQ definitions script renders
-   `deploy/manifests/phase-5/rabbitmq-definitions.template.json` with the
+   `deploy/manifests/secret-sync/rabbitmq-definitions.template.json` with the
    generated or Vault-hydrated RabbitMQ passwords from
-   `~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env`
+   `~/.local/share/budget-analyzer/vault-secrets/secret-sync-generated-secrets.env`
    and writes the rendered secret payload outside the repo. The template is the
    checked-in allow-list for the `currency-service` AMQP resources. It
    currently grants `exchange-rate.import.requested`,
@@ -457,7 +457,7 @@ shell history:
 4. After the OCI vault, dynamic group, policy, and secret inventory exist and IAM propagation has had time to settle, apply the reviewed secret-sync path on the OCI instance.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-   ./deploy/scripts/secrets/apply-phase-5-secrets.sh
+   ./deploy/scripts/secrets/apply-secret-sync.sh
    kubectl get clustersecretstore budget-analyzer-oci-vault
    kubectl get externalsecret -A
    kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
@@ -467,7 +467,7 @@ shell history:
 5. Generate and apply the internal TLS secrets from the OCI host or another trusted machine outside AI sessions.
    ```bash
    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-   ./deploy/scripts/secrets/generate-phase-5-infra-tls.sh
+   ./deploy/scripts/secrets/generate-infra-tls.sh
    ```
    The script writes the CA and service keypairs under `~/.local/share/budget-analyzer/infra-tls` by default, keeps them outside the repo, and refuses to run from the containerized AI workspace.
 6. Stop if any `ExternalSecret` reports sync errors, if
@@ -484,13 +484,13 @@ The repo-owned production render path must be reviewed before any production
 gateway or egress objects are applied:
 
 ```bash
-./deploy/scripts/render/phase-6-production-manifests.sh
-sed -n '1,260p' tmp/phase-6/gateway-routes.yaml
-sed -n '1,220p' tmp/phase-6/istio-ingress-policies.yaml
-sed -n '1,120p' tmp/phase-6/prometheus-stack-values.override.yaml
-sed -n '1,260p' tmp/phase-6/istio-egress.yaml
+./deploy/scripts/render/production-routes.sh
+sed -n '1,260p' tmp/production-routes/gateway-routes.yaml
+sed -n '1,220p' tmp/production-routes/istio-ingress-policies.yaml
+sed -n '1,120p' tmp/production-routes/prometheus-stack-values.override.yaml
+sed -n '1,260p' tmp/production-routes/istio-egress.yaml
 rg -n 'budgetanalyzer\\.localhost|auth0-issuer\\.placeholder\\.invalid' \
-  kubernetes/production tmp/phase-6
+  kubernetes/production tmp/production-routes
 ```
 
 The production apps overlay no longer applies the checked-in fallback
@@ -559,15 +559,15 @@ For Jaeger and Kiali, use the repo-owned observability render/apply path
 instead of one-off `kubectl` or `helm` commands:
 
 ```bash
-./deploy/scripts/render/phase-7-observability.sh
-sed -n '1,220p' tmp/phase-7-observability/jaeger-deployment.yaml
-sed -n '1,260p' tmp/phase-7-observability/kiali.yaml
+./deploy/scripts/render/observability.sh
+sed -n '1,220p' tmp/observability/jaeger-deployment.yaml
+sed -n '1,260p' tmp/observability/kiali.yaml
 
-./deploy/scripts/reconcile/phase-7-observability.sh
+./deploy/scripts/reconcile/observability.sh
 ```
 
 The render step keeps the exact OCI Jaeger manifests and rendered Kiali output
-reviewable under `tmp/phase-7-observability/`. It uses a Helm server-side dry
+reviewable under `tmp/observability/`. It uses a Helm server-side dry
 run against the live cluster so `kiali.yaml` includes the full
 namespace-scoped `Role`/`RoleBinding` footprint that production will install.
 The apply step refreshes that artifact, applies the shared Jaeger manifests
@@ -581,12 +581,12 @@ observability `HTTPRoute` still exists.
 The repo-owned render path for the public TLS cutover is:
 
 ```bash
-./deploy/scripts/render/phase-11-public-tls-manifests.sh
-sed -n '1,220p' tmp/phase-11/cluster-issuer.yaml
-sed -n '1,220p' tmp/phase-11/public-certificate.yaml
-sed -n '1,220p' tmp/phase-11/reference-grant.yaml
-sed -n '1,220p' tmp/phase-11/ingress-gateway-config.yaml
-sed -n '1,260p' tmp/phase-11/istio-gateway.yaml
+./deploy/scripts/render/public-tls.sh
+sed -n '1,220p' tmp/public-tls/cluster-issuer.yaml
+sed -n '1,220p' tmp/public-tls/public-certificate.yaml
+sed -n '1,220p' tmp/public-tls/reference-grant.yaml
+sed -n '1,220p' tmp/public-tls/ingress-gateway-config.yaml
+sed -n '1,260p' tmp/public-tls/istio-gateway.yaml
 ```
 
 The current forward-path public TLS contract remains locked to:
@@ -608,7 +608,7 @@ Kyverno compatibility contract in-repo:
 - `deploy/helm-values/cert-manager.values.yaml` pins the chart-managed
   `acmesolver` image by digest so the temporary solver Pod can pass the
   production image policy even though it runs in `default`.
-- `deploy/manifests/phase-11/cluster-issuer.yaml.template` labels the temporary
+- `deploy/manifests/public-tls/cluster-issuer.yaml.template` labels the temporary
   solver Pod and applies the strongest pod-level security context the
   cert-manager Gateway solver API exposes.
 - `kubernetes/kyverno/policies/30-require-workload-security-context.yaml`
@@ -661,14 +661,14 @@ certificate are all healthy.
   `--verify-runtime` when you want the script to also prove the Spring
   Boot/Grafana dashboard inputs after the rollout. That path also keeps the
   Prometheus Operator on the repo-owned RBAC post-renderer.
-- Production Grafana has no public `HTTPRoute` in the phase-6 route render.
+- Production Grafana has no public `HTTPRoute` in the production-route render.
   Production Prometheus also stays internal-only. Use the shared loopback-bound
   operator contract documented in
   [../docs/architecture/observability.md](../docs/architecture/observability.md)
   instead of maintaining a second command inventory here.
 - The reviewed OCI rollout path for Jaeger and Kiali uses
-  `./deploy/scripts/render/phase-7-observability.sh` for review and
-  `./deploy/scripts/reconcile/phase-7-observability.sh` for the live install.
+  `./deploy/scripts/render/observability.sh` for review and
+  `./deploy/scripts/reconcile/observability.sh` for the live install.
 - Jaeger and Kiali follow that same internal-only loopback model; use the
   canonical commands and helper scripts from
   [../docs/architecture/observability.md](../docs/architecture/observability.md).
@@ -700,8 +700,8 @@ values, the policies, or rebuild the OCI cluster.
 
 ```bash
 sed -n '1,240p' deploy/helm-values/kyverno.values.yaml
-sed -n '1,220p' deploy/scripts/reconcile/install-phase-7-kyverno.sh
-sed -n '1,220p' deploy/scripts/reconcile/apply-phase-7-policies.sh
+sed -n '1,220p' deploy/scripts/reconcile/install-kyverno.sh
+sed -n '1,220p' deploy/scripts/reconcile/apply-admission-policies.sh
 sed -n '1,220p' kubernetes/kyverno/README.md
 find kubernetes/kyverno/policies -maxdepth 2 -type f | sort
 ```
@@ -710,7 +710,7 @@ Then install the controller with the pinned chart and checked-in values:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-./deploy/scripts/reconcile/install-phase-7-kyverno.sh
+./deploy/scripts/reconcile/install-kyverno.sh
 kubectl get namespace kyverno --show-labels
 kubectl get deployments,pods -n kyverno
 ```
@@ -729,7 +729,7 @@ local Tilt/latest exception rules:
 
 ```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-./deploy/scripts/reconcile/apply-phase-7-policies.sh
+./deploy/scripts/reconcile/apply-admission-policies.sh
 kubectl get clusterpolicy
 ```
 
@@ -745,5 +745,5 @@ Every committed shell script under `deploy/scripts/` must pass:
 - `shellcheck -x <script>`
 
 The render paths must also be provable locally with sample non-secret input so
-reviewers can inspect generated YAML under `tmp/phase-4/`, `tmp/phase-5/`, and
-`tmp/phase-6/`.
+reviewers can inspect generated YAML under `tmp/ingress-bootstrap/`, `tmp/secret-sync/`, and
+`tmp/production-routes/`.

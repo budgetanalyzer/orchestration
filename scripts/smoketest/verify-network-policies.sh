@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# verify-phase-2-network-policies.sh
+# verify-network-policies.sh
 #
 # Runtime verification for NetworkPolicy enforcement.
 # Proves that NetworkPolicy allowlists are enforced in the current Istio
@@ -20,7 +20,7 @@
 # Prerequisites: Tilt running with all services and network policies applied.
 #
 # Usage:
-#   ./scripts/smoketest/verify-phase-2-network-policies.sh
+#   ./scripts/smoketest/verify-network-policies.sh
 
 set -euo pipefail
 
@@ -50,7 +50,7 @@ BUDGET_ANALYZER_WEB_IP=""
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-2-network-policies.sh
+Usage: ./scripts/smoketest/verify-network-policies.sh
 
 Options:
   -h, --help                    Show this help text.

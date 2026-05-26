@@ -8,20 +8,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PROBE_NAMESPACE="default"
 INFRA_NAMESPACE="infrastructure"
-TEMP_LABEL_KEY="verify-phase7-temp"
+TEMP_LABEL_KEY="verify-runtime-security-guardrails-temp"
 TEMP_LABEL_VALUE="true"
-REDIS_PROBE_NAME="phase7-redis-acl-probe"
-POSTGRES_PROBE_NAME="phase7-postgresql-authz-probe"
-RABBITMQ_PROBE_NAME="phase7-rabbitmq-authz-probe"
+REDIS_PROBE_NAME="runtime-guardrails-redis-acl-probe"
+POSTGRES_PROBE_NAME="runtime-guardrails-postgresql-authz-probe"
+RABBITMQ_PROBE_NAME="runtime-guardrails-rabbitmq-authz-probe"
 REDIS_PROBE_IMAGE="redis:7-alpine@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6"
 POSTGRES_PROBE_IMAGE="postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50"
 RABBITMQ_PROBE_IMAGE="python:3.12-alpine@sha256:7747d47f92cfca63a6e2b50275e23dba8407c30d8ae929a88ddd49a5d3f2d331"
 WAIT_TIMEOUT="${PHASE7_WAIT_TIMEOUT:-120s}"
 REGRESSION_TIMEOUT="${PHASE7_REGRESSION_TIMEOUT:-35m}"
 RUN_ID="$(date +%s)"
-REDIS_ALLOWED_KEY="currency-service:phase7-runtime:${RUN_ID}"
-REDIS_DENIED_KEY="session:phase7-runtime:${RUN_ID}"
-RABBITMQ_TEMP_VHOST="phase7-runtime-${RUN_ID}"
+REDIS_ALLOWED_KEY="currency-service:runtime-guardrails:${RUN_ID}"
+REDIS_DENIED_KEY="session:runtime-guardrails:${RUN_ID}"
+RABBITMQ_TEMP_VHOST="runtime-guardrails-${RUN_ID}"
 RABBITMQ_FORBIDDEN_QUEUE="phase7.runtime.forbidden.queue.${RUN_ID}"
 RABBITMQ_FORBIDDEN_EXCHANGE="phase7.runtime.forbidden.exchange.${RUN_ID}"
 REDIS_CURRENCY_SERVICE_USERNAME="currency-service"
@@ -39,7 +39,7 @@ RABBITMQ_TEMP_VHOST_CREATED=false
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-phase-7-runtime-guardrails.sh
+Usage: ./scripts/smoketest/verify-runtime-security-guardrails.sh
 
 Options:
   -h, --help                    Show this help text.
@@ -209,7 +209,7 @@ metadata:
   namespace: ${PROBE_NAMESPACE}
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase7-role: redis
+    verify-runtime-security-guardrails-role: redis
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -249,7 +249,7 @@ metadata:
   namespace: ${PROBE_NAMESPACE}
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase7-role: postgresql
+    verify-runtime-security-guardrails-role: postgresql
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -289,7 +289,7 @@ metadata:
   namespace: ${PROBE_NAMESPACE}
   labels:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-    verify-phase7-role: rabbitmq
+    verify-runtime-security-guardrails-role: rabbitmq
   annotations:
     sidecar.istio.io/inject: "false"
 spec:
@@ -333,7 +333,7 @@ spec:
   podSelector:
     matchLabels:
       ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-      verify-phase7-role: redis
+      verify-runtime-security-guardrails-role: redis
   policyTypes:
     - Egress
   egress:
@@ -359,7 +359,7 @@ spec:
   podSelector:
     matchLabels:
       ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-      verify-phase7-role: postgresql
+      verify-runtime-security-guardrails-role: postgresql
   policyTypes:
     - Egress
   egress:
@@ -385,7 +385,7 @@ spec:
   podSelector:
     matchLabels:
       ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-      verify-phase7-role: rabbitmq
+      verify-runtime-security-guardrails-role: rabbitmq
   policyTypes:
     - Egress
   egress:
@@ -421,7 +421,7 @@ spec:
           podSelector:
             matchLabels:
               ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-              verify-phase7-role: redis
+              verify-runtime-security-guardrails-role: redis
       ports:
         - protocol: TCP
           port: 6379
@@ -447,7 +447,7 @@ spec:
           podSelector:
             matchLabels:
               ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-              verify-phase7-role: postgresql
+              verify-runtime-security-guardrails-role: postgresql
       ports:
         - protocol: TCP
           port: 5432
@@ -473,7 +473,7 @@ spec:
           podSelector:
             matchLabels:
               ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
-              verify-phase7-role: rabbitmq
+              verify-runtime-security-guardrails-role: rabbitmq
       ports:
         - protocol: TCP
           port: 5671
@@ -1006,7 +1006,7 @@ run_reused_regression_umbrella() {
         PHASE2_ALLOW_ATTEMPTS="${PHASE2_ALLOW_ATTEMPTS:-8}" \
         PHASE2_PROBE_STABILIZATION_SECONDS="${PHASE2_PROBE_STABILIZATION_SECONDS:-8}" \
         timeout --foreground --kill-after=10s "${REGRESSION_TIMEOUT}" \
-        "${SCRIPT_DIR}/verify-phase-6-edge-browser-hardening.sh"; then
+        "${SCRIPT_DIR}/verify-edge-browser-hardening.sh"; then
         pass_reused "Edge/browser hardening verifier passed and reran the runtime cascade plus the intended NetworkPolicy, ingress, and transport regressions"
         pass_reused "Auth-edge throttling and API rate-limit identity proofs remain intact under the runtime guardrail baseline"
     else

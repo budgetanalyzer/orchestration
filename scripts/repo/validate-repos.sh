@@ -21,6 +21,8 @@
 
 # Get script directory and source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=repo-config.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x from repo root.
 source "$SCRIPT_DIR/repo-config.sh"
 # Allow callers to exclude repos via EXCLUDE_REPOS (comma-separated)
 if [ -n "$EXCLUDE_REPOS" ]; then
@@ -68,7 +70,11 @@ for REPO in "${REPOS[@]}"; do
         continue
     fi
 
-    cd "$REPO_PATH"
+    cd "$REPO_PATH" || {
+        print_error "Failed to enter repository: $REPO_PATH"
+        VALIDATION_FAILED=1
+        continue
+    }
 
     # Check if on main branch
     CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -106,13 +112,13 @@ for REPO in "${REPOS[@]}"; do
         continue
     fi
 
-    if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
+    if ! REMOTE=$(git rev-parse '@{u}' 2>/dev/null); then
         print_error "No upstream branch configured for $REPO. Run: git branch --set-upstream-to=origin/main main"
         VALIDATION_FAILED=1
         continue
     fi
 
-    if ! BASE=$(git merge-base @ @{u} 2>/dev/null); then
+    if ! BASE=$(git merge-base @ '@{u}' 2>/dev/null); then
         print_error "Failed to find merge base for $REPO"
         VALIDATION_FAILED=1
         continue

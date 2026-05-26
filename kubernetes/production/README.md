@@ -85,18 +85,10 @@ kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsN
 ./deploy/scripts/secrets/render-secret-sync.sh
 ```
 
-The lower-level baseline renderer is still available when a complete schema v2
-desired-state manifest has already been reviewed:
-
-```bash
-./deploy/scripts/release/update-production-release-images.sh \
-  --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
-```
-
 The deployment manifest records deployment id, orchestration revision,
 per-artifact source refs, source commits, artifact versions, `service-common`
 versions for Java workloads, and digest-pinned image refs.
-The update helper copies the reviewed manifest to
+The local desired-state preparation command copies the reviewed manifest to
 `apps/deployment-manifest.yaml` and regenerates
 `docs-aggregator/release-metadata.json`,
 `kubernetes/production/docs-aggregator/release-metadata.json`, and

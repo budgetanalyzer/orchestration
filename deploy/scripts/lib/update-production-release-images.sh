@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/../lib/common.sh"
+source "${SCRIPT_DIR}/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
@@ -77,14 +77,15 @@ orchestration_source_ref=""
 usage() {
     cat <<'EOF'
 Usage:
-  ./deploy/scripts/release/update-production-release-images.sh \
+  update_production_release_images_main \
     --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 
 Options:
   --deployment-manifest PATH       Required schema_version: 2 deployment manifest.
   -h, --help                       Show this help.
 
-Updates the checked-in OCI production application image baseline from a
+Internal implementation for the OCI desired-state preparation command. Updates
+the checked-in OCI production application image baseline from a
 complete v2 deployment manifest. The manifest is the source of truth for
 deployment id, orchestration revision, per-artifact source refs, source
 commits, artifact versions, Java service-common versions, and digest-pinned
@@ -602,7 +603,7 @@ verify_updates() {
     "${STATIC_VERIFIER}"
 }
 
-main() {
+update_production_release_images_main() {
     parse_args "$@"
 
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || phase4_die "missing image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
@@ -621,5 +622,3 @@ main() {
     phase4_info "updated production deployment baseline to ${deployment_id}"
     phase4_info "review the diff before deploying to OCI"
 }
-
-main "$@"

@@ -45,7 +45,7 @@ for usage text or a recursive dispatch path.
 | `deploy/scripts/secrets/generate-infra-tls.sh` | `deploy/README.md` | yes | local certificate files, cluster secrets | continuing deployment; secret bootstrap |
 | `deploy/scripts/secrets/bootstrap-vault-secrets.sh` | `deploy/README.md`; calls `deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh` | yes | OCI Vault, local operator receipt | continuing deployment; secret bootstrap |
 | `deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh` | `deploy/README.md`; called by `deploy/scripts/secrets/bootstrap-vault-secrets.sh` | yes | OCI Vault | continuing deployment; secret bootstrap |
-| `deploy/scripts/render/production-routes.sh` | `deploy/README.md`; called by `deploy/scripts/release/deploy-oci-release.sh`; `kubernetes/production/README.md`; `scripts/guardrails/verify-production-image-overlay.sh` | yes | tmp | continuing deployment; production render |
+| `deploy/scripts/render/production-routes.sh` | `deploy/README.md`; called by the OCI manifest applier library; `kubernetes/production/README.md`; `scripts/guardrails/verify-production-image-overlay.sh` | yes | tmp | continuing deployment; production render |
 | `deploy/scripts/reconcile/install-kyverno.sh` | `deploy/README.md`; `kubernetes/kyverno/README.md`; `kubernetes/production/README.md` | yes | cluster | continuing deployment; admission bootstrap |
 | `deploy/scripts/reconcile/apply-admission-policies.sh` | `deploy/README.md`; `kubernetes/kyverno/README.md`; `kubernetes/production/README.md` | yes | cluster | continuing deployment; admission policy apply |
 | `deploy/scripts/render/public-tls.sh` | `deploy/README.md`; referenced by `deploy/scripts/bootstrap/04-install-istio.sh` | yes | tmp | continuing deployment; public TLS render |
@@ -54,10 +54,10 @@ for usage text or a recursive dispatch path.
 | `deploy/scripts/render/observability.sh` | `deploy/README.md`; called by `deploy/scripts/reconcile/observability.sh`; `kubernetes/production/README.md`; `scripts/guardrails/verify-production-image-overlay.sh` | yes | tmp | continuing deployment; observability render |
 | `deploy/scripts/reconcile/observability.sh` | `deploy/README.md`; called by `deploy/scripts/reconcile/production-monitoring.sh`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; observability apply |
 | `deploy/scripts/reconcile/production-monitoring.sh` | `deploy/README.md`; `kubernetes/production/README.md` | yes | cluster, tmp | continuing deployment; monitoring apply |
-| `deploy/scripts/release/update-production-release-images.sh` | `deploy/README.md`; called by `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`; `docs-aggregator/README.md`; `docs/ci-cd.md`; cleanup plan; `kubernetes/production/README.md`; `scripts/README.md` | lower-level | repo files, tmp | continuing deployment; baseline renderer |
-| `deploy/scripts/verify/oci-upgrade-lockstep.sh` | `deploy/README.md`; called by `deploy/scripts/release/update-production-release-images.sh`, `deploy/scripts/release/deploy-oci-release.sh`, and `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`; `docs/ci-cd.md`; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | none, tmp | verification |
-| `deploy/scripts/release/deploy-oci-release.sh` | `deploy/README.md`; called by `deploy/scripts/release/deploy-current-oci-manifest.sh`; `docs/ci-cd.md`; cleanup plan; `scripts/README.md` | lower-level | cluster, tmp | continuing deployment; lower-level applier |
-| `deploy/scripts/release/deploy-current-oci-manifest.sh` | `deploy/README.md`; called by `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`; `docs/ci-cd.md`; cleanup plan; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | cluster via `deploy/scripts/release/deploy-oci-release.sh`, tmp | continuing deployment; normal OCI apply |
+| `deploy/scripts/lib/update-production-release-images.sh` | sourced by `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | library | repo files, tmp | continuing deployment; baseline renderer implementation |
+| `deploy/scripts/verify/oci-upgrade-lockstep.sh` | `deploy/README.md`; called by the release baseline library, the OCI manifest applier library, and `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`; `docs/ci-cd.md`; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | none, tmp | verification |
+| `deploy/scripts/lib/deploy-oci-release.sh` | sourced by `deploy/scripts/release/deploy-current-oci-manifest.sh` | library | cluster, tmp | continuing deployment; lower-level applier implementation |
+| `deploy/scripts/release/deploy-current-oci-manifest.sh` | `deploy/README.md`; called by `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`; `docs/ci-cd.md`; cleanup plan; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | cluster via the OCI manifest applier library, tmp | continuing deployment; normal OCI apply |
 | `deploy/scripts/lib/common.sh` | sourced by nearly every shell script under `deploy/scripts/`; `deploy/README.md`; `scripts/README.md` | library | none directly | library |
 | `deploy/scripts/lib/version-contract.sh` | sourced by `deploy/scripts/lib/common.sh`; `scripts/guardrails/verify-static-security-manifests.sh`; `scripts/ops/capture-prometheus-operator-baseline.sh`; `scripts/smoketest/verify-monitoring-rendered-manifests.sh`; `deploy/README.md` | library | none | library; version contract |
 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | `deploy/README.md`; `docs/ci-cd.md`; `docs/runbooks/oci-release-deployment-checklist.md`; `kubernetes/production/README.md`; `scripts/README.md`; referenced by `scripts/repo/prepare-lockstep-release.sh` and `scripts/repo/prepare-service-release.sh` | yes | git tags/push in `--push-tags`, repo files in `--resolve-images`, tmp, GHCR reads | continuing deployment; normal local desired-state preparation |
@@ -92,13 +92,10 @@ for usage text or a recursive dispatch path.
 | `scripts/ops/render-istio-egress-config.sh` | `Tiltfile`; `deploy/scripts/render/production-routes.sh`; `docs/development/local-environment.md`; `docs/research/auth0-findings.md`; `docs/setup/auth0-setup.md`; Istio templates; `scripts/README.md` | yes | stdout/tmp; cluster with `--apply` | local ops and production render helper |
 | `scripts/ops/reset-databases.sh` | `scripts/README.md`; ADR context mention | yes | PostgreSQL data in cluster | local ops |
 | `scripts/ops/seed-ext-authz-session.sh` | `scripts/README.md`; called by several smoketests | yes | Redis data in cluster | local ops; test fixture |
-| `scripts/ops/show-pod-version-labels.sh` | `deploy/scripts/release/deploy-oci-release.sh`; `docs/runbooks/oci-release-deployment-checklist.md`; `scripts/README.md` | yes | none | local ops; production inspection |
+| `scripts/ops/show-pod-version-labels.sh` | OCI manifest applier library; `docs/runbooks/oci-release-deployment-checklist.md`; `scripts/README.md` | yes | none | local ops; production inspection |
 | `scripts/ops/start-observability-port-forwards.sh` | `AGENTS.md`; `docs/architecture/observability.md`; `docs/development/getting-started.md`; `docs/development/local-environment.md`; `scripts/README.md`; called by SSH tunnel helper | yes | local processes | local ops; observability access |
 | `scripts/ops/start-observability-ssh-tunnels.sh` | `deploy/README.md`; `docs/architecture/observability.md`; `kubernetes/production/README.md`; `scripts/README.md` | yes | local SSH process | local ops; production observability access |
 | `scripts/ops/triage-kiali-findings.sh` | `docs/architecture/observability.md`; `docs/runbooks/kiali-expected-warnings.md`; `scripts/README.md`; called by monitoring runtime and Prometheus operator verifiers | yes | tmp/output artifacts, local port-forward | local ops; observability triage |
-| `scripts/repo/checkout-main.sh` | cleanup plan; `scripts/README.md` | no | git checkout/pull in sibling repos | repo management; review candidate |
-| `scripts/repo/checkout-tag.sh` | cleanup plan; `scripts/README.md` | no | git checkout in sibling repos | repo management; review candidate |
-| `scripts/repo/generate-deployment-manifest.sh` | cleanup plan; `scripts/README.md` | lower-level | local manifest output under `tmp/` by default | release management; review candidate |
 | `scripts/repo/generate-unified-api-docs.sh` | `docs-aggregator/README.md`; `scripts/README.md`; ADR context mention | yes | repo docs, sibling web docs when present | repo management; docs/API generation |
 | `scripts/repo/prepare-lockstep-release.sh` | `scripts/README.md` | yes | none by default; delegates git tagging with `--tag` | release management |
 | `scripts/repo/prepare-service-release.sh` | `scripts/README.md` | yes | none by default; delegates git tagging with `--tag` | release management |
@@ -107,7 +104,7 @@ for usage text or a recursive dispatch path.
 | `scripts/repo/tag-lockstep-release.sh` | `scripts/README.md`; called by `prepare-lockstep-release.sh`; referenced by `tag-release.sh` | yes, explicit release helper | git tag/push in sibling repos | release management |
 | `scripts/repo/tag-release.sh` | `docs/ci-cd.md`; `scripts/README.md`; called by `prepare-service-release.sh`; referenced by service-common release helper | yes, explicit release helper | git tag/push in sibling repo | release management |
 | `scripts/repo/update-service-common-version.sh` | `scripts/README.md` | yes | sibling repo files | release management |
-| `scripts/repo/validate-repos.sh` | cleanup plan; `scripts/README.md`; ADR context mention | no | none by default; optional git checkout/pull with `--fix` or `--clean` | repo management; review candidate |
+| `scripts/repo/validate-repos.sh` | cleanup plan; `scripts/README.md`; ADR context mention | yes | none | repo management; read-only validation |
 | `scripts/smoketest/audit-frontend-csp.sh` | `docs/architecture/security-architecture.md`; `docs/development/local-environment.md`; called by `verify-edge-browser-hardening.sh` | no | none | verification; lower-level browser security audit |
 | `scripts/smoketest/smoketest.sh` | `docs/development/getting-started.md`; `scripts/README.md` | yes | delegates to verification scripts | verification; aggregate local smoke |
 | `scripts/smoketest/verify-clean-tilt-deployment-admission.sh` | `docs/architecture/observability.md`; `docs/development/getting-started.md`; `docs/tilt-kind-setup-guide.md`; `scripts/README.md`; called by `smoketest.sh`; referenced by Kiali triage | yes | cluster dry-run/probes, tmp | verification |
@@ -134,10 +131,8 @@ for usage text or a recursive dispatch path.
   the superseded release-manifest generator, the rejected host-redirect
   experiment executable, the completed one-time Redis migration helper, and the
   one-off GitHub repository-topic admin helper.
-- The broad git write helpers remain active only as documented repo-management
-  commands or review candidates: `checkout-main.sh`, `checkout-tag.sh`, and
-  the optional `--fix`/`--clean` paths in `validate-repos.sh`.
-- `deploy/scripts/release/update-production-release-images.sh` and
-  `deploy/scripts/release/deploy-oci-release.sh` have active wrapper callers and are
-  documented as lower-level repair/replay entry points, not normal operator
-  commands.
+- The broad git write helpers were deleted.
+- `scripts/repo/validate-repos.sh` is retained as read-only validation; the
+  former `--fix` and `--clean` modes now fail explicitly.
+- The lower-level OCI baseline renderer and manifest applier were converted to
+  non-executable libraries called by the normal release entry points.

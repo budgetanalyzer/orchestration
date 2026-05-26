@@ -12,14 +12,14 @@ REPO_ROOT="${PHASE4_REPO_ROOT}"
 PARENT_DIR="$(dirname "${REPO_ROOT}")"
 PRODUCTION_DEPLOYMENT_MANIFEST="${REPO_ROOT}/kubernetes/production/apps/deployment-manifest.yaml"
 PRODUCTION_IMAGE_INVENTORY="${REPO_ROOT}/kubernetes/production/apps/image-inventory.yaml"
-UPDATE_PRODUCTION_BASELINE="${SCRIPT_DIR}/update-production-release-images.sh"
+UPDATE_PRODUCTION_BASELINE_LIB="${SCRIPT_DIR}/../lib/update-production-release-images.sh"
 STATIC_VERIFIER="${SCRIPT_DIR}/../verify/oci-upgrade-lockstep.sh"
 DEPLOYMENT_OUTPUT_ROOT="${REPO_ROOT}/tmp/deployments"
 readonly REPO_ROOT
 readonly PARENT_DIR
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
 readonly PRODUCTION_IMAGE_INVENTORY
-readonly UPDATE_PRODUCTION_BASELINE
+readonly UPDATE_PRODUCTION_BASELINE_LIB
 readonly STATIC_VERIFIER
 readonly DEPLOYMENT_OUTPUT_ROOT
 
@@ -302,7 +302,7 @@ validate_repo_layout() {
 
     [[ -d "${service_common_repo}/.git" ]] || die "missing git repository: ${service_common_repo}"
     [[ -f "${PRODUCTION_IMAGE_INVENTORY}" ]] || die "missing production image inventory: ${PRODUCTION_IMAGE_INVENTORY}"
-    [[ -x "${UPDATE_PRODUCTION_BASELINE}" ]] || die "missing executable: ${UPDATE_PRODUCTION_BASELINE}"
+    [[ -f "${UPDATE_PRODUCTION_BASELINE_LIB}" ]] || die "missing release baseline library: ${UPDATE_PRODUCTION_BASELINE_LIB}"
     [[ -x "${STATIC_VERIFIER}" ]] || die "missing executable: ${STATIC_VERIFIER}"
 }
 
@@ -806,7 +806,13 @@ write_deployment_manifest() {
 update_production_desired_state() {
     local args=(--deployment-manifest "${deployment_output_path}")
 
-    "${UPDATE_PRODUCTION_BASELINE}" "${args[@]}"
+    bash -c '
+        set -euo pipefail
+        # shellcheck source=deploy/scripts/lib/update-production-release-images.sh
+        source "$1"
+        shift
+        update_production_release_images_main "$@"
+    ' bash "${UPDATE_PRODUCTION_BASELINE_LIB}" "${args[@]}"
 }
 
 verify_no_lifecycle_status_in_desired_state() {

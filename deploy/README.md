@@ -81,10 +81,11 @@ desired state.
 - `release/` owns local desired-state preparation and OCI application release
   helpers. The normal entry points are
   `release/prepare-oci-manifest-from-current-stack.sh` and
-  `release/deploy-current-oci-manifest.sh`; the explicit baseline update and
-  manifest replay helpers remain lower-level repair paths.
+  `release/deploy-current-oci-manifest.sh`; lower-level baseline update and
+  manifest replay implementation lives in `lib/` and is not a direct operator
+  surface.
 - `verify/` contains non-mutating or temporary-probe verifiers.
-- `lib/` contains sourced implementation shared by the deployment scripts.
+- `lib/` contains sourced helpers and internal deployment implementations.
 
 ## Review And Run Order
 
@@ -149,9 +150,7 @@ desired state.
 11. Review the production desired-state preparation and OCI apply helpers:
    - `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh`
    - `deploy/scripts/release/deploy-current-oci-manifest.sh`
-   - `deploy/scripts/release/update-production-release-images.sh`
    - `deploy/scripts/verify/oci-upgrade-lockstep.sh`
-   - `deploy/scripts/release/deploy-oci-release.sh`
    - `docs/runbooks/oci-release-deployment-checklist.md`
    - `kubernetes/production/apps/deployment-manifest.yaml`
    - `kubernetes/production/apps/image-inventory.yaml`
@@ -249,9 +248,7 @@ and the standard shell tools used by the scripts.
 | `deploy/scripts/reconcile/production-monitoring.sh` | Idempotently reapplies the production monitoring stack: the Prometheus/Grafana Helm baseline, Grafana dashboard ConfigMap, Spring Boot ServiceMonitor, and by default the existing Jaeger/Kiali apply path. | Re-run on OCI after monitoring values, dashboards, ServiceMonitors, Jaeger/Kiali manifests, or observability access contracts change. Use `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh and `--verify-runtime` to run the dashboard input verifier. |
 | `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` | Normal local OCI desired-state preparation entry point. It requires clean source workspaces, compares current artifact source state with the production image inventory, previews changed-artifact tag actions with `--plan-only`, creates and pushes missing `vX.Y.Z` source tags for changed artifacts with `--push-tags`, and reads already-published GHCR tags with `--resolve-images` to resolve digests, write a complete desired-state manifest, update the production image inventory, release metadata, runtime metadata patch, and app overlay, then stop for review. Use `--lockstep` only when every managed artifact must move to the requested tag. | Run from the local workstation before an OCI deployment. Missing GHCR image tags are a prerequisite failure in `--resolve-images`; wait for GitHub Actions manually instead of leaving the script in a polling loop. |
 | `deploy/scripts/release/deploy-current-oci-manifest.sh` | Normal OCI-host apply entry point. It applies the checked-in production manifest, validates manifest/inventory agreement, runs the static gate, applies the managed production app set with selective workload rollout, waits only for changed deployments, and verifies live runtime metadata against the checked-in manifest while allowing unchanged pods to retain an earlier deployment id. | Run on the OCI host after the reviewed orchestration desired-state diff has been pulled. |
-| `deploy/scripts/release/update-production-release-images.sh` | Lower-level renderer used by the preparation command. It updates the checked-in production deployment baseline from a complete schema v2 desired-state manifest, regenerates `/api-docs/release-metadata.json` and the runtime metadata patch, copies the reviewed manifest into `kubernetes/production/apps/deployment-manifest.yaml`, then runs the static agreement gate. | Use directly only when repairing the checked-in baseline from an already complete desired-state manifest. Java artifacts must carry `service_common_version`. |
 | `deploy/scripts/verify/oci-upgrade-lockstep.sh` | Runs non-mutating static checks that local Tilt chart pins match OCI version contracts; production deployment manifest, image inventory, app kustomization, runtime metadata patch, and release metadata agree; production `/api-docs` render wiring remains intact; and production infrastructure and Helm values keep digest-pin inputs. | Run before tagging or deploying an OCI release, and after any platform, app image, monitoring, production render, or config-only deployment change. |
-| `deploy/scripts/release/deploy-oci-release.sh` | Lower-level OCI desired-state applier. It requires a schema v2 `--deployment-manifest`, validates it against the checked-in production baseline, runs the static gate, captures pre/post cluster snapshots, applies the managed production app set with selective workload rollout, waits only for changed deployments, and verifies live pods against the manifest while allowing unchanged pods to retain an earlier deployment id. | Use directly only when replaying an explicit reviewed desired-state manifest. |
 
 External Secrets Operator values intentionally leave service account token
 automount enabled for the controller, webhook, and cert-controller pods. Those

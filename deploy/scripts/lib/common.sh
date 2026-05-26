@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 
+if [[ "${PHASE4_COMMON_LOADED:-}" == "1" ]]; then
+    # shellcheck disable=SC2317 # If executed instead of sourced, return fails and exit remains reachable.
+    return 0 2>/dev/null || exit 0
+fi
+PHASE4_COMMON_LOADED=1
+
 PHASE4_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PHASE4_REPO_ROOT="$(cd "${PHASE4_COMMON_DIR}/../../.." && pwd)"
+readonly PHASE4_COMMON_LOADED
 readonly PHASE4_COMMON_DIR
 readonly PHASE4_REPO_ROOT
 

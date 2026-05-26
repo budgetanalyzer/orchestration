@@ -104,23 +104,12 @@ scripts/
   entry point. It applies the checked-in production manifest, waits only for
   changed managed rollouts, and verifies live runtime metadata against that
   manifest.
-- `../deploy/scripts/release/update-production-release-images.sh` - Updates the
-  checked-in production app deployment baseline from a schema v2 deployment
-  manifest, then runs the static agreement gate. It is now a lower-level
-  renderer used by the local preparation command.
 - `../deploy/scripts/verify/oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
   OCI version contracts; production deployment manifest, image inventory, app
   kustomization, runtime metadata patch, and release metadata agreement;
   production `/api-docs` render wiring; and digest-pin inputs for production
   infrastructure and Helm values.
-- `../deploy/scripts/release/deploy-oci-release.sh` - Lower-level OCI deployment
-  desired-state applier. It requires a schema v2
-  `--deployment-manifest`, validates the checked-in production baseline, runs
-  the static gate, captures pre/post cluster snapshots under
-  `tmp/oci-release-deploy/`, applies the managed production app set, waits only
-  for changed rollouts, and prints the final
-  public-route and observability checklist.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -140,11 +129,6 @@ scripts/
   runtime image repos need the requested tag based on the current local HEADs,
   then rerun without `--plan-only` to tag only the missing repos and skip tags
   already pointing at current HEAD.
-- `repo/generate-deployment-manifest.sh` - Starts from the checked-in
-  production image inventory, preserves unchanged artifact digests, applies
-  explicit artifact/image metadata overrides, and writes a complete schema v2
-  deployment manifest for
-  `deploy/scripts/release/update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -384,8 +368,7 @@ directory without writing outside the repository.
 ## Repo Management
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
-  state.
-- `repo/checkout-main.sh` and `repo/checkout-tag.sh` help switch sibling repos.
+  state without changing branches or pulling.
 - `repo/prepare-lockstep-release.sh` is the release-manager source preflight
   for lockstep releases. Run it with `--release-version X.Y.Z` after
   `service-common` and Java consumers are pinned to the released
@@ -434,10 +417,6 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
-- `repo/generate-deployment-manifest.sh` is a lower-level schema v2 manifest
-  generator retained for reviewed baseline repair and historical workflows.
-  It now carries forward existing Java `service-common` metadata from the
-  production inventory.
 - `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` is the normal
   local desired-state preparation entry point for OCI app changes; use
   `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
@@ -446,13 +425,6 @@ directory without writing outside the repository.
 - `deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host apply
   entry point for the checked-in production manifest and waits only for changed
   managed rollouts.
-- `deploy/scripts/release/update-production-release-images.sh` consumes a complete
-  manifest to update the checked-in production deployment manifest, production
-  image inventory, production app image overlay, browser-visible
-  `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/release/deploy-oci-release.sh` consumes an explicit reviewed
-  deployment manifest, applies the managed production app set with selective
-  workload rollout, and verifies live runtime metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

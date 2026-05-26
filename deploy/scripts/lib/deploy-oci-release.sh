@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/../lib/common.sh"
+source "${SCRIPT_DIR}/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
@@ -53,9 +53,10 @@ declare -a UNCHANGED_DEPLOYMENTS=()
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/release/deploy-oci-release.sh --deployment-manifest PATH [options]
+Usage: deploy_oci_release_main --deployment-manifest PATH [options]
 
-OCI desired-state deployment applier.
+Internal implementation for the checked-in OCI desired-state deployment
+applier.
 
 Required:
   --deployment-manifest PATH
@@ -522,7 +523,7 @@ print_completion_checklist() {
     printf '  - From a workstation, verify: curl -fsS https://demo.budgetanalyzer.org/api-docs/release-metadata.json\n'
 }
 
-main() {
+deploy_oci_release_main() {
     parse_args "$@"
     load_deployment_manifest
     validate_manifest_matches_inventory
@@ -543,5 +544,3 @@ main() {
     capture_snapshot post-deploy
     print_completion_checklist
 }
-
-main "$@"

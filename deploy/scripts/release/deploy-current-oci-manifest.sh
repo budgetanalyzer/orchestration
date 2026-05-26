@@ -9,9 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_DEPLOYMENT_MANIFEST="$(phase4_repo_path "kubernetes/production/apps/deployment-manifest.yaml")"
-DEPLOY_OCI_RELEASE="${SCRIPT_DIR}/deploy-oci-release.sh"
+DEPLOY_OCI_RELEASE_LIB="${SCRIPT_DIR}/../lib/deploy-oci-release.sh"
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
-readonly DEPLOY_OCI_RELEASE
+readonly DEPLOY_OCI_RELEASE_LIB
 
 declare -a DEPLOY_ARGS=()
 
@@ -61,9 +61,12 @@ main() {
 
     [[ -f "${PRODUCTION_DEPLOYMENT_MANIFEST}" ]] || \
         die "missing checked-in production deployment manifest: ${PRODUCTION_DEPLOYMENT_MANIFEST}"
-    [[ -x "${DEPLOY_OCI_RELEASE}" ]] || die "missing executable: ${DEPLOY_OCI_RELEASE}"
+    [[ -f "${DEPLOY_OCI_RELEASE_LIB}" ]] || die "missing release deploy library: ${DEPLOY_OCI_RELEASE_LIB}"
 
-    exec "${DEPLOY_OCI_RELEASE}" \
+    # shellcheck source=deploy/scripts/lib/deploy-oci-release.sh
+    # shellcheck disable=SC1091 # Library path is resolved from SCRIPT_DIR at runtime.
+    source "${DEPLOY_OCI_RELEASE_LIB}"
+    deploy_oci_release_main \
         --deployment-manifest "${PRODUCTION_DEPLOYMENT_MANIFEST}" \
         "${DEPLOY_ARGS[@]}"
 }

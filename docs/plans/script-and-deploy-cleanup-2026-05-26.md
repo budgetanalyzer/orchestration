@@ -91,17 +91,20 @@ superseded release-manifest generator, the rejected host-redirect experiment
 executable, the completed one-time Redis StatefulSet migration helper, and the
 one-off GitHub repository-topic admin helper.
 
-Review these for deletion, narrowing, or conversion to read-only docs before
-renaming anything around them:
+The Phase 5 executable surface pass resolved the remaining review candidates:
+the broad checkout helpers and historical manifest generator were deleted,
+`validate-repos.sh` was narrowed to read-only validation, the lower-level OCI
+baseline renderer and manifest applier were converted to non-executable
+libraries, and sourced libraries were made non-executable.
 
-| Path | Concern |
+| Candidate | Resolution |
 | --- | --- |
-| `scripts/repo/checkout-main.sh` | Broad git write helper; conflicts with the repo norm that the user owns git workflow. |
-| `scripts/repo/checkout-tag.sh` | Broad git write helper; should not be a normal orchestration entry point. |
-| `scripts/repo/validate-repos.sh` | Current implementation has ShellCheck warnings and includes optional git write behavior through `--fix` / `--clean`. |
-| `scripts/repo/generate-deployment-manifest.sh` | Lower-level historical workflow; verify whether the current OCI preparation flow still needs it as a direct executable. |
-| `deploy/scripts/release/update-production-release-images.sh` | Lower-level renderer used by the preparation flow; consider folding into the normal preparation command or moving implementation into `deploy/scripts/lib/`. |
-| `deploy/scripts/release/deploy-oci-release.sh` | Lower-level applier used by the normal OCI-host command; consider folding into `deploy-current-oci-manifest.sh` or moving implementation into `deploy/scripts/lib/`. |
+| Broad all-repo branch checkout helper | Deleted. |
+| Broad all-repo tag checkout helper | Deleted. |
+| `scripts/repo/validate-repos.sh` | Retained as read-only validation; `--fix` and `--clean` now fail with an explicit removal message. |
+| Historical deployment-manifest generator | Deleted; the normal OCI preparation command owns schema v2 desired-state generation. |
+| Lower-level OCI production baseline renderer | Moved to `deploy/scripts/lib/` and called by the preparation entry point. |
+| Lower-level OCI manifest applier | Moved to `deploy/scripts/lib/` and called by the checked-in manifest apply entry point. |
 
 ## Work Plan
 
@@ -145,7 +148,7 @@ renaming anything around them:
 - Removed numeric prefixes from non-bootstrap deploy scripts.
 - Updated executable cross-calls and active documentation references.
 - Updated `deploy/README.md` to document the lifecycle layout, normal release
-  entry points, verification scripts, and lower-level repair/replay helpers.
+  entry points, verification scripts, and deployment library boundary.
 
 ### 4. Replace Legacy Phase Names
 
@@ -167,9 +170,12 @@ renaming anything around them:
 
 ### 5. Reduce Executable Surface
 
+**Status:** Complete.
+
 - Convert single-caller lower-level executables into sourced functions or
   internal implementation blocks where it reduces confusion.
-- Keep `scripts/lib/` and `deploy/scripts/lib/` for shared logic only.
+- Keep `scripts/lib/` and `deploy/scripts/lib/` limited to sourced helpers or
+  internal implementations, not standalone operator entry points.
 - Make sourced libraries non-executable.
 - Require every remaining executable script to have discoverable usage:
   `--help`, a usage function, or a clear README entry when it is not intended

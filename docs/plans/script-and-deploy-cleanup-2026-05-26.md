@@ -17,9 +17,9 @@ This plan covers cleanup of the orchestration repository's shell scripts and
 `deploy/` operator surface.
 
 The cleanup should remove obsolete one-off scripts, replace legacy phase-based
-names with domain names, clarify which deployment scripts are initial setup
-versus continuing deployment operations, and leave the repo with fewer scripts
-and clearer entry points.
+names with domain names, clarify which deployment scripts are cluster/platform
+bootstrap versus continuing deployment operations, and leave the repo with
+fewer scripts and clearer entry points.
 
 ## Non-Goals
 
@@ -64,7 +64,7 @@ Use domain directories for deployment operations:
 
 ```text
 deploy/scripts/
-├── initial/
+├── bootstrap/
 ├── secrets/
 ├── render/
 ├── reconcile/
@@ -118,8 +118,8 @@ renaming anything around them:
   - whether it is directly documented as a canonical entry point
   - whether it mutates local files, git state, cluster state, host state, OCI,
     or GitHub
-  - whether it is initial setup, continuing deployment, verification, local
-    ops, or one-time repair
+  - whether it is cluster/platform bootstrap, continuing deployment,
+    verification, local ops, or one-time repair
 - Ignore `docs/archive/` as an active caller.
 
 ### 2. Delete Confirmed Obsolete Scripts
@@ -138,13 +138,15 @@ renaming anything around them:
 
 - Move current normal deployment scripts into lifecycle directories.
 - Remove numeric prefixes where the script is not part of a strictly ordered
-  initial setup sequence.
-- Decide whether the initial setup scripts should remain numbered inside
-  `deploy/scripts/initial/` or be renamed with explicit verbs and documented
+  cluster/platform bootstrap sequence.
+- Move the early k3s, namespace/Gateway API, Istio, controller, and baseline
+  NetworkPolicy scripts under `deploy/scripts/bootstrap/`.
+- Decide whether bootstrap scripts should remain numbered inside
+  `deploy/scripts/bootstrap/` or be renamed with explicit verbs and documented
   ordering.
 - Update `deploy/README.md` so it clearly separates:
-  - initial instance setup
-  - secret/bootstrap operations
+  - cluster/platform bootstrap
+  - secret synchronization and secret bootstrap operations
   - continuing production deployments
   - production reconciliation
   - verification

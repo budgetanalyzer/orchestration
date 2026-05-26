@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 INSTALL_K3S_EXEC_FLAGS="--disable=traefik --disable=servicelb --disable=metrics-server --write-kubeconfig-mode=644"
 readonly INSTALL_K3S_EXEC_FLAGS

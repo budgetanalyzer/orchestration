@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE11_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-11"
 readonly PHASE11_RENDER_ROOT
@@ -15,7 +15,7 @@ readonly PHASE11_LOCKED_DEMO_DOMAIN
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/16-render-phase-11-public-tls-manifests.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/phase-11-public-tls-manifests.sh [--output-dir DIR]
 
 Renders the reviewed public TLS manifests into tmp/phase-11/ for
 operator review before apply.

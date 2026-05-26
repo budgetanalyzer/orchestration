@@ -100,8 +100,8 @@ renaming anything around them:
 | `scripts/repo/checkout-tag.sh` | Broad git write helper; should not be a normal orchestration entry point. |
 | `scripts/repo/validate-repos.sh` | Current implementation has ShellCheck warnings and includes optional git write behavior through `--fix` / `--clean`. |
 | `scripts/repo/generate-deployment-manifest.sh` | Lower-level historical workflow; verify whether the current OCI preparation flow still needs it as a direct executable. |
-| `deploy/scripts/23-update-production-release-images.sh` | Lower-level renderer used by the preparation flow; consider folding into the normal preparation command or moving implementation into `deploy/scripts/lib/`. |
-| `deploy/scripts/25-deploy-oci-release.sh` | Lower-level applier used by the normal OCI-host command; consider folding into `deploy-current-oci-manifest.sh` or moving implementation into `deploy/scripts/lib/`. |
+| `deploy/scripts/release/update-production-release-images.sh` | Lower-level renderer used by the preparation flow; consider folding into the normal preparation command or moving implementation into `deploy/scripts/lib/`. |
+| `deploy/scripts/release/deploy-oci-release.sh` | Lower-level applier used by the normal OCI-host command; consider folding into `deploy-current-oci-manifest.sh` or moving implementation into `deploy/scripts/lib/`. |
 
 ## Work Plan
 
@@ -135,21 +135,17 @@ renaming anything around them:
 
 ### 3. Normalize Deploy Script Layout
 
-- Move current normal deployment scripts into lifecycle directories.
-- Remove numeric prefixes where the script is not part of a strictly ordered
-  cluster/platform bootstrap sequence.
-- Move the early k3s, namespace/Gateway API, Istio, controller, and baseline
-  NetworkPolicy scripts under `deploy/scripts/bootstrap/`.
-- Decide whether bootstrap scripts should remain numbered inside
-  `deploy/scripts/bootstrap/` or be renamed with explicit verbs and documented
-  ordering.
-- Update `deploy/README.md` so it clearly separates:
-  - cluster/platform bootstrap
-  - secret synchronization and secret bootstrap operations
-  - continuing production deployments
-  - production reconciliation
-  - verification
-  - lower-level internal helpers, if any remain executable
+**Status:** Complete.
+
+- Moved deploy scripts into lifecycle directories:
+  `bootstrap/`, `secrets/`, `render/`, `reconcile/`, `release/`, and
+  `verify/`.
+- Kept numeric prefixes only for the strict bootstrap sequence under
+  `deploy/scripts/bootstrap/`.
+- Removed numeric prefixes from non-bootstrap deploy scripts.
+- Updated executable cross-calls and active documentation references.
+- Updated `deploy/README.md` to document the lifecycle layout, normal release
+  entry points, verification scripts, and lower-level repair/replay helpers.
 
 ### 4. Replace Legacy Phase Names
 

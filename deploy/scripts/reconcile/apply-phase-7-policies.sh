@@ -7,7 +7,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 POLICIES=(
     "kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml"

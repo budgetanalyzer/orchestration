@@ -92,7 +92,7 @@ scripts/
   Kyverno policy. It is non-mutating, but it requires a live
   `kubectl` context so the Kiali production render can use a Helm server-side
   dry run and capture the full namespace-scoped RBAC footprint.
-- `../deploy/scripts/prepare-oci-manifest-from-current-stack.sh` - Normal
+- `../deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` - Normal
   local OCI desired-state preparation entry point. It validates clean source
   workspaces, compares current artifact source state with the production image
   inventory, previews tag actions for changed artifacts, creates and pushes
@@ -100,21 +100,21 @@ scripts/
   publishes the expected GHCR tags, `--resolve-images` reads changed-artifact
   tags once, resolves digest-pinned refs, preserves unchanged artifact images,
   updates the checked-in production desired state, and stops for review.
-- `../deploy/scripts/deploy-current-oci-manifest.sh` - Normal OCI-host apply
+- `../deploy/scripts/release/deploy-current-oci-manifest.sh` - Normal OCI-host apply
   entry point. It applies the checked-in production manifest, waits only for
   changed managed rollouts, and verifies live runtime metadata against that
   manifest.
-- `../deploy/scripts/23-update-production-release-images.sh` - Updates the
+- `../deploy/scripts/release/update-production-release-images.sh` - Updates the
   checked-in production app deployment baseline from a schema v2 deployment
   manifest, then runs the static agreement gate. It is now a lower-level
   renderer used by the local preparation command.
-- `../deploy/scripts/24-verify-oci-upgrade-lockstep.sh` - Non-mutating static
+- `../deploy/scripts/verify/oci-upgrade-lockstep.sh` - Non-mutating static
   verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
   OCI version contracts; production deployment manifest, image inventory, app
   kustomization, runtime metadata patch, and release metadata agreement;
   production `/api-docs` render wiring; and digest-pin inputs for production
   infrastructure and Helm values.
-- `../deploy/scripts/25-deploy-oci-release.sh` - Lower-level OCI deployment
+- `../deploy/scripts/release/deploy-oci-release.sh` - Lower-level OCI deployment
   desired-state applier. It requires a schema v2
   `--deployment-manifest`, validates the checked-in production baseline, runs
   the static gate, captures pre/post cluster snapshots under
@@ -144,7 +144,7 @@ scripts/
   production image inventory, preserves unchanged artifact digests, applies
   explicit artifact/image metadata overrides, and writes a complete schema v2
   deployment manifest for
-  `deploy/scripts/23-update-production-release-images.sh`.
+  `deploy/scripts/release/update-production-release-images.sh`.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
 
@@ -227,7 +227,7 @@ Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:
 
 ```bash
-./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+./deploy/scripts/verify/oci-upgrade-lockstep.sh
 ```
 
 Use the live-cluster production verifier when a cluster is available:
@@ -347,7 +347,7 @@ the active context and Tilt resource state from the same host shell first.
   `configmaps`, service mutation, and pod-delete authority outside
   `monitoring` while retaining the documented cluster-read exceptions for
   `namespaces`, `nodes`, `ingresses`, and `storageclasses`.
-- `deploy/scripts/08-verify-network-policy-enforcement.sh` can run before
+- `deploy/scripts/verify/network-policy-enforcement.sh` can run before
   production Auth0 config exists, but in that pre-Auth0 state the two positive
   `istio-egress-gateway:443` checks are deferred until the real egress routing
   is rendered and applied later in the production plan.
@@ -438,19 +438,19 @@ directory without writing outside the repository.
   generator retained for reviewed baseline repair and historical workflows.
   It now carries forward existing Java `service-common` metadata from the
   production inventory.
-- `deploy/scripts/prepare-oci-manifest-from-current-stack.sh` is the normal
+- `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` is the normal
   local desired-state preparation entry point for OCI app changes; use
   `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
   steps. Add `--lockstep` only when every managed artifact should move to the
   requested tag instead of preserving unchanged artifacts.
-- `deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host apply
+- `deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host apply
   entry point for the checked-in production manifest and waits only for changed
   managed rollouts.
-- `deploy/scripts/23-update-production-release-images.sh` consumes a complete
+- `deploy/scripts/release/update-production-release-images.sh` consumes a complete
   manifest to update the checked-in production deployment manifest, production
   image inventory, production app image overlay, browser-visible
   `/api-docs/release-metadata.json`, and generated runtime metadata patch.
-- `deploy/scripts/25-deploy-oci-release.sh` consumes an explicit reviewed
+- `deploy/scripts/release/deploy-oci-release.sh` consumes an explicit reviewed
   deployment manifest, applies the managed production app set with selective
   workload rollout, and verifies live runtime metadata.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,

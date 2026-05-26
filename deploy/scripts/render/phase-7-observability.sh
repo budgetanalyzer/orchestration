@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE7_OBSERVABILITY_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-7-observability"
 readonly PHASE7_OBSERVABILITY_RENDER_ROOT
@@ -33,7 +33,7 @@ readonly KIALI_POST_RENDERER
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/20-render-phase-7-observability.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/phase-7-observability.sh [--output-dir DIR]
 
 Renders the reviewed production Jaeger and Kiali observability artifacts for
 operator review. The Kiali render uses a Helm server-side dry run against the

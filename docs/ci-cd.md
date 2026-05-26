@@ -102,14 +102,14 @@ review, and one OCI-host apply command:
 
 ```bash
 # Local workstation
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
 
 # After the owning GitHub Actions image workflows publish the expected GHCR tags
-./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
+./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
 
 # OCI host, after the orchestration diff is reviewed, committed, pushed, and pulled
-./deploy/scripts/deploy-current-oci-manifest.sh
+./deploy/scripts/release/deploy-current-oci-manifest.sh
 ```
 
 The local preparation command validates the expected sibling repositories,
@@ -352,16 +352,16 @@ Release image publishing is tag-driven and owned by the source repositories:
   per-artifact source refs, source commits, artifact versions,
   `service-common` versions for Java workloads, and digest-pinned GHCR image
   refs
-- `./deploy/scripts/23-update-production-release-images.sh
+- `./deploy/scripts/release/update-production-release-images.sh
   --deployment-manifest <path>` remains the lower-level baseline renderer used
   by the local preparation command
-- `./deploy/scripts/deploy-current-oci-manifest.sh` is the normal OCI-host
+- `./deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host
   apply command for the checked-in production manifest and waits only for
   changed managed rollouts
-- `./deploy/scripts/25-deploy-oci-release.sh` remains the lower-level OCI
+- `./deploy/scripts/release/deploy-oci-release.sh` remains the lower-level OCI
   applier for replaying an explicit reviewed desired-state manifest with
   selective workload rollout
-- `./deploy/scripts/24-verify-oci-upgrade-lockstep.sh` is the main static
+- `./deploy/scripts/verify/oci-upgrade-lockstep.sh` is the main static
   agreement gate for the checked-in production desired state: deployment
   manifest, image inventory, app kustomization, runtime metadata patch, and
   release metadata must agree before OCI apply

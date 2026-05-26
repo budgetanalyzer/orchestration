@@ -46,9 +46,9 @@ Use the checked-in operator surface for that path:
 - `deploy/helm-values/kyverno.values.yaml` pins the production controller
   replica counts, runtime-hardening values, and immutable digests for every
   rendered Kyverno controller and hook image.
-- `deploy/scripts/14-install-phase-7-kyverno.sh` installs the pinned chart
+- `deploy/scripts/reconcile/install-phase-7-kyverno.sh` installs the pinned chart
   version into the `kyverno` namespace with those reviewed values.
-- `deploy/scripts/15-apply-phase-7-policies.sh` runs
+- `deploy/scripts/reconcile/apply-phase-7-policies.sh` runs
   `./scripts/guardrails/verify-production-image-overlay.sh` first, then applies:
   - `policies/00-smoke-disallow-privileged.yaml`
   - `policies/10-require-namespace-pod-security-labels.yaml`

@@ -6,14 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE5_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-5"
 readonly PHASE5_RENDER_ROOT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/09-render-phase-5-secrets.sh [--output-dir DIR]
+Usage: ./deploy/scripts/secrets/render-phase-5-secrets.sh [--output-dir DIR]
 
 Renders the reviewed production secret-sync artifacts into a local output
 directory:

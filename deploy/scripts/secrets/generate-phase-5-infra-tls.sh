@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 SERVICES=(postgresql redis rabbitmq)
 DEFAULT_OUTPUT_DIR="${HOME}/.local/share/budget-analyzer/infra-tls"
@@ -21,7 +21,7 @@ trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/11-generate-phase-5-infra-tls.sh [options]
+Usage: ./deploy/scripts/secrets/generate-phase-5-infra-tls.sh [options]
 
 Generates the private production infrastructure CA and service certificates
 outside the repo, then applies the expected Kubernetes Secret objects:

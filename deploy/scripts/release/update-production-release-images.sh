@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
@@ -15,7 +15,7 @@ PRODUCTION_KUSTOMIZATION="${PRODUCTION_APPS_DIR}/kustomization.yaml"
 PRODUCTION_RUNTIME_METADATA_PATCH="${PRODUCTION_APPS_DIR}/patches/runtime-release-metadata.yaml"
 LOCAL_RELEASE_METADATA_JSON="$(phase4_repo_path "docs-aggregator/release-metadata.json")"
 PRODUCTION_RELEASE_METADATA_JSON="$(phase4_repo_path "kubernetes/production/docs-aggregator/release-metadata.json")"
-STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
+STATIC_VERIFIER="${SCRIPT_DIR}/../verify/oci-upgrade-lockstep.sh"
 readonly PRODUCTION_APPS_DIR
 readonly PRODUCTION_IMAGE_INVENTORY
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
@@ -77,7 +77,7 @@ orchestration_source_ref=""
 usage() {
     cat <<'EOF'
 Usage:
-  ./deploy/scripts/23-update-production-release-images.sh \
+  ./deploy/scripts/release/update-production-release-images.sh \
     --deployment-manifest tmp/deployments/oci-YYYYMMDD.N.yaml
 
 Options:

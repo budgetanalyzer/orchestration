@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_INFRASTRUCTURE_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/production-infrastructure"
 readonly PRODUCTION_INFRASTRUCTURE_RENDER_ROOT
@@ -19,7 +19,7 @@ readonly STATEFULSET_WAIT_TIMEOUT
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/18-apply-production-infrastructure.sh [--output-dir DIR]
+Usage: ./deploy/scripts/reconcile/production-infrastructure.sh [--output-dir DIR]
 
 Refreshes the reviewed production infrastructure render output, applies it to
 the current Kubernetes context, and waits for PostgreSQL, RabbitMQ, and Redis
@@ -68,7 +68,7 @@ main() {
     phase4_require_cluster_access
 
     phase4_info "refreshing the rendered production infrastructure manifest"
-    "${SCRIPT_DIR}/17-render-production-infrastructure.sh" --output-dir "${output_dir}" >/dev/null
+    "${SCRIPT_DIR}/../render/production-infrastructure.sh" --output-dir "${output_dir}" >/dev/null
 
     manifest_path="${output_dir}/${PRODUCTION_INFRASTRUCTURE_MANIFEST}"
     [[ -s "${manifest_path}" ]] || phase4_die "missing rendered production infrastructure manifest: ${manifest_path}"

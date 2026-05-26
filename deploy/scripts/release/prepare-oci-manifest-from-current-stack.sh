@@ -6,14 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 REPO_ROOT="${PHASE4_REPO_ROOT}"
 PARENT_DIR="$(dirname "${REPO_ROOT}")"
 PRODUCTION_DEPLOYMENT_MANIFEST="${REPO_ROOT}/kubernetes/production/apps/deployment-manifest.yaml"
 PRODUCTION_IMAGE_INVENTORY="${REPO_ROOT}/kubernetes/production/apps/image-inventory.yaml"
-UPDATE_PRODUCTION_BASELINE="${SCRIPT_DIR}/23-update-production-release-images.sh"
-STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
+UPDATE_PRODUCTION_BASELINE="${SCRIPT_DIR}/update-production-release-images.sh"
+STATIC_VERIFIER="${SCRIPT_DIR}/../verify/oci-upgrade-lockstep.sh"
 DEPLOYMENT_OUTPUT_ROOT="${REPO_ROOT}/tmp/deployments"
 readonly REPO_ROOT
 readonly PARENT_DIR
@@ -89,13 +89,13 @@ docker_label=""
 usage() {
     cat <<'EOF'
 Usage:
-  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
+  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh \
     --source-tag vX.Y.Z --plan-only
 
-  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
+  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh \
     --source-tag vX.Y.Z --push-tags [options]
 
-  ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh \
+  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh \
     --source-tag vX.Y.Z --resolve-images [options]
 
 Options:
@@ -849,7 +849,7 @@ print_tag_completion() {
     done
 
     printf '  2. Rerun:\n'
-    printf '     ./deploy/scripts/prepare-oci-manifest-from-current-stack.sh --source-tag %s' "${source_tag}"
+    printf '     ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag %s' "${source_tag}"
     if (( ${#scope_args[@]} > 0 )); then
         printf ' %s' "${scope_args[@]}"
     fi
@@ -864,7 +864,7 @@ print_completion() {
     printf '\nNext steps:\n'
     printf '  1. Review the orchestration diff.\n'
     printf '  2. Commit and push the orchestration desired-state update.\n'
-    printf '  3. On the OCI host, pull the repo and run deploy/scripts/deploy-current-oci-manifest.sh.\n'
+    printf '  3. On the OCI host, pull the repo and run deploy/scripts/release/deploy-current-oci-manifest.sh.\n'
 }
 
 main() {

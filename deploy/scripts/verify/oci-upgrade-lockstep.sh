@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 TILTFILE="$(phase4_repo_path "Tiltfile")"
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
@@ -75,7 +75,7 @@ TEMP_DIR=""
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/24-verify-oci-upgrade-lockstep.sh
+Usage: ./deploy/scripts/verify/oci-upgrade-lockstep.sh
 
 Runs static OCI lockstep checks before release or deployment work:
   - local Tilt chart pins match OCI phase version contracts

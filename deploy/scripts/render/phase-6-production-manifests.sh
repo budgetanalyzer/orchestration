@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE6_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-6"
 readonly PHASE6_RENDER_ROOT
@@ -15,7 +15,7 @@ readonly LOCKED_DEMO_DOMAIN
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/13-render-phase-6-production-manifests.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/phase-6-production-manifests.sh [--output-dir DIR]
 
 Renders the reviewed production gateway routes, Istio ingress
 policies, production Grafana port-forward override, and Istio egress

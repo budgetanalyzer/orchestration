@@ -9,7 +9,7 @@ readonly HELM_WAIT_TIMEOUT
 readonly PLATFORM_CONTROLLERS
 
 # shellcheck source=deploy/scripts/lib/common.sh
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 show_namespace_diagnostics() {
     local namespace="$1"

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE4_NETWORK_POLICY_PROBE_IMAGE="${PHASE4_NETWORK_POLICY_PROBE_IMAGE:-postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50}"
 readonly PHASE4_NETWORK_POLICY_PROBE_IMAGE
@@ -119,7 +119,7 @@ LISTENER_GRAFANA_IP=""
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/08-verify-network-policy-enforcement.sh
+Usage: ./deploy/scripts/verify/network-policy-enforcement.sh
 
 This verifier creates disposable probe and listener pods so the production ingress path can prove
 the checked-in NetworkPolicy contract on the current k3s cluster before any
@@ -220,11 +220,11 @@ require_network_policies() {
     egress_count="$(kubectl get networkpolicy -n istio-egress --no-headers 2>/dev/null | wc -l)"
     monitoring_count="$(kubectl get networkpolicy -n monitoring --no-headers 2>/dev/null | wc -l)"
 
-    [[ "${default_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace default; run deploy/scripts/07-apply-network-policies.sh first"
-    [[ "${infrastructure_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace infrastructure; run deploy/scripts/07-apply-network-policies.sh first"
-    [[ "${ingress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-ingress; run deploy/scripts/07-apply-network-policies.sh first"
-    [[ "${egress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-egress; run deploy/scripts/07-apply-network-policies.sh first"
-    [[ "${monitoring_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace monitoring; run deploy/scripts/07-apply-network-policies.sh first"
+    [[ "${default_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace default; run deploy/scripts/bootstrap/06-apply-network-policies.sh first"
+    [[ "${infrastructure_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace infrastructure; run deploy/scripts/bootstrap/06-apply-network-policies.sh first"
+    [[ "${ingress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-ingress; run deploy/scripts/bootstrap/06-apply-network-policies.sh first"
+    [[ "${egress_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace istio-egress; run deploy/scripts/bootstrap/06-apply-network-policies.sh first"
+    [[ "${monitoring_count}" -gt 0 ]] || phase4_die "no NetworkPolicy resources found in namespace monitoring; run deploy/scripts/bootstrap/06-apply-network-policies.sh first"
 
     phase4_info "found ${default_count} policies in default, ${infrastructure_count} in infrastructure, ${ingress_count} in istio-ingress, ${egress_count} in istio-egress, ${monitoring_count} in monitoring"
 }

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_INFRASTRUCTURE_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/production-infrastructure"
 readonly PRODUCTION_INFRASTRUCTURE_RENDER_ROOT
@@ -15,7 +15,7 @@ readonly PRODUCTION_INFRASTRUCTURE_MANIFEST
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/17-render-production-infrastructure.sh [--output-dir DIR]
+Usage: ./deploy/scripts/render/production-infrastructure.sh [--output-dir DIR]
 
 Renders the reviewed production infrastructure overlay for operator review.
 By default the manifest is written to:

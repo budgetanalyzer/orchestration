@@ -8,7 +8,7 @@ readonly HELM_WAIT_TIMEOUT
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PHASE7_OBSERVABILITY_RENDER_ROOT="${PHASE4_REPO_ROOT}/tmp/phase-7-observability"
 readonly PHASE7_OBSERVABILITY_RENDER_ROOT
@@ -27,7 +27,7 @@ readonly PRODUCTION_VERIFIER
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/21-apply-phase-7-observability.sh [--output-dir DIR]
+Usage: ./deploy/scripts/reconcile/phase-7-observability.sh [--output-dir DIR]
 
 Refreshes the reviewed production Jaeger/Kiali render output, applies the
 shared Jaeger manifests, installs Kiali with the checked-in pinned values, and
@@ -105,7 +105,7 @@ main() {
     require_service monitoring prometheus-stack-kube-prom-prometheus
 
     phase4_info "refreshing the reviewed production observability render output"
-    "${SCRIPT_DIR}/20-render-phase-7-observability.sh" --output-dir "${output_dir}" >/dev/null
+    "${SCRIPT_DIR}/../render/phase-7-observability.sh" --output-dir "${output_dir}" >/dev/null
 
     phase4_info "applying monitoring namespace and Jaeger manifests from ${output_dir}"
     kubectl apply -f "${output_dir}/monitoring-namespace.yaml"

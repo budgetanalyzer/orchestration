@@ -6,11 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_APPS_DIR="$(phase4_repo_path "kubernetes/production/apps")"
 PRODUCTION_IMAGE_INVENTORY="${PRODUCTION_APPS_DIR}/image-inventory.yaml"
-STATIC_VERIFIER="${SCRIPT_DIR}/24-verify-oci-upgrade-lockstep.sh"
+STATIC_VERIFIER="${SCRIPT_DIR}/../verify/oci-upgrade-lockstep.sh"
 POD_VERSION_LABELS_SCRIPT="$(phase4_repo_path "scripts/ops/show-pod-version-labels.sh")"
 SNAPSHOT_ROOT="$(phase4_repo_path "tmp/oci-release-deploy")"
 PHASE6_RENDER_ROOT="$(phase4_repo_path "tmp/phase-6")"
@@ -53,7 +53,7 @@ declare -a UNCHANGED_DEPLOYMENTS=()
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/25-deploy-oci-release.sh --deployment-manifest PATH [options]
+Usage: ./deploy/scripts/release/deploy-oci-release.sh --deployment-manifest PATH [options]
 
 OCI desired-state deployment applier.
 
@@ -491,7 +491,7 @@ run_application_phase() {
     local deployment
 
     info "running application phase"
-    run_cmd "${SCRIPT_DIR}/13-render-phase-6-production-manifests.sh"
+    run_cmd "${SCRIPT_DIR}/../render/phase-6-production-manifests.sh"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/gateway-routes.yaml"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-ingress-policies.yaml"
     run_cmd kubectl apply -f "${PHASE6_RENDER_ROOT}/istio-egress.yaml"

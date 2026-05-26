@@ -6,13 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 OUTPUT_DIR="${PHASE4_RENDER_ROOT}"
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/03-render-phase-4-istio-manifests.sh [--output-dir DIR]
+Usage: ./deploy/scripts/bootstrap/03-render-phase-4-istio-manifests.sh [--output-dir DIR]
 
 Renders the production ingress ConfigMap and Gateway manifests into
 tmp/phase-4/ for operator review.
@@ -56,4 +56,4 @@ phase4_render_template \
     "${OUTPUT_DIR}/istio-gateway.yaml"
 
 phase4_info "rendered ingress manifests into ${OUTPUT_DIR}"
-phase4_info "review these files before running deploy/scripts/04-install-istio.sh"
+phase4_info "review these files before running deploy/scripts/bootstrap/04-install-istio.sh"

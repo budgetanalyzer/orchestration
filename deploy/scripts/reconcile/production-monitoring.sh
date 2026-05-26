@@ -9,7 +9,7 @@ APPLY_JAEGER_KIALI=true
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 MONITORING_NAMESPACE="monitoring"
 readonly MONITORING_NAMESPACE
@@ -36,7 +36,7 @@ readonly MONITORING_RUNTIME_VERIFIER
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/22-apply-production-monitoring.sh [options]
+Usage: ./deploy/scripts/reconcile/production-monitoring.sh [options]
 
 Idempotently reapplies the production monitoring stack: Prometheus/Grafana,
 Grafana dashboards, Spring Boot ServiceMonitor, and by default the reviewed
@@ -134,7 +134,7 @@ main() {
 
     if [[ "${APPLY_JAEGER_KIALI}" == "true" ]]; then
         phase4_info "reapplying Jaeger and Kiali"
-        "${SCRIPT_DIR}/21-apply-phase-7-observability.sh"
+        "/phase-7-observability.sh"
     fi
 
     if [[ "${VERIFY_RUNTIME}" == "true" ]]; then

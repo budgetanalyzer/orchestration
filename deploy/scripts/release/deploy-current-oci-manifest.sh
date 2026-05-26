@@ -6,10 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # common.sh is resolved from SCRIPT_DIR at runtime.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 PRODUCTION_DEPLOYMENT_MANIFEST="$(phase4_repo_path "kubernetes/production/apps/deployment-manifest.yaml")"
-DEPLOY_OCI_RELEASE="${SCRIPT_DIR}/25-deploy-oci-release.sh"
+DEPLOY_OCI_RELEASE="${SCRIPT_DIR}/deploy-oci-release.sh"
 readonly PRODUCTION_DEPLOYMENT_MANIFEST
 readonly DEPLOY_OCI_RELEASE
 
@@ -18,7 +18,7 @@ declare -a DEPLOY_ARGS=()
 usage() {
     cat <<'EOF'
 Usage:
-  ./deploy/scripts/deploy-current-oci-manifest.sh [options]
+  ./deploy/scripts/release/deploy-current-oci-manifest.sh [options]
 
 Options:
   --kubeconfig PATH  Use an explicit OCI host kubeconfig.

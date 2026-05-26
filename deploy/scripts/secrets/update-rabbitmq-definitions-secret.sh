@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/common.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/../lib/common.sh"
 
 DEFAULT_GENERATED_ENV_FILE="${HOME}/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env"
 DEFAULT_OUTPUT_FILE="${HOME}/.local/share/budget-analyzer/vault-secrets/rabbitmq-definitions.json"
@@ -22,7 +22,7 @@ OUTPUT_FILE="${DEFAULT_OUTPUT_FILE}"
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy/scripts/12-update-rabbitmq-definitions-secret.sh [options]
+Usage: ./deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh [options]
 
 Renders deploy/manifests/phase-5/rabbitmq-definitions.template.json with the
 generated RabbitMQ passwords, validates the v0.0.14 destination contract, and
@@ -30,7 +30,7 @@ creates or updates the OCI Vault secret:
   budget-analyzer-rabbitmq-definitions
 
 Options:
-  --generated-env-file FILE  File created by 12-bootstrap-phase-5-vault-secrets.sh.
+  --generated-env-file FILE  File created by deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh.
                              Default: ~/.local/share/budget-analyzer/vault-secrets/phase-5-generated-secrets.env
   --output-file FILE         Rendered definitions file. Must stay outside the repo.
                              Default: ~/.local/share/budget-analyzer/vault-secrets/rabbitmq-definitions.json
@@ -61,7 +61,7 @@ prepare_output_path() {
 
 load_generated_secret_material() {
     [[ -f "${GENERATED_ENV_FILE}" ]] || \
-        phase4_die "missing generated secret material: ${GENERATED_ENV_FILE}; run deploy/scripts/12-bootstrap-phase-5-vault-secrets.sh first"
+        phase4_die "missing generated secret material: ${GENERATED_ENV_FILE}; run deploy/scripts/secrets/bootstrap-phase-5-vault-secrets.sh first"
 
     set -a
     # shellcheck disable=SC1090

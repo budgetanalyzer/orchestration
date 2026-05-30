@@ -294,24 +294,25 @@
         }
       }
     },
-    "/v1/statement-formats/{formatKey}": {
+    "/v1/statement-formats/{id}": {
       "get": {
         "tags": [
           "Statement Formats"
         ],
         "summary": "Get statement format details",
-        "description": "Returns details of a specific statement format by its format key.",
+        "description": "Returns details of a specific statement format by ID.",
         "operationId": "getFormat",
         "parameters": [
           {
-            "name": "formatKey",
+            "name": "id",
             "in": "path",
-            "description": "Unique format identifier",
+            "description": "Statement format ID",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             },
-            "example": "capital-one"
+            "example": 123
           }
         ],
         "responses": {
@@ -374,18 +375,19 @@
           "Statement Formats"
         ],
         "summary": "Update a statement format",
-        "description": "Updates an existing statement format. Only provided fields will be updated. The format key and format type cannot be changed after creation.",
+        "description": "Updates an existing statement format. Only provided fields will be updated. The ID, scope, owner, and format type cannot be changed after creation.",
         "operationId": "updateFormat",
         "parameters": [
           {
-            "name": "formatKey",
+            "name": "id",
             "in": "path",
-            "description": "Unique format identifier",
+            "description": "Statement format ID",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             },
-            "example": "capital-one"
+            "example": 123
           }
         ],
         "requestBody": {
@@ -1167,18 +1169,19 @@
           "Transactions"
         ],
         "summary": "Preview transactions from a file before import",
-        "description": "Parses a CSV or PDF file and returns the extracted transactions for review and editing before batch import. No data is persisted. The format parameter is required and determines which parser to use. The response includes advisory duplicate metadata using strict owner-scoped financial identity fields plus normalized exact or conservative fuzzy description matching against existing transactions or earlier rows in the same preview payload, plus file-level import history status for exact reuploads by the authenticated user.",
+        "description": "Parses a CSV or PDF file and returns the extracted transactions for review and editing before batch import. No data is persisted. The statementFormatId parameter is required and determines which parser to use. The response includes advisory duplicate metadata using strict owner-scoped financial identity fields plus normalized exact or conservative fuzzy description matching against existing transactions or earlier rows in the same preview payload, plus file-level import history status for exact reuploads by the authenticated user.",
         "operationId": "previewTransactions",
         "parameters": [
           {
-            "name": "format",
+            "name": "statementFormatId",
             "in": "query",
-            "description": "Format key (e.g., 'capital-one-yearly' for PDF, 'capital-one' for CSV). Use GET /v1/statement-formats to list available formats.",
+            "description": "Statement format ID selected from GET /v1/statement-formats. Use GET /v1/statement-formats to list available formats.",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             },
-            "example": "capital-one-yearly"
+            "example": 123
           },
           {
             "name": "accountId",
@@ -1231,11 +1234,11 @@
                 },
                 "examples": {
                   "Format Not Supported": {
-                    "summary": "Invalid format parameter",
+                    "summary": "Invalid statement format selection",
                     "description": "Format Not Supported",
                     "value": {
                       "type": "APPLICATION_ERROR",
-                      "message": "Format not supported: fake-bank",
+                      "message": "Statement format has no supported parser revision: 999",
                       "code": "FORMAT_NOT_SUPPORTED"
                     }
                   },
@@ -1583,22 +1586,295 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Business rule violation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiErrorResponse"
                 },
-                "examples": {
-                  "Duplicate Format Key": {
-                    "summary": "Format key already exists",
-                    "description": "Duplicate Format Key",
-                    "value": {
-                      "type": "APPLICATION_ERROR",
-                      "message": "Format key already exists: capital-one",
-                      "code": "FORMAT_KEY_ALREADY_EXISTS"
-                    }
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/statement-formats/csv-wizard/save": {
+      "post": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Save a CSV wizard statement format",
+        "description": "Validates the confirmed mapping against the sample CSV and creates a user-scoped CSV statement format with one enabled CSV_COLUMN_CONFIG parser revision.",
+        "operationId": "saveCsvWizardFormat",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/CsvWizardSaveRequest"
                   }
+                },
+                "required": [
+                  "file",
+                  "request"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementFormatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Mapping validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/statement-formats/csv-wizard/preview": {
+      "post": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Preview a CSV wizard mapping",
+        "description": "Parses read-only transaction preview rows from a multipart CSV sample and confirmed mapping. This does not create a statement format, preview token, file import, or transactions.",
+        "operationId": "previewCsvMapping",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/CsvWizardMappingPreviewRequest"
+                  }
+                },
+                "required": [
+                  "file",
+                  "request"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvWizardPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Mapping validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INTERNAL_ERROR",
+                  "message": "Internal Server Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "SERVICE_UNAVAILABLE",
+                  "message": "Service Unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/statement-formats/csv-wizard/analyze": {
+      "post": {
+        "tags": [
+          "Statement Formats"
+        ],
+        "summary": "Analyze a CSV sample for statement format creation",
+        "description": "Parses a multipart CSV sample, returns headers and sample rows, and infers an initial CSV column mapping without persisting the uploaded file or creating import state.",
+        "operationId": "analyzeCsvSample",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvWizardAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CSV parsing or analysis error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
                 }
               }
             }
@@ -3818,41 +4094,6 @@
             "maxLength": 3,
             "minLength": 3
           },
-          "dateHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "dateFormat": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "descriptionHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "creditHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "debitHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "typeHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
-          "categoryHeader": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0
-          },
           "enabled": {
             "type": "boolean"
           }
@@ -3864,9 +4105,6 @@
           "id": {
             "type": "integer",
             "format": "int64"
-          },
-          "formatKey": {
-            "type": "string"
           },
           "displayName": {
             "type": "string"
@@ -3885,25 +4123,14 @@
           "defaultCurrencyIsoCode": {
             "type": "string"
           },
-          "dateHeader": {
-            "type": "string"
+          "scope": {
+            "type": "string",
+            "enum": [
+              "SYSTEM",
+              "USER"
+            ]
           },
-          "dateFormat": {
-            "type": "string"
-          },
-          "descriptionHeader": {
-            "type": "string"
-          },
-          "creditHeader": {
-            "type": "string"
-          },
-          "debitHeader": {
-            "type": "string"
-          },
-          "typeHeader": {
-            "type": "string"
-          },
-          "categoryHeader": {
+          "ownerId": {
             "type": "string"
           },
           "enabled": {
@@ -4044,10 +4271,11 @@
             "description": "Original filename of the uploaded file",
             "example": "cap-one-2024.csv"
           },
-          "detectedFormat": {
-            "type": "string",
-            "description": "Detected format key used for parsing (informational)",
-            "example": "capital-one-ytd"
+          "statementFormatId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Statement format ID used for parsing",
+            "example": 123
           },
           "previewImportToken": {
             "type": "string",
@@ -4067,10 +4295,10 @@
           }
         },
         "required": [
-          "detectedFormat",
           "fileImport",
           "previewImportToken",
           "sourceFile",
+          "statementFormatId",
           "transactions"
         ]
       },
@@ -4123,7 +4351,7 @@
           },
           "accountId": {
             "type": "string",
-            "description": "Account identifier. Null and empty values are equivalent for duplicate detection.",
+            "description": "Account identifier. This value is included in the preview row but is not used for duplicate detection.",
             "example": "checking-12345"
           },
           "duplicate": {
@@ -4166,10 +4394,11 @@
             "description": "Timestamp when the previous import completed",
             "example": "2026-05-01T12:34:56Z"
           },
-          "format": {
-            "type": "string",
-            "description": "Format key used for the previous import",
-            "example": "capital-one"
+          "statementFormatId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Statement format ID used for the previous import",
+            "example": 123
           },
           "accountId": {
             "type": "string",
@@ -4184,9 +4413,9 @@
           }
         },
         "required": [
-          "format",
           "importedAt",
           "originalFilename",
+          "statementFormatId",
           "transactionCount"
         ]
       },
@@ -4310,7 +4539,7 @@
           },
           "accountId": {
             "type": "string",
-            "description": "Account identifier. Null and empty values are equivalent for duplicate detection.",
+            "description": "Account identifier. This value is stored with the transaction but is not used for duplicate detection.",
             "example": "checking-12345"
           },
           "allowDuplicate": {
@@ -4450,12 +4679,6 @@
       "CreateStatementFormatRequest": {
         "type": "object",
         "properties": {
-          "formatKey": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 0,
-            "pattern": "^[a-z0-9-]+$"
-          },
           "displayName": {
             "type": "string",
             "maxLength": 100,
@@ -4478,6 +4701,13 @@
             "type": "string",
             "maxLength": 3,
             "minLength": 3
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "SYSTEM",
+              "USER"
+            ]
           },
           "dateHeader": {
             "type": "string",
@@ -4519,9 +4749,263 @@
           "bankName",
           "defaultCurrencyIsoCode",
           "displayName",
-          "formatKey",
           "formatType"
         ]
+      },
+      "CsvWizardColumnMappingRequest": {
+        "type": "object",
+        "description": "User-confirmed CSV column mapping for statement format creation",
+        "properties": {
+          "dateColumn": {
+            "type": "string",
+            "description": "CSV column containing transaction dates",
+            "example": "Date",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "dateFormat": {
+            "type": "string",
+            "description": "Java DateTimeFormatter pattern for dateColumn",
+            "example": "MM/dd/uu",
+            "maxLength": 50,
+            "minLength": 0
+          },
+          "descriptionColumn": {
+            "type": "string",
+            "description": "CSV column containing transaction descriptions",
+            "example": "Memo",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "amountMode": {
+            "type": "string",
+            "description": "Amount mapping mode",
+            "enum": [
+              "SINGLE_AMOUNT_WITH_TYPE",
+              "DEBIT_CREDIT_COLUMNS"
+            ],
+            "example": "SINGLE_AMOUNT_WITH_TYPE"
+          },
+          "amountColumn": {
+            "type": "string",
+            "description": "Amount column for SINGLE_AMOUNT_WITH_TYPE",
+            "example": "Amount",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "debitColumn": {
+            "type": "string",
+            "description": "Debit amount column for DEBIT_CREDIT_COLUMNS",
+            "example": "Debit",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "creditColumn": {
+            "type": "string",
+            "description": "Credit amount column for DEBIT_CREDIT_COLUMNS",
+            "example": "Credit",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "typeColumn": {
+            "type": "string",
+            "description": "Credit/debit type column for SINGLE_AMOUNT_WITH_TYPE",
+            "example": "Type",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "categoryColumn": {
+            "type": "string",
+            "description": "Optional category column",
+            "example": "Category",
+            "maxLength": 100,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "amountMode"
+        ]
+      },
+      "CsvWizardSaveRequest": {
+        "type": "object",
+        "description": "CSV wizard save request",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "Display name for the saved statement format",
+            "example": "Example CSV",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "bankName": {
+            "type": "string",
+            "description": "Bank name for transactions parsed by this format",
+            "example": "Example Bank",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "defaultCurrencyIsoCode": {
+            "type": "string",
+            "description": "Default ISO 4217 currency code",
+            "example": "USD",
+            "maxLength": 3,
+            "minLength": 3
+          },
+          "mapping": {
+            "$ref": "#/components/schemas/CsvWizardColumnMappingRequest",
+            "description": "Confirmed CSV column mapping"
+          }
+        },
+        "required": [
+          "bankName",
+          "defaultCurrencyIsoCode",
+          "displayName",
+          "mapping"
+        ]
+      },
+      "CsvWizardMappingPreviewRequest": {
+        "type": "object",
+        "description": "CSV wizard parser preview request",
+        "properties": {
+          "bankName": {
+            "type": "string",
+            "description": "Bank name to place on preview rows",
+            "example": "Example Bank",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "defaultCurrencyIsoCode": {
+            "type": "string",
+            "description": "Default ISO 4217 currency code",
+            "example": "USD",
+            "maxLength": 3,
+            "minLength": 3
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Optional account ID to place on preview rows",
+            "example": "checking-001",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "mapping": {
+            "$ref": "#/components/schemas/CsvWizardColumnMappingRequest",
+            "description": "Confirmed CSV column mapping"
+          }
+        },
+        "required": [
+          "bankName",
+          "defaultCurrencyIsoCode",
+          "mapping"
+        ]
+      },
+      "CsvWizardPreviewResponse": {
+        "type": "object",
+        "description": "CSV wizard read-only parser preview response",
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewTransactionResponse"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvWizardWarningResponse"
+            }
+          }
+        }
+      },
+      "CsvWizardWarningResponse": {
+        "type": "object",
+        "description": "CSV wizard warning",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CsvWizardAnalysisResponse": {
+        "type": "object",
+        "description": "CSV wizard sample analysis response",
+        "properties": {
+          "headers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sampleRows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "inferredMapping": {
+            "$ref": "#/components/schemas/CsvWizardColumnMappingResponse"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "columnConfidences": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvWizardWarningResponse"
+            }
+          }
+        }
+      },
+      "CsvWizardColumnMappingResponse": {
+        "type": "object",
+        "description": "CSV wizard column mapping",
+        "properties": {
+          "dateColumn": {
+            "type": "string"
+          },
+          "dateFormat": {
+            "type": "string"
+          },
+          "descriptionColumn": {
+            "type": "string"
+          },
+          "amountMode": {
+            "type": "string",
+            "enum": [
+              "SINGLE_AMOUNT_WITH_TYPE",
+              "DEBIT_CREDIT_COLUMNS"
+            ]
+          },
+          "amountColumn": {
+            "type": "string"
+          },
+          "debitColumn": {
+            "type": "string"
+          },
+          "creditColumn": {
+            "type": "string"
+          },
+          "typeColumn": {
+            "type": "string"
+          },
+          "categoryColumn": {
+            "type": "string"
+          }
+        }
       },
       "TransactionUpdateRequest": {
         "type": "object",

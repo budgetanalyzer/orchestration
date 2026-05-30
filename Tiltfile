@@ -325,9 +325,9 @@ deployment["runtime"] = "tilt"
 for artifact in metadata.get("artifacts", {}).values():
     artifact["localSource"] = local_source_state(artifact)
 
-with output_path.open("w", encoding="utf-8") as output:
-    json.dump(metadata, output, indent=2)
-    output.write("\\n")
+rendered = json.dumps(metadata, indent=2) + "\\n"
+if not output_path.exists() or output_path.read_text(encoding="utf-8") != rendered:
+    output_path.write_text(rendered, encoding="utf-8")
 PY
 """, quiet=True)
 

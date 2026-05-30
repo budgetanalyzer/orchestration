@@ -135,11 +135,12 @@ The current local platform baseline still works like this:
 5. It applies pinned Gateway API CRDs, configures local DNS plus
    browser-facing and internal transport TLS, and prepares `.env`.
 
-During the Calico reconciliation step, the repo also converges the Kind node
-inotify budget used by Kubernetes log-follow paths. Tilt log streaming and
-`kubectl logs -f` use Kubernetes follow mode; on Kind this can allocate
-fsnotify watchers on the Kubernetes node, even when plain `kubectl logs` still
-works and the workload is healthy. The local baseline is:
+Tilt runs `./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on every
+`tilt up` before workload resources start. The Calico reconciliation script
+uses the same helper. Tilt log streaming and `kubectl logs -f` use Kubernetes
+follow mode; on Kind this can allocate fsnotify watchers on the Kubernetes
+node, even when plain `kubectl logs` still works and the workload is healthy.
+The local baseline is:
 
 ```text
 fs.inotify.max_user_instances >= 8192
@@ -148,10 +149,11 @@ fs.inotify.max_user_watches >= 524288
 
 Run `./scripts/bootstrap/check-tilt-prerequisites.sh` for read-only visibility
 into the host/container values and any reachable Kind node values. If a Kind
-node is below baseline, run `./scripts/bootstrap/install-calico.sh` to reconcile
-it. A one-off `docker exec kind-control-plane sysctl ...` can recover a live
-cluster during diagnosis, but the durable repo-owned fix is the Calico bootstrap
-script.
+node is below baseline in a running Tilt session, trigger the
+`kind-node-inotify-budget` Tilt resource or run
+`./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on the host. A one-off
+`docker exec kind-control-plane sysctl ...` can recover a live cluster during
+diagnosis, but the repo-owned fix is the Tilt preflight helper.
 
 Tilt is the local secret producer for infrastructure credentials and the local
 renderer for non-secret Session Gateway Auth0 config. Kubernetes manifests keep
@@ -651,10 +653,12 @@ budget:
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-If the Kind node values are below the local baseline, reconcile them with:
+If the Kind node values are below the local baseline in a running Tilt session,
+trigger the `kind-node-inotify-budget` Tilt resource or reconcile them on the
+host with:
 
 ```bash
-./scripts/bootstrap/install-calico.sh
+./scripts/bootstrap/reconcile-kind-inotify-budget.sh
 ```
 
 Do not patch service manifests or application environment variables for this

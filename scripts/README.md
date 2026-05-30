@@ -162,11 +162,15 @@ Choose scripts by runtime boundary:
   used by `setup.sh` and Tilt. Tilt reruns the host-only
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
   so namespace recreation cannot leave the infrastructure TLS secrets missing.
+- `bootstrap/reconcile-kind-inotify-budget.sh` raises low Kind node inotify
+  values used by Kubernetes log-follow streams. Tilt runs it as
+  `kind-node-inotify-budget` on every `tilt up` before workload resources
+  start.
 - `bootstrap/install-calico.sh` installs or reconciles pinned Calico CNI for
-  Kind clusters created with `disableDefaultCNI`. It also converges the Kind
-  node inotify budget used by Tilt and `kubectl logs -f` Kubernetes follow
-  streams. A live `docker exec kind-control-plane sysctl ...` recovery command
-  is diagnostic only; rerun this script for the durable local fix.
+  Kind clusters created with `disableDefaultCNI`. It also uses the inotify
+  reconciliation helper. A live `docker exec kind-control-plane sysctl ...`
+  recovery command is diagnostic only; use the helper or Tilt resource for the
+  durable local fix.
 - `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
   certificate bootstrap scripts. Do not run them from an AI container because
   the browser must trust the host mkcert CA.

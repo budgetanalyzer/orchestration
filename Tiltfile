@@ -46,6 +46,13 @@ docker_prune_settings(
 # INFRASTRUCTURE SERVICES (Shared Kubernetes Baseline)
 # ============================================================================
 
+local_resource(
+    'kind-node-inotify-budget',
+    cmd='./scripts/bootstrap/reconcile-kind-inotify-budget.sh',
+    deps=['scripts/bootstrap/reconcile-kind-inotify-budget.sh'],
+    labels=['infrastructure'],
+)
+
 # PostgreSQL, Redis, RabbitMQ, and generated Redis ACL bootstrap ConfigMap
 k8s_yaml(kustomize('kubernetes/infrastructure'))
 
@@ -53,6 +60,7 @@ k8s_resource(
     objects=['infrastructure:namespace'],
     new_name='infrastructure-namespace',
     labels=['infrastructure'],
+    resource_deps=['kind-node-inotify-budget'],
 )
 
 local_resource(
@@ -508,6 +516,7 @@ local_resource(
         'tilt trigger permission-service-compile && ' +
         'tilt trigger session-gateway-compile',
     deps=service_common_publish_deps(get_repo_path('service-common')),
+    resource_deps=['kind-node-inotify-budget'],
     labels=['compile'],
     allow_parallel=True,
     auto_init=True
@@ -740,6 +749,7 @@ local_resource(
     'budget-analyzer-web-prod-smoke-build',
     cmd=frontend_smoke_build_command(frontend_repo, frontend_smoke_staging_dir),
     deps=frontend_smoke_build_deps(frontend_repo),
+    resource_deps=['kind-node-inotify-budget'],
     labels=['frontend'],
 )
 
@@ -923,6 +933,7 @@ local_resource(
 local_resource(
     'gateway-api-crds',
     cmd='. scripts/lib/pinned-tool-versions.sh && kubectl apply -f "$(phase7_gateway_api_manifest_url)"',
+    resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
 
@@ -940,6 +951,7 @@ local_resource(
             --version 1.29.2 \
             --wait
     ''',
+    resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
 
@@ -1087,6 +1099,7 @@ local_resource(
     'monitoring-namespace',
     cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
     deps=['kubernetes/monitoring/namespace.yaml'],
+    resource_deps=['kind-node-inotify-budget'],
     labels=['monitoring'],
 )
 
@@ -1220,6 +1233,7 @@ local_resource(
 local_resource(
     'mkcert-tls-secret',
     cmd='./scripts/bootstrap/setup-k8s-tls.sh',
+    resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
 
@@ -1235,6 +1249,7 @@ local_resource(
         kubectl delete gatewayclass envoy-proxy --ignore-not-found || true
         kubectl delete envoyproxy kind-proxy-config -n envoy-gateway-system --ignore-not-found || true
     ''',
+    resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
 

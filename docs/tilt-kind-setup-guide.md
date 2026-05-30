@@ -117,7 +117,7 @@ That baseline does three important things:
 - pins the Kind node image for reproducibility
 - maps HTTPS traffic through the repo's ingress contract
 - reconciles the Kind node inotify budget required by Kubernetes log-follow
-  streams
+  streams during bootstrap and on every `tilt up`
 
 Useful checks:
 
@@ -133,11 +133,12 @@ kubectl get daemonset calico-node -n kube-system
 Tilt log streaming and `kubectl logs -f` use Kubernetes follow mode, which can
 allocate fsnotify watchers on the Kubernetes node. If follow mode fails with
 `failed to create fsnotify watcher: too many open files`, plain
-`kubectl logs` may still work and the workload may still be healthy. The durable
-local fix is:
+`kubectl logs` may still work and the workload may still be healthy. Tilt runs
+the durable local fix as the `kind-node-inotify-budget` resource on every
+`tilt up`; for a running session, trigger that resource or run:
 
 ```bash
-./scripts/bootstrap/install-calico.sh
+./scripts/bootstrap/reconcile-kind-inotify-budget.sh
 ```
 
 That script raises low Kind node values for both

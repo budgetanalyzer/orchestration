@@ -55,6 +55,10 @@ handle_unexpected_error() {
     exit "$exit_code"
 }
 
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+
 require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         print_error_stderr "$1 is required but not installed."
@@ -137,8 +141,10 @@ fetch_service_spec() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/docs-aggregator"
+TMP_DIR="$(mktemp -d)"
 
 trap 'handle_unexpected_error "$?" "$LINENO"' ERR
+trap cleanup EXIT
 
 print_info "Generating unified OpenAPI specification..."
 
@@ -163,17 +169,30 @@ fi
 print_success "✓ Fetched Permission Service spec"
 
 # Filter out /internal/* routes and Internal* schemas from all specs — those are service-to-service only
-BUDGET_SPEC=$(echo "$BUDGET_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
-CURRENCY_SPEC=$(echo "$CURRENCY_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
-PERMISSION_SPEC=$(echo "$PERMISSION_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))')
+BUDGET_SPEC_FILE="$TMP_DIR/transaction-service-openapi.json"
+CURRENCY_SPEC_FILE="$TMP_DIR/currency-service-openapi.json"
+PERMISSION_SPEC_FILE="$TMP_DIR/permission-service-openapi.json"
+
+printf '%s' "$BUDGET_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))' > "$BUDGET_SPEC_FILE"
+printf '%s' "$CURRENCY_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))' > "$CURRENCY_SPEC_FILE"
+printf '%s' "$PERMISSION_SPEC" | jq '.paths |= with_entries(select(.key | contains("/internal") | not)) | .components.schemas |= with_entries(select(.key | startswith("Internal") | not))' > "$PERMISSION_SPEC_FILE"
+unset BUDGET_SPEC CURRENCY_SPEC PERMISSION_SPEC
 
 print_info "Merging OpenAPI specifications..."
 
-# Create unified spec using jq
-UNIFIED_SPEC=$(jq -n \
-    --argjson budget "$BUDGET_SPEC" \
-    --argjson currency "$CURRENCY_SPEC" \
-    --argjson permission "$PERMISSION_SPEC" '
+# Save JSON output
+OUTPUT_JSON="$OUTPUT_DIR/openapi.json"
+TMP_JSON="$(mktemp "${OUTPUT_JSON}.tmp.XXXXXX")"
+
+# Create unified spec using jq. Read specs from files instead of passing them
+# as arguments so large generated OpenAPI documents do not exceed ARG_MAX.
+jq -n \
+    --slurpfile budget_spec "$BUDGET_SPEC_FILE" \
+    --slurpfile currency_spec "$CURRENCY_SPEC_FILE" \
+    --slurpfile permission_spec "$PERMISSION_SPEC_FILE" '
+($budget_spec[0]) as $budget |
+($currency_spec[0]) as $currency |
+($permission_spec[0]) as $permission |
 {
     "openapi": "3.1.0",
     "info": {
@@ -213,18 +232,13 @@ UNIFIED_SPEC=$(jq -n \
         )
     }
 }
-')
-
-# Save JSON output
-OUTPUT_JSON="$OUTPUT_DIR/openapi.json"
-TMP_JSON="$(mktemp "${OUTPUT_JSON}.tmp.XXXXXX")"
-echo "$UNIFIED_SPEC" | jq '.' > "$TMP_JSON"
+' > "$TMP_JSON"
 mv "$TMP_JSON" "$OUTPUT_JSON"
 print_success "✓ Generated unified OpenAPI spec (JSON): $OUTPUT_JSON"
 
 # Save YAML output
 OUTPUT_YAML="$OUTPUT_DIR/openapi.yaml"
-echo "$UNIFIED_SPEC" | convert_json_to_yaml "$OUTPUT_YAML" "unified OpenAPI spec" || true
+convert_json_to_yaml "$OUTPUT_YAML" "unified OpenAPI spec" < "$OUTPUT_JSON" || true
 
 # --- Session Gateway spec (separate from unified spec) ---
 

@@ -1078,6 +1078,193 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/statement-formats/pdf-wizard/save:
+    post:
+      tags:
+        - Statement Formats
+      summary: Save a PDF wizard statement format
+      description: Validates the confirmed text-PDF table mapping against the sample
+        PDF and creates a user-scoped PDF statement format with one enabled PDF_TEXT_TABLE_CONFIG
+        parser revision.
+      operationId: savePdfWizardFormat
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                request:
+                  $ref: '#/components/schemas/PdfWizardSaveRequest'
+              required:
+                - file
+                - request
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementFormatResponse'
+        '422':
+          description: Mapping validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/pdf-wizard/preview:
+    post:
+      tags:
+        - Statement Formats
+      summary: Preview a PDF wizard mapping
+      description: Parses read-only transaction preview rows from a multipart text-PDF
+        sample and confirmed table mapping. This does not create a statement format,
+        preview token, file import, or transactions.
+      operationId: previewPdfMapping
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                request:
+                  $ref: '#/components/schemas/PdfWizardMappingPreviewRequest'
+              required:
+                - file
+                - request
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdfWizardPreviewResponse'
+        '422':
+          description: Mapping validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/pdf-wizard/analyze:
+    post:
+      tags:
+        - Statement Formats
+      summary: Analyze a PDF sample for statement format creation
+      description: Extracts text from a multipart PDF sample and returns ranked transaction-table
+        candidates with inferred mappings, confidence, sample rows, and unsupported-file
+        rejection reasons. This does not persist the uploaded file or create import
+        state.
+      operationId: analyzePdfSample
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdfWizardAnalysisResponse'
+        '422':
+          description: PDF parsing or analysis error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/statement-formats/csv-wizard/save:
     post:
       tags:
@@ -3325,6 +3512,271 @@ components:
         - defaultCurrencyIsoCode
         - displayName
         - formatType
+    PdfWizardColumnMappingRequest:
+      type: object
+      description: User-confirmed PDF table column mapping for statement format creation
+      properties:
+        dateHeader:
+          type: string
+          description: PDF table header containing transaction dates
+          example: Date
+          maxLength: 100
+          minLength: 0
+        dateFormat:
+          type: string
+          description: Java DateTimeFormatter pattern for dateHeader
+          example: MM/dd/uuuu
+          maxLength: 50
+          minLength: 0
+        descriptionHeader:
+          type: string
+          description: PDF table header containing descriptions
+          example: Description
+          maxLength: 100
+          minLength: 0
+        amountMode:
+          type: string
+          description: Amount mapping mode
+          enum:
+            - SIGNED_AMOUNT
+            - DEBIT_CREDIT_COLUMNS
+          example: SIGNED_AMOUNT
+        amountHeader:
+          type: string
+          description: Signed amount header for SIGNED_AMOUNT
+          example: Amount
+          maxLength: 100
+          minLength: 0
+        debitHeader:
+          type: string
+          description: Debit amount header for DEBIT_CREDIT_COLUMNS
+          example: Debit
+          maxLength: 100
+          minLength: 0
+        creditHeader:
+          type: string
+          description: Credit amount header for DEBIT_CREDIT_COLUMNS
+          example: Credit
+          maxLength: 100
+          minLength: 0
+        typeHeader:
+          type: string
+          description: Optional credit/debit type header
+          example: Type
+          maxLength: 100
+          minLength: 0
+        negativeMeans:
+          type: string
+          description: Direction represented by negative signed amounts
+          enum:
+            - CREDIT
+            - DEBIT
+          example: CREDIT
+      required:
+        - amountMode
+    PdfWizardSaveRequest:
+      type: object
+      description: PDF wizard save request
+      properties:
+        displayName:
+          type: string
+          description: Display name for the saved statement format
+          example: Example PDF
+          maxLength: 100
+          minLength: 0
+        bankName:
+          type: string
+          description: Bank name for transactions parsed by this format
+          example: Example Bank
+          maxLength: 100
+          minLength: 0
+        defaultCurrencyIsoCode:
+          type: string
+          description: Default ISO 4217 currency code
+          example: USD
+          maxLength: 3
+          minLength: 3
+        headerMustContain:
+          type: array
+          description: Header tokens that identify the confirmed transaction table
+          items:
+            type: string
+            maxLength: 100
+            minLength: 0
+          maxItems: 10
+          minItems: 0
+        minimumRows:
+          type: integer
+          format: int32
+          description: Minimum transaction rows required for the parser to match
+          example: 1
+        yearSource:
+          type: string
+          description: How yearless date values should be completed
+          enum:
+            - EXPLICIT_DATE
+            - STATEMENT_PERIOD
+          example: EXPLICIT_DATE
+        mapping:
+          $ref: '#/components/schemas/PdfWizardColumnMappingRequest'
+          description: Confirmed PDF column mapping
+      required:
+        - bankName
+        - defaultCurrencyIsoCode
+        - displayName
+        - mapping
+        - yearSource
+    PdfWizardMappingPreviewRequest:
+      type: object
+      description: PDF wizard parser preview request
+      properties:
+        bankName:
+          type: string
+          description: Bank name to place on preview rows
+          example: Example Bank
+          maxLength: 100
+          minLength: 0
+        defaultCurrencyIsoCode:
+          type: string
+          description: Default ISO 4217 currency code
+          example: USD
+          maxLength: 3
+          minLength: 3
+        accountId:
+          type: string
+          description: Optional account ID to place on preview rows
+          example: checking-001
+          maxLength: 100
+          minLength: 0
+        headerMustContain:
+          type: array
+          description: Header tokens that identify the confirmed transaction table
+          items:
+            type: string
+            maxLength: 100
+            minLength: 0
+          maxItems: 10
+          minItems: 0
+        minimumRows:
+          type: integer
+          format: int32
+          description: Minimum transaction rows required for the parser to match
+          example: 1
+        yearSource:
+          type: string
+          description: How yearless date values should be completed
+          enum:
+            - EXPLICIT_DATE
+            - STATEMENT_PERIOD
+          example: EXPLICIT_DATE
+        mapping:
+          $ref: '#/components/schemas/PdfWizardColumnMappingRequest'
+          description: Confirmed PDF column mapping
+      required:
+        - bankName
+        - defaultCurrencyIsoCode
+        - mapping
+        - yearSource
+    PdfWizardPreviewResponse:
+      type: object
+      description: PDF wizard read-only parser preview response
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreviewTransactionResponse'
+        diagnostics:
+          type: array
+          items:
+            type: string
+    PdfWizardAnalysisResponse:
+      type: object
+      description: PDF wizard sample analysis response
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/PdfWizardTableCandidateResponse'
+        confidence:
+          type: number
+          format: double
+        rejectionReasons:
+          type: array
+          items:
+            type: string
+    PdfWizardColumnMappingResponse:
+      type: object
+      description: PDF wizard column mapping
+      properties:
+        dateHeader:
+          type: string
+        dateFormat:
+          type: string
+        descriptionHeader:
+          type: string
+        amountMode:
+          type: string
+          enum:
+            - SIGNED_AMOUNT
+            - DEBIT_CREDIT_COLUMNS
+        amountHeader:
+          type: string
+        debitHeader:
+          type: string
+        creditHeader:
+          type: string
+        typeHeader:
+          type: string
+        negativeMeans:
+          type: string
+          enum:
+            - CREDIT
+            - DEBIT
+    PdfWizardTableCandidateResponse:
+      type: object
+      description: Ranked PDF wizard table candidate
+      properties:
+        candidateId:
+          type: string
+        pageNumber:
+          type: integer
+          format: int32
+        startLineNumber:
+          type: integer
+          format: int32
+        endLineNumber:
+          type: integer
+          format: int32
+        rowCount:
+          type: integer
+          format: int32
+        repeatedHeaderCount:
+          type: integer
+          format: int32
+        headers:
+          type: array
+          items:
+            type: string
+        sampleRows:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+        inferredMapping:
+          $ref: '#/components/schemas/PdfWizardColumnMappingResponse'
+        confidence:
+          type: number
+          format: double
+        columnConfidences:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+        rejectionReasons:
+          type: array
+          items:
+            type: string
     CsvWizardColumnMappingRequest:
       type: object
       description: User-confirmed CSV column mapping for statement format creation

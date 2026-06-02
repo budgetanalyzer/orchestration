@@ -995,8 +995,19 @@ paths:
       tags:
         - Statement Formats
       summary: List all statement formats
-      description: Returns all configured statement formats (both enabled and disabled).
+      description: Returns statement formats visible to the caller. Formats hidden
+        by the current user are excluded by default; pass includeHidden=true for management
+        screens.
       operationId: listFormats
+      parameters:
+        - name: includeHidden
+          in: query
+          description: Include formats hidden by the current user
+          required: false
+          schema:
+            type: boolean
+            default: false
+          example: true
       responses:
         '200':
           description: OK
@@ -1060,6 +1071,113 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/{id}/unhide:
+    post:
+      tags:
+        - Statement Formats
+      summary: Unhide a statement format
+      description: Restores a statement format to the current user's normal import
+        selection lists. The operation is idempotent.
+      operationId: unhideFormat
+      parameters:
+        - name: id
+          in: path
+          description: Statement format ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 123
+      responses:
+        '204':
+          description: Statement format unhidden
+        '404':
+          description: Statement format not found or not visible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/statement-formats/{id}/hide:
+    post:
+      tags:
+        - Statement Formats
+      summary: Hide a statement format
+      description: Hides a statement format from the current user's normal import
+        selection lists. The operation is idempotent and does not disable the format
+        for other users.
+      operationId: hideFormat
+      parameters:
+        - name: id
+          in: path
+          description: Statement format ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 123
+      responses:
+        '204':
+          description: Statement format hidden
+        '404':
+          description: Statement format not found or not visible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
         '500':
           description: Internal Server Error
           content:
@@ -3012,6 +3130,11 @@ components:
           type: string
         enabled:
           type: boolean
+        hidden:
+          type: boolean
+          description: Whether the current user has hidden this format from normal
+            import selection
+          example: false
         createdAt:
           type: string
           format: date-time

@@ -418,6 +418,9 @@ becomes `https://app.budgetanalyzer.localhost/api/v1/currencies`.
 Goal: create a runnable Python test harness with no service-specific test
 logic yet.
 
+Status: complete. Implemented in sibling repository
+`../budget-analyzer-api-tests` through step 19.
+
 Steps:
 
 1. Create the standalone repository directory `budget-analyzer-api-tests/`

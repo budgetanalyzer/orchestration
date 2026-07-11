@@ -315,6 +315,11 @@ Write plans to `docs/plans/`, not hidden locations.
 
 Plans should be visible, version-controlled collaboration artifacts. Do not hide meaningful project planning in ephemeral or private planning mechanisms.
 
+When creating an implementation or execution plan intended for AI Session
+Handler, follow the [AI Session Handler plan format](../ai-session-handler/docs/plan-format.md), use
+its canonical template, replace every placeholder, and retain the numbered `## Phase N: Title`
+headings.
+
 ## Autonomous AI Execution Pattern
 
 The preferred AI execution pattern in this repo is autonomous execution with clear success criteria. For rationale, safety model, Docker access patterns, and examples, see `docs/architecture/autonomous-ai-execution.md`.

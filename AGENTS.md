@@ -77,6 +77,21 @@ The default debugging model is split across host and container:
 - AI agents run inside the container
 - The container has shared workspace access and full `kubectl` access to the host-managed cluster
 
+The agent container is inside the trusted local-development boundary. Local
+workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated
+development TLS keys, and disposable local API-test credentials are not hidden
+from the agent. Never expose staging or production kubeconfigs, cloud or
+deployment credentials, user credentials, or session cookies to this
+container, and never use an agent session to deploy or administer staging or
+production. Before an in-container agent-authorized cluster mutation, require
+the current context and referenced cluster to equal `kind-kind`, require a
+loopback Kubernetes API endpoint, and require the `kind-control-plane` node.
+Use `kind get clusters` only as an additional host-side check because the
+container Docker daemon cannot enumerate the host-managed Kind cluster. For
+the full boundary and API-test target checks, read
+`docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
+credential, Kubernetes-access, or autonomous execution behavior.
+
 Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
 - Shape: `VM.Standard.A1.Flex`
 - Capacity: 4 OCPUs, 24 GB RAM

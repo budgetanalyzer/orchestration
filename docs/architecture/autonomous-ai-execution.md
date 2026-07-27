@@ -4,7 +4,42 @@
 
 **Core Principle**: An effective technique for running AI coding agents is to give them a clear task, define success criteria, and let them execute autonomously in a safe sandbox.
 
-This document explains the architectural pattern that makes this possible: containerized AI agent execution with full privileges, isolated from the host system.
+This document explains the architectural pattern that makes this possible:
+containerized AI agent execution with broad capability inside an explicitly
+local development trust boundary.
+
+## Local Development Trust Boundary
+
+The Budget Analyzer agent container is trusted with the local development
+environment. The shared workspace, host-managed local Kind kubeconfig, local
+Kubernetes Secrets, generated development TLS private keys, and local API-test
+credentials are not confidentiality boundaries against an agent running in
+this container. This is an intentional tradeoff for implementing and verifying
+the local stack and the `budget-analyzer-api-tests` repository.
+
+That trust does not extend to staging or production:
+
+- Never mount staging or production kubeconfigs, cloud credentials, deployment
+  credentials, user credentials, or session cookies into the agent container.
+- Never use an agent session to deploy or administer staging or production.
+- Treat authenticated API-test credentials supplied to an agent as disposable
+  local test credentials only.
+- Before an agent-authorized workflow mutates the local cluster from inside the
+  container, fail closed unless the current context and referenced cluster are
+  both exactly `kind-kind`, the Kubernetes API endpoint is loopback-bound, and
+  `kubectl get node kind-control-plane` succeeds. The container's Docker daemon
+  cannot enumerate the host-managed Kind cluster, so reserve `kind get
+  clusters` as an additional check for host-only bootstrap commands.
+- For agent-run API-test acceptance, require the selected configuration to
+  declare `environment_type: local` and target exactly
+  `https://app.budgetanalyzer.localhost`. A configuration name such as `local`
+  is not sufficient by itself.
+
+The host mkcert `rootCA.pem` certificate is public trust material, not a
+credential. It may contain locally identifying subject metadata and a stable
+fingerprint, so keep it ignored by Git and out of uploaded artifacts and logs.
+The corresponding `rootCA-key.pem` remains prohibited from the workspace and
+agent container.
 
 ## The Pattern
 
@@ -60,7 +95,10 @@ claude -p "fix all lint errors" \
 
 ### The VS Code Devcontainer Sandbox
 
-**Key Insight**: Give Claude Code maximum capability with zero risk by running it in an isolated container.
+**Key Insight**: Give the agent broad local-development capability inside a
+reviewed trust boundary. The container reduces accidental host-system changes;
+it is not a confidentiality boundary for mounted workspace files, kubeconfig,
+local cluster Secrets, or credentials deliberately supplied to local tests.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -92,13 +130,17 @@ claude -p "fix all lint errors" \
 - Execute integration tests with TestContainers
 - Start local Kubernetes clusters (Kind)
 
-### What Claude CANNOT Do
+### What Claude CANNOT Do By Policy
 
-- Access files outside `/workspace` (container filesystem boundary)
-- Affect host system's packages or configuration
+- Deploy or administer staging or production
+- Receive staging or production kubeconfigs, cloud credentials, user
+  credentials, or session cookies
 - Modify the sandbox configuration itself (mounted read-only at `.devcontainer/`)
-- Break out of container isolation
-- Access host network directly (except via exposed ports)
+
+Do not infer a stronger technical isolation claim from this list. The current
+local sandbox intentionally mounts the shared workspace and local kubeconfig
+and uses host networking. Review the active workspace compose configuration
+before changing or expanding that authority.
 
 ### Self-Protecting Configuration
 

@@ -621,7 +621,36 @@ fi
 
 echo
 
-echo "11. Checking infrastructure TLS secrets..."
+echo "11. Checking host-published local ingress CA..."
+echo "---------------------------------------------"
+
+PUBLISHED_LOCAL_CA="$ORCHESTRATION_DIR/nginx/certs/k8s/_mkcert-rootCA.pem"
+LOCAL_INGRESS_CERT="$ORCHESTRATION_DIR/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem"
+
+if [ ! -r "$PUBLISHED_LOCAL_CA" ]; then
+    echo -e "${RED}✗${NC} Published public local CA is missing: $PUBLISHED_LOCAL_CA"
+    echo "  Run ./setup.sh from the host orchestration checkout to publish it."
+    ((ERRORS++))
+elif ! command -v openssl >/dev/null 2>&1; then
+    echo -e "${RED}✗${NC} Cannot validate the published public local CA because OpenSSL is unavailable"
+    ((ERRORS++))
+elif ! openssl x509 -in "$PUBLISHED_LOCAL_CA" -noout >/dev/null 2>&1; then
+    echo -e "${RED}✗${NC} Published public local CA is invalid: $PUBLISHED_LOCAL_CA"
+    echo "  Run ./setup.sh from the host orchestration checkout to replace it."
+    ((ERRORS++))
+elif [ ! -r "$LOCAL_INGRESS_CERT" ] \
+    || ! openssl verify -CAfile "$PUBLISHED_LOCAL_CA" "$LOCAL_INGRESS_CERT" >/dev/null 2>&1; then
+    echo -e "${RED}✗${NC} Published public local CA is stale for the wildcard ingress certificate: $PUBLISHED_LOCAL_CA"
+    echo "  Run ./setup.sh from the host orchestration checkout to reconcile local TLS."
+    ((ERRORS++))
+else
+    echo -e "${GREEN}✓${NC} Published public local CA verifies the wildcard ingress certificate"
+    echo "  $PUBLISHED_LOCAL_CA"
+fi
+
+echo
+
+echo "12. Checking infrastructure TLS secrets..."
 echo "---------------------------------------------"
 
 if [ "$CLUSTER_CONNECTED" = true ]; then
@@ -665,7 +694,7 @@ fi
 
 echo
 
-echo "12. Verifying runtime security prerequisites..."
+echo "13. Verifying runtime security prerequisites..."
 echo "---------------------------------------------"
 
 VERIFY_SCRIPT="$ORCHESTRATION_DIR/scripts/smoketest/verify-security-prereqs.sh"

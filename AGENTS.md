@@ -371,7 +371,19 @@ Allowed read-only operations:
 - `kubectl get secret -o yaml`
 - Certificate file reads for debugging
 
-When SSL issues occur, guide the user to run the certificate scripts on the host.
+For live agent work against exactly
+`https://app.budgetanalyzer.localhost`, agents may run the workspace-owned
+`ensure-budget-analyzer-local-ca-trust` command to install the host-published
+public root into container-local trust stores. Use
+`check-budget-analyzer-local-ca-trust` for read-only trust diagnosis. Read
+`../workspace/docs/local-budget-analyzer-tls.md` before changing or debugging
+this flow.
+
+If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
+ask the user to run `./setup.sh` from the orchestration checkout on the host.
+Do not generate or rotate certificates in-container, and do not bypass
+verification with HTTP, `--insecure`, `verify=False`, or
+`ignore_https_errors`.
 
 ## Path Portability
 

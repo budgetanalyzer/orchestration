@@ -1168,8 +1168,8 @@
         "tags": [
           "Transactions"
         ],
-        "summary": "Preview transactions from a file before import",
-        "description": "Parses a CSV or PDF file and returns the extracted transactions for review and editing before batch import. No data is persisted. The statementFormatId parameter is required and determines which parser to use. The response includes advisory duplicate metadata using strict owner-scoped financial identity fields plus normalized exact or conservative fuzzy description matching against existing transactions or earlier rows in the same preview payload, plus file-level import history status for exact reuploads by the authenticated user.",
+        "summary": "Preview transactions from ordered files before import",
+        "description": "Parses one or more ordered CSV or PDF files using one shared statement format and returns one result and preview token per file for review before batch import. No data is persisted. Processing stops at the first failed file and returns no partial preview response. The response includes advisory duplicate metadata using strict owner-scoped financial identity fields plus normalized description equality against existing transactions or completed earlier files, plus per-file import history status for exact reuploads by the authenticated user. Repeated rows within one file are not compared with each other.",
         "operationId": "previewTransactions",
         "parameters": [
           {
@@ -1186,7 +1186,7 @@
           {
             "name": "accountId",
             "in": "query",
-            "description": "Account ID to pre-fill for all transactions",
+            "description": "Account ID to pre-fill for transactions from every file",
             "required": false,
             "schema": {
               "type": "string"
@@ -1200,14 +1200,18 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "CSV or PDF file to preview"
+                  "files": {
+                    "type": "array",
+                    "description": "Ordered CSV or PDF files to preview. Repeat the files multipart part for each source.",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1
                   }
                 },
                 "required": [
-                  "file"
+                  "files"
                 ]
               }
             }
@@ -1243,11 +1247,11 @@
                     }
                   },
                   "Parsing Error": {
-                    "summary": "Missing required column",
+                    "summary": "Missing required column in the second file",
                     "description": "Parsing Error",
                     "value": {
                       "type": "APPLICATION_ERROR",
-                      "message": "Missing value for required column 'Description' at line 1",
+                      "message": "Failed to preview file 'may.csv': Missing value for required column 'Description' at line 1",
                       "code": "CSV_PARSING_ERROR"
                     }
                   },
@@ -1256,7 +1260,7 @@
                     "description": "Missing Original Filename",
                     "value": {
                       "type": "APPLICATION_ERROR",
-                      "message": "Uploaded file must include an original filename.",
+                      "message": "Uploaded file part at index 0 must include an original filename.",
                       "code": "MISSING_ORIGINAL_FILENAME"
                     }
                   }
@@ -1402,7 +1406,7 @@
           "Transactions"
         ],
         "summary": "Import a batch of transactions",
-        "description": "Imports transactions from a batch request (typically from the preview endpoint after user edits). Validates all transactions upfront and rejects the entire batch if any fail. Duplicate filtering uses strict owner-scoped financial identity fields plus normalized exact or conservative fuzzy description matching. Duplicates are skipped unless allowDuplicate is true on the row. The response reports skipped duplicates and duplicates intentionally imported. previewImportToken from the preview response is required and is verified before batch import processing starts. If duplicate filtering leaves no rows to create, the request fails with BATCH_IMPORT_NO_TRANSACTIONS_CREATED.",
+        "description": "Imports one ordered group of reviewed source files from the preview endpoint. Every previewImportToken is verified for the authenticated owner before the persistence service is called. Verified tokens must share one statement format and account, but may use different parser revisions. All rows are validated before database work, and every accepted file group is persisted atomically. Duplicate filtering uses strict owner-scoped financial identity fields plus normalized description equality against persisted rows and completed earlier files. Rows within their own file are not compared. Duplicates are skipped unless allowDuplicate is true. Each source that creates rows creates or reuses separate file provenance; a zero-created source creates none. Transaction and newly created provenance writes roll back together on failure. The response reports aggregate and ordered per-file counts, including duplicates intentionally imported, and created rows. If duplicate filtering leaves no rows to create across all files, the request fails with BATCH_IMPORT_NO_TRANSACTIONS_CREATED.",
         "operationId": "batchImportTransactions",
         "requestBody": {
           "content": {
@@ -1454,6 +1458,15 @@
                       "type": "APPLICATION_ERROR",
                       "message": "All submitted rows were skipped as duplicates.",
                       "code": "BATCH_IMPORT_NO_TRANSACTIONS_CREATED"
+                    }
+                  },
+                  "Source Identity Mismatch": {
+                    "summary": "Verified tokens identify different formats or accounts",
+                    "description": "Source Identity Mismatch",
+                    "value": {
+                      "type": "APPLICATION_ERROR",
+                      "message": "Preview import token sources do not match.",
+                      "code": "BATCH_IMPORT_SOURCE_MISMATCH"
                     }
                   }
                 }
@@ -4427,17 +4440,17 @@
           "pinnedCount": {
             "type": "integer",
             "format": "int32",
-            "description": "Number of pinned transactions"
+            "description": "Number of active pinned transactions"
           },
           "excludedCount": {
             "type": "integer",
             "format": "int32",
-            "description": "Number of excluded transactions"
+            "description": "Number of active excluded transactions"
           },
           "transactionCount": {
             "type": "integer",
             "format": "int64",
-            "description": "Total number of transactions matching this view"
+            "description": "Total number of effectively visible transactions in this view"
           },
           "createdAt": {
             "type": "string",
@@ -4724,9 +4737,9 @@
           "alreadyImported"
         ]
       },
-      "PreviewResponse": {
+      "PreviewFileResponse": {
         "type": "object",
-        "description": "Response from transaction preview containing extracted transactions",
+        "description": "Preview result for one uploaded source file",
         "properties": {
           "sourceFile": {
             "type": "string",
@@ -4750,7 +4763,7 @@
           },
           "transactions": {
             "type": "array",
-            "description": "List of extracted transactions ready for review, including advisory duplicate metadata for each row",
+            "description": "Extracted transactions ready for review, including advisory duplicate metadata",
             "items": {
               "$ref": "#/components/schemas/PreviewTransactionResponse"
             }
@@ -4762,6 +4775,22 @@
           "sourceFile",
           "statementFormatId",
           "transactions"
+        ]
+      },
+      "PreviewResponse": {
+        "type": "object",
+        "description": "Grouped response from an ordered multi-file transaction preview",
+        "properties": {
+          "files": {
+            "type": "array",
+            "description": "Ordered preview result for every uploaded source file",
+            "items": {
+              "$ref": "#/components/schemas/PreviewFileResponse"
+            }
+          }
+        },
+        "required": [
+          "files"
         ]
       },
       "PreviewTransactionResponse": {
@@ -4777,8 +4806,7 @@
           "description": {
             "type": "string",
             "description": "Description of the transaction",
-            "example": "TAQUERIA DEL SOL #3",
-            "minLength": 1
+            "example": "TAQUERIA DEL SOL #3"
           },
           "amount": {
             "type": "number",
@@ -4802,14 +4830,12 @@
           "bankName": {
             "type": "string",
             "description": "Name of the bank",
-            "example": "Capital One",
-            "minLength": 1
+            "example": "Capital One"
           },
           "currencyIsoCode": {
             "type": "string",
             "description": "ISO currency code",
-            "example": "USD",
-            "minLength": 1
+            "example": "USD"
           },
           "accountId": {
             "type": "string",
@@ -4818,7 +4844,7 @@
           },
           "duplicate": {
             "type": "boolean",
-            "description": "Whether this row appears to duplicate an existing active owner-owned transaction or an earlier row in the same preview payload after strict financial identity matching plus normalized exact or conservative fuzzy description matching",
+            "description": "Whether this row appears to duplicate an existing active transaction or a row from a completed earlier source file after strict financial identity matching plus normalized description equality. Rows within this source file are not compared with each other.",
             "example": false
           },
           "duplicateReason": {
@@ -4928,28 +4954,44 @@
           }
         }
       },
-      "BatchImportRequest": {
+      "BatchImportFileRequest": {
         "type": "object",
-        "description": "Request for batch importing transactions",
+        "description": "Reviewed batch import data for one previewed source file",
         "properties": {
-          "transactions": {
-            "type": "array",
-            "description": "List of transactions to import",
-            "items": {
-              "$ref": "#/components/schemas/BatchImportTransactionRequest"
-            },
-            "minItems": 1
-          },
           "previewImportToken": {
             "type": "string",
-            "description": "Opaque token returned by the preview endpoint. Required when importing reviewed transactions so the service can record file import metadata.",
+            "description": "Opaque source-file token returned by the preview endpoint",
             "example": "v2.dGVzdGl2MTIzNDU.Kc4WwTqfh1sFD8pxVq7Hxg",
             "minLength": 1
+          },
+          "transactions": {
+            "type": "array",
+            "description": "Required reviewed transactions from this source file; the list may be empty",
+            "items": {
+              "$ref": "#/components/schemas/BatchImportTransactionRequest"
+            }
           }
         },
         "required": [
           "previewImportToken",
           "transactions"
+        ]
+      },
+      "BatchImportRequest": {
+        "type": "object",
+        "description": "Request for batch importing transactions",
+        "properties": {
+          "files": {
+            "type": "array",
+            "description": "Required, non-empty ordered source file groups",
+            "items": {
+              "$ref": "#/components/schemas/BatchImportFileRequest"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "files"
         ]
       },
       "BatchImportTransactionRequest": {
@@ -5007,7 +5049,7 @@
           "allowDuplicate": {
             "type": "boolean",
             "default": false,
-            "description": "Whether to import this row even when it duplicates an existing transaction or earlier row in the same batch under the strict financial identity plus normalized exact or conservative fuzzy description rule",
+            "description": "Whether to import this row even when it duplicates an existing transaction or a row from a completed earlier file under the strict financial identity plus normalized description equality rule",
             "example": false
           }
         },
@@ -5018,6 +5060,46 @@
           "date",
           "description",
           "type"
+        ]
+      },
+      "BatchImportFileResponse": {
+        "type": "object",
+        "description": "Batch import result for one verified source file",
+        "properties": {
+          "sourceFile": {
+            "type": "string",
+            "description": "Original filename verified from the preview token",
+            "example": "statement-january.csv"
+          },
+          "created": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of transactions created from this source file"
+          },
+          "duplicatesSkipped": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of duplicate rows skipped from this source file"
+          },
+          "duplicatesImported": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of duplicate rows intentionally imported from this source file"
+          },
+          "transactions": {
+            "type": "array",
+            "description": "Transactions created from this source file",
+            "items": {
+              "$ref": "#/components/schemas/TransactionResponse"
+            }
+          }
+        },
+        "required": [
+          "created",
+          "duplicatesImported",
+          "duplicatesSkipped",
+          "sourceFile",
+          "transactions"
         ]
       },
       "BatchImportResponse": {
@@ -5042,11 +5124,11 @@
             "description": "Number of duplicate rows intentionally imported with allowDuplicate",
             "example": 1
           },
-          "transactions": {
+          "files": {
             "type": "array",
-            "description": "List of created transactions with IDs",
+            "description": "Ordered import result for every submitted source file",
             "items": {
-              "$ref": "#/components/schemas/TransactionResponse"
+              "$ref": "#/components/schemas/BatchImportFileResponse"
             }
           }
         },
@@ -5054,7 +5136,7 @@
           "created",
           "duplicatesImported",
           "duplicatesSkipped",
-          "transactions"
+          "files"
         ]
       },
       "TransactionResponse": {

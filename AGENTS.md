@@ -77,6 +77,21 @@ The default debugging model is split across host and container:
 - AI agents run inside the container
 - The container has shared workspace access and full `kubectl` access to the host-managed cluster
 
+The agent container is inside the trusted local-development boundary. Local
+workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated
+development TLS keys, and disposable local API-test credentials are not hidden
+from the agent. Never expose staging or production kubeconfigs, cloud or
+deployment credentials, user credentials, or session cookies to this
+container, and never use an agent session to deploy or administer staging or
+production. Before an in-container agent-authorized cluster mutation, require
+the current context and referenced cluster to equal `kind-kind`, require a
+loopback Kubernetes API endpoint, and require the `kind-control-plane` node.
+Use `kind get clusters` only as an additional host-side check because the
+container Docker daemon cannot enumerate the host-managed Kind cluster. For
+the full boundary and API-test target checks, read
+`docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
+credential, Kubernetes-access, or autonomous execution behavior.
+
 Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
 - Shape: `VM.Standard.A1.Flex`
 - Capacity: 4 OCPUs, 24 GB RAM
@@ -315,6 +330,24 @@ Write plans to `docs/plans/`, not hidden locations.
 
 Plans should be visible, version-controlled collaboration artifacts. Do not hide meaningful project planning in ephemeral or private planning mechanisms.
 
+When creating an implementation or execution plan intended for AI Session
+Handler, follow the [AI Session Handler plan format](../ai-session-handler/docs/plan-format.md), use
+its canonical template, replace every placeholder, and retain the numbered `## Phase N: Title`
+headings.
+
+Run a specific plan through the workspace wrapper with:
+
+```bash
+ai-session-handler run \
+  --plan /workspace/REPOSITORY/docs/plans/PLAN.md \
+  --max-phases 999 \
+  --quiet \
+  --agent-cmd "/workspace/ai-session-handler/.venv/bin/ai-session-handler-codex-high --model MODEL"
+```
+
+Omit `--model MODEL` from the quoted agent command to use the wrapper's
+configured or default model.
+
 ## Autonomous AI Execution Pattern
 
 The preferred AI execution pattern in this repo is autonomous execution with clear success criteria. For rationale, safety model, Docker access patterns, and examples, see `docs/architecture/autonomous-ai-execution.md`.
@@ -338,7 +371,19 @@ Allowed read-only operations:
 - `kubectl get secret -o yaml`
 - Certificate file reads for debugging
 
-When SSL issues occur, guide the user to run the certificate scripts on the host.
+For live agent work against exactly
+`https://app.budgetanalyzer.localhost`, agents may run the workspace-owned
+`ensure-budget-analyzer-local-ca-trust` command to install the host-published
+public root into container-local trust stores. Use
+`check-budget-analyzer-local-ca-trust` for read-only trust diagnosis. Read
+`../workspace/docs/local-budget-analyzer-tls.md` before changing or debugging
+this flow.
+
+If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
+ask the user to run `./setup.sh` from the orchestration checkout on the host.
+Do not generate or rotate certificates in-container, and do not bypass
+verification with HTTP, `--insecure`, `verify=False`, or
+`ignore_https_errors`.
 
 ## Path Portability
 

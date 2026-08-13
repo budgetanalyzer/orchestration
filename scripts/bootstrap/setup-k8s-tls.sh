@@ -4,6 +4,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 K8S_CERTS_DIR="$ORCHESTRATION_DIR/nginx/certs/k8s"
+PUBLISHED_CA_FILE="$K8S_CERTS_DIR/_mkcert-rootCA.pem"
+EXPECTED_KUBECTL_CONTEXT="kind-kind"
+EXPECTED_KIND_CLUSTER="kind"
+PUBLISHED_CA_TMP=""
+
+trap 'if [ -n "$PUBLISHED_CA_TMP" ]; then rm -f "$PUBLISHED_CA_TMP"; fi' EXIT
 
 echo "=== Budget Analyzer - Kubernetes TLS Setup ==="
 echo
@@ -40,13 +46,40 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 
-# Check if kind cluster is accessible
-if ! kubectl cluster-info &>/dev/null; then
-    echo "[ERROR] Cannot connect to Kubernetes cluster"
+if ! command -v kind &> /dev/null; then
+    echo "[ERROR] kind is not installed"
     echo
-    echo "Ensure Kind cluster is running:"
-    echo "  kind get clusters"
-    echo "  kind create cluster --name kind"
+    echo "Install the repo-pinned Kind version first:"
+    echo "  \"$ORCHESTRATION_DIR/scripts/bootstrap/install-verified-tool.sh\" kind"
+    echo
+    exit 1
+fi
+
+if ! command -v openssl &> /dev/null; then
+    echo "[ERROR] OpenSSL is not installed"
+    echo "        Install it with your OS package manager, then rerun this script."
+    exit 1
+fi
+
+ACTIVE_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+if [ "$ACTIVE_CONTEXT" != "$EXPECTED_KUBECTL_CONTEXT" ]; then
+    echo "[ERROR] Refusing Kubernetes access from context '${ACTIVE_CONTEXT:-none}'" >&2
+    echo "        Expected the local context '$EXPECTED_KUBECTL_CONTEXT'." >&2
+    echo "        Run ./setup.sh from this host checkout to recreate and select the supported local cluster." >&2
+    exit 1
+fi
+
+if ! kind get clusters 2>/dev/null | grep -Fxq "$EXPECTED_KIND_CLUSTER"; then
+    echo "[ERROR] Refusing Kubernetes access because the host Kind cluster '$EXPECTED_KIND_CLUSTER' is absent" >&2
+    echo "        Run ./setup.sh from this host checkout to recreate the supported local cluster." >&2
+    exit 1
+fi
+
+# Check only the expected local context after both identity gates pass.
+if ! kubectl cluster-info --context "$EXPECTED_KUBECTL_CONTEXT" &>/dev/null; then
+    echo "[ERROR] Cannot connect to the expected local Kubernetes cluster"
+    echo
+    echo "Run ./setup.sh from this host checkout to recreate the supported local cluster."
     echo
     exit 1
 fi
@@ -62,7 +95,8 @@ fi
 
 echo "[OK] mkcert is installed"
 echo "[OK] kubectl is installed"
-echo "[OK] Kubernetes cluster is accessible"
+echo "[OK] kind is installed"
+echo "[OK] Kubernetes target is $EXPECTED_KUBECTL_CONTEXT backed by Kind cluster $EXPECTED_KIND_CLUSTER"
 if [ "$CERTUTIL_AVAILABLE" = true ]; then
     echo "[OK] certutil is installed"
 fi
@@ -140,6 +174,23 @@ else
 fi
 
 echo "[OK] mkcert CA installed"
+
+if [ ! -r "$CA_FILE" ]; then
+    echo "[ERROR] mkcert did not provide a readable public root CA certificate" >&2
+    echo "        Rerun ./setup.sh from this host checkout after repairing the host mkcert installation." >&2
+    exit 1
+fi
+
+if ! openssl x509 -in "$CA_FILE" -noout >/dev/null 2>&1; then
+    echo "[ERROR] mkcert public root CA is not a parseable certificate" >&2
+    exit 1
+fi
+
+if ! openssl x509 -in "$CA_FILE" -noout -text 2>/dev/null | grep -q 'CA:TRUE'; then
+    echo "[ERROR] mkcert public root certificate is not marked as a CA" >&2
+    exit 1
+fi
+
 echo
 echo "[NOTE] Restart your browser for certificate changes to take effect"
 
@@ -167,6 +218,38 @@ else
     fi
 
     echo "[OK] Certificate generated"
+fi
+
+if ! openssl x509 -in "$CERT_FILE" -noout >/dev/null 2>&1; then
+    echo "[ERROR] Wildcard ingress certificate is missing or invalid" >&2
+    exit 1
+fi
+
+CA_SUBJECT="$(openssl x509 -in "$CA_FILE" -noout -subject -nameopt RFC2253)"
+CERT_ISSUER="$(openssl x509 -in "$CERT_FILE" -noout -issuer -nameopt RFC2253)"
+CA_SUBJECT="${CA_SUBJECT#subject=}"
+CERT_ISSUER="${CERT_ISSUER#issuer=}"
+
+if [ "$CA_SUBJECT" != "$CERT_ISSUER" ] \
+    || ! openssl verify -CAfile "$CA_FILE" "$CERT_FILE" >/dev/null 2>&1; then
+    echo "[ERROR] The wildcard ingress certificate was not signed by the current host mkcert CA" >&2
+    echo "        Remove the existing wildcard certificate pair on the host, then rerun ./setup.sh." >&2
+    exit 1
+fi
+
+if [ -r "$PUBLISHED_CA_FILE" ] && cmp -s "$CA_FILE" "$PUBLISHED_CA_FILE"; then
+    echo "[SKIP] Published public mkcert CA is already current: $PUBLISHED_CA_FILE"
+else
+    PUBLISHED_CA_TMP="$(mktemp "$K8S_CERTS_DIR/.mkcert-rootCA.pem.tmp.XXXXXX")"
+    if ! install -m 0644 "$CA_FILE" "$PUBLISHED_CA_TMP" \
+        || ! mv -f "$PUBLISHED_CA_TMP" "$PUBLISHED_CA_FILE"; then
+        rm -f "$PUBLISHED_CA_TMP"
+        PUBLISHED_CA_TMP=""
+        echo "[ERROR] Failed to publish the public mkcert CA" >&2
+        exit 1
+    fi
+    PUBLISHED_CA_TMP=""
+    echo "[OK] Published public mkcert CA: $PUBLISHED_CA_FILE"
 fi
 
 # Show certificate files
@@ -211,6 +294,8 @@ echo
 echo "=== Setup Complete! ==="
 echo
 echo "The TLS secret '$SECRET_NAME' is now available for the Istio ingress gateway."
+echo "The public local CA is available to trusted workspace consumers at:"
+echo "  $PUBLISHED_CA_FILE"
 echo
 echo "=== Next Steps ==="
 echo

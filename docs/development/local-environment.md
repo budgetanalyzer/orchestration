@@ -166,6 +166,39 @@ For the credential-free local `service-common` contract, see
 For the script directory map and verifier inventory, see
 [../../scripts/README.md](../../scripts/README.md).
 
+## Host-Published Local Ingress CA
+
+Host `./setup.sh` owns browser-facing certificate generation and publishes an
+exact public copy of the mkcert root that signs the local wildcard ingress
+certificate at:
+
+```text
+nginx/certs/k8s/_mkcert-rootCA.pem
+```
+
+The published PEM is ignored by Git. It is public local trust material, not a
+private key or application secret, but it can contain workstation-identifying
+metadata and must stay out of logs and uploaded artifacts. The corresponding
+mkcert CA private key remains in the host mkcert store and is never copied into
+the workspace.
+
+`scripts/bootstrap/setup-k8s-tls.sh` publishes the PEM atomically only after it
+confirms that the active context is `kind-kind`, the host Kind cluster is named
+`kind`, the source is a CA certificate, and the CA verifies the wildcard
+certificate. `scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing,
+invalid, or stale publication without printing certificate subject or issuer
+metadata.
+
+The sibling workspace devcontainer can install this public root lazily into
+its container-local system, Python, and Chromium trust stores. For live agent
+work against exactly `https://app.budgetanalyzer.localhost`, run
+`ensure-budget-analyzer-local-ca-trust`; use
+`check-budget-analyzer-local-ca-trust` for read-only diagnosis. Detailed
+container behavior lives in `../workspace/docs/local-budget-analyzer-tls.md`.
+If the publication is missing or stale, stop and ask the user to run
+orchestration `./setup.sh` on the host. Never run mkcert or either certificate
+setup script from the agent container.
+
 ## Observability Access
 
 Local Tilt installs Grafana, Prometheus, Jaeger, and Kiali in the

@@ -34,7 +34,8 @@ This is the supported local startup path for the repository:
 - `./setup.sh` converges repo-managed pinned prerequisites such as `kubectl`,
   Kind, Tilt, `mkcert`, Calico, and Gateway API CRDs, installs a supported
   Helm 3 binary when needed, recreates the local `kind` cluster, configures
-  browser and internal TLS, sets up local DNS, and prepares `.env`.
+  browser and internal TLS, publishes the public local ingress CA for lazy
+  agent-container trust installation, sets up local DNS, and prepares `.env`.
 - Edit `.env` before `tilt up`. Auth0 values and `FRED_API_KEY` are required
   for local startup.
 - `tilt up` is the supported entry point for the full local stack.
@@ -46,6 +47,13 @@ This is the supported local startup path for the repository:
 
 Open `https://app.budgetanalyzer.localhost` after the app workloads are green
 in Tilt.
+
+Agents that need verified HTTPS access to that exact origin may run
+`ensure-budget-analyzer-local-ca-trust` inside a rebuilt workspace container.
+If it reports that the host publication is missing, run `./setup.sh` from the
+host; do not generate or rotate certificates in the container. The publication
+contract and diagnostics live in
+[`local-environment.md`](local-environment.md#host-published-local-ingress-ca).
 
 ## Validation
 

@@ -154,10 +154,10 @@ Choose scripts by runtime boundary:
   Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
   after verifying checked-in SHA-256 values.
 - `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
-  versions, certificates, DNS, Docker/Kind prerequisites, inotify budgets,
-  pinned Gateway API and Calico state, and optional runtime security state. It
-  reports drift and install commands without performing interactive cluster
-  changes.
+  versions, the host-published public ingress CA, DNS, Docker/Kind
+  prerequisites, inotify budgets, pinned Gateway API and Calico state, and
+  optional runtime security state. It reports drift and install commands
+  without performing interactive cluster changes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
   used by `setup.sh` and Tilt. Tilt reruns the host-only
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
@@ -173,7 +173,11 @@ Choose scripts by runtime boundary:
   durable local fix.
 - `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
   certificate bootstrap scripts. Do not run them from an AI container because
-  the browser must trust the host mkcert CA.
+  the browser must trust the host mkcert CA. `setup-k8s-tls.sh` fails closed
+  unless the target is the host `kind-kind` context backed by the `kind`
+  cluster, then atomically publishes only the public mkcert root at
+  `nginx/certs/k8s/_mkcert-rootCA.pem` for the workspace lazy-trust command.
+  The publication remains ignored by Git; no CA private key is published.
 
 Use `../setup.sh` when you want the full local bootstrap to converge
 repo-managed prerequisites and recreate the local Kind cluster. Use

@@ -34,6 +34,10 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 tilt up       # start everything
 ```
 
+Run `./setup.sh` on the host. In addition to configuring browser TLS, it
+publishes the public local ingress CA consumed by the workspace's lazy
+agent-container trust command.
+
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 
 Once the stack is running:

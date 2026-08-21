@@ -137,6 +137,9 @@ scripts/
   already pointing at current HEAD.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
   OpenAPI artifacts used by `/api-docs`.
+- `repo/compare-test-coverage.py` - Compares committed coverage on every
+  non-main core sibling repository with its local `origin/main` ref without
+  switching branches or changing a working tree.
 
 Choose scripts by runtime boundary:
 
@@ -380,6 +383,18 @@ repo root, so callers can run the loadtest scripts from any current working
 directory without writing outside the repository.
 
 ## Repo Management
+
+- `repo/compare-test-coverage.py` discovers core sibling repositories that are
+  currently on a branch other than `main` or `master`, requires their working
+  trees to be clean, and builds temporary exports of `origin/main` and `HEAD`.
+  It runs the repository-native JaCoCo, Vitest, or Go coverage command and
+  prints line/statement and branch coverage comparisons. The script uses the
+  existing local `origin/main` refs and never fetches or changes Git state.
+  Run it without arguments:
+
+  ```bash
+  ./scripts/repo/compare-test-coverage.py
+  ```
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state without changing branches or pulling.

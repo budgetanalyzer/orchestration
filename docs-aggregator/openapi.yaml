@@ -21,7 +21,7 @@ servers:
     description: Production environment
 tags:
   - name: Saved Views
-    description: Create and manage saved transaction views
+    description: Create and manage static transaction collections
     x-service: transaction-service
   - name: Statement Formats
     description: Manage statement format configurations for imports
@@ -39,159 +39,6 @@ tags:
     description: User administration operations
     x-service: permission-service
 paths:
-  /v1/views/{id}:
-    get:
-      tags:
-        - Saved Views
-      summary: Get a saved view
-      description: Gets a saved view by ID
-      operationId: getView
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    put:
-      tags:
-        - Saved Views
-      summary: Update a saved view
-      description: Updates a saved view's name or criteria
-      operationId: updateView
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateSavedViewRequest'
-        required: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    delete:
-      tags:
-        - Saved Views
-      summary: Delete a saved view
-      description: Deletes a saved view
-      operationId: deleteView
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: No Content
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
   /v1/statement-formats/{id}:
     get:
       tags:
@@ -312,8 +159,7 @@ paths:
     get:
       tags:
         - Saved Views
-      summary: List saved views
-      description: Gets all saved views for the current user
+      summary: List static saved views
       operationId: listViews
       responses:
         '200':
@@ -345,8 +191,7 @@ paths:
     post:
       tags:
         - Saved Views
-      summary: Create a saved view
-      description: Creates a new saved view for the current user
+      summary: Create a static saved view
       operationId: createView
       requestBody:
         content:
@@ -357,6 +202,13 @@ paths:
       responses:
         '201':
           description: Created
+          headers:
+            Location:
+              description: Canonical URL of the created saved view
+              style: simple
+              schema:
+                type: string
+                format: uri
           content:
             application/json:
               schema:
@@ -370,375 +222,13 @@ paths:
               example:
                 type: INVALID_REQUEST
                 message: Bad Request
-        '500':
-          description: Internal Server Error
+        '422':
+          description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable membership or SAVED_VIEW_NAME_ALREADY_EXISTS
+            for a same-owner name conflict
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/views/{id}/pin:
-    post:
-      tags:
-        - Saved Views
-      summary: Bulk pin transactions
-      description: Pins multiple transactions to the view. Returns updatedCount for
-        unique valid IDs and notFoundIds for IDs that are missing, deleted, or not
-        owned by the caller.
-      operationId: bulkPinTransactions
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BulkViewTransactionRequest'
-        required: true
-      responses:
-        '200':
-          description: Some transactions were not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BulkViewTransactionResponse'
-              examples:
-                Partial success:
-                  summary: Some IDs were not pinned
-                  description: Partial success
-                  value:
-                    updatedCount: 2
-                    notFoundIds:
-                      - 999
-                      - 1000
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '404':
-          description: Saved view not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/views/{id}/pin/{txnId}:
-    post:
-      tags:
-        - Saved Views
-      summary: Pin a transaction
-      description: Pins a transaction to the view
-      operationId: pinTransaction
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: txnId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    delete:
-      tags:
-        - Saved Views
-      summary: Unpin a transaction
-      description: Removes a pin from the view
-      operationId: unpinTransaction
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: txnId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/views/{id}/exclude:
-    post:
-      tags:
-        - Saved Views
-      summary: Bulk exclude transactions
-      description: Excludes multiple transactions from the view. Returns updatedCount
-        for unique valid IDs and notFoundIds for IDs that are missing, deleted, or
-        not owned by the caller.
-      operationId: bulkExcludeTransactions
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BulkViewTransactionRequest'
-        required: true
-      responses:
-        '200':
-          description: Some transactions were not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BulkViewTransactionResponse'
-              examples:
-                Partial success:
-                  summary: Some IDs were not excluded
-                  description: Partial success
-                  value:
-                    updatedCount: 2
-                    notFoundIds:
-                      - 999
-                      - 1000
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '404':
-          description: Saved view not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/views/{id}/exclude/{txnId}:
-    post:
-      tags:
-        - Saved Views
-      summary: Exclude a transaction
-      description: Excludes a transaction from the view
-      operationId: excludeTransaction
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: txnId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-    delete:
-      tags:
-        - Saved Views
-      summary: Remove exclusion
-      description: Removes an exclusion, allowing the transaction to appear if it
-        matches criteria
-      operationId: unexcludeTransaction
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: txnId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavedViewResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -1587,6 +1077,272 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/views/{id}:
+    get:
+      tags:
+        - Saved Views
+      summary: Get static saved-view metadata
+      operationId: getView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    delete:
+      tags:
+        - Saved Views
+      summary: Delete a static saved view
+      operationId: deleteView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    patch:
+      tags:
+        - Saved Views
+      summary: Rename a static saved view
+      operationId: updateView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSavedViewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '422':
+          description: SAVED_VIEW_NAME_ALREADY_EXISTS for a same-owner name conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+  /v1/views/{id}/transactions:
+    get:
+      tags:
+        - Saved Views
+      summary: Get complete static saved-view membership
+      operationId: getViewTransactions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViewMembershipResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    patch:
+      tags:
+        - Saved Views
+      summary: Apply a static saved-view membership delta
+      operationId: updateViewTransactions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSavedViewTransactionsRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
+        '422':
+          description: Unprocessable Entity
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/transactions/{id}:
     get:
       tags:
@@ -1741,61 +1497,15 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
-  /v1/views/{id}/transactions:
-    get:
-      tags:
-        - Saved Views
-      summary: Get view transaction IDs
-      description: Gets IDs of active transactions in this view, grouped by membership
-        type (matched, pinned, excluded). Soft-deleted transactions are excluded.
-      operationId: getViewTransactions
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ViewMembershipResponse'
-        '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
   /v1/transactions:
     get:
       tags:
         - Transactions
       summary: Get transactions
-      description: Get all transactions
+      description: Returns the complete active transaction collection for the authenticated
+        owner as a plain array. This intentionally unpaged snapshot supports browser-owned
+        filtering, sorting, and aggregation; browser table pagination is presentation
+        only.
       operationId: getTransactions
       responses:
         '200':
@@ -1829,8 +1539,26 @@ paths:
       tags:
         - Transactions
       summary: Search transactions across users
+      description: Returns a paged administrative search across active transactions.
+        minAmount and maxAmount compare each row's stored numeric amount without currency
+        normalization, so an amount-only query may match multiple currencies. currencyIsoCode
+        is an independent exact criterion; combine it with amount bounds for a currency-specific
+        numeric comparison. Sorting by amount likewise uses the stored numeric amount.
       operationId: searchTransactions
       parameters:
+        - name: sort
+          in: query
+          description: Sorting criteria as property,(asc|desc). Multiple values are
+            supported. sort=amount compares stored numeric amounts without currency
+            normalization.
+          required: false
+          schema:
+            type: array
+            default:
+              - date,DESC
+              - id,DESC
+            items:
+              type: string
         - name: id
           in: query
           description: Unique identifier for the transaction
@@ -1894,29 +1622,41 @@ paths:
           example: '2025-10-14'
         - name: currencyIsoCode
           in: query
-          description: ISO currency code for the transaction
+          description: Exact ISO currency code criterion. On administrative endpoints
+            this is independent of minAmount and maxAmount; combine them to make an
+            amount comparison currency-specific.
           required: false
           schema:
             type: string
-            description: ISO currency code for the transaction
+            description: Exact ISO currency code criterion. On administrative endpoints
+              this is independent of minAmount and maxAmount; combine them to make
+              an amount comparison currency-specific.
             example: USD
           example: USD
         - name: minAmount
           in: query
-          description: Minimum transaction amount
+          description: Inclusive minimum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           required: false
           schema:
             type: number
-            description: Minimum transaction amount
+            description: Inclusive minimum stored numeric amount. Administrative search
+              and count do not normalize currencies, so this criterion is valid across
+              currencies.
             example: 10.0
           example: 10.0
         - name: maxAmount
           in: query
-          description: Maximum transaction amount
+          description: Inclusive maximum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           required: false
           schema:
             type: number
-            description: Maximum transaction amount
+            description: Inclusive maximum stored numeric amount. Administrative search
+              and count do not normalize currencies, so this criterion is valid across
+              currencies.
             example: 500.0
           example: 500.0
         - name: type
@@ -1998,18 +1738,6 @@ paths:
             type: integer
             default: 50
             minimum: 1
-        - name: sort
-          in: query
-          description: 'Sorting criteria in the format: property,(asc|desc). Default
-            sort order is ascending. Multiple sort criteria are supported.'
-          required: false
-          schema:
-            type: array
-            default:
-              - date,DESC
-              - id,DESC
-            items:
-              type: string
       responses:
         '200':
           description: Transactions retrieved successfully
@@ -2055,6 +1783,9 @@ paths:
       tags:
         - Transactions
       summary: Count transactions across users
+      description: Counts active transactions matching the administrative criteria.
+        minAmount and maxAmount compare stored numeric amounts without currency normalization;
+        currencyIsoCode is an independent exact criterion.
       operationId: countTransactionsAcrossUsers
       parameters:
         - name: id
@@ -2120,29 +1851,41 @@ paths:
           example: '2025-10-14'
         - name: currencyIsoCode
           in: query
-          description: ISO currency code for the transaction
+          description: Exact ISO currency code criterion. On administrative endpoints
+            this is independent of minAmount and maxAmount; combine them to make an
+            amount comparison currency-specific.
           required: false
           schema:
             type: string
-            description: ISO currency code for the transaction
+            description: Exact ISO currency code criterion. On administrative endpoints
+              this is independent of minAmount and maxAmount; combine them to make
+              an amount comparison currency-specific.
             example: USD
           example: USD
         - name: minAmount
           in: query
-          description: Minimum transaction amount
+          description: Inclusive minimum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           required: false
           schema:
             type: number
-            description: Minimum transaction amount
+            description: Inclusive minimum stored numeric amount. Administrative search
+              and count do not normalize currencies, so this criterion is valid across
+              currencies.
             example: 10.0
           example: 10.0
         - name: maxAmount
           in: query
-          description: Maximum transaction amount
+          description: Inclusive maximum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           required: false
           schema:
             type: number
-            description: Maximum transaction amount
+            description: Inclusive maximum stored numeric amount. Administrative search
+              and count do not normalize currencies, so this criterion is valid across
+              currencies.
             example: 500.0
           example: 500.0
         - name: type
@@ -2925,185 +2668,6 @@ paths:
                 message: Service Unavailable
 components:
   schemas:
-    UpdateSavedViewRequest:
-      type: object
-      description: Request to update a saved view
-      properties:
-        name:
-          type: string
-          description: New name for the view
-          example: SF Trip December 2024
-          maxLength: 255
-          minLength: 0
-        criteria:
-          $ref: '#/components/schemas/ViewCriteriaApi'
-          description: New filter criteria for the view
-        openEnded:
-          type: boolean
-          description: If true, the view includes transactions up to current date
-    ViewCriteriaApi:
-      type: object
-      description: Filter criteria for a saved view
-      properties:
-        dateFrom:
-          type: string
-          format: date
-          description: Start date for transaction date range
-          example: '2024-12-01'
-        dateTo:
-          type: string
-          format: date
-          description: End date for transaction date range. Omitted for open-ended
-            views.
-        accountIds:
-          type: array
-          description: Account IDs to filter by
-          items:
-            type: string
-          uniqueItems: true
-        bankNames:
-          type: array
-          description: Bank names to filter by
-          example:
-            - Capital One
-            - Truist
-          items:
-            type: string
-          uniqueItems: true
-        currencyIsoCodes:
-          type: array
-          description: Currency ISO codes to filter by
-          example:
-            - USD
-            - EUR
-          items:
-            type: string
-          uniqueItems: true
-        minAmount:
-          type: number
-          description: Minimum transaction amount
-          example: 10.0
-        maxAmount:
-          type: number
-          description: Maximum transaction amount
-          example: 500.0
-        type:
-          type: string
-          description: Type of transaction to include
-          enum:
-            - CREDIT
-            - DEBIT
-          example: DEBIT
-        searchText:
-          type: string
-          description: Text to match in the transaction description
-          example: coffee
-    SavedViewResponse:
-      type: object
-      description: Saved view response
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier for the view
-        name:
-          type: string
-          description: Name of the view
-          example: SF Trip December 2024
-        criteria:
-          $ref: '#/components/schemas/ViewCriteriaApi'
-          description: Filter criteria for the view
-        openEnded:
-          type: boolean
-          description: If true, the view includes transactions up to the current date
-        pinnedCount:
-          type: integer
-          format: int32
-          description: Number of active pinned transactions
-        excludedCount:
-          type: integer
-          format: int32
-          description: Number of active excluded transactions
-        transactionCount:
-          type: integer
-          format: int64
-          description: Total number of effectively visible transactions in this view
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the view was created
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the view was last updated
-      required:
-        - createdAt
-        - criteria
-        - excludedCount
-        - id
-        - name
-        - openEnded
-        - pinnedCount
-        - transactionCount
-        - updatedAt
-    ApiErrorResponse:
-      description: Standard API error response format
-      properties:
-        type:
-          type: string
-          description: Error type categorization for API responses
-          enum:
-            - INVALID_REQUEST
-            - VALIDATION_ERROR
-            - NOT_FOUND
-            - APPLICATION_ERROR
-            - SERVICE_UNAVAILABLE
-            - INTERNAL_ERROR
-            - UNAUTHORIZED
-            - FORBIDDEN
-          example: APPLICATION_ERROR
-        message:
-          type: string
-          description: Human-readable message describing the error
-          example: 'CSV format: fake-bank not supported'
-        code:
-          type: string
-          description: Machine-readable error code for specific application errors
-            (required for APPLICATION_ERROR type)
-          example: CSV_PARSING_ERROR
-        fieldErrors:
-          type: array
-          description: List of field-level validation errors (populated for VALIDATION_ERROR
-            type)
-          items:
-            $ref: '#/components/schemas/FieldError'
-      required:
-        - message
-        - type
-    FieldError:
-      description: Field-level validation error details
-      properties:
-        index:
-          type: integer
-          format: int32
-          description: Zero-based index of the item in a batch/list that caused the
-            error. Null for single-item validation errors.
-          example: 44
-        field:
-          type: string
-          description: Field that triggered the error
-          example: email
-        message:
-          type: string
-          description: Error message
-          example: must be a valid email address
-        rejectedValue:
-          type: object
-          description: Value that caused the error
-          example: invalid@email
-      required:
-        - field
-        - message
     UpdateStatementFormatRequest:
       type: object
       properties:
@@ -3173,6 +2737,64 @@ components:
           example: usr_admin456
       required:
         - createdAt
+    ApiErrorResponse:
+      description: Standard API error response format
+      properties:
+        type:
+          type: string
+          description: Error type categorization for API responses
+          enum:
+            - INVALID_REQUEST
+            - VALIDATION_ERROR
+            - NOT_FOUND
+            - APPLICATION_ERROR
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+          example: APPLICATION_ERROR
+        message:
+          type: string
+          description: Human-readable message describing the error
+          example: 'CSV format: fake-bank not supported'
+        code:
+          type: string
+          description: Machine-readable error code for specific application errors
+            (required for APPLICATION_ERROR type)
+          example: CSV_PARSING_ERROR
+        fieldErrors:
+          type: array
+          description: List of field-level validation errors (populated for VALIDATION_ERROR
+            type)
+          items:
+            $ref: '#/components/schemas/FieldError'
+      required:
+        - message
+        - type
+    FieldError:
+      description: Field-level validation error details
+      properties:
+        index:
+          type: integer
+          format: int32
+          description: Zero-based index of the item in a batch/list that caused the
+            error. Null for single-item validation errors.
+          example: 44
+        field:
+          type: string
+          description: Field that triggered the error
+          example: email
+        message:
+          type: string
+          description: Error message
+          example: must be a valid email address
+        rejectedValue:
+          type: object
+          description: Value that caused the error
+          example: invalid@email
+      required:
+        - field
+        - message
     CreateSavedViewRequest:
       type: object
       description: Request to create a new saved view
@@ -3183,53 +2805,47 @@ components:
           example: SF Trip December 2024
           maxLength: 255
           minLength: 0
-        criteria:
-          $ref: '#/components/schemas/ViewCriteriaApi'
-          description: Filter criteria for the view
-        openEnded:
-          type: boolean
-          description: If true, the view includes transactions up to current date
-          example: false
+        transactionIds:
+          type: array
+          description: Unordered transaction IDs to include in the static view
+          items:
+            type: integer
+            format: int64
+            minimum: 1
       required:
-        - criteria
         - name
-    BulkViewTransactionRequest:
+        - transactionIds
+    SavedViewResponse:
       type: object
-      description: Request to bulk pin or exclude multiple transactions in a saved
-        view
+      description: Static saved-view metadata
       properties:
-        ids:
-          type: array
-          description: List of transaction IDs to update
-          example:
-            - 1
-            - 2
-            - 3
-          items:
-            type: integer
-            format: int64
-          minItems: 1
-      required:
-        - ids
-    BulkViewTransactionResponse:
-      type: object
-      description: Response from bulk saved-view transaction update operation
-      properties:
-        updatedCount:
+        id:
+          type: string
+          format: uuid
+          description: Unique view identifier
+        name:
+          type: string
+          description: User-facing view name
+          example: SF Trip December 2024
+        transactionCount:
           type: integer
-          format: int32
-          description: Number of unique transaction IDs successfully updated
-          example: 5
-        notFoundIds:
-          type: array
-          description: List of transaction IDs that were not found, not owned by the
-            user, or deleted
-          example:
-            - 999
-            - 1000
-          items:
-            type: integer
-            format: int64
+          format: int64
+          description: Number of active transaction memberships
+          example: 25
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last explicit update timestamp
+      required:
+        - createdAt
+        - id
+        - name
+        - transactionCount
+        - updatedAt
     PreviewFileImportStatusResponse:
       type: object
       description: File import history status for the previewed upload
@@ -4161,6 +3777,39 @@ components:
           type: string
         categoryColumn:
           type: string
+    UpdateSavedViewRequest:
+      type: object
+      description: Request to rename a saved view
+      properties:
+        name:
+          type: string
+          description: New name for the view
+          example: SF Trip December 2024
+          maxLength: 255
+          minLength: 0
+      required:
+        - name
+    UpdateSavedViewTransactionsRequest:
+      type: object
+      description: Static saved-view membership additions and removals
+      properties:
+        addTransactionIds:
+          type: array
+          description: Unordered transaction IDs to add
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+        removeTransactionIds:
+          type: array
+          description: Unordered transaction IDs to remove
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+      required:
+        - addTransactionIds
+        - removeTransactionIds
     TransactionUpdateRequest:
       type: object
       description: Request to update a transaction's mutable fields
@@ -4179,13 +3828,11 @@ components:
           minLength: 0
     ViewMembershipResponse:
       type: object
-      description: Transaction IDs grouped by membership type in a saved view. Only
-        includes active (non-deleted) transactions.
+      description: Complete static saved-view transaction membership
       properties:
-        matched:
+        transactionIds:
           type: array
-          description: IDs of active transactions matching view criteria (excluding
-            excluded IDs)
+          description: Deterministically ordered transaction IDs
           example:
             - 123
             - 456
@@ -4193,29 +3840,8 @@ components:
           items:
             type: integer
             format: int64
-        pinned:
-          type: array
-          description: IDs of active transactions explicitly pinned (excluding those
-            already matched)
-          example:
-            - 101
-            - 102
-          items:
-            type: integer
-            format: int64
-        excluded:
-          type: array
-          description: IDs of active transactions explicitly excluded from matched
-            set
-          example:
-            - 234
-          items:
-            type: integer
-            format: int64
       required:
-        - excluded
-        - matched
-        - pinned
+        - transactionIds
     PageMetadataResponse:
       type: object
       description: Pagination metadata for a paged API response
@@ -4311,15 +3937,21 @@ components:
           example: '2025-10-14'
         currencyIsoCode:
           type: string
-          description: ISO currency code for the transaction
+          description: Exact ISO currency code criterion. On administrative endpoints
+            this is independent of minAmount and maxAmount; combine them to make an
+            amount comparison currency-specific.
           example: USD
         minAmount:
           type: number
-          description: Minimum transaction amount
+          description: Inclusive minimum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           example: 10.0
         maxAmount:
           type: number
-          description: Maximum transaction amount
+          description: Inclusive maximum stored numeric amount. Administrative search
+            and count do not normalize currencies, so this criterion is valid across
+            currencies.
           example: 500.0
         type:
           type: string

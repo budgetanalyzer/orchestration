@@ -222,6 +222,7 @@ Supported local startup path:
 - `tilt up` remains the supported full-stack entry point after the documented prerequisites are complete
 - `docs/development/local-environment.md` owns live-update mechanics and mixed local-and-cluster workflow detail
 - `scripts/README.md` owns the full verifier catalog and targeted capability checks
+- Preserve the local frontend production-smoke path as one atomic Tilt image target mapped into `nginx-gateway`; read `docs/development/local-environment.md#frontend-reactvite` before changing that build or rollout wiring
 
 Primary operator entry points:
 - App: `https://app.budgetanalyzer.localhost`

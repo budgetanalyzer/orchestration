@@ -14,6 +14,7 @@ kubernetes/services/nginx-gateway/deployment.yaml
 kubernetes/services/permission-service/deployment.yaml
 kubernetes/services/session-gateway/deployment.yaml
 kubernetes/services/transaction-service/deployment.yaml
+nginx/Dockerfile.prod-smoke-assets
 Tiltfile
 tests/setup-flow/kind-cluster-test-config.yaml
 tests/shared/Dockerfile.test-env

@@ -150,7 +150,7 @@ check_node_version() {
     if [ -z "$parsed_version" ]; then
         echo -e "${RED}✗${NC} Could not parse Node.js version"
         echo "  Raw output: $raw_version"
-        echo "  Install Node.js 20+ for the local frontend prod-smoke Tilt resource."
+        echo "  Install Node.js 20+ for the local frontend prod-smoke image build."
         ((ERRORS++))
         return 1
     fi
@@ -161,7 +161,7 @@ check_node_version() {
     fi
 
     echo -e "${RED}✗${NC} Unsupported Node.js version: $raw_version"
-    echo "  Expected Node.js 20+ for the local frontend prod-smoke Tilt resource."
+    echo "  Expected Node.js 20+ for the local frontend prod-smoke image build."
     ((ERRORS++))
     return 1
 }
@@ -175,7 +175,7 @@ check_npm_version() {
     if [ -z "$parsed_version" ]; then
         echo -e "${RED}✗${NC} Could not parse npm version"
         echo "  Raw output: $raw_version"
-        echo "  Install npm 10+ for the local frontend prod-smoke Tilt resource."
+        echo "  Install npm 10+ for the local frontend prod-smoke image build."
         ((ERRORS++))
         return 1
     fi
@@ -186,7 +186,7 @@ check_npm_version() {
     fi
 
     echo -e "${RED}✗${NC} Unsupported npm version: $raw_version"
-    echo "  Expected npm 10+ for the local frontend prod-smoke Tilt resource."
+    echo "  Expected npm 10+ for the local frontend prod-smoke image build."
     ((ERRORS++))
     return 1
 }
@@ -438,7 +438,7 @@ if [ -d "$WORKSPACE_DIR/budget-analyzer-web" ]; then
         echo -e "${GREEN}✓${NC} budget-analyzer-web/node_modules exists for the local prod-smoke build"
     else
         echo -e "${RED}✗${NC} budget-analyzer-web/node_modules is missing"
-        echo "  Tilt's budget-analyzer-web-prod-smoke-build resource runs npm on the host."
+        echo "  Tilt's budget-analyzer-web-prod-smoke image build runs npm on the host."
         echo "  Run: cd $WORKSPACE_DIR/budget-analyzer-web && npm install"
         ((ERRORS++))
     fi

@@ -137,16 +137,18 @@ NGINX serves two frontend modes on the same origin:
 - `/` and `/login` keep the existing Vite/HMR development flow through the `budget-analyzer-web` pod.
 - `/_prod-smoke/` serves the sibling repo's `npm run build:prod-smoke` output as static files for CSP and browser-policy verification.
 
-The `budget-analyzer-web-prod-smoke-build` Tilt resource runs that smoke build
-locally in the sibling repo, not inside the frontend container, then stages the
-built files under orchestration-owned `.tilt/budget-analyzer-web-prod-smoke/`
-before building the tiny static asset image. Keep local npm dependencies
-installed there (`cd ../budget-analyzer-web && npm install`) if you expect
-`/_prod-smoke/` to build or refresh. The normal frontend pod remains separate
-and still installs its own dependencies inside its image. Tilt also watches the
-smoke build's `.env`, `.env.local`, `.env.production`, and
-`.env.production.local` inputs so relevant env changes retrigger the static
-bundle path.
+The `budget-analyzer-web-prod-smoke` Tilt image target runs that smoke build
+locally in the sibling repo, not inside the frontend container, then builds the
+tiny static-asset image directly from the completed `dist/` directory as the
+same atomic operation. Keep local npm dependencies installed there
+(`cd ../budget-analyzer-web && npm install`) if you expect `/_prod-smoke/` to
+build or refresh. The normal frontend pod remains separate and still installs
+its own dependencies inside its image. Tilt watches the smoke build inputs,
+including `.env`, `.env.local`, `.env.production`, and
+`.env.production.local`, plus the asset Dockerfile. A changed image reference
+updates the NGINX Deployment, replaces its pod, and reruns the init container
+that copies the current bundle into the pod-local volume. Exact mechanics live
+in [../docs/development/local-environment.md](../docs/development/local-environment.md#frontend-reactvite).
 
 The smoke path is a verification seam, not a second long-term application mode. API and auth endpoints stay root-relative (`/api`, `/oauth2/authorization/idp`, `/logout`) regardless of which frontend path is loaded.
 
@@ -358,12 +360,12 @@ This is the power of resource-based routing!
 **Cause:** The smoke bundle did not build, the static asset image is stale, or the init container failed to copy files into the NGINX volume.
 
 **Fix:**
-1. Check the Tilt resource: `tilt get uiresources | grep budget-analyzer-web-prod-smoke-build`
+1. Check the owning Tilt resource: `tilt get uiresources nginx-gateway`
 2. Ensure the sibling repo has local npm dependencies: `cd ../budget-analyzer-web && npm install`
-3. Re-run the build directly if needed: `cd ../budget-analyzer-web && npm run build:prod-smoke`
-4. Verify the orchestration staging directory was refreshed: `ls -R .tilt/budget-analyzer-web-prod-smoke`
-5. Inspect the init container: `kubectl logs deployment/nginx-gateway -c web-prod-smoke-assets --previous`
-6. Verify the copied files exist: `kubectl exec deployment/nginx-gateway -- ls -R /usr/share/nginx/html/_prod-smoke`
+3. Inspect the image map: `tilt get imagemaps budget-analyzer-web-prod-smoke`
+4. Inspect the NGINX image-build logs: `tilt logs nginx-gateway`
+5. Inspect the init container: `kubectl logs deployment/nginx-gateway -c web-prod-smoke-assets`
+6. Verify the copied files exist: `kubectl exec deployment/nginx-gateway -c nginx -- ls -R /usr/share/nginx/html/_prod-smoke`
 
 ### API requests fail (404 or 502)
 

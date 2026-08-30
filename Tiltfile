@@ -706,22 +706,21 @@ k8s_resource(
 # ============================================================================
 
 frontend_repo = get_repo_path('budget-analyzer-web')
-frontend_smoke_staging_dir = config.main_dir + '/.tilt/budget-analyzer-web-prod-smoke'
+frontend_smoke_dockerfile = config.main_dir + '/nginx/Dockerfile.prod-smoke-assets'
 
-def frontend_smoke_build_command(repo_path, staging_dir):
-    """Build and stage the local production-smoke bundle with an explicit npm preflight."""
+def frontend_smoke_image_build_command(repo_path, dockerfile):
+    """Build the local production-smoke bundle and its image as one operation."""
     return (
-        'rm -rf ' + shell_single_quote(staging_dir) + ' && '
-        + 'mkdir -p ' + shell_single_quote(staging_dir) + ' && '
-        + 'cd ' + shell_single_quote(repo_path) + ' && '
+        'cd ' + shell_single_quote(repo_path) + ' && '
         + 'if [ ! -d node_modules ]; then '
         + "printf '%s\\n' " + shell_single_quote(
-            'budget-analyzer-web-prod-smoke-build requires local npm dependencies in the sibling budget-analyzer-web repo. Run "npm install" there before re-running Tilt. This preflight only applies to the local /_prod-smoke/ build path; the normal frontend pod still installs its dependencies inside its image.'
+            'The budget-analyzer-web-prod-smoke image build requires local npm dependencies in the sibling budget-analyzer-web repo. Run "npm install" there before re-running Tilt. This preflight only applies to the local /_prod-smoke/ build path; the normal frontend pod still installs its dependencies inside its image.'
         ) + ' >&2; '
         + 'exit 1; '
         + 'fi && '
         + 'npm run build:prod-smoke && '
-        + 'cp -R dist/. ' + shell_single_quote(staging_dir) + '/'
+        + 'docker build --file ' + shell_single_quote(dockerfile)
+        + ' --tag "$EXPECTED_REF" dist'
     )
 
 def frontend_smoke_build_deps(repo_path):
@@ -743,25 +742,12 @@ def frontend_smoke_build_deps(repo_path):
         repo_path + '/.env.production.local',
     ]
 
-# Build a production-bundle smoke variant that NGINX can serve statically under
-# /_prod-smoke/ without replacing the live Vite/HMR frontend route at /.
-local_resource(
-    'budget-analyzer-web-prod-smoke-build',
-    cmd=frontend_smoke_build_command(frontend_repo, frontend_smoke_staging_dir),
-    deps=frontend_smoke_build_deps(frontend_repo),
-    resource_deps=['kind-node-inotify-budget'],
-    labels=['frontend'],
-)
-
-docker_build(
+# Build the production-smoke bundle and its asset image atomically so Tilt only
+# updates NGINX after both steps succeed.
+custom_build(
     'budget-analyzer-web-prod-smoke',
-    context=frontend_smoke_staging_dir,
-    dockerfile_contents='''
-FROM alpine:3.22.2@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
-
-WORKDIR /prod-smoke
-COPY . ./
-''',
+    command=frontend_smoke_image_build_command(frontend_repo, frontend_smoke_dockerfile),
+    deps=frontend_smoke_build_deps(frontend_repo) + [frontend_smoke_dockerfile],
 )
 
 # Create ConfigMap from NGINX configuration with auto-reload
@@ -834,7 +820,7 @@ k8s_resource(
         port_forward(8080, 8080, name='HTTP'),
     ],
     labels=['gateway'],
-    resource_deps=['istio-injection', 'budget-analyzer-web-prod-smoke-build']
+    resource_deps=['istio-injection']
 )
 
 # ============================================================================

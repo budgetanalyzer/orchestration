@@ -22,7 +22,7 @@ environment works after startup
 - mkcert 1.4.4 (`setup.sh` auto-installs this pinned binary if missing or
   mismatched; Linux still needs host `libnss3-tools` for browser trust stores)
 - JDK 25 (required by host-side Gradle local resources before service images are built)
-- Node.js 20+ and npm 10+ (required by the local frontend prod-smoke Tilt resource)
+- Node.js 20+ and npm 10+ (required by the local frontend prod-smoke image build)
 
 Gradle does not need to be installed globally for the normal Tilt path; use the
 checked-in `./gradlew` wrappers.
@@ -34,7 +34,8 @@ JDK, Node.js, npm, sibling repository checkouts including `../ext-authz`, and
 frontend `node_modules`.
 
 The sibling `budget-analyzer-web` repo must also have local npm dependencies
-installed because `budget-analyzer-web-prod-smoke-build` runs on the host:
+installed because the `budget-analyzer-web-prod-smoke` image build runs on the
+host:
 
 ```bash
 cd ../budget-analyzer-web
@@ -329,8 +330,16 @@ Tilt builds from the Dockerfile in `budget-analyzer-web/` — installs dependenc
 **Live sync (no restart needed):**
 When you edit React code, Tilt syncs `src/`, `public/`, and `index.html` into the running pod. Vite's HMR detects the change and hot-patches the browser — no container restart, no page reload. If `package.json` changes, Tilt triggers `npm install` inside the pod.
 
-**Production-smoke build (`local_resource` + init container):**
-Tilt also runs `npm run build:prod-smoke` from the sibling repo, stages the built bundle into orchestration-owned `.tilt/budget-analyzer-web-prod-smoke/`, builds a tiny static-asset image from that staging directory, and has `nginx-gateway` copy that bundle into an internal volume during pod startup. NGINX serves that bundle at `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other browser-security checks while `/` and `/login` stay on the live Vite route.
+**Production-smoke build (atomic custom image build + init container):**
+Tilt's `budget-analyzer-web-prod-smoke` custom image target runs the local npm
+preflight and `npm run build:prod-smoke` in the sibling repo, then builds the
+static-asset image directly from the completed `dist/` directory. These steps
+are one operation: Tilt cannot publish or inject a new image reference when
+frontend compilation fails. The image remains mapped into `nginx-gateway`,
+whose init container copies the bundle into an internal `emptyDir` volume.
+NGINX serves that bundle at
+`https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other
+browser-security checks while `/` and `/login` stay on the live Vite route.
 
 That local smoke-build path depends on host/devcontainer npm state in the
 sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
@@ -340,9 +349,11 @@ from the normal frontend pod, which still installs and runs inside its own
 image. Tilt now watches the sibling smoke-build inputs plus the Vite env files
 that affect the build (`.env`, `.env.local`, `.env.production`, and
 `.env.production.local`) so those local config changes retrigger the smoke
-asset path. The staging directory is orchestration-owned local plumbing; this
-fix does not change the frontend release-image workflow or the production NGINX
-cutover.
+asset image. A successful build with changed image content updates the image
+reference in the NGINX Deployment pod template, so Kubernetes creates a new
+ReplicaSet and pod and the init container repopulates the volume with the
+current bundle. This orchestration-owned image path does not change the
+frontend release-image workflow or the production NGINX cutover.
 
 That seam is deliberately local-only. The checked-in production cutover now
 lives in `nginx/nginx.production.k8s.conf`, where `/` and `/login` serve the

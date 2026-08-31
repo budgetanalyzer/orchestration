@@ -223,7 +223,8 @@ paths:
                 type: INVALID_REQUEST
                 message: Bad Request
         '422':
-          description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable membership or SAVED_VIEW_NAME_ALREADY_EXISTS
+          description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable membership or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED
+            when the membership limit is exceeded or SAVED_VIEW_NAME_ALREADY_EXISTS
             for a same-owner name conflict
           content:
             application/json:
@@ -1320,9 +1321,10 @@ paths:
                 type: NOT_FOUND
                 message: Not Found
         '422':
-          description: Unprocessable Entity
+          description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable additions or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED
+            when the membership limit is exceeded
           content:
-            '*/*':
+            application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
         '500':
@@ -2812,6 +2814,7 @@ components:
             type: integer
             format: int64
             minimum: 1
+          maxItems: 10000
       required:
         - name
         - transactionIds
@@ -3800,6 +3803,7 @@ components:
             type: integer
             format: int64
             minimum: 1
+          maxItems: 10000
         removeTransactionIds:
           type: array
           description: Unordered transaction IDs to remove
@@ -3807,6 +3811,7 @@ components:
             type: integer
             format: int64
             minimum: 1
+          maxItems: 10000
       required:
         - addTransactionIds
         - removeTransactionIds

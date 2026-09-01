@@ -248,6 +248,81 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/views/{sourceViewId}/clone:
+    post:
+      tags:
+        - Saved Views
+      summary: Clone a static saved view
+      description: Creates an independent copy of an owner-scoped saved view under
+        a new name
+      operationId: cloneView
+      parameters:
+        - name: sourceViewId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneSavedViewRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: Canonical URL of the cloned saved view
+              style: simple
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedViewResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Source saved view not found for the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '422':
+          description: SAVED_VIEW_MEMBERSHIP_STALE when the source membership is unavailable
+            or SAVED_VIEW_NAME_ALREADY_EXISTS for a same-owner target name conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/transactions/preview:
     post:
       tags:
@@ -2849,6 +2924,18 @@ components:
         - name
         - transactionCount
         - updatedAt
+    CloneSavedViewRequest:
+      type: object
+      description: Request to clone a saved view
+      properties:
+        name:
+          type: string
+          description: Name for the cloned view
+          example: Copy of December review
+          maxLength: 255
+          minLength: 0
+      required:
+        - name
     PreviewFileImportStatusResponse:
       type: object
       description: File import history status for the previewed upload

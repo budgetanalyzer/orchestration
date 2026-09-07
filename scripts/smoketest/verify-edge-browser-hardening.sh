@@ -40,6 +40,7 @@ PROBE_LABEL_KEY="verify-edge-browser-temp"
 PROBE_LABEL_VALUE="true"
 PROBE_POD_NAME="edge-browser-probe"
 PROBE_POLICY_NAME="allow-edge-browser-egress-to-istio-ingress"
+# renovate: datasource=docker depName=curlimages/curl
 PROBE_IMAGE="curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6"
 INGRESS_NAMESPACE="istio-ingress"
 INGRESS_SERVICE_NAME="istio-ingress-gateway-istio"

@@ -1,0 +1,78 @@
+name: Dependency Automation Configuration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dependency-automation-config.yml'
+      - 'renovate.json'
+      - 'renovate-presets/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dependency-automation-config.yml'
+      - 'renovate.json'
+      - 'renovate-presets/**'
+  workflow_dispatch:
+    inputs:
+      run_hosted_dry_run:
+        description: Run the post-publication GitHub-platform full dry run
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: '44.65.5'
+
+jobs:
+  validate-renovate-config:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Validate repository configuration and shared preset
+        run: >-
+          npx --yes --package="renovate@${RENOVATE_VERSION}" renovate-config-validator
+          --strict --no-global renovate.json renovate-presets/default.json
+
+  hosted-renovate-dry-run:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_hosted_dry_run }}
+    needs: validate-renovate-config
+    permissions:
+      checks: read
+      contents: read
+      issues: read
+      pull-requests: read
+      security-events: read
+      statuses: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Run read-only hosted full dry run
+        env:
+          LOG_LEVEL: debug
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_TOKEN: ${{ github.token }}
+        run: >-
+          npx --yes "renovate@${RENOVATE_VERSION}"
+          --platform=github
+          --dry-run=full
+          "${GITHUB_REPOSITORY}"

@@ -159,6 +159,18 @@ the checked-in desired state and immutable image digests.
 
 ## Orchestration Workflows
 
+Dependency update pull-request ownership, activation, cost constraints, and
+failure triage live in [Dependency Automation](dependency-automation.md). The
+focused `dependency-automation-config.yml` workflow runs Renovate's official
+strict configuration validator against the repository config and shared preset;
+it does not install the App or open dependency pull requests.
+
+The weekly/manual `exact-image-security-evidence.yml` workflow renders the
+checked-in production/controller sources offline, resolves each rendered ref to
+an exact platform digest, and publishes Trivy inventories and vulnerability
+reports. Its operating boundary, artifact contents, and known coverage gaps are
+owned by [Dependency Automation](dependency-automation.md#exact-image-security-evidence).
+
 ### `security-guardrails.yml`
 
 The orchestration repo now has a dedicated static security workflow for the

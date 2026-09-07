@@ -150,6 +150,8 @@ Choose scripts by runtime boundary:
 - `ops/` is for interactive local maintenance.
 - `loadtest/` manages synthetic local fixtures.
 - `repo/` coordinates cross-repo maintenance tasks.
+- `security/` prepares repeatable scanner inputs without applying resources or
+  contacting a Kubernetes API.
 
 ## Bootstrap
 
@@ -223,6 +225,18 @@ setup.
   RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
   `redis-data` claim template, and applies the production image Kyverno policy
   to the rendered app overlay.
+
+## Security evidence
+
+- `security/render-image-scan-inputs.sh` renders the production app and
+  infrastructure Kustomize overlays plus the selected Istio, External Secrets,
+  cert-manager, Kyverno, kube-prometheus-stack, and Kiali charts. It uses the
+  checked-in values and observability post-renderers, copies the standalone
+  Jaeger and Kind inputs, and extracts the Tilt Temurin and frontend smoke base
+  refs. The helper is offline with respect to Kubernetes: Helm repository and
+  container-registry network access are still required. The weekly/manual
+  exact-image evidence workflow owns YAML extraction, immutable platform
+  resolution, Trivy scanning, summaries, and short-lived artifacts.
 
 Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:

@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T164326Z-phase-10-96cbdc38-6b86-40de-b067-dd4474bb2adc",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e"
+  },
+  "phase": {
+    "id": "phase-10",
+    "title": "Onboard workspace images and installed tooling"
+  },
+  "status": "agent-failed",
+  "summary": "agent command exited with code 1",
+  "started_at": "2026-09-06T16:43:26Z",
+  "finished_at": "2026-09-06T16:45:21Z",
+  "execution_workspace": "/workspace/workspace",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T164326Z-phase-10-96cbdc38-6b86-40de-b067-dd4474bb2adc.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T164326Z-phase-10-96cbdc38-6b86-40de-b067-dd4474bb2adc.txt"
+  }
+}

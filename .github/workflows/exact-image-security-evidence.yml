@@ -1,0 +1,385 @@
+name: Exact Image Security Evidence
+
+on:
+  schedule:
+    - cron: '23 4 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exact-image-security-evidence
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  TRIVY_CACHE_DIR: ${{ github.workspace }}/scan-work/trivy-cache
+  TRIVY_NO_PROGRESS: 'true'
+
+jobs:
+  exact-image-security-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pinned render tools
+        run: |
+          tools_dir="${RUNNER_TEMP}/budget-analyzer-render-tools"
+          ./scripts/bootstrap/install-verified-tool.sh helm --install-dir "${tools_dir}"
+          ./scripts/bootstrap/install-verified-tool.sh kubectl --install-dir "${tools_dir}"
+          echo "${tools_dir}" >> "${GITHUB_PATH}"
+
+      - name: Render production and local image sources offline
+        run: >-
+          ./scripts/security/render-image-scan-inputs.sh
+          --output-dir scan-work/rendered
+          --local-platform linux/amd64
+
+      - name: Extract rendered image references
+        uses: mikefarah/yq@e1d5d6eb36b8995bf29e5acb561659824dc47be3 # v4.53.6
+        with:
+          cmd: |
+            set -eu
+            : > scan-work/raw-targets.tsv
+            for platform_dir in scan-work/rendered/linux-*; do
+              platform="linux/${platform_dir##*-}"
+              for manifest in "${platform_dir}"/*.yaml; do
+                source_path="${manifest#scan-work/rendered/}"
+                yq eval-all --no-doc --unwrapScalar '
+                  (
+                    .. | select(tag == "!!map") | .image? |
+                    select(tag == "!!str")
+                  ),
+                  (
+                    .. | select(tag == "!!seq") | .[] |
+                    select(
+                      tag == "!!str" and
+                      test("^--(prometheus-config-reloader|acme-http01-solver-image)=")
+                    ) |
+                    sub("^--[^=]+="; "")
+                  )
+                ' "${manifest}" > scan-work/extracted-image-refs.txt
+                while IFS= read -r image_ref; do
+                  case "${image_ref}" in
+                    ghcr.io/budgetanalyzer/*) continue ;;
+                  esac
+                  printf '%s\t%s\t%s\n' "${source_path}" "${platform}" "${image_ref}" \
+                    >> scan-work/raw-targets.tsv
+                done < scan-work/extracted-image-refs.txt
+              done
+            done
+            sort -u scan-work/raw-targets.tsv -o scan-work/raw-targets.tsv
+
+      - name: Build the deduplicated scan target manifest
+        run: |
+          test -s scan-work/raw-targets.tsv
+          jq -Rn '
+            [
+              inputs |
+              split("\t") |
+              {source: .[0], platform: .[1], source_ref: .[2]}
+            ] |
+            group_by([.platform, .source_ref]) |
+            map({
+              platform: .[0].platform,
+              source_ref: .[0].source_ref,
+              sources: (map(.source) | unique)
+            })
+          ' < scan-work/raw-targets.tsv > scan-work/targets.json
+          test "$(jq 'length' scan-work/targets.json)" -gt 0
+          {
+            echo '## Exact-image security evidence'
+            echo
+            printf 'Collected **%s** distinct image/platform targets from checked-in render inputs.\n\n' \
+              "$(jq 'length' scan-work/targets.json)"
+            echo '| Platform | Rendered source | Image reference |'
+            echo '| --- | --- | --- |'
+            jq -r '.[] | "| `\(.platform)` | \(.sources | map("`" + . + "`") | join("<br>")) | `\(.source_ref)` |"' \
+              scan-work/targets.json
+            echo
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Set up pinned Trivy CLI
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+
+      - name: Scan resolved platform artifacts
+        run: |
+          set -u
+          mkdir -p scan-work/evidence scan-work/scanner
+          incomplete=0
+          known_unscannable=0
+          docker buildx version > scan-work/scanner/registry-resolver-version.txt 2>&1 || incomplete=1
+
+          if trivy image --download-db-only > scan-work/scanner/database-download.log 2>&1; then
+            printf '%s\n' 'Trivy vulnerability database download completed.' \
+              > scan-work/scanner/database-status.txt
+          else
+            printf '%s\n' 'Trivy vulnerability database download failed.' \
+              > scan-work/scanner/database-status.txt
+            incomplete=1
+          fi
+          trivy --version > scan-work/scanner/version-and-database.txt 2>&1 || incomplete=1
+
+          {
+            echo '| Platform | Exact scanned artifact | Source pin | OS | OS packages | Application packages | Critical | High | Result |'
+            echo '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          target_index=0
+          while IFS= read -r target; do
+            target_index=$((target_index + 1))
+            platform="$(jq -r '.platform' <<< "${target}")"
+            source_ref="$(jq -r '.source_ref' <<< "${target}")"
+            sources="$(jq -c '.sources' <<< "${target}")"
+            target_hash="$(printf '%s\n%s\n' "${platform}" "${source_ref}" | sha256sum | cut -c1-12)"
+            target_dir="scan-work/evidence/$(printf '%03d' "${target_index}")-${target_hash}"
+            mkdir -p "${target_dir}"
+
+            if [[ "${source_ref}" == *@sha256:* ]]; then
+              source_pin="immutable"
+              declared_digest="${source_ref##*@}"
+            else
+              source_pin="mutable"
+              declared_digest=""
+            fi
+
+            jq -n \
+              --arg platform "${platform}" \
+              --arg source_ref "${source_ref}" \
+              --arg source_pin "${source_pin}" \
+              --argjson sources "${sources}" \
+              "{platform: \$platform, source_ref: \$source_ref, source_pin: \$source_pin, sources: \$sources}" \
+              > "${target_dir}/source.json"
+
+            if [[ "${source_ref}" == auto ]]; then
+              jq -n \
+                --arg result offline-render-does-not-identify-image \
+                --arg reason 'The Istio gateway chart emits image: auto; the injector resolves the proxy image only with a live control plane.' \
+                "{result: \$result, reason: \$reason}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | offline render does not identify image |\n' \
+                "${platform}" "${source_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              known_unscannable=$((known_unscannable + 1))
+              continue
+            fi
+
+            if ! docker buildx imagetools inspect --format '{{json .Manifest}}' "${source_ref}" \
+              > "${target_dir}/registry-manifest.json" \
+              2> "${target_dir}/registry-resolution.stderr"; then
+              jq -n --arg result registry-resolution-failed "{result: \$result}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | registry resolution failed |\n' \
+                "${platform}" "${source_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              incomplete=1
+              continue
+            fi
+
+            os="${platform%/*}"
+            architecture="${platform#*/}"
+            if jq -e '.manifests | type == "array"' "${target_dir}/registry-manifest.json" >/dev/null; then
+              resolved_digest="$(jq -r \
+                --arg os "${os}" \
+                --arg architecture "${architecture}" \
+                "first(.manifests[] | select(.platform.os == \$os and .platform.architecture == \$architecture)) | .digest // empty" \
+                "${target_dir}/registry-manifest.json")"
+            else
+              resolved_digest="$(jq -r '.digest // empty' "${target_dir}/registry-manifest.json")"
+            fi
+
+            manifest_digest="$(jq -r '.digest // empty' "${target_dir}/registry-manifest.json")"
+            if [[ -n "${declared_digest}" && "${declared_digest}" != "${manifest_digest}" ]]; then
+              jq -n \
+                --arg result declared-digest-mismatch \
+                --arg declared_digest "${declared_digest}" \
+                --arg registry_digest "${manifest_digest}" \
+                "{result: \$result, declared_digest: \$declared_digest, registry_digest: \$registry_digest}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | declared digest mismatch |\n' \
+                "${platform}" "${source_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              incomplete=1
+              continue
+            fi
+
+            if [[ -z "${resolved_digest}" ]]; then
+              jq -n --arg result platform-manifest-not-found "{result: \$result}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | platform manifest not found |\n' \
+                "${platform}" "${source_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              incomplete=1
+              continue
+            fi
+
+            repository="${source_ref%@*}"
+            last_component="${repository##*/}"
+            if [[ "${last_component}" == *:* ]]; then
+              repository="${repository%:*}"
+            fi
+            resolved_ref="${repository}@${resolved_digest}"
+
+            jq -n \
+              --arg platform "${platform}" \
+              --arg source_ref "${source_ref}" \
+              --arg source_pin "${source_pin}" \
+              --arg source_manifest_digest "${manifest_digest}" \
+              --arg resolved_ref "${resolved_ref}" \
+              --arg resolved_digest "${resolved_digest}" \
+              --argjson sources "${sources}" \
+              "{
+                platform: \$platform,
+                source_ref: \$source_ref,
+                source_pin: \$source_pin,
+                source_manifest_digest: \$source_manifest_digest,
+                resolved_ref: \$resolved_ref,
+                resolved_digest: \$resolved_digest,
+                sources: \$sources
+              }" > "${target_dir}/resolved-artifact.json"
+
+            inventory_ok=true
+            if ! trivy image \
+              --image-src remote \
+              --platform "${platform}" \
+              --scanners vuln \
+              --list-all-pkgs \
+              --format json \
+              --output "${target_dir}/package-inventory.json" \
+              "${resolved_ref}" \
+              2> "${target_dir}/package-inventory.stderr"; then
+              inventory_ok=false
+              incomplete=1
+            fi
+
+            vulnerabilities_ok=true
+            if ! trivy image \
+              --image-src remote \
+              --platform "${platform}" \
+              --scanners vuln \
+              --format json \
+              --output "${target_dir}/vulnerabilities.json" \
+              "${resolved_ref}" \
+              2> "${target_dir}/vulnerabilities.stderr"; then
+              vulnerabilities_ok=false
+              incomplete=1
+            fi
+
+            if [[ "${inventory_ok}" != true || "${vulnerabilities_ok}" != true ]]; then
+              jq -n \
+                --arg result trivy-scan-failed \
+                --argjson inventory_ok "${inventory_ok}" \
+                --argjson vulnerabilities_ok "${vulnerabilities_ok}" \
+                "{result: \$result, inventory_complete: \$inventory_ok, vulnerability_report_complete: \$vulnerabilities_ok}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | Trivy scan failed |\n' \
+                "${platform}" "${resolved_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              continue
+            fi
+
+            scanned_os="$(jq -r '.Metadata.ImageConfig.os // empty' \
+              "${target_dir}/package-inventory.json")"
+            scanned_architecture="$(jq -r '.Metadata.ImageConfig.architecture // empty' \
+              "${target_dir}/package-inventory.json")"
+            if [[ "${scanned_os}" != "${os}" || "${scanned_architecture}" != "${architecture}" ]]; then
+              jq -n \
+                --arg result scanned-platform-mismatch \
+                --arg expected "${platform}" \
+                --arg actual "${scanned_os}/${scanned_architecture}" \
+                "{result: \$result, expected_platform: \$expected, actual_platform: \$actual}" \
+                > "${target_dir}/status.json"
+              # shellcheck disable=SC2016
+              printf '| `%s` | `%s` | %s | - | - | - | - | - | scanned platform mismatch |\n' \
+                "${platform}" "${resolved_ref}" "${source_pin}" >> "${GITHUB_STEP_SUMMARY}"
+              incomplete=1
+              continue
+            fi
+
+            os_id="$(jq -r '(.Metadata.OS.Family // "unidentified") + ":" + (.Metadata.OS.Name // "unidentified")' \
+              "${target_dir}/package-inventory.json")"
+            os_packages="$(jq '[.Results[]? | select(.Class == "os-pkgs") | .Packages[]?] | length' \
+              "${target_dir}/package-inventory.json")"
+            application_packages="$(jq '[.Results[]? | select(.Class != "os-pkgs") | .Packages[]?] | length' \
+              "${target_dir}/package-inventory.json")"
+            critical="$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' \
+              "${target_dir}/vulnerabilities.json")"
+            high="$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' \
+              "${target_dir}/vulnerabilities.json")"
+
+            if [[ "${os_id}" == "unidentified:unidentified" && "${application_packages}" == 0 ]]; then
+              result="complete; no OS or application metadata"
+            elif [[ "${application_packages}" == 0 ]]; then
+              result="complete; no application packages"
+            elif [[ "${os_id}" == "unidentified:unidentified" ]]; then
+              result="complete; OS unidentified"
+            else
+              result="complete"
+            fi
+            jq -n \
+              --arg result "${result}" \
+              --arg os "${os_id}" \
+              --argjson os_packages "${os_packages}" \
+              --argjson application_packages "${application_packages}" \
+              --argjson critical "${critical}" \
+              --argjson high "${high}" \
+              "{
+                result: \$result,
+                os: \$os,
+                os_packages: \$os_packages,
+                application_packages: \$application_packages,
+                vulnerabilities: {critical: \$critical, high: \$high}
+              }" > "${target_dir}/status.json"
+
+            # shellcheck disable=SC2016
+            printf '| `%s` | `%s` | %s | `%s` | %s | %s | %s | %s | %s |\n' \
+              "${platform}" "${resolved_ref}" "${source_pin}" "${os_id}" \
+              "${os_packages}" "${application_packages}" "${critical}" "${high}" "${result}" \
+              >> "${GITHUB_STEP_SUMMARY}"
+          done < <(jq -c '.[]' scan-work/targets.json)
+
+          trivy --version > scan-work/scanner/version-and-database-after-scans.txt 2>&1 || incomplete=1
+          jq -n \
+            --argjson target_count "$(jq 'length' scan-work/targets.json)" \
+            --argjson incomplete "${incomplete}" \
+            --argjson known_unscannable "${known_unscannable}" \
+            "{target_count: \$target_count, scan_error: (\$incomplete != 0), known_unscannable: \$known_unscannable}" \
+            > scan-work/scan-status.json
+
+          if [[ "${incomplete}" -ne 0 ]]; then
+            echo 'One or more image scans were incomplete; inspect the retained evidence artifact.' >&2
+            exit 1
+          fi
+
+      - name: Upload short-lived image security evidence
+        id: evidence-artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: exact-image-security-evidence-${{ github.run_id }}
+          path: |
+            scan-work/evidence
+            scan-work/rendered
+            scan-work/scanner
+            scan-work/raw-targets.tsv
+            scan-work/targets.json
+            scan-work/scan-status.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+
+      - name: Link the retained evidence
+        if: ${{ always() && steps.evidence-artifact.outputs.artifact-url != '' }}
+        env:
+          ARTIFACT_URL: ${{ steps.evidence-artifact.outputs.artifact-url }}
+        run: |
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          printf '[Download the seven-day evidence artifact](%s)\n' "${ARTIFACT_URL}" \
+            >> "${GITHUB_STEP_SUMMARY}"

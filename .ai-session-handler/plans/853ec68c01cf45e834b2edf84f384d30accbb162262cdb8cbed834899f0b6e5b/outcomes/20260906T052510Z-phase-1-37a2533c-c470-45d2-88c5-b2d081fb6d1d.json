@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "d99be9ac402fe0c5907e15fa91f9de43b5be4fc103f6a33f3aeaa1cebc386750"
+  },
+  "phase": {
+    "id": "phase-1",
+    "title": "Configure the orchestration pilot and shared policy"
+  },
+  "status": "blocked",
+  "summary": "Implemented Phase 1: added the shared preset and root Renovate config, official validator workflow, chart/tool/image annotations, canonical policy documentation, ownership/README/CI/AGENTS links, and coverage report. Extraction found 95 occurrences across 34 files. Strict validation, actionlint, bash -n, ShellCheck, diff checks, static security guardrails, and guardrail self-tests passed; existing dependency selections are unchanged. Policy decisions preserve digest pinning, first-party release ownership, ARM64 review, checksum contracts, security scheduling, and approval gates. Blocker: Renovate local mode downgrades full dry runs to lookup-only, the preset is unpublished, no GitHub read token is available, and anonymous registry retries produced host failures. A true no-write hosted full dry run therefore requires external publication/read credentials and stable registry access. Handoff: docs/dependency-automation.md and docs/research/dependency-automation-coverage.md.",
+  "started_at": "2026-09-06T05:25:10Z",
+  "finished_at": "2026-09-06T05:42:39Z",
+  "execution_workspace": "/workspace/orchestration",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d.txt"
+  }
+}

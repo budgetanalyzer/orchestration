@@ -1,0 +1,434 @@
+AI SESSION HANDLER WORKER PROTOCOL
+
+CONTEXT
+- plan_workspace_path: /workspace/orchestration
+- execution_workspace_path: /workspace/session-gateway
+- plan_path: /workspace/orchestration/docs/plans/dependency-automation-plan.md
+- state_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/state.json
+- run_id: 20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a
+- transcript_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.txt
+- selected_phase_id: phase-7
+- selected_phase_title: Onboard session-gateway
+
+INSTRUCTIONS
+- Read repository instructions first from execution_workspace_path, beginning with the AGENTS.md at its root.
+- Inspect current repository state before editing.
+- Read the global plan intent, durable handoff context, and any prior outcome records relevant to this phase before making decisions.
+- Implement exactly selected phase phase-7: Onboard session-gateway.
+- Do not proceed to later phases.
+- Restrict execution work to execution_workspace_path and the selected phase. Do not perform work in another repository.
+- Follow the selected phase plan unless repository reality contradicts it.
+- Run the validation commands listed in the selected phase.
+- Do not run git commit, push, checkout, reset, clean, stash, branch creation, or automatic worktree operations.
+- Update only files required for the selected phase.
+- Treat state_path and outcome records as runner-owned and read-only. Do not create, edit, replace, or delete them; report the phase outcome only through the terminal marker.
+- Store durable design context in ordinary repository documentation when this phase requires later phases to rely on it.
+- Do not make design-changing guesses. If implementation requires an unplanned product, architecture, schema, API, or workflow decision, stop with <phase-needs-clarification>.
+- Treat user clarification as a first-class stop state, not as failure.
+- End one output stream with exactly one terminal marker from the grammar below. The opening tag must begin at a line boundary, the result must be nonempty, and only whitespace may follow the closing tag on that stream.
+- Do not emit recognized terminal tags anywhere else, including examples, quoted text, fenced blocks, progress, or diagnostics. Do not emit a result on both stdout and stderr.
+
+FAILURE MODES
+- Use <phase-blocked> when the phase cannot be completed without external action.
+- Use <phase-needs-clarification> when a specific user decision is required.
+- Use <phase-complete> only after implementation and validation for this phase are complete.
+- In every terminal result, summarize changed artifacts, validation commands and results, decisions, remaining limitations, and relevant handoff references. Keep the summary concise but sufficient for a fresh worker.
+
+GLOBAL PLAN INTENT START
+# Dependency Automation Plan
+
+**Status:** Local preparation in progress; Phases 1–11 are credential-free.
+All authenticated validation and human activation are deferred to Phase 12.
+Automation is not installed or enabled by this document.
+
+Use Renovate to discover dependency updates and open reviewable pull requests across
+Budget Analyzer. Keep GitHub Dependabot alerts enabled for vulnerability detection,
+and use existing open-source scanners for dependencies that update discovery alone
+cannot assess. No dependency upgrades are part of implementing this plan.
+
+Preserve [the September 6 review](../research/dependency-update-review-2026-09-06.md)
+unchanged as the acceptance benchmark. Its versions are historical observations,
+not inputs to the bot's target selection. Automation must independently discover
+equivalent or newer applicable updates. Record misses explicitly; an update PR is
+not proof that the associated security advisory was detected.
+
+## Selected tools and cost
+
+| Purpose | Selection | Cost and boundary |
+| --- | --- | --- |
+| Version and digest update PRs | Open-source Renovate, run by the Mend Renovate Community GitHub App | The app explicitly supports public and private repositories without a paid plan. No self-hosted bot infrastructure is needed. |
+| Dependency vulnerability alerts | GitHub dependency graph and Dependabot alerts | Available on GitHub Free. GitHub's hosted service is proprietary; the update engine and added scanning tools are open source. |
+| Resolved Java dependency graph | Official `gradle/actions/dependency-submission` | Use the open-source `cache-provider: basic` path, not the proprietary enhanced cache or a preview subscription. |
+| Image packages and vulnerabilities | Trivy CLI/action | Open source; no Aqua subscription, server, or commercial database required. |
+| Frontend and Go verification | `npm audit` and `govulncheck` | Existing ecosystem tools; no subscription. |
+
+Renovate is the sole update-PR owner. Do not add Dependabot version-update
+configuration or enable overlapping Dependabot security-update PRs. Renovate can
+consume Dependabot alerts and attempt security fixes itself. Alert-only findings,
+especially inherited Gradle versions, remain visible when it cannot produce a fix.
+
+The free Mend service currently documents unlimited repositories, one concurrent
+job per organization, approximately four-hour scheduling for active repositories,
+and a 30-minute job timeout. That is adequate for initial dependency discovery;
+the pilot must verify actual completion for this project. Paid Merge Confidence,
+enterprise scheduling, support, and approval for enhanced OSS resources are not
+prerequisites.
+
+GitHub Actions compute and artifact storage are a separate cost consideration.
+Use standard Linux runners, short artifact retention, and existing jobs where
+practical. Public-repository standard runners are free; private-repository usage
+must fit the account's included allowance with paid overages disabled. Repository
+visibility, billing settings, and bot installation cannot be inferred from the
+checkout; the unauthenticated API check during planning returned HTTP 403.
+Before activation, verify these settings. If a necessary capability requires a
+subscription, trial conversion, paid runner, or additional spend, stop and discuss
+it with the user. Do not silently switch to a paid offering or provision a server.
+
+## Scope and operating policy
+
+The rollout covers `orchestration`, `service-common`, `currency-service`,
+`permission-service`, `transaction-service`, `session-gateway`,
+`budget-analyzer-web`, `ext-authz`, `workspace`, and
+`budget-analyzer-api-tests`. Other sibling checkouts are outside this rollout.
+Each sibling phase executes in that repository's context and reads its own
+`AGENTS.md`; orchestration workers must not implement sibling service logic.
+
+The implementation consists of repository configuration, small CI additions, and
+documentation. Use native Renovate managers first. For existing shell variables,
+Tilt strings, and download URLs, use Renovate's documented declarative regex
+manager and annotation comments. This is configuration of an existing tool, not a
+new dependency crawler. Do not build custom scanners, advisory matching code,
+version-selection scripts, lifecycle services, dashboards, or cross-repo bots.
+
+Put common rules in `renovate-presets/default.json` in orchestration. Sibling
+`renovate.json` files extend
+`github>budgetanalyzer/orchestration//renovate-presets/default`; keep file-specific
+extraction rules in their owning repository. Publish the preset before activating
+consumers. Operating policy belongs in `docs/dependency-automation.md`,
+with sibling docs linking to it instead of copying detailed policy.
+
+Initial policy:
+
+- Start from `config:recommended`, enable the Dependency Dashboard, and set
+  `automerge: false` everywhere, including security fixes.
+- Create routine PRs weekly, initially at most three open routine PRs per repo
+  and two new routine PRs per hour. Security fixes bypass the routine schedule;
+  verify the effective Renovate configuration preserves that behavior.
+- Keep patch, minor, and major recommendations distinguishable. Show both
+  maintained-line updates and later release lines where supported by the
+  datasource. Use dashboard approval for majors and stateful/platform migrations;
+  do not hide them using blanket major exclusions or restrictive version ceilings.
+- Group only concrete compatibility families: React/React DOM, Vitest packages,
+  related Spring coordinates within a repo, repeated Istio pins, and related
+  chart/CLI declarations. Helm chart majors are not application majors: all
+  controller/chart updates need review even when semver calls them a patch.
+- Keep Helm 4, RabbitMQ/PostgreSQL migrations, and Kubernetes/Istio coordination
+  visible as proposals requiring compatibility review. Bots cannot coordinate an
+  atomic merge across repositories or infer the correct Spring release train.
+- Enable digest refreshes and retain digest pinning and image flavor suffixes.
+  Never replace an immutable reference with a floating tag. Verify ARM64 support
+  before accepting image updates; an available registry tag is insufficient.
+- Exclude historical docs, generated output, local `:tilt-*` images, and documented
+  local image repositories from updates. First-party production artifact promotion
+  remains owned by the existing release workflow and its synchronized manifest,
+  inventory, and overlay; Renovate must not update those independently.
+- New checks report the existing vulnerability backlog without blocking every
+  unrelated PR. Publish findings and distinguish scan failures from findings;
+  do not swallow authentication, database-download, or dependency-resolution
+  failures. Introducing a vulnerability merge gate is a separate decision.
+
+## Coverage contract
+
+Create an ordinary Markdown coverage report during implementation at
+`docs/research/dependency-automation-coverage.md`. It records source paths,
+extracted package identities, observed bot/scanner outputs, and remaining gaps.
+Do not maintain a second hand-curated table of desired dependency versions.
+
+| Baseline area | Automated update discovery | Security/support proof and expected limits |
+| --- | --- | --- |
+| Spring Boot, Cloud, Modulith, SpringDoc, Testcontainers, other Java dependencies | Renovate Gradle/version-catalog and wrapper managers in all five Java repos | Submit resolved graphs, including Framework, Security, Jackson, Tomcat and Netty, to Dependabot. A Boot PR alone does not establish that its BOM fixes every finding. Overrides require service-owner assessment. |
+| Frontend direct and transitive packages; later toolchain majors | Renovate npm manager, lockfile maintenance, Dockerfile and Actions managers | Dependabot alerts plus full and production-only `npm audit`. Compare advisory/package identities, not the old total of 20 findings. Preserve browser/SSR/dev-server applicability distinctions. |
+| go-redis and Go runtime | Renovate gomod, Dockerfile, Actions, and workspace download extraction | `govulncheck ./...` must reproduce or explain GO-2025-3540 and distinguish reachable calls from package presence. |
+| Redis, PostgreSQL, RabbitMQ, NGINX, Temurin, Jaeger, Swagger UI and other deployed third-party images | Dockerfile/Kubernetes/Helm-values managers plus Tilt and script extraction; digest updates | Trivy scans the exact selected digest and inventories the embedded software. A new digest does not prove the exact Redis or JDK patch or advisory fix. Missing package identification is a coverage gap. |
+| External Secrets, Kyverno, cert-manager, Istio, kube-prometheus-stack, Kiali | Helm datasource mapped to shell and Tilt pins; explicit chart names and registry URLs | Render selected charts and scan their actual image refs. Chart versions differ from app versions. Controller advisories may lack matching image-package metadata and must be recorded as misses. |
+| Prometheus, Grafana, Prometheus Operator, kube-state-metrics | Helm-values image refs plus chart updates | Scan explicitly overridden images as well as chart defaults. Updating a chart does not update an independently overridden image tag. |
+| K3s, Kind binary/node image, Kubernetes tooling, Gateway API, Calico, Helm, Tilt and other pinned tools | Built-in Docker/release datasources and annotated existing pins | Show supported-line patches and newer releases independently. Tool versions coupled to checked-in checksums need complete checksum changes before merge. Pod Security labels are compatibility settings, not ordinary package pins. |
+| Workspace base image, Node/Go, Zulu and installed packages | Dockerfile/ARG/download extraction where versions are declared | Scan a built workspace image for installed versions. Unversioned apt installs receive updates through rebuilds; Renovate cannot open a version PR for an absent patch pin. Preserve the digest-only Ubuntu base constraint. |
+| GitHub Actions and Python API-test dependencies | Native Actions and Python managers where constraints/lockfiles permit updates | Unbounded Python requirements are not version pins. Report their detection and installed-environment audit coverage without pretending an unbounded spec can receive routine version bumps. |
+| EOL decisions: Boot, Node, Go, RabbitMQ, NGINX, Kubernetes/K3s and Istio | Newer releases should be visible in the bot dashboard | Renovate release discovery, abandonment heuristics, and vulnerability scanners are not a comprehensive EOL detector. Retain a quarterly human support-policy check against upstream lifecycle sources. |
+
+Both patch and major proposals must remain visible for broad tags such as
+`redis:7-alpine` and `eclipse-temurin:25-jre-alpine`. Test actual extraction and
+lookup: broad tags can produce only digest updates and conceal patch identities.
+If a same-digest, explicit-version alias is needed for reliable recommendations,
+record that as a separately reviewed representation change; do not silently
+upgrade the underlying image during onboarding.
+
+Keep tool versions with checksum tables, chart/application coupling, and the
+digest-only workspace base behind dashboard approval until a proposal contains
+all required companion changes. Use existing Renovate checksum capabilities where
+they fit and verify them; regex extraction alone does not calculate arbitrary
+checksums. Otherwise identify the missing companion work in the proposal and
+retain existing validation failures. Do not weaken verification to make a bot PR
+mergeable.
+
+## Acceptance and activation boundaries
+
+The target is automated coverage of the same or a superset of the review's update
+and security findings. Measure update discovery, advisory detection, and lifecycle
+assessment separately. For every baseline item, record one of: reproduced,
+superseded by a newer applicable finding, false positive with evidence, or missing.
+Include the advisory identifier, affected package/version, proposed target where
+available, output URL/artifact, and any required human compatibility decision.
+
+All baseline areas must have a demonstrated extraction/scan path. Missing
+high-priority findings block a claim of full review parity. Tool installation can
+be reported complete while parity remains incomplete, but those are distinct
+outcomes. If standard configuration and the selected tools cannot close a gap,
+report it to the user; do not fabricate an advisory match, seed expected versions
+into configuration, or add a custom implementation. The lifecycle and
+exploitability limits above remain explicit even after successful onboarding.
+
+Implementation phases prepare reviewable local files. No phase authorizes git
+writes, merging dependency PRs, releases, certificate writes, or cluster changes.
+The user owns committing and publishing changes. Before final observation, a
+repository administrator installs the free Renovate App only on the scoped repos,
+enables dependency graph and Dependabot alerts, grants the app alert-read access,
+and confirms duplicate update-PR services are off. Prepare all configuration and
+documentation before this activation handoff. Do not change GitHub settings while
+merely executing this planning request.
+
+Existing Maven package credentials are a Phase 12 prerequisite for complete
+remote Java graph resolution and successful bot PR CI, not a prerequisite for
+Phases 1–11. Prepare references to the existing scoped GitHub Packages secrets in
+trusted CI without reading or verifying their values. The Phase 12 operator
+configures Mend's supported encrypted credential/host-rule settings if Renovate
+needs private Maven lookup and verifies free-app support before activation.
+Never put plaintext tokens in presets or reports, substitute Maven Local for
+remote-resolution proof, drop internal dependencies, or introduce privileged
+`pull_request_target` execution of dependency branches to obtain secrets.
+
+## Credential-free preparation and Phase 12 handoff
+
+The user explicitly requires all authentication and credential review to wait
+until Phase 12. Agents must never receive or use GitHub, package-registry, image-
+registry, or Mend credentials, even in Phase 12. Do not search environment files,
+credential stores, host mounts, or sibling repos for secrets; ask for tokens,
+logins, or early workflow dispatches; or provision replacement credentials.
+Authenticated operations run under the user's control in trusted hosted CI,
+GitHub/Mend administration, or the user's own trusted environment. Agents inspect
+public output or user-supplied sanitized evidence without authenticated access.
+The canonical operating procedure is `docs/dependency-automation.md`.
+
+These rules apply to every phase worker, including retries:
+
+1. Phases 1–11 complete repository configuration, documentation, strict schema
+   validation, dependency extraction, workflow lint, and applicable credential-free
+   checks. Use local preset files before publication. Run public lookups and local
+   scans/builds where available without credentials.
+2. All authenticated GitHub/API lookups, private-package resolution, complete
+   remotely resolved Java snapshots, hosted graph submissions, published-preset
+   resolution, hosted bot/scanner verification, and visibility/billing/App/secret
+   review are Phase 12 acceptance work. Do not require a successful historical CI
+   build or proof that repository secrets exist to complete preparation.
+3. When a check needs authentication, or an unauthenticated API limit prevents
+   it, record it as `pending Phase 12` and continue independent preparation. A
+   known requirement can be recorded without repeatedly provoking a 401/403.
+   Preserve any partial output as incomplete. This also applies to repository
+   build/test gates whose execution depends on remote package authentication.
+   Their authenticated verification is deferred, not waived or reported passed.
+4. Each deferred item must name the repo, check/command, affected package or
+   configuration, failure evidence or reason not attempted, required operator
+   action, and expected Phase 12 proof. Store sibling handoffs in their own nearest
+   docs; Phase 12 consolidates them into orchestration's coverage report. Never
+   change runner-owned state or outcomes to bypass a gate.
+5. Missing credentials are deliberately not preparation prerequisites under this
+   user-approved scope. Once local preparation checks pass and every deferred
+   item has a durable handoff, report the phase complete with authenticated
+   acceptance pending. Do not return a blocked/clarification outcome solely for
+   those deferred checks. Report other missing prerequisites, invalid config,
+   extraction defects, crashes, and non-authentication tool failures normally.
+   Do not silently classify an unexplained 403 or resolution error as an auth gap.
+6. Keep hosted workflows strict: authentication, resolution, download, and scan
+   failures must still fail their jobs. A tool's zero exit status or partial Java
+   snapshot is not proof of coverage. Do not change dependencies, filters, caches,
+   build logic, or checks to manufacture a successful remote-resolution result.
+   Optional local snapshots are local evidence only, never hosted acceptance.
+
+Phases 1–11 completion means preparation is complete; it does not mean automation
+is active, authenticated checks passed, or review parity was established. Phase 12
+is the sole human authentication/activation gate and cannot complete until its
+required authenticated evidence is available. Missing evidence then requires a
+specific operator handoff, never credentials for the agent.
+
+For the stopped Phase 4 retry, inspect and retain its existing configuration and
+validation evidence. The incomplete 87-coordinate snapshot and unavailable Maven
+access remain pending Phase 12; neither blocks preparation under this revision.
+Revalidate changed files as needed and complete the phase only after its local
+checks and durable handoff meet the revised criteria. Preserve phase numbers and
+completed phase history. After this edit, the user resumes the stopped runner with
+`--retry-stopped --accept-plan-change` added to their existing run command.
+
+## Execution runtime prerequisite
+
+Before resuming this plan at Phase 2, the user will upgrade the sibling
+`../workspace` sandbox from Node 22 to Node 24, update that repository's nearest
+runtime documentation, rebuild the development container, and complete the
+workspace-owned post-rebuild checks. This is a user-owned prerequisite, not a
+dependency upgrade implemented by this plan. An orchestration worker must not edit
+the workspace repository to satisfy it.
+
+At the start of the next runner invocation, verify `node --version` reports major
+version 24 and that `npm --version` succeeds. Stop if the rebuilt runtime is not
+active. Renovate `44.65.5` previously loaded under Node `22.23.2` emitted an
+unhandled `RegExp.escape is not a function` rejection while returning exit status
+zero. Treat any uncaught exception, unhandled rejection, or fatal/error log from
+Renovate as validation failure regardless of process status. Classify documented
+authentication/API-limit failures as pending Phase 12 under the boundary above;
+that classification never turns a failed run into a pass. After this prerequisite
+is complete, run local Renovate validation directly under the workspace's Node 24;
+do not hide a stale container behind an ad hoc downloaded Node runtime.
+
+The manual Node 22-to-24 change becomes the declared baseline for later extraction
+and image scanning. Record it as a prerequisite change, not as a Renovate-discovered
+or bot-applied finding when comparing automation with the saved review.
+
+## Upstream references
+
+These support the tool selection; the review remains the historical benchmark.
+Recheck availability and schema options at implementation time.
+
+- [Renovate GitHub App: explicitly free, including private repos](https://github.com/apps/renovate)
+- [Mend Community hosting limits and paid-feature separation](https://docs.renovatebot.com/mend-hosted/overview/)
+- [Renovate open-source license](https://github.com/renovatebot/renovate/blob/main/license)
+- [GitHub security features available on all plans](https://docs.github.com/en/code-security/getting-started/github-security-features)
+- [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+- [Renovate shared presets](https://docs.renovatebot.com/config-presets/)
+- [Renovate regex manager](https://docs.renovatebot.com/modules/manager/regex/)
+- [Kubernetes manager requires explicit file patterns](https://docs.renovatebot.com/modules/manager/kubernetes/)
+- [Renovate vulnerability alert integration](https://docs.renovatebot.com/configuration-options/#vulnerabilityalerts)
+- [Renovate OSV limitations: direct dependencies and selected datasources](https://docs.renovatebot.com/configuration-options/#osvvulnerabilityalerts)
+- [Gradle dependency submission and basic cache option](https://github.com/gradle/actions/blob/main/docs/dependency-submission.md)
+- [Trivy container images, SBOMs and platform selection](https://trivy.dev/latest/docs/target/container_image/)
+- [Go vulnerability checking](https://go.dev/doc/security/vuln/)
+
+GLOBAL PLAN INTENT END
+
+PREVIOUS STATE SUMMARY START
+plan:
+  path: /workspace/orchestration/docs/plans/dependency-automation-plan.md
+  sha256: f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e
+  accepted_at: 2026-09-06T15:58:27Z
+completed_phase_ids: phase-1, phase-2, phase-3, phase-4, phase-5, phase-6
+committed_outcome_count: 9
+current_phase:
+  id: phase-7
+  title: Onboard session-gateway
+stop: none
+active_attempt:
+  id: 20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a
+  status: prepared
+  phase_id: phase-7
+  snapshot_sha256: f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e
+  execution_workspace: /workspace/session-gateway
+  started_at: 2026-09-06T16:14:37Z
+  prompt_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.txt
+  transcript_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.txt
+  outcome_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.json
+last_run:
+  run_id: 20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c
+  phase_id: phase-6
+  status: phase-complete
+  started_at: 2026-09-06T16:08:30Z
+  finished_at: 2026-09-06T16:14:37Z
+  exit_code: 0
+  execution_workspace: /workspace/transaction-service
+  prompt_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.txt
+  transcript_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.txt
+  outcome_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.json
+  summary: Completed Phase 6 for transaction-service. Added `renovate.json`, a trusted-main weekly/manual dependency-submission workflow, `docs/dependency-automation.md`, and a README link. The workflow preflights `spring-platform` and `service-web`, uses basic caching, and separates package-read credentials from the submission token. No dependency pins, build configuration, or service logic changed.
+
+Validation passed under Node 24: strict Renovate schema validation, actionlint, documentation links, diff checks, and unchanged dependency/build inputs. Renovate extracted 43 occurrences across eight files using Gradle, wrapper, Dockerfile, and Actions managers, including all three internal catalog coordinates; credential-free lookup returned 46 candidate branches with no unexpected diagnostics.
+
+The official local graph generator succeeded with 91 coordinates, but no internal coordinates or complete runtime/test graph because authenticated `serviceCommon` 0.0.16 resolution was unavailable. Published-preset resolution, authenticated lookups, hosted graph submission, bot-PR CI, Dependabot settings, and alert evidence remain pending Phase 12 as documented in `docs/dependency-automation.md`.
+PREVIOUS STATE SUMMARY END
+
+DURABLE HANDOFF CONTEXT START
+latest_relevant_summary:
+  attempt_id: 20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c
+  phase_id: phase-6
+  status: phase-complete
+  outcome_path: /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.json
+  summary:
+    Completed Phase 6 for transaction-service. Added `renovate.json`, a trusted-main weekly/manual dependency-submission workflow, `docs/dependency-automation.md`, and a README link. The workflow preflights `spring-platform` and `service-web`, uses basic caching, and separates package-read credentials from the submission token. No dependency pins, build configuration, or service logic changed.
+    
+    Validation passed under Node 24: strict Renovate schema validation, actionlint, documentation links, diff checks, and unchanged dependency/build inputs. Renovate extracted 43 occurrences across eight files using Gradle, wrapper, Dockerfile, and Actions managers, including all three internal catalog coordinates; credential-free lookup returned 46 candidate branches with no unexpected diagnostics.
+    
+    The official local graph generator succeeded with 91 coordinates, but no internal coordinates or complete runtime/test graph because authenticated `serviceCommon` 0.0.16 resolution was unavailable. Published-preset resolution, authenticated lookups, hosted graph submission, bot-PR CI, Dependabot settings, and alert evidence remain pending Phase 12 as documented in `docs/dependency-automation.md`.
+earlier_committed_outcomes:
+  - phase-1 | blocked | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d.json
+  - phase-1 | phase-complete | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T083330Z-phase-1-ae324ab9-532b-4947-99fb-5436dc684f13.json
+  - phase-2 | phase-complete | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T084126Z-phase-2-e737a609-5d2a-431e-bc55-d88da73324db.json
+  - phase-3 | phase-complete | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6.json
+  - phase-4 | agent-failed | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711.json
+  - phase-4 | blocked | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T142142Z-phase-4-a0a06134-c86c-4c8c-a200-d6c8f882f762.json
+  - phase-4 | phase-complete | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T155827Z-phase-4-3247f296-d0ad-4c79-a928-2ef9197588e6.json
+  - phase-5 | phase-complete | /workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T160221Z-phase-5-096bc149-5eeb-4a8c-bc1c-61f709a44258.json
+DURABLE HANDOFF CONTEXT END
+
+SELECTED PHASE BODY START
+
+### Workspace
+
+../session-gateway
+
+### Goal
+
+Cover the reactive authentication edge and its inherited Netty dependencies.
+
+### Scope
+
+Renovate config, official dependency-submission workflow and local docs.
+
+### Non-goals
+
+No security overrides, auth changes, upgrades, releases or sibling writes.
+
+### Required context
+
+Read local instructions/build/catalog/CI, the shared preset, artifact-resolution
+guide and Java graph-submission pattern from Phases 3–4.
+
+### Execution steps
+
+1. Add the preset consumer and verify native manager extraction and update lookup.
+2. Add trusted-branch and weekly/manual graph submission with basic caching and
+   existing package-secret references kept distinct from the submission token.
+3. Document the Phase 12 proof for resolved WebFlux/Reactor Netty/Netty and Spring
+   dependencies, available local evidence, and the inherited-BOM limit.
+
+### Implementation notes
+
+Do not add a Tomcat expectation to a service that does not resolve it. Prove
+coverage from the actual graph rather than copying another service's package list.
+
+### Validation
+
+Run config validation/extraction, credential-free lookup and actionlint. Generate
+a local graph only where possible without credentials and inspect available Netty
+evidence without overrides. Record authenticated build/resolution and complete
+reactive graph verification as pending Phase 12.
+
+### Completion criteria
+
+Local bot/workflow configuration checks and extraction pass, with available local
+evidence and explicit Phase 12 handoffs. A complete remotely resolved reactive
+runtime graph and credentials are not required to complete preparation.
+
+SELECTED PHASE BODY END
+
+TERMINAL MARKER GRAMMAR START
+<phase-complete>summary</phase-complete>
+<phase-blocked>reason</phase-blocked>
+<phase-needs-clarification>specific question for user</phase-needs-clarification>
+TERMINAL MARKER GRAMMAR END

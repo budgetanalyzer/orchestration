@@ -12,6 +12,7 @@ readonly PHASE4_VERSION_CONTRACT_EFFECTIVE_DATE
 # - do not automatically follow a project's latest channel or a newly
 #   published minor release
 
+# renovate: datasource=github-releases depName=k3s-io/k3s versioning=regex:^v(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\+k3s(?<build>\d+)$
 export PHASE4_K3S_VERSION="v1.34.6+k3s1"
 readonly PHASE4_K3S_VERSION
 export PHASE4_K3S_INSTALL_URL="https://get.k3s.io"
@@ -20,30 +21,37 @@ export PHASE4_MIN_INOTIFY_INSTANCES="8192"
 readonly PHASE4_MIN_INOTIFY_INSTANCES
 export PHASE4_MIN_INOTIFY_WATCHES="524288"
 readonly PHASE4_MIN_INOTIFY_WATCHES
+# renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
 export PHASE4_GATEWAY_API_CRDS_VERSION="v1.5.1"
 readonly PHASE4_GATEWAY_API_CRDS_VERSION
 export PHASE4_GATEWAY_API_STANDARD_INSTALL_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/${PHASE4_GATEWAY_API_CRDS_VERSION}/standard-install.yaml"
 readonly PHASE4_GATEWAY_API_STANDARD_INSTALL_URL
+# renovate: datasource=helm depName=base registryUrl=https://istio-release.storage.googleapis.com/charts
 export PHASE4_ISTIO_CHART_VERSION="1.29.2"
 readonly PHASE4_ISTIO_CHART_VERSION
 export PHASE4_ISTIO_HELM_REPO_URL="https://istio-release.storage.googleapis.com/charts"
 readonly PHASE4_ISTIO_HELM_REPO_URL
+# renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io
 export PHASE4_EXTERNAL_SECRETS_CHART_VERSION="2.2.0"
 readonly PHASE4_EXTERNAL_SECRETS_CHART_VERSION
 export PHASE4_EXTERNAL_SECRETS_HELM_REPO_URL="https://charts.external-secrets.io"
 readonly PHASE4_EXTERNAL_SECRETS_HELM_REPO_URL
+# renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
 export PHASE4_CERT_MANAGER_CHART_VERSION="v1.20.2"
 readonly PHASE4_CERT_MANAGER_CHART_VERSION
 export PHASE4_CERT_MANAGER_HELM_REPO_URL="https://charts.jetstack.io"
 readonly PHASE4_CERT_MANAGER_HELM_REPO_URL
+# renovate: datasource=helm depName=kyverno registryUrl=https://kyverno.github.io/kyverno/
 export PHASE7_KYVERNO_CHART_VERSION="3.8.0"
 readonly PHASE7_KYVERNO_CHART_VERSION
 export PHASE7_KYVERNO_HELM_REPO_URL="https://kyverno.github.io/kyverno/"
 readonly PHASE7_KYVERNO_HELM_REPO_URL
+# renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
 export PHASE7_PROMETHEUS_STACK_CHART_VERSION="83.4.0"
 readonly PHASE7_PROMETHEUS_STACK_CHART_VERSION
 export PHASE7_PROMETHEUS_STACK_HELM_REPO_URL="https://prometheus-community.github.io/helm-charts"
 readonly PHASE7_PROMETHEUS_STACK_HELM_REPO_URL
+# renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
 export PHASE7_KIALI_CHART_VERSION="2.24.0"
 readonly PHASE7_KIALI_CHART_VERSION
 export PHASE7_KIALI_HELM_REPO_URL="https://kiali.org/helm-charts"

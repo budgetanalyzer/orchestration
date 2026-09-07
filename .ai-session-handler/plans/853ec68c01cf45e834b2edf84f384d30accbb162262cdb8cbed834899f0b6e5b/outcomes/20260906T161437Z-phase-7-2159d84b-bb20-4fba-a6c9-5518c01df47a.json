@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e"
+  },
+  "phase": {
+    "id": "phase-7",
+    "title": "Onboard session-gateway"
+  },
+  "status": "phase-complete",
+  "summary": "Completed Phase 7 for session-gateway. Added `renovate.json`, a trusted-main weekly/manual dependency-submission workflow, `docs/dependency-automation.md`, and a README link. The workflow uses basic caching, separately scopes package-read and submission tokens, preflights `spring-platform` and `service-web`, and runs the build before submission so unresolved configurations cannot yield a silently partial graph. No dependencies, application code, or build inputs changed.\n\nValidation passed under Node 24: strict Renovate schema validation, actionlint, documentation/link checks, and diff checks. Renovate extracted 39 occurrences across eight files using Gradle, wrapper, Dockerfile, and Actions managers, including both internal coordinates. Credential-free lookup returned 45 candidate branches; the sole diagnostic requires GitHub authentication and is deferred.\n\nThe official local graph generator completed but produced only 87 build/tool coordinates and no WebFlux, Security, Reactor, Netty, Lettuce, or internal coordinates. Dependency insight confirmed HTTP 401 resolving `service-web` 0.0.16. Authenticated build/resolution, complete reactive graph verification, hosted submission, published-preset resolution, bot-PR CI, and Dependabot evidence remain pending Phase 12 as documented. Tomcat is explicitly excluded from the reactive service\u2019s acceptance expectations.",
+  "started_at": "2026-09-06T16:14:37Z",
+  "finished_at": "2026-09-06T16:21:45Z",
+  "execution_workspace": "/workspace/session-gateway",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.txt"
+  }
+}

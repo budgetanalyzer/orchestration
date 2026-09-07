@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e"
+  },
+  "phase": {
+    "id": "phase-12",
+    "title": "Observe activation and compare against the saved review"
+  },
+  "status": "blocked",
+  "summary": "Consolidated all Phase 1\u201311 deferred checks, repository workflows, five Java graph submissions, and benchmark/advisory dispositions in `docs/research/dependency-automation-coverage.md`. Added weekly operations, scan-failure triage, quarterly lifecycle review, and dependency-onboarding guidance to `docs/dependency-automation.md`. Validation passed with Node 24.20.0/npm 11.19.0, whitespace and link-target checks, scoped-repository/workflow/baseline/advisory reconciliation, and historical-review integrity verification (unchanged SHA-256 `3c0c4075e021884227d5ecbd0861a9c4f18471e184b8fbbf8cecc1ac8014c347`). No credentials were accessed and runner-owned state was unchanged. Phase 12 cannot complete until the operator publishes orchestration and its preset first; supplies sanitized visibility, zero-spend, free-Mend, App, and settings evidence; dispatches the read-only hosted dry run and all prepared scanner/audit workflows; provides accepted complete graph submissions for all five Java repositories; and supplies two successful Renovate cycles plus one scheduled scanner cycle. No hosted evidence or run URLs are currently available, so automation installation and benchmark parity remain unestablished. The exact evidence checklist is in the coverage report and ordered procedure in the canonical guide.",
+  "started_at": "2026-09-07T05:50:41Z",
+  "finished_at": "2026-09-07T06:02:41Z",
+  "execution_workspace": "/workspace/orchestration",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.txt"
+  }
+}

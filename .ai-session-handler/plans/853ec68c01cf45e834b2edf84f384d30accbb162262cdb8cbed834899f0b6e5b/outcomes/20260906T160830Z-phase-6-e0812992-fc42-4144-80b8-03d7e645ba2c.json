@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e"
+  },
+  "phase": {
+    "id": "phase-6",
+    "title": "Onboard transaction-service"
+  },
+  "status": "phase-complete",
+  "summary": "Completed Phase 6 for transaction-service. Added `renovate.json`, a trusted-main weekly/manual dependency-submission workflow, `docs/dependency-automation.md`, and a README link. The workflow preflights `spring-platform` and `service-web`, uses basic caching, and separates package-read credentials from the submission token. No dependency pins, build configuration, or service logic changed.\n\nValidation passed under Node 24: strict Renovate schema validation, actionlint, documentation links, diff checks, and unchanged dependency/build inputs. Renovate extracted 43 occurrences across eight files using Gradle, wrapper, Dockerfile, and Actions managers, including all three internal catalog coordinates; credential-free lookup returned 46 candidate branches with no unexpected diagnostics.\n\nThe official local graph generator succeeded with 91 coordinates, but no internal coordinates or complete runtime/test graph because authenticated `serviceCommon` 0.0.16 resolution was unavailable. Published-preset resolution, authenticated lookups, hosted graph submission, bot-PR CI, Dependabot settings, and alert evidence remain pending Phase 12 as documented in `docs/dependency-automation.md`.",
+  "started_at": "2026-09-06T16:08:30Z",
+  "finished_at": "2026-09-06T16:14:37Z",
+  "execution_workspace": "/workspace/transaction-service",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.txt"
+  }
+}

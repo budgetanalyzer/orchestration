@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260907T043454Z-phase-10-c8a4e598-15b9-4ddd-94ae-db321e852295",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e"
+  },
+  "phase": {
+    "id": "phase-10",
+    "title": "Onboard workspace images and installed tooling"
+  },
+  "status": "phase-complete",
+  "summary": "Phase 10 complete. Added `renovate.json`, the weekly/manual workspace image evidence workflow, and `docs/dependency-automation.md`; linked guidance from README/AGENTS and staged read-only Dockerfile annotations in `tmp/dependency-automation/proposed/ai-agent-sandbox.patch`.\n\nValidation passed: Node v24.20.0/npm 11.19.0, strict Renovate schema, credential-free extraction of 16 dependencies from 13 files, actionlint, Compose config, staged patch application, Dockerfile build check, exact Ubuntu 24.04 amd64/arm64 index verification, fresh no-cache amd64 build, and Trivy 0.74.0 inventory/vulnerability scans. Trivy identified 481 OS packages plus Node 24.20.0, Zulu 25.0.4.1, and Go 1.24.1.\n\nThe workflow preserves digest-only Ubuntu syntax, uses scan UID/GID 10001 to avoid the base image\u2019s existing 1000 account, does not start or push the image, and keeps scanner caches out of seven-day artifacts. Checksum-coupled tools require dashboard approval; Go remains amd64-only; unversioned apt/global packages and VIA remain documented gaps. GitHub-backed lookups, hosted network validation, Actions cost review, activation, and settings evidence remain pending Phase 12 per `docs/dependency-automation.md`. Whole-worktree `git diff --check` still reports unrelated pre-existing trailing whitespace in `ai-agent-sandbox/scripts/codex-lean.sh`; all phase-scoped checks pass.",
+  "started_at": "2026-09-07T04:34:54Z",
+  "finished_at": "2026-09-07T05:23:09Z",
+  "execution_workspace": "/workspace/workspace",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260907T043454Z-phase-10-c8a4e598-15b9-4ddd-94ae-db321e852295.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260907T043454Z-phase-10-c8a4e598-15b9-4ddd-94ae-db321e852295.txt"
+  }
+}

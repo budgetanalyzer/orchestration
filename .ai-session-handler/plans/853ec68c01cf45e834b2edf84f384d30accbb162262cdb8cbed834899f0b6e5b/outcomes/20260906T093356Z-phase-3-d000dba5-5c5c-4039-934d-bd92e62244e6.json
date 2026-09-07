@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "ea4d0681b89e839676cba96dc4b80787655d77c436b3795f0832a3c9b007ee40"
+  },
+  "phase": {
+    "id": "phase-3",
+    "title": "Onboard service-common and its resolved Java graph"
+  },
+  "status": "phase-complete",
+  "summary": "Added `renovate.json`, the trusted-main/weekly/manual Gradle dependency-submission workflow, `docs/dependency-automation.md`, and a README link. The workflow uses `gradle/actions/dependency-submission@v6`, basic open-source caching, no configuration filters or Build Scan, direct submission without artifact retention, and only `contents: write`. No dependency versions or build configuration changed.\n\nValidation passed: Node 24/npm prerequisite; strict Renovate validation; native extraction of 52 occurrences across 12 files with 41 candidate branches; actionlint for all workflows; `./gradlew clean spotlessApply`; `./gradlew clean build`; and diff checks. An official local Gradle dependency snapshot resolved all four subprojects and 216 coordinates, including Boot, Cloud, and Modulith BOMs plus actual Spring Framework, Spring Security, Tomcat, Netty, and Jackson dependencies across runtime/test configurations.\n\nRemaining activation checks: publish the shared orchestration preset, perform authenticated hosted GitHub Action lookups, run the workflow on `main`, and confirm GitHub accepted the dependency submission. Handoff reference: `docs/dependency-automation.md`.",
+  "started_at": "2026-09-06T09:33:56Z",
+  "finished_at": "2026-09-06T09:45:45Z",
+  "execution_workspace": "/workspace/service-common",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6.txt"
+  }
+}

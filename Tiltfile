@@ -478,6 +478,7 @@ def service_common_publish_deps(repo_path):
 def spring_boot_dockerfile(port):
     """Inline dev Dockerfile that selects the executable Spring Boot Jar."""
     return '''
+# renovate: datasource=docker depName=eclipse-temurin
 FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
@@ -931,6 +932,7 @@ local_resource(
 local_resource(
     'istio-base',
     cmd='''
+        # renovate: datasource=helm depName=base registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-base istio/base \
             --namespace istio-system \
             --create-namespace \
@@ -947,6 +949,7 @@ local_resource(
 local_resource(
     'istio-cni',
     cmd='''
+        # renovate: datasource=helm depName=cni registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
             --version 1.29.2 \
@@ -967,6 +970,7 @@ local_resource(
 local_resource(
     'istiod',
     cmd='''
+        # renovate: datasource=helm depName=istiod registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
             --version 1.29.2 \
@@ -1039,6 +1043,7 @@ local_resource(
     cmd='''
         helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
         helm repo update kyverno >/dev/null
+        # renovate: datasource=helm depName=kyverno registryUrl=https://kyverno.github.io/kyverno/
         helm upgrade --install kyverno kyverno/kyverno \
             --namespace kyverno \
             --create-namespace \
@@ -1094,6 +1099,7 @@ local_resource(
     cmd='''
         ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
         kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
+        # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
         helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --version 83.4.0 \
@@ -1178,6 +1184,7 @@ local_resource(
         kubectl apply -f kubernetes/istio/egress-namespace.yaml
         helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
         helm repo update kiali >/dev/null
+        # renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
         helm upgrade --install kiali kiali/kiali-server \
             --namespace monitoring \
             --version 2.24.0 \
@@ -1314,6 +1321,7 @@ local_resource(
             kubectl delete deployment,serviceaccount,role,rolebinding,service,hpa istio-egress-gateway \
                 -n istio-egress --ignore-not-found
         fi
+        # renovate: datasource=helm depName=gateway registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-egress-gateway istio/gateway \
             --namespace istio-egress \
             --version 1.29.2 \

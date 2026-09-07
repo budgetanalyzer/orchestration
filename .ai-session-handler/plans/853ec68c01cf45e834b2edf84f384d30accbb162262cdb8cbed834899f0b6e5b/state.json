@@ -1,0 +1,142 @@
+{
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "f55dc8ed6053a698192bc5f642d9305c1c5a35a6fb4194beda23c7469f78df2e",
+    "accepted_at": "2026-09-06T15:58:27Z"
+  },
+  "completed_phase_ids": [
+    "phase-1",
+    "phase-2",
+    "phase-3",
+    "phase-4",
+    "phase-5",
+    "phase-6",
+    "phase-7",
+    "phase-8",
+    "phase-9",
+    "phase-10",
+    "phase-11"
+  ],
+  "committed_outcomes": [
+    {
+      "attempt_id": "20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d",
+      "phase_id": "phase-1",
+      "status": "blocked",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T052510Z-phase-1-37a2533c-c470-45d2-88c5-b2d081fb6d1d.json"
+    },
+    {
+      "attempt_id": "20260906T083330Z-phase-1-ae324ab9-532b-4947-99fb-5436dc684f13",
+      "phase_id": "phase-1",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T083330Z-phase-1-ae324ab9-532b-4947-99fb-5436dc684f13.json"
+    },
+    {
+      "attempt_id": "20260906T084126Z-phase-2-e737a609-5d2a-431e-bc55-d88da73324db",
+      "phase_id": "phase-2",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T084126Z-phase-2-e737a609-5d2a-431e-bc55-d88da73324db.json"
+    },
+    {
+      "attempt_id": "20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6",
+      "phase_id": "phase-3",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T093356Z-phase-3-d000dba5-5c5c-4039-934d-bd92e62244e6.json"
+    },
+    {
+      "attempt_id": "20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711",
+      "phase_id": "phase-4",
+      "status": "agent-failed",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711.json"
+    },
+    {
+      "attempt_id": "20260906T142142Z-phase-4-a0a06134-c86c-4c8c-a200-d6c8f882f762",
+      "phase_id": "phase-4",
+      "status": "blocked",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T142142Z-phase-4-a0a06134-c86c-4c8c-a200-d6c8f882f762.json"
+    },
+    {
+      "attempt_id": "20260906T155827Z-phase-4-3247f296-d0ad-4c79-a928-2ef9197588e6",
+      "phase_id": "phase-4",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T155827Z-phase-4-3247f296-d0ad-4c79-a928-2ef9197588e6.json"
+    },
+    {
+      "attempt_id": "20260906T160221Z-phase-5-096bc149-5eeb-4a8c-bc1c-61f709a44258",
+      "phase_id": "phase-5",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T160221Z-phase-5-096bc149-5eeb-4a8c-bc1c-61f709a44258.json"
+    },
+    {
+      "attempt_id": "20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c",
+      "phase_id": "phase-6",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T160830Z-phase-6-e0812992-fc42-4144-80b8-03d7e645ba2c.json"
+    },
+    {
+      "attempt_id": "20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a",
+      "phase_id": "phase-7",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T161437Z-phase-7-2159d84b-bb20-4fba-a6c9-5518c01df47a.json"
+    },
+    {
+      "attempt_id": "20260906T162145Z-phase-8-d77da42f-0b69-4344-8920-433bee6036eb",
+      "phase_id": "phase-8",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T162145Z-phase-8-d77da42f-0b69-4344-8920-433bee6036eb.json"
+    },
+    {
+      "attempt_id": "20260906T163329Z-phase-9-8eadac46-036a-45c9-8c68-6791407c96c6",
+      "phase_id": "phase-9",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T163329Z-phase-9-8eadac46-036a-45c9-8c68-6791407c96c6.json"
+    },
+    {
+      "attempt_id": "20260906T164326Z-phase-10-96cbdc38-6b86-40de-b067-dd4474bb2adc",
+      "phase_id": "phase-10",
+      "status": "agent-failed",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260906T164326Z-phase-10-96cbdc38-6b86-40de-b067-dd4474bb2adc.json"
+    },
+    {
+      "attempt_id": "20260907T043454Z-phase-10-c8a4e598-15b9-4ddd-94ae-db321e852295",
+      "phase_id": "phase-10",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260907T043454Z-phase-10-c8a4e598-15b9-4ddd-94ae-db321e852295.json"
+    },
+    {
+      "attempt_id": "20260907T052309Z-phase-11-d581eade-03ec-4f7b-8e2d-9121e47fc1f5",
+      "phase_id": "phase-11",
+      "status": "phase-complete",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260907T052309Z-phase-11-d581eade-03ec-4f7b-8e2d-9121e47fc1f5.json"
+    },
+    {
+      "attempt_id": "20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981",
+      "phase_id": "phase-12",
+      "status": "blocked",
+      "path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.json"
+    }
+  ],
+  "current_phase": {
+    "id": "phase-12",
+    "title": "Observe activation and compare against the saved review"
+  },
+  "active_attempt": null,
+  "stop": {
+    "reason": "blocked",
+    "phase_id": "phase-12",
+    "message": "Consolidated all Phase 1\u201311 deferred checks, repository workflows, five Java graph submissions, and benchmark/advisory dispositions in `docs/research/dependency-automation-coverage.md`. Added weekly operations, scan-failure triage, quarterly lifecycle review, and dependency-onboarding guidance to `docs/dependency-automation.md`. Validation passed with Node 24.20.0/npm 11.19.0, whitespace and link-target checks, scoped-repository/workflow/baseline/advisory reconciliation, and historical-review integrity verification (unchanged SHA-256 `3c0c4075e021884227d5ecbd0861a9c4f18471e184b8fbbf8cecc1ac8014c347`). No credentials were accessed and runner-owned state was unchanged. Phase 12 cannot complete until the operator publishes orchestration and its preset first; supplies sanitized visibility, zero-spend, free-Mend, App, and settings evidence; dispatches the read-only hosted dry run and all prepared scanner/audit workflows; provides accepted complete graph submissions for all five Java repositories; and supplies two successful Renovate cycles plus one scheduled scanner cycle. No hosted evidence or run URLs are currently available, so automation installation and benchmark parity remain unestablished. The exact evidence checklist is in the coverage report and ordered procedure in the canonical guide.",
+    "clarification_request": null
+  },
+  "last_run": {
+    "run_id": "20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981",
+    "phase_id": "phase-12",
+    "status": "blocked",
+    "started_at": "2026-09-07T05:50:41Z",
+    "finished_at": "2026-09-07T06:02:41Z",
+    "exit_code": 2,
+    "execution_workspace": "/workspace/orchestration",
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.txt",
+    "outcome_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/outcomes/20260907T055041Z-phase-12-bddefe9f-547f-4702-b1dd-91b6b26ad981.json",
+    "summary": "Consolidated all Phase 1\u201311 deferred checks, repository workflows, five Java graph submissions, and benchmark/advisory dispositions in `docs/research/dependency-automation-coverage.md`. Added weekly operations, scan-failure triage, quarterly lifecycle review, and dependency-onboarding guidance to `docs/dependency-automation.md`. Validation passed with Node 24.20.0/npm 11.19.0, whitespace and link-target checks, scoped-repository/workflow/baseline/advisory reconciliation, and historical-review integrity verification (unchanged SHA-256 `3c0c4075e021884227d5ecbd0861a9c4f18471e184b8fbbf8cecc1ac8014c347`). No credentials were accessed and runner-owned state was unchanged. Phase 12 cannot complete until the operator publishes orchestration and its preset first; supplies sanitized visibility, zero-spend, free-Mend, App, and settings evidence; dispatches the read-only hosted dry run and all prepared scanner/audit workflows; provides accepted complete graph submissions for all five Java repositories; and supplies two successful Renovate cycles plus one scheduled scanner cycle. No hosted evidence or run URLs are currently available, so automation installation and benchmark parity remain unestablished. The exact evidence checklist is in the coverage report and ordered procedure in the canonical guide."
+  }
+}

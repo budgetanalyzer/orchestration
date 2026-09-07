@@ -1,0 +1,20 @@
+{
+  "attempt_id": "20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711",
+  "plan": {
+    "path": "/workspace/orchestration/docs/plans/dependency-automation-plan.md",
+    "sha256": "ea4d0681b89e839676cba96dc4b80787655d77c436b3795f0832a3c9b007ee40"
+  },
+  "phase": {
+    "id": "phase-4",
+    "title": "Onboard currency-service"
+  },
+  "status": "agent-failed",
+  "summary": "agent command exited with code 1",
+  "started_at": "2026-09-06T09:45:45Z",
+  "finished_at": "2026-09-06T09:48:49Z",
+  "execution_workspace": "/workspace/currency-service",
+  "artifacts": {
+    "prompt_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/prompts/20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711.txt",
+    "transcript_path": "/workspace/orchestration/.ai-session-handler/plans/853ec68c01cf45e834b2edf84f384d30accbb162262cdb8cbed834899f0b6e5b/transcripts/20260906T094545Z-phase-4-5c327d0b-ae31-4041-8bcc-caef5181f711.txt"
+  }
+}

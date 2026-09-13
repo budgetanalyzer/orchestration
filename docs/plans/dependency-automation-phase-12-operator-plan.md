@@ -1,12 +1,19 @@
 # Dependency Automation Phase 12 Operator Plan
 
-**Status:** Ready for operator preparation; hosted activation evidence is pending.
+**Status:** Ready for third-party go/no-go review; hosted activation evidence is
+pending.
 
 This plan completes Phase 12 of the broader
 [dependency automation plan](dependency-automation-plan.md) outside AI Session
 Handler. It is an interactive operator checklist for publishing the prepared
 configuration, activating the free hosted services, collecting sanitized
 evidence, and completing the benchmark comparison.
+
+The first step is deliberately a decision gate. Set up only the account access
+needed to inspect the third-party offerings, verify their current zero-spend
+boundaries and operational limits, and decide whether their durability risk is
+acceptable. Do not publish configuration, install an App, or change repository
+settings until that decision is recorded.
 
 The canonical operating policy and activation requirements remain in
 [Dependency Automation](../dependency-automation.md). Record results in the
@@ -78,9 +85,123 @@ of actual scheduled scanner runs.
 9. `workspace`
 10. `budget-analyzer-api-tests`
 
-## Current publication blockers
+## Step 1: Set up account access and make the third-party decision
 
-Resolve these before publishing prepared files:
+**Owner: HUMAN.** The AI agent may inventory public terms and checkout facts and
+review sanitized confirmations. The human owns OAuth sign-in, account and
+organization settings, billing inspection, and the final go/no-go decision. Do
+not install the Renovate App or change repository settings in this step.
+
+Complete this gate before publishing files that trigger hosted workflows.
+
+### Accounts and external services
+
+| Dependency | New account needed? | What this rollout uses | First-step action |
+| --- | --- | --- | --- |
+| GitHub account and `budgetanalyzer` organization | No; use the existing GitHub identity | Repository administration, Actions, dependency graph, Dependabot alerts, artifacts, and GitHub Packages | Confirm the identity can install organization Apps and administer Actions, security, package, and repository settings for all ten repositories. |
+| Mend Developer Portal and Renovate Community Cloud | Yes, this is the only expected new account surface | Hosted Renovate jobs, logs, App settings, and optional encrypted Maven host rules | Sign in at [Mend's Developer Portal](https://developer.mend.io/) with GitHub OAuth. This creates or accesses the free portal profile; do not select a paid product, start a trial, provide payment information, or install the App yet. |
+| GitHub Packages Maven access | No new provider account | Resolution of private `org.budgetanalyzer` artifacts | Confirm package visibility and the existing credential names. First try the Mend App's platform token after installation; only if needed, store an existing scoped credential in Mend settings during Step 7. |
+| Trivy, `npm audit`, `govulncheck`, `pip-audit`, and Gradle dependency submission | No | Open-source scanners and graph generation on GitHub-hosted runners | Confirm that no workflow requests a vendor login, premium database, or paid API. |
+| Public package registries, container registries, and advisory databases | No account expected | Anonymous dependency lookup, image pulls, and vulnerability database downloads | Accept that availability and anonymous rate limits are runtime dependencies; Step 9 proves them in practice. Do not create paid registry accounts as a preemptive workaround. |
+
+A separate paid Mend account or Mend sales subscription is not required by the
+published Community flow. The portal uses the existing GitHub identity through
+OAuth. GitHub's built-in services remain under the existing GitHub organization;
+they are not separate accounts.
+
+### Verify the current free boundary
+
+Record the access date and retain a public link or sanitized screenshot for each
+of these checks:
+
+1. [Mend's hosted overview](https://docs.renovatebot.com/mend-hosted/overview/)
+   still describes Community Cloud as free for unlimited public and private
+   repositories. Confirm the published Community limits still fit this rollout:
+   one concurrent organization job, jobs for active repositories approximately
+   every four hours, 1 vCPU, 3 GB memory, 15 GB disk, and a 30-minute timeout.
+   Note that Community has no Mend helpdesk support or included Merge Confidence
+   workflows.
+2. The [Renovate GitHub App listing](https://github.com/apps/renovate) still says
+   it is free for public and private repositories and requires no paid plan.
+3. [Mend's credential documentation](https://docs.renovatebot.com/mend-hosted/credentials/)
+   still permits organization- or repository-scoped secrets and host rules in
+   the Developer Portal. Confirm that the logged-in portal identifies the
+   Community path without an upgrade, trial, or payment prompt. The actual
+   repository settings surface and Maven lookup remain Step 7 evidence because
+   they may not exist until after the pilot installation. Do not enter a
+   credential yet.
+4. [GitHub's security-feature documentation](https://docs.github.com/en/code-security/getting-started/github-security-features)
+   still lists the dependency graph and Dependabot alerts among features
+   available on all GitHub plans.
+5. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+   still makes standard hosted runners free for public repositories. Also inspect
+   current artifact usage: artifact storage is plan-limited even when public-repo
+   runner compute is free, and it shares its allowance with GitHub Packages.
+6. [GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
+   still makes public packages free. Record whether the `service-common` Maven
+   packages are public or private and whether current shared package/artifact
+   storage and transfer fit the included allowance.
+7. Review the GitHub OAuth and App permission descriptions plus Mend's current
+   terms and privacy notice. Confirm that selected-repository installation,
+   uninstall, and OAuth revocation are available and that Mend's access to source
+   and job logs is acceptable before granting it in Step 6.
+
+The unauthenticated GitHub repository API confirmed at `2026-09-09T08:51:48Z`
+that all ten scoped repositories were public and used `main` as their default
+branch. Reconfirm visibility now. Public visibility removes standard-runner
+minute charges, but it does not remove the shared artifact/package storage check.
+Confirm that no larger runner is selected. If the organization has no payment
+method, record that over-limit use will be blocked rather than billed. If it has
+a payment method, confirm an effective zero-dollar budget or equivalent
+no-spend control for Actions and Packages.
+
+For the existing Maven-access prerequisite, confirm by name only that
+`SERVICE_COMMON_PACKAGES_USERNAME` and
+`SERVICE_COMMON_PACKAGES_READ_TOKEN` exist in `currency-service`,
+`permission-service`, `transaction-service`, and `session-gateway`. Do not
+reveal, copy, rotate, or test the values in an agent environment.
+
+### Assess durability and decide
+
+No vendor promises that a free hosted tier will remain free forever. Treat the
+durability evidence honestly:
+
+- **GitHub built-ins:** strong current fit because public-repository standard
+  runners are free and dependency graph/Dependabot features are documented for
+  all plans. Terms and storage allowances can still change.
+- **Mend hosting:** reasonable but weaker long-term assurance. Mend publishes a
+  distinct free Community tier alongside its paid Enterprise tier, the App
+  listing says no paid plan is required, and the Renovate engine is active
+  open-source software under AGPL-3.0. Mend publishes no perpetual-free promise,
+  grandfathering guarantee, Community SLA, or helpdesk support. All ten scoped
+  repositories contain MIT licenses and therefore appear eligible to request
+  the enhanced free Community (OSS) tier; Mend describes that tier as part of
+  its open-source commitment, but acceptance is discretionary and still does
+  not create a longevity guarantee. The basic rollout must not depend on that
+  request being accepted.
+- **Fallback:** the open-source engine makes later self-hosting technically
+  possible, but operating and paying for that fallback is outside this plan. It
+  requires a new decision rather than silently becoming part of Phase 12.
+
+Record one explicit outcome with the evidence date:
+
+- `GO — proceed with Mend Renovate Community under the documented limits and
+  accept the hosted-tier policy-change risk`; or
+- `NO-GO — stop Phase 12 before publication or activation`.
+
+Choose no-go if any required capability asks for payment, a trial, an
+unidentified account, broader repository access, or limits that do not look
+workable for ten repositories. Also choose no-go if the absence of a perpetual
+free guarantee or in-scope fallback is unacceptable. Do not continue to Step 2
+without a recorded go decision.
+
+## Step 2: Clean and publish orchestration first
+
+**Owner: HUMAN.** The AI agent may prepare local file changes, run checks, and
+review the proposed diff. The human owns the history cleanup, branch operations,
+commit, push, review, and merge.
+
+Resolve these current publication blockers before publishing prepared files:
 
 1. The local orchestration branch `monitor-dependency-notifications` is two
    commits ahead of `origin/main` and has no upstream. Its Phase 12 preparation
@@ -105,56 +226,6 @@ Resolve these before publishing prepared files:
 
 After cleanup, preserve a sanitized list of the default-branch revisions used
 for activation.
-
-## Step 1: Confirm the zero-spend and credential prerequisites
-
-**Owner: HUMAN.** The AI agent may inventory facts available from the checkouts
-or public sources and prepare the evidence table. The human must confirm the
-existing GitHub Actions secret names. If repository visibility changes, the
-human must also check private-repository Actions billing. No Mend login or App
-installation is required in this step.
-
-Complete this before publishing files that trigger hosted workflows.
-
-For every scoped repository:
-
-1. Record whether it is public or private.
-2. For every private repository, confirm that included GitHub Actions usage is
-   sufficient and paid overages are disabled.
-3. Confirm from Mend's public documentation that Renovate Community supports
-   the repository type within the free service's published job limits.
-
-The unauthenticated GitHub repository API confirmed at `2026-09-09T08:51:48Z`
-that all ten scoped repositories are public and use `main` as their default
-branch. While that remains true, the private-repository Actions allowance and
-paid-overage check is not applicable; do not add a payment method or enable
-billing for this rollout.
-
-For the existing Maven-access prerequisite:
-
-1. Confirm from Mend's public documentation that Community supports hosted
-   credentials, GitHub Packages host rules, and Maven lookup. Do not attempt to
-   prove account-specific access before App installation; Step 7 owns the actual
-   authenticated lookup proof. Mend no longer supports repository-config
-   encrypted secrets.
-2. Confirm, by name only, that these existing GitHub Actions secrets are present
-   in `currency-service`, `permission-service`, `transaction-service`, and
-   `session-gateway`:
-   `SERVICE_COMMON_PACKAGES_USERNAME` and
-   `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
-3. Do not reveal, copy, rotate, or test the secret values in an agent environment.
-
-Retain public proof of repository visibility and Mend free-tier support plus
-sanitized confirmation of secret-name presence. The public checks above are
-already satisfied by the recorded API result and Mend documentation; the human
-secret-name confirmation is the only remaining action while all repositories
-stay public. Stop and discuss any paid or unsupported requirement.
-
-## Step 2: Clean and publish orchestration first
-
-**Owner: HUMAN.** The AI agent may prepare local file changes, run checks, and
-review the proposed diff. The human owns the history cleanup, branch operations,
-commit, push, review, and merge.
 
 1. Remove `.ai-session-handler/**` from the unpublished change history that will
    be pushed. Do not publish the runner transcripts merely because the runner
@@ -268,12 +339,13 @@ if the required dependency-graph or credential configuration was not yet active.
 **Owner: HUMAN.** App installation, permission grants, and Mend administration
 require the human. The AI agent may assess public or sanitized pilot evidence.
 
-1. Open the Mend developer portal and sign in with GitHub OAuth if the App flow
-   requires it. This may create a free Mend portal profile; do not create a paid
-   subscription, start a trial, or provide a payment method.
-2. On GitHub's App installation screen, confirm the repositories are selectable,
-   then install the free Mend Renovate Community GitHub App with access
-   restricted to `orchestration` first.
+1. Reconfirm that Step 1 recorded a go decision and that the Mend Developer
+   Portal profile still shows the Community offering without a paid
+   subscription, trial, or payment requirement.
+2. From the Developer Portal or GitHub App listing, open GitHub's App
+   installation screen, confirm the repositories are selectable, then install
+   the free Mend Renovate Community GitHub App with access restricted to
+   `orchestration` first.
 3. Grant read access to Dependabot alerts when that permission is available.
 4. Run or observe onboarding for orchestration.
 5. Inspect the resolved configuration, extraction logs, Dependency Dashboard,

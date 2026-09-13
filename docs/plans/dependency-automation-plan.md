@@ -940,9 +940,15 @@ agent's review surface when hosted pages require login.
    Record the repo, command/workflow, package/configuration, reason deferred,
    operator action, expected evidence, and pending/passed/failed disposition.
    Apply the canonical activation procedure with the user; only the user performs
-   publication, authenticated checks, credential configuration, and settings
-   changes. Confirm visibility, zero-spend settings, existing Maven access, and
-   free Mend support through sanitized evidence before enabling hosted automation.
+   publication, OAuth sign-in, authenticated checks, credential configuration,
+   and settings changes. Before any publication or App installation, have the
+   user access the Mend Developer Portal through GitHub OAuth, inventory every
+   external account and service, inspect Actions artifact and GitHub Packages
+   usage as well as runner billing, confirm existing Maven access by secret name,
+   and record a dated go/no-go decision. The decision must acknowledge that the
+   currently documented free Mend tier has no perpetual-free guarantee or
+   in-scope self-hosted fallback. Continue only with sanitized evidence of an
+   accepted zero-spend boundary and a go decision.
 2. Have the user manually dispatch `dependency-automation-config.yml` with
    `run_hosted_dry_run` enabled. The job must use only GitHub's short-lived job
    token with explicit read permissions plus Renovate `--dry-run=full`. Preserve

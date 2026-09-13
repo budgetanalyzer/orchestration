@@ -55,11 +55,37 @@ selected security evidence uses GitHub's dependency graph and Dependabot alerts,
 Gradle's open-source basic dependency-submission path, Trivy, `npm audit`, and
 `govulncheck`.
 
-GitHub Actions usage is separate from Mend hosting. Public repositories can use
-standard hosted Linux runners. Before enabling automation for a private
-repository, confirm its included Actions allowance and that paid overages are
-disabled. Stop for user direction if required coverage needs spending or a
-capability unavailable on the free offering.
+The only new account surface expected by this rollout is a Mend Developer Portal
+profile, accessed with the existing GitHub identity through OAuth. It administers
+the free hosted App; it is not a paid Mend subscription. The existing GitHub
+account must already have authority to install Apps and administer Actions,
+security, package, and repository settings for the scoped organization. GitHub
+Actions, GitHub Packages, the dependency graph, Dependabot, Trivy, `npm audit`,
+`govulncheck`, `pip-audit`, and the public registries and advisory databases do
+not require separate new accounts for this rollout.
+
+GitHub Actions usage is separate from Mend hosting. Standard GitHub-hosted
+runners are currently free for public repositories, but artifact storage is
+still limited by the GitHub plan and shares its allowance with GitHub Packages.
+Public packages are currently free; private package storage and transfer have
+plan allowances. Before enabling automation, inspect the organization plan,
+Actions artifact usage, package visibility and usage, payment-method state, and
+budgets. If no payment method is present, over-limit use should be blocked rather
+than billed; if a payment method exists, require a zero-dollar budget or another
+effective no-spend control. Recheck runner and storage allowances if repository
+or package visibility changes.
+
+The operator must make an explicit third-party dependency decision before any
+publication or activation. Mend currently documents Community Cloud as a free
+tier for unlimited public and private repositories and publishes its resource
+limits. The GitHub App listing says no paid plan is required. Those statements
+are current service policy, not a promise that the hosted tier will remain free
+for a particular duration. The open-source Renovate engine provides a technical
+fallback if hosting changes, but self-hosting is deliberately outside this
+rollout and would require a new cost and operations decision. Stop for user
+direction if that policy-change risk is unacceptable or if required coverage
+needs spending, a trial, an account not listed above, or a capability unavailable
+on the free offerings.
 
 ## Activation procedure
 
@@ -88,13 +114,17 @@ own docs and link here; Phase 12 consolidates it in the coverage report.
 
 The Phase 12 operator sequence is:
 
-1. Confirm repository visibility, Actions billing/overage settings, and that the
-   public Mend documentation covers every scoped repository and authenticated
-   package credentials within the free service's job limits. This is a public
-   documentation preflight; it does not require a Mend login, App installation,
-   billing account, subscription, or payment method. Confirm account-specific
-   repository selection during App installation and prove authenticated Maven
-   lookup during the pilot.
+1. Use the existing GitHub administrator identity to sign in to the Mend
+   Developer Portal with GitHub OAuth, without installing the App, starting a
+   trial, selecting a paid product, or adding payment information. Inventory all
+   third-party dependencies, verify the currently published free terms and
+   limits, inspect GitHub Actions artifact and Packages usage, confirm package
+   visibility and existing Maven secret names, and record a dated go/no-go
+   decision. Confirm that App scope can be restricted during installation and
+   that hosted credentials are supported; prove repository selection and actual
+   authenticated Maven lookup later during the pilot. Stop before publication if
+   the operator does not accept the hosted-service durability risk or zero-spend
+   boundary.
 2. Publish the orchestration repository and its shared preset before publishing
    consumer configurations.
 3. Manually dispatch

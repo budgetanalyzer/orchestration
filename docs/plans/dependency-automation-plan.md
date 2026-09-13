@@ -165,11 +165,14 @@ Existing Maven package credentials are a Phase 12 prerequisite for complete
 remote Java graph resolution and successful bot PR CI, not a prerequisite for
 Phases 1–11. Prepare references to the existing scoped GitHub Packages secrets in
 trusted CI without reading or verifying their values. The Phase 12 operator
-configures Mend's supported encrypted credential/host-rule settings if Renovate
-needs private Maven lookup and verifies free-app support before activation.
-Never put plaintext tokens in presets or reports, substitute Maven Local for
-remote-resolution proof, drop internal dependencies, or introduce privileged
-`pull_request_target` execution of dependency branches to obtain secrets.
+first tests Mend's App-token GitHub Packages access. If Renovate needs a separate
+credential for private Maven lookup, the operator stores the existing scoped
+credential in the Mend App settings and references it from `hostRules` with
+Mend's secret-placeholder syntax. Mend no longer supports repository-config
+encrypted secrets. Verify free-app support before activation. Never put tokens
+in presets or reports, substitute Maven Local for remote-resolution proof, drop
+internal dependencies, or introduce privileged `pull_request_target` execution
+of dependency branches to obtain secrets.
 
 ## Credential-free preparation and Phase 12 handoff
 
@@ -263,6 +266,8 @@ Recheck availability and schema options at implementation time.
 
 - [Renovate GitHub App: explicitly free, including private repos](https://github.com/apps/renovate)
 - [Mend Community hosting limits and paid-feature separation](https://docs.renovatebot.com/mend-hosted/overview/)
+- [Mend App-settings credential storage](https://docs.renovatebot.com/mend-hosted/credentials/)
+- [Renovate private-package and GitHub Packages authentication](https://docs.renovatebot.com/getting-started/private-packages/)
 - [Renovate open-source license](https://github.com/renovatebot/renovate/blob/main/license)
 - [GitHub security features available on all plans](https://docs.github.com/en/code-security/getting-started/github-security-features)
 - [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)

@@ -36,6 +36,18 @@ This cannot necessarily finish in one sitting. Mend Community scheduling may
 take approximately four hours, and the acceptance criteria require observation
 of actual scheduled scanner runs.
 
+## Ownership legend
+
+- **HUMAN** owns authenticated account inspection, billing and repository
+  settings, App administration, workflow dispatch, credential configuration,
+  and every git commit, push, merge, or branch operation. The AI agent may
+  prepare local changes, perform public research, and review sanitized evidence
+  for these steps, but cannot complete them independently.
+- **AI AGENT** owns checkout-based analysis, evidence reconciliation,
+  documentation updates, and the final assessment when the required public or
+  sanitized evidence has been supplied. The human still publishes resulting
+  documentation changes through the normal git workflow.
+
 ## Safety and ownership boundaries
 
 - The operator performs all commits, pushes, merges, workflow dispatches, GitHub
@@ -44,7 +56,7 @@ of actual scheduled scanner runs.
   credentials to an agent.
 - Provide agents only public evidence or sanitized URLs, logs, snapshots, and
   settings confirmations.
-- Do not commit tokens or plaintext host rules. Do not use
+- Do not commit tokens or plaintext credentials in host rules. Do not use
   `pull_request_target` to expose trusted credentials to dependency branches.
 - Use only Mend Renovate Community and standard GitHub-hosted runners within the
   approved zero-spend boundary. Stop if a required capability needs a paid plan,
@@ -96,6 +108,12 @@ for activation.
 
 ## Step 1: Confirm the zero-spend and credential prerequisites
 
+**Owner: HUMAN.** The AI agent may inventory facts available from the checkouts
+or public sources and prepare the evidence table. The human must confirm the
+existing GitHub Actions secret names. If repository visibility changes, the
+human must also check private-repository Actions billing. No Mend login or App
+installation is required in this step.
+
 Complete this before publishing files that trigger hosted workflows.
 
 For every scoped repository:
@@ -103,14 +121,22 @@ For every scoped repository:
 1. Record whether it is public or private.
 2. For every private repository, confirm that included GitHub Actions usage is
    sufficient and paid overages are disabled.
-3. Confirm the free Mend Renovate Community service supports the repository.
-4. Confirm the repository will be selectable for an installation restricted to
-   only the ten scoped repositories.
+3. Confirm from Mend's public documentation that Renovate Community supports
+   the repository type within the free service's published job limits.
 
-For private Maven resolution:
+The unauthenticated GitHub repository API confirmed at `2026-09-09T08:51:48Z`
+that all ten scoped repositories are public and use `main` as their default
+branch. While that remains true, the private-repository Actions allowance and
+paid-overage check is not applicable; do not add a payment method or enable
+billing for this rollout.
 
-1. Confirm that Mend Community supports encrypted host rules and authenticated
-   Maven lookup within the free service and its job limits.
+For the existing Maven-access prerequisite:
+
+1. Confirm from Mend's public documentation that Community supports hosted
+   credentials, GitHub Packages host rules, and Maven lookup. Do not attempt to
+   prove account-specific access before App installation; Step 7 owns the actual
+   authenticated lookup proof. Mend no longer supports repository-config
+   encrypted secrets.
 2. Confirm, by name only, that these existing GitHub Actions secrets are present
    in `currency-service`, `permission-service`, `transaction-service`, and
    `session-gateway`:
@@ -118,11 +144,17 @@ For private Maven resolution:
    `SERVICE_COMMON_PACKAGES_READ_TOKEN`.
 3. Do not reveal, copy, rotate, or test the secret values in an agent environment.
 
-Retain sanitized proof of repository visibility, billing/overage configuration,
-Mend free-tier support, and secret-name presence. Stop and discuss any paid or
-unsupported requirement.
+Retain public proof of repository visibility and Mend free-tier support plus
+sanitized confirmation of secret-name presence. The public checks above are
+already satisfied by the recorded API result and Mend documentation; the human
+secret-name confirmation is the only remaining action while all repositories
+stay public. Stop and discuss any paid or unsupported requirement.
 
 ## Step 2: Clean and publish orchestration first
+
+**Owner: HUMAN.** The AI agent may prepare local file changes, run checks, and
+review the proposed diff. The human owns the history cleanup, branch operations,
+commit, push, review, and merge.
 
 1. Remove `.ai-session-handler/**` from the unpublished change history that will
    be pushed. Do not publish the runner transcripts merely because the runner
@@ -146,6 +178,10 @@ Do not publish a consumer `renovate.json` before the shared preset is available
 from orchestration's default branch.
 
 ## Step 3: Run the orchestration hosted dry run
+
+**Owner: HUMAN.** The human dispatches the authenticated GitHub workflow and
+provides its public or sanitized output. The AI agent may analyze that output
+and identify blockers.
 
 From the orchestration repository's Actions page:
 
@@ -175,6 +211,9 @@ the run has an unexplained fatal/error result.
 
 ## Step 4: Prepare GitHub security settings
 
+**Owner: HUMAN.** These are authenticated repository-administration changes.
+The AI agent may review sanitized settings evidence after the changes.
+
 For each scoped repository:
 
 1. Enable the dependency graph.
@@ -190,6 +229,10 @@ Retain sanitized screenshots or exports showing the effective settings. Do not
 record cookies, tokens, secret values, or unrelated account information.
 
 ## Step 5: Publish the consumer repositories
+
+**Owner: HUMAN.** The AI agent may review each checkout, prepare local file
+changes, and run local validation. The human owns all commits, pushes, reviews,
+merges, and default-branch decisions.
 
 Review, commit, and publish the prepared files in each consumer repository only
 after Step 2 has made the shared preset resolvable.
@@ -222,13 +265,20 @@ if the required dependency-graph or credential configuration was not yet active.
 
 ## Step 6: Pilot Renovate on orchestration
 
-1. Install the free Mend Renovate Community GitHub App with access restricted to
-   `orchestration` first.
-2. Grant read access to Dependabot alerts when that permission is available.
-3. Run or observe onboarding for orchestration.
-4. Inspect the resolved configuration, extraction logs, Dependency Dashboard,
+**Owner: HUMAN.** App installation, permission grants, and Mend administration
+require the human. The AI agent may assess public or sanitized pilot evidence.
+
+1. Open the Mend developer portal and sign in with GitHub OAuth if the App flow
+   requires it. This may create a free Mend portal profile; do not create a paid
+   subscription, start a trial, or provide a payment method.
+2. On GitHub's App installation screen, confirm the repositories are selectable,
+   then install the free Mend Renovate Community GitHub App with access
+   restricted to `orchestration` first.
+3. Grant read access to Dependabot alerts when that permission is available.
+4. Run or observe onboarding for orchestration.
+5. Inspect the resolved configuration, extraction logs, Dependency Dashboard,
    proposed branches, duration, and all rate-limit or timeout messages.
-5. Confirm:
+6. Confirm:
    - the shared preset is applied;
    - `automerge` is false;
    - routine limits and schedules are effective;
@@ -244,6 +294,10 @@ boundary, cannot resolve required dependencies, or applies the wrong policy.
 
 ## Step 7: Expand Renovate to the remaining repositories
 
+**Owner: HUMAN.** The human changes App scope and configures encrypted Maven
+credentials. The AI agent may review sanitized job, dashboard, extraction, and
+lookup evidence without receiving credentials.
+
 After the orchestration pilot passes:
 
 1. Expand the same App installation to only the other nine scoped repositories.
@@ -251,8 +305,9 @@ After the orchestration pilot passes:
 3. Confirm every repository resolves the published preset and creates a
    Dependency Dashboard.
 4. Confirm no competing Dependabot update PRs or another update bot are active.
-5. Configure any required private Maven access only with Mend-supported encrypted
-   secrets and host rules.
+5. First use Mend's App-token GitHub Packages host rules. If separate private
+   Maven credentials are required, the human stores them only in Mend App
+   settings and references them from `hostRules` using secret placeholders.
 6. Verify authenticated Maven lookups for the internal `org.budgetanalyzer`
    coordinates without exposing credentials.
 
@@ -260,6 +315,10 @@ Record each repository's App job URL, revision, duration, extracted dependency
 count, lookup failures, dashboard URL, and first proposal URLs.
 
 ## Step 8: Submit all five Java dependency graphs
+
+**Owner: HUMAN.** The human dispatches workflows from trusted default branches
+and supplies sanitized run and graph evidence. The AI agent may evaluate graph
+completeness and document gaps.
 
 Run `.github/workflows/dependency-submission.yml` from trusted default-branch
 code in this order:
@@ -290,6 +349,9 @@ A green ordinary build, package preflight, generator exit code, or partial
 
 ## Step 9: Run the prepared scanner workflows manually
 
+**Owner: HUMAN.** The human confirms the Actions cost boundary and dispatches
+the workflows. The AI agent may inspect public or sanitized logs and artifacts.
+
 Dispatch these workflows from their trusted default branches for immediate
 feedback:
 
@@ -310,6 +372,11 @@ scan.
 
 ## Step 10: Review actual hosted behavior
 
+**Owner: AI AGENT.** The human supplies sanitized evidence for private or
+account-only views, including billing confirmation and private package access.
+The AI agent reconciles the evidence, identifies failures or gaps, and prepares
+coverage-report updates.
+
 For every repository, inspect and retain evidence for:
 
 - resolved Renovate configuration and extraction/lookup logs;
@@ -329,6 +396,10 @@ controllers, frontend transitive packages, and Go dependencies.
 
 ## Step 11: Observe the required cycles
 
+**Owner: HUMAN.** The human observes the authenticated GitHub and Mend views
+over the required elapsed time and supplies sanitized cycle evidence. The AI
+agent may evaluate each supplied cycle and track what remains pending.
+
 1. Record at least two successful Renovate bot cycles for each of the ten
    repositories.
 2. Record one actual scheduled run, not merely a manual dispatch, for every
@@ -340,6 +411,11 @@ controllers, frontend transitive packages, and Go dependencies.
 Keep Phase 12 open while any required cycle or scheduled run is pending.
 
 ## Step 12: Complete the benchmark comparison
+
+**Owner: AI AGENT.** Using the public and sanitized evidence supplied during the
+earlier steps, the AI agent updates the coverage report and assigns only the
+evidence-supported classifications below. The human publishes the resulting
+documentation change.
 
 Update `docs/research/dependency-automation-coverage.md` using hosted evidence.
 For every deferred-check row, record:
@@ -370,6 +446,10 @@ inventories that cannot identify Redis, Temurin, or controller application
 versions and the offline Istio gateway `image: auto` limitation.
 
 ## Step 13: Close Phase 12
+
+**Owner: AI AGENT.** The AI agent audits the assembled evidence and reports the
+installation and benchmark outcomes separately. The human supplies any missing
+account-only confirmation and publishes the final documentation change.
 
 Before declaring completion, verify:
 

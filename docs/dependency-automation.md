@@ -89,9 +89,12 @@ own docs and link here; Phase 12 consolidates it in the coverage report.
 The Phase 12 operator sequence is:
 
 1. Confirm repository visibility, Actions billing/overage settings, and that the
-   free Mend service supports every scoped repository and required authenticated
-   Maven lookup within its job limits. Complete this before publication can
-   trigger any prepared push workflows.
+   public Mend documentation covers every scoped repository and authenticated
+   package credentials within the free service's job limits. This is a public
+   documentation preflight; it does not require a Mend login, App installation,
+   billing account, subscription, or payment method. Confirm account-specific
+   repository selection during App installation and prove authenticated Maven
+   lookup during the pilot.
 2. Publish the orchestration repository and its shared preset before publishing
    consumer configurations.
 3. Manually dispatch
@@ -104,9 +107,13 @@ The Phase 12 operator sequence is:
    rollout plan. Grant read access to Dependabot alerts when available.
 5. Enable the dependency graph and Dependabot alerts. Disable Dependabot version
    updates and automatic Dependabot security-update pull requests.
-6. Configure private Maven access only through Mend-supported encrypted secrets
-   and host rules. Never commit a token and never use `pull_request_target` to
-   expose trusted credentials to dependency branches.
+6. First use the GitHub Packages host rules that Mend provisions from the App's
+   platform token. If that token cannot read the required package, store the
+   existing scoped credential in the Mend App settings and reference it from a
+   `hostRules` entry with Mend's secret-placeholder syntax. Mend no longer
+   supports repository-config encrypted secrets. Never commit a token and never
+   use `pull_request_target` to expose trusted credentials to dependency
+   branches.
 7. Run each Java repository's graph-submission workflow on its trusted default
    branch using its existing scoped package-read secrets and a separate GitHub
    job token for submission. Verify complete application/runtime/test dependency

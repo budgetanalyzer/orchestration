@@ -68,12 +68,31 @@ GitHub Actions usage is separate from Mend hosting. Standard GitHub-hosted
 runners are currently free for public repositories, but artifact storage is
 still limited by the GitHub plan and shares its allowance with GitHub Packages.
 Public packages are currently free; private package storage and transfer have
-plan allowances. Before enabling automation, inspect the organization plan,
-Actions artifact usage, package visibility and usage, payment-method state, and
-budgets. If no payment method is present, over-limit use should be blocked rather
-than billed; if a payment method exists, require a zero-dollar budget or another
-effective no-spend control. Recheck runner and storage allowances if repository
-or package visibility changes.
+plan allowances. Public package visibility does not remove GitHub Packages'
+authentication requirement for Maven installation.
+
+Treat shared-storage capacity as a Phase 12 prerequisite, not a post-activation
+surprise. Before publishing scheduled artifact-producing workflows, record a
+dated public Actions artifact inventory across every organization repository,
+the current unexpired artifact bytes, the authenticated billing view's accrued
+Actions artifact and Packages usage, the organization plan and included
+allowance, and package visibility. Inventory each new `upload-artifact` producer
+and its retention period. Locally generate and compress the exact paths for any
+potentially large new bundle, especially the orchestration exact-image evidence
+and workspace-image evidence, and record the estimated compressed bytes. Include
+existing build artifacts that new Renovate pull requests will trigger in the
+headroom calculation.
+
+After each first manual hosted scanner run, use the artifact REST response's
+`size_in_bytes` value to replace the estimate before accepting scheduled
+operation. Seven-day weekly retention contributes approximately one compressed
+bundle's size to steady-state monthly average storage; additional manual runs
+add storage in proportion to their retained hours. Stop before publication if a
+local estimate cannot be produced or the available allowance cannot absorb the
+projection. If no payment method is present, over-limit use should be blocked
+rather than billed; if a payment method exists, require a zero-dollar budget or
+another effective no-spend control. Recheck runner and storage allowances if
+repository or package visibility changes.
 
 The operator must make an explicit third-party dependency decision before any
 publication or activation. Mend currently documents Community Cloud as a free
@@ -99,13 +118,14 @@ trusted environment and supplies sanitized evidence for agent review.
 
 Missing authentication, authenticated-only API access, and unauthenticated API
 rate limits are recorded as pending Phase 12 evidence; they do not block local
-configuration preparation. This includes private Maven resolution, complete
-remotely resolved Java snapshots, graph submission, published-preset resolution,
-and hosted bot/scanner runs. Local schema validation, extraction, workflow lint,
-and checks that can run without credentials remain required. Preserve actual
-failures and incomplete outputs; never report a deferred check as passed or
-weaken a hosted job's failure behavior. Non-authentication prerequisites and
-implementation defects remain blockers under the owning repository's rules.
+configuration preparation. This includes authenticated Maven resolution,
+complete remotely resolved Java snapshots, graph submission, published-preset
+resolution, and hosted bot/scanner runs. Local schema validation, extraction,
+workflow lint, and checks that can run without credentials remain required.
+Preserve actual failures and incomplete outputs; never report a deferred check
+as passed or weaken a hosted job's failure behavior. Non-authentication
+prerequisites and implementation defects remain blockers under the owning
+repository's rules.
 
 For each deferred check, record the repository, check/command, affected packages
 or configurations, observed failure or reason not attempted, and the Phase 12
@@ -118,13 +138,13 @@ The Phase 12 operator sequence is:
    Developer Portal with GitHub OAuth, without installing the App, starting a
    trial, selecting a paid product, or adding payment information. Inventory all
    third-party dependencies, verify the currently published free terms and
-   limits, inspect GitHub Actions artifact and Packages usage, confirm package
+   limits, complete the shared-storage prerequisite above, confirm package
    visibility and existing Maven secret names, and record a dated go/no-go
    decision. Confirm that App scope can be restricted during installation and
-   that hosted credentials are supported; prove repository selection and actual
-   authenticated Maven lookup later during the pilot. Stop before publication if
-   the operator does not accept the hosted-service durability risk or zero-spend
-   boundary.
+   that hosted credentials are supported; prove repository selection, actual
+   hosted artifact sizes, and authenticated Maven lookup later during the pilot.
+   Stop before publication if the operator does not accept the hosted-service
+   durability risk or zero-spend boundary.
 2. Publish the orchestration repository and its shared preset before publishing
    consumer configurations.
 3. Manually dispatch

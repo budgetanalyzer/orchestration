@@ -100,7 +100,7 @@ Complete this gate before publishing files that trigger hosted workflows.
 | --- | --- | --- | --- |
 | GitHub account and `budgetanalyzer` organization | No; use the existing GitHub identity | Repository administration, Actions, dependency graph, Dependabot alerts, artifacts, and GitHub Packages | Confirm the identity can install organization Apps and administer Actions, security, package, and repository settings for all ten repositories. |
 | Mend Developer Portal and Renovate Community Cloud | Yes, this is the only expected new account surface | Hosted Renovate jobs, logs, App settings, and optional encrypted Maven host rules | Sign in at [Mend's Developer Portal](https://developer.mend.io/) with GitHub OAuth. This creates or accesses the free portal profile; do not select a paid product, start a trial, provide payment information, or install the App yet. |
-| GitHub Packages Maven access | No new provider account | Resolution of private `org.budgetanalyzer` artifacts | Confirm package visibility and the existing credential names. First try the Mend App's platform token after installation; only if needed, store an existing scoped credential in Mend settings during Step 7. |
+| GitHub Packages Maven access | No new provider account | Authenticated resolution of public `org.budgetanalyzer` artifacts | Reconfirm package visibility and the existing credential names. Public Maven packages are free under the current billing policy but still require authentication to install. First try the Mend App's platform token after installation; only if needed, store an existing scoped credential in Mend settings during Step 7. |
 | Trivy, `npm audit`, `govulncheck`, `pip-audit`, and Gradle dependency submission | No | Open-source scanners and graph generation on GitHub-hosted runners | Confirm that no workflow requests a vendor login, premium database, or paid API. |
 | Public package registries, container registries, and advisory databases | No account expected | Anonymous dependency lookup, image pulls, and vulnerability database downloads | Accept that availability and anonymous rate limits are runtime dependencies; Step 9 proves them in practice. Do not create paid registry accounts as a preemptive workaround. |
 
@@ -154,6 +154,56 @@ Confirm that no larger runner is selected. If the organization has no payment
 method, record that over-limit use will be blocked rather than billed. If it has
 a payment method, confirm an effective zero-dollar budget or equivalent
 no-spend control for Actions and Packages.
+
+### Complete the shared-storage prerequisite
+
+Do not publish the scheduled scanner workflows until this storage preflight has
+a recorded result. The AI agent performs the public inventory, local size
+measurements, and projection; the human supplies only sanitized confirmations
+from account-only billing and budget views.
+
+1. Inventory unexpired Actions artifacts across every public repository in the
+   `budgetanalyzer` organization with the public repository artifact REST API.
+   Record the UTC observation time, repository, artifact name, `size_in_bytes`,
+   creation and expiry times, total retained bytes, and any API visibility or
+   rate-limit gap. This is a current-file snapshot, not the billing total.
+2. In the authenticated organization **Billing & licensing** view, record the
+   plan and included shared-storage allowance, billing-cycle dates, accrued
+   Actions artifact and Packages usage, current Packages usage and visibility,
+   payment-method state, and whether a hard-stop no-spend control is effective.
+   Do not infer accrued usage from current retained files: deletion or expiry
+   stops future accrual but does not erase storage already accrued this cycle.
+3. Inventory all artifact producers introduced by the rollout and their
+   retention. The new producers are the orchestration exact-image evidence,
+   frontend npm audit, `ext-authz` govulncheck, workspace-image evidence, and
+   Python audit workflows; each currently retains its bundle for seven days.
+   Also include existing JAR, test-result, and frontend build artifacts that new
+   Renovate pull requests will cause existing build workflows to upload.
+4. Before publication, execute the complete orchestration exact-image scan
+   locally and compress exactly the paths listed by its `upload-artifact` step at
+   compression level 9. Record the compressed byte estimate. Do the same for the
+   workspace-image bundle and measure the smaller audit directories when they
+   are locally available. If a complete local bundle cannot be generated, leave
+   the estimate pending and stop before publication rather than assuming it is
+   small.
+5. Project steady-state use against the authenticated allowance. For a weekly
+   bundle retained seven days, use approximately one compressed bundle size as
+   its steady-state monthly-average contribution. Add each extra manual run in
+   proportion to its retained hours and include a reasonable Renovate-PR build
+   artifact allowance. Record the formula, assumptions, projected total, and
+   remaining headroom.
+6. After each first manual hosted scanner run in Step 9, query its artifact REST
+   record and replace the estimate with `size_in_bytes`. Recalculate headroom
+   before leaving that workflow enabled for its required scheduled run.
+
+The public API snapshot at `2026-09-13T08:52:38Z` found 12 unexpired artifacts
+across all 15 then-public organization repositories, totaling `373325516` bytes
+(`356.0 MiB`). They were existing `currency-service`, `permission-service`, and
+`session-gateway` JAR and test-result artifacts scheduled to expire around
+`2026-09-13T10:28Z` through `10:31Z`; they were not outputs of this rollout.
+Treat this only as dated evidence and repeat the inventory when executing this
+prerequisite. The public API cannot prove the organization plan, accrued billing
+usage, or resources hidden from unauthenticated callers.
 
 For the existing Maven-access prerequisite, confirm by name only that
 `SERVICE_COMMON_PACKAGES_USERNAME` and
@@ -377,8 +427,8 @@ After the orchestration pilot passes:
 3. Confirm every repository resolves the published preset and creates a
    Dependency Dashboard.
 4. Confirm no competing Dependabot update PRs or another update bot are active.
-5. First use Mend's App-token GitHub Packages host rules. If separate private
-   Maven credentials are required, the human stores them only in Mend App
+5. First use Mend's App-token GitHub Packages host rules. If separate Maven
+   credentials are required, the human stores them only in Mend App
    settings and references them from `hostRules` using secret placeholders.
 6. Verify authenticated Maven lookups for the internal `org.budgetanalyzer`
    coordinates without exposing credentials.
@@ -433,28 +483,30 @@ feedback:
 4. `workspace`: `workspace-image-security-evidence.yml`
 5. `budget-analyzer-api-tests`: `python-dependency-audit.yml`
 
-Before dispatching the workspace image scan, reconfirm its potentially larger
-no-cache build fits the zero-spend Actions boundary.
+Before dispatching any scanner, confirm the Step 1 storage projection still fits
+the zero-spend Actions boundary. Before dispatching the workspace image scan,
+also reconfirm its potentially larger no-cache build fits that boundary.
 
 For every run, retain the URL, revision, duration, artifact URL, tool/database
 versions, completion status, and operational failures. Findings may be
 non-blocking, but failed installation, resolution, database download, inventory,
 or report generation is an operational failure and cannot be reported as a clean
-scan.
+scan. Query the uploaded artifact's `size_in_bytes`, replace the Step 1 estimate,
+and recalculate shared-storage headroom before accepting its scheduled operation.
 
 ## Step 10: Review actual hosted behavior
 
 **Owner: AI AGENT.** The human supplies sanitized evidence for private or
-account-only views, including billing confirmation and private package access.
-The AI agent reconciles the evidence, identifies failures or gaps, and prepares
-coverage-report updates.
+account-only views, including billing confirmation and authenticated package
+access. The AI agent reconciles the evidence, identifies failures or gaps, and
+prepares coverage-report updates.
 
 For every repository, inspect and retain evidence for:
 
 - resolved Renovate configuration and extraction/lookup logs;
 - Dependency Dashboard and representative patch, minor, major, digest, and
   migration proposals where applicable;
-- representative bot-PR checks and private package access;
+- representative bot-PR checks and authenticated package access;
 - Dependabot alerts separately from update proposals;
 - no automerge and no duplicate update-PR service;
 - no paid feature or unintended Actions overage;

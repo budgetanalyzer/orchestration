@@ -27,7 +27,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   # renovate: datasource=npm depName=renovate
-  RENOVATE_VERSION: '44.65.5'
+  RENOVATE_VERSION: '44.66.1'
 
 jobs:
   validate-renovate-config:

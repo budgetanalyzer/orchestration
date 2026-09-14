@@ -1,8 +1,8 @@
 # Dependency Automation
 
-**Status:** Configuration prepared; a bounded zero-spend branch trial was approved
-on 2026-09-14. Trial workflow adaptations and administrator activation remain
-pending.
+**Status:** Configuration and branch-trial workflow controls are prepared; a
+bounded zero-spend branch trial was approved on 2026-09-14. Human publication,
+hosted measurement, and administrator activation remain pending.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -183,6 +183,43 @@ caches, and billing are repository/account state. Default-branch changes affect
 new PR bases, applicable rulesets, schedules, and integrations. Neither mode
 authorizes dependency merges, package publication, releases, or deployment.
 
+### Trial workflow controls
+
+All nine repositories use the exact protected ref
+`refs/heads/dependency-automation-trial`. Relevant build workflows accept pushes
+to that ref and pull requests whose base is either `main` or the trial branch.
+Scanner and graph workflows accept only direct `main` or trial refs; they reject
+pull-request merge refs and unrelated manual-dispatch refs. Snapshot and release
+publishing workflows remain unchanged.
+
+Repository variables control every trial-side expansion and are disabled when
+unset or set to any value other than the exact string `true`:
+
+| Repository variable | Trial behavior enabled |
+| --- | --- |
+| `DEPENDENCY_AUTOMATION_TRIAL_SCHEDULES_ENABLED` | Allows a scheduled scanner or graph job to run when the trial branch is the current default. |
+| `DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED` | Allows a measured, complete sealed evidence archive to upload for one day. |
+| `DEPENDENCY_AUTOMATION_TRIAL_GRAPH_SUBMISSION_ENABLED` | Allows Java graph submission only when the exact trial ref is also the current default branch. |
+| `DEPENDENCY_AUTOMATION_TRIAL_CACHES_ENABLED` | Allows the workflow's optional Actions-backed cache after the initial cache-disabled measurement. |
+
+The initial branch measurement therefore runs complete builds, scans, and Java
+graph generation with trial schedules, uploads, graph submission, and optional
+caches off. Java workflows use Gradle's generation-only graph mode, keep package
+read secrets separate from `${{ github.token }}`, and preserve strict dependency
+resolution. Main-branch graph submission and existing main build/scanner uploads
+retain their production behavior.
+
+Every repository carries `.github/scripts/prepare-trial-evidence.sh`. The helper
+archives only a workflow's explicit allowlist, reports source, uncompressed-tar,
+and compressed bytes in the job summary, and blocks trial upload unless the
+complete archive fits within 24 MiB. The 24 MiB payload ceiling reserves 1 MiB
+inside the approved 25 MiB per-run cap for the Actions artifact wrapper and
+metadata. Trial uploads use one-day retention and no second compression pass.
+Image layers, scanner databases, dependency caches, and unrelated workspace files
+are excluded. If an enabled upload would exceed the cap, the workflow fails
+evidence delivery without trimming findings. Size-only runner summaries remain
+measurement evidence, not scan or graph acceptance.
+
 ### Operator sequence
 
 The Phase 12 operator sequence is below. Steps 5–8 apply to the full rehearsal;
@@ -267,12 +304,14 @@ not in a second desired-version inventory.
 
 ## Exact-image security evidence
 
-`exact-image-security-evidence.yml` runs weekly and by manual dispatch. It has
-no pull-request trigger and findings do not create a merge gate. The job fails
-when rendering, registry resolution, database download, package inventory, or a
-vulnerability scan is incomplete; vulnerability findings themselves leave the
-scan successful. The final upload runs even after failure and retains evidence
-for seven days without relying on SARIF hosting or a paid service.
+`exact-image-security-evidence.yml` preserves weekly and manual operation on
+`main` and also accepts direct runs of the exact trial ref. It has no pull-request
+trigger and findings do not create a merge gate. The job fails when rendering,
+registry resolution, database download, package inventory, or a vulnerability
+scan is incomplete; vulnerability findings themselves leave the scan successful.
+Main runs retain complete evidence for seven days. Trial runs start with schedule,
+Trivy cache, and upload expansion off, report exact allowlisted sizes, and permit
+only the capped one-day sealed archive described above.
 
 The workflow calls `scripts/security/render-image-scan-inputs.sh`, which uses
 the production Kustomize overlays, controller chart versions from

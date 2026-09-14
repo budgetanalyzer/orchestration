@@ -2,13 +2,13 @@ name: Dependency Automation Configuration
 
 on:
   push:
-    branches: [main]
+    branches: [main, dependency-automation-trial]
     paths:
       - '.github/workflows/dependency-automation-config.yml'
       - 'renovate.json'
       - 'renovate-presets/**'
   pull_request:
-    branches: [main]
+    branches: [main, dependency-automation-trial]
     paths:
       - '.github/workflows/dependency-automation-config.yml'
       - 'renovate.json'
@@ -48,7 +48,11 @@ jobs:
           --strict --no-global renovate.json renovate-presets/default.json
 
   hosted-renovate-dry-run:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_hosted_dry_run }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' && inputs.run_hosted_dry_run &&
+        github.ref == 'refs/heads/dependency-automation-trial'
+      }}
     needs: validate-renovate-config
     permissions:
       checks: read
@@ -60,19 +64,90 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout the exact trial source
+        uses: actions/checkout@v6
+        with:
+          ref: dependency-automation-trial
+          persist-credentials: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
 
+      - name: Verify trial source, configuration, and preset revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_sha="$(git rev-parse HEAD)"
+          config_blob_sha="$(git rev-parse HEAD:renovate.json)"
+          preset_blob_sha="$(git rev-parse HEAD:renovate-presets/default.json)"
+          preset_ref_sha="$(git ls-remote origin refs/heads/dependency-automation-trial | cut -f1)"
+
+          [[ -n "${preset_ref_sha}" ]]
+          [[ "${source_sha}" == "${preset_ref_sha}" ]]
+          jq -e '
+            .extends == ["github>budgetanalyzer/orchestration//renovate-presets/default#dependency-automation-trial"]
+          ' renovate.json > /dev/null
+
+          {
+            echo '## Hosted Renovate trial revisions'
+            echo
+            printf -- '- source SHA: %s\n' "${source_sha}"
+            printf -- '- repository config blob SHA: %s\n' "${config_blob_sha}"
+            printf -- '- preset ref SHA: %s\n' "${preset_ref_sha}"
+            printf -- '- preset blob SHA: %s\n' "${preset_blob_sha}"
+          } | tee dependency-automation-revisions.log >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Run read-only hosted full dry run
         env:
           LOG_LEVEL: debug
+          RENOVATE_BASE_BRANCH_PATTERNS: '["dependency-automation-trial"]'
           RENOVATE_ONBOARDING: 'false'
           RENOVATE_REQUIRE_CONFIG: required
           RENOVATE_TOKEN: ${{ github.token }}
+          RENOVATE_USE_BASE_BRANCH_CONFIG: merge
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p dependency-automation-evidence
+          npx --yes "renovate@${RENOVATE_VERSION}" \
+            --platform=github \
+            --dry-run=full \
+            "${GITHUB_REPOSITORY}" 2>&1 \
+            | tee dependency-automation-evidence/renovate-debug.log
+
+      - name: Measure complete trial Renovate evidence
+        id: trial-evidence
+        if: ${{ always() }}
         run: >-
-          npx --yes "renovate@${RENOVATE_VERSION}"
-          --platform=github
-          --dry-run=full
-          "${GITHUB_REPOSITORY}"
+          bash .github/scripts/prepare-trial-evidence.sh
+          dependency-automation-evidence/renovate-evidence.tar.gz
+          'Trial hosted Renovate dry run'
+          dependency-automation-revisions.log
+          dependency-automation-evidence/renovate-debug.log
+
+      - name: Upload capped trial Renovate evidence
+        if: >-
+          ${{
+            always() && vars.DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED == 'true' &&
+            steps.trial-evidence.outputs.upload_allowed == 'true'
+          }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: trial-renovate-evidence-${{ github.run_id }}
+          path: dependency-automation-evidence/renovate-evidence.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Enforce complete trial Renovate evidence delivery
+        if: >-
+          ${{
+            always() && vars.DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED == 'true' &&
+            steps.trial-evidence.outputs.upload_allowed != 'true'
+          }}
+        run: |
+          echo 'The complete trial Renovate evidence exceeds the capped upload allowance.' >&2
+          exit 1

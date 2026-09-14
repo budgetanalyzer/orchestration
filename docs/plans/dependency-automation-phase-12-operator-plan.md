@@ -1,16 +1,16 @@
 # Dependency Automation Phase 12 Operator Plan
 
 **Status:** Bounded zero-spend trial approved on 2026-09-14 with `main` remaining
-default. Local trial-ref and generated-state ignore remediation is complete;
-workflow adaptations, rollback evidence, consumer publication, and hosted
-evidence remain pending.
+default. Local trial-ref, generated-state ignore remediation, and Step 3 workflow
+controls are complete; rollback evidence, human publication, and hosted evidence
+remain pending.
 
 This is an interactive operator checklist, outside AI Session Handler, for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
 [Dependency Automation](../dependency-automation.md) owns policy. Record results
 in the [coverage report](../research/dependency-automation-coverage.md).
-This revision updates documentation; it does not implement workflow changes,
-create branches, or authorize merges or settings changes.
+The plan does not create branches or authorize merges, workflow triggers, or
+settings changes; those remain human-owned even when local controls are complete.
 
 ## Objective and trial modes
 
@@ -176,8 +176,18 @@ moves trial refs only. Verify the recorded `main` SHAs afterward.
 
 **Owner: AI AGENT in the owning context**, followed by human publication.
 
-These are prerequisites still to implement; read local instructions and update
-nearest dependency-automation docs with each change.
+**Local implementation status:** Complete. All nine repositories now carry the
+exact trial push/base guards, disabled-by-default repository-variable gates,
+cache-disabled initial measurement, capped one-day sealed uploads, and local
+workflow documentation. The five Java repositories use generation-only Gradle
+graphs until both the graph-submission variable is enabled and the protected
+trial ref is the current default. On 2026-09-14, Node 24 strict Renovate
+validation and local extraction, `actionlint`, `bash -n`, ShellCheck, helper
+smoke validation, and the local event/ref case review passed. Hosted execution
+and human publication remain separate evidence below.
+
+The completed control set is listed below. Read local instructions and keep the
+nearest dependency-automation docs aligned with any later change.
 
 1. Add exact trial-branch push triggers for initial measurement where needed.
    Extend relevant `pull_request.branches: [main]` builds to accept the trial

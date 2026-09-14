@@ -8,6 +8,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 GRAFANA_URL="${GRAFANA_URL:-http://127.0.0.1:3300}"
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
+# renovate: datasource=npm depName=@playwright/test
 PLAYWRIGHT_VERSION="${PLAYWRIGHT_VERSION:-1.59.1}"
 DEBUG_APPLICATION="${GRAFANA_DEBUG_APPLICATION:-currency-service}"
 DEBUG_NAMESPACE="${GRAFANA_DEBUG_NAMESPACE:-default}"

@@ -13,8 +13,11 @@ TEMP_LABEL_VALUE="true"
 REDIS_PROBE_NAME="runtime-guardrails-redis-acl-probe"
 POSTGRES_PROBE_NAME="runtime-guardrails-postgresql-authz-probe"
 RABBITMQ_PROBE_NAME="runtime-guardrails-rabbitmq-authz-probe"
+# renovate: datasource=docker depName=redis
 REDIS_PROBE_IMAGE="redis:7-alpine@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6"
+# renovate: datasource=docker depName=postgres
 POSTGRES_PROBE_IMAGE="postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50"
+# renovate: datasource=docker depName=python
 RABBITMQ_PROBE_IMAGE="python:3.12-alpine@sha256:7747d47f92cfca63a6e2b50275e23dba8407c30d8ae929a88ddd49a5d3f2d331"
 WAIT_TIMEOUT="${PHASE7_WAIT_TIMEOUT:-120s}"
 REGRESSION_TIMEOUT="${PHASE7_REGRESSION_TIMEOUT:-35m}"

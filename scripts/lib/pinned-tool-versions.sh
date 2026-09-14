@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 # Pinned tool versions and verified download metadata for security guardrail tooling.
 
+# renovate: datasource=github-releases depName=kubernetes/kubernetes
 PHASE7_KUBECTL_VERSION="v1.35.4"
+# renovate: datasource=github-releases depName=helm/helm
 PHASE7_HELM_VERSION="v3.20.1"
+# renovate: datasource=github-releases depName=tilt-dev/tilt extractVersion=^v(?<version>.*)$
 PHASE7_TILT_VERSION="0.37.3"
+# renovate: datasource=github-releases depName=FiloSottile/mkcert
 PHASE7_MKCERT_VERSION="v1.4.4"
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
 PHASE7_KIND_VERSION="v0.31.0"
+# renovate: datasource=github-releases depName=yannh/kubeconform
 PHASE7_KUBECONFORM_VERSION="v0.7.0"
+# renovate: datasource=github-releases depName=stackrox/kube-linter
 PHASE7_KUBE_LINTER_VERSION="v0.8.3"
+# renovate: datasource=github-releases depName=kyverno/kyverno extractVersion=^kyverno-cli-(?<version>v.*)$
 PHASE7_KYVERNO_CLI_VERSION="v1.18.0"
+# renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
 PHASE7_GATEWAY_API_VERSION="v1.5.1"
+# renovate: datasource=github-releases depName=projectcalico/calico
 PHASE7_CALICO_VERSION="v3.32.0"
 
 phase7_normalize_os() {

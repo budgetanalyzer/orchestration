@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/../lib/common.sh"
 
+# renovate: datasource=docker depName=postgres
 PHASE4_NETWORK_POLICY_PROBE_IMAGE="${PHASE4_NETWORK_POLICY_PROBE_IMAGE:-postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50}"
 readonly PHASE4_NETWORK_POLICY_PROBE_IMAGE
 CONNECT_TIMEOUT="${PHASE4_NETWORK_POLICY_CONNECT_TIMEOUT:-3}"

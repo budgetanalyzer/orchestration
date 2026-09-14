@@ -12,6 +12,7 @@ PROBE_LABEL_VALUE="true"
 PROBE_POD_A="api-rate-limit-probe-a"
 PROBE_POD_B="api-rate-limit-probe-b"
 PROBE_POLICY_NAME="allow-api-rate-limit-egress-to-istio-ingress"
+# renovate: datasource=docker depName=curlimages/curl
 PROBE_IMAGE="curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6"
 NGINX_DEPLOYMENT="deployment/nginx-gateway"
 NGINX_LOG_TAIL_LINES=1200

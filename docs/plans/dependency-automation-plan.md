@@ -4,6 +4,11 @@
 All authenticated validation and human activation are deferred to Phase 12.
 Automation is not installed or enabled by this document.
 
+Phase 12 now uses a branch rehearsal before the operator's merge decision; see
+the [operator checklist](dependency-automation-phase-12-operator-plan.md).
+Completed preparation phases retain their history. Trial workflow adaptations
+are additional owning-repository work, not evidence already completed here.
+
 Use Renovate to discover dependency updates and open reviewable pull requests across
 Budget Analyzer. Keep GitHub Dependabot alerts enabled for vulnerability detection,
 and use existing open-source scanners for dependencies that update discovery alone
@@ -907,123 +912,134 @@ have explicit Phase 12 handoffs and unbounded-constraint limits remain stated.
 
 ### Goal
 
-Establish what the enabled automation independently detects and report remaining gaps.
+Evaluate hosted dependency automation on trial branches before a merge decision,
+then verify ongoing activation only if the operator approves promotion.
 
 ### Scope
 
-Operator handoff for all deferred authentication, read-only review of supplied
-hosted dry-run and activation evidence, orchestration coverage report, and
-canonical docs. Authenticated execution remains outside the agent environment.
+Operator handoff for deferred authentication and branch rehearsal, review of
+public/sanitized hosted evidence, billing and storage projections, orchestration
+coverage report, and canonical documentation. Authenticated execution remains
+outside the agent environment.
 
 ### Non-goals
 
 No credentials for agents, agent-authenticated GitHub/Mend/registry access,
-agent-performed workflow dispatch or settings changes, dependency merges,
-upgrades, sibling fixes or deployment.
+agent-performed dispatch/settings/git operations, dependency upgrades or merges,
+sibling implementation, releases, or deployment. A successful rehearsal does not
+authorize promotion to main.
 
 ### Required context
 
-Read all repo-local deferred-check handoffs, phase evidence, the canonical
-activation procedure, and the saved review. Phases 1–11 must have completed local
-preparation; their pending authenticated checks are expected inputs to this phase.
-The user now owns publication of the shared preset before consumer configs,
-credential and zero-spend review, workflow dispatch, and administrator activation.
-If those actions or their evidence are outstanding, first assemble a concrete
-handoff from the prepared files and deferred-check records, then pause for the
-operator to supply sanitized results. Never ask for credentials. Local dry runs
-do not satisfy hosted acceptance; public or sanitized exported evidence is the
-agent's review surface when hosted pages require login.
+Read the canonical guide, the
+[Phase 12 operator plan](dependency-automation-phase-12-operator-plan.md), all
+repo-local deferred-check handoffs, phase evidence, and the saved review.
+Phases 1–11 must have completed local preparation. The Mend account is created
+according to the operator; tier, billing, App scope, and package access are still
+unverified.
+
+The revised operator plan supersedes the previous merge-before-testing sequence.
+Trial workflow adaptations are additional preparation in each owning repository
+context, not implementation for this orchestration phase. Assemble concrete
+handoffs before pausing for operator actions; never ask for credentials.
+Public output or sanitized exports are the evidence surface when login is needed.
 
 ### Execution steps
 
-1. Consolidate every deferred check from Phases 1–11 into the coverage report.
-   Record the repo, command/workflow, package/configuration, reason deferred,
-   operator action, expected evidence, and pending/passed/failed disposition.
-   Apply the canonical activation procedure with the user; only the user performs
-   publication, OAuth sign-in, authenticated checks, credential configuration,
-   and settings changes. Before any publication or App installation, have the
-   user access the Mend Developer Portal through GitHub OAuth, inventory every
-   external account and service, inspect Actions artifact and GitHub Packages
-   usage as well as runner billing, confirm existing Maven access by secret name,
-   and record a dated go/no-go decision. The decision must acknowledge that the
-   currently documented free Mend tier has no perpetual-free guarantee or
-   in-scope self-hosted fallback. Continue only with sanitized evidence of an
-   accepted zero-spend boundary and a go decision.
-2. Have the user manually dispatch `dependency-automation-config.yml` with
-   `run_hosted_dry_run` enabled. The job must use only GitHub's short-lived job
-   token with explicit read permissions plus Renovate `--dry-run=full`. Preserve
-   the workflow URL, verify that the published preset resolves, and record GitHub
-   lookups, branch-file mutation simulation, registry retries, and explicit gaps.
-   The user triggers this run; do not provide its token to an agent.
-3. After the operator enables the dependency graph under the canonical activation
-   procedure, have the user run each of the five Java repositories' prepared
-   graph-submission workflows on trusted default-branch code. Package resolution uses existing
-   scoped CI secrets; submission uses the separate job token. Require per-repo
-   run URL, source revision, complete snapshot or equivalent detailed dependency
-   evidence, and proof GitHub accepted submission. Inspect runtime/test coverage,
-   internal coordinates in consumers, and actual inherited Spring/Jackson/Tomcat/
-   Netty dependencies where applicable. A green ordinary build, POM preflight,
-   another repo's snapshot, or successful generator exit with failed/missing
-   configurations is insufficient. Retain sanitized evidence through the standard
-   workflow outputs or operator export; never export secrets. Complete every
-   other deferred authenticated lookup/build/test/scan and record its result.
-   The orchestration-only Renovate dry run cannot satisfy these per-repo checks.
-4. Complete the administrator activation procedure in
-   `docs/dependency-automation.md`, then inspect each repository's actual
-   extraction/lookup logs, Dependency Dashboard,
-   PR proposals, graph submissions, Dependabot alerts and scanner runs. Record run
-   timestamps, config revisions, database versions and links. Observe at least two
-   successful bot cycles and one scheduled scan cycle, using a manual first scan
-   for immediate feedback. Missing authentication or rate-limit failures are gaps.
-5. Complete the Markdown comparison for every review area and named high-priority
-   advisory. Separate exact matches, newer applicable recommendations, additional
-   findings, applicability differences, deferred migrations and genuine misses.
-   Do not require obsolete exact target versions or equal vulnerability counts.
-   Record the user-applied workspace Node 24 prerequisite as baseline context, not
-   as an update independently discovered or applied by Renovate.
-6. Check that maintained-line patches remain visible alongside major proposals,
-   including Redis/PostgreSQL/Temurin digest changes, Spring inherited findings,
-   controller images, frontend transitive packages and reachable go-redis findings.
-7. Demonstrate no duplicate update-PR ownership, no automerge, functioning bot PR
-   checks and credential access, no paid features and no unintended production
-   artifact promotion. Record free-service timing/resource failures if observed.
-8. Update the canonical guide with the verified operator workflow: weekly dashboard
-   and alert review, scan-failure triage, quarterly upstream support-policy review,
-   and adding a dependency through native extraction or a standard annotation.
-   Correct active documentation drift only in its owner docs. Leave the archived
-   notification guide, saved research and ADRs unchanged.
-9. Report automation installation and benchmark parity separately. Return any
-   sibling configuration issue to its owning phase/context; do not fix sibling
-   service logic or write a custom workaround from orchestration.
+1. Consolidate every deferred check: repo, command/workflow, package/configuration,
+   reason deferred, operator action, expected proof, and disposition. Include
+   trial workflow prerequisites and keep them pending until implemented and
+   validated in the owning contexts.
+2. Have the operator verify current free terms, account controls, visibility,
+   existing Maven secret names, current/accrued storage, and separate cache use.
+   Record a bounded trial decision. Unknown output sizes may be measured in hosted
+   runs with uploads and schedules off after the no-spend boundary is established;
+   a complete local scan estimate is no longer a prerequisite for that measurement.
+3. Follow the operator plan to publish all implementation on the identically named
+   `dependency-automation-trial` branch in all ten repositories, orchestration
+   preset first, with explicit trial preset refs. Preserve outgoing
+   history hygiene, unrelated work, and each recorded main SHA. No main merge is
+   required. Review the exact-ref/event guards, PR build filters, upload caps,
+   retention, and disabled schedule/submission gates before execution.
+4. Review the hosted read-only full Renovate dry run with GitHub's ephemeral
+   read-permission job token and explicit trial configuration selection. Verify
+   source/base/preset SHAs, extraction, authenticated lookups where supported,
+   mutation simulation, and all errors. A checkout ref or orchestration-only dry
+   run does not prove consumer configuration, Maven graphs, or App behavior.
+5. Review complete branch build/scanner measurements and controlled artifact
+   uploads. Include implicit graph artifacts, existing bot-PR JAR/test/frontend
+   outputs, cache use, and failure-path output. Replace estimates with actual
+   artifact bytes, project intended retention and PR volume, and reconcile
+   refreshed billing. Missing detailed output remains an evidence gap.
+6. Record the operator's trial mode. If main remains default, report branch
+   results with default-only cron/onboarding/alert checks pending. For a full
+   rehearsal, the operator audits default-branch effects and temporarily makes
+   protected trial branches default, orchestration first. Verify unchanged main
+   SHAs and trial-ref guards; only the operator changes settings or installs the
+   App. Expand App scope only after the orchestration pilot passes.
+7. In the full rehearsal, require complete remotely resolved application/runtime/
+   test graphs and accepted GitHub submissions for all five Java repos on their
+   actual trusted trial defaults. Use existing scoped package-read secrets and
+   separate submission tokens. Verify internal coordinates and inherited
+   Spring/Jackson/Tomcat/Netty dependencies as applicable, plus graph-backed alerts.
+   Preflights, partial snapshots, or another repo's graph do not satisfy this.
+8. Require complete scanner reports, real bot-PR checks/package access, two
+   successful Mend cycles per repo, and one actual scheduled cycle per scheduled
+   scanner and Java graph workflow. Record source refs, timestamps, tool/database
+   versions, bytes, duration, and queueing. Do not count skipped/manual jobs as
+   scheduled acceptance or hide authentication, timeout, and registry failures.
+9. Apply the operator plan's stop/restore procedure before the merge decision:
+   pause App/jobs, preserve evidence, restore original defaults/settings, verify
+   main SHAs, and record residual repo-wide state. Report trial acceptance,
+   ongoing installation, and benchmark parity separately. A paused trial leaves
+   ongoing installation pending, even when all trial checks passed.
+10. Complete the historical comparison with reproduced, superseded by a newer
+    applicable finding, false positive with evidence, or missing classifications.
+    Keep maintained-line patches visible alongside major proposals. Record
+    workspace Node 24 as an operator-applied prerequisite, not bot discovery.
+    Preserve known image inventory, offline Istio, checksum, and ARM64 limits.
+11. Prepare a concrete promotion recommendation and diff based on measured
+    billing/storage, resource limits, coverage, and PR behavior. The operator
+    chooses GO, NO-GO, or DEFER. Without promotion approval, leave implementation
+    on branches and record activation as deferred; do not claim Phase 12's
+    ongoing-installation acceptance is complete.
+12. After an explicit GO, the operator publishes the final shared preset before
+    consumers, removes trial-only wiring through reviewed changes, restores the
+    intended retention, and reactivates deliberately. Verify changed refs/config
+    and main-push paths with fresh evidence, including final graph acceptance,
+    App/PR behavior and scheduled runs. Update canonical operating docs only from
+    verified behavior; leave saved research, archives, and ADRs unchanged.
 
 ### Implementation notes
 
-Do not edit this executable plan while a runner invocation is using its snapshot;
-write evidence to the coverage report. Actual security remediation, checksum
-refreshes and major migrations happen in subsequent reviewed dependency work.
-Agents do not perform authenticated operations to collect evidence. If public
-access is unavailable, use operator-supplied sanitized logs, snapshots, and
-settings confirmation. Missing authentication or evidence may block this phase;
-report the exact outstanding operator action rather than requesting a token.
+Do not edit this executable plan while a runner uses its snapshot; record results
+in the coverage report. Each sibling implementation handoff belongs in that repo's
+context. Branches are not account/billing or credential isolation. Restoring
+defaults does not delete alerts, issues, artifacts, caches, or accrued usage.
+A missing operator decision requires a concrete handoff, never a token request.
 
 ### Validation
 
-Check every baseline row has evidence and a disposition, every active repo has
-successful runs, and all high-priority misses are prominently stated. Check links,
-the read-only hosted dry-run URL, published-preset resolution, the zero-spend
-settings evidence and that the historical review is unchanged.
-Reconcile every deferred-check record: authenticated operational checks must have
-successful evidence, including complete graphs and accepted submissions for all
-five Java repos. Authentication failures and pending runs cannot be reclassified
-as scanner limitations to claim completion.
+Reconcile every deferred check and baseline row with source-ref-aware evidence.
+Check the explicit preset resolution, unchanged main SHAs during trial, complete
+Java graphs and accepted submissions, real PR checks, actual scheduled events,
+artifact/cache accounting, billing controls, and rollback ledger.
+Check links and the historical review hash. Distinguish branch evidence, full
+rehearsal, and final activation; none automatically substitutes for the next.
+Authentication failures and pending runs cannot be relabeled as tool limitations
+to claim completion.
 
 ### Completion criteria
 
-The free automation is demonstrably active across the scoped repos, standard
-reports and update proposals are accessible, and the comparison states exactly
-which findings were reproduced. All deferred authenticated operational checks
-have passed with per-repo evidence; no credentials were supplied to agents.
-Full review parity is claimed only when all high-priority update/security findings
-are reproduced or superseded with evidence;
-otherwise explicitly report partial coverage and the standard-tool limitations
-for the user's decision. Lifecycle and exploitability assessment remain human work.
+Trial assessment is ready for the operator's decision when its selected mode's
+checks, cost measurements, benchmark comparison, and restore procedure have
+evidence, with remaining default-only checks explicit. This is a decision
+checkpoint, not automatic ongoing activation.
+
+Phase 12's ongoing-installation objective is complete only after approved
+promotion and successful final hosted evidence across all scoped repositories,
+including every deferred authenticated operational check. No credentials were
+supplied to agents. If promotion is declined or deferred, report that disposition
+and leave ongoing activation unclaimed. Full review parity is claimed only when
+all high-priority findings are reproduced or superseded with evidence; otherwise
+report partial coverage. Lifecycle and exploitability assessment remain human work.

@@ -1,6 +1,8 @@
 # Dependency Automation
 
-**Status:** Configuration prepared; administrator activation is still required.
+**Status:** Configuration prepared; branch rehearsal and administrator activation
+are pending. The operator has created the Mend account; account limits and billing
+controls still need verification.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -71,32 +73,40 @@ Public packages are currently free; private package storage and transfer have
 plan allowances. Public package visibility does not remove GitHub Packages'
 authentication requirement for Maven installation.
 
-Treat shared-storage capacity as a Phase 12 prerequisite, not a post-activation
-surprise. Before publishing scheduled artifact-producing workflows, record a
-dated public Actions artifact inventory across every organization repository,
-the current unexpired artifact bytes, the authenticated billing view's accrued
-Actions artifact and Packages usage, the organization plan and included
-allowance, and package visibility. Inventory each new `upload-artifact` producer
-and its retention period. Locally generate and compress the exact paths for any
-potentially large new bundle, especially the orchestration exact-image evidence
-and workspace-image evidence, and record the estimated compressed bytes. Include
-existing build artifacts that new Renovate pull requests will trigger in the
-headroom calculation.
+Branch runs use the same account allowances as runs on `main`. Before the first
+hosted trial, record current retained artifact bytes, accrued billing usage,
+the organization plan and allowance, package visibility, and effective no-spend
+controls. Include existing JAR, test-result, and frontend build artifacts that
+bot PRs will trigger. Actions caches have a separate allowance; inventory cache
+producers and account settings separately from pooled artifact/Packages storage.
+Runner-local Docker layers and scanner databases are not Actions artifacts unless
+uploaded or saved as caches. The workspace scanner uploads reports and build
+logs, not its built Docker image.
 
-After each first manual hosted scanner run, use the artifact REST response's
-`size_in_bytes` value to replace the estimate before accepting scheduled
-operation. Seven-day weekly retention contributes approximately one compressed
-bundle's size to steady-state monthly average storage; additional manual runs
-add storage in proportion to their retained hours. Stop before publication if a
-local estimate cannot be produced or the available allowance cannot absorb the
-projection. If no payment method is present, over-limit use should be blocked
-rather than billed; if a payment method exists, require a zero-dollar budget or
-another effective no-spend control. Recheck runner and storage allowances if
-repository or package visibility changes.
+Missing local bundle sizes do not require merging or block a bounded measurement
+run. Prepare trial workflows with schedules and uploads disabled by default. Run
+the complete scan on a standard public-repository runner, measure the exact
+upload paths, and report sizes in the job summary. Then permit one capped upload
+at a time with one-day trial retention, within verified remaining headroom.
+Enforce the cap before upload, including uploads after failure. A size-only run
+does not replace retained detailed acceptance evidence. Replace estimates with
+the artifact API's `size_in_bytes` before enabling further uploads or schedules.
 
-The operator must make an explicit third-party dependency decision before any
-publication or activation. Mend currently documents Community Cloud as a free
-tier for unlimited public and private repositories and publishes its resource
+Project storage as `sum(bytes / 2^30 * retained_hours)` GiB-hours, adding existing
+accrual and expected non-trial use. Compare with the actual billing-cycle
+allowance and keep headroom for retries and overlapping runs. Weekly bundles
+retained seven days average approximately one bundle each; one-day trial
+retention must not be used to understate the seven-day production projection.
+Deletion stops future accrual, not usage already accrued. Billing views may lag.
+If no payment method is present, confirm over-limit use is blocked; otherwise
+require an effective spend-stopping control for every relevant billed product.
+A notification-only budget is insufficient. Stop hosted work if that boundary
+cannot be established; local preparation may continue.
+
+The operator must approve a bounded trial before any workflow-triggering
+publication or App activation; accepting ongoing operation is a later decision.
+Mend currently documents Community Cloud as a free tier for unlimited public
+and private repositories and publishes its resource
 limits. The GitHub App listing says no paid plan is required. Those statements
 are current service policy, not a promise that the hosted tier will remain free
 for a particular duration. The open-source Renovate engine provides a technical
@@ -132,29 +142,70 @@ or configurations, observed failure or reason not attempted, and the Phase 12
 operator action and expected proof. Sibling phases keep this handoff in their
 own docs and link here; Phase 12 consolidates it in the coverage report.
 
-The Phase 12 operator sequence is:
+### Branch rehearsal before a merge decision
+
+Keep the prepared implementation on `dependency-automation-trial` in all ten
+scoped repositories. Use that exact shared name for trial refs and workflow guards.
+The [Phase 12 operator plan](plans/dependency-automation-phase-12-operator-plan.md)
+owns the checklist, required workflow adaptations, trial limits, and rollback.
+This planning change does not perform branch operations or activate anything.
+
+GitHub schedules run only on the repository's default branch. New manual
+workflows normally need default-branch registration; selecting a ref does not
+make a branch-only workflow automatically discoverable. Renovate normally reads
+its repository config from the default branch. Shared presets can use an explicit
+Git ref, so preset publication itself does not require a merge to `main`.
+
+There are two acceptance modes:
+
+- Keep `main` as default: use explicitly scoped branch push/PR triggers for
+  hosted build, scan, size-measurement, and read-only Renovate checks. Actual
+  default-branch scheduling, normal Mend onboarding, and alert integration remain
+  pending unless separately demonstrated through supported hosted configuration.
+  Do not claim full activation from these results.
+- With explicit operator agreement, temporarily make the protected trial branch
+  the default, first in orchestration and then in consumers. This permits normal
+  Mend onboarding, scheduled jobs, and default-branch dependency-graph/alert
+  acceptance without moving `main`. Audit repository-wide default-branch effects
+  first. Pause the App before restoring defaults and making the merge decision.
+
+The second mode is a real installation in the existing repositories, not an
+isolated account sandbox. App permissions, issues, PRs, alerts, artifacts,
+caches, and billing are repository/account state. Default-branch changes affect
+new PR bases, applicable rulesets, schedules, and integrations. Neither mode
+authorizes dependency merges, package publication, releases, or deployment.
+
+### Operator sequence
+
+The Phase 12 operator sequence is below. Steps 5–8 apply to the full rehearsal;
+when `main` remains default, retain those unperformed checks as pending.
 
 1. Use the existing GitHub administrator identity to sign in to the Mend
    Developer Portal with GitHub OAuth, without installing the App, starting a
    trial, selecting a paid product, or adding payment information. Inventory all
    third-party dependencies, verify the currently published free terms and
-   limits, complete the shared-storage prerequisite above, confirm package
-   visibility and existing Maven secret names, and record a dated go/no-go
+   limits, complete the bounded-trial cost prerequisite above, confirm package
+   visibility and existing Maven secret names, and record a dated trial go/no-go
    decision. Confirm that App scope can be restricted during installation and
    that hosted credentials are supported; prove repository selection, actual
    hosted artifact sizes, and authenticated Maven lookup later during the pilot.
    Stop before publication if the operator does not accept the hosted-service
    durability risk or zero-spend boundary.
-2. Publish the orchestration repository and its shared preset before publishing
-   consumer configurations.
-3. Manually dispatch
+2. Prepare branch-scoped triggers, trusted-ref guards, upload caps, and disabled
+   schedules in every owning repository. Publish the orchestration trial preset
+   before consumers, using an explicit preset ref. No default-branch merge is
+   required. Record each trial SHA and the unchanged `main` SHA.
+3. Run
    `dependency-automation-config.yml` with `run_hosted_dry_run` enabled. Its
    GitHub-provided job token has read permissions only, Renovate runs with
    `--dry-run=full`, and the user retains control of the trigger. Preserve the
-   workflow URL and confirm that the published preset resolves before proceeding;
-   never copy the job token into an agent environment.
-4. Install the Renovate Community App only on the repositories listed in the
-   rollout plan. Grant read access to Dependabot alerts when available.
+   workflow URL and confirm the intended trial ref and preset resolve before
+   proceeding; never copy the job token into an agent environment.
+4. Complete the bounded scanner/build measurement runs. Decide whether to stop
+   with branch evidence or perform the temporary-default full rehearsal. For the
+   latter, apply the operator plan's default-branch controls and install the
+   Renovate Community App on orchestration first. Grant read access to Dependabot
+   alerts when available. Expand only after the pilot passes.
 5. Enable the dependency graph and Dependabot alerts. Disable Dependabot version
    updates and automatic Dependabot security-update pull requests.
 6. First use the GitHub Packages host rules that Mend provisions from the App's
@@ -164,8 +215,8 @@ The Phase 12 operator sequence is:
    supports repository-config encrypted secrets. Never commit a token and never
    use `pull_request_target` to expose trusted credentials to dependency
    branches.
-7. Run each Java repository's graph-submission workflow on its trusted default
-   branch using its existing scoped package-read secrets and a separate GitHub
+7. In the full rehearsal, run each Java repository's graph-submission workflow
+   on its trusted default branch using existing scoped package-read secrets and a separate GitHub
    job token for submission. Verify complete application/runtime/test dependency
    coverage and GitHub acceptance for every repo. A successful ordinary build,
    package-access preflight, or partial snapshot is insufficient. Preserve a
@@ -173,12 +224,16 @@ The Phase 12 operator sequence is:
    source revision; the orchestration-only Renovate dry run does not prove Maven
    resolution or Java submission. Resolve every other deferred authenticated
    lookup/build/scan and retain its evidence too.
-8. Run onboarding for orchestration first. Inspect the resolved configuration,
-   extraction logs, dashboard, job duration, and any rate-limit or timeout
-   message before enabling consumers.
+8. Record two successful Mend cycles per repository, complete detailed scanner
+   and Java graph evidence, and an actual scheduled cycle for every prepared
+   scheduled workflow. Measure bot-PR build artifacts as well as scanner bundles.
+   Pause the trial and restore original defaults before deciding whether to merge.
 9. Record every baseline item in the coverage report as reproduced, superseded,
    false positive with evidence, or missing. Update discovery, advisory evidence,
-   and lifecycle assessment are separate results.
+   and lifecycle assessment are separate results. Report trial acceptance,
+   ongoing installation, and benchmark parity separately. Ongoing installation
+   remains pending until the operator approves promotion and verifies the final
+   configuration on the restored default branches.
 
 The Community service's documented single concurrent organization job,
 approximately four-hour scheduling, and 30-minute timeout are acceptable only if
@@ -195,7 +250,7 @@ repository config discovery, and process the checkout with the local platform.
 Use debug logging and do not provide a GitHub token or enable a write-capable
 platform mode. Local mode proves extraction and supported lookups but does not
 perform a true full dry run. Phase 12 owns the post-publication GitHub-platform
-full dry run through the manually dispatched, read-only workflow; its ephemeral
+full dry run through the operator-triggered, read-only workflow; its ephemeral
 job token is never provided to an agent.
 
 Extraction and lookup evidence belongs in

@@ -1,15 +1,34 @@
 # Dependency Automation Coverage
 
 **Status:** Local preparation is complete across the scoped repositories;
-administrator activation and all hosted acceptance evidence remain pending.
+trial workflow adaptations, branch rehearsal, administrator activation, and all
+hosted acceptance evidence remain pending. The operator reports that the Mend
+account has been created; billing controls and App activation are not verified.
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-14 (branch rehearsal handoff; prior local evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
 [dependency review](dependency-update-review-2026-09-06.md) remains the
 historical acceptance benchmark, and
 [Dependency Automation](../dependency-automation.md) owns operating policy.
+
+## Phase 12 branch rehearsal handoff
+
+Follow the [revised operator plan](../plans/dependency-automation-phase-12-operator-plan.md)
+before publishing or triggering hosted work. Account creation is the only newly
+reported external result; no branch run, billing check, or App cycle is claimed.
+The operator must choose whether to keep main as default and defer default-only
+checks, or temporarily use protected trial defaults for a full rehearsal.
+
+Required additional preparation includes trial-ref workflow guards, build checks
+for PRs targeting trial branches, explicit preset refs, disabled schedule/upload/
+submission gates, bounded artifact measurement, and a settings rollback ledger.
+Implement and validate those changes in each owning repo before the trial.
+Record source/default refs, main SHAs, actual artifact bytes and retention, cache
+use, billing observations, and detailed report evidence alongside existing
+deferred checks. Report trial acceptance, ongoing installation, and benchmark
+parity separately. A paused successful trial does not mean ongoing activation.
 
 ## Phase 1 pilot evidence
 

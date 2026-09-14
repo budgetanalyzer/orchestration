@@ -1,9 +1,13 @@
 # Dependency Automation Phase 12 Operator Plan
 
-**Status:** Bounded zero-spend trial approved on 2026-09-14 with `main` remaining
-default. Local trial-ref, generated-state ignore remediation, and Step 3 workflow
-controls are complete; rollback evidence, human publication, and hosted evidence
-remain pending.
+**Status:** Bounded zero-spend trial approved on 2026-09-14. Trial branches are
+published and the initial Step 4 hosted branch measurements completed. The
+operator reconfirmed disabled expansion gates and zero current Actions spend,
+then authorized the Step 5 temporary-default orchestration pilot. The
+orchestration pre-switch audit, human-administered switch, and Step 5.3
+trial-default dry run are complete. Post-run inspection found that a malformed
+ruleset branch pattern left `main` unprotected after the switch. Repair and
+verify both protected refs before Step 5.4; do not install Mend yet.
 
 This is an interactive operator checklist, outside AI Session Handler, for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -11,6 +15,86 @@ This is an interactive operator checklist, outside AI Session Handler, for
 in the [coverage report](../research/dependency-automation-coverage.md).
 The plan does not create branches or authorize merges, workflow triggers, or
 settings changes; those remain human-owned even when local controls are complete.
+
+## Current session handoff — 2026-09-14
+
+Resume at the **Step 5 protection remediation**, immediately before Step 5.4.
+Do not repeat the completed branch measurements, pre-switch audit,
+default-branch switch, or successful Step 5.3 dry run.
+
+Completed:
+
+- Step 1 bounded-trial approval is recorded. The operator reconfirmed zero
+  current GitHub Actions spend, no payment method, and disabled orchestration
+  cache, schedule, and upload gates immediately before Step 5.
+- All nine `dependency-automation-trial` refs are published. Step 3 workflow
+  controls and local validation are complete.
+- Step 4's initial no-upload hosted branch measurements completed successfully
+  in all nine repositories. Public metadata showed zero uploaded artifacts. The
+  publication-triggered jobs overlapped instead of remaining one at a time; this
+  is a recorded process deviation, and all remaining work must be serialized.
+- Hosted Renovate run
+  [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973)
+  passed its structural gates at source/preset ref
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72`: 109 dependencies in 37 package
+  files, exact trial base, dry-run mutation simulation, and repository result
+  `done` without `ERROR` or `FATAL` records. Aqua Security GitHub lookups and
+  anonymous Docker Hub pagination remain incomplete; do not call this clean
+  lookup acceptance.
+- The orchestration pre-switch audit is complete: zero open PRs; Pages absent;
+  no deployment, release, environment, reusable-workflow, or `workflow_run`
+  surface; the only schedule is trial-gated off; all scoped preset consumers pin
+  the explicit trial ref; and Renovate/Mend has no current orchestration access.
+- No protection existed initially. The human created active ruleset
+  `dependency-automation-trial-protection`, intending to cover both `main` and
+  `dependency-automation-trial`, require pull requests, and block deletion and
+  force pushes without unavailable required checks. The pre-switch review
+  incorrectly accepted its malformed combined branch pattern; the later API
+  audit established that only the dynamic default target matched.
+- Immediately before handoff, `main` was still the default at
+  `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`; protected trial head was
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72` (eight commits ahead, zero behind).
+- The human changed only orchestration's default branch to
+  `dependency-automation-trial`. Credential-free post-switch verification at
+  `2026-09-14T14:28Z` confirmed that default/trial SHA
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72` and `main` SHA
+  `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5` were unchanged. Open PRs and
+  issues remained zero, and the newest visible Actions run remained pre-switch
+  run `34848193973` from `2026-09-14T13:16:09Z`; no switch-time workflow or
+  visible bot activity occurred. The unauthenticated artifact API was rate
+  limited, but no post-switch workflow existed that could have uploaded an
+  artifact.
+- Step 5.3 manual-dispatch run
+  [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322)
+  passed on the exact trial/default SHA. Strict config validation and the hosted
+  full-dry-run job passed sequentially in 2 minutes 27 seconds. The workflow's
+  hard gates establish matching source/preset ref, exact trial base, mutation
+  simulation, repository result `done`, and no `ERROR`/`FATAL` records. Both
+  upload paths were skipped and the run reported zero artifacts. Existing Aqua
+  Security and Docker Hub lookup gaps remain pending.
+- Post-run inspection found active rules only on the trial branch and none on
+  `main`. Ruleset `dependency-automation-trial-protection` contains
+  `~DEFAULT_BRANCH` plus malformed literal pattern
+  `refs/heads/"main", "dependency-automation-trial"`; only the dynamic default
+  target currently matches. Both branch SHAs remain unchanged, so no drift was
+  observed, but the required persistent `main` protection is not effective.
+
+Next actions:
+
+1. **HUMAN:** Edit ruleset `dependency-automation-trial-protection`. Replace the
+   malformed combined pattern with separate `refs/heads/main` and
+   `refs/heads/dependency-automation-trial` include entries. Keep deletion,
+   non-fast-forward, and required-pull-request rules active; do not weaken them.
+2. **AI AGENT:** Verify both branches independently receive all three active
+   rules and that both SHAs remain unchanged.
+3. Install Mend Community only on orchestration after that repair passes; then
+   continue Steps 5.4–5.6. Keep schedules, uploads, and optional caches off.
+
+Still pending after the default switch: detailed no-upload report review,
+upload-size values, Aqua Security and Docker Hub lookup remediation, App
+installation, dashboard/proposals, dependency graph and Dependabot settings,
+bot-PR checks, scheduled evidence, benchmark reconciliation, and the final
+rollback/merge decision. Uploads must remain disabled until sizes are reviewed.
 
 ## Objective and trial modes
 
@@ -294,6 +378,30 @@ The operator can stop here without any merge. If `main` stays default, report
 branch results and pending default-only checks. Continue to Step 5 only after
 the operator selects the temporary-default full rehearsal.
 
+### Recorded Step 4 disposition and Step 5 authorization — 2026-09-14
+
+- All nine trial refs are published. Public run metadata records successful
+  branch executions for the frontend audit, Go vulnerability check,
+  orchestration and workspace image evidence, all five Java builds, and all five
+  generation-only Java graph jobs. The relevant runs uploaded no artifacts.
+- Orchestration's successful full dry run used source and preset ref
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72`, extracted 109 dependencies from
+  37 package files, selected the exact trial base, simulated dry-run mutations,
+  and returned `Repository result: done` without `ERROR` or `FATAL` records.
+  Aqua Security GitHub lookups and anonymous Docker Hub pagination remained
+  incomplete and must not be reported as clean lookup acceptance.
+- The initial publication-triggered measurement jobs overlapped across
+  repositories instead of honoring the one-hosted-job-at-a-time trial rule.
+  Preserve this as a process deviation; do not repeat successful runs merely to
+  make their timing sequential. Serialize all remaining trial work.
+- The operator reconfirmed that orchestration's trial cache, schedule, and upload
+  gates are off and that current GitHub Actions billing is zero. Upload sizing
+  remains pending and uploads must stay disabled until it is reviewed.
+- The operator authorized the temporary-default orchestration rehearsal. This
+  is not the default-branch change itself: complete Step 5.1, preserve `main`
+  protection, and require the human administrator to perform and verify the
+  switch.
+
 ## Step 5: Pilot orchestration with the trial branch as default
 
 **Owner: HUMAN.** This changes repository administration, not `main` history.
@@ -323,6 +431,85 @@ Vulnerability-fix proposals can bypass routine PR limits/schedules; those are
 not cost caps. Keep upload controls effective and pause App access if load exceeds
 the trial allowance. Do not expand after wrong PR bases, timeouts, or unresolved
 policy/lookup errors.
+
+### Orchestration pre-change audit — 2026-09-14
+
+Public repository and checkout evidence currently establishes:
+
+- `main` remains the default at
+  `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`; the trial ref is
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72`, eight commits ahead and zero
+  behind `main`.
+- The repository has zero open pull requests. Changing the default will
+  therefore change the suggested base for future PRs but will not retarget an
+  existing PR.
+- No workflow uses `workflow_run`, `workflow_call`, a GitHub Environment, Pages,
+  package publication, release publication, or deployment. Existing release
+  tags are repository history, not an active workflow integration.
+- The only schedule is the exact-image scanner. Its trial schedule requires
+  `DEPENDENCY_AUTOMATION_TRIAL_SCHEDULES_ENABLED == 'true'`, which the operator
+  confirmed is off. Do not manually dispatch it during the one-job pilot.
+- All nine scoped Renovate configurations reference the explicit
+  `#dependency-automation-trial` preset ref. Cross-repository documentation
+  links generally pin `blob/main`, so they continue to resolve; generic links
+  to the repository root will temporarily display trial content. The only local
+  unrefed preset consumer discovered was `budget-analyzer-api-tests`, whose
+  `renovate.json` returned HTTP 404 on its public `main` ref and is not a
+  published consumer.
+- The repository has no checked-in Dependabot configuration. Renovate remains
+  the intended sole update-PR owner, but installed Apps, repository security
+  settings, Pages settings, webhooks, environments, and rulesets are
+  administrator-only state and cannot be inferred from the checkout.
+
+The operator reported that no repository rulesets or classic branch-protection
+rules exist. There is no dynamic default-branch rule to migrate, but the trial
+ref was initially unprotected and did not satisfy Step 5.2. The human
+administrator then activated `dependency-automation-trial-protection`, intending
+to target both `main` and `dependency-automation-trial`, block deletion and force
+pushes, and require pull requests without unavailable status checks. Record
+the current installed-App scope and confirm that Renovate/Mend cannot act before
+the intended post-switch installation. This administrator-only App-scope check
+was completed: the operator confirmed that Renovate/Mend had no access to
+orchestration. Immediately before the switch, public refs still showed `main` as
+default at `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5` and the trial at
+`24ffc8e36bf87a730bb6a25961059becbdb67d72`. The review treated the intended
+dual-branch target as effective and left the default change as the next
+human-administered action. Post-run inspection established that this protection
+conclusion was incorrect because the explicit combined branch pattern was
+malformed.
+
+### Orchestration post-switch verification — 2026-09-14
+
+The human administrator reported changing only the default branch to
+`dependency-automation-trial`. Credential-free Git and public HTML checks at
+`2026-09-14T14:28Z` verified:
+
+- `HEAD` advertises `dependency-automation-trial` at
+  `24ffc8e36bf87a730bb6a25961059becbdb67d72`;
+- `main` remains at `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`;
+- open pull requests and open issues remain zero; and
+- the newest visible Actions run remains successful pre-switch dry run
+  [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973),
+  started at `2026-09-14T13:16:09Z` on the trial SHA.
+
+The default change therefore produced no workflow run, PR, issue, or visible bot
+activity. Since there was no post-switch workflow, there was no new run that
+could upload an artifact. GitHub's unauthenticated artifact API returned the
+shared-IP rate-limit response during verification, so direct artifact inventory
+is recorded as unavailable rather than inferred from an authenticated view.
+Step 5.3 manual-dispatch run
+[34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322)
+subsequently passed on this exact source/default revision. Both jobs succeeded
+sequentially in 2 minutes 27 seconds, the workflow's structural hard gates
+passed, both upload paths were skipped, and GitHub reports zero run artifacts.
+
+Post-run ruleset inspection nevertheless blocks Step 5.4. The active ruleset's
+conditions include `~DEFAULT_BRANCH` and malformed literal pattern
+`refs/heads/"main", "dependency-automation-trial"`. The trial branch currently
+receives deletion, non-fast-forward, and pull-request rules only because it is
+default; `main` receives none. Both SHAs remain unchanged. Repair the include
+conditions to separate explicit branch refs and verify both rule sets before
+installing Mend.
 
 ## Step 6: Expand and collect full rehearsal evidence
 

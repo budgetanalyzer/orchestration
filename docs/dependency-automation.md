@@ -1,8 +1,15 @@
 # Dependency Automation
 
-**Status:** Configuration and branch-trial workflow controls are prepared; a
-bounded zero-spend branch trial was approved on 2026-09-14. Human publication,
-hosted measurement, and administrator activation remain pending.
+**Status:** Trial branches and workflow controls are published, and the initial
+hosted branch measurements completed under the bounded zero-spend trial. On
+2026-09-14 the operator reconfirmed disabled expansion gates and zero current
+Actions spend, then authorized the temporary-default orchestration pilot.
+The protected `dependency-automation-trial` branch is now orchestration's
+temporary default, and the Step 5.3 trial-default dry run passed. Both recorded
+branch SHAs remain unchanged, but post-run inspection found that the ruleset's
+malformed explicit branch pattern left `main` unprotected after it ceased being
+default. Repair and verify both protected refs before administrator activation;
+default-only App acceptance remains pending.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -182,6 +189,59 @@ isolated account sandbox. App permissions, issues, PRs, alerts, artifacts,
 caches, and billing are repository/account state. Default-branch changes affect
 new PR bases, applicable rulesets, schedules, and integrations. Neither mode
 authorizes dependency merges, package publication, releases, or deployment.
+
+On 2026-09-14 the operator selected this temporary-default mode for the
+orchestration pilot after confirming that the trial cache, schedule, and upload
+gates remained off and current GitHub Actions spend remained zero. This approval
+does not itself authorize an agent to change repository settings. Complete the
+operator plan's pre-change audit, preserve `main` protection, and have the human
+administrator make and verify the bounded default-branch change.
+
+The 2026-09-14 orchestration pre-change audit found no existing repository
+rulesets or classic branch-protection rules. There is therefore no dynamic
+default-branch rule that would move away from `main`, but the trial ref does not
+initially satisfy the protected-branch prerequisite. The human administrator
+then created `dependency-automation-trial-protection`, intending to protect both
+`main` and `dependency-automation-trial` with deletion and force pushes blocked
+and pull requests required without unavailable status checks. The pre-switch
+review incorrectly accepted the configured target as equivalent protection;
+the post-run API audit below exposed the malformed target condition.
+
+The operator also confirmed that Renovate/Mend had no access to orchestration
+before the default-branch switch. The human administrator then changed only the
+default branch to `dependency-automation-trial`. Credential-free verification
+at `2026-09-14T14:28Z` found the advertised default and trial head unchanged at
+`24ffc8e36bf87a730bb6a25961059becbdb67d72`, with `main` unchanged at
+`dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`. Open pull requests and issues
+remained zero, and the newest visible Actions run was still the pre-switch run
+`34848193973` from `2026-09-14T13:16:09Z`; the switch therefore triggered no
+workflow or artifact-producing run. The unauthenticated artifact API was rate
+limited during this check, so direct post-switch artifact inventory remains an
+access gap rather than a claimed zero-byte snapshot.
+
+Manual-dispatch run
+[34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322)
+then passed at source `24ffc8e36bf87a730bb6a25961059becbdb67d72` while
+the trial branch was the public default. Strict config validation and the hosted
+full dry-run job both passed; the workflow's hard gates prove that the exact
+trial source/preset ref matched, the trial base was selected, mutation
+simulation occurred, the repository result was `done`, and no `ERROR` or
+`FATAL` record was emitted. The two jobs ran sequentially, total duration was
+2 minutes 27 seconds, both upload paths were skipped, and the run artifact count
+was zero. Existing Aqua Security and Docker Hub lookup gaps are not resolved by
+this public metadata and remain pending.
+
+The same post-run public API inspection exposed a protection defect. Active
+ruleset `dependency-automation-trial-protection` includes `~DEFAULT_BRANCH` and
+one malformed literal branch pattern,
+`refs/heads/"main", "dependency-automation-trial"`. The malformed value matches
+neither explicit branch. Consequently the current default trial branch receives
+the deletion, non-fast-forward, and pull-request rules, while `main` receives no
+active rule. `main` remained unchanged at its recorded SHA, but App installation
+must wait until the administrator replaces the malformed condition with separate
+explicit `refs/heads/main` and
+`refs/heads/dependency-automation-trial` entries and public checks show all three
+rules on both branches.
 
 ### Trial workflow controls
 

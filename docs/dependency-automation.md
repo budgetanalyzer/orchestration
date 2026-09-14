@@ -252,7 +252,14 @@ when `main` remains default, retain those unperformed checks as pending.
    job and suppresses the exact-image job for that push. An unmarked push leaves
    the dry-run job skipped. Stop using the marker to disable the fallback, and
    remove its push and suppression clauses during final promotion while retaining
-   normal `workflow_dispatch`.
+   normal `workflow_dispatch`. Because `main` has no Renovate config,
+   `baseBranchPatterns` plus `useBaseBranchConfig=merge` cannot bootstrap the
+   branch-only run. The workflow instead wraps the reviewed trial
+   `renovate.json` as the configuration for exactly this repository, bypasses
+   onboarding with `requireConfig=optional`, and forces the trial base. It fails
+   unless Renovate extracts dependencies, selects the trial base, emits dry-run
+   mutation simulation, finishes with `Repository result: done`, and emits no
+   `ERROR` or `FATAL` records.
 4. Complete the bounded scanner/build measurement runs. Decide whether to stop
    with branch evidence or perform the temporary-default full rehearsal. For the
    latter, apply the operator plan's default-branch controls and install the

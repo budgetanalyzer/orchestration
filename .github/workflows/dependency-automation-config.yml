@@ -107,19 +107,53 @@ jobs:
         env:
           LOG_LEVEL: debug
           RENOVATE_BASE_BRANCH_PATTERNS: '["dependency-automation-trial"]'
+          RENOVATE_CONFIG_FILE: dependency-automation-evidence/renovate-trial-global-config.json
+          RENOVATE_CONFIG_VALIDATION_ERROR: 'true'
           RENOVATE_ONBOARDING: 'false'
-          RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_REQUIRE_CONFIG: optional
           RENOVATE_TOKEN: ${{ github.token }}
-          RENOVATE_USE_BASE_BRANCH_CONFIG: merge
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p dependency-automation-evidence
+
+          jq -e --arg repository "${GITHUB_REPOSITORY}" '
+            {
+              onboarding: false,
+              requireConfig: "optional",
+              repositories: [({repository: $repository} + .)]
+            }
+          ' renovate.json \
+            > dependency-automation-evidence/renovate-trial-global-config.json
+
+          npx --yes --package="renovate@${RENOVATE_VERSION}" \
+            renovate-config-validator --strict \
+            dependency-automation-evidence/renovate-trial-global-config.json
+
           npx --yes "renovate@${RENOVATE_VERSION}" \
             --platform=github \
-            --dry-run=full \
-            "${GITHUB_REPOSITORY}" 2>&1 \
+            --dry-run=full 2>&1 \
             | tee dependency-automation-evidence/renovate-debug.log
+
+          renovate_log=dependency-automation-evidence/renovate-debug.log
+          require_log_evidence() {
+            description="$1"
+            pattern="$2"
+            if ! grep -Fq "${pattern}" "${renovate_log}"; then
+              printf 'Missing required Renovate evidence: %s\n' "${description}" >&2
+              return 1
+            fi
+          }
+
+          require_log_evidence 'dependency extraction' 'Dependency extraction complete'
+          require_log_evidence 'exact trial base' 'baseBranch=dependency-automation-trial'
+          require_log_evidence 'dry-run mutation simulation' 'DRY-RUN:'
+          require_log_evidence 'successful repository result' 'Repository result: done,'
+
+          if grep -Eq '^[[:space:]]*(ERROR|FATAL):' "${renovate_log}"; then
+            echo 'Renovate emitted an ERROR or FATAL record.' >&2
+            exit 1
+          fi
 
       - name: Measure complete trial Renovate evidence
         id: trial-evidence
@@ -129,6 +163,7 @@ jobs:
           dependency-automation-evidence/renovate-evidence.tar.gz
           'Trial hosted Renovate dry run'
           dependency-automation-revisions.log
+          dependency-automation-evidence/renovate-trial-global-config.json
           dependency-automation-evidence/renovate-debug.log
 
       - name: Upload capped trial Renovate evidence

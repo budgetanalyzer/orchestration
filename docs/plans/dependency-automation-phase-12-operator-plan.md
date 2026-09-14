@@ -41,8 +41,14 @@ Renovate [preset refs](https://docs.renovatebot.com/config-presets/),
 [baseBranchPatterns](https://docs.renovatebot.com/configuration-options/#basebranchpatterns),
 and [useBaseBranchConfig](https://docs.renovatebot.com/configuration-options/#usebasebranchconfig).
 Selecting update bases does not bootstrap a missing default-branch config.
-`useBaseBranchConfig=merge` layers branch config over default config. Neither
-setting makes GitHub schedules run on a non-default branch.
+`useBaseBranchConfig=merge` can only layer a same-named base-branch config over
+a config already discovered on the default branch; it cannot bootstrap this
+trial while `main` has no Renovate config. The hosted branch-only dry run instead
+loads the reviewed trial `renovate.json` through a generated one-repository
+self-hosted wrapper, bypasses onboarding with `requireConfig=optional`, and
+forces the exact trial update base. This does not model normal default-branch
+config discovery. Neither approach makes GitHub schedules run on a non-default
+branch.
 
 ## Ownership and boundaries
 
@@ -220,10 +226,16 @@ nearest dependency-automation docs aligned with any later change.
    intended normal cache behavior separately. The workspace job uploads reports
    and build logs, not its Docker image; runner-local layers are not artifacts.
 7. For orchestration's GitHub-platform dry run while `main` remains default,
-   explicitly configure supported trial base/config overrides and preserve all
-   repository extraction rules. A checkout ref alone does not retarget Renovate.
-   Prove the config/source/preset SHAs in debug logs. Keep `--dry-run=full`,
-   read-only ephemeral job-token permissions, and no credentials in agent output.
+   generate a one-repository self-hosted wrapper from the exact checked-out trial
+   `renovate.json`, use `requireConfig=optional`, force the exact trial base, and
+   preserve all repository extraction rules. A checkout ref,
+   `baseBranchPatterns`, or `useBaseBranchConfig=merge` alone does not bootstrap
+   a config absent from `main`. Prove the config/source/preset SHAs in debug logs.
+   Keep `--dry-run=full`, read-only ephemeral job-token permissions, and no
+   credentials in agent output. Fail the job unless extraction, trial-base
+   selection, dry-run mutation simulation, and `Repository result: done` are all
+   present; also fail on Renovate `ERROR` or `FATAL` records even when its process
+   exits zero.
 8. Run strict Renovate validation and `actionlint`. For changed shell scripts
    run `bash -n` and `shellcheck`. Review manual trial, scheduled trial, PR into
    trial, ordinary main, and unrelated-ref cases. Verify no publishing or
@@ -254,7 +266,9 @@ ordinary commits.
    changes, duration, and failures. Prefer **Run workflow** with
    `run_hosted_dry_run=true` when GitHub exposes it. While the workflow remains
    absent from `main`, use the exact commit-message fallback documented above;
-   the resulting push run is the operator-triggered run.
+   the resulting push run is the operator-triggered run. A green workflow that
+   reports `disabled-no-config`, performs zero extraction/lookups, or lacks
+   dry-run mutation records is a failed measurement, not acceptance.
 2. Run smaller audits first: frontend `dependency-audit.yml` and ext-authz
    `go-vulnerability-check.yml`. Then run orchestration
    `exact-image-security-evidence.yml` and workspace

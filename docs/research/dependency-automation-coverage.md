@@ -1,13 +1,13 @@
 # Dependency Automation Coverage
 
-**Status:** Local preparation, trial-ref remediation, and generated-state ignore
-hygiene are complete, and a bounded zero-spend branch trial was approved on
-2026-09-14. Step 3 workflow controls and local validation are complete; rollback
-evidence, human publication, administrator activation, and all hosted acceptance
-evidence remain pending.
+**Status:** Local preparation, trial-ref remediation, generated-state ignore
+hygiene, and the exact-image action-policy remediation are complete, and a
+bounded zero-spend branch trial was approved on 2026-09-14. Step 3 workflow
+controls and local validation are complete; rollback evidence, human
+publication, administrator activation, and hosted acceptance remain pending.
 
-**Last updated:** 2026-09-14 (Step 3 local workflow controls and validation;
-prior local evidence retained)
+**Last updated:** 2026-09-14 (exact-image yq action-policy remediation and local
+validation; prior local evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -81,22 +81,42 @@ inside GitHub Actions.
 
 ## Phase 2 exact-image evidence
 
-After excluding generated `tmp/` output, a Node 24 extraction rerun found 104
-occurrences across 35 package files. The new workflow contributed six native
-GitHub Actions records: checkout, pinned yq, pinned Trivy setup, pinned Trivy
-CLI input, artifact upload, and the runner identity. The native manager owns all
-of them; no scanner-specific custom manager was needed.
+With generated `tmp/` output excluded, a Node 24 Renovate `44.65.5` extraction
+rerun against the locally merged repository configuration found 108 occurrences
+across 36 manager package-file records (34 distinct paths): two Dockerfile, 19
+GitHub Actions, 13 Helm-values, 29 Kubernetes, and 45 regex-managed occurrences.
+The same command against the pre-remediation snapshot also found 108
+occurrences. This measured rerun supersedes the earlier 104-occurrence, 35-file
+count, which did not reproduce.
 
-The offline render and YAML extraction path produced 32 distinct
-image/platform targets from checked-in sources: 28 production/controller refs
-for `linux/arm64`, three local-only refs for `linux/amd64`, and the Istio gateway
-chart's unresolved `image: auto` marker. The workflow scans each registry ref
-only after resolving the platform child digest. The `auto` marker is explicitly
+The workflow now contributes six native GitHub Actions occurrences: checkout,
+the pinned Trivy setup action, the pinned Trivy CLI input, two artifact-upload
+references, and the runner identity. `mikefarah/yq` moved from one native
+GitHub Actions occurrence to one `github-releases` occurrence in
+`scripts/lib/pinned-tool-versions.sh`; no yq Actions occurrence remains. Its
+version and complete platform checksum table remain coupled through the verified
+tool contract.
+
+The verified installer supplied Helm, kubectl, and yq `v4.53.6` for a local
+offline rerun of the workflow's exact render, extraction, and target-manifest
+steps. It produced the unchanged 32 distinct image/platform targets from
+checked-in sources: 28 scannable production/controller refs for `linux/arm64`,
+three local-only refs for `linux/amd64`, and the Istio gateway chart's unresolved
+`image: auto` marker for `linux/arm64`. The workflow scans each registry ref only
+after resolving the platform child digest. The `auto` marker is explicitly
 unscannable without the live Istio injector, so the workflow retains it as a
 known gap without turning that expected limitation into a scan error. Unexpected
 render, resolution, database, and Trivy failures do fail. The render included
 controller hooks, the cert-manager solver argument, the Prometheus
-config-reloader argument, and all five explicit monitoring image overrides.
+config-reloader argument, and all five explicit monitoring image overrides;
+first-party Budget Analyzer refs remained excluded.
+
+The previous hosted exact-image job was rejected before step execution because
+the organization Actions policy did not authorize the `mikefarah/yq` action
+source. That job is distinct from the Dependency Automation Configuration
+workflow started by the same branch push. Local remediation does not establish
+hosted admission: a replacement exact-image run, source revision, and sanitized
+outcome remain pending.
 
 Representative scans used Trivy `0.74.0` with vulnerability DB version 2,
 updated `2026-09-06 07:00:11 UTC`. These observed artifact digests are evidence
@@ -123,7 +143,7 @@ refs; they do not infer embedded versions from tags.
 | Production chart contract: `deploy/scripts/lib/version-contract.sh` | `base`, `external-secrets`, `cert-manager`, `kyverno`, `kube-prometheus-stack`, `kiali-server`; real Helm repository URL attached to each | All six repositories returned release metadata. Istio showed maintained-line and 1.30 proposals; later lines were also visible for the other charts. Every chart proposal is approval-gated. |
 | Local chart commands: `Tiltfile` | Istio `base`, `cni`, `istiod`, and `gateway`; `kyverno`, `kube-prometheus-stack`, `kiali-server` | Lookups succeeded and repeated declarations resolve to the same datasource identities without native-manager duplication. Istio declarations are grouped per repository. |
 | Production platform releases: `deploy/scripts/lib/version-contract.sh` | `k3s-io/k3s`, `kubernetes-sigs/gateway-api` | Extracted, including the literal `v` prefix and K3s `+k3sN` build component. Authenticated lookup is deferred to the Phase 12 hosted job. `PHASE4_POD_SECURITY_VERSION` is intentionally not extracted. |
-| Checksum-coupled tools: `scripts/lib/pinned-tool-versions.sh` | `kubernetes/kubernetes`, `helm/helm`, `tilt-dev/tilt`, `FiloSottile/mkcert`, `kubernetes-sigs/kind`, `yannh/kubeconform`, `stackrox/kube-linter`, `kyverno/kyverno`, `kubernetes-sigs/gateway-api`, `projectcalico/calico` | All identities extracted; Tilt's absent `v` and Kyverno CLI's release prefix are explicit. Authenticated lookup is deferred to the Phase 12 hosted job. Proposals are approval-gated and state that Renovate cannot regenerate the checksum table. |
+| Checksum-coupled tools: `scripts/lib/pinned-tool-versions.sh` | `kubernetes/kubernetes`, `helm/helm`, `tilt-dev/tilt`, `FiloSottile/mkcert`, `kubernetes-sigs/kind`, `yannh/kubeconform`, `stackrox/kube-linter`, `kyverno/kyverno`, `mikefarah/yq`, `kubernetes-sigs/gateway-api`, `projectcalico/calico` | All identities extracted; Tilt's absent `v` and Kyverno CLI's release prefix are explicit. Authenticated lookup is deferred to the Phase 12 hosted job. Proposals are approval-gated and state that Renovate cannot regenerate the checksum table. |
 | Kind node: `kind-cluster-config.yaml` | `kindest/node:v1.35.0` plus its current digest | Docker lookup succeeded and exposed separate 1.35, 1.36, and 1.37 lines. Platform/ARM64 review is approval-gated. The stale setup-flow Kind image is excluded. |
 | Stateful services: `kubernetes/infrastructure/{postgresql,rabbitmq,redis}/statefulset.yaml` and annotated probe scripts listed in `scripts/lib/image-pinning-targets.txt` | `postgres:16-alpine`, `rabbitmq:3.13-management`, `redis:7-alpine`, plus exact digests | Redis lookup exposed a maintained broad-tag digest refresh and Redis 8; RabbitMQ exposed RabbitMQ 4. PostgreSQL lookup timed out in the pilot. All are approval-gated. Broad tags do not identify the embedded Redis/PostgreSQL patch, so Redis 7.4.11 parity is **missing** until a separately reviewed explicit alias or image inventory proves it. |
 | Edge and utility images: service manifests, `nginx/Dockerfile.prod-smoke-assets`, and annotated smoke scripts | `nginxinc/nginx-unprivileged`, `swaggerapi/swagger-ui`, `busybox`, `alpine`, `curlimages/curl`, `mendhak/http-https-echo`, `python` | Lookups exposed later NGINX maintained/minor lines, Swagger UI lines, and updates for the probe images. Exact digest refreshes were resolved. Repeated probe refs share identities. |
@@ -132,7 +152,7 @@ refs; they do not infer embedded versions from tags.
 | Monitoring image overrides: `kubernetes/monitoring/prometheus-stack-values.yaml` | `docker.io/grafana/grafana`, `registry.k8s.io/kube-state-metrics/kube-state-metrics`, `quay.io/prometheus/prometheus`, and both Prometheus Operator images | Native Helm-values extraction found all five tags. Kube-state-metrics, Prometheus, and Operator lookups produced later lines; Grafana and config-reloader had registry timeouts on repeat validation. The chart's nonstandard `sha` fields are not associated with tags by the native manager, so complete tag-plus-digest mutation is an explicit **gap** and must fail review until handled as a companion change. |
 | Kiali override: `kubernetes/monitoring/kiali-values.yaml` | `quay.io/kiali/kiali:v2.24.0` plus digest | Nonstandard keys are covered by an adjacent regex annotation. Lookup was not completed because the repeat run stopped on registry host errors; chart lookup did succeed. |
 | Production controller overrides: `deploy/helm-values/{cert-manager,external-secrets,kyverno}.values.yaml` | Seven Kyverno image repositories/digests; cert-manager and External Secrets are chart-only | Kyverno's digest-only structure was extracted but lacks a trustworthy tag and must not be refreshed from `latest`; all chart-value image proposals are approval-gated. Cert-manager and External Secrets omit repository/tag keys, so native image extraction cannot identify them. Rendering and exact-image scanning must close this **gap** in the later security-evidence phase. |
-| GitHub Actions: `.github/workflows/*.yml` | `actions/checkout`, `actions/setup-node`, Node 24, `renovate`, and the exact-image workflow's pinned yq, Trivy setup/CLI, and artifact upload inputs | Extraction succeeded, including all newly introduced scanner inputs. Authenticated lookups are deferred to the Phase 12 hosted job. All workflows retain `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`; runner labels are not update targets. |
+| GitHub Actions: `.github/workflows/*.yml` | `actions/checkout`, `actions/setup-node`, Node 24, `renovate`, and the exact-image workflow's Trivy setup/CLI and artifact upload inputs | Extraction succeeded, including all scanner inputs. yq is now extracted only as a checksum-coupled GitHub release tool, not an action. Authenticated lookups are deferred to the Phase 12 hosted job. All workflows retain `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`; runner labels are not update targets. |
 | Temporary Playwright runner: `scripts/ops/grafana-ui-playwright-debug.sh` | `@playwright/test` | npm lookup succeeded. Generated runner directories remain excluded. |
 | First-party local and production images | Seven approved local repositories; synchronized GHCR production artifacts under `kubernetes/production/apps` | Local names are extracted by Kubernetes but disabled by package policy. Production promotion paths are excluded so Renovate cannot desynchronize the release-owned manifest, inventory, overlays, or metadata. |
 
@@ -190,7 +210,7 @@ URL, tool/database version where applicable, and the final status.
 | Repository | Check/workflow and affected surface | Reason deferred | Operator action and expected proof | Disposition |
 | --- | --- | --- | --- | --- |
 | `orchestration` | Hosted Renovate full dry run for charts, release/tool pins, Actions, Docker/Helm/Kubernetes inputs, and registry retries | GitHub token, published preset, and true full dry-run behavior are hosted-only. | Run the manual config workflow above; retain its URL and logs, including successful PostgreSQL, Grafana, config-reloader, Kiali, GitHub-release, and Docker-token retries or explicit failed lookup records. | **Pending — no run URL** |
-| `orchestration` | `.github/workflows/exact-image-security-evidence.yml` for 32 rendered targets | The workflow was prepared but not hosted; local representative scans do not prove the complete run. | Manually run, then observe one scheduled run. Retain source revision, run/artifact URLs, platform digests, Trivy CLI/DB metadata, all completion statuses, and the known Istio gateway `image: auto` gap. | **Pending — no hosted artifact** |
+| `orchestration` | `.github/workflows/exact-image-security-evidence.yml` for 32 rendered targets | The prior hosted job was rejected before execution because organization policy did not authorize the yq action source. The action has been replaced locally by the checksum-verified yq CLI, but local rendering and representative scans do not prove hosted admission or a complete run. | After human review and publication, run the exact-image workflow and retain the source revision and run URL. Prove policy admission, verified yq `v4.53.6` installation, completed extraction, platform digests, Trivy CLI/DB metadata, every completion status, artifact evidence when enabled, and the known Istio gateway `image: auto` gap. Then observe one scheduled run separately. | **Pending — local policy remediation passed; replacement hosted run not supplied** |
 | `orchestration` | Dashboard/proposals and required checks | App/settings are not active. | Retain two bot cycles, dashboard and proposal URLs, maintained-line plus major proposals, approval gates, immutable digest/flavor preservation, ARM64 review records, and successful applicable checks. | **Pending — no bot-cycle evidence** |
 | `service-common` | Hosted Renovate lookup for Gradle/catalog/wrapper/Actions | Actions and published-preset lookups require hosted GitHub access. | Retain App log/dashboard evidence for all 52 locally extracted occurrences, including maintained Spring lines and Spring 4/test-stack proposals. | **Pending — no hosted lookup** |
 | `service-common` | `.github/workflows/dependency-submission.yml` | The complete 216-coordinate local snapshot was not submitted. | Run on trusted `main`; retain run URL, revision, accepted-submission proof, and detailed runtime/test graph containing Boot, Cloud, Modulith, Framework, Security, Jackson, Tomcat, and Netty where resolved. | **Pending — no accepted submission** |

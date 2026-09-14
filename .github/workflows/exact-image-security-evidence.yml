@@ -41,6 +41,7 @@ jobs:
           tools_dir="${RUNNER_TEMP}/budget-analyzer-render-tools"
           ./scripts/bootstrap/install-verified-tool.sh helm --install-dir "${tools_dir}"
           ./scripts/bootstrap/install-verified-tool.sh kubectl --install-dir "${tools_dir}"
+          ./scripts/bootstrap/install-verified-tool.sh yq --install-dir "${tools_dir}"
           echo "${tools_dir}" >> "${GITHUB_PATH}"
 
       - name: Render production and local image sources offline
@@ -50,39 +51,38 @@ jobs:
           --local-platform linux/amd64
 
       - name: Extract rendered image references
-        uses: mikefarah/yq@e1d5d6eb36b8995bf29e5acb561659824dc47be3 # v4.53.6
-        with:
-          cmd: |
-            set -eu
-            : > scan-work/raw-targets.tsv
-            for platform_dir in scan-work/rendered/linux-*; do
-              platform="linux/${platform_dir##*-}"
-              for manifest in "${platform_dir}"/*.yaml; do
-                source_path="${manifest#scan-work/rendered/}"
-                yq eval-all --no-doc --unwrapScalar '
-                  (
-                    .. | select(tag == "!!map") | .image? |
-                    select(tag == "!!str")
-                  ),
-                  (
-                    .. | select(tag == "!!seq") | .[] |
-                    select(
-                      tag == "!!str" and
-                      test("^--(prometheus-config-reloader|acme-http01-solver-image)=")
-                    ) |
-                    sub("^--[^=]+="; "")
-                  )
-                ' "${manifest}" > scan-work/extracted-image-refs.txt
-                while IFS= read -r image_ref; do
-                  case "${image_ref}" in
-                    ghcr.io/budgetanalyzer/*) continue ;;
-                  esac
-                  printf '%s\t%s\t%s\n' "${source_path}" "${platform}" "${image_ref}" \
-                    >> scan-work/raw-targets.tsv
-                done < scan-work/extracted-image-refs.txt
-              done
+        shell: bash
+        run: |
+          set -eu
+          : > scan-work/raw-targets.tsv
+          for platform_dir in scan-work/rendered/linux-*; do
+            platform="linux/${platform_dir##*-}"
+            for manifest in "${platform_dir}"/*.yaml; do
+              source_path="${manifest#scan-work/rendered/}"
+              yq eval-all --no-doc --unwrapScalar '
+                (
+                  .. | select(tag == "!!map") | .image? |
+                  select(tag == "!!str")
+                ),
+                (
+                  .. | select(tag == "!!seq") | .[] |
+                  select(
+                    tag == "!!str" and
+                    test("^--(prometheus-config-reloader|acme-http01-solver-image)=")
+                  ) |
+                  sub("^--[^=]+="; "")
+                )
+              ' "${manifest}" > scan-work/extracted-image-refs.txt
+              while IFS= read -r image_ref; do
+                case "${image_ref}" in
+                  ghcr.io/budgetanalyzer/*) continue ;;
+                esac
+                printf '%s\t%s\t%s\n' "${source_path}" "${platform}" "${image_ref}" \
+                  >> scan-work/raw-targets.tsv
+              done < scan-work/extracted-image-refs.txt
             done
-            sort -u scan-work/raw-targets.tsv -o scan-work/raw-targets.tsv
+          done
+          sort -u scan-work/raw-targets.tsv -o scan-work/raw-targets.tsv
 
       - name: Build the deduplicated scan target manifest
         run: |

@@ -234,13 +234,27 @@ GitHub documents default-branch registration and API/CLI dispatch after a workfl
 has run; verify actual discovery instead of assuming `--ref` bootstraps it.
 Do not merge a bootstrap workflow to `main` or use `pull_request_target`.
 
+For the orchestration workflow, GitHub does not display **Run workflow** while
+`dependency-automation-config.yml` exists only on the non-default trial branch.
+The UI-independent fallback is a reviewed push to the exact trial branch whose
+head commit message contains `[run-hosted-renovate-dry-run]`. The push must change
+the configuration workflow, `renovate.json`, or `renovate-presets/**` so the
+workflow's path filter admits it. This marker starts the same read-only full dry
+run and suppresses the exact-image measurement for that push, preserving the
+one-job-at-a-time trial boundary. An unmarked push still runs validation but not
+the hosted dry run. The marker grants no write permission and must not appear in
+ordinary commits.
+
 ## Step 4: Measure hosted behavior before expanding
 
 **Owner: HUMAN** triggers; **AI AGENT** reviews sanitized results.
 
 1. Validate and run the read-only full Renovate dry run against orchestration's
    trial input. Retain preset resolution, extraction, lookup, simulated file
-   changes, duration, and failures.
+   changes, duration, and failures. Prefer **Run workflow** with
+   `run_hosted_dry_run=true` when GitHub exposes it. While the workflow remains
+   absent from `main`, use the exact commit-message fallback documented above;
+   the resulting push run is the operator-triggered run.
 2. Run smaller audits first: frontend `dependency-audit.yml` and ext-authz
    `go-vulnerability-check.yml`. Then run orchestration
    `exact-image-security-evidence.yml` and workspace
@@ -336,6 +350,8 @@ Perform this pause after success, failure, or an early stop:
 1. Pause/remove trial App access first; disable trial schedules/submissions/
    uploads. Confirm the stop and cancel queued/running trial jobs before restoring
    defaults so bots/jobs cannot act unexpectedly on restored refs.
+   The dry-run push fallback has no persistent switch: stop using its exact
+   commit-message marker and it remains dormant.
 2. Export sanitized evidence and record artifact IDs/expiry. Close trial PRs
    explicitly as appropriate. Keep branch work recoverable. Delete only
    operator-selected trial artifacts/caches after export if needed; deletion
@@ -371,7 +387,11 @@ approval.
 1. Prepare the final diff: remove trial refs/triggers and temporary gates as
    appropriate, restore intended retention, and keep useful durable cost controls.
    Validate affected behavior. Keep final schedules disabled until costs and
-   activation timing are accepted.
+   activation timing are accepted. Remove both temporary
+   `[run-hosted-renovate-dry-run]` clauses: the push arm in
+   `dependency-automation-config.yml` and the matching exact-image suppression.
+   Retain `workflow_dispatch`; once the workflow exists on the restored default
+   branch, GitHub exposes the normal **Run workflow** control.
 2. Merge orchestration's shared preset to its restored default first, then
    consumers with the normal preset reference. Include no bot dependency changes,
    unrelated work, or execution transcripts.

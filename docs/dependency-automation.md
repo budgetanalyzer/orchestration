@@ -245,7 +245,14 @@ when `main` remains default, retain those unperformed checks as pending.
    GitHub-provided job token has read permissions only, Renovate runs with
    `--dry-run=full`, and the user retains control of the trigger. Preserve the
    workflow URL and confirm the intended trial ref and preset resolve before
-   proceeding; never copy the job token into an agent environment.
+   proceeding; never copy the job token into an agent environment. GitHub hides
+   **Run workflow** while this workflow exists only on the non-default trial
+   branch. In that state, make a reviewed qualifying push whose head commit
+   message contains `[run-hosted-renovate-dry-run]`; the marker runs the dry-run
+   job and suppresses the exact-image job for that push. An unmarked push leaves
+   the dry-run job skipped. Stop using the marker to disable the fallback, and
+   remove its push and suppression clauses during final promotion while retaining
+   normal `workflow_dispatch`.
 4. Complete the bounded scanner/build measurement runs. Decide whether to stop
    with branch evidence or perform the temporary-default full rehearsal. For the
    latter, apply the operator plan's default-branch controls and install the

@@ -1,8 +1,21 @@
 # Dependency Automation
 
-**Status:** Configuration and branch-trial workflow controls are prepared; a
-bounded zero-spend branch trial was approved on 2026-09-14. Human publication,
-hosted measurement, and administrator activation remain pending.
+**Status:** Trial branches and workflow controls are published, and the initial
+hosted branch measurements completed under the bounded zero-spend trial. On
+2026-09-14 the operator reconfirmed disabled expansion gates and zero current
+Actions spend, then authorized the temporary-default orchestration pilot.
+The protected `dependency-automation-trial` branch is now orchestration's
+temporary default, and the Step 5.3 trial-default dry run passed. A malformed
+ruleset target briefly left `main` unprotected after it ceased being default;
+the target is now repaired and both refs independently receive all three rules
+with their recorded SHAs unchanged. Orchestration-only administrator activation
+is complete in Scan and Alert mode, and Renovate opened the Dependency Dashboard
+against the trial default. Representative routine PR #56 targets the trial
+default, contains only the expected Renovate patch, passed its applicable check,
+and explicitly reports automerge disabled. Mend-side cycle timing, queueing, and
+lookup/error-log review was operator-checked without a reported blocker. The
+orchestration pilot is ready for the Step 6 per-repository pre-expansion audits;
+live vulnerability-alert and sustained limit behavior remain later evidence.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -182,6 +195,142 @@ isolated account sandbox. App permissions, issues, PRs, alerts, artifacts,
 caches, and billing are repository/account state. Default-branch changes affect
 new PR bases, applicable rulesets, schedules, and integrations. Neither mode
 authorizes dependency merges, package publication, releases, or deployment.
+
+On 2026-09-14 the operator selected this temporary-default mode for the
+orchestration pilot after confirming that the trial cache, schedule, and upload
+gates remained off and current GitHub Actions spend remained zero. This approval
+does not itself authorize an agent to change repository settings. Complete the
+operator plan's pre-change audit, preserve `main` protection, and have the human
+administrator make and verify the bounded default-branch change.
+
+The 2026-09-14 orchestration pre-change audit found no existing repository
+rulesets or classic branch-protection rules. There is therefore no dynamic
+default-branch rule that would move away from `main`, but the trial ref does not
+initially satisfy the protected-branch prerequisite. The human administrator
+then created `dependency-automation-trial-protection`, intending to protect both
+`main` and `dependency-automation-trial` with deletion and force pushes blocked
+and pull requests required without unavailable status checks. The pre-switch
+review incorrectly accepted the configured target as equivalent protection;
+the post-run API audit below exposed the malformed target condition.
+
+The operator also confirmed that Renovate/Mend had no access to orchestration
+before the default-branch switch. The human administrator then changed only the
+default branch to `dependency-automation-trial`. Credential-free verification
+at `2026-09-14T14:28Z` found the advertised default and trial head unchanged at
+`24ffc8e36bf87a730bb6a25961059becbdb67d72`, with `main` unchanged at
+`dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`. Open pull requests and issues
+remained zero, and the newest visible Actions run was still the pre-switch run
+`34848193973` from `2026-09-14T13:16:09Z`; the switch therefore triggered no
+workflow or artifact-producing run. The unauthenticated artifact API was rate
+limited during this check, so direct post-switch artifact inventory remains an
+access gap rather than a claimed zero-byte snapshot.
+
+Manual-dispatch run
+[34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322)
+then passed at source `24ffc8e36bf87a730bb6a25961059becbdb67d72` while
+the trial branch was the public default. Strict config validation and the hosted
+full dry-run job both passed; the workflow's hard gates prove that the exact
+trial source/preset ref matched, the trial base was selected, mutation
+simulation occurred, the repository result was `done`, and no `ERROR` or
+`FATAL` record was emitted. The two jobs ran sequentially, total duration was
+2 minutes 27 seconds, both upload paths were skipped, and the run artifact count
+was zero. Existing Aqua Security and Docker Hub lookup gaps are not resolved by
+this public metadata and remain pending.
+
+The same post-run public API inspection exposed a protection defect. Active
+ruleset `dependency-automation-trial-protection` initially included
+`~DEFAULT_BRANCH` and one malformed combined literal branch pattern. The first
+remediation attempt split that value but retained literal quotes, producing
+`refs/heads/"main"` and `refs/heads/"dependency-automation-trial"`. Neither
+explicit pattern matches; consequently the current default trial branch receives
+the deletion, non-fast-forward, and pull-request rules only through
+`~DEFAULT_BRANCH`, while `main` receives no active rule. Both SHAs remain
+unchanged. App installation must wait until the administrator removes the quote
+characters so the API reports exact `refs/heads/main` and
+`refs/heads/dependency-automation-trial` conditions and public checks show all
+three rules on both branches.
+
+The administrator saved the corrected unquoted patterns at
+`2026-09-14T14:59:43Z`. Credential-free verification at
+`2026-09-14T15:00:04Z` confirmed exact conditions `refs/heads/main` and
+`refs/heads/dependency-automation-trial`; both branches independently receive
+the deletion, non-fast-forward, and pull-request rules. `main` remains at
+`dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`, the trial/default remains at
+`24ffc8e36bf87a730bb6a25961059becbdb67d72`, open pull requests remain zero,
+and no new workflow was triggered. The Step 5.4 protection prerequisite is now
+satisfied.
+
+The operator then installed the Renovate-only Mend Community product in Scan
+and Alert mode with repository access restricted to orchestration. The operator
+reports the dependency graph and Dependabot alerts enabled, competing Dependabot
+version-update and security-update PRs disabled, and alert-read access granted
+where offered. Renovate opened
+[Dependency Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55)
+at `2026-09-14T15:05:04Z` without creating a PR, branch, commit, or Actions run.
+The dashboard contains 95 approval-gated proposals and 75 routine proposals
+awaiting schedule, consistent with the configured approval and weekly-schedule
+controls. Public settings APIs do not expose the operator-reported security
+toggles, so retain that report as administrator evidence.
+
+The operator selected only the routine `renovate/renovate-44.66.x` dashboard
+entry. Renovate opened
+[PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) at
+`2026-09-14T15:13:39Z` from `renovate/renovate-44.66.x` at
+`a12888e1d19309eb79bde14d06f673e4ab683479` into
+`dependency-automation-trial`. Its one commit changes only
+`.github/workflows/dependency-automation-config.yml`, updating
+`RENOVATE_VERSION` from `44.65.5` to `44.66.1`. Pull-request run
+[34860772186](https://github.com/budgetanalyzer/orchestration/actions/runs/34860772186)
+completed successfully in 37 seconds: `validate-renovate-config` passed in 35
+seconds, the manual-only hosted dry-run job correctly skipped, and no artifact
+was uploaded. The Renovate-generated PR body explicitly says automerge is
+disabled by config. Public refs and the dashboard show this as the sole open
+Renovate PR and branch; leave it open and unmerged. Mend Developer Portal
+cycle timing, queue delay, timeout, and lookup/error logs are not public and
+therefore required administrator review before repository-scope expansion.
+
+The operator reviewed the two Mend cycles and reported that all requested
+status, queueing, timeout, rate-limit, authentication, and lookup checks looked
+good. Exact portal timestamps and durations were not transcribed, so the public
+Dashboard and PR timestamps remain the retained timing evidence. Step 5.6 review
+also confirmed the effective policy shape:
+
+- routine updates remain on `before 6am on monday`, with three concurrent and
+  two hourly PR limits; the Dashboard kept routine proposals under **Awaiting
+  Schedule** until the operator selected one;
+- major, Helm, stateful, platform/ARM64, chart-image override, and
+  checksum-coupled proposals appear under **Pending Approval**, including
+  maintained Istio `1.29.7`, Prometheus `3.11.3`, stateful digest, and platform
+  release proposals;
+- digest proposals retain tags and flavor suffixes such as
+  `postgres:16-alpine`, `redis:7-alpine`, and
+  `eclipse-temurin:25-jre-alpine`, while detected image updates retain
+  `nginx-unprivileged`'s `-alpine` flavor;
+- vulnerability alerts are enabled with an unrestricted schedule and
+  `automerge: false`; no live vulnerability-fix PR was available in this pilot,
+  so graph-backed alert and schedule-bypass behavior remains Step 6 evidence;
+  and
+- the Dashboard contains no first-party Budget Analyzer image proposal, and the
+  production promotion paths remain ignored. The Dashboard does detect the
+  service deployment resources themselves, which is not a first-party image
+  update proposal.
+
+This completes the orchestration Step 5 pilot without merging PR #56. Runtime
+enforcement of the configured concurrency/hourly limits and live vulnerability
+behavior still require the deliberately broader Step 6 observation period.
+
+The Step 6.1 public pre-expansion audit found all eight remaining scoped
+repositories still defaulting to `main`, with clean local checkouts matching the
+published `main` and trial refs, zero open PRs, and the explicit trial preset ref
+in every `renovate.json`. Their release workflows are tag/manual-only except
+`service-common` snapshot publication, which explicitly follows pushes to
+`main`; changing a default branch does not trigger any of them. Trial schedules,
+uploads, graph submissions, and optional caches remain gated off. However, none
+of the eight repositories has a repository ruleset or classic branch protection
+on either `main` or `dependency-automation-trial`. Protect both refs before each
+serialized default switch and App-scope expansion. Start with `service-common`,
+which is first in the graph-submission dependency order; do not grant Mend
+access or switch its default until that protection is publicly verified.
 
 ### Trial workflow controls
 

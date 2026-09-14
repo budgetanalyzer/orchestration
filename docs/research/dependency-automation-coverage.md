@@ -4,14 +4,22 @@
 refs are published, and initial Step 4 hosted branch measurements completed.
 The operator authorized the temporary-default orchestration pilot on
 2026-09-14 after reconfirming disabled expansion gates and zero current Actions
-spend. Administrator activation, default-only acceptance, and benchmark
+spend. Ecosystem-wide activation, default-only acceptance, and benchmark
 reconciliation remain pending. The orchestration pre-switch audit, Step 5.2
 switch, and Step 5.3 dry run are complete. Post-run inspection found `main`
 unprotected because the active ruleset contains a malformed combined branch
-pattern; repair is required before App installation.
+pattern; the administrator repaired it, and both refs now independently receive
+all three intended rules with unchanged SHAs. Renovate-only Community
+installation is complete for orchestration in Scan and Alert mode, and
+Dependency Dashboard #55 is active. Representative routine PR #56 has the
+correct trial base, one-file patch, successful applicable check, and explicit
+no-automerge behavior. The operator reported no issue in the requested Mend
+cycle/queue/lookup review, and Step 5 proposal controls passed. The public Step
+6.1 audit found all eight remaining repositories ready except for missing
+protection on both `main` and their trial refs; start with `service-common`.
 
-**Last updated:** 2026-09-14 (orchestration Step 5.3 dry run and ruleset blocker;
-prior local and hosted evidence retained)
+**Last updated:** 2026-09-14 (orchestration Step 5 completion and Step 6.1 public
+pre-expansion audit; prior local and hosted evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -66,13 +74,52 @@ result `done`, and no `ERROR`/`FATAL` records. Both upload paths skipped and the
 run artifact count was zero. Existing Aqua Security and Docker Hub lookup gaps
 remain unresolved.
 
-Post-run public API inspection found a ruleset defect: the active include
-conditions are `~DEFAULT_BRANCH` and malformed literal
-`refs/heads/"main", "dependency-automation-trial"`. The trial branch receives
-the three intended rules only as the current default, while `main` receives no
-active rule. Both SHAs remain unchanged. Repair this to two separate explicit
-branch refs and verify both receive deletion, non-fast-forward, and pull-request
-rules before installing Mend.
+Post-run public API inspection found a ruleset defect: the initial include
+conditions were `~DEFAULT_BRANCH` and one malformed combined literal. The first
+remediation split the condition but retained quotes, yielding
+`refs/heads/"main"` and `refs/heads/"dependency-automation-trial"`. Those values
+still match neither branch. The trial receives the three intended rules only as
+the current default, while `main` receives no active rule. Both SHAs remain
+unchanged. Remove the literal quotes and verify both branches before installing
+Mend.
+The administrator then saved unquoted patterns. Verification at
+`2026-09-14T15:00:04Z` found exact `refs/heads/main` and
+`refs/heads/dependency-automation-trial` conditions and all three rules on both
+branches. Both SHAs, the successful run list, and zero-open-PR state remained
+unchanged; the Step 5.4 protection blocker is cleared.
+The operator then installed Renovate-only Mend Community in Scan and Alert mode
+for orchestration only and reports graph/alerts enabled with competing Dependabot
+update PRs disabled. Renovate opened
+[Dependency Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55)
+with 95 approval-gated and 75 schedule-gated entries. No PR, branch, commit, or
+Actions run accompanied onboarding.
+The operator then selected only routine proposal `renovate/renovate-44.66.x`.
+[PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) opened at
+`2026-09-14T15:13:39Z` into `dependency-automation-trial` from head
+`a12888e1d19309eb79bde14d06f673e4ab683479`. Its one-commit, one-file diff
+changes only the workflow's Renovate pin from `44.65.5` to `44.66.1`.
+[Run 34860772186](https://github.com/budgetanalyzer/orchestration/actions/runs/34860772186)
+passed the applicable config validation in 37 seconds overall, correctly skipped
+the manual-only hosted dry run, and uploaded no artifact. The PR body explicitly
+reports automerge disabled by config. Public refs and the dashboard show no
+second Renovate PR or branch. The operator reviewed both Mend cycles and
+reported no issue in the requested status, queueing, timeout, rate-limit,
+authentication, or lookup fields; exact portal timestamps/durations were not
+transcribed. Dashboard/config review confirmed routine schedule/limits,
+approval-gated sensitive categories, maintained-line and flavor-preserving
+digest proposals, and no first-party image proposal. No live
+vulnerability-fix PR was available, so graph-backed alert behavior remains Step
+6 evidence.
+
+The subsequent public Step 6.1 audit found all eight remaining repositories
+still on `main`, with zero open PRs, clean local checkouts whose main/trial SHAs
+match public refs, and explicit trial-preset references. Trial refs are two or
+three commits ahead and zero behind. No repository has a ruleset or classic
+branch protection on either ref, so protection is the next prerequisite. Trial
+schedules, uploads, graph submissions, and optional caches remain gated off;
+default changes do not trigger the observed release/snapshot workflows. Begin
+the serialized expansion with `service-common` after protecting both refs and
+confirming its administrator-only integration state.
 The executable
 [trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
 owns the completed local preset-reference and generated-state ignore corrections.
@@ -241,15 +288,15 @@ URL, tool/database version where applicable, and the final status.
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
 | All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories were public and used `main` at `2026-09-14T01:45:30Z`. A fully paginated unauthenticated snapshot covered all 15 publicly visible organization repositories and 1,191 historical artifact records; none was unexpired, so currently retained public artifact bytes were zero. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. The operator also reports no GitHub payment method, and GitHub's current Actions billing documentation says over-quota usage is blocked without one. This prevents financial exposure but does not guarantee that a capped upload will succeed. | Keep uploads and schedules off initially. Measure exact output locally and runner-side, permit at most one 25 MiB bundle with one-day retention, and treat a quota rejection as failed evidence delivery. Do not add a payment method. Replace unknown private headroom with measured artifact bytes if GitHub later exposes them, and recalculate before expansion or scheduling. On 2026-09-14 the operator reconfirmed zero current Actions spend and disabled orchestration upload, cache, and schedule gates; public metadata showed zero artifacts on every listed initial branch run. | **Zero-spend control reconfirmed and initial runs retained zero artifacts — private headroom and upload sizing remain pending; uploads stay off** |
-| All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. Repair the discovered `main` protection defect before installation, then confirm restricted App scope and prove authenticated Maven lookup before expansion. | **Bounded Community trial and orchestration switch approved — protection repair, App scope, and hosted lookup pending** |
-| Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run public API inspection showed the ruleset contains `~DEFAULT_BRANCH` plus malformed literal `refs/heads/"main", "dependency-automation-trial"`; only the current default trial ref receives rules, while `main` receives none. Both SHAs remain unchanged. | Replace the malformed combined condition with separate explicit `refs/heads/main` and `refs/heads/dependency-automation-trial` includes. Preserve all three rules. Verify both branches independently before App installation. | **Blocked — `main` protection repair required before Step 5.4** |
+| All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. The discovered `main` protection defect is repaired, and the operator restricted initial App access to orchestration. Prove hosted lookup behavior before expansion. | **Bounded Community trial, orchestration switch, protection, and pilot App scope passed — hosted lookup pending** |
+| Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run inspection found only the dynamic default target effective. The first remediation retained quoted patterns; the final saved repair uses exact unquoted refs. | Public verification at `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and `refs/heads/dependency-automation-trial` conditions. Both branches independently receive deletion, non-fast-forward, and pull-request rules; both SHAs remain unchanged. Preserve the ruleset through pilot rollback. | **Passed — both branches independently protected before Step 5.4** |
 | All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata now records successful initial branch jobs in all nine repositories with zero artifacts. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial refs and initial hosted branch jobs passed — detailed report review, default-only behavior, and upload sizing remain pending** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve the explicit orchestration trial ref. | Orchestration source and preset ref `24ffc8e36bf87a730bb6a25961059becbdb67d72` resolved successfully in hosted dry-run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973); all nine trial refs are publicly resolvable. Keep the preset ref frozen during each evidence batch. | **Trial preset publication and hosted resolution passed** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` or the trial-only marked-push fallback | Local platform mode cannot perform a true full dry run or GitHub lookups. Before the temporary-default switch, GitHub did not expose **Run workflow**, so the branch-only workflow used its reviewed one-repository wrapper. The temporary default now permits normal manual dispatch without changing that read-only execution contract. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) established 109 dependencies in 37 package files and retained the Aqua Security IP-allow-list and anonymous Docker Hub page-11 gaps. Trial-default manual run [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322) then passed on the same exact source/preset SHA: both jobs succeeded sequentially in 2 minutes 27 seconds, all structural hard gates passed, uploads skipped, and artifact count was zero. | **Trial-default hosted mechanics passed — individual Aqua Security and Docker Hub lookup coverage remains incomplete** |
-| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Install the App only on the scoped repositories, grant alert-read access, enable graph/alerts, and keep Dependabot version and security-update PRs disabled. Retain settings plus dashboard/alert URLs and prove Renovate is the sole update-PR owner with `automerge=false`. | **Pending — evidence not supplied** |
+| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | The operator installed Renovate-only Community in Scan and Alert mode for orchestration only and reports graph/alerts enabled, alert-read access granted where offered, and Dependabot version/security-update PRs disabled. [Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55) was created by `renovate[bot]` with 95 approval-gated and 75 scheduled proposals and no PR burst. Representative [PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) targets the trial default, changes only the expected Renovate pin, passed config validation, and explicitly reports automerge disabled. The operator reported no issue in the requested two-cycle Mend telemetry review. | **Orchestration Step 5 App acceptance passed — consumer activation pending** |
 | Four Java consumers | Mend App-settings GitHub Packages access | Public inspection on `2026-09-13` showed all four published `service-common` Maven packages in GitHub's public-package filter. GitHub Packages still requires authentication to install public Maven packages; agents cannot inspect or receive the existing credential. | Reconfirm package visibility, then first test Mend's App-token GitHub Packages host rules. If a separate credential is required, store it only in Mend App settings and reference it from `hostRules` with a secret placeholder. Confirm free-App support and retain sanitized lookup logs for each consumer. | **Public visibility preflight passed — authenticated hosted lookup pending** |
-| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Automation has not been installed or observed. | Record two successful bot cycles per repository plus one scheduled scan cycle for each prepared scanner, using a manual first scan for immediate feedback. Include timestamps, revisions, durations, dashboard/proposal links, database versions, and rate-limit/timeout results. | **Pending — evidence not supplied** |
-| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior cannot be inferred from local config alone. | Export effective config and representative proposals/checks; show no paid feature, no automatic merge, no Dependabot update PRs, successful required checks/credential access, and no Renovate edits under the release-owned first-party production paths. | **Pending — evidence not supplied** |
+| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Public effects show orchestration onboarding and a dashboard-triggered proposal cycle; the operator reviewed both Mend cycles without reporting an issue, but exact private timestamps/durations were not transcribed. Other repositories are not activated. | Retain the public orchestration timestamps and operator review, then record two successful bot cycles per remaining repository plus one scheduled scan cycle for each prepared scanner. Include timestamps, revisions, durations, dashboard/proposal links, database versions, and rate-limit/timeout results. | **Orchestration two-cycle acceptance passed with operator summary — consumer cycles and scheduled scans pending** |
+| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior required live App evidence. | Orchestration uses Renovate-only Community. PR #56 explicitly reports automerge disabled; the operator reports Dependabot update PRs disabled; only one Renovate PR/branch exists; and Dashboard #55 contains no first-party Budget Analyzer image proposal. Repeat this proof for each consumer. | **Orchestration passed — consumer evidence pending** |
 
 ### Repository deferred-check reconciliation
 
@@ -257,7 +304,7 @@ URL, tool/database version where applicable, and the final status.
 | --- | --- | --- | --- | --- |
 | `orchestration` | Hosted Renovate full dry run for charts, release/tool pins, Actions, Docker/Helm/Kubernetes inputs, and registry retries | GitHub token, published preset, and true full-dry-run behavior are hosted-only. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) validated the trial wrapper and preset, extracted 109 dependencies from 37 package files, selected the trial base, simulated mutations, and returned `done`. Preserve the Aqua Security IP-allow-list failures and anonymous Docker Hub page-11 failures as incomplete lookups; do not classify them as a clean lookup pass. | **Hosted mechanics passed — Aqua Security and Docker Hub lookup gaps pending** |
 | `orchestration` | `.github/workflows/exact-image-security-evidence.yml` for 32 rendered targets | The prior hosted job was rejected before execution because organization policy did not authorize the yq action source. The action was replaced by the checksum-verified yq CLI. | Push run [34831702464](https://github.com/budgetanalyzer/orchestration/actions/runs/34831702464) passed on source `be9ed6b936c4e35f31d58f7056b9771918bf9889`; the exact-image workflow and scan inputs are unchanged through the current trial source. It uploaded no artifact. Retain detailed findings separately and observe one scheduled run later. | **Hosted admission and no-upload measurement passed — detailed report and scheduled evidence pending** |
-| `orchestration` | Dashboard/proposals and required checks | App/settings are not active. | Retain two bot cycles, dashboard and proposal URLs, maintained-line plus major proposals, approval gates, immutable digest/flavor preservation, ARM64 review records, and successful applicable checks. | **Pending — no bot-cycle evidence** |
+| `orchestration` | Dashboard/proposals and required checks | App/settings were previously inactive. | [Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55) proves normal onboarding and surfaces maintained-line, digest, chart, platform, checksum, and major proposals under approval/schedule controls. Representative [PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) targets `dependency-automation-trial`, changes only the Renovate `44.65.5` to `44.66.1` pin, passed [run 34860772186](https://github.com/budgetanalyzer/orchestration/actions/runs/34860772186), and explicitly reports automerge disabled. The operator reported both Mend cycles looked good. Keep the PR unmerged. Live vulnerability and sustained-limit behavior remain broader-trial evidence. | **Step 5 pilot passed — later scheduled/alert evidence pending** |
 | `service-common` | Hosted Renovate lookup for Gradle/catalog/wrapper/Actions | Actions and published-preset lookups require hosted GitHub access. | Retain App log/dashboard evidence for all 52 locally extracted occurrences, including maintained Spring lines and Spring 4/test-stack proposals. | **Pending — no hosted lookup** |
 | `service-common` | `.github/workflows/dependency-submission.yml` | The complete 216-coordinate local snapshot was not submitted. | Trial push run [34823856894](https://github.com/budgetanalyzer/service-common/actions/runs/34823856894) passed generation-only mode at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` with no artifact. Submission and GitHub graph acceptance remain gated until the trial branch is default. | **Hosted generation passed — accepted submission pending** |
 | `service-common` | Representative bot PR `build.yml`, graph/alerts, and dashboard | No App, PR, or administrator evidence is available. | Retain bot PR/check URLs and sanitized graph/alert/settings evidence; prove no automerge or overlapping Dependabot update PRs. | **Pending — no hosted evidence** |
@@ -333,10 +380,12 @@ digest-only proposals are not proof of those embedded patch versions.
 
 ## Current outcome
 
-Installation status and benchmark parity are both **not established**. Local
-configuration and scanner preparation are complete, but automation is not
-demonstrably active and no Phase 12 authenticated operational check has passed.
-The operator evidence in the tables above is required before this report can
-record two bot cycles, a scheduled scan cycle, accepted Java graphs, or final
-benchmark dispositions. Existing local misses remain gaps; lifecycle and
+Ecosystem-wide installation and benchmark parity are both **not established**.
+The orchestration Step 5 pilot passed through its Dashboard, representative PR,
+operator-reviewed Mend cycles, and proposal controls. Step 6 expansion has not
+started because all eight remaining repositories lack protection on both the
+main and trial refs; `service-common` protection is the next prerequisite. The
+operator evidence in the tables above is still required before this report can
+record consumer activation, scheduled scan cycles, accepted Java graphs, or
+final benchmark dispositions. Existing local misses remain gaps; lifecycle and
 exploitability assessment remain human work.

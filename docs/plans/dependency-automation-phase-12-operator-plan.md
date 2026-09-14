@@ -5,9 +5,15 @@ published and the initial Step 4 hosted branch measurements completed. The
 operator reconfirmed disabled expansion gates and zero current Actions spend,
 then authorized the Step 5 temporary-default orchestration pilot. The
 orchestration pre-switch audit, human-administered switch, and Step 5.3
-trial-default dry run are complete. Post-run inspection found that a malformed
-ruleset branch pattern left `main` unprotected after the switch. Repair and
-verify both protected refs before Step 5.4; do not install Mend yet.
+trial-default dry run are complete. A malformed ruleset branch pattern briefly
+left `main` unprotected after the switch; it is now repaired and both refs
+independently receive all three intended rules with unchanged SHAs. Step 5 is
+complete: onboarding, representative routine PR behavior, operator
+cycle review, and proposal-control review passed without a reported expansion
+blocker. The public portion of Step 6.1 is complete for all eight remaining
+repositories and found neither branch protected in any of them. Resume with the
+human-administered `service-common` dual-branch protection prerequisite; do not
+change its default or App scope yet.
 
 This is an interactive operator checklist, outside AI Session Handler, for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -18,9 +24,11 @@ settings changes; those remain human-owned even when local controls are complete
 
 ## Current session handoff — 2026-09-14
 
-Resume at the **Step 5 protection remediation**, immediately before Step 5.4.
-Do not repeat the completed branch measurements, pre-switch audit,
-default-branch switch, or successful Step 5.3 dry run.
+Resume at **Step 6.1**, at the `service-common` protection and administrator-state
+preflight. Do not repeat the completed public eight-repository audit or the
+orchestration installation, branch measurements, switch, Step 5 dry run,
+protection repair, dashboard selection, representative PR creation, or Mend
+cycle review.
 
 Completed:
 
@@ -78,23 +86,78 @@ Completed:
   `refs/heads/"main", "dependency-automation-trial"`; only the dynamic default
   target currently matches. Both branch SHAs remain unchanged, so no drift was
   observed, but the required persistent `main` protection is not effective.
+- The first human remediation attempt separated the two patterns but retained
+  literal quotes. At `2026-09-14T14:56:42Z`, the API reported
+  `refs/heads/"main"` and `refs/heads/"dependency-automation-trial"`; `main`
+  still received zero rules and the trial still received all three only through
+  `~DEFAULT_BRANCH`. Both SHAs and the successful run list remained unchanged.
+- The administrator then saved unquoted explicit patterns. Verification at
+  `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and
+  `refs/heads/dependency-automation-trial` conditions, with deletion,
+  non-fast-forward, and pull-request rules effective on each branch. Both SHAs,
+  the run list, and the zero-open-PR state remained unchanged.
+- The operator installed Renovate-only Mend Community in Scan and Alert mode,
+  restricted to orchestration, and reports the dependency graph and Dependabot
+  alerts enabled, Dependabot version-update and security-update PRs disabled,
+  and alert-read access granted where offered. Renovate opened
+  [Dependency Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55)
+  at `2026-09-14T15:05:04Z`. It created no PR, branch, commit, or Actions run.
+  The dashboard has 95 approval-gated entries and 75 routine entries awaiting
+  schedule, with no visible config-warning section.
+- The operator selected only the routine `renovate/renovate-44.66.x` entry.
+  Renovate opened
+  [PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) at
+  `2026-09-14T15:13:39Z`, targeting `dependency-automation-trial` from sole
+  Renovate branch `renovate/renovate-44.66.x` at
+  `a12888e1d19309eb79bde14d06f673e4ab683479`. The one-commit diff changes only
+  `.github/workflows/dependency-automation-config.yml`, from Renovate `44.65.5`
+  to `44.66.1`. Pull-request run
+  [34860772186](https://github.com/budgetanalyzer/orchestration/actions/runs/34860772186)
+  passed in 37 seconds; config validation passed in 35 seconds, the manual-only
+  hosted dry run correctly skipped, and no artifact was uploaded. The PR body
+  explicitly reports automerge disabled by config. The PR remains open and
+  unmerged, and no second Renovate PR or branch was created.
+- The operator reviewed both Mend cycles' requested status, queueing, timeout,
+  rate-limit, authentication, and lookup fields and reported that everything
+  looked good. Exact portal timestamps/durations were not transcribed; public
+  Dashboard and PR timestamps remain the retained timing evidence.
+- Step 5.6 review confirmed weekly routine scheduling, three concurrent and two
+  hourly PR limits, and dashboard approval for major, chart, stateful, platform,
+  chart-image override, and checksum-coupled changes. The live Dashboard shows
+  maintained-line and digest proposals with flavor suffixes intact, while no
+  first-party Budget Analyzer image proposal appears. Vulnerability alerts are
+  configured for any-time scheduling with automerge off, but no live
+  vulnerability-fix PR was available; graph-backed alert behavior remains Step
+  6 evidence.
+- The public Step 6.1 audit found all eight remaining repositories on `main`,
+  with zero open PRs, clean matching local/remote refs, and the explicit
+  orchestration trial preset in each `renovate.json`. Every trial branch is two
+  or three commits ahead and zero behind its `main`. No repository has a
+  ruleset or classic branch protection on either ref. Default changes do not
+  trigger the tag/manual release workflows or `service-common`'s explicit-main
+  snapshot workflow; all default-sensitive scanner/graph schedules remain
+  trial-gated off.
 
 Next actions:
 
-1. **HUMAN:** Edit ruleset `dependency-automation-trial-protection`. Replace the
-   malformed combined pattern with separate `refs/heads/main` and
-   `refs/heads/dependency-automation-trial` include entries. Keep deletion,
-   non-fast-forward, and required-pull-request rules active; do not weaken them.
-2. **AI AGENT:** Verify both branches independently receive all three active
-   rules and that both SHAs remain unchanged.
-3. Install Mend Community only on orchestration after that repair passes; then
-   continue Steps 5.4–5.6. Keep schedules, uploads, and optional caches off.
+1. **HUMAN:** In `service-common`, create active ruleset
+   `dependency-automation-trial-protection` with exact unquoted includes
+   `~DEFAULT_BRANCH`, `refs/heads/main`, and
+   `refs/heads/dependency-automation-trial`. Block deletion and force pushes and
+   require pull requests. Do not add unavailable required checks.
+2. **HUMAN:** Confirm Mend still has no `service-common` access and report any
+   Pages, environments, webhooks, or integrations that follow the default
+   branch. Do not change the default branch or App scope yet.
+3. **AI AGENT:** Verify both refs independently receive all three rules and that
+   the SHAs below remain unchanged before authorizing the serialized switch.
+4. Keep PR #56 open and unmerged. Keep schedules, uploads, optional caches, all
+   other dashboard checkboxes, and all consumer-repository App access off until
+   the serialized Step 6 sequence explicitly enables each one.
 
 Still pending after the default switch: detailed no-upload report review,
-upload-size values, Aqua Security and Docker Hub lookup remediation, App
-installation, dashboard/proposals, dependency graph and Dependabot settings,
-bot-PR checks, scheduled evidence, benchmark reconciliation, and the final
-rollback/merge decision. Uploads must remain disabled until sizes are reviewed.
+upload-size values, scheduled evidence, benchmark reconciliation, consumer
+activation, graph/alert evidence, and the final rollback/merge decision. Uploads
+must remain disabled until sizes are reviewed.
 
 ## Objective and trial modes
 
@@ -503,13 +566,44 @@ subsequently passed on this exact source/default revision. Both jobs succeeded
 sequentially in 2 minutes 27 seconds, the workflow's structural hard gates
 passed, both upload paths were skipped, and GitHub reports zero run artifacts.
 
-Post-run ruleset inspection nevertheless blocks Step 5.4. The active ruleset's
-conditions include `~DEFAULT_BRANCH` and malformed literal pattern
-`refs/heads/"main", "dependency-automation-trial"`. The trial branch currently
-receives deletion, non-fast-forward, and pull-request rules only because it is
-default; `main` receives none. Both SHAs remain unchanged. Repair the include
-conditions to separate explicit branch refs and verify both rule sets before
-installing Mend.
+Post-run ruleset inspection nevertheless blocks Step 5.4. The active ruleset
+initially contained `~DEFAULT_BRANCH` and one malformed combined literal. The
+first remediation split it into `refs/heads/"main"` and
+`refs/heads/"dependency-automation-trial"`, but those values still contain
+literal quote characters and match neither branch. The trial branch receives
+deletion, non-fast-forward, and pull-request rules only because it is default;
+`main` receives none. Both SHAs remain unchanged. Remove the quotes from the two
+UI patterns and verify both rule sets before installing Mend.
+
+The administrator subsequently saved unquoted patterns. At
+`2026-09-14T15:00:04Z`, public API checks showed exact conditions
+`refs/heads/main` and `refs/heads/dependency-automation-trial`; each branch
+independently received deletion, non-fast-forward, and pull-request rules.
+`main` remained at `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5`, the
+trial/default remained at `24ffc8e36bf87a730bb6a25961059becbdb67d72`, open
+PRs remained zero, and no new workflow ran. The protection blocker is cleared;
+proceed to Step 5.4.
+
+The operator completed Step 5.4 with the Renovate-only Community product in
+Scan and Alert mode and orchestration-only repository scope. The operator
+reports the dependency graph and Dependabot alerts enabled and competing
+Dependabot update PRs disabled. Renovate created
+[Dependency Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55),
+which presents approval-gated and scheduled proposals without creating a PR
+burst. The operator then selected exactly one representative routine proposal.
+[PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) targets
+`dependency-automation-trial` and changes only the workflow's Renovate pin from
+`44.65.5` to `44.66.1`. Its applicable config-validation run
+[34860772186](https://github.com/budgetanalyzer/orchestration/actions/runs/34860772186)
+passed in 37 seconds with no artifact, and its generated body explicitly reports
+automerge disabled. No additional Renovate PR or branch appeared. Leave
+the PR open. The operator reviewed both Mend cycles and reported no issue in the
+requested status, queueing, timeout, rate-limit, authentication, or lookup
+fields. Dashboard inspection confirmed the configured routine limits and
+approval gates, maintained-line and flavor-preserving digest proposals, and no
+first-party image proposal. No live vulnerability-fix PR was available, so that
+behavior remains Step 6 graph/alert evidence. Step 5 is complete; proceed to the
+serialized Step 6.1 audits before expanding App access.
 
 ## Step 6: Expand and collect full rehearsal evidence
 
@@ -541,6 +635,39 @@ installing Mend.
 7. Record durations, errors, cache use, artifact bytes/expiry, and refreshed
    billing for scheduled and PR runs. Preserve failures; do not omit dependencies
    or buy a workaround to satisfy the trial.
+
+### Step 6.1 public pre-expansion audit — 2026-09-14
+
+All observed trial refs are zero commits behind `main`; local and remote SHAs
+match, and each local checkout is clean.
+
+| Repository | `main` SHA | Trial SHA | Ahead | Public protection |
+| --- | --- | --- | ---: | --- |
+| `service-common` | `f31557761b80f17ce8fadc128e273b21b4fd07fe` | `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | 3 | None |
+| `currency-service` | `df1121d1fb238e262e3198610a5b2954d3f2e0a2` | `e89758adfced41af4106dc9d0c7398bfdff604e8` | 3 | None |
+| `permission-service` | `7a7759ad627505bf203a9d7a5ea5057cea3f832b` | `3e532f87eed65fa0202e35039938f131f1c453f8` | 3 | None |
+| `transaction-service` | `8a1d2bd97f97d3f734e9cf67c3241e2e61d13a40` | `0a9de2ec5b8ea9742ad44b02c4b7148ca568c190` | 3 | None |
+| `session-gateway` | `57e0f038175b994943226a8046ebceaffae6bf43` | `fe6061562e52eccf42570265b5299439c6827c9b` | 2 | None |
+| `budget-analyzer-web` | `b6f0d23c38428daf8412ae055ccbc9db89ac9517` | `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | 3 | None |
+| `ext-authz` | `917eae9c782b4b1c4d576258883c3e558a7d55a1` | `75ed2bda4de7460332a8dea656def0459064753f` | 3 | None |
+| `workspace` | `383efc840832d474cd9d60e0368ed2ded828e03c` | `d8e384474512eafb827970db8194413764b79098` | 3 | None |
+
+All eight repositories still advertise `main` as default, have zero open PRs,
+and pin the shared preset's explicit `dependency-automation-trial` ref. Public
+branch and ruleset pages report no classic branch protection and no repository
+rulesets. Build workflows already accept the trial base. Scheduled scanner or
+graph jobs require the exact trial schedule variable; uploads, optional caches,
+and Java graph submission have separate exact-`true` gates. Release workflows
+are tag/manual-only except `service-common` snapshot publication on explicit
+`main` pushes, so a default change does not invoke a publishing path. No
+`workflow_run`, `pull_request_target`, Pages, or environment workflow surface was
+found. Administrator-only App, graph/Dependabot, Pages, environment, webhook,
+and integration settings still require confirmation one repository at a time.
+
+Begin with `service-common` because it is first in the required graph-submission
+order and publishes the internal package consumed by the other Java services.
+Create and verify equivalent protection for `main` and the trial ref before
+changing its default or expanding Mend access.
 
 ## Step 7: Pause, restore, and make the merge decision
 

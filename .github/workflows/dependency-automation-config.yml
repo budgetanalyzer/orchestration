@@ -47,6 +47,7 @@ jobs:
           npx --yes --package="renovate@${RENOVATE_VERSION}" renovate-config-validator
           --strict --no-global renovate.json renovate-presets/default.json
 
+  # Temporary non-default-branch fallback. Remove the push arm during promotion.
   hosted-renovate-dry-run:
     if: >-
       ${{

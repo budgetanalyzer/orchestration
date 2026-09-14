@@ -266,6 +266,13 @@ Keep repository workflows on Node 24-ready action majors. In this repo that mean
 - `docker/build-push-action@v7`
 - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope
 
+Treat action-source admission and commit pinning as separate controls. Before
+introducing an external `uses:` reference, confirm that the effective
+organization Actions policy authorizes its source. When an external action is
+not authorized, prefer the repository's checksum-verified CLI contract in
+`scripts/bootstrap/install-verified-tool.sh`; read `scripts/README.md` before
+adding or changing a verified release tool.
+
 When workflow changes span multiple repos, coordinate the shared policy here and make repo-local workflow edits in the owning repos as needed.
 
 ## Project Priorities

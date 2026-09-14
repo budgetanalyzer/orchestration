@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
     cat <<'EOF'
-Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno> [--install-dir DIR]
+Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno|yq> [--install-dir DIR]
 
 Installs the repo-pinned tool release for the current OS/architecture after
 verifying the checked-in SHA-256 checksum.
@@ -104,7 +104,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$TOOL" in
-    kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno)
+    kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno|yq)
         ;;
     *)
         echo "Unsupported tool: $TOOL" >&2
@@ -176,6 +176,12 @@ case "$TOOL" in
         phase7_verify_sha256 "$ARCHIVE" "$EXPECTED_SHA256"
         tar -xzf "$ARCHIVE" -C "$TMP_DIR"
         install_binary "$TMP_DIR/kyverno" "$INSTALL_DIR/kyverno"
+        ;;
+    yq)
+        ARTIFACT="$TMP_DIR/yq"
+        download_file "$URL" "$ARTIFACT"
+        phase7_verify_sha256 "$ARTIFACT" "$EXPECTED_SHA256"
+        install_binary "$ARTIFACT" "$INSTALL_DIR/yq"
         ;;
 esac
 

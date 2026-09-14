@@ -156,8 +156,9 @@ Choose scripts by runtime boundary:
 ## Bootstrap
 
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
-  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
-  after verifying checked-in SHA-256 values.
+  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, `kyverno`, and `yq`
+  releases from checked-in upstream URLs after verifying each downloaded
+  artifact against its checked-in SHA-256 value.
 - `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
   versions, the host-published public ingress CA, DNS, Docker/Kind
   prerequisites, inotify budgets, pinned Gateway API and Calico state, and

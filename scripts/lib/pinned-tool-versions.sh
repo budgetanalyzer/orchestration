@@ -17,6 +17,8 @@ PHASE7_KUBECONFORM_VERSION="v0.7.0"
 PHASE7_KUBE_LINTER_VERSION="v0.8.3"
 # renovate: datasource=github-releases depName=kyverno/kyverno extractVersion=^kyverno-cli-(?<version>v.*)$
 PHASE7_KYVERNO_CLI_VERSION="v1.18.0"
+# renovate: datasource=github-releases depName=mikefarah/yq
+PHASE7_YQ_VERSION="v4.53.6"
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
 PHASE7_GATEWAY_API_VERSION="v1.5.1"
 # renovate: datasource=github-releases depName=projectcalico/calico
@@ -123,6 +125,9 @@ phase7_tool_version() {
         kyverno)
             printf '%s\n' "$PHASE7_KYVERNO_CLI_VERSION"
             ;;
+        yq)
+            printf '%s\n' "$PHASE7_YQ_VERSION"
+            ;;
         *)
             echo "Unsupported tool: $1" >&2
             return 1
@@ -192,6 +197,19 @@ phase7_tool_url() {
             esac
             printf 'https://github.com/kyverno/kyverno/releases/download/%s/kyverno-cli_%s_%s.tar.gz\n' "$PHASE7_KYVERNO_CLI_VERSION" "$PHASE7_KYVERNO_CLI_VERSION" "$suffix"
             ;;
+        yq)
+            case "$platform" in
+                linux-amd64) suffix='linux_amd64' ;;
+                linux-arm64) suffix='linux_arm64' ;;
+                darwin-amd64) suffix='darwin_amd64' ;;
+                darwin-arm64) suffix='darwin_arm64' ;;
+                *)
+                    echo "Unsupported yq platform: $platform" >&2
+                    return 1
+                    ;;
+            esac
+            printf 'https://github.com/mikefarah/yq/releases/download/%s/yq_%s\n' "$PHASE7_YQ_VERSION" "$suffix"
+            ;;
         *)
             echo "Unsupported tool: $tool" >&2
             return 1
@@ -233,6 +251,10 @@ phase7_tool_sha256() {
         kyverno:linux-arm64) printf '37697771e1cc92daf73bebde4eb304691af09e07a4278cc82062e829c8475cec\n' ;;
         kyverno:darwin-amd64) printf '35f4884e98e32e87223f1591e4ca0f82f9136f1cc9e9ba6482c441fdb00611d5\n' ;;
         kyverno:darwin-arm64) printf '9b3d02f999c2b12e315b70b8d5b2db569b08e16f70449a23991515ed390e9268\n' ;;
+        yq:linux-amd64) printf 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385\n' ;;
+        yq:linux-arm64) printf '88a1016bc1d657375a35864e4f44b6f333df8ff97b559f51bba0adcb2169df09\n' ;;
+        yq:darwin-amd64) printf 'caa513cb04f3804b34d4752f0e0d7904fecb9e7cf1d34081289f83259319a7f6\n' ;;
+        yq:darwin-arm64) printf 'cceb0b8d71ea5294334121f8429f33f92b920e7217d904a2f9f35443968ac424\n' ;;
         *)
             echo "Unsupported checksum lookup: $1 on $2" >&2
             return 1
@@ -251,7 +273,7 @@ phase7_install_hint() {
         mkcert)
             printf 'sudo apt-get install -y libnss3-tools && "%s" mkcert\n' "$installer_path"
             ;;
-        kubectl|helm|tilt|kind)
+        kubectl|helm|tilt|kind|yq)
             printf '"%s" %s\n' "$installer_path" "$tool"
             ;;
         kubeconform|kube-linter|kyverno)

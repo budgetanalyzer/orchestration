@@ -1,8 +1,8 @@
 # Dependency Automation
 
-**Status:** Configuration prepared; branch rehearsal and administrator activation
-are pending. The operator has created the Mend account; account limits and billing
-controls still need verification.
+**Status:** Configuration prepared; a bounded zero-spend branch trial was approved
+on 2026-09-14. Trial workflow adaptations and administrator activation remain
+pending.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -102,6 +102,14 @@ If no payment method is present, confirm over-limit use is blocked; otherwise
 require an effective spend-stopping control for every relevant billed product.
 A notification-only budget is insufficient. Stop hosted work if that boundary
 cannot be established; local preparation may continue.
+
+If authenticated per-artifact inventory is unavailable, record that access gap
+instead of reporting unknown private-repository bytes as zero. A confirmed
+no-payment-method block establishes the zero-spend boundary, but it does not prove
+that upload capacity remains. Keep initial uploads disabled, treat a quota-blocked
+upload as a trial failure rather than a reason to add billing information, and
+replace the unknown with measured artifact bytes only when the hosted platform
+makes them available.
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.

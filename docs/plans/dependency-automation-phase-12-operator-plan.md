@@ -1,7 +1,8 @@
 # Dependency Automation Phase 12 Operator Plan
 
-**Status:** Mend account created (operator report). Branch rehearsal design is
-prepared; workflow adaptations, billing verification, publication, and hosted
+**Status:** Bounded zero-spend trial approved on 2026-09-14 with `main` remaining
+default. Local trial-ref and generated-state ignore remediation is complete;
+workflow adaptations, rollback evidence, consumer publication, and hosted
 evidence remain pending.
 
 This is an interactive operator checklist, outside AI Session Handler, for
@@ -96,9 +97,45 @@ Free hosting has no perpetual-free guarantee. Self-hosting would require a
 separate decision. No-go stops hosted work; local preparation can continue.
 Unknown local output sizes call for a bounded measurement run, not a merge.
 
+### Recorded trial decision — 2026-09-14
+
+- **Decision:** `TRIAL GO`; keep `main` as the default branch and defer
+  default-only acceptance.
+- **Financial boundary:** the operator reports no payment method on GitHub or
+  Mend and no paid Mend trial. GitHub's current Actions billing documentation
+  states that usage is blocked when an account without a valid payment method
+  exhausts its quota. Do not add a payment method during this trial.
+- **Mend boundary:** Community remains the selected free service. Public
+  documentation still lists one concurrent organization job, approximately
+  four-hour scheduling, 1 vCPU, 3 GB memory, 15 GB disk, and a 30-minute timeout.
+- **Public artifact observation:** the unauthenticated API was paginated across
+  all 15 publicly visible organization repositories at
+  `2026-09-14T01:45:30Z`. It returned 1,191 historical artifact records and zero
+  unexpired artifacts, for zero currently retained public artifact bytes.
+- **Access gap:** private repositories exist, but the observed authenticated UI
+  did not provide a practical per-artifact inventory. Private retained bytes and
+  upload headroom therefore remain unknown. This can block trial uploads but
+  cannot create a charge under the confirmed no-payment-method boundary.
+- **Trial cap:** one hosted job at a time; schedules and uploads initially off;
+  at most one concurrently retained 25 MiB evidence bundle with one-day
+  retention after measurement and review.
+- **Review/expiry:** review this approval by `2026-09-21`; any larger retained
+  total, paid feature, payment method, or continuation beyond that date requires
+  a new operator decision.
+
+This decision establishes the cost guardrail only. Package visibility, required
+Maven secret names, rollback settings, workflow controls, preset resolution, and
+hosted behavior still require their separately listed evidence.
+
 ## Step 2: Prepare branches and the rollback ledger
 
 **Owner: HUMAN** for git/publication; **AI AGENT** for diff review.
+
+The executable
+[trial-ref and ignore remediation plan](dependency-automation-trial-ref-and-ignore-remediation-plan.md)
+has corrected the focused preset-reference and `.gitignore` defects locally.
+Human clean-history review and publication remain pending before the broader
+Step 3 workflow adaptations can run remotely.
 
 Use the exact branch name `dependency-automation-trial` in all nine repositories.
 Use the same name in workflow triggers, trusted-ref guards, preset references,

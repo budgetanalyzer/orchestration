@@ -1,11 +1,12 @@
 # Dependency Automation Coverage
 
-**Status:** Local preparation is complete across the scoped repositories;
-trial workflow adaptations, branch rehearsal, administrator activation, and all
-hosted acceptance evidence remain pending. The operator reports that the Mend
-account has been created; billing controls and App activation are not verified.
+**Status:** Local preparation, trial-ref remediation, and generated-state ignore
+hygiene are complete, and a bounded zero-spend branch trial was approved on
+2026-09-14. Workflow adaptations, rollback evidence, administrator activation,
+and all hosted acceptance evidence remain pending.
 
-**Last updated:** 2026-09-14 (branch rehearsal handoff; prior local evidence retained)
+**Last updated:** 2026-09-14 (zero-spend decision and branch remediation handoff;
+prior local evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -16,15 +17,20 @@ historical acceptance benchmark, and
 ## Phase 12 branch rehearsal handoff
 
 Follow the [revised operator plan](../plans/dependency-automation-phase-12-operator-plan.md)
-before publishing or triggering hosted work. Account creation is the only newly
-reported external result; no branch run, billing check, or App cycle is claimed.
-The operator must choose whether to keep main as default and defer default-only
-checks, or temporarily use protected trial defaults for a full rehearsal.
+before publishing or triggering hosted work. The operator selected a bounded
+trial with `main` remaining default and reported that neither GitHub nor Mend has
+a payment method. GitHub documents that over-quota Actions use is blocked without
+a valid payment method, establishing a zero-spend boundary. No branch run or App
+cycle is claimed, and default-only checks remain deferred.
 
-Required additional preparation includes trial-ref workflow guards, build checks
-for PRs targeting trial branches, explicit preset refs, disabled schedule/upload/
-submission gates, bounded artifact measurement, and a settings rollback ledger.
-Implement and validate those changes in each owning repo before the trial.
+Remaining preparation includes exact trial-branch workflow guards, build checks
+for PRs targeting trial branches, disabled schedule/upload/submission gates,
+bounded artifact measurement, and a settings rollback ledger.
+The executable
+[trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
+owns the completed local preset-reference and generated-state ignore corrections.
+Human clean-history review and publication of those changes, plus the separate
+workflow controls in each owning repo, remain required before the trial.
 Record source/default refs, main SHAs, actual artifact bytes and retention, cache
 use, billing observations, and detailed report evidence alongside existing
 deferred checks. Report trial acceptance, ongoing installation, and benchmark
@@ -147,13 +153,14 @@ the Mend App is active.
 
 ## Phase 12 activation evidence
 
-No administrator or hosted evidence has been supplied as of 2026-09-07. In
-particular, this report has no read-only hosted dry-run URL, published-preset
-resolution log, visibility/billing confirmation, Mend free-service
-confirmation, App installation evidence, Dependency Dashboard URL, accepted
-Java graph submission, Dependabot settings or alert export, bot pull request,
-or scheduled scanner run. Every row below therefore remains `pending`; none is
-being reclassified as a scanner limitation or a pass.
+The 2026-09-14 operator report and public checks establish the bounded trial's
+zero-spend control, selected branch-only mode, and current public artifact
+snapshot. No hosted execution evidence has been supplied. In particular, this
+report has no read-only hosted dry-run URL, published-preset resolution log, App
+installation evidence, Dependency Dashboard URL, accepted Java graph submission,
+Dependabot settings or alert export, bot pull request, or scheduled scanner run.
+Those rows remain `pending`; none is being reclassified as a scanner limitation
+or a pass.
 
 The operator must follow the ordered
 [activation procedure](../dependency-automation.md#activation-procedure) and
@@ -166,8 +173,8 @@ URL, tool/database version where applicable, and the final status.
 
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
-| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | The unauthenticated repository API confirmed at `2026-09-09T08:51:48Z` that all nine scoped repositories are public and use `main`. A public artifact API snapshot at `2026-09-13T08:52:38Z` covered all 15 then-public organization repositories and found 12 unexpired artifacts totaling `373325516` bytes (`356.0 MiB`), all existing JAR/test outputs in `currency-service`, `permission-service`, and `session-gateway`; they were due to expire around `10:28Z`–`10:31Z` that day. Current retained bytes are not accrued billing usage, and authenticated account settings remain unavailable to agents. Standard public-repository runner compute is currently free, but Actions artifact storage is plan-limited and shares its allowance with quota-bound GitHub Packages storage. | During operator Step 1, repeat the public artifact inventory; record the authenticated plan, allowance, billing-cycle accrued storage, package usage/visibility, payment-method state, and hard-stop no-spend control; inventory new and Renovate-triggered artifact producers; locally compress the exact-image and workspace-image output paths; and project retained-hour usage plus headroom. After each first manual scanner run, replace estimates with its REST `size_in_bytes` and recalculate before accepting scheduled operation. | **Public compute and dated current-file snapshot passed — size projections, accrued storage, and account controls pending** |
-| All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | During operator Step 1, use GitHub OAuth to access the Mend Developer Portal without installing the App or starting a trial, confirm Community settings are available without payment, and record a dated go/no-go decision accepting or rejecting the policy-change risk. Confirm restricted App scope during the Step 6 pilot and prove authenticated Maven lookup during Step 7. | **Public free-tier preflight passed — account review and go/no-go decision pending** |
+| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories were public and used `main` at `2026-09-14T01:45:30Z`. A fully paginated unauthenticated snapshot covered all 15 publicly visible organization repositories and 1,191 historical artifact records; none was unexpired, so currently retained public artifact bytes were zero. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. The operator also reports no GitHub payment method, and GitHub's current Actions billing documentation says over-quota usage is blocked without one. This prevents financial exposure but does not guarantee that a capped upload will succeed. | Keep uploads and schedules off initially. Measure exact output locally and runner-side, permit at most one 25 MiB bundle with one-day retention, and treat a quota rejection as failed evidence delivery. Do not add a payment method. Replace unknown private headroom with measured API bytes if GitHub later exposes them, and recalculate before expansion or scheduling. | **Zero-spend control and public snapshot passed — private headroom and accrued usage unavailable; upload success pending measurement** |
+| All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, selected the mode that keeps `main` default, capped retained evidence at one 25 MiB one-day bundle, and set review for `2026-09-21`. Confirm restricted App scope during the later pilot and prove authenticated Maven lookup before expansion. | **Bounded Community trial approved — App scope and hosted lookup pending** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve a GitHub-hosted orchestration preset that was unpublished during local checks. | Publish orchestration and `renovate-presets/default.json` before consumer configs; retain source revisions and successful resolution logs. | **Pending — evidence not supplied** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` | Local platform mode cannot perform a true full dry run or GitHub lookups. | Dispatch from the trusted default branch. Retain the run URL and logs proving strict validation, `--dry-run=full`, read-only permissions, effective preset resolution, GitHub lookups, branch-file mutation simulation, registry retries, and no fatal/error output. | **Pending — evidence not supplied** |
 | All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Install the App only on the scoped repositories, grant alert-read access, enable graph/alerts, and keep Dependabot version and security-update PRs disabled. Retain settings plus dashboard/alert URLs and prove Renovate is the sole update-PR owner with `automerge=false`. | **Pending — evidence not supplied** |

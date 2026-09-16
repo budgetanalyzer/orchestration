@@ -27,9 +27,15 @@ explicit Maven Central exclusion for `org.budgetanalyzer` through `main` and
 their trial branches, while orchestration merged the canonical repository
 ownership documentation through the same branch flow. The operator reports
 that the required post-merge `currency-service` Renovate scan succeeded with no
-warnings. Batch B can resume with confirmation of all seven green B1 onboarding
-results; live vulnerability-fix and sustained-limit behavior remain later
-evidence.
+warnings. All seven B1 onboarding results were then green. The four Java
+consumer graphs are now accepted with 108, 54, 54, and 78 alerts respectively,
+after correcting trial controls that had been entered as repository secrets
+instead of repository variables. Before B4, public verification found five
+automatic vulnerability-fix PRs in `budget-analyzer-web` and one in `ext-authz`.
+All use the trial base and have automerge disabled, but the frontend burst
+exceeded the three-PR trial stop threshold. B4 is paused until the shared preset
+publishes a dedicated three-PR vulnerability-alert limit; existing security PRs
+remain open and unmerged as evidence.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -52,8 +58,12 @@ configuration extends it and adds only repository-specific manager paths and
 extraction rules. Routine pull requests are created weekly, with no more than
 three open routine pull requests and two new routine pull requests per hour in
 one repository. Vulnerability fixes use Renovate's dedicated alert path and an
-unrestricted schedule. Major, chart, stateful, platform, and checksum-coupled
-updates require Dependency Dashboard approval.
+unrestricted schedule, with a separate limit of three concurrent vulnerability
+PRs per repository. Renovate's vulnerability path ignores the top-level
+concurrent and hourly limits by default, so the nested limit is required; the
+routine and vulnerability paths have independent three-PR budgets. Major,
+chart, stateful, platform, and checksum-coupled updates require Dependency
+Dashboard approval.
 
 Patch, minor, and major proposals remain distinct. Digest refreshes must retain
 an immutable digest and any image flavor suffix. Reviewers must independently
@@ -389,6 +399,32 @@ operator report rather than an independently inspected scan transcript. Before
 B2, confirm one green B1 onboarding result for every repository, including a
 post-correction green result for `transaction-service` if it has not already
 completed.
+
+The operator subsequently confirmed all seven B1 onboarding results green and
+ran the four Java consumer graph workflows. `currency-service` submitted on the
+first attempt. The other three initially ran in generation-only mode because
+the trial control names had been created as repository secrets, which are not
+available through the workflows' `vars` context. After the operator created the
+required repository variables, replacement runs submitted complete graphs.
+GitHub's accepted SBOMs contain 314 packages for `currency-service`, 236 for
+`permission-service`, 238 for `transaction-service`, and 241 for
+`session-gateway`, including all expected internal `service-common`
+coordinates. The operator reported 108, 54, 54, and 78 open Dependabot alerts
+respectively. All accepted runs used the trial default, left repo-owned uploads
+disabled, and have zero artifacts. An extra `service-common` refresh also
+reconfirmed its 222-package graph and 89 alerts; it was not required by B2.
+
+The pre-B4 public check found five `budget-analyzer-web` vulnerability PRs and
+one `ext-authz` vulnerability PR created during their first onboarding cycles.
+Every PR targets `dependency-automation-trial`, carries the `security` label,
+and has GitHub auto-merge disabled. Renovate vulnerability-alert PRs ignore the
+top-level `prConcurrentLimit`, `prHourlyLimit`, and schedule by default. Because
+the shared preset had no nested vulnerability limit, the frontend opened five
+PRs and crossed the plan's stop threshold. The durable correction adds
+`vulnerabilityAlerts.prConcurrentLimit: 3`. Publish and validate that correction
+on the shared trial preset before B4. The limit does not close existing PRs:
+keep `budget-analyzer-web` PRs #116–#120 and `ext-authz` PR #1 open and unmerged,
+and treat them as the post-correction baseline.
 
 ### Trial workflow controls
 

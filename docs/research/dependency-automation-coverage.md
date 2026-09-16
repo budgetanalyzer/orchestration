@@ -18,14 +18,18 @@ cycle/queue/lookup review, and Step 5 proposal controls passed. The public Step
 6.1 audit found all eight remaining repositories initially missing protection.
 The serialized `service-common` batch now has dual-branch protection, a trial
 default, two operator-reported green Mend cycles, accepted 222-package graph
-submission, 89 graph-backed alerts, and passing representative PR #57. Continue
-by confirming all seven green B1 onboarding results after the internal Maven
-routing correction and operator-reported successful post-merge
-`currency-service` scan; scheduled and upload-size evidence remains pending.
+submission, 89 graph-backed alerts, and passing representative PR #57. All
+seven remaining B1 onboarding results are green and the four Java consumer
+graphs are accepted with complete internal-package coverage. B4 is paused
+before execution: the first onboarding cycles opened five frontend and one Go
+security PR, exposing that vulnerability alerts ignore the top-level PR limits.
+The shared preset now prepares a dedicated three-PR vulnerability budget for
+publication before the seven second cycles. Scheduled and upload-size evidence
+remains pending.
 
-**Last updated:** 2026-09-16 (internal Maven routing correction merged through
-`main` and trial; post-merge currency scan succeeded without warnings by
-operator report; prior local and hosted evidence retained)
+**Last updated:** 2026-09-16 (B1–B3 evidence recorded; pre-B4 security-PR burst
+paused execution; nested vulnerability limit prepared; prior local and hosted
+evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -226,8 +230,73 @@ required post-merge `currency-service` Renovate scan and reported that it
 succeeded with no warnings. No raw Mend log or separate per-coordinate result
 was supplied, so this records the sanitized operator report without claiming
 independent inspection of the scan transcript. The routing-fix checkpoint is
-complete; all seven B1 green onboarding outcomes still need confirmation before
-B2.
+complete; the operator subsequently confirmed all seven B1 onboarding outcomes
+green.
+
+### Batch B graph and security-PR checkpoint
+
+The first B2 graph pass exposed a control-scope error rather than a dependency
+failure. The operator had created the trial control names as repository secrets,
+but the workflows intentionally read non-sensitive controls from the `vars`
+context. [`currency-service` run 35083509407](https://github.com/budgetanalyzer/currency-service/actions/runs/35083509407)
+submitted successfully after its graph control was corrected. The first
+`permission-service`, `transaction-service`, and `session-gateway` runs stayed
+in generation-only mode while still passing their package-access and build
+checks. Those non-submitting runs were
+[`permission-service` 35083948086](https://github.com/budgetanalyzer/permission-service/actions/runs/35083948086),
+[`transaction-service` 35084259266](https://github.com/budgetanalyzer/transaction-service/actions/runs/35084259266), and
+[`session-gateway` 35084554215](https://github.com/budgetanalyzer/session-gateway/actions/runs/35084554215).
+A second
+[`permission-service` diagnostic run 35085536053](https://github.com/budgetanalyzer/permission-service/actions/runs/35085536053)
+also remained generation-only and made the mistaken scope explicit. These
+successful generation-only runs are retained and are not counted as accepted
+submissions.
+
+After the operator created the required repository variables, replacement runs
+passed sequentially on the exact trial/default SHAs:
+
+| Repository | Accepted run | Trial SHA | Accepted SBOM packages | Open alerts |
+| --- | --- | --- | ---: | ---: |
+| `currency-service` | [35083509407](https://github.com/budgetanalyzer/currency-service/actions/runs/35083509407) | `93da3e3599e71cfa453ed78d41691fdfd1edadc3` | 314 | 108 |
+| `permission-service` | [35091521154](https://github.com/budgetanalyzer/permission-service/actions/runs/35091521154) | `a31e7c5880a3d3e742e7224297e8226d9e7a47ff` | 236 | 54 |
+| `transaction-service` | [35091855229](https://github.com/budgetanalyzer/transaction-service/actions/runs/35091855229) | `aa439d27aec63031ab056d4f4afe70cc43e13cca` | 238 | 54 |
+| `session-gateway` | [35092673426](https://github.com/budgetanalyzer/session-gateway/actions/runs/35092673426) | `8f8b8c30aa3008f870879ab623a0b6ef8ee04ec5` | 241 | 78 |
+
+Public SBOM inspection found `org.budgetanalyzer:spring-platform`,
+`org.budgetanalyzer:service-core`, and `org.budgetanalyzer:service-web` where
+applicable in all four consumer graphs. The graphs also expose Spring Framework
+6.2.18 and Jackson Databind 2.21.2 throughout; the servlet services include
+Tomcat 10.1.54, while `session-gateway` contains WebFlux, Reactor Netty/Netty,
+and Lettuce with no Tomcat package. Every accepted run used `workflow_dispatch`
+on `dependency-automation-trial`, completed successfully, skipped the repo-owned
+upload paths, and has zero artifacts. The operator also ran
+[`service-common` 35092182970](https://github.com/budgetanalyzer/service-common/actions/runs/35092182970),
+which reconfirmed its existing 222-package graph and 89 alerts with zero
+artifacts. That refresh was not required by B2 and must not be repeated for this
+batch.
+
+Before B4, public inspection found six automatic vulnerability-fix PRs created
+during the initial onboarding cycles. `budget-analyzer-web` opened
+[#116](https://github.com/budgetanalyzer/budget-analyzer-web/pull/116),
+[#117](https://github.com/budgetanalyzer/budget-analyzer-web/pull/117),
+[#118](https://github.com/budgetanalyzer/budget-analyzer-web/pull/118),
+[#119](https://github.com/budgetanalyzer/budget-analyzer-web/pull/119), and
+[#120](https://github.com/budgetanalyzer/budget-analyzer-web/pull/120), while
+`ext-authz` opened [#1](https://github.com/budgetanalyzer/ext-authz/pull/1).
+All six target `dependency-automation-trial`, carry the `security` label, and
+have GitHub auto-merge disabled. The five-PR frontend burst crossed the plan's
+three-PR stop threshold.
+
+This is a shared-policy defect, not evidence that the top-level routine limit
+failed. Renovate vulnerability-alert PRs ignore top-level
+`branchConcurrentLimit`, `commitHourlyLimit`, `prConcurrentLimit`,
+`prHourlyLimit`, and schedule by default. Their default dedicated concurrent
+limit is zero, meaning unlimited. The shared preset correction adds
+`vulnerabilityAlerts.prConcurrentLimit: 3`, retaining an unrestricted security
+schedule and `automerge: false` while giving vulnerability fixes a separate
+three-PR budget. It does not close the six existing PRs. Publish and validate
+the corrected trial preset before B4, preserve those PRs open and unmerged, and
+use them as the baseline for the seven second cycles.
 
 The executable
 [trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
@@ -376,14 +445,14 @@ the Mend App is active.
 
 ## Phase 12 activation evidence
 
-The 2026-09-14 operator report and public checks establish the bounded trial's
-zero-spend control, published trial refs, initial hosted branch measurements,
-and current public artifact snapshot. The orchestration dry run and branch
-build/scan/generation jobs are now linked below. There is still no App
-installation evidence, Dependency Dashboard URL, accepted Java graph submission,
-Dependabot settings or alert export, bot pull request, or scheduled scanner run.
-Those default-only rows remain `pending`; none is being reclassified as a
-scanner limitation or a pass.
+The 2026-09-14 operator report and subsequent public checks establish the
+bounded trial's zero-spend control, published trial refs, initial hosted branch
+measurements, all nine Dependency Dashboards, five accepted Java graphs, alert
+counts, and eight live bot PRs. The orchestration dry run and branch
+build/scan/generation jobs are linked below. Seven consumer second cycles,
+scheduled scanner runs, uploads, and final benchmark reconciliation remain
+pending. B4 is paused until the nested vulnerability limit is published; no
+pending row is being reclassified as a scanner limitation or a pass.
 
 The operator must follow the ordered
 [activation procedure](../dependency-automation.md#activation-procedure) and
@@ -402,10 +471,10 @@ URL, tool/database version where applicable, and the final status.
 | All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata now records successful initial branch jobs in all nine repositories with zero artifacts. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial refs and initial hosted branch jobs passed — detailed report review, default-only behavior, and upload sizing remain pending** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve the explicit orchestration trial ref. | Orchestration source and preset ref `24ffc8e36bf87a730bb6a25961059becbdb67d72` resolved successfully in hosted dry-run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973); all nine trial refs are publicly resolvable. Keep the preset ref frozen during each evidence batch. | **Trial preset publication and hosted resolution passed** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` or the trial-only marked-push fallback | Local platform mode cannot perform a true full dry run or GitHub lookups. Before the temporary-default switch, GitHub did not expose **Run workflow**, so the branch-only workflow used its reviewed one-repository wrapper. The temporary default now permits normal manual dispatch without changing that read-only execution contract. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) established 109 dependencies in 37 package files and retained the Aqua Security IP-allow-list and anonymous Docker Hub page-11 gaps. Trial-default manual run [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322) then passed on the same exact source/preset SHA: both jobs succeeded sequentially in 2 minutes 27 seconds, all structural hard gates passed, uploads skipped, and artifact count was zero. | **Trial-default hosted mechanics passed — individual Aqua Security and Docker Hub lookup coverage remains incomplete** |
-| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | The operator installed Renovate-only Community in Scan and Alert mode for orchestration only and reports graph/alerts enabled, alert-read access granted where offered, and Dependabot version/security-update PRs disabled. [Dashboard #55](https://github.com/budgetanalyzer/orchestration/issues/55) was created by `renovate[bot]` with 95 approval-gated and 75 scheduled proposals and no PR burst. Representative [PR #56](https://github.com/budgetanalyzer/orchestration/pull/56) targets the trial default, changes only the expected Renovate pin, passed config validation, and explicitly reports automerge disabled. The operator reported no issue in the requested two-cycle Mend telemetry review. | **Orchestration Step 5 App acceptance passed — consumer activation pending** |
-| Four Java consumers | Mend App-settings GitHub Packages access | Public inspection on `2026-09-13` showed all four published `service-common` Maven packages in GitHub's public-package filter. GitHub Packages still requires authentication to install public Maven packages; agents cannot inspect or receive the existing credential. | Reconfirm package visibility, then first test Mend's App-token GitHub Packages host rules. If a separate credential is required, store it only in Mend App settings and reference it from `hostRules` with a secret placeholder. Confirm free-App support and retain sanitized lookup logs for each consumer. | **Public visibility preflight passed — authenticated hosted lookup pending** |
-| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Public effects show orchestration onboarding and a dashboard-triggered proposal cycle; the operator reviewed both Mend cycles without reporting an issue, but exact private timestamps/durations were not transcribed. Other repositories are not activated. | Retain the public orchestration timestamps and operator review, then record two successful bot cycles per remaining repository plus one scheduled scan cycle for each prepared scanner. Include timestamps, revisions, durations, dashboard/proposal links, database versions, and rate-limit/timeout results. | **Orchestration two-cycle acceptance passed with operator summary — consumer cycles and scheduled scans pending** |
-| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior required live App evidence. | Orchestration uses Renovate-only Community. PR #56 explicitly reports automerge disabled; the operator reports Dependabot update PRs disabled; only one Renovate PR/branch exists; and Dashboard #55 contains no first-party Budget Analyzer image proposal. Repeat this proof for each consumer. | **Orchestration passed — consumer evidence pending** |
+| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Mend is now restricted to all nine selected repositories and all nine Dashboards exist. The operator reports all seven consumer onboarding jobs green after the narrowly scoped Maven correction. Five consumer graphs are accepted and graph-backed alert counts are recorded. Orchestration and `service-common` retain their representative routine PRs; six consumer vulnerability PRs use the trial base and have automerge disabled. The five-PR frontend burst exposed the missing dedicated vulnerability limit, so B4 remains paused until the corrected preset is published. | **All repositories onboarded — nested alert-limit correction and seven second cycles pending** |
+| Four Java consumers | Mend App-settings GitHub Packages access | Public inspection on `2026-09-13` showed all four published `service-common` Maven packages in GitHub's public-package filter. GitHub Packages still requires authentication to install public Maven packages; agents cannot inspect or receive the existing credential. | The operator stored the existing package-read credential in Mend and configured an organization-level Maven host rule scoped only to `https://maven.pkg.github.com/budgetanalyzer/service-common/`. All four Dashboards now list their applicable internal coordinates, B1 completed green, and the accepted SBOMs independently prove package resolution in Actions. | **Authenticated hosted lookup and graph package resolution passed — credential details intentionally not retained** |
+| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Public effects show orchestration and `service-common` onboarding plus dashboard-triggered second cycles; the operator reviewed those Mend cycles without reporting an issue, but exact private timestamps/durations were not transcribed. The seven remaining repositories have one green onboarding cycle each. | Publish the nested vulnerability limit, then request and record one second green cycle for each of the seven remaining repositories. Scheduled scanner cycles remain a later, separately authorized batch. | **Two-cycle acceptance passed for orchestration and service-common — seven B4 cycles and scheduled scans pending** |
+| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior required live App evidence. | Renovate-only Community remains the sole PR owner. The operator reports Dependabot update PRs disabled. The two representative routine PRs and six consumer security PRs all use the trial base with GitHub auto-merge disabled. The security burst is retained as evidence and does not authorize merge or paid features. | **No duplicate owner or automerge observed — B4 and remaining proposal review pending** |
 
 ### Repository deferred-check reconciliation
 
@@ -417,24 +486,24 @@ URL, tool/database version where applicable, and the final status.
 | `service-common` | Hosted Renovate lookup for Gradle/catalog/wrapper/Actions | Actions and published-preset lookups require hosted GitHub access. | [Dashboard #56](https://github.com/budgetanalyzer/service-common/issues/56) shows Gradle, catalog, wrapper, Actions, maintained Spring-line and Spring 4/test-stack proposals, plus the explicit trial preset, with no visible config warning. The operator reported onboarding and post-graph cycles green. | **Passed for dashboard discovery — private log details not transcribed** |
 | `service-common` | `.github/workflows/dependency-submission.yml` | The complete 216-coordinate local snapshot was not submitted. | Trial push run [34823856894](https://github.com/budgetanalyzer/service-common/actions/runs/34823856894) passed generation-only mode. Manual [run 34937981854](https://github.com/budgetanalyzer/service-common/actions/runs/34937981854) attempt 1 exposed disabled Dependency graph and automatically retained 7,444-byte artifact `10383564434` through `2026-12-14`; after enablement, attempt 2 submitted successfully at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94`. GitHub's accepted SBOM has 222 packages. | **Accepted complete graph passed — scheduled submission pending** |
 | `service-common` | Representative bot PR `build.yml`, graph/alerts, and dashboard | No App, PR, or administrator evidence was previously available. | The operator reported 89 graph-backed Dependabot alerts. Representative [PR #57](https://github.com/budgetanalyzer/service-common/pull/57) targets the trial default, changes only Gradle `9.5.0` to `9.5.1`, states automerge is disabled, and passed [build 34940825035](https://github.com/budgetanalyzer/service-common/actions/runs/34940825035) with cache and uploads off. No second PR or security-fix PR appeared. | **Manual rehearsal passed — scheduled and live vulnerability-fix PR evidence pending** |
-| `currency-service` | Hosted Renovate lookup for 57 extracted records, including three `org.budgetanalyzer` coordinates and Actions | Authenticated Maven and GitHub lookups were intentionally unavailable locally. | Retain App log/dashboard evidence proving preset, Actions, and authenticated Maven lookups succeed without auth/config/timeout errors. | **Pending — no hosted lookup** |
-| `currency-service` | `.github/workflows/dependency-submission.yml` | Local output had only 87 build/tool coordinates because `serviceCommon` 0.0.16 could not resolve. | Trial push run [34823893235](https://github.com/budgetanalyzer/currency-service/actions/runs/34823893235) passed generation-only mode at `e89758adfced41af4106dc9d0c7398bfdff604e8`; companion build [34823893237](https://github.com/budgetanalyzer/currency-service/actions/runs/34823893237) also passed, proving hosted package resolution. Submission, detailed graph review, and GitHub acceptance remain pending. | **Hosted build/generation passed — accepted complete graph pending** |
+| `currency-service` | Hosted Renovate lookup for 57 extracted records, including internal `org.budgetanalyzer` coordinates and Actions | Authenticated Maven and GitHub lookups were intentionally unavailable locally. | The post-routing-fix scan was operator-reported green with no warnings, and Dashboard #84 lists the applicable internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by sanitized operator report and Dashboard evidence — second cycle pending** |
+| `currency-service` | `.github/workflows/dependency-submission.yml` | Local output had only 87 build/tool coordinates because `serviceCommon` 0.0.16 could not resolve. | Manual [run 35083509407](https://github.com/budgetanalyzer/currency-service/actions/runs/35083509407) passed at `93da3e3599e71cfa453ed78d41691fdfd1edadc3`. GitHub's accepted SBOM has 314 packages, including all applicable internal coordinates; the operator reported 108 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
 | `currency-service` | Representative bot PR `build.yml`, graph/alerts, and settings | Historical ordinary build `34027551741` predates submission automation and is insufficient. | Retain a current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — current evidence not supplied** |
-| `permission-service` | Hosted Renovate lookup for 45 extracted records, including three internal coordinates and Actions | Authenticated Maven and GitHub lookups were deferred. | Retain App log/dashboard evidence proving preset, Actions, and authenticated Maven lookups succeed. | **Pending — no hosted lookup** |
-| `permission-service` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted internal and application runtime/test trees. | Trial push run [34823913812](https://github.com/budgetanalyzer/permission-service/actions/runs/34823913812) passed generation-only mode at `3e532f87eed65fa0202e35039938f131f1c453f8`; companion build [34823913772](https://github.com/budgetanalyzer/permission-service/actions/runs/34823913772) also passed. Submission, detailed graph review, and GitHub acceptance remain pending. | **Hosted build/generation passed — accepted complete graph pending** |
+| `permission-service` | Hosted Renovate lookup for 45 extracted records, including three internal coordinates and Actions | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding, and Dashboard #20 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by operator report and Dashboard evidence — second cycle pending** |
+| `permission-service` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted internal and application runtime/test trees. | After correcting the secret/variable scope, manual [run 35091521154](https://github.com/budgetanalyzer/permission-service/actions/runs/35091521154) passed at `a31e7c5880a3d3e742e7224297e8226d9e7a47ff`. GitHub's accepted SBOM has 236 packages and all three internal coordinates; the operator reported 54 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
 | `permission-service` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
-| `transaction-service` | Hosted Renovate lookup for 43 extracted records, including three internal coordinates and Actions | Authenticated Maven and GitHub lookups were deferred. | Retain App log/dashboard evidence proving preset, Actions, and authenticated Maven lookups succeed. | **Pending — no hosted lookup** |
-| `transaction-service` | `.github/workflows/dependency-submission.yml` | Local 91-coordinate graph omitted internal, PostgreSQL, and Testcontainers trees. | Trial push run [34823873554](https://github.com/budgetanalyzer/transaction-service/actions/runs/34823873554) passed generation-only mode at `0a9de2ec5b8ea9742ad44b02c4b7148ca568c190`; companion build [34823873507](https://github.com/budgetanalyzer/transaction-service/actions/runs/34823873507) also passed. Submission, detailed graph review, and GitHub acceptance remain pending. | **Hosted build/generation passed — accepted complete graph pending** |
+| `transaction-service` | Hosted Renovate lookup for 43 extracted records, including three internal coordinates and Actions | The first onboarding cycle returned `no-result` before the scoped Mend credential and Maven routing correction. | The operator reported a post-correction green B1 result, and Dashboard #84 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed after correction — second cycle pending** |
+| `transaction-service` | `.github/workflows/dependency-submission.yml` | Local 91-coordinate graph omitted internal, PostgreSQL, and Testcontainers trees. | After correcting the secret/variable scope, manual [run 35091855229](https://github.com/budgetanalyzer/transaction-service/actions/runs/35091855229) passed at `aa439d27aec63031ab056d4f4afe70cc43e13cca`. GitHub's accepted SBOM has 238 packages and all three internal coordinates; the operator reported 54 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
 | `transaction-service` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
-| `session-gateway` | Hosted Renovate lookup for 39 extracted records, including two internal coordinates, Actions, and images | Authenticated Maven and GitHub lookups were deferred. | Retain App log/dashboard evidence proving preset, Actions, authenticated Maven, and image lookups succeed. | **Pending — no hosted lookup** |
-| `session-gateway` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted the reactive application tree after a GitHub Packages HTTP 401. | Trial push run [34824028238](https://github.com/budgetanalyzer/session-gateway/actions/runs/34824028238) passed generation-only mode at `fe6061562e52eccf42570265b5299439c6827c9b`; companion build [34824028192](https://github.com/budgetanalyzer/session-gateway/actions/runs/34824028192) also passed. Submission, detailed reactive graph review, and GitHub acceptance remain pending. | **Hosted build/generation passed — accepted complete graph pending** |
+| `session-gateway` | Hosted Renovate lookup for 39 extracted records, including internal coordinates, Actions, and images | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding, and Dashboard #25 lists its internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by operator report and Dashboard evidence — second cycle pending** |
+| `session-gateway` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted the reactive application tree after a GitHub Packages HTTP 401. | After correcting the secret/variable scope, manual [run 35092673426](https://github.com/budgetanalyzer/session-gateway/actions/runs/35092673426) passed at `8f8b8c30aa3008f870879ab623a0b6ef8ee04ec5`. GitHub's accepted SBOM has 241 packages and all three internal coordinates; the operator reported 78 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete reactive graph passed — detailed advisory mapping and scheduled submission pending** |
 | `session-gateway` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
 | `budget-analyzer-web` | Hosted Renovate lookup for 65 npm/lockfile/Dockerfile/Actions records | Actions and published preset were hosted-only; local Docker token acquisition repeatedly failed for Node and NGINX. | Retain App logs/dashboard proving npm, lockfile, Node, NGINX, Actions, and setup-node lookups succeed and both maintained and toolchain-major proposals remain visible. | **Pending — Docker/GitHub retries unproved** |
 | `budget-analyzer-web` | `.github/workflows/dependency-audit.yml` | Local audits reproduced findings, but hosted install/registry/audit execution was unobserved. | Trial push run [34823959669](https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/34823959669) passed at `2cbef3f17f546fe167628b221a1cb9dec810c2bd` with uploads disabled. Retain/reconcile the detailed reports before claiming finding parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed report and scheduled evidence pending** |
-| `budget-analyzer-web` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted bot PR or settings evidence exists. | Retain successful checks for representative lockfile maintenance and approved toolchain-major proposals, dashboard/alert URLs, and no-duplicate/no-automerge evidence. | **Pending — no hosted evidence** |
+| `budget-analyzer-web` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened five vulnerability PRs before the planned representative routine proposal. | Security PRs #116–#120 all target the trial branch, carry the security label, and have auto-merge disabled, but their count exceeded the trial stop threshold. Preserve them and publish the nested three-PR vulnerability limit before B4 or Batch C. | **Live vulnerability path proved but concurrency acceptance failed — correction and representative routine PR pending** |
 | `ext-authz` | Hosted Renovate lookup for 21 Go/Dockerfile/Actions/scanner records | GitHub lookups and the Go builder Docker lookup were incomplete locally. | Retain App logs/dashboard proving preset, Actions, Go input, `golang:1.24-alpine`, modules, and scanner lookups succeed. | **Pending — Go builder/GitHub retries unproved** |
 | `ext-authz` | `.github/workflows/go-vulnerability-check.yml` | Local `govulncheck` reproduced GO-2025-3540, but the hosted scanner/database path was unobserved. | Trial push run [34823939945](https://github.com/budgetanalyzer/ext-authz/actions/runs/34823939945) passed at `75ed2bda4de7460332a8dea656def0459064753f` with uploads disabled. Retain/reconcile the detailed finding before claiming advisory parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed finding and scheduled evidence pending** |
-| `ext-authz` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted bot PR or administrator evidence exists. | Retain successful bot PR checks, dashboard/alert URLs, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
+| `ext-authz` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened a vulnerability PR before the planned representative routine proposal. | Security PR #1 targets the trial branch, carries the security label, and has auto-merge disabled. Preserve it as the one-PR baseline; after the nested limit is published, at most two additional vulnerability PRs may open. | **Live vulnerability path and no-automerge passed — second cycle and representative routine PR pending** |
 | `workspace` | Hosted Renovate lookup for 16 Dockerfile/ARG/download/Actions records | Published preset and GitHub release lookups are hosted-only. | Retain App logs/dashboard proving every identity resolves, Ubuntu 24.04 updates preserve digest-only syntax, maintained Go line and majors remain visible, and checksum proposals remain approval-gated. | **Pending — no hosted lookup** |
 | `workspace` | `.github/workflows/workspace-image-security-evidence.yml`, cost, and public downloads | The no-cache build may consume substantial Actions time; hosted download/build/scan paths were previously unobserved. | Trial push run [34823984859](https://github.com/budgetanalyzer/workspace/actions/runs/34823984859) passed at `d8e384474512eafb827970db8194413764b79098` in about six minutes with uploads and optional caches disabled. Retain/review the detailed inventory and scan report before claiming parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed report, upload sizing, and scheduled evidence pending** |
 | `workspace` | Graph/alerts, dashboard, and settings | Administrator settings are not visible locally. | Retain sanitized settings, dashboard/proposal and alert evidence, including explicit unversioned apt/npm/PyPI, VIA, Go amd64-only, and lifecycle limitations. | **Pending — no hosted evidence** |
@@ -452,7 +521,7 @@ dispositions require hosted URLs/artifacts and must use `reproduced`,
 
 | Baseline area | Local preparation evidence | Phase 12 disposition |
 | --- | --- | --- |
-| Spring Boot, Cloud, Modulith, SpringDoc, Testcontainers, and other Java dependencies | Native extraction exists in all five Java repos. Only `service-common` produced a complete local graph; four consumer graphs were incomplete without authenticated Maven access. | **Pending** complete accepted submissions, inherited alerts, maintained-line proposals, and Spring 4 migration visibility for all five repos. |
+| Spring Boot, Cloud, Modulith, SpringDoc, Testcontainers, and other Java dependencies | Native extraction exists in all five Java repos. GitHub now has accepted complete graphs for `service-common` and all four consumers, including internal packages and the expected servlet/reactive runtime split. | **Accepted graph coverage passed; pending** per-advisory alert mapping, maintained-line proposals, and Spring 4 migration visibility across the B4 Dashboards. |
 | Frontend direct/transitive packages and toolchain majors | Renovate extracted npm/lockfile inputs; both local audits reproduced the benchmark's 20 full-tree and four production findings by package identity. | **Pending** hosted audit, alerts, dashboard, maintained patches, later majors, and bot PR checks. |
 | `go-redis` and Go runtime | Local Renovate lookup found go-redis 9.7.3 and later v9 lines; local govulncheck reproduced reachable GO-2025-3540. | **Pending** hosted scanner/database evidence, alerts, Go builder lookup, and Go lifecycle migration proposal. |
 | Deployed third-party images | Extraction and an exact-platform scan path exist. Redis and Temurin primary versions were not inventoried; some registry retries failed. | **Pending** full hosted image artifact and proposals; Redis, Temurin, and PostgreSQL patch parity is not established. |
@@ -467,12 +536,12 @@ dispositions require hosted URLs/artifacts and must use `reproduced`,
 | Advisory | Affected area | Local preparation evidence | Final disposition |
 | --- | --- | --- | --- |
 | `GHSA-c8h9-259x-jff4` | Redis 7.4.8 | Redis binary/version absent from Trivy inventory. | **Missing; hosted evidence pending** |
-| `GHSA-7m2p-62gw-p8qq` | Spring Framework 6.2.18 | Complete local `service-common` graph only; no submitted consumer graphs or alerts. | **Pending** |
-| `GHSA-5m62-pw8w-7w9f` | Tomcat 10.1.54 | Same graph limitation; applicability needs service review. | **Pending** |
-| `GHSA-9xv2-5v5q-p794` | Tomcat 10.1.54 | Same graph limitation; applicability needs service review. | **Pending** |
-| `GHSA-38f8-5428-x5cv` | Netty 4.1.132 | Consumer reactive graph is incomplete. | **Pending** |
-| `GHSA-8c42-7qj2-3j46` | Netty 4.1.132 | Consumer reactive graph is incomplete. | **Pending** |
-| `GHSA-j3rv-43j4-c7qm` | Jackson 2.21.2 | No accepted graph or Dependabot alert evidence. | **Pending** |
+| `GHSA-7m2p-62gw-p8qq` | Spring Framework 6.2.18 | Accepted graphs expose Spring 6.2.18 in all four consumers; aggregate alert counts are recorded. | **Pending per-advisory alert mapping** |
+| `GHSA-5m62-pw8w-7w9f` | Tomcat 10.1.54 | Accepted servlet-service graphs expose Tomcat 10.1.54; `session-gateway` correctly has no Tomcat package. | **Pending per-advisory alert mapping and applicability review** |
+| `GHSA-9xv2-5v5q-p794` | Tomcat 10.1.54 | Accepted servlet-service graphs expose Tomcat 10.1.54; `session-gateway` correctly has no Tomcat package. | **Pending per-advisory alert mapping and applicability review** |
+| `GHSA-38f8-5428-x5cv` | Netty 4.1.132 | The accepted `session-gateway` graph exposes Reactor Netty/Netty 4.1.132 and Lettuce. | **Pending per-advisory alert mapping** |
+| `GHSA-8c42-7qj2-3j46` | Netty 4.1.132 | The accepted `session-gateway` graph exposes Reactor Netty/Netty 4.1.132 and Lettuce. | **Pending per-advisory alert mapping** |
+| `GHSA-j3rv-43j4-c7qm` | Jackson 2.21.2 | Accepted graphs expose Jackson Databind 2.21.2 in all four consumers; aggregate alert counts are recorded. | **Pending per-advisory alert mapping** |
 | `GHSA-r2pg-r6h7-crf3` | External Secrets 2.2.0 | Primary Go module had no version in representative image inventory. | **Missing; hosted evidence pending** |
 | `GHSA-wv26-88m5-6h59` | External Secrets 2.2.0 | Primary Go module had no version in representative image inventory. | **Missing; hosted evidence pending** |
 | `GHSA-79gf-7frw-68m9` | Kyverno 1.18.0 | Reproduced locally as `CVE-2026-54523`; fixed version 1.18.2. | **Pending hosted reproduction/supersession proof** |
@@ -490,18 +559,16 @@ digest-only proposals are not proof of those embedded patch versions.
 ## Current outcome
 
 Ecosystem-wide installation and benchmark parity are both **not established**.
-The orchestration Step 5 pilot passed through its Dashboard, representative PR,
-operator-reviewed Mend cycles, and proposal controls. `service-common` then
-passed dual-branch protection, temporary-default onboarding, accepted graph and
-alert processing, two green Mend cycles, and a representative bot PR. All seven
-remaining repositories passed Batch A. Batch B B1 then exposed the expected
-authenticated Maven boundary in `transaction-service`; the operator reports the
-Mend credential and narrowly scoped host rule are configured. The repository
-routing correction is merged through all affected `main` and trial branches,
-and the operator reports that the post-merge `currency-service` scan succeeded
-with no warnings. The next operator action is confirmation of all seven green
-B1 onboarding results, including a post-correction `transaction-service` green
-result if still outstanding. B2 Java graph submissions must not start before
-that checkpoint. Consumer activation, scheduled scan cycles, the other accepted
-Java graphs, and final benchmark dispositions remain pending. Existing local
-misses remain gaps; lifecycle and exploitability assessment remain human work.
+The orchestration Step 5 pilot and `service-common` rehearsal passed. All seven
+remaining repositories passed Batch A and B1, and all four consumer Java graphs
+are accepted with complete internal-package coverage and recorded alert counts.
+The graph run exposed and corrected repository controls mistakenly entered as
+secrets instead of variables. B4 is paused before its Dashboard requests because
+the first onboarding cycles opened five frontend vulnerability PRs and one Go
+vulnerability PR. Their bases and no-automerge state are correct, but the
+frontend exceeded the trial stop threshold because Renovate's vulnerability
+path ignored the top-level PR limits. Publish and validate the nested three-PR
+vulnerability limit, then resume B4 against the retained six-PR baseline.
+Scheduled scan cycles, Batch C, and final benchmark dispositions remain pending.
+Existing local misses remain gaps; lifecycle and exploitability assessment
+remain human work.

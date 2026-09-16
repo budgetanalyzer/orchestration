@@ -33,9 +33,53 @@ after correcting trial controls that had been entered as repository secrets
 instead of repository variables. Before B4, public verification found five
 automatic vulnerability-fix PRs in `budget-analyzer-web` and one in `ext-authz`.
 All use the trial base and have automerge disabled, but the frontend burst
-exceeded the three-PR trial stop threshold. B4 is paused until the shared preset
-publishes a dedicated three-PR vulnerability-alert limit; existing security PRs
-remain open and unmerged as evidence.
+exceeded the three-PR trial stop threshold. The dedicated three-PR
+vulnerability-alert limit was published through orchestration PR #62, and both
+trial-branch workflows passed with zero artifacts. The operator then requested
+all seven B4 cycles. Six were initially green; `workspace` alone reported a
+package lookup warning for `aquasecurity/setup-trivy`. Workspace correction PR
+#9 replaced only that native lookup with a public `git-tags` manager. Its
+automatic corrective cycle refreshed Dashboard #8 with the exact pinned action
+and no repository problem, while image-evidence run 35098592885 passed at
+`110e5f78fd995ed281d425f9da90bc81079f651d` with uploads skipped and zero
+artifacts. Batch B and its public checkpoint are complete. Workspace PR #10
+published the same-repository, trial-targeted image-evidence pull-request path at
+`09ee0a2afecc2af6c3a216b225537c680ef68848`, and pull-request run 35100312719
+passed. The operator explicitly accepted the still-running post-merge run
+35100778569 as successful for the Batch C starting gate; the Phase 1 public
+refresh subsequently confirmed that run completed successfully. Batch C then
+passed: `currency-service` PR #87,
+`budget-analyzer-web` PR #122, `ext-authz` PR #3, and `workspace` PR #11 all
+target the trial branch, contain their intended routine dependency diffs, carry
+the `dependencies` label, and have automerge disabled. Their representative
+runs 35101624894, 35102606776, 35103116099, and 35103462824 passed with trial
+uploads skipped, zero retained artifacts, and no Actions cache entries for the
+PR refs. The Phase 12 completion baseline refreshed public state at
+`2026-09-16T17:05:13Z`: all nine repositories still advertise the protected
+trial branch as default, all recorded main/trial SHAs are unchanged, all twelve
+known Renovate PRs remain open against the trial branch with the expected label
+and GitHub auto-merge unset, and the public Actions cache inventory is empty in
+all nine repositories. It also found a previously unrecorded failed Build run
+on frontend security PR #120: `npm ci` failed before the remaining build gates.
+The public patch changes only `package.json` from Vitest 3 to 4 while leaving
+`package-lock.json` and the grouped Vitest companion packages unchanged, so
+locked installation correctly rejected the malformed proposal. The operator
+identified its creation as an accidental trial-variable side effect and
+accepted it as non-representative; routine frontend PR #122 passed the same
+Build workflow. Keep #120 open and unmerged until planned rollback, but do not
+rerun or repair it merely for trial acceptance. Its explicit disposition means
+it no longer blocks Phase 2 or later batch authorization by itself.
+Public artifact inventory now contains 502,562,266 non-expired bytes: 7,444
+bytes from the retained `service-common` graph diagnostic and 502,554,822 bytes
+from ordinary seven-day Java build artifacts in the four consumer services.
+At the authenticated cost checkpoint, the operator reconfirmed no GitHub
+payment method, reported `$1.07` gross Actions usage fully offset by a `$1.07`
+discount with `$0` billed, and confirmed zero-dollar budgets with **Stop usage**
+enabled. This establishes redundant spend-stopping controls but does not add
+artifact headroom.
+Keep the four Batch C routine PRs and six existing security PRs open and
+unmerged. Schedules, uploads, cost reconciliation, final benchmark review,
+promotion, and ongoing installation remain pending and unauthorized.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -193,6 +237,10 @@ Keep the prepared implementation on `dependency-automation-trial` in all nine
 scoped repositories. Use that exact shared name for trial refs and workflow guards.
 The [Phase 12 operator plan](plans/dependency-automation-phase-12-operator-plan.md)
 owns the checklist, required workflow adaptations, trial limits, and rollback.
+After Batch C, the executable
+[Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md)
+owns cost reconciliation, controlled uploads, real scheduled evidence, rollback
+verification, and decision preparation across explicit human checkpoints.
 This planning change does not perform branch operations or activate anything.
 
 GitHub schedules run only on the repository's default branch. New manual
@@ -421,19 +469,47 @@ and has GitHub auto-merge disabled. Renovate vulnerability-alert PRs ignore the
 top-level `prConcurrentLimit`, `prHourlyLimit`, and schedule by default. Because
 the shared preset had no nested vulnerability limit, the frontend opened five
 PRs and crossed the plan's stop threshold. The durable correction adds
-`vulnerabilityAlerts.prConcurrentLimit: 3`. Publish and validate that correction
-on the shared trial preset before B4. The limit does not close existing PRs:
+`vulnerabilityAlerts.prConcurrentLimit: 3`; it was published and validated on
+the shared trial preset before B4. The limit does not close existing PRs:
 keep `budget-analyzer-web` PRs #116–#120 and `ext-authz` PR #1 open and unmerged,
 and treat them as the post-correction baseline.
+
+The limit was published to the trial preset through
+[orchestration PR #62](https://github.com/budgetanalyzer/orchestration/pull/62)
+at `c9e6f31208a5f668fcccd3e7ff2fea649654443c`. The resulting
+[Dependency Automation Configuration run 35095610585](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610585)
+and
+[Exact Image Security Evidence run 35095610628](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610628)
+both passed with zero artifacts. The operator then requested the seven B4 Mend
+cycles. Six completed green. `workspace` alone initially reported `no-result` for the
+public `aquasecurity/setup-trivy` GitHub tag lookup in
+`.github/workflows/workspace-image-security-evidence.yml`, despite the pinned
+commit resolving exactly to public tag `v0.3.1`. The workspace correction
+disables only that native action record and replaces it with a regex-managed
+`git-tags` lookup against the public Git repository. Workspace PR #9 merged
+that correction into the trial branch at
+`110e5f78fd995ed281d425f9da90bc81079f651d`. The automatic corrective cycle
+updated Dashboard #8 to detect `aquasecurity/setup-trivy v0.3.1` at the exact
+pinned commit with no repository problem. The resulting
+[Workspace Image Security Evidence run 35098592885](https://github.com/budgetanalyzer/workspace/actions/runs/35098592885)
+also passed with uploads skipped and zero artifacts. Post-cycle public
+inspection found the frontend five-PR and `ext-authz` one-PR security baselines
+unchanged, with no open pull request in the other five B4 repositories. Batch B
+is complete; the six earlier green B4 cycles must not be repeated.
 
 ### Trial workflow controls
 
 All nine repositories use the exact protected ref
 `refs/heads/dependency-automation-trial`. Relevant build workflows accept pushes
 to that ref and pull requests whose base is either `main` or the trial branch.
-Scanner and graph workflows accept only direct `main` or trial refs; they reject
-pull-request merge refs and unrelated manual-dispatch refs. Snapshot and release
-publishing workflows remain unchanged.
+Scanner and graph workflows normally accept only direct `main` or trial refs.
+The workspace image-evidence workflow additionally accepts same-repository pull
+requests targeting the trial branch so its Batch C representative PR receives
+the complete no-cache image build and scan. That path uses read-only repository
+permissions, keeps optional caches and uploads behind the trial variables, and
+measures the same sealed evidence allowlist without retaining an artifact while
+uploads are disabled. Unrelated pull-request refs and manual-dispatch refs remain
+rejected. Snapshot and release publishing workflows remain unchanged.
 
 Repository variables control every trial-side expansion and are disabled when
 unset or set to any value other than the exact string `true`:

@@ -881,6 +881,10 @@ authorize promotion to main.
 Read the canonical guide, the
 [Phase 12 operator plan](dependency-automation-phase-12-operator-plan.md), all
 repo-local deferred-check handoffs, phase evidence, and the saved review.
+After Batch C, use the
+[Phase 12 completion plan](dependency-automation-phase-12-completion-plan.md)
+for the cost, controlled-upload, scheduled-evidence, rollback, and decision
+sequence.
 Phases 1–10 must have completed local preparation. The Mend account is created
 according to the operator; tier, billing, App scope, and package access are still
 unverified.

@@ -20,16 +20,37 @@ The serialized `service-common` batch now has dual-branch protection, a trial
 default, two operator-reported green Mend cycles, accepted 222-package graph
 submission, 89 graph-backed alerts, and passing representative PR #57. All
 seven remaining B1 onboarding results are green and the four Java consumer
-graphs are accepted with complete internal-package coverage. B4 is paused
-before execution: the first onboarding cycles opened five frontend and one Go
-security PR, exposing that vulnerability alerts ignore the top-level PR limits.
-The shared preset now prepares a dedicated three-PR vulnerability budget for
-publication before the seven second cycles. Scheduled and upload-size evidence
-remains pending.
+graphs are accepted with complete internal-package coverage. The shared
+three-PR vulnerability budget was published and validated before B4. Six of the
+seven second cycles completed green initially; `workspace` alone reported a
+`setup-trivy` package lookup warning. Workspace PR #9 published the narrow
+public-Git-tag fallback at `110e5f78fd995ed281d425f9da90bc81079f651d`.
+Dashboard #8 then refreshed with the exact action tag and commit and no
+repository problem, and image-evidence run 35098592885 passed with zero
+artifacts. Batch B and its public checkpoint are complete. Workspace PR #10 published
+the trusted Batch C pull-request trigger at
+`09ee0a2afecc2af6c3a216b225537c680ef68848`, and PR run 35100312719 passed. The
+operator accepted the still-running post-merge run 35100778569 as successful for
+the purpose of starting Batch C; the Phase 1 refresh later confirmed its public
+conclusion as success. Batch C then passed: four routine PRs have the exact
+trial base, intended diffs,
+`dependencies` label, disabled automerge, and successful representative runs.
+All four runs skipped uploads, retained zero artifacts, and have no Actions
+cache entry for their PR refs. The Phase 12 completion baseline then found one
+previously unrecorded failure on frontend security PR #120 and 502,562,266
+non-expired public artifact bytes. The #120 patch changes only `package.json`
+from Vitest 3 to 4 without updating `package-lock.json` or the grouped Vitest
+companions, so `npm ci` correctly rejected it. At `2026-09-16T17:35:49Z`, the
+operator identified its creation as an accidental trial-variable side effect
+and accepted it as non-representative. Routine PR #122 passed the same Build
+workflow. Keep #120 open and unmerged until rollback; its explicit disposition
+removes it as an expansion blocker. Scheduled, upload-size, cost, and final
+benchmark evidence remain pending.
 
-**Last updated:** 2026-09-16 (B1–B3 evidence recorded; pre-B4 security-PR burst
-paused execution; nested vulnerability limit prepared; prior local and hosted
-evidence retained)
+**Last updated:** 2026-09-16 (Checkpoint A zero-spend and Mend state accepted;
+malformed accidental frontend security PR #120 explicitly dispositioned;
+schedules, uploads, cost reconciliation, and final benchmark dispositions
+remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -39,13 +60,197 @@ historical acceptance benchmark, and
 
 ## Phase 12 branch rehearsal handoff
 
-Follow the [revised operator plan](../plans/dependency-automation-phase-12-operator-plan.md)
-for the remaining hosted trial. The operator selected a bounded trial and
+The A-C procedure remains in the
+[revised operator plan](../plans/dependency-automation-phase-12-operator-plan.md).
+After Batch C, follow the executable
+[Phase 12 completion plan](../plans/dependency-automation-phase-12-completion-plan.md)
+for cost, upload, schedule, rollback, and decision evidence. The operator
+selected a bounded trial and
 reported that neither GitHub nor Mend has a payment method. GitHub documents that
 over-quota Actions use is blocked without a valid payment method, establishing a
-zero-spend boundary. All nine trial refs are now published, initial branch
-measurement runs completed, and default-only App, schedule, and alert checks
-remain deferred.
+zero-spend boundary. At `2026-09-16T17:27:55Z`, the operator reconfirmed that
+GitHub has no payment method and reported an Actions billing view of `$1.07`
+gross usage, a `$1.07` included-usage discount, and `$0` billed usage. All nine
+At `2026-09-16T17:32:19Z`, the operator additionally confirmed zero-dollar
+budgets with **Stop usage** enabled. All nine trial refs are now published,
+initial branch measurement runs completed, and default-only App, schedule, and
+alert checks remain deferred.
+
+### Phase 12 completion Phase 1 public baseline
+
+The credential-free refresh observed public state at `2026-09-16T17:05:13Z`.
+Before inspection, orchestration was on `dependency-automation-trial` at
+`c9e6f31208a5f668fcccd3e7ff2fea649654443c` with the four pre-existing
+dependency-automation documents modified and the completion plan untracked.
+The seven service/application sibling checkouts were clean on their trial refs.
+The `workspace` checkout was clean on local branch `pr-workflow` at
+`bcb4991b96e4f5fad32a8ff5c305f2f09fbff94f`; public state, not that local
+branch, remains authoritative for its trial ref. No sibling was changed.
+
+All open pull requests in the table are authored by `renovate[bot]`, remain
+open and unmerged against `dependency-automation-trial`, carry exactly the
+listed routine or security label, and have GitHub auto-merge unset. The
+`merge_commit_sha` returned for an open pull request is GitHub's synthetic test
+merge and is not evidence of a merge.
+
+| Repository | Public default | `main` SHA | Trial SHA | Current bot-PR and workflow result |
+| --- | --- | --- | --- | --- |
+| `orchestration` | `dependency-automation-trial` | `57089578957bae3da42587a7e2902727c5473149` | `c9e6f31208a5f668fcccd3e7ff2fea649654443c` | Routine #56 (`dependencies`); current-head run 35068922686 passed |
+| `service-common` | `dependency-automation-trial` | `f31557761b80f17ce8fadc128e273b21b4fd07fe` | `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | Routine #57 (`dependencies`); run 34940825035 passed |
+| `currency-service` | `dependency-automation-trial` | `aa432316849c9231389f8a844325dcf0d64f7335` | `93da3e3599e71cfa453ed78d41691fdfd1edadc3` | Routine #87 (`dependencies`); run 35101624894 passed |
+| `permission-service` | `dependency-automation-trial` | `f2d9d55b149c1f3a00e7f2edd85bafe01a46c5f1` | `a31e7c5880a3d3e742e7224297e8226d9e7a47ff` | No bot PR; exact-trial build 35082242381 and graph run 35091521154 passed |
+| `transaction-service` | `dependency-automation-trial` | `ccc459f9ea954296a4d1cea6cdbc4b3acf994e6a` | `aa439d27aec63031ab056d4f4afe70cc43e13cca` | No bot PR; exact-trial build 35082230614 and graph run 35091855229 passed |
+| `session-gateway` | `dependency-automation-trial` | `a37c7a0bb832b857d3d7371e521ac82e99fc3b93` | `8f8b8c30aa3008f870879ab623a0b6ef8ee04ec5` | No bot PR; exact-trial build 35082219212 and graph run 35092673426 passed |
+| `budget-analyzer-web` | `dependency-automation-trial` | `b6f0d23c38428daf8412ae055ccbc9db89ac9517` | `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | Security #116-#120 (`security`) and routine #122 (`dependencies`); #116-#119 and #122 passed, but [#120 run 35069921284](https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/35069921284) failed at `npm ci` |
+| `ext-authz` | `dependency-automation-trial` | `917eae9c782b4b1c4d576258883c3e558a7d55a1` | `75ed2bda4de7460332a8dea656def0459064753f` | Security #1 (`security`) and routine #3 (`dependencies`); runs 35069819575 and 35103116099 passed |
+| `workspace` | `dependency-automation-trial` | `383efc840832d474cd9d60e0368ed2ded828e03c` | `09ee0a2afecc2af6c3a216b225537c680ef68848` | Routine #11 (`dependencies`); PR run 35103462824 and post-merge run 35100778569 passed |
+
+Each repository's public open-issue count reconciles exactly to the listed PRs
+plus its one known Dependency Dashboard (#55, #56, #84, #20, #84, #25, #121,
+#2, and #8 in table order); no additional open issue is visible.
+
+Public rules pages revalidated active
+`dependency-automation-trial-protection` rulesets `23314213`, `23413311`,
+`23529702`, `23529744`, `23529779`, `23529892`, `23529959`, `23529991`, and
+`23530015` in repository-table order. Every ruleset has no bypass actor, exact
+default, `main`, and trial targets, and only deletion, non-fast-forward, and
+pull-request rules. Public SBOM downloads freshly reconfirmed 222, 314, 236,
+238, and 241 packages for the five Java repositories, the exact trial document
+version, and all applicable internal coordinates in the four consumers.
+
+The public artifact and cache inventory is now materially different from the
+pre-trial zero-byte snapshot. The Java artifacts below are ordinary seven-day
+main-path artifacts created by the routing-fix PR and resulting `main` push;
+they are not repo-owned trial uploads. Every scoped repository reports zero
+Actions cache entries.
+
+| Repository | Non-expired public artifacts | Public bytes | Expiry/source note |
+| --- | ---: | ---: | --- |
+| `orchestration` | 0 | 0 | None |
+| `service-common` | 1 | 7,444 | Graph diagnostic `10383564434`; expires `2026-12-14T06:40:17Z` |
+| `currency-service` | 4 | 167,095,599 | Two `app-jar` and two `test-results`; expire 2026-09-23 |
+| `permission-service` | 4 | 120,455,809 | Two `app-jar` and two `test-results`; expire 2026-09-23 |
+| `transaction-service` | 4 | 129,237,896 | Two `app-jar` and two `test-results`; expire 2026-09-23 |
+| `session-gateway` | 4 | 85,765,518 | Two `app-jar` and two `test-results`; expire 2026-09-23 |
+| `budget-analyzer-web` | 0 | 0 | None |
+| `ext-authz` | 0 | 0 | None |
+| `workspace` | 0 | 0 | None |
+| **Total** | **17** | **502,562,266** | About 480 MiB; Phase 2 must include this existing accrual |
+
+GitHub's current
+[Actions billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions#storage-measurement-units)
+defines its storage units as binary: 1 GB is 2^30 bytes and 1 MB is 2^20
+bytes. The Free-for-organizations allowance is therefore 524,288,000 bytes.
+The public artifact total is 479.280725 MiB, or 95.856145% of that current
+allowance, leaving 21,725,734 bytes (20.719275 MiB) of instantaneous public
+headroom. It is below, not above, the 500 MB allowance; the apparent excess
+exists only when the artifact total is incorrectly compared with 500,000,000
+decimal bytes.
+
+The 502,554,822-byte ordinary Java artifact set expires after seven days. A
+full seven-day lifetime contributes 78.630829 GiB-hours, equivalent to
+111.830513 MiB-month in a 720-hour month, or 22.366103% of the monthly 500 MiB
+allowance. The long-lived 7,444-byte diagnostic is negligible at this scale.
+This distinguishes the current retained-byte peak from GitHub's hourly accrued
+monthly storage calculation.
+
+Public organization inspection shows ten packages: six Container Registry
+packages and four public `service-common` Maven packages. GitHub's current
+[Packages billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
+states that public packages are free and that Container Registry storage and
+bandwidth are currently free. These ten public packages therefore add no
+metered package-storage usage. Account-private artifact or package usage remains
+unobservable without authenticated billing data and is not reported as zero.
+The operator's `$1.07` gross Actions usage, matching `$1.07` discount, `$0`
+billed usage, and absent payment method establish that no storage or runner
+overage is currently billed. The safe conclusion is: known public storage is
+within the free allowance and no paid overage exists, but additional upload
+capacity remains unproved; keep trial uploads disabled.
+
+#### Trial upload and schedule inventory
+
+All nine copies of `.github/scripts/prepare-trial-evidence.sh` are byte-identical
+at SHA-256
+`6511fbe339319e1fa53b5ba6857ae45f8e83d2cfb30bb6bd87771d046bc31774`.
+The helper includes its generated measurement file in each sealed archive,
+rejects absolute or parent-traversal paths, and measures
+`source_bytes`, `uncompressed_tar_bytes`, `compressed_archive_bytes`, and
+`upload_allowed` against 25,165,824 bytes (24 MiB). The job summary emits the
+same source, tar, compressed, cap, and allowed fields. Every producer requires
+`DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED=true` and
+`upload_allowed=true`, uploads the already-compressed archive with compression
+level zero and one-day retention, and fails delivery when uploads are enabled
+but the complete archive exceeds the cap.
+
+| Repository/workflow | Sealed archive | Exact allowlisted inputs |
+| --- | --- | --- |
+| `orchestration` / `dependency-automation-config.yml` | `renovate-evidence.tar.gz` | `dependency-automation-revisions.log`; `dependency-automation-evidence/renovate-trial-global-config.json`; `dependency-automation-evidence/renovate-debug.log` |
+| `orchestration` / `exact-image-security-evidence.yml` | `image-security-evidence.tar.gz` | `scan-work/evidence`; `rendered`; `scanner`; `raw-targets.tsv`; `targets.json`; `scan-status.json` |
+| `service-common` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `spring-platform/build/libs`; `spring-platform/build/test-results/test`; `spring-cloud-platform/build/libs`; `spring-cloud-platform/build/test-results/test`; `service-core/build/libs`; `service-core/build/test-results/test`; `service-web/build/libs`; `service-web/build/test-results/test` |
+| `service-common` / `dependency-submission.yml` | `dependency-graph-evidence.tar.gz` | `dependency-automation-evidence/dependency-resolution.log`; `dependency-automation-evidence/dependency-graph` |
+| `currency-service` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `build/libs`; `build/test-results/test` |
+| `currency-service` / `dependency-submission.yml` | `dependency-graph-evidence.tar.gz` | `dependency-automation-evidence/dependency-resolution.log`; `dependency-automation-evidence/dependency-graph` |
+| `permission-service` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `build/libs`; `build/test-results/test` |
+| `permission-service` / `dependency-submission.yml` | `dependency-graph-evidence.tar.gz` | `dependency-automation-evidence/dependency-resolution.log`; `dependency-automation-evidence/dependency-graph` |
+| `transaction-service` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `build/libs`; `build/test-results/test` |
+| `transaction-service` / `dependency-submission.yml` | `dependency-graph-evidence.tar.gz` | `dependency-automation-evidence/dependency-resolution.log`; `dependency-automation-evidence/dependency-graph` |
+| `session-gateway` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `build/libs`; `build/test-results/test` |
+| `session-gateway` / `dependency-submission.yml` | `dependency-graph-evidence.tar.gz` | `dependency-automation-evidence/dependency-resolution.log`; `dependency-automation-evidence/dependency-graph` |
+| `budget-analyzer-web` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log`; `dist`; `coverage` |
+| `budget-analyzer-web` / `dependency-audit.yml` | `audit-evidence.tar.gz` | `dependency-audit-reports` |
+| `ext-authz` / `build.yml` | `build-evidence.tar.gz` | `dependency-automation-evidence/build.log` |
+| `ext-authz` / `go-vulnerability-check.yml` | `govulncheck-evidence.tar.gz` | `govulncheck-results` |
+| `workspace` / `workspace-image-security-evidence.yml` | `workspace-image-evidence.tar.gz` | `workspace-image-scan` |
+
+The five Java build producers plus the frontend and Go build producers accept
+only push/dispatch on `main` or the trial ref and pull requests whose base is
+one of those refs; trial measurement is limited to the trial ref/base. The
+orchestration dry-run producer requires the exact trial ref plus either an
+opted-in dispatch or the reviewed marked-push fallback. The scheduled producers
+use these checked-in guards:
+
+| Repository/workflow | UTC cron | Trial schedule guard |
+| --- | --- | --- |
+| `orchestration` / Exact Image Security Evidence | Saturday 04:23 | Exact trial ref and schedule variable `true`; main accepts schedule/dispatch; trial also accepts reviewed push/dispatch |
+| `workspace` / Workspace Image Security Evidence | Saturday 04:41 | Exact trial ref and schedule variable `true`; main accepts schedule/dispatch; same-repository PRs must target the trial ref |
+| `ext-authz` / Go Vulnerability Check | Monday 05:17 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `service-common` / Dependency Submission | Monday 05:23 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `currency-service` / Dependency Submission | Monday 05:31 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `permission-service` / Dependency Submission | Monday 05:37 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `transaction-service` / Dependency Submission | Monday 05:43 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `session-gateway` / Dependency Submission | Monday 05:43 | Exact trial ref and schedule variable `true`; main and trial also accept guarded push/dispatch |
+| `budget-analyzer-web` / Dependency Audit | Monday 06:17 | Exact trial ref and schedule variable `true`; main accepts schedule/dispatch; trial also accepts guarded push/dispatch |
+
+Optional trial caches remain gated by
+`DEPENDENCY_AUTOMATION_TRIAL_CACHES_ENABLED`; Java submission additionally
+requires the accepted graph-submission variable and the trial ref to remain the
+repository default before it submits rather than only generates.
+
+Checkpoint A is complete with authenticated account and installation facts:
+
+```text
+Checkpoint A complete
+Observed UTC: 2026-09-16T17:35:49Z
+GitHub organization plan: GitHub Free for organizations (500 MiB allowance)
+Actions billed amount this cycle: $0 (operator reported $1.07 gross usage and $1.07 discount at 2026-09-16T17:27:55Z)
+Actions included/used minutes: not displayed
+Artifact/storage usage: 502,562,266 public bytes (479.280725 MiB, 95.856145% of the 500 MiB allowance); account-private aggregate not displayed
+Packages storage usage: ten public packages add no metered usage under GitHub policy; account-private aggregate not displayed
+Quota or usage warning: none reported
+GitHub payment method: absent
+Actions hard spend stop: $0 Stop-usage budget plus no-payment-method block
+Packages hard spend stop: $0 Stop-usage budget plus no-payment-method block
+Mend tier: Community/free
+Mend paid trial or payment method: absent
+Mend active organization jobs: 0
+Mend repository scope: exact nine
+Unexpected condition: budget-analyzer-web PR #120 is a malformed accidental trial proposal retained open and unmerged until rollback; explicitly accepted as non-representative
+```
+
+Do not supply credentials, cookies, billing identifiers, private repository
+names, or private logs. Checkpoint A was read-only. The failed public run is now
+explicitly dispositioned; uploads and schedules remain off until their separate
+plan gates.
 
 Public metadata for the initial branch runs records successful frontend audit,
 Go vulnerability, orchestration/workspace image, Java build, and generation-only
@@ -294,9 +499,34 @@ failed. Renovate vulnerability-alert PRs ignore top-level
 limit is zero, meaning unlimited. The shared preset correction adds
 `vulnerabilityAlerts.prConcurrentLimit: 3`, retaining an unrestricted security
 schedule and `automerge: false` while giving vulnerability fixes a separate
-three-PR budget. It does not close the six existing PRs. Publish and validate
-the corrected trial preset before B4, preserve those PRs open and unmerged, and
-use them as the baseline for the seven second cycles.
+three-PR budget. It does not close the six existing PRs. The corrected trial
+preset was published and validated before B4; preserve those PRs open and
+unmerged and use them as the baseline for the seven second cycles.
+
+The correction was published through
+[orchestration PR #62](https://github.com/budgetanalyzer/orchestration/pull/62)
+at `c9e6f31208a5f668fcccd3e7ff2fea649654443c`.
+[Configuration run 35095610585](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610585)
+and
+[image-evidence run 35095610628](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610628)
+both passed with zero artifacts. The operator then requested all seven B4
+cycles. Six completed green. `workspace` alone reported `no-result` for the
+native `github-tags` lookup of `aquasecurity/setup-trivy` in
+`.github/workflows/workspace-image-security-evidence.yml`. Public Git refs prove
+that tag `v0.3.1` maps exactly to the checked-in commit
+`81e514348e19b6112ce2a7e3ecbafe19c1e1f567`; the dependency is not missing.
+The prepared consumer correction disables only that native record and adds a
+regex manager using Renovate's `git-tags` datasource against the public Git
+repository. Local Renovate 44.65.5 strict validation passed, and the direct
+lookup resolved the current tag and digest without a warning or proposed
+change. Post-cycle public inspection found the five frontend security PRs and
+one `ext-authz` security PR unchanged, with no open PR in the other five B4
+repositories. Workspace PR #9 subsequently published the correction at
+`110e5f78fd995ed281d425f9da90bc81079f651d`. Its automatic corrective cycle
+refreshed Dashboard #8 with the exact setup-trivy record and no repository
+problem, while image-evidence run 35098592885 passed with uploads skipped and
+zero artifacts. This completed the seventh B4 cycle without repeating the other
+six.
 
 The executable
 [trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
@@ -448,11 +678,21 @@ the Mend App is active.
 The 2026-09-14 operator report and subsequent public checks establish the
 bounded trial's zero-spend control, published trial refs, initial hosted branch
 measurements, all nine Dependency Dashboards, five accepted Java graphs, alert
-counts, and eight live bot PRs. The orchestration dry run and branch
-build/scan/generation jobs are linked below. Seven consumer second cycles,
-scheduled scanner runs, uploads, and final benchmark reconciliation remain
-pending. B4 is paused until the nested vulnerability limit is published; no
-pending row is being reclassified as a scanner limitation or a pass.
+counts, and twelve live bot PRs. The orchestration dry run and branch
+build/scan/generation jobs are linked below. All consumer second cycles passed:
+workspace's automatic corrective cycle refreshed Dashboard #8 without a
+repository problem, and its associated image-evidence workflow passed with zero
+artifacts. Batch C added four passing routine representative PRs without an
+unexpected PR or retained artifact. The completion-baseline refresh then found
+one failed build on existing frontend security PR #120 and 502,562,266 current
+public artifact bytes. The #120 patch changes only `package.json` while leaving
+the lockfile and grouped Vitest companions unchanged, so its `npm ci` failure is
+the expected rejection of a malformed proposal. The operator accepted it as a
+non-representative accidental trial side effect; routine PR #122 passed the same
+workflow. Scheduled scanner runs, uploads, cost, and final benchmark
+reconciliation remain pending behind their explicit gates. The nested
+vulnerability limit and workspace lookup correction are published and
+validated.
 
 The operator must follow the ordered
 [activation procedure](../dependency-automation.md#activation-procedure) and
@@ -465,16 +705,16 @@ URL, tool/database version where applicable, and the final status.
 
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
-| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories were public and used `main` at `2026-09-14T01:45:30Z`. A fully paginated unauthenticated snapshot covered all 15 publicly visible organization repositories and 1,191 historical artifact records; none was unexpired, so currently retained public artifact bytes were zero. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. The operator also reports no GitHub payment method, and GitHub's current Actions billing documentation says over-quota usage is blocked without one. This prevents financial exposure but does not guarantee that a capped upload will succeed. | Keep uploads and schedules off initially. Measure exact output locally and runner-side, permit at most one 25 MiB bundle with one-day retention, and treat a quota rejection as failed evidence delivery. Do not add a payment method. Replace unknown private headroom with measured artifact bytes if GitHub later exposes them, and recalculate before expansion or scheduling. On 2026-09-14 the operator reconfirmed zero current Actions spend and disabled orchestration upload, cache, and schedule gates; public metadata showed zero artifacts on every listed initial branch run. | **Zero-spend control reconfirmed and initial runs retained zero artifacts — private headroom and upload sizing remain pending; uploads stay off** |
+| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories are public. The `2026-09-14T01:45:30Z` snapshot found zero retained public bytes. The `2026-09-16T17:05:13Z` refresh instead found 17 non-expired public artifacts totaling 502,562,266 bytes: the 7,444-byte `service-common` graph diagnostic plus ordinary seven-day Java JAR/test artifacts in four consumers. GitHub uses binary storage units, so this is 479.280725 MiB, or 95.856145% of the 500 MiB allowance, with 20.719275 MiB current public headroom. Seven-day retention makes the ordinary set equivalent to 111.830513 MiB-month in a 720-hour month. Public caches are zero in all nine repositories. Public inspection also finds six Container Registry and four Maven packages; GitHub policy makes these public packages free and currently makes Container Registry storage free, so they add no metered package storage. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. At `2026-09-16T17:27:55Z`, the operator reconfirmed no GitHub payment method and reported `$1.07` gross Actions usage, a `$1.07` discount, and `$0` billed usage. GitHub's current Actions billing documentation says over-quota usage is blocked without a valid payment method. | Keep uploads and schedules off. The known public total is within the free allowance and there is no billed overage, but Phase 2 must still account for unknown private headroom before selecting a one-day upload. Treat a quota rejection as failed evidence delivery and do not add a payment method. The completion baseline does not independently expose private variables. | **Known public storage is within the free allowance and billed usage is zero — private upload headroom and upload sizing remain pending; uploads stay off** |
 | All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. The discovered `main` protection defect is repaired, and the operator restricted initial App access to orchestration. Prove hosted lookup behavior before expansion. | **Bounded Community trial, orchestration switch, protection, and pilot App scope passed — hosted lookup pending** |
 | Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run inspection found only the dynamic default target effective. The first remediation retained quoted patterns; the final saved repair uses exact unquoted refs. | Public verification at `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and `refs/heads/dependency-automation-trial` conditions. Both branches independently receive deletion, non-fast-forward, and pull-request rules; both SHAs remain unchanged. Preserve the ruleset through pilot rollback. | **Passed — both branches independently protected before Step 5.4** |
 | All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata now records successful initial branch jobs in all nine repositories with zero artifacts. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial refs and initial hosted branch jobs passed — detailed report review, default-only behavior, and upload sizing remain pending** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve the explicit orchestration trial ref. | Orchestration source and preset ref `24ffc8e36bf87a730bb6a25961059becbdb67d72` resolved successfully in hosted dry-run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973); all nine trial refs are publicly resolvable. Keep the preset ref frozen during each evidence batch. | **Trial preset publication and hosted resolution passed** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` or the trial-only marked-push fallback | Local platform mode cannot perform a true full dry run or GitHub lookups. Before the temporary-default switch, GitHub did not expose **Run workflow**, so the branch-only workflow used its reviewed one-repository wrapper. The temporary default now permits normal manual dispatch without changing that read-only execution contract. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) established 109 dependencies in 37 package files and retained the Aqua Security IP-allow-list and anonymous Docker Hub page-11 gaps. Trial-default manual run [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322) then passed on the same exact source/preset SHA: both jobs succeeded sequentially in 2 minutes 27 seconds, all structural hard gates passed, uploads skipped, and artifact count was zero. | **Trial-default hosted mechanics passed — individual Aqua Security and Docker Hub lookup coverage remains incomplete** |
-| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Mend is now restricted to all nine selected repositories and all nine Dashboards exist. The operator reports all seven consumer onboarding jobs green after the narrowly scoped Maven correction. Five consumer graphs are accepted and graph-backed alert counts are recorded. Orchestration and `service-common` retain their representative routine PRs; six consumer vulnerability PRs use the trial base and have automerge disabled. The five-PR frontend burst exposed the missing dedicated vulnerability limit, so B4 remains paused until the corrected preset is published. | **All repositories onboarded — nested alert-limit correction and seven second cycles pending** |
+| All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Mend is restricted to all nine selected repositories and all nine Dashboards exist. The operator reports all seven consumer onboarding jobs green after the narrowly scoped Maven correction. Five consumer graphs are accepted and graph-backed alert counts are recorded. Six representative routine PRs and six consumer vulnerability PRs use the trial base and have automerge disabled. The dedicated vulnerability limit was published through orchestration PR #62. Workspace PR #9 corrected its isolated action lookup, after which Dashboard #8 refreshed with no repository problem. | **All repositories onboarded; Batch B Dashboard and Batch C representative-PR acceptance passed** |
 | Four Java consumers | Mend App-settings GitHub Packages access | Public inspection on `2026-09-13` showed all four published `service-common` Maven packages in GitHub's public-package filter. GitHub Packages still requires authentication to install public Maven packages; agents cannot inspect or receive the existing credential. | The operator stored the existing package-read credential in Mend and configured an organization-level Maven host rule scoped only to `https://maven.pkg.github.com/budgetanalyzer/service-common/`. All four Dashboards now list their applicable internal coordinates, B1 completed green, and the accepted SBOMs independently prove package resolution in Actions. | **Authenticated hosted lookup and graph package resolution passed — credential details intentionally not retained** |
-| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Public effects show orchestration and `service-common` onboarding plus dashboard-triggered second cycles; the operator reviewed those Mend cycles without reporting an issue, but exact private timestamps/durations were not transcribed. The seven remaining repositories have one green onboarding cycle each. | Publish the nested vulnerability limit, then request and record one second green cycle for each of the seven remaining repositories. Scheduled scanner cycles remain a later, separately authorized batch. | **Two-cycle acceptance passed for orchestration and service-common — seven B4 cycles and scheduled scans pending** |
-| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior required live App evidence. | Renovate-only Community remains the sole PR owner. The operator reports Dependabot update PRs disabled. The two representative routine PRs and six consumer security PRs all use the trial base with GitHub auto-merge disabled. The security burst is retained as evidence and does not authorize merge or paid features. | **No duplicate owner or automerge observed — B4 and remaining proposal review pending** |
+| All 9 scoped repositories | Two successful Renovate cycles and one scheduled scanner cycle | Public effects show orchestration and `service-common` onboarding plus dashboard-triggered second cycles; the operator reviewed those Mend cycles without reporting an issue, but exact private timestamps/durations were not transcribed. The seven remaining repositories have one green onboarding cycle each. | The operator requested all seven B4 cycles after the shared-limit correction. Six were green initially. Workspace PR #9 corrected the only reported lookup problem; its automatic corrective cycle updated Dashboard #8 with the exact setup-trivy record and no repository problem. Do not repeat the successful Batch B cycles. Scheduled scanner cycles remain a later, separately authorized batch. | **Two-cycle Batch B acceptance passed for all nine repositories — scheduled scans pending** |
+| All 9 scoped repositories | No paid features, automerge, duplicate PR owner, or first-party production promotion | Effective hosted behavior required live App evidence. | Renovate-only Community remains the sole PR owner. The operator reports Dependabot update PRs disabled. All six representative routine PRs and six consumer security PRs use the trial base with GitHub auto-merge disabled. The security burst is retained as evidence and does not authorize merge or paid features. | **No duplicate owner or automerge observed — Batches A-C passed** |
 
 ### Repository deferred-check reconciliation
 
@@ -486,26 +726,26 @@ URL, tool/database version where applicable, and the final status.
 | `service-common` | Hosted Renovate lookup for Gradle/catalog/wrapper/Actions | Actions and published-preset lookups require hosted GitHub access. | [Dashboard #56](https://github.com/budgetanalyzer/service-common/issues/56) shows Gradle, catalog, wrapper, Actions, maintained Spring-line and Spring 4/test-stack proposals, plus the explicit trial preset, with no visible config warning. The operator reported onboarding and post-graph cycles green. | **Passed for dashboard discovery — private log details not transcribed** |
 | `service-common` | `.github/workflows/dependency-submission.yml` | The complete 216-coordinate local snapshot was not submitted. | Trial push run [34823856894](https://github.com/budgetanalyzer/service-common/actions/runs/34823856894) passed generation-only mode. Manual [run 34937981854](https://github.com/budgetanalyzer/service-common/actions/runs/34937981854) attempt 1 exposed disabled Dependency graph and automatically retained 7,444-byte artifact `10383564434` through `2026-12-14`; after enablement, attempt 2 submitted successfully at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94`. GitHub's accepted SBOM has 222 packages. | **Accepted complete graph passed — scheduled submission pending** |
 | `service-common` | Representative bot PR `build.yml`, graph/alerts, and dashboard | No App, PR, or administrator evidence was previously available. | The operator reported 89 graph-backed Dependabot alerts. Representative [PR #57](https://github.com/budgetanalyzer/service-common/pull/57) targets the trial default, changes only Gradle `9.5.0` to `9.5.1`, states automerge is disabled, and passed [build 34940825035](https://github.com/budgetanalyzer/service-common/actions/runs/34940825035) with cache and uploads off. No second PR or security-fix PR appeared. | **Manual rehearsal passed — scheduled and live vulnerability-fix PR evidence pending** |
-| `currency-service` | Hosted Renovate lookup for 57 extracted records, including internal `org.budgetanalyzer` coordinates and Actions | Authenticated Maven and GitHub lookups were intentionally unavailable locally. | The post-routing-fix scan was operator-reported green with no warnings, and Dashboard #84 lists the applicable internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by sanitized operator report and Dashboard evidence — second cycle pending** |
+| `currency-service` | Hosted Renovate lookup for 57 extracted records, including internal `org.budgetanalyzer` coordinates and Actions | Authenticated Maven and GitHub lookups were intentionally unavailable locally. | The post-routing-fix scan was operator-reported green with no warnings, Dashboard #84 lists the applicable internal packages through the explicit trial preset, and the operator reported the B4 cycle green. | **Hosted internal Maven lookup and second cycle passed by sanitized operator report and Dashboard evidence** |
 | `currency-service` | `.github/workflows/dependency-submission.yml` | Local output had only 87 build/tool coordinates because `serviceCommon` 0.0.16 could not resolve. | Manual [run 35083509407](https://github.com/budgetanalyzer/currency-service/actions/runs/35083509407) passed at `93da3e3599e71cfa453ed78d41691fdfd1edadc3`. GitHub's accepted SBOM has 314 packages, including all applicable internal coordinates; the operator reported 108 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
-| `currency-service` | Representative bot PR `build.yml`, graph/alerts, and settings | Historical ordinary build `34027551741` predates submission automation and is insufficient. | Retain a current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — current evidence not supplied** |
-| `permission-service` | Hosted Renovate lookup for 45 extracted records, including three internal coordinates and Actions | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding, and Dashboard #20 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by operator report and Dashboard evidence — second cycle pending** |
+| `currency-service` | Representative bot PR `build.yml`, graph/alerts, and settings | Historical ordinary build `34027551741` predates submission automation and is insufficient. | Routine [PR #87](https://github.com/budgetanalyzer/currency-service/pull/87) targets the trial branch, changes only Spring Boot `3.5.14` to `3.5.16`, carries the `dependencies` label, and reports automerge disabled. Internal-package-aware [build 35101624894](https://github.com/budgetanalyzer/currency-service/actions/runs/35101624894) passed at `6ee3464e7009162a2d87f8f72fd252839edfc56f`; uploads skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. No second PR appeared. | **Batch C representative build and package access passed** |
+| `permission-service` | Hosted Renovate lookup for 45 extracted records, including three internal coordinates and Actions | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding and B4 cycles, and Dashboard #20 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup and second cycle passed by operator report and Dashboard evidence** |
 | `permission-service` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted internal and application runtime/test trees. | After correcting the secret/variable scope, manual [run 35091521154](https://github.com/budgetanalyzer/permission-service/actions/runs/35091521154) passed at `a31e7c5880a3d3e742e7224297e8226d9e7a47ff`. GitHub's accepted SBOM has 236 packages and all three internal coordinates; the operator reported 54 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
-| `permission-service` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
-| `transaction-service` | Hosted Renovate lookup for 43 extracted records, including three internal coordinates and Actions | The first onboarding cycle returned `no-result` before the scoped Mend credential and Maven routing correction. | The operator reported a post-correction green B1 result, and Dashboard #84 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed after correction — second cycle pending** |
+| `permission-service` | Representative bot PR `build.yml`, graph/alerts, and settings | The original row expected one bot PR per Java consumer, but Batch C intentionally selected one representative from the four consumers. | All four consumer `build.yml` files are byte-identical. `permission-service` independently passed exact-trial build 35082242381 and accepted graph run 35091521154 with internal packages; its B4 cycle was green. Currency PR #87 proves the shared PR-event, no-trial-cache, measurement, and package-access path. No distinct `permission-service` workflow path remains untested. | **Superseded — accepted by the approved Batch C shared-workflow sample; no extra bot PR required** |
+| `transaction-service` | Hosted Renovate lookup for 43 extracted records, including three internal coordinates and Actions | The first onboarding cycle returned `no-result` before the scoped Mend credential and Maven routing correction. | The operator reported post-correction green B1 and B4 results, and Dashboard #84 lists all three internal packages through the explicit trial preset. | **Hosted internal Maven lookup and second cycle passed after correction** |
 | `transaction-service` | `.github/workflows/dependency-submission.yml` | Local 91-coordinate graph omitted internal, PostgreSQL, and Testcontainers trees. | After correcting the secret/variable scope, manual [run 35091855229](https://github.com/budgetanalyzer/transaction-service/actions/runs/35091855229) passed at `aa439d27aec63031ab056d4f4afe70cc43e13cca`. GitHub's accepted SBOM has 238 packages and all three internal coordinates; the operator reported 54 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete graph passed — detailed advisory mapping and scheduled submission pending** |
-| `transaction-service` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
-| `session-gateway` | Hosted Renovate lookup for 39 extracted records, including internal coordinates, Actions, and images | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding, and Dashboard #25 lists its internal packages through the explicit trial preset. | **Hosted internal Maven lookup passed by operator report and Dashboard evidence — second cycle pending** |
+| `transaction-service` | Representative bot PR `build.yml`, graph/alerts, and settings | The original row expected one bot PR per Java consumer, but Batch C intentionally selected one representative from the four consumers. | All four consumer `build.yml` files are byte-identical. `transaction-service` independently passed exact-trial build 35082230614 and accepted graph run 35091855229 with internal packages; its corrected B1 and B4 cycles were green. Currency PR #87 proves the shared PR-event, no-trial-cache, measurement, and package-access path. No distinct `transaction-service` workflow path remains untested. | **Superseded — accepted by the approved Batch C shared-workflow sample; no extra bot PR required** |
+| `session-gateway` | Hosted Renovate lookup for 39 extracted records, including internal coordinates, Actions, and images | Authenticated Maven and GitHub lookups were deferred. | The operator reported green B1 onboarding and B4 cycles, and Dashboard #25 lists its internal packages through the explicit trial preset. | **Hosted internal Maven lookup and second cycle passed by operator report and Dashboard evidence** |
 | `session-gateway` | `.github/workflows/dependency-submission.yml` | Local 87-coordinate graph omitted the reactive application tree after a GitHub Packages HTTP 401. | After correcting the secret/variable scope, manual [run 35092673426](https://github.com/budgetanalyzer/session-gateway/actions/runs/35092673426) passed at `8f8b8c30aa3008f870879ab623a0b6ef8ee04ec5`. GitHub's accepted SBOM has 241 packages and all three internal coordinates; the operator reported 78 alerts. Uploads skipped and the run has zero artifacts. | **Accepted complete reactive graph passed — detailed advisory mapping and scheduled submission pending** |
-| `session-gateway` | Representative bot PR `build.yml`, graph/alerts, and settings | No hosted PR or administrator evidence exists. | Retain current bot PR build with package access plus accepted graph, alerts, dashboard, and no-duplicate/no-automerge settings evidence. | **Pending — no hosted evidence** |
-| `budget-analyzer-web` | Hosted Renovate lookup for 65 npm/lockfile/Dockerfile/Actions records | Actions and published preset were hosted-only; local Docker token acquisition repeatedly failed for Node and NGINX. | Retain App logs/dashboard proving npm, lockfile, Node, NGINX, Actions, and setup-node lookups succeed and both maintained and toolchain-major proposals remain visible. | **Pending — Docker/GitHub retries unproved** |
+| `session-gateway` | Representative bot PR `build.yml`, graph/alerts, and settings | The original row expected one bot PR per Java consumer, but Batch C intentionally selected one representative from the four consumers. | All four consumer `build.yml` files are byte-identical. `session-gateway` independently passed exact-trial build 35082219212 and accepted reactive graph run 35092673426 with internal packages; its B4 cycle was green. Currency PR #87 proves the shared PR-event, no-trial-cache, measurement, and package-access path. Its reactive dependency distinction is already covered by its own build and graph, not by an extra PR trigger. | **Superseded — accepted by the approved Batch C shared-workflow sample; no extra bot PR required** |
+| `budget-analyzer-web` | Hosted Renovate lookup for 65 npm/lockfile/Dockerfile/Actions records | Actions and published preset were hosted-only; local Docker token acquisition repeatedly failed for Node and NGINX. | The operator reported the B4 cycle green. Retain Dashboard evidence for npm, lockfile, Node, NGINX, Actions, and setup-node proposals; detailed private lookup results were not transcribed. | **Hosted second cycle passed by operator report — detailed lookup evidence pending** |
 | `budget-analyzer-web` | `.github/workflows/dependency-audit.yml` | Local audits reproduced findings, but hosted install/registry/audit execution was unobserved. | Trial push run [34823959669](https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/34823959669) passed at `2cbef3f17f546fe167628b221a1cb9dec810c2bd` with uploads disabled. Retain/reconcile the detailed reports before claiming finding parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed report and scheduled evidence pending** |
-| `budget-analyzer-web` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened five vulnerability PRs before the planned representative routine proposal. | Security PRs #116–#120 all target the trial branch, carry the security label, and have auto-merge disabled, but their count exceeded the trial stop threshold. Preserve them and publish the nested three-PR vulnerability limit before B4 or Batch C. | **Live vulnerability path proved but concurrency acceptance failed — correction and representative routine PR pending** |
-| `ext-authz` | Hosted Renovate lookup for 21 Go/Dockerfile/Actions/scanner records | GitHub lookups and the Go builder Docker lookup were incomplete locally. | Retain App logs/dashboard proving preset, Actions, Go input, `golang:1.24-alpine`, modules, and scanner lookups succeed. | **Pending — Go builder/GitHub retries unproved** |
+| `budget-analyzer-web` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened five vulnerability PRs before the planned representative routine proposal. | Security PRs #116–#120 remain the exact open baseline. Routine [PR #122](https://github.com/budgetanalyzer/budget-analyzer-web/pull/122) targets the trial branch, changes only `package-lock.json` for `@radix-ui/react-checkbox` `1.3.3` to `1.3.11` and its resolved Radix dependencies, carries the `dependencies` label, and reports automerge disabled. [Build 35102606776](https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/35102606776) passed at `59318aa42f06a395b50f0cce50c923a923fc20f2` using the no-trial-cache path; uploads skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. The Phase 1 refresh found [security PR #120 run 35069921284](https://github.com/budgetanalyzer/budget-analyzer-web/actions/runs/35069921284) failed after 11 seconds at `npm ci`; its later gates skipped, the measurement step passed, and upload/enforcement steps skipped. Public diff inspection shows that #120 changes only `package.json` from Vitest 3 to 4 without updating `package-lock.json` or grouped Vitest companion packages. The operator identified it as an accidental trial-variable side effect and accepted it as non-representative. Preserve it open and unmerged until rollback; do not rerun or repair it for trial acceptance. | **Batch C routine sample passed; malformed accidental security PR #120 explicitly dispositioned** |
+| `ext-authz` | Hosted Renovate lookup for 21 Go/Dockerfile/Actions/scanner records | GitHub lookups and the Go builder Docker lookup were incomplete locally. | The operator reported the B4 cycle green. Retain Dashboard evidence for preset, Actions, Go input, `golang:1.24-alpine`, modules, and scanner proposals; detailed private lookup results were not transcribed. | **Hosted second cycle passed by operator report — detailed lookup evidence pending** |
 | `ext-authz` | `.github/workflows/go-vulnerability-check.yml` | Local `govulncheck` reproduced GO-2025-3540, but the hosted scanner/database path was unobserved. | Trial push run [34823939945](https://github.com/budgetanalyzer/ext-authz/actions/runs/34823939945) passed at `75ed2bda4de7460332a8dea656def0459064753f` with uploads disabled. Retain/reconcile the detailed finding before claiming advisory parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed finding and scheduled evidence pending** |
-| `ext-authz` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened a vulnerability PR before the planned representative routine proposal. | Security PR #1 targets the trial branch, carries the security label, and has auto-merge disabled. Preserve it as the one-PR baseline; after the nested limit is published, at most two additional vulnerability PRs may open. | **Live vulnerability path and no-automerge passed — second cycle and representative routine PR pending** |
-| `workspace` | Hosted Renovate lookup for 16 Dockerfile/ARG/download/Actions records | Published preset and GitHub release lookups are hosted-only. | Retain App logs/dashboard proving every identity resolves, Ubuntu 24.04 updates preserve digest-only syntax, maintained Go line and majors remain visible, and checksum proposals remain approval-gated. | **Pending — no hosted lookup** |
-| `workspace` | `.github/workflows/workspace-image-security-evidence.yml`, cost, and public downloads | The no-cache build may consume substantial Actions time; hosted download/build/scan paths were previously unobserved. | Trial push run [34823984859](https://github.com/budgetanalyzer/workspace/actions/runs/34823984859) passed at `d8e384474512eafb827970db8194413764b79098` in about six minutes with uploads and optional caches disabled. Retain/review the detailed inventory and scan report before claiming parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed report, upload sizing, and scheduled evidence pending** |
+| `ext-authz` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened a vulnerability PR before the planned representative routine proposal. | Security PR #1 remains the exact open baseline. Routine [PR #3](https://github.com/budgetanalyzer/ext-authz/pull/3) targets the trial branch, changes only `GOVULNCHECK_VERSION` from `v1.7.0` to `v1.8.0`, carries the `dependencies` label, and reports automerge disabled. [Build 35103116099](https://github.com/budgetanalyzer/ext-authz/actions/runs/35103116099) passed at `148adfc33bea6ddbff9e530b22fa6802cfddab85`; uploads skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. | **Batch C representative Go build passed; bounded security baseline retained** |
+| `workspace` | Hosted Renovate lookup for Dockerfile/ARG/download/Actions records | Published preset and GitHub release lookups are hosted-only. | The first B4 cycle reported `no-result` only for native `github-tags` package `aquasecurity/setup-trivy`. Workspace PR #9 disabled that one native record and added the public `git-tags` manager at `110e5f78fd995ed281d425f9da90bc81079f651d`. The automatic corrective cycle refreshed Dashboard #8 with `v0.3.1` and the exact pinned commit and no repository problem. Continue to require digest-only Ubuntu syntax and approval-gated checksum proposals. | **Hosted setup-trivy correction and Batch B second-cycle acceptance passed** |
+| `workspace` | `.github/workflows/workspace-image-security-evidence.yml`, cost, and public downloads | The no-cache build may consume substantial Actions time; hosted download/build/scan paths were previously unobserved. | Trial push run [34823984859](https://github.com/budgetanalyzer/workspace/actions/runs/34823984859) passed at `d8e384474512eafb827970db8194413764b79098` in about six minutes. Corrective [run 35098592885](https://github.com/budgetanalyzer/workspace/actions/runs/35098592885) passed at `110e5f78fd995ed281d425f9da90bc81079f651d` in about four minutes. Workspace PR #10 published the same-repository trial-PR trigger at `09ee0a2afecc2af6c3a216b225537c680ef68848`, and [PR run 35100312719](https://github.com/budgetanalyzer/workspace/actions/runs/35100312719) passed. The operator accepted post-merge [run 35100778569](https://github.com/budgetanalyzer/workspace/actions/runs/35100778569) as successful without waiting; Phase 1 later confirmed its public conclusion as success. Routine [PR #11](https://github.com/budgetanalyzer/workspace/pull/11) targets the trial branch and changes only `MITMPROXY_VERSION` from `12.2.2` to `12.2.3`; [image-evidence run 35103462824](https://github.com/budgetanalyzer/workspace/actions/runs/35103462824) passed at `e44419a4c580ee81bfd611646886cd610e330887`. Upload steps skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. Retain/review the detailed inventory and scan report before claiming parity, and observe one scheduled run later. | **Batch C representative image build and scan passed — detailed report, upload sizing, cost, and scheduled evidence pending** |
 | `workspace` | Graph/alerts, dashboard, and settings | Administrator settings are not visible locally. | Retain sanitized settings, dashboard/proposal and alert evidence, including explicit unversioned apt/npm/PyPI, VIA, Go amd64-only, and lifecycle limitations. | **Pending — no hosted evidence** |
 
 ## Benchmark comparison status
@@ -563,12 +803,22 @@ The orchestration Step 5 pilot and `service-common` rehearsal passed. All seven
 remaining repositories passed Batch A and B1, and all four consumer Java graphs
 are accepted with complete internal-package coverage and recorded alert counts.
 The graph run exposed and corrected repository controls mistakenly entered as
-secrets instead of variables. B4 is paused before its Dashboard requests because
-the first onboarding cycles opened five frontend vulnerability PRs and one Go
-vulnerability PR. Their bases and no-automerge state are correct, but the
-frontend exceeded the trial stop threshold because Renovate's vulnerability
-path ignored the top-level PR limits. Publish and validate the nested three-PR
-vulnerability limit, then resume B4 against the retained six-PR baseline.
-Scheduled scan cycles, Batch C, and final benchmark dispositions remain pending.
+secrets instead of variables. The nested three-PR vulnerability limit was
+published and validated before B4. Six second cycles completed green initially;
+`workspace` alone exposed a hosted `setup-trivy` tag-lookup failure. Workspace
+PR #9 published the public-Git-tag fallback, its corrective Dashboard cycle
+showed no repository problem, and run 35098592885 passed with zero artifacts.
+Batch B and its public checkpoint are complete. Batch C also passed with the
+four exact routine proposals, intended diffs, successful representative runs,
+disabled automerge, no PR-ref cache entries, and zero artifacts. The refreshed
+baseline supersedes the stale per-repository PR rows for `permission-service`,
+`transaction-service`, and `session-gateway`: their byte-identical build
+workflow, own exact-trial build/graph evidence, and the approved currency PR
+sample leave no unique untested PR workflow. It also records the separate
+frontend security PR #120 `npm ci` failure and 502,562,266 current public
+artifact bytes. PR #120 is now explicitly dispositioned as a malformed,
+non-representative accidental trial proposal; routine PR #122 proves the same
+workflow's accepted path. Scheduled scan cycles, upload sizing, cost
+reconciliation, and final benchmark dispositions remain pending.
 Existing local misses remain gaps; lifecycle and exploitability assessment
 remain human work.

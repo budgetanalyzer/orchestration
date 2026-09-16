@@ -40,6 +40,14 @@ That works because the local build path stays local-first:
 - downstream host-side Gradle builds then resolve `service-common` from Maven
   Local
 
+Repository ownership for `org.budgetanalyzer` artifacts is explicit in every
+Java consumer. Gradle checks Maven Local first, then the authenticated
+`service-common` GitHub Packages repository, which is restricted to the
+`org.budgetanalyzer` group. Maven Central remains last for external
+dependencies and excludes `org.budgetanalyzer` entirely. Internal coordinates
+therefore resolve only from Maven Local or the authenticated GitHub Packages
+repository and never fall through to Maven Central.
+
 If you hit a local `service-common` resolution error while working in the full
 workspace, republish it locally and rerun the service build:
 

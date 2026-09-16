@@ -2,7 +2,18 @@
 
 **Status:** Bounded zero-spend trial in progress. Orchestration and
 `service-common` completed their manual rehearsal batches, and all seven
-remaining repositories passed the Batch A checkpoint. Start with **Batch B**.
+remaining repositories passed the Batch A checkpoint. Batch B started but is
+paused in B1 after the first `transaction-service` Renovate cycle reported
+unauthenticated lookups for the three internal `service-common` Maven packages.
+The operator reports that the existing package-read PAT is now stored in Mend
+and an organization-level Maven host rule is configured for only
+`https://maven.pkg.github.com/budgetanalyzer/service-common/`. The four Java
+consumers have also merged the internal-group Maven Central exclusion through
+`main` and their protected trial branches. The operator reports that the
+required post-merge `currency-service` Renovate scan succeeded with no warnings.
+Resume by confirming all seven green B1 onboarding results, including a
+post-correction green `transaction-service` result if still outstanding. Do not
+start B2 before that checkpoint.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -207,6 +218,42 @@ normal. Require one green onboarding job for every added repository. Do not
 inspect logs for green jobs. Stop and report only if a repository is red.
 
 Do not select dependency proposals yet.
+
+#### B1 resume marker — 2026-09-16
+
+Batch B repository expansion reached `transaction-service`, whose first
+Renovate cycle reported `no-result` for these declarations in
+`gradle/libs.versions.toml`:
+
+- `org.budgetanalyzer:spring-platform`
+- `org.budgetanalyzer:service-core`
+- `org.budgetanalyzer:service-web`
+
+This established that Mend's installation token did not provide the required
+GitHub Packages Maven lookup. The package coordinates are not being treated as
+missing. The operator reports completing the supported Mend-side correction:
+
+- the saved package-read PAT is stored as a Mend credential; and
+- an organization-level Renovate Maven host rule supplies the PAT owner's
+  GitHub username and that credential only to
+  `https://maven.pkg.github.com/budgetanalyzer/service-common/`.
+
+The secret value and username are intentionally not recorded. A separate build
+correction now keeps repository ownership explicit: Maven Local remains first,
+the authenticated `service-common` GitHub Packages repository remains second,
+and Maven Central excludes `org.budgetanalyzer`. The correction was merged into
+each consumer's `main` branch and then forward into its protected trial branch.
+The operator reports that the required post-merge `currency-service` Renovate
+scan succeeded with no warnings. No raw log or separate per-coordinate result
+was supplied; retain this as sanitized operator-reported evidence.
+
+The routing-fix checkpoint is complete. Finish confirming one green B1
+onboarding result for each of the seven repositories. If `transaction-service`
+has not completed a green scan since the correction, run it from the
+[`transaction-service` Mend page](https://developer.mend.io/github/budgetanalyzer/transaction-service)
+before B2. If any internal-package warning remains, record only the sanitized
+error and stop; do not disclose or rotate a credential through an agent session.
+These corrective runs do not replace the B4 Dashboard cycle.
 
 ### B2. Submit the four Java graphs
 

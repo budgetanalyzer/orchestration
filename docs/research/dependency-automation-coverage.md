@@ -19,12 +19,13 @@ cycle/queue/lookup review, and Step 5 proposal controls passed. The public Step
 The serialized `service-common` batch now has dual-branch protection, a trial
 default, two operator-reported green Mend cycles, accepted 222-package graph
 submission, 89 graph-backed alerts, and passing representative PR #57. Continue
-with Batch B after all seven remaining repositories passed the batched
-ruleset/security/variable/default setup checkpoint; scheduled and upload-size
-evidence remains pending.
+by confirming all seven green B1 onboarding results after the internal Maven
+routing correction and operator-reported successful post-merge
+`currency-service` scan; scheduled and upload-size evidence remains pending.
 
-**Last updated:** 2026-09-16 (seven-repository Batch A setup and public
-checkpoint passed; prior local and hosted evidence retained)
+**Last updated:** 2026-09-16 (internal Maven routing correction merged through
+`main` and trial; post-merge currency scan succeeded without warnings by
+operator report; prior local and hosted evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -183,6 +184,50 @@ issues or pull requests and no new repository-defined workflow. GitHub
 automatically ran successful `ext-authz` graph updates for the old and new
 defaults while graph/default settings changed; these were platform-generated
 `dynamic` events rather than operator-dispatched workflows.
+
+Batch B App expansion then reached `transaction-service`. Its first Renovate
+cycle reported `no-result` for `org.budgetanalyzer:spring-platform`,
+`org.budgetanalyzer:service-core`, and `org.budgetanalyzer:service-web` in
+`gradle/libs.versions.toml`. This is preserved as evidence that Mend's
+installation token did not satisfy the authenticated GitHub Packages Maven
+lookup; it is not evidence that the published coordinates are absent. The
+operator reports storing the previously retained package-read PAT in Mend and
+configuring an organization-level Renovate Maven host rule for only
+`https://maven.pkg.github.com/budgetanalyzer/service-common/`, using the PAT
+owner's GitHub username. No secret value or username is recorded here. The
+durable repository correction and post-merge scan result are recorded below.
+All seven B1 green onboarding outcomes still need confirmation before B2.
+
+### Internal Maven routing correction
+
+All four Java consumers previously declared Maven Local, the authenticated
+`service-common` GitHub Packages repository, and an unrestricted Maven Central
+repository. The durable correction preserves that order and excludes
+`org.budgetanalyzer` from Maven Central, so internal coordinates resolve only
+from Maven Local or GitHub Packages. It deliberately does not use Gradle
+`exclusiveContent`, which would prevent the intended Maven Local fallback. No
+dependency version, credential, Renovate configuration, workflow, or
+`service-common` artifact changed.
+
+The correction was merged into each `main` branch and then forward into the
+protected trial branch:
+
+| Repository | `main` pull request and resulting SHA | Trial pull request and resulting SHA |
+| --- | --- | --- |
+| `orchestration` | [#59](https://github.com/budgetanalyzer/orchestration/pull/59) — `57089578957bae3da42587a7e2902727c5473149` | [#60](https://github.com/budgetanalyzer/orchestration/pull/60) — `dab623ea7517e12cf9d08d8ea570529e745ecd3a` |
+| `currency-service` | [#85](https://github.com/budgetanalyzer/currency-service/pull/85) — `aa432316849c9231389f8a844325dcf0d64f7335` | [#86](https://github.com/budgetanalyzer/currency-service/pull/86) — `93da3e3599e71cfa453ed78d41691fdfd1edadc3` |
+| `permission-service` | [#21](https://github.com/budgetanalyzer/permission-service/pull/21) — `f2d9d55b149c1f3a00e7f2edd85bafe01a46c5f1` | [#22](https://github.com/budgetanalyzer/permission-service/pull/22) — `a31e7c5880a3d3e742e7224297e8226d9e7a47ff` |
+| `transaction-service` | [#85](https://github.com/budgetanalyzer/transaction-service/pull/85) — `ccc459f9ea954296a4d1cea6cdbc4b3acf994e6a` | [#86](https://github.com/budgetanalyzer/transaction-service/pull/86) — `aa439d27aec63031ab056d4f4afe70cc43e13cca` |
+| `session-gateway` | [#26](https://github.com/budgetanalyzer/session-gateway/pull/26) — `a37c7a0bb832b857d3d7371e521ac82e99fc3b93` | [#27](https://github.com/budgetanalyzer/session-gateway/pull/27) — `8f8b8c30aa3008f870879ab623a0b6ef8ee04ec5` |
+
+Local validation passed `clean spotlessApply`, `clean build`, and
+`git diff --check` in all four consumers. The operator subsequently ran the
+required post-merge `currency-service` Renovate scan and reported that it
+succeeded with no warnings. No raw Mend log or separate per-coordinate result
+was supplied, so this records the sanitized operator report without claiming
+independent inspection of the scan transcript. The routing-fix checkpoint is
+complete; all seven B1 green onboarding outcomes still need confirmation before
+B2.
 
 The executable
 [trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
@@ -448,10 +493,15 @@ Ecosystem-wide installation and benchmark parity are both **not established**.
 The orchestration Step 5 pilot passed through its Dashboard, representative PR,
 operator-reviewed Mend cycles, and proposal controls. `service-common` then
 passed dual-branch protection, temporary-default onboarding, accepted graph and
-alert processing, two green Mend cycles, and a representative bot PR. The next
-operator action is Batch A from the Phase 12 operator plan: configure rules,
-security settings, disabled expansion variables, Java graph gates, and temporary
-defaults across all seven remaining repositories before one agent verification
-checkpoint. Consumer activation, scheduled scan cycles, the other accepted Java
-graphs, and final benchmark dispositions remain pending. Existing local misses
-remain gaps; lifecycle and exploitability assessment remain human work.
+alert processing, two green Mend cycles, and a representative bot PR. All seven
+remaining repositories passed Batch A. Batch B B1 then exposed the expected
+authenticated Maven boundary in `transaction-service`; the operator reports the
+Mend credential and narrowly scoped host rule are configured. The repository
+routing correction is merged through all affected `main` and trial branches,
+and the operator reports that the post-merge `currency-service` scan succeeded
+with no warnings. The next operator action is confirmation of all seven green
+B1 onboarding results, including a post-correction `transaction-service` green
+result if still outstanding. B2 Java graph submissions must not start before
+that checkpoint. Consumer activation, scheduled scan cycles, the other accepted
+Java graphs, and final benchmark dispositions remain pending. Existing local
+misses remain gaps; lifecycle and exploitability assessment remain human work.

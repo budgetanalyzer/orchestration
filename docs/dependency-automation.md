@@ -13,9 +13,13 @@ is complete in Scan and Alert mode, and Renovate opened the Dependency Dashboard
 against the trial default. Representative routine PR #56 targets the trial
 default, contains only the expected Renovate patch, passed its applicable check,
 and explicitly reports automerge disabled. Mend-side cycle timing, queueing, and
-lookup/error-log review was operator-checked without a reported blocker. The
-orchestration pilot is ready for the Step 6 per-repository pre-expansion audits;
-live vulnerability-alert and sustained limit behavior remain later evidence.
+lookup/error-log review was operator-checked without a reported blocker.
+`service-common` subsequently passed its manual Step 6 rehearsal through
+protection, temporary-default onboarding, accepted graph submission, alerts, two
+green Mend cycles, and a representative PR. The remaining seven repositories
+passed the Phase 12 Batch A setup and public verification checkpoint on
+2026-09-16. Batch B activation, live vulnerability-fix behavior, and
+sustained-limit behavior remain later evidence.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -320,17 +324,35 @@ enforcement of the configured concurrency/hourly limits and live vulnerability
 behavior still require the deliberately broader Step 6 observation period.
 
 The Step 6.1 public pre-expansion audit found all eight remaining scoped
-repositories still defaulting to `main`, with clean local checkouts matching the
-published `main` and trial refs, zero open PRs, and the explicit trial preset ref
-in every `renovate.json`. Their release workflows are tag/manual-only except
+repositories initially defaulting to `main`, with clean local checkouts matching
+the published `main` and trial refs, zero open PRs, and the explicit trial preset
+ref in every `renovate.json`. Their release workflows are tag/manual-only except
 `service-common` snapshot publication, which explicitly follows pushes to
 `main`; changing a default branch does not trigger any of them. Trial schedules,
-uploads, graph submissions, and optional caches remain gated off. However, none
-of the eight repositories has a repository ruleset or classic branch protection
-on either `main` or `dependency-automation-trial`. Protect both refs before each
-serialized default switch and App-scope expansion. Start with `service-common`,
-which is first in the graph-submission dependency order; do not grant Mend
-access or switch its default until that protection is publicly verified.
+uploads, graph submissions, and optional caches remain gated off. None initially
+had protection on either `main` or `dependency-automation-trial`.
+
+The `service-common` rehearsal subsequently passed through dual-branch
+protection, temporary-default activation, accepted graph submission, alert
+processing, two green Mend cycles, and a representative PR. For the seven
+remaining repositories, use the operator plan's batched procedure: complete all
+non-triggering ruleset, security-setting, variable, and default changes first;
+then perform one public verification checkpoint before expanding App access.
+The Mend Community one-job organization limit serializes the onboarding queue.
+Human-dispatched GitHub workflows remain one at a time, but they no longer
+require an agent handoff between successful repositories. Stop the batch on an
+actual failure or unexpected side effect, not after every routine administrative
+change.
+
+The 2026-09-16 Batch A checkpoint passed for all seven remaining repositories.
+Each trial ref is the default at its recorded SHA, each `main` SHA is unchanged,
+and an active ruleset independently targets the default, `main`, and
+`dependency-automation-trial` refs with only deletion, force-push, and
+pull-request protection and no bypass actors. Dependency-graph SBOM access and
+the explicit trial preset reference succeeded in every repository. No open
+issues or pull requests appeared. Enabling the graph and changing the default in
+`ext-authz` caused two automatic, successful GitHub `Graph Update` runs, one for
+each default; no repository-defined workflow was dispatched by Batch A.
 
 ### Trial workflow controls
 
@@ -350,6 +372,10 @@ unset or set to any value other than the exact string `true`:
 | `DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED` | Allows a measured, complete sealed evidence archive to upload for one day. |
 | `DEPENDENCY_AUTOMATION_TRIAL_GRAPH_SUBMISSION_ENABLED` | Allows Java graph submission only when the exact trial ref is also the current default branch. |
 | `DEPENDENCY_AUTOMATION_TRIAL_CACHES_ENABLED` | Allows the workflow's optional Actions-backed cache after the initial cache-disabled measurement. |
+
+These names are intentionally trial-specific. Promotion does not rename them:
+keep them disabled while trial-only paths remain, or remove them later when
+those paths are retired.
 
 The initial branch measurement therefore runs complete builds, scans, and Java
 graph generation with trial schedules, uploads, graph submission, and optional

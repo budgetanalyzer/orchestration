@@ -19,11 +19,12 @@ cycle/queue/lookup review, and Step 5 proposal controls passed. The public Step
 The serialized `service-common` batch now has dual-branch protection, a trial
 default, two operator-reported green Mend cycles, accepted 222-package graph
 submission, 89 graph-backed alerts, and passing representative PR #57. Continue
-with batched ruleset/security/variable/default setup for all seven remaining
-repositories; scheduled and upload-size evidence remains pending.
+with Batch B after all seven remaining repositories passed the batched
+ruleset/security/variable/default setup checkpoint; scheduled and upload-size
+evidence remains pending.
 
-**Last updated:** 2026-09-15 (`service-common` serialized Step 6 batch through
-graph/alerts and representative PR; prior local and hosted evidence retained)
+**Last updated:** 2026-09-16 (seven-repository Batch A setup and public
+checkpoint passed; prior local and hosted evidence retained)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -170,6 +171,19 @@ verification checkpoint, then one Mend/graph activation batch. Mend's Community
 organization concurrency remains one job, and human-dispatched GitHub graph
 workflows remain sequential within the batch. This changes coordination, not
 the credential, no-merge, no-upload, no-schedule, or zero-spend boundaries.
+
+The 2026-09-16 Batch A public checkpoint passed after correcting one malformed
+`transaction-service` branch target, activating the prepared `session-gateway`
+ruleset, and switching the `ext-authz` default. All seven repositories retain
+their recorded `main` and trial SHAs, advertise the trial ref as default, and
+have an active no-bypass ruleset with exact default, `main`, and trial targets
+and only deletion, non-fast-forward, and pull-request rules. Their dependency
+graph SBOM endpoints and exact trial-preset references resolve, with no open
+issues or pull requests and no new repository-defined workflow. GitHub
+automatically ran successful `ext-authz` graph updates for the old and new
+defaults while graph/default settings changed; these were platform-generated
+`dynamic` events rather than operator-dispatched workflows.
+
 The executable
 [trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
 owns the completed local preset-reference and generated-state ignore corrections.

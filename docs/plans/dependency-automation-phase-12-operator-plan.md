@@ -1,8 +1,8 @@
 # Dependency Automation Phase 12 Operator Plan
 
 **Status:** Bounded zero-spend trial in progress. Orchestration and
-`service-common` completed their manual rehearsal batches. Start with **Batch A**
-for the seven remaining repositories.
+`service-common` completed their manual rehearsal batches, and all seven
+remaining repositories passed the Batch A checkpoint. Start with **Batch B**.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -58,13 +58,13 @@ PR burst.
 | --- | --- | --- | --- |
 | `orchestration` | `dc8f8ecd91f3d1cfbc3c187bb8d59b293370a7e5` | `24ffc8e36bf87a730bb6a25961059becbdb67d72` | Manual pilot passed |
 | `service-common` | `f31557761b80f17ce8fadc128e273b21b4fd07fe` | `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | Manual batch passed |
-| `currency-service` | `df1121d1fb238e262e3198610a5b2954d3f2e0a2` | `e89758adfced41af4106dc9d0c7398bfdff604e8` | Batch A pending |
-| `permission-service` | `7a7759ad627505bf203a9d7a5ea5057cea3f832b` | `3e532f87eed65fa0202e35039938f131f1c453f8` | Batch A pending |
-| `transaction-service` | `8a1d2bd97f97d3f734e9cf67c3241e2e61d13a40` | `0a9de2ec5b8ea9742ad44b02c4b7148ca568c190` | Batch A pending |
-| `session-gateway` | `57e0f038175b994943226a8046ebceaffae6bf43` | `fe6061562e52eccf42570265b5299439c6827c9b` | Batch A pending |
-| `budget-analyzer-web` | `b6f0d23c38428daf8412ae055ccbc9db89ac9517` | `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | Batch A pending |
-| `ext-authz` | `917eae9c782b4b1c4d576258883c3e558a7d55a1` | `75ed2bda4de7460332a8dea656def0459064753f` | Batch A pending |
-| `workspace` | `383efc840832d474cd9d60e0368ed2ded828e03c` | `d8e384474512eafb827970db8194413764b79098` | Batch A pending |
+| `currency-service` | `df1121d1fb238e262e3198610a5b2954d3f2e0a2` | `e89758adfced41af4106dc9d0c7398bfdff604e8` | Batch A verified |
+| `permission-service` | `7a7759ad627505bf203a9d7a5ea5057cea3f832b` | `3e532f87eed65fa0202e35039938f131f1c453f8` | Batch A verified |
+| `transaction-service` | `8a1d2bd97f97d3f734e9cf67c3241e2e61d13a40` | `0a9de2ec5b8ea9742ad44b02c4b7148ca568c190` | Batch A verified |
+| `session-gateway` | `57e0f038175b994943226a8046ebceaffae6bf43` | `fe6061562e52eccf42570265b5299439c6827c9b` | Batch A verified |
+| `budget-analyzer-web` | `b6f0d23c38428daf8412ae055ccbc9db89ac9517` | `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | Batch A verified |
+| `ext-authz` | `917eae9c782b4b1c4d576258883c3e558a7d55a1` | `75ed2bda4de7460332a8dea656def0459064753f` | Batch A verified |
+| `workspace` | `383efc840832d474cd9d60e0368ed2ded828e03c` | `d8e384474512eafb827970db8194413764b79098` | Batch A verified |
 
 Completed evidence, including the `service-common` failed graph prerequisite,
 7,444-byte automatic diagnostic artifact, successful 222-package graph, 89
@@ -183,6 +183,12 @@ Verify all seven repositories in one pass:
 Update the plan and coverage report once. If one repository fails, identify only
 the concrete exception; do not restart successful repositories. Batch B starts
 only after this checkpoint passes.
+
+**Passed 2026-09-16.** All seven defaults and recorded SHAs, exact ruleset
+targets and rules, dependency-graph API access, open-item/activity state, and
+trial preset references passed public verification. The only new activity was
+two automatic successful GitHub graph updates in `ext-authz`; Batch A dispatched
+no repository workflow.
 
 ## Batch B: activate and exercise all seven
 

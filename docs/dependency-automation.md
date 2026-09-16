@@ -17,8 +17,9 @@ lookup/error-log review was operator-checked without a reported blocker.
 `service-common` subsequently passed its manual Step 6 rehearsal through
 protection, temporary-default onboarding, accepted graph submission, alerts, two
 green Mend cycles, and a representative PR. The remaining seven repositories
-now follow the Phase 12 operator plan's batched setup and activation procedure;
-live vulnerability-fix and sustained-limit behavior remain later evidence.
+passed the Phase 12 Batch A setup and public verification checkpoint on
+2026-09-16. Batch B activation, live vulnerability-fix behavior, and
+sustained-limit behavior remain later evidence.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -343,6 +344,16 @@ require an agent handoff between successful repositories. Stop the batch on an
 actual failure or unexpected side effect, not after every routine administrative
 change.
 
+The 2026-09-16 Batch A checkpoint passed for all seven remaining repositories.
+Each trial ref is the default at its recorded SHA, each `main` SHA is unchanged,
+and an active ruleset independently targets the default, `main`, and
+`dependency-automation-trial` refs with only deletion, force-push, and
+pull-request protection and no bypass actors. Dependency-graph SBOM access and
+the explicit trial preset reference succeeded in every repository. No open
+issues or pull requests appeared. Enabling the graph and changing the default in
+`ext-authz` caused two automatic, successful GitHub `Graph Update` runs, one for
+each default; no repository-defined workflow was dispatched by Batch A.
+
 ### Trial workflow controls
 
 All nine repositories use the exact protected ref
@@ -361,6 +372,10 @@ unset or set to any value other than the exact string `true`:
 | `DEPENDENCY_AUTOMATION_TRIAL_UPLOADS_ENABLED` | Allows a measured, complete sealed evidence archive to upload for one day. |
 | `DEPENDENCY_AUTOMATION_TRIAL_GRAPH_SUBMISSION_ENABLED` | Allows Java graph submission only when the exact trial ref is also the current default branch. |
 | `DEPENDENCY_AUTOMATION_TRIAL_CACHES_ENABLED` | Allows the workflow's optional Actions-backed cache after the initial cache-disabled measurement. |
+
+These names are intentionally trial-specific. Promotion does not rename them:
+keep them disabled while trial-only paths remain, or remove them later when
+those paths are retired.
 
 The initial branch measurement therefore runs complete builds, scans, and Java
 graph generation with trial schedules, uploads, graph submission, and optional

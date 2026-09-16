@@ -18,8 +18,18 @@ lookup/error-log review was operator-checked without a reported blocker.
 protection, temporary-default onboarding, accepted graph submission, alerts, two
 green Mend cycles, and a representative PR. The remaining seven repositories
 passed the Phase 12 Batch A setup and public verification checkpoint on
-2026-09-16. Batch B activation, live vulnerability-fix behavior, and
-sustained-limit behavior remain later evidence.
+2026-09-16. Batch B then paused during onboarding when `transaction-service`
+reported unauthenticated lookups for all three internal `service-common` Maven
+coordinates. The operator reports storing the existing package-read PAT in Mend
+and adding an organization-level Maven host rule scoped to the exact
+`service-common` GitHub Packages path. The four Java consumers then merged an
+explicit Maven Central exclusion for `org.budgetanalyzer` through `main` and
+their trial branches, while orchestration merged the canonical repository
+ownership documentation through the same branch flow. The operator reports
+that the required post-merge `currency-service` Renovate scan succeeded with no
+warnings. Batch B can resume with confirmation of all seven green B1 onboarding
+results; live vulnerability-fix and sustained-limit behavior remain later
+evidence.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -353,6 +363,32 @@ the explicit trial preset reference succeeded in every repository. No open
 issues or pull requests appeared. Enabling the graph and changing the default in
 `ext-authz` caused two automatic, successful GitHub `Graph Update` runs, one for
 each default; no repository-defined workflow was dispatched by Batch A.
+
+Batch B App expansion subsequently reached `transaction-service`. Its first
+Renovate cycle extracted `org.budgetanalyzer:spring-platform`,
+`org.budgetanalyzer:service-core`, and `org.budgetanalyzer:service-web` from the
+version catalog but reported `no-result` for all three. This is the planned
+authenticated Maven lookup test: the packages are published, but the Mend
+installation token did not authenticate the GitHub Packages Maven request. The
+operator reports that the existing package-read PAT is now stored in Mend and
+an organization-level Renovate Maven host rule supplies its owning username and
+credential only for
+`https://maven.pkg.github.com/budgetanalyzer/service-common/`. No credential
+value is retained in repository documentation.
+
+The Java consumers also allowed internal coordinates to fall through to Maven
+Central after the intended Maven Local and authenticated GitHub Packages
+sources. The durable correction excludes `org.budgetanalyzer` from Maven
+Central without using Gradle `exclusiveContent`, preserving the Maven Local
+fallback. It was merged through `main` and then forward into each protected
+trial branch. The coverage report records the resulting pull requests and
+SHAs. The operator reports that the required post-merge `currency-service`
+Renovate scan succeeded with no warnings. No raw Mend log or separate
+per-coordinate result was supplied, so the retained evidence is the sanitized
+operator report rather than an independently inspected scan transcript. Before
+B2, confirm one green B1 onboarding result for every repository, including a
+post-correction green result for `transaction-service` if it has not already
+completed.
 
 ### Trial workflow controls
 

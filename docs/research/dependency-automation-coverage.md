@@ -54,12 +54,15 @@ At `2026-09-17T05:25:38Z`, public APIs confirmed those eight IDs absent, a
 1,338,110-byte public residual, zero caches, exact trial-branch heads for all
 four fixes, and unchanged recorded `main` SHAs. The trial-only correction is
 fully rollbackable but does not change current `main` recurrence. Uploads remain
-unauthorized pending the workspace helper correction, exact no-upload archive
-measurements, and private-usage accounting.
+unauthorized pending exact no-upload archive measurements and Phase 3's
+headroom analysis. The workspace helper correction is published at
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726`; run `35187741819` passed at that
+SHA with zero artifacts while `main` remained
+`383efc840832d474cd9d60e0368ed2ded828e03c`.
 
-**Last updated:** 2026-09-17 (exact-ID cleanup and trial-only service merges
-publicly verified; `main` rollback SHAs unchanged; uploads, schedules, and final
-benchmark dispositions remain pending)
+**Last updated:** 2026-09-17 (workspace correction, exact-ID cleanup, and
+trial-only service merges publicly verified; `main` rollback SHAs unchanged;
+uploads, schedules, and final benchmark dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -597,6 +600,20 @@ exact nine-repository scope. Those controls prevent spend; they do not establish
 available storage. Account-private artifact and package usage remains unknown
 and is not treated as zero.
 
+The completion plan's workspace-correction verification passed at
+`2026-09-17T10:14:02Z`. Public refs resolved
+`dependency-automation-trial` to
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726` and `main` to the unchanged
+rollback SHA `383efc840832d474cd9d60e0368ed2ded828e03c`. Push run
+`35187741819` completed successfully at the corrected trial SHA with the image
+build, complete scan, and sealed-allowlist measurement steps successful; upload,
+enforcement, retained-size, and artifact-link steps were skipped, and the run
+retained zero artifacts. Local focused helper tests, `bash -n`, `shellcheck`,
+`actionlint`, and `git diff --check` all passed. The helper gates only the final
+gzip at 25,165,824 bytes, the upload action uses compression level zero, the
+post-upload check enforces 26,214,400 retained bytes, and every schedule, cache,
+and upload expansion remains conditional.
+
 The old and corrected recurring models must not be mixed:
 
 | Surface | Old recurring model | Corrected recurring model |
@@ -652,7 +669,7 @@ Exactly five non-duplicative detailed records remain. Their candidate order is:
 | 1 | [`ext-authz` variables](https://github.com/budgetanalyzer/ext-authz/settings/variables/actions); [Go Vulnerability Check](https://github.com/budgetanalyzer/ext-authz/actions/workflows/go-vulnerability-check.yml), no inputs | `dependency-automation-trial` at `75ed2bda4de7460332a8dea656def0459064753f` | `trial-govulncheck-evidence-RUN_ID` | Stop unless the complete archive is eligible and contains the scanner/database metadata and full result |
 | 2 | [`budget-analyzer-web` variables](https://github.com/budgetanalyzer/budget-analyzer-web/settings/variables/actions); [Dependency Audit](https://github.com/budgetanalyzer/budget-analyzer-web/actions/workflows/dependency-audit.yml), no inputs | `dependency-automation-trial` at `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | `trial-npm-audit-evidence-RUN_ID` | Stop unless the full and production audit reports are complete and eligible |
 | 3 | [`service-common` variables](https://github.com/budgetanalyzer/service-common/settings/variables/actions); [Dependency Submission](https://github.com/budgetanalyzer/service-common/actions/workflows/dependency-submission.yml), no inputs | `dependency-automation-trial` at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | `trial-dependency-graph-evidence-RUN_ID` | Stop unless resolution and the complete graph are eligible; keep graph submission enabled |
-| 4 | [`workspace` variables](https://github.com/budgetanalyzer/workspace/settings/variables/actions); [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `09ee0a2afecc2af6c3a216b225537c680ef68848`; replace with the reviewed correction SHA | `trial-workspace-image-evidence-RUN_ID` | Stop unless the compressed-only correction is published, the complete allowlist is unchanged, and the final archive is eligible |
+| 4 | [`workspace` variables](https://github.com/budgetanalyzer/workspace/settings/variables/actions); [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml), no inputs | `dependency-automation-trial` at corrected SHA `6a6bf33fb019825b7709693a1b103c8a1dd7d726` | `trial-workspace-image-evidence-RUN_ID` | Stop unless the complete allowlist is unchanged and the final archive is eligible |
 | 5 | [`orchestration` variables](https://github.com/budgetanalyzer/orchestration/settings/variables/actions); [Exact Image Security Evidence](https://github.com/budgetanalyzer/orchestration/actions/workflows/exact-image-security-evidence.yml), no inputs | `dependency-automation-trial` at `c9e6f31208a5f668fcccd3e7ff2fea649654443c` | `trial-exact-image-security-evidence-RUN_ID` | Stop unless all rendered targets remain allowlisted and the fresh no-upload summary reports an eligible final archive |
 
 For every row, select the exact trial branch, leave schedule and cache variables
@@ -666,14 +683,15 @@ remaining one-retry envelope before proceeding.
 
 This matrix is conditional documentation, not an executable authorization. The
 current decision remains **DO NOT AUTHORIZE UPLOADS**: exact-ID cleanup and the
-four trial-only merges are verified, but the workspace correction is not
-implemented, final-archive measurements are incomplete, and private-repository
-usage is unknown. `main` remains unchanged for rollback and may recreate
+four trial-only merges plus the workspace correction are verified, but
+final-archive measurements are incomplete and private-repository usage is
+unknown. `main` remains unchanged for rollback and may recreate
 `app-jar`; do not count the corrected projection as active. Do not run only the
-known smaller rows. A later attempt requires the workspace correction, five
-exact no-upload measurements, a fresh public inventory, an authenticated
-sanitized private-usage aggregate, one-retry reconciliation, and a new explicit
-`UPLOAD BATCH GO` decision.
+known smaller rows. A later attempt requires five exact no-upload measurements,
+a fresh public inventory, one-retry reconciliation, and a new explicit `UPLOAD
+BATCH GO` decision. Private artifact and package usage remains `unknown` unless
+a sanitized aggregate is already available; do not ask the operator to
+re-investigate it.
 
 ## Phase 1 pilot evidence
 

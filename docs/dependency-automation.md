@@ -265,22 +265,25 @@ window is the 1,338,110-byte residual plus two 26,214,400-byte artifacts, or
 ceiling when available.
 
 The workspace evidence is 42,276,809 source bytes, a 42,301,440-byte temporary
-tar, and a 5,754,918-byte final `.tar.gz`. The current helper incorrectly makes
-the intermediate tar an upload-eligibility condition even though only the gzip
-archive is uploaded. The simplest safe correction is to continue measuring all
-three values but gate upload eligibility only on the final archive being at most
-24 MiB, upload it with compression disabled, and fail the run if the exact
-retained artifact API size exceeds 25 MiB. Preserve the complete allowlist and
-fail closed; do not trim scanner targets or reports to satisfy either ceiling.
+tar, and a 5,754,918-byte final `.tar.gz`. The corrected helper continues to
+measure all three values but gates upload eligibility only on the final archive
+being at most 24 MiB, uploads it with compression disabled, and fails the run if
+the exact retained artifact API size exceeds 25 MiB. The correction is published
+on `dependency-automation-trial` at
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726`; publication-triggered run
+`35187741819` passed with the complete allowlist and retained zero artifacts.
+Public verification found `main` unchanged at
+`383efc840832d474cd9d60e0368ed2ded828e03c`. Do not trim scanner targets or
+reports to satisfy either ceiling.
 
 **DO NOT AUTHORIZE UPLOADS YET.** Keep every upload, schedule, and optional-cache
 variable `false`. Exact-ID cleanup is publicly verified and the four workflow
 corrections are trial-only with unchanged `main` rollback SHAs. The workspace
-helper correction is only proposed, exact compressed-size summaries are still
-missing for the required evidence rows, and private-repository usage remains
-unknown. No payment method, paid trial, or allowance increase is permitted. The
-detailed cleanup ledger,
-measurement gaps, and next decision sequence live in the
+helper correction is published and verified; exact compressed-size summaries
+are still missing for the required evidence rows, and private-repository usage
+remains unknown. No payment method, paid trial, or allowance increase is
+permitted. The detailed cleanup ledger, measurement gaps, and next decision
+sequence live in the
 [coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation)
 and the
 [Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md).

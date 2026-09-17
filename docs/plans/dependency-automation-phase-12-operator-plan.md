@@ -52,8 +52,13 @@ the four exact `dependency-automation-trial` refs. At
 This preserves rollback but does not activate the correction on `main`, which
 may recreate `app-jar` before promotion. The completion plan applies the
 corrected rolling-storage model directly instead of creating a second
-remediation meta-plan. Uploads remain unauthorized pending the workspace helper
-correction, exact no-upload bundle sizes, and sanitized private-usage accounting.
+remediation meta-plan. The helper correction was subsequently published at
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726`; run `35187741819` passed at that
+SHA with zero artifacts, and `main` remained unchanged. The completion plan now
+owns the remaining no-upload measurement work. Uploads remain unauthorized
+pending those exact rows and Phase 3's headroom analysis; private artifact and
+package usage stays explicitly `unknown` unless a sanitized aggregate is already
+available.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).

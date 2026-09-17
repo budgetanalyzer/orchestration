@@ -18,23 +18,38 @@ WAIT_LIMIT="${PHASE12_WAIT_LIMIT:-1440}"
 
 usage() {
   cat <<'USAGE'
-Usage: run-dependency-automation-upload-batch.sh --confirm 'UPLOAD BATCH GO'
+Usage: run-dependency-automation-upload-batch.sh --confirm 'UPLOAD BATCH GO' \
+  [--resume-first-run RUN_ID --resume-first-artifact ARTIFACT_ID]
 
 Runs the reviewed Phase 12 Gate C matrix from a clean checkout whose HEAD is
 already published as budgetanalyzer/orchestration:dependency-automation-trial.
 The helper uses the operator's existing gh session, serializes all rows, restores
 the upload variable after each dispatch, downloads and checksums each exact
 artifact, deletes only that captured artifact ID, and writes a sanitized ledger
-under tmp/dependency-automation/.
+under tmp/dependency-automation/. The resume options recover an interrupted
+first row only; the helper verifies the exact run and artifact before use and
+does not dispatch a duplicate first-row workflow.
 USAGE
 }
 
 confirmation=""
+resume_first_run=""
+resume_first_artifact=""
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --confirm)
       [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
       confirmation="$2"
+      shift 2
+      ;;
+    --resume-first-run)
+      [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+      resume_first_run="$2"
+      shift 2
+      ;;
+    --resume-first-artifact)
+      [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+      resume_first_artifact="$2"
       shift 2
       ;;
     -h|--help)
@@ -52,6 +67,13 @@ done
 if [[ "${confirmation}" != 'UPLOAD BATCH GO' ]]; then
   echo "Refusing to run without --confirm 'UPLOAD BATCH GO'." >&2
   exit 2
+fi
+
+if [[ -n "${resume_first_run}" || -n "${resume_first_artifact}" ]]; then
+  if [[ ! "${resume_first_run}" =~ ^[1-9][0-9]*$ || ! "${resume_first_artifact}" =~ ^[1-9][0-9]*$ ]]; then
+    echo 'Both resume IDs must be supplied as positive integers.' >&2
+    exit 2
+  fi
 fi
 
 if [[ ! "${WAIT_SECONDS}" =~ ^[0-9]+$ || ! "${WAIT_LIMIT}" =~ ^[1-9][0-9]*$ ]]; then
@@ -228,6 +250,8 @@ jq -n \
   --argjson public_allowance_bytes "${PUBLIC_ALLOWANCE_BYTES}" \
   --argjson failure_diagnostic_reserve_bytes "${FAILURE_DIAGNOSTIC_RESERVE_BYTES}" \
   --argjson matrix "${matrix_json}" \
+  --arg resume_run_id "${resume_first_run}" \
+  --arg resume_artifact_id "${resume_first_artifact}" \
   '{
     schema_version: 1,
     gate: "UPLOAD BATCH GO",
@@ -243,6 +267,10 @@ jq -n \
     },
     matrix: $matrix,
     preflight: null,
+    resume: (if $resume_run_id == "" then null else {
+      first_row_run_id: ($resume_run_id | tonumber),
+      first_row_artifact_id: ($resume_artifact_id | tonumber)
+    } end),
     rows: [],
     failure: null,
     final_upload_gate_restore_succeeded: false
@@ -298,12 +326,21 @@ collect_public_storage() {
   local combined_artifacts='[]'
   local combined_caches='[]'
 
-  repositories_json="$("${GH_BIN}" api --paginate --slurp "orgs/${ORG}/repos?type=public&per_page=100")"
+  repositories_json="$(
+    "${GH_BIN}" api --paginate "orgs/${ORG}/repos?type=public&per_page=100" |
+      jq -s '.'
+  )" || return 1
   while IFS= read -r repository; do
-    artifacts_json="$("${GH_BIN}" api --paginate --slurp \
-      "repos/${ORG}/${repository}/actions/artifacts?per_page=100")"
-    caches_json="$("${GH_BIN}" api --paginate --slurp \
-      "repos/${ORG}/${repository}/actions/caches?per_page=100")"
+    artifacts_json="$(
+      "${GH_BIN}" api --paginate \
+        "repos/${ORG}/${repository}/actions/artifacts?per_page=100" |
+        jq -s '.'
+    )" || return 1
+    caches_json="$(
+      "${GH_BIN}" api --paginate \
+        "repos/${ORG}/${repository}/actions/caches?per_page=100" |
+        jq -s '.'
+    )" || return 1
     combined_artifacts="$(jq \
       --arg repository "${repository}" \
       --argjson pages "${artifacts_json}" \
@@ -314,7 +351,7 @@ collect_public_storage() {
         size_in_bytes,
         expires_at,
         workflow_run: {id: .workflow_run.id, head_branch: .workflow_run.head_branch, head_sha: .workflow_run.head_sha}
-      }]' <<< "${combined_artifacts}")"
+      }]' <<< "${combined_artifacts}")" || return 1
     combined_caches="$(jq \
       --arg repository "${repository}" \
       --argjson pages "${caches_json}" \
@@ -324,7 +361,7 @@ collect_public_storage() {
         key,
         ref,
         size_in_bytes
-      }]' <<< "${combined_caches}")"
+      }]' <<< "${combined_caches}")" || return 1
   done < <(jq -r '[.[][]] | map(select(.visibility == "public")) | .[].name' <<< "${repositories_json}" | sort -u)
 
   jq -n \
@@ -336,12 +373,19 @@ collect_public_storage() {
       cache_count: ($caches | length),
       cache_bytes: ($caches | map(.size_in_bytes) | add // 0),
       app_jar_recurrence: [$artifacts[] | select(.name == "app-jar")],
+      controlled_upload_artifacts: [
+        $artifacts[] |
+        select(.name | test("^trial-(govulncheck|npm-audit|dependency-graph|workspace-image|exact-image-security)-evidence-[0-9]+$"))
+      ],
       artifacts: $artifacts,
       caches: $caches
     }'
 }
 
-storage_json="$(collect_public_storage)"
+if ! storage_json="$(collect_public_storage)"; then
+  set_failure 'Could not collect the complete public artifact and cache inventory.'
+  exit 1
+fi
 current_public_bytes="$(jq -r '.artifact_bytes' <<< "${storage_json}")"
 current_cache_count="$(jq -r '.cache_count' <<< "${storage_json}")"
 app_jar_count="$(jq -r '.app_jar_recurrence | length' <<< "${storage_json}")"
@@ -355,6 +399,25 @@ if ((current_cache_count != 0)); then
 fi
 if ((app_jar_count != 0)); then
   set_failure "Public app-jar recurrence detected (${app_jar_count} artifacts)."
+  exit 1
+fi
+controlled_upload_count="$(jq -r '.controlled_upload_artifacts | length' <<< "${storage_json}")"
+if [[ -n "${resume_first_run}" ]]; then
+  if [[ "${controlled_upload_count}" != 1 ]] || ! jq -e \
+    --argjson run_id "${resume_first_run}" \
+    --argjson artifact_id "${resume_first_artifact}" \
+    '[.controlled_upload_artifacts[] | select(
+      .repository == "ext-authz" and
+      .id == $artifact_id and
+      .name == ("trial-govulncheck-evidence-" + ($run_id | tostring)) and
+      .workflow_run.id == $run_id and
+      .workflow_run.head_sha == "75ed2bda4de7460332a8dea656def0459064753f"
+    )] | length == 1' >/dev/null <<< "${storage_json}"; then
+    set_failure 'The retained controlled-upload artifact does not exactly match the requested first-row resume IDs.'
+    exit 1
+  fi
+elif ((controlled_upload_count != 0)); then
+  set_failure "Found ${controlled_upload_count} retained controlled-upload artifact(s); use the reviewed exact-ID resume path."
   exit 1
 fi
 if ((remaining_bytes < 0)); then
@@ -389,6 +452,7 @@ while IFS= read -r row; do
   delete_after_download="$(jq -r '.delete_after_download' <<< "${row}")"
   expected_artifact=""
   full_repository="${ORG}/${repository}"
+  resumed_row=false
 
   if [[ "$(variable_value "${repository}" "${SCHEDULE_VARIABLE}")" != false \
     || "$(variable_value "${repository}" "${CACHE_VARIABLE}")" != false \
@@ -401,51 +465,60 @@ while IFS= read -r row; do
     exit 1
   fi
 
-  prior_run_ids="$("${GH_BIN}" api \
-    "repos/${full_repository}/actions/workflows/${workflow}/runs?branch=${TRIAL_BRANCH}&event=workflow_dispatch&per_page=100" \
-    --jq '[.workflow_runs[].id]')"
-
-  active_repository="${repository}"
-  set_upload_value "${repository}" true
-  if [[ "$(variable_value "${repository}" "${UPLOAD_VARIABLE}")" != true ]]; then
-    set_failure "Upload gate did not become true for ${repository}."
-    exit 1
-  fi
-
-  "${GH_BIN}" workflow run "${workflow}" --repo "${full_repository}" --ref "${TRIAL_BRANCH}" >/dev/null
-
   run_id=""
-  for ((attempt = 1; attempt <= WAIT_LIMIT; attempt++)); do
-    runs_json="$("${GH_BIN}" api \
-      "repos/${full_repository}/actions/workflows/${workflow}/runs?branch=${TRIAL_BRANCH}&event=workflow_dispatch&per_page=100")"
-    run_id="$(jq -r \
-      --arg sha "${expected_sha}" \
-      --argjson prior "${prior_run_ids}" \
-      '[.workflow_runs[] | select(.head_sha == $sha and (.id as $id | $prior | index($id) | not))] |
-       sort_by(.created_at) | last | .id // empty' <<< "${runs_json}")"
-    [[ -n "${run_id}" ]] && break
-    sleep "${WAIT_SECONDS}"
-  done
-  if [[ -z "${run_id}" ]]; then
-    set_failure "No new source-exact workflow_dispatch run appeared for ${repository}."
-    exit 1
-  fi
-
   run_json=""
-  for ((attempt = 1; attempt <= WAIT_LIMIT; attempt++)); do
-    run_json="$("${GH_BIN}" api "repos/${full_repository}/actions/runs/${run_id}")"
-    [[ "$(jq -r '.status' <<< "${run_json}")" == completed ]] && break
-    sleep "${WAIT_SECONDS}"
-  done
-  if [[ "$(jq -r '.status' <<< "${run_json}")" != completed ]]; then
-    set_failure "Timed out waiting for ${repository} run ${run_id}."
-    exit 1
-  fi
+  if [[ "${order}" == 1 && -n "${resume_first_run}" ]]; then
+    resumed_row=true
+    run_id="${resume_first_run}"
+    if ! run_json="$("${GH_BIN}" api "repos/${full_repository}/actions/runs/${run_id}")"; then
+      set_failure "Could not read resumed ${repository} run ${run_id}."
+      exit 1
+    fi
+  else
+    prior_run_ids="$("${GH_BIN}" api \
+      "repos/${full_repository}/actions/workflows/${workflow}/runs?branch=${TRIAL_BRANCH}&event=workflow_dispatch&per_page=100")"
+    prior_run_ids="$(jq '[.workflow_runs[].id]' <<< "${prior_run_ids}")"
 
-  if ! restore_active_upload_gate; then
     active_repository="${repository}"
-    set_failure "Failed to restore the upload gate after ${repository} run ${run_id}."
-    exit 1
+    set_upload_value "${repository}" true
+    if [[ "$(variable_value "${repository}" "${UPLOAD_VARIABLE}")" != true ]]; then
+      set_failure "Upload gate did not become true for ${repository}."
+      exit 1
+    fi
+
+    "${GH_BIN}" workflow run "${workflow}" --repo "${full_repository}" --ref "${TRIAL_BRANCH}" >/dev/null
+
+    for ((attempt = 1; attempt <= WAIT_LIMIT; attempt++)); do
+      runs_json="$("${GH_BIN}" api \
+        "repos/${full_repository}/actions/workflows/${workflow}/runs?branch=${TRIAL_BRANCH}&event=workflow_dispatch&per_page=100")"
+      run_id="$(jq -r \
+        --arg sha "${expected_sha}" \
+        --argjson prior "${prior_run_ids}" \
+        '[.workflow_runs[] | select(.head_sha == $sha and (.id as $id | $prior | index($id) | not))] |
+         sort_by(.created_at) | last | .id // empty' <<< "${runs_json}")"
+      [[ -n "${run_id}" ]] && break
+      sleep "${WAIT_SECONDS}"
+    done
+    if [[ -z "${run_id}" ]]; then
+      set_failure "No new source-exact workflow_dispatch run appeared for ${repository}."
+      exit 1
+    fi
+
+    for ((attempt = 1; attempt <= WAIT_LIMIT; attempt++)); do
+      run_json="$("${GH_BIN}" api "repos/${full_repository}/actions/runs/${run_id}")"
+      [[ "$(jq -r '.status' <<< "${run_json}")" == completed ]] && break
+      sleep "${WAIT_SECONDS}"
+    done
+    if [[ "$(jq -r '.status' <<< "${run_json}")" != completed ]]; then
+      set_failure "Timed out waiting for ${repository} run ${run_id}."
+      exit 1
+    fi
+
+    if ! restore_active_upload_gate; then
+      active_repository="${repository}"
+      set_failure "Failed to restore the upload gate after ${repository} run ${run_id}."
+      exit 1
+    fi
   fi
 
   if [[ "$(jq -r '.conclusion' <<< "${run_json}")" != success \
@@ -456,8 +529,14 @@ while IFS= read -r row; do
     exit 1
   fi
 
-  jobs_json="$("${GH_BIN}" api --paginate --slurp \
-    "repos/${full_repository}/actions/runs/${run_id}/jobs?per_page=100")"
+  if ! jobs_json="$(
+    "${GH_BIN}" api --paginate \
+      "repos/${full_repository}/actions/runs/${run_id}/jobs?per_page=100" |
+      jq -s '.'
+  )"; then
+    set_failure "Could not collect all jobs for ${repository} run ${run_id}."
+    exit 1
+  fi
   if ! jq -e '[.[].jobs[]] | length > 0 and all(.[]; .status == "completed" and .conclusion == "success")' \
     >/dev/null <<< "${jobs_json}"; then
     set_failure "One or more jobs failed acceptance for ${repository} run ${run_id}."
@@ -481,6 +560,10 @@ while IFS= read -r row; do
   if [[ ! "${artifact_id}" =~ ^[0-9]+$ || ! "${artifact_bytes}" =~ ^[0-9]+$ \
     || "${artifact_sha}" != "${expected_sha}" || "${artifact_bytes}" -gt "${RETAINED_CAP_BYTES}" ]]; then
     set_failure "Artifact metadata or retained-size acceptance failed for ${repository} run ${run_id}."
+    exit 1
+  fi
+  if [[ "${resumed_row}" == true && "${artifact_id}" != "${resume_first_artifact}" ]]; then
+    set_failure "Resumed artifact ID mismatch for ${repository} run ${run_id}."
     exit 1
   fi
 
@@ -546,6 +629,7 @@ while IFS= read -r row; do
     --arg local_payload "${payload_path#"${REPO_ROOT}"/}" \
     --argjson payload_bytes "${payload_bytes}" \
     --arg payload_sha256 "${payload_sha256}" \
+    --argjson resumed "${resumed_row}" \
     --argjson deletion_requested "${delete_after_download}" \
     --argjson deletion_confirmed "${deletion_confirmed:-false}" \
     '{
@@ -553,6 +637,7 @@ while IFS= read -r row; do
       repository: $repository,
       workflow: $workflow,
       source_sha: $source_sha,
+      resumed_from_interrupted_batch: $resumed,
       run: {id: $run_id, url: $run_url, event: "workflow_dispatch", conclusion: $conclusion},
       artifact: {
         id: $artifact_id,
@@ -573,7 +658,10 @@ while IFS= read -r row; do
     "${ledger_path}" > "${ledger_tmp}"
   mv "${ledger_tmp}" "${ledger_path}"
 
-  storage_json="$(collect_public_storage)"
+  if ! storage_json="$(collect_public_storage)"; then
+    set_failure "Could not refresh public artifact and cache inventory after ${repository}."
+    exit 1
+  fi
   if [[ "$(jq -r '.cache_count' <<< "${storage_json}")" != 0 \
     || "$(jq -r '.app_jar_recurrence | length' <<< "${storage_json}")" != 0 ]]; then
     set_failure "Unexpected cache or app-jar state appeared after ${repository}."

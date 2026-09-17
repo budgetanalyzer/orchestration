@@ -71,9 +71,9 @@ conservative current-residual-plus-one-retry-plus-future-failure model peaks at
 55,097,576 bytes and leaves 469,190,424 public bytes before unknown private
 usage.
 
-**Last updated:** 2026-09-17 (Gate C stopped before upload on a host GitHub CLI
-compatibility defect; reviewed retry correction, schedules, and final benchmark
-dispositions remain pending)
+**Last updated:** 2026-09-17 (Gate C stopped twice on host GitHub CLI
+compatibility defects; one exact first-row artifact awaits reviewed recovery,
+while schedules and final benchmark dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -794,7 +794,7 @@ The operator must reply exactly `UPLOAD BATCH GO` before running:
 Until that separate Gate C authorization, all upload, schedule, and cache
 variables remain `false`; this section records readiness, not execution.
 
-### Phase 12 completion Phase 4 Gate C preflight stop
+### Phase 12 completion Phase 4 Gate C compatibility stops and recovery
 
 The operator supplied the exact `UPLOAD BATCH GO` authorization and invoked the
 published bridge from orchestration source
@@ -823,6 +823,50 @@ implementation. Publish the reviewed correction, verify its exact trial head,
 then require a fresh `UPLOAD BATCH GO` for the retry. Until that succeeds, all
 five detailed rows and the Phase 4 schedule recommendation remain pending;
 **DO NOT AUTHORIZE SCHEDULES**.
+
+That REST correction was published at
+`cb0b20e6408f49e69a2c8e76afd1e8c6c2fa15b3`, and a fresh exact authorization
+started a second helper invocation at `2026-09-17T12:40:00Z`. Its ledger at
+`tmp/dependency-automation/gate-c-20260917T124000Z/ledger.json` proves all five
+frozen refs, trial defaults, and false expansion gates passed. It then records
+an `upload_batch` failure at `2026-09-17T12:41:09Z`, zero accepted rows, and
+successful final upload-gate restoration. The host CLI rejected the later
+`gh api --slurp` job request.
+
+Unlike the first stop, the second invocation dispatched its first row. Public
+APIs independently record successful `ext-authz` run
+[35222448397](https://github.com/budgetanalyzer/ext-authz/actions/runs/35222448397)
+at exact source `75ed2bda4de7460332a8dea656def0459064753f`, created at
+`2026-09-17T12:40:23Z` and completed at `2026-09-17T12:41:02Z`. Its sole
+artifact is exact ID `10496714385`, name
+`trial-govulncheck-evidence-35222448397`, API size 52,768 bytes, and expiry
+`2026-09-18T12:40:58Z`. No later matrix row ran. Preserve that artifact for
+local checksummed recovery rather than deleting it or dispatching duplicate
+first-row evidence.
+
+The second ledger's `artifact_bytes=0` and derived 53,759,466-byte peak are
+invalid: the unsupported pagination flag failed inside the inventory function,
+and the old control flow interpreted empty API output as an empty inventory.
+Do not use those values for cost or acceptance. The corrected collector uses
+`gh api --paginate | jq -s`, explicitly fails before dispatch on any inventory
+API error, and recognizes retained trial artifacts as a stop unless the exact
+first-row resume IDs are supplied.
+
+Fixture validation now covers the ordinary five-row path, an inventory API
+failure with no dispatch, exact first-row recovery without a duplicate
+`ext-authz` dispatch, and failed-run restoration. After publishing the reviewed
+correction and obtaining a fresh exact `UPLOAD BATCH GO`, run:
+
+```bash
+./scripts/repo/run-dependency-automation-upload-batch.sh \
+  --confirm 'UPLOAD BATCH GO' \
+  --resume-first-run 35222448397 \
+  --resume-first-artifact 10496714385
+```
+
+Successful recovery must verify and checksum the retained archive, delete only
+artifact `10496714385`, then serialize rows 2–5. Until the complete corrected
+ledger and archives exist, **DO NOT AUTHORIZE SCHEDULES**.
 
 ## Phase 1 pilot evidence
 

@@ -155,10 +155,14 @@ scripts/
   artifact, deletes only that captured ID after the local copy is complete, and
   writes a sanitized ledger under ignored `tmp/dependency-automation/`. Variable
   reads and writes use `gh api` so the bridge does not depend on newer
-  `gh variable get --json` support.
+  `gh variable get --json` support. Paginated responses are slurped with `jq`
+  instead of a newer `gh api --slurp` flag. Exact resume IDs may recover an
+  interrupted first row without dispatching duplicate evidence; unrecognized
+  retained trial artifacts stop the helper.
 - `repo/test-run-dependency-automation-upload-batch.sh` - Fixture-driven test
-  for the Gate C helper's five-row success path and failed-run restoration path;
-  it performs no GitHub requests or repository-variable changes.
+  for the Gate C helper's five-row success path, fail-closed public-inventory
+  collection, exact first-row recovery, and failed-run restoration path; it
+  performs no GitHub requests or repository-variable changes.
 
 Choose scripts by runtime boundary:
 

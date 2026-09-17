@@ -1,210 +1,166 @@
 # Dependency Automation Phase 12 Completion Plan
 
-This plan completes the bounded dependency-automation trial without treating
-ordinary Java CI artifacts as deployment inputs. The public-baseline and
-original cost-reconciliation work are completed historical checkpoints. This
-executable plan starts by removing the workspace helper's false
-intermediate-tar blocker. It records the operator-completed trial-branch
-publication and exact-ID cleanup, obtains exact no-upload measurements, and
-then makes a fresh one-at-a-time upload decision.
+This plan completes the bounded dependency-automation trial with agent-owned
+evidence collection by default. The agent performs every public read, inventory,
+calculation, comparison, wait, and documentation update that anonymous GitHub
+APIs permit. The operator is not a human API client and must not be asked to
+recheck public artifacts, caches, branch heads, workflow status, or previously
+recorded billing facts.
 
-The agent never receives credentials or performs authenticated GitHub mutations.
-The operator owns publication, exact-ID deletion, workflow dispatches, settings,
-App access, and final decisions. Keep uploads, schedules, optional caches, and
-unapproved graph submission `false` unless the exact checkpoint below explicitly
-authorizes one action. No payment method, paid trial, or allowance increase is
-allowed.
+Credentials remain outside the agent environment. The only operator work left
+is a small set of consequential or credentialed actions: publishing reviewed
+changes, running an agent-authored host helper for GitHub mutations, giving an
+explicit upload or schedule authorization, restoring account settings, and
+making the final GO/NO-GO/DEFER decision. Host helpers must fail closed, use the
+operator's existing `gh` session without exposing its token, and write only a
+sanitized machine-readable ledger under ignored `tmp/` paths that the agent can
+inspect. Do not require the operator to compose checkpoint reports manually.
 
-Keep every remediation change on the protected dependency-automation trial
-branch until the final promotion decision. `main` and its recorded SHAs are the
-rollback baseline. Trial publication proves that the change is reviewable and
-recoverable; it does not activate the corrected recurring-storage model on
-`main`. Until promotion, a new `main` build may recreate `app-jar`, so every
-inventory refresh must check for recurrence. A `NO-GO` or `DEFER` restores the
-original defaults/settings and leaves `main` unchanged; removal of trial refs is
-considered only after rollback verification.
+The completed zero-spend checkpoint is a standing invariant. Do not ask the
+operator to reconfirm the absence of a payment method or paid trial. The
+operator must proactively report a change before further hosted work if a
+payment method, paid trial, allowance increase, or spend-stop removal is
+introduced. Otherwise every phase proceeds from the recorded hard stop. Private
+artifact and package usage is `unknown` unless a sanitized aggregate is already
+available; record `unknown` once and do not ask the operator to investigate it
+again. Unknown private usage is not zero, but under the standing hard stop a
+single capped upload may be used as a fail-closed capacity probe after exact
+no-upload sizing. A quota rejection fails the trial and never authorizes billing.
 
-Rollback applies to repository refs, workflow behavior, variables, schedules,
-caches, App access, and defaults. The completed deletion of an Actions artifact
-is not reversible: its old artifact ID cannot be restored. Preserve the exact
-deletion ledger as the audit record. This does not impair release or deployment
-rollback because no active release or deployment path consumed `app-jar`; if a
-diagnostic copy were ever needed, the old workflow can regenerate equivalent
-JARs from the recorded source SHA without restoring the deleted object.
+Keep every remediation change on the protected
+`dependency-automation-trial` branches until a separate promotion plan is
+approved. `main` and its recorded SHAs remain the rollback baseline. Until
+promotion, an unchanged `main` workflow may recreate `app-jar`, so every agent
+inventory must identify recurrence without asking the operator to do so.
 
-Run one phase at a time with `--max-phases 1`. Do not cross an operator
-checkpoint in one invocation: Phase 2 requires Checkpoint B, Phase 3 requires
-Checkpoint C, Phase 4 requires Checkpoint D, Phase 6 requires Checkpoint E, and
-Phase 7 requires Checkpoint F. Stop with a concrete handoff when the required
-checkpoint record is absent or incomplete.
-
+Run one phase at a time with `--max-phases 1`. A phase may wait and poll public
+state. It must stop only for a listed operator gate, an unavailable exact job
+summary, or a genuine evidence failure. Do not manufacture a broader handoff.
 The canonical policy is [Dependency Automation](../dependency-automation.md),
 the evidence ledger is the
 [coverage report](../research/dependency-automation-coverage.md), and completed
 Batches A-C remain summarized in the
 [operator plan](dependency-automation-phase-12-operator-plan.md).
 
-## Current disposition
+## Responsibility model
 
-The completed original cost reconciliation recorded **DO NOT AUTHORIZE
-UPLOADS** under the old recurring-storage model. The corrected model removes
-deploy-unconsumed `app-jar` uploads and keeps
-failure-only JUnit XML for one day. A public refresh at
-`2026-09-17T04:56:48Z` still found the old objects: 17 non-expired artifacts,
-502,562,266 bytes, and zero caches across all 15 public organization
-repositories. Eight exact `app-jar` artifacts contribute 501,224,156 bytes.
+| Work | Owner | Rule |
+| --- | --- | --- |
+| Public branch/SHA, PR, workflow, job, artifact, cache, and exact-ID reads | Agent | Query GitHub directly, paginate, timestamp, retry rate limits, and save sanitized evidence. |
+| Public artifact/cache totals and `app-jar` recurrence | Agent | Recompute from APIs; never ask the operator. |
+| Zero-artifact and serialized-run verification | Agent | Derive from public run, job, and artifact metadata. |
+| Source/tar/gzip values in a GitHub job summary | Agent when exposed; otherwise one minimal operator extraction | GitHub does not expose custom job-summary content anonymously. Ask once only for the missing measurement rows, never for facts available through public APIs. |
+| Private artifact/package totals | Agent records `unknown` | Do not ask again unless an aggregate is volunteered or already present. |
+| Billing/payment/trial state | Standing historical baseline | Do not reconfirm. Stop only if the operator reports a change. |
+| Workflow dispatches, repository variables, App/default/settings changes, and exact-ID deletion | Operator-side host helper | Agent authors and validates the helper; operator runs it with credentials outside the container; agent consumes its sanitized ledger. |
+| Evidence analysis, arithmetic, recommendations, and documentation | Agent | Perform completely and independently. |
+| Upload, schedule, and final promotion decisions | Operator | Require only the exact GO phrase defined below. |
 
-After exact-ID cleanup, known public residual storage is 1,338,110 bytes. A
-rolling trial window containing one 25 MiB retained artifact
-and one retry would peak at 53,766,910 public bytes, but this is not authority to
-upload. Public verification at `2026-09-17T05:25:38Z` confirms all eight IDs are
-absent, no public `app-jar` remains, public caches remain zero, and the four
-service corrections are on exact `dependency-automation-trial` heads
-`cca334840a5ad812f4745621e7196c281541393d`,
-`943edf82fa6fe55e625a70dc7b51bd26424bd3de`,
-`c8e2b4ccef37e059357d01aed937e93894a85485`, and
-`923637aadb8be5d9f87a9f88799bd7d6dd4905d7` in currency, permission,
-transaction, and session order. Their recorded `main` SHAs remain unchanged.
-The zero-artifact successful-CI projection is therefore a promotion projection,
-not current `main` behavior. The four other required archive sizes and
-account-private usage remain unknown, and the workspace helper correction is
-not implemented.
+## Standing baseline and completed work
 
-## Operator checkpoint A: completed zero-spend baseline
+Checkpoint A is complete: GitHub Free for organizations, no payment method,
+zero-dollar Actions and Packages budgets with **Stop usage**, `$0` billed Actions
+usage at the checkpoint, Mend Community/free, no paid trial, and trial expansion
+variables off. These facts bound spend at zero but do not prove capacity. They
+are not a recurring questionnaire.
 
-Checkpoint A is complete. Preserve its historical record: GitHub Free for
-organizations, no payment method, zero-dollar Actions and Packages budgets with
-**Stop usage**, `$0` billed Actions usage, Mend Community/free, no paid trial,
-and all upload/schedule/cache variables off. These controls bound spend at zero;
-they do not prove storage headroom.
-
-## Operator checkpoint B: publish, clean up, and measure without uploads
-
-Perform this checkpoint only after Phase 1 validates the workspace correction.
-This checkpoint does not authorize an evidence upload.
-
-1. Record the four merged PR URLs and merge SHAs. Verify they landed on the exact
-   protected `dependency-automation-trial` ref expected by the workflow guards;
-   if the operator used a differently named dependency-automation branch, stop
-   and reconcile the ref before running measurements. Confirm `main` and its
-   recorded SHAs remain unchanged. Do not promote these changes to `main` during
-   the trial.
-2. Review and publish the Phase 1 workspace correction at a recorded source SHA.
-   Publish it only to `dependency-automation-trial`; keep `main` unchanged and
-   keep uploads, schedules, and optional caches `false`.
-3. Verify the eight recorded artifact IDs are absent. Preserve their repository,
-   run, source SHA, name, API size, expiry, and the operator's exact-ID deletion
-   record. If any ID still exists, stop and reconcile it rather than issuing a
-   broad or repeated cleanup.
-4. The completed deletion target list is retained below for audit and rollback
-   evidence. Do not rerun these commands against an unverified or reused ID.
-
-```bash
-gh api --method DELETE repos/budgetanalyzer/currency-service/actions/artifacts/10440009083
-gh api --method DELETE repos/budgetanalyzer/currency-service/actions/artifacts/10440089489
-gh api --method DELETE repos/budgetanalyzer/permission-service/actions/artifacts/10439738759
-gh api --method DELETE repos/budgetanalyzer/permission-service/actions/artifacts/10440034884
-gh api --method DELETE repos/budgetanalyzer/transaction-service/actions/artifacts/10440595892
-gh api --method DELETE repos/budgetanalyzer/transaction-service/actions/artifacts/10440114874
-gh api --method DELETE repos/budgetanalyzer/session-gateway/actions/artifacts/10439454814
-gh api --method DELETE repos/budgetanalyzer/session-gateway/actions/artifacts/10441010133
-```
-
-5. Obtain a fresh public artifact/cache inventory after deletion. Expected public
-   residual, if no unrelated run occurred, is 1,338,110 artifact bytes and zero
-   cache bytes. Record changed reality instead of forcing that expectation, and
-   explicitly identify any new `app-jar` created by an unchanged `main` workflow.
-6. With uploads, schedules, and optional caches still `false`, run the five
-   candidate workflows one at a time only to obtain fresh job-summary
-   measurements. Record repository, workflow/run URL, source SHA, source bytes,
-   temporary tar bytes, final gzip bytes, `upload_allowed`, allowlist/target
-   count, and zero retained artifacts. The five rows are `govulncheck`, npm
-   audit, representative Java graph, workspace image, and platform image.
-7. In the operator's trusted environment, record a sanitized aggregate of
-   current private-repository artifact and package bytes and counts. Do not send
-   tokens, repository names, raw private API responses, cookies, or logs to the
-   agent. If GitHub cannot expose a trustworthy aggregate, report private usage
-   as unknown.
-8. Confirm again that no payment method or paid trial was added and every upload,
-   schedule, and optional-cache variable remains `false`.
-9. Send the sanitized checkpoint record:
+The operator deleted the eight obsolete `app-jar` artifacts by exact ID. The
+agent must verify their continued absence itself:
 
 ```text
-Checkpoint B complete
-Observed UTC: TIMESTAMP
-Published regular-CI correction SHAs: REPOSITORY=SHA ...
-Published workspace correction SHA: SHA
-Trial branch verified as dependency-automation-trial: yes | no, actual ref
-Recorded main SHAs unchanged: yes | no, details
-Deleted artifact IDs verified absent: 10440009083, 10440089489, 10439738759, 10440034884, 10440595892, 10440114874, 10439454814, 10441010133 | mismatch details
-Fresh public artifact bytes/count: BYTES / COUNT
-Fresh public cache bytes/count: BYTES / COUNT
-Private artifact aggregate: BYTES / COUNT | unknown
-Private package aggregate: BYTES / COUNT | unknown
-govulncheck: RUN | SHA | SOURCE | TAR | GZIP | ALLOWED | ZERO_ARTIFACTS
-npm audit: RUN | SHA | SOURCE | TAR | GZIP | ALLOWED | ZERO_ARTIFACTS
-Java graph: RUN | SHA | SOURCE | TAR | GZIP | ALLOWED | ZERO_ARTIFACTS
-workspace image: RUN | SHA | SOURCE | TAR | GZIP | ALLOWED | ZERO_ARTIFACTS
-platform image: RUN | SHA | SOURCE | TAR | GZIP | ALLOWED | ZERO_ARTIFACTS
-Uploads/schedules/caches: false / false / false
-Payment method or paid trial added: no
-Unexpected condition: none | sanitized description
+currency-service:    10440009083 10440089489
+permission-service:  10439738759 10440034884
+transaction-service: 10440595892 10440114874
+session-gateway:     10439454814 10441010133
 ```
 
-## Operator checkpoint C: controlled one-at-a-time uploads
+The four regular-CI corrections are published only on their protected trial
+branches. Public verification at `2026-09-17T05:25:38Z` found 1,338,110 known
+public artifact bytes, zero public cache bytes, no remaining public `app-jar`,
+and unchanged recorded `main` SHAs. That observation is historical; Phase 2
+must refresh it.
 
-Do not perform this checkpoint unless Phase 2 publishes
-`SAFE TO REQUEST UPLOAD BATCH GO` with an exact matrix and the operator then
-replies `UPLOAD BATCH GO`.
+The workspace evidence correction is now published on
+`dependency-automation-trial` at
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726`. Its publication-triggered
+[workflow run](https://github.com/budgetanalyzer/workspace/actions/runs/35187741819)
+completed successfully with zero artifacts. `main` remains
+`383efc840832d474cd9d60e0368ed2ded828e03c`. The known regression bundle was
+42,276,809 source bytes, a 42,301,440-byte temporary tar, and a 5,754,918-byte
+gzip; a fresh source-exact summary still replaces those historical measurements
+when available.
 
-For each approved row, complete the entire sequence before touching the next:
+## Minimal operator gates
 
-1. Verify the source SHA and exact archive estimate still match Phase 2.
-2. Keep schedules and optional caches `false`. Enable uploads only in that one
-   repository; preserve graph-submission state exactly as the matrix requires.
-3. Dispatch the exact approved workflow on `dependency-automation-trial` and
-   wait for completion. Do not overlap rows.
-4. Immediately restore uploads to `false`.
-5. Record artifact ID, repository, run URL, source SHA, name, API
-   `size_in_bytes`, expiry, tool/database versions, target counts, and all
-   row-specific findings. Stop if the retained artifact exceeds 25 MiB, the
-   evidence is incomplete, the ref changed, a cache or PR appeared, or the run
-   failed/skipped.
-6. Recompute current storage with one retry. After all required findings are
-   recorded, the operator may delete that exact artifact ID or wait for one-day
-   expiry before the next row. Never use a broad cleanup.
+These are the only permissible operator gates. No gate asks the operator to
+verify public state or restate the standing billing baseline.
 
-Candidate order, subject to Phase 2 minimization:
+### Gate B: credentialed no-upload execution, only if needed
 
-1. `ext-authz` Go Vulnerability Check
-2. `budget-analyzer-web` Dependency Audit
-3. `service-common` Dependency Submission
-4. `workspace` Workspace Image Security Evidence
-5. `orchestration` Exact Image Security Evidence
+Phase 2 first searches for source-exact successful trial runs. If one or more
+candidate runs are absent, the agent supplies one exact host command that
+dispatches only the missing workflows on `dependency-automation-trial`, waits
+for each to finish before starting the next, and never changes upload, schedule,
+graph-submission, or cache variables. The five candidates are:
 
-## Operator checkpoint D: real scheduled events
+1. `budgetanalyzer/ext-authz`: `go-vulnerability-check.yml`
+2. `budgetanalyzer/budget-analyzer-web`: `dependency-audit.yml`
+3. `budgetanalyzer/service-common`: `dependency-submission.yml`
+4. `budgetanalyzer/workspace`: `workspace-image-security-evidence.yml`
+5. `budgetanalyzer/orchestration`: `exact-image-security-evidence.yml`
 
-Do not enable schedules unless Phase 3 accepts the controlled evidence and the
-operator replies `SCHEDULE BATCH GO`. Keep uploads and optional caches `false`.
-Enable only the documented trial schedule variables, observe one real cron event
-for each of the nine scheduled workflows, then restore all schedule variables to
-`false`. Record run URL, source SHA, scheduled event, start/end timestamps,
-queueing, result, findings/package counts, and zero unexpected artifacts/caches.
+The operator runs that command in an authenticated host shell. The agent then
+discovers the runs, jobs, SHAs, conclusions, and zero-artifact results through
+public APIs. If GitHub still hides custom summary content, the only manual input
+allowed is one five-row extraction containing `SOURCE`, `TAR`, `GZIP`,
+`ALLOWED`, and allowlist/target count. Do not request branch checks, artifact
+checks, private totals, variable confirmations, or billing confirmations.
 
-## Operator checkpoint E: pause and restore
+### Gate C: controlled uploads
 
-After Phase 5 prepares rollback, pause/remove Mend trial access, cancel queued
-trial jobs, set every trial variable `false`, restore original defaults and
-settings, preserve recorded evidence, and leave branch protection in place until
-Phase 6 verifies restoration. Verify every recorded `main` SHA is unchanged and
-that none of the trial-only artifact-policy or workspace-helper changes reached
-`main`. Do not merge dependency PRs or manually delete an artifact whose
-required findings are not recorded. Consider removal of trial refs only after
-Phase 6 accepts rollback.
+Phase 3 may publish `SAFE TO REQUEST UPLOAD BATCH GO` with an exact matrix and
+an agent-authored host helper. The operator must reply exactly:
 
-## Operator checkpoint F: final decision
+```text
+UPLOAD BATCH GO
+```
 
-After Phase 6 publishes the decision package, reply with exactly one:
+The operator then runs the helper once. It preflights exact SHAs and false
+schedule/cache gates, enables uploads for one repository at a time, dispatches
+and waits, restores the upload gate in a trap, downloads the exact artifact into
+ignored `tmp/` evidence, records API metadata and a checksum, and deletes only
+that exact artifact after the local copy is complete if the matrix authorizes
+deletion. It stops on any mismatch and emits a sanitized JSON ledger. The agent
+performs every subsequent verification and report analysis.
+
+### Gate D: real scheduled events
+
+Phase 4 may publish `SAFE TO REQUEST SCHEDULE BATCH GO` with exact enable and
+restore commands. The operator must reply exactly:
+
+```text
+SCHEDULE BATCH GO
+```
+
+The operator runs the agent-authored host helper to enable only the approved
+trial schedule variables. The agent monitors public APIs until one real cron
+event for every required workflow is accepted or a timeout/blocker is proven.
+The operator then runs the helper's restore command; the agent verifies all
+public consequences and consumes the sanitized settings ledger. No manual run
+report is required.
+
+### Gate E: pause and restore
+
+After Phase 5 publishes an exact restore manifest and validated host helper, the
+operator runs it in the trusted host environment. The helper pauses/removes Mend
+trial access, cancels queued trial jobs, restores original defaults/settings,
+sets every trial variable false, and emits a sanitized ledger. The agent verifies
+all public state and does not ask for a prose attestation.
+
+### Gate F: final decision
+
+After Phase 6 publishes the complete decision package, the operator replies
+with exactly one:
 
 ```text
 PHASE 12 DECISION: GO
@@ -212,10 +168,11 @@ PHASE 12 DECISION: NO-GO
 PHASE 12 DECISION: DEFER
 ```
 
-`GO` authorizes Phase 7 to write a separate promotion plan. It does not authorize
-merges, App resumption, schedules, uploads, caches, releases, or deployment.
+`GO` authorizes Phase 7 to write a separate promotion plan. It does not
+authorize merges, App resumption, schedules, uploads, caches, releases, or
+deployment.
 
-## Phase 1: Correct workspace evidence eligibility
+## Phase 1: Verify the completed workspace evidence correction
 
 ### Workspace
 
@@ -223,60 +180,55 @@ merges, App resumption, schedules, uploads, caches, releases, or deployment.
 
 ### Goal
 
-Remove the self-imposed intermediate-tar blocker while preserving complete
-workspace image evidence and both upload-size ceilings.
+Treat the published Phase 1 correction as completed work and verify its
+fail-closed behavior and public result without changing it again.
 
 ### Scope
 
-The workspace evidence helper/workflow, focused tests, and nearest workspace
-dependency-automation documentation, all on `dependency-automation-trial`.
+The workspace helper/workflow, focused tests, nearest documentation, published
+trial SHA, and publication-triggered workflow metadata.
 
 ### Non-goals
 
-No scanner-target trimming, upload, schedule, cache enablement, dispatch,
-authenticated API action, image push/start, or unrelated workspace change.
+No new implementation, dispatch, upload, schedule/cache change, authenticated
+API action, image push/start, merge, or `main` change.
 
 ### Required context
 
 Read workspace `AGENTS.md`, `.github/scripts/prepare-trial-evidence.sh`,
+`.github/scripts/test-prepare-trial-evidence.sh`,
 `.github/workflows/workspace-image-security-evidence.yml`, and
-`docs/dependency-automation.md`. Use the measured 42,276,809 source bytes,
-42,301,440-byte tar, and 5,754,918-byte gzip as the known regression case.
+`docs/dependency-automation.md`.
 
 ### Execution steps
 
-1. Keep source, tar, and gzip measurements, but make `upload_allowed` depend only
-   on the final `.tar.gz` being at most 25,165,824 bytes.
-2. Preserve the complete `workspace-image-scan` allowlist and fail on archive
-   creation, missing inputs, traversal, or compressed payload overflow.
-3. Keep upload compression level zero and add a post-upload exact-ID API check
-   that fails if retained `size_in_bytes` exceeds 26,214,400 bytes.
-4. Add focused synthetic coverage for a tar above 24 MiB whose gzip is below
-   24 MiB, and for a gzip above 24 MiB that remains rejected.
-5. Update workspace documentation with the payload-versus-retained distinction.
-6. Record the starting `main` and trial SHAs and leave `main` unchanged. Prepare
-   the correction as trial-only work for an operator-owned PR/merge.
+1. Verify public trial SHA `6a6bf33fb019825b7709693a1b103c8a1dd7d726`
+   contains the correction and `main` remains at the recorded rollback SHA.
+2. Verify run `35187741819` completed successfully and retained zero artifacts.
+3. Confirm eligibility depends only on a final gzip no larger than 25,165,824
+   bytes, upload compression remains zero, and the exact retained ceiling is
+   26,214,400 bytes.
+4. Confirm the workflow still passes the complete `workspace-image-scan`
+   allowlist and every expansion gate remains conditional.
+5. Run the focused helper tests, `bash -n`, `shellcheck`, `actionlint`, and
+   `git diff --check` if the published source is present locally.
 
 ### Implementation notes
 
-The temporary tar is compressor input, not retained payload. Do not precompress
-or remove reports merely to reduce the tar measurement. If the retained-size
-check fails after upload, stop; the operator handles any exact-ID deletion after
-recording the artifact.
+The temporary tar is compressor input, not retained payload. Do not create
+another remediation PR when the published correction and checks already pass.
 
 ### Validation
 
-Run focused helper tests, `bash -n`, `shellcheck`, `actionlint`, and
-`git diff --check`. Verify the complete allowlist is unchanged and the known
-5,754,918-byte gzip becomes eligible without changing its contents.
+Cross-check public ref/run/artifact APIs and local tests. Record any changed
+public state directly; do not ask the operator to verify it.
 
 ### Completion criteria
 
-The workspace owns a reviewed fail-closed correction with a 24 MiB final-payload
-target, 25 MiB retained ceiling, complete evidence, no enabled upload, and an
-unchanged `main` rollback baseline.
+The correction is accepted as published, its run is green with zero artifacts,
+and `main` remains unchanged.
 
-## Phase 2: Recompute headroom and publish the upload recommendation
+## Phase 2: Collect the post-publication baseline and no-upload measurements
 
 ### Workspace
 
@@ -284,61 +236,73 @@ unchanged `main` rollback baseline.
 
 ### Goal
 
-Use Checkpoint B's post-cleanup inventory, exact no-upload sizes, one retry, and
-private-usage aggregate to decide whether an upload batch may be requested.
+Perform all public Checkpoint B work, obtain the five exact no-upload rows, and
+produce a machine-readable evidence ledger without recurring operator
+attestations.
 
 ### Scope
 
-Read-only public verification, arithmetic, canonical policy, coverage ledger,
-and current-status summaries.
+Credentialless GitHub API collection, optional repo-owned collection scripts,
+public run/job/artifact/cache verification, exact size rows, and canonical
+documentation.
 
 ### Non-goals
 
-No workflow dispatch, upload, artifact deletion, schedule/cache enablement,
-authenticated API action, or assumption that unknown private usage is zero.
+No upload, artifact deletion, schedule/cache/graph enablement, App/settings
+change, assumption that private usage is zero, or billing reconfirmation.
 
 ### Required context
 
-Read the complete Checkpoint B handoff, fresh public API inventory, exact five-row
-measurement summaries, canonical policy, coverage report, and operator-plan
-summary.
+Read the standing baseline and Gate B above, canonical policy, coverage report,
+operator-plan summary, the five candidate workflows, and `scripts/README.md`
+before adding a collector or host helper.
 
 ### Execution steps
 
-1. Verify the eight IDs are absent or record exact exceptions; confirm no new
-   ordinary `app-jar` appeared.
-2. Recalculate known public bytes. Report current `main` recurrence separately
-   from the trial-only corrected projection; do not claim the corrected model is
-   active until a later promotion changes `main`.
-3. For each candidate, use its exact final gzip estimate and enforce the 24 MiB
-   payload target. Model retained bytes conservatively up to 25 MiB until API
-   bytes replace the estimate.
-4. Compute a rolling one-at-a-time peak with one retry, current non-trial bytes,
-   expected ordinary failure diagnostics, and explicit private artifact/package
-   usage. Keep caches at zero.
-5. Reject the batch if any size is missing, private usage is unknown or consumes
-   the envelope, evidence is incomplete, or zero-spend controls changed.
-6. Update `docs/dependency-automation.md` first, then the coverage report and
-   operator-plan status. Publish either `SAFE TO REQUEST UPLOAD BATCH GO` with an
-   exact matrix and stop thresholds, or `DO NOT AUTHORIZE UPLOADS` with exact
-   remaining blockers.
+1. Query all public organization repositories with pagination. Verify the eight
+   deleted IDs return absent, inventory every non-expired artifact and cache,
+   total bytes/counts, and identify any new `app-jar` with repository, run, SHA,
+   expiry, and size.
+2. Verify the four regular-CI correction trial heads, the workspace correction
+   head, every recorded `main` rollback SHA, and exact branch names directly.
+3. Discover the newest source-exact candidate runs. Verify event, trial ref,
+   source SHA, result, job steps, serialization, skipped upload/cache paths, and
+   zero artifacts through public APIs.
+4. If a candidate run is absent, prepare the exact serialized Gate B host
+   command and stop only for its execution. After execution, discover and verify
+   the runs yourself; do not ask for a checkpoint narrative.
+5. Record source, tar, gzip, `upload_allowed`, and allowlist/target count from
+   accessible evidence. If custom summaries remain inaccessible anonymously,
+   request only the five missing measurement rows once, then own all validation
+   and transcription.
+6. Record private artifact and package totals as `unknown` unless a sanitized
+   aggregate already exists. Carry the standing zero-spend baseline forward
+   without asking for confirmation.
+7. Save a sanitized ledger under ignored `tmp/dependency-automation/` and update
+   `docs/dependency-automation.md` first, then the coverage report and
+   operator-plan status.
 
 ### Implementation notes
 
-Do not require all five artifacts to coexist. The rolling model permits exact-ID
-cleanup after findings are recorded and therefore scales to later repositories.
+Anonymous GitHub APIs expose public branches, runs, jobs, artifacts, caches,
+and exact artifact IDs. They do not expose custom job-summary content. Treat
+that API limitation narrowly; it does not justify delegating the rest of the
+checkpoint to the operator. A rate limit is a retry/wait condition, not a reason
+to request manual verification.
 
 ### Validation
 
-Reperform every byte calculation independently, verify links and timestamps, and
-run `git diff --check`. Confirm no text itself authorizes an upload.
+Independently re-sum public bytes and counts, verify pagination and timestamps,
+cross-check every run against its branch head, run `bash -n` and `shellcheck` on
+new shell helpers, and run `git diff --check`.
 
 ### Completion criteria
 
-The corrected model has a current evidence-backed recommendation. Checkpoint C
-remains unavailable until a separate `UPLOAD BATCH GO` response.
+All public baseline facts and five exact size rows are recorded, private usage
+is a single explicit `unknown` if necessary, zero artifacts are proven, and the
+operator has not been asked to reconfirm billing or public state.
 
-## Phase 3: Verify controlled evidence uploads
+## Phase 3: Recompute headroom and prepare the controlled-upload bridge
 
 ### Workspace
 
@@ -346,51 +310,63 @@ remains unavailable until a separate `UPLOAD BATCH GO` response.
 
 ### Goal
 
-Verify the operator-authorized one-at-a-time upload batch and reconcile actual
-retained bytes and findings.
+Use Phase 2 evidence to decide whether a fail-closed one-at-a-time upload probe
+is safe and prepare its exact operator-side automation.
 
 ### Scope
 
-Public run/artifact verification, sanitized private findings, rolling storage
-accounting, and documentation.
+Storage arithmetic, candidate minimization, exact matrix, stop thresholds,
+agent-authored host helper, canonical policy, and evidence summaries.
 
 ### Non-goals
 
-No dispatch, variable mutation, deletion, schedule/cache enablement, or promotion.
+No upload, dispatch, variable mutation, deletion, schedule/cache enablement,
+credential access, or promotion.
 
 ### Required context
 
-Read Phase 2's matrix and the complete Checkpoint C handoff.
+Read Phase 2's sanitized ledger, current public inventory, exact five-row
+measurements, standing hard-stop policy, and exact-ID deletion rules.
 
 ### Execution steps
 
-1. Verify each run's ref, SHA, event, result, serialization, artifact ID/name/API
-   bytes/expiry, and restored upload gate.
-2. Confirm complete row-specific reports and required findings; leave missing
-   content as an evidence gap.
-3. Confirm every retained artifact is at most 25 MiB and reconcile wrapper
-   overhead against its final gzip estimate.
-4. Verify any deletion targeted only the recorded exact ID after findings were
-   captured, then recompute the next-row retry envelope.
-5. Update canonical policy first, then coverage and status summaries. Recommend
-   or reject Checkpoint D.
+1. Recalculate known public bytes and separate any current `main` recurrence
+   from the trial-only corrected projection.
+2. Enforce the 24 MiB final-payload target for each row and model retained bytes
+   conservatively up to 25 MiB until API values replace estimates.
+3. Compute the rolling peak with one retry, current non-trial bytes, and expected
+   failure diagnostics. Keep private usage explicitly unknown and treat quota
+   rejection as a safe trial failure under the standing hard stop.
+4. Minimize the upload matrix to evidence that cannot be accepted from the
+   no-upload runs. Do not upload merely because a row exists.
+5. Create or update a repo-owned host helper that preflights exact SHAs and
+   gates, serializes rows, restores variables with a trap, downloads each exact
+   artifact to ignored `tmp/`, verifies its checksum, captures API metadata,
+   optionally deletes only the exact captured ID, and writes a sanitized JSON
+   ledger without credentials or raw private API responses.
+6. Update canonical policy first, then coverage and status summaries. Publish
+   either `SAFE TO REQUEST UPLOAD BATCH GO` with the exact Gate C command or
+   `DO NOT AUTHORIZE UPLOADS` with concrete evidence blockers.
 
 ### Implementation notes
 
-An expired or deleted artifact can still count when its metadata and required
-findings were recorded before deletion. A URL alone is not detailed evidence.
+Unknown private usage no longer causes another operator inquiry. It remains a
+capacity uncertainty bounded by the standing no-spend control; the first quota
+failure ends the batch. The helper must never add billing, broaden deletion, or
+continue after a failed restore.
 
 ### Validation
 
-Cross-check API-byte sums, retained windows, one-retry calculations, and all five
-evidence dispositions. Run `git diff --check`.
+Reperform every byte calculation independently. Dry-run the host helper against
+fixtures or mocked `gh` output, run `bash -n`, `shellcheck`, focused tests, and
+`git diff --check`. Confirm no document or helper bypasses Gate C.
 
 ### Completion criteria
 
-All approved rows are accepted or have a concrete blocker, gates are off, and
-scheduled acceptance has an explicit recommendation.
+The upload recommendation is evidence-backed and, if positive, the operator's
+entire credentialed task is one reviewed helper invocation after one exact GO.
 
-## Phase 4: Verify real scheduled cycles
+## Phase 4: Verify controlled uploads and detailed evidence
 
 ### Workspace
 
@@ -398,45 +374,59 @@ scheduled acceptance has an explicit recommendation.
 
 ### Goal
 
-Verify one real cron event for every scheduled trial workflow after Checkpoint D.
+After Gate C, verify the helper's one-at-a-time batch, inspect downloaded
+evidence, and decide whether real scheduled events are warranted.
 
 ### Scope
 
-Public run verification, sanitized private summaries, schedule/cost accounting,
-and documentation.
+Sanitized helper ledger, public run/job/artifact APIs, downloaded evidence under
+ignored `tmp/`, rolling storage reconciliation, and documentation.
 
 ### Non-goals
 
-No schedule mutation, rerun, upload, cache, App change, or promotion.
+No manual dispatch, new variable mutation, broad deletion, schedule enablement,
+promotion, or billing inquiry.
 
 ### Required context
 
-Read Checkpoint D's handoff, the nine workflow guards, and Phase 3's ledger.
+Read Phase 3's matrix and helper, the exact `UPLOAD BATCH GO`, the sanitized
+Gate C ledger, and downloaded artifact checksums/content.
 
 ### Execution steps
 
-1. Verify all nine runs used `schedule` on the frozen trial refs and did not skip
-   their substantive jobs.
-2. Record duration, queueing, overlap, findings/package counts, artifacts, and
-   cache behavior.
-3. Confirm all schedule, upload, and cache variables returned to `false`.
-4. Update canonical policy, coverage, and current-status summaries.
+1. Verify each run's ref, SHA, event, result, serialization, artifact ID/name,
+   API bytes, expiry, and restored upload gate from public APIs and the ledger.
+2. Inspect every downloaded archive for the complete allowlist, scanner/tool
+   metadata, target counts, and required row-specific findings. Treat a URL
+   alone as insufficient evidence.
+3. Confirm every retained artifact was at most 25 MiB and reconcile wrapper
+   overhead against its final gzip measurement.
+4. Verify each optional deletion used only the recorded exact ID after a local
+   checksummed copy was complete; recompute the rolling envelope between rows.
+5. Refresh all public artifacts/caches and identify unexpected PRs, caches,
+   artifacts, or ref changes yourself.
+6. Update canonical policy, coverage, and status summaries. Publish either
+   `SAFE TO REQUEST SCHEDULE BATCH GO` with exact Gate D commands or a concrete
+   stop disposition.
 
 ### Implementation notes
 
-Manual dispatch is not cron evidence. Keep the two 05:43 jobs' intentional
-overlap visible in compute accounting.
+If the bridge was not authorized because Phase 3 returned `DO NOT AUTHORIZE`,
+record controlled uploads and schedule rehearsal as intentionally skipped and
+continue to rollback preparation; do not keep requesting approval.
 
 ### Validation
 
-Verify timestamps/events from public metadata and reconcile all nine rows.
+Cross-check public/API byte sums, local checksums, archive contents, retained
+windows, one-retry calculations, and all evidence dispositions. Run
+`git diff --check`.
 
 ### Completion criteria
 
-All scheduled workflows have accepted source-aware evidence or one explicit
-blocker, and every execution gate is off.
+All authorized rows are accepted or have one concrete blocker, all upload gates
+are off, and the schedule recommendation requires no operator-written report.
 
-## Phase 5: Complete benchmark dispositions and prepare rollback
+## Phase 5: Verify scheduled cycles and prepare exact restoration
 
 ### Workspace
 
@@ -444,43 +434,59 @@ blocker, and every execution gate is off.
 
 ### Goal
 
-Finish the historical comparison and prepare an exact restore ledger.
+After Gate D, monitor real cron events agent-side, complete benchmark
+dispositions, and prepare the exact Gate E restore package.
 
 ### Scope
 
-Coverage dispositions, cost summary, frozen refs/settings, and Checkpoint E
-handoff.
+Public scheduled-run monitoring, cache/artifact accounting, benchmark coverage,
+frozen refs/settings, restore manifest, and host helper.
 
 ### Non-goals
 
-No settings mutation, App removal, PR change, branch deletion, merge, or final
-GO/NO-GO/DEFER decision.
+No unauthorised settings mutation, rerun, upload, cache, App change, merge,
+branch deletion, or final decision.
 
 ### Required context
 
-Read the saved September 6 review, current coverage tables, current completion
-plan evidence through Phase 4, and the original main/default/settings ledger.
+Read Gate D's sanitized settings ledger, Phase 4 evidence, all nine workflow
+guards, the September 6 review, current coverage tables, and original
+main/default/settings ledger.
 
 ### Execution steps
 
-1. Classify every benchmark row as reproduced, superseded, false positive with
-   evidence, or missing.
-2. Separate trial acceptance, ongoing-installation readiness, and benchmark
-   parity.
-3. Reconcile final trial storage/compute with no-spend controls.
-4. Prepare exact Checkpoint E restore targets and stop conditions.
+1. Poll public APIs until all required runs use the `schedule` event on frozen
+   trial refs and execute substantive jobs; record queueing, duration, overlap,
+   result, artifacts, caches, findings/package counts, and exact source SHA.
+2. Ask only for the Gate D restore command to be run after the public completion
+   condition is met. Verify public consequences and consume its sanitized
+   settings ledger; do not request a prose confirmation.
+3. Classify every benchmark row as reproduced, superseded, false positive with
+   evidence, intentionally skipped, or missing. Separate trial acceptance,
+   ongoing-installation readiness, and benchmark parity.
+4. Reconcile final trial storage and compute under the standing hard stop
+   without another billing question.
+5. Prepare the exact Gate E restore manifest and host helper for App access,
+   queued jobs, variables, defaults, settings, PR disposition, and branch
+   protection. Include expected-before and expected-after values and fail on
+   drift.
 
 ### Implementation notes
 
-Do not claim full parity while a high-priority row is missing.
+Manual dispatch is not cron evidence. If schedules were not authorized, mark the
+rows intentionally skipped and preserve that limitation in the final decision
+package. Do not claim full parity while a high-priority row is missing.
 
 ### Validation
 
-Verify the review hash, every disposition, and every restore target.
+Verify timestamps/events from public metadata, the saved review hash, every
+benchmark disposition, every restore target, and the host helper with fixtures.
+Run shell validation and `git diff --check`.
 
 ### Completion criteria
 
-The evidence and rollback ledgers are complete enough for operator restoration.
+Scheduled evidence is accepted or explicitly skipped/blocked, and restoration
+is reduced to one reviewed operator-side helper invocation.
 
 ## Phase 6: Verify rollback and publish the decision package
 
@@ -490,46 +496,52 @@ The evidence and rollback ledgers are complete enough for operator restoration.
 
 ### Goal
 
-Verify Checkpoint E and produce the final evidence-backed decision package.
+After Gate E, independently verify restored state and produce the final
+evidence-backed decision package.
 
 ### Scope
 
-Public state verification, sanitized authenticated attestations, residual-state
-ledger, and decision recommendation.
+Public state verification, sanitized restore ledger, residual-state inventory,
+and GO/NO-GO/DEFER recommendation.
 
 ### Non-goals
 
-No mutation, merge, branch deletion, artifact cleanup, App reactivation, or
-promotion plan.
+No mutation, merge, branch deletion, artifact cleanup, App reactivation,
+promotion plan, or billing reconfirmation.
 
 ### Required context
 
-Read Checkpoint E's handoff, Phase 5's restore ledger, recorded main SHAs, and
-current public repository state.
+Read Gate E's sanitized ledger, Phase 5 restore manifest, recorded main SHAs,
+standing baseline, and current public repository state.
 
 ### Execution steps
 
-1. Verify original defaults/main SHAs, paused App/jobs, closed or preserved PRs
-   as specified, false variables, and active protections.
-2. Inventory residual artifacts, caches, dashboards, alerts, and history.
-3. Reconcile all acceptance, parity, cost, credential, schedule, and rollback
-   evidence.
+1. Verify original defaults/main SHAs, public PR dispositions, trial refs, and
+   branch protections directly. Consume the sanitized ledger for private
+   settings that public APIs cannot expose.
+2. Inventory residual public artifacts, caches, dashboards, alerts, workflows,
+   and history yourself. Record inaccessible private surfaces once without
+   asking the operator to inspect them again.
+3. Reconcile all acceptance, parity, cost, schedule, credential-boundary, and
+   rollback evidence.
 4. Publish separate trial-acceptance, ongoing-installation, and benchmark-parity
    conclusions with a GO, NO-GO, or DEFER recommendation.
 
 ### Implementation notes
 
-Restoring defaults does not erase repository-wide state or accrued usage.
+Restoring defaults does not erase repository history or accrued usage. The
+standing baseline remains valid unless the operator previously reported a
+change.
 
 ### Validation
 
-Cross-check public API state, sanitized operator attestations, and every decision
-criterion. Run `git diff --check`.
+Cross-check public API state, sanitized helper ledgers, every decision criterion,
+and all byte calculations. Run `git diff --check`.
 
 ### Completion criteria
 
-Rollback is verified or has one concrete exception, and Checkpoint F can be
-answered without another research pass.
+Rollback is verified or has one concrete exception, and Gate F can be answered
+without another research pass or repeated account questionnaire.
 
 ## Phase 7: Record the decision and create the authorized next plan
 
@@ -539,7 +551,7 @@ answered without another research pass.
 
 ### Goal
 
-Record Checkpoint F and, only after `GO`, create a separate promotion plan.
+Record Gate F and, only after `GO`, create a separate promotion plan.
 
 ### Scope
 
@@ -552,8 +564,8 @@ upgrade, release, deployment, or claim that `GO` completed installation.
 
 ### Required context
 
-Read the exact Checkpoint F response, Phase 6 package, current rollback state,
-and the AI Session Handler plan format.
+Read the exact Gate F response, Phase 6 package, current rollback state, and the
+AI Session Handler plan format.
 
 ### Execution steps
 
@@ -562,8 +574,8 @@ and the AI Session Handler plan format.
 3. For `GO`, create a separate plan that publishes the shared preset first,
    removes trial-only wiring through reviewed repo-owned phases, and reactivates
    each repository deliberately with fresh final evidence.
-4. Keep ordinary CI artifact policy, exact-ID cleanup rules, and rolling evidence
-   retention in the promotion acceptance criteria.
+4. Keep ordinary CI artifact policy, exact-ID cleanup rules, credential
+   boundaries, and rolling evidence retention in promotion acceptance criteria.
 
 ### Implementation notes
 

@@ -209,6 +209,20 @@ upload as a trial failure rather than a reason to add billing information, and
 replace the unknown with measured artifact bytes only when the hosted platform
 makes them available.
 
+For the remainder of Phase 12, treat the recorded zero-spend checkpoint as a
+standing invariant, not a recurring operator questionnaire. The operator must
+report a change before further hosted work if a payment method, paid trial,
+allowance increase, or spend-stop removal is introduced; otherwise later phases
+must not ask for another confirmation. Let the agent perform every anonymous
+public branch, run, artifact, cache, and exact-ID check directly. If private
+artifact or package totals remain inaccessible, record them as `unknown` without
+asking the operator to re-investigate. After exact no-upload sizing, a single
+capped upload may serve as a fail-closed capacity probe under the standing hard
+stop: a quota rejection fails the trial and never justifies adding billing.
+Credentialed dispatches and settings changes stay in the operator's trusted
+environment, preferably through an agent-authored host helper that emits only a
+sanitized ledger into the shared workspace.
+
 ### Phase 12 controlled-upload cost disposition
 
 The 2026-09-16 authenticated checkpoint established a financial hard stop, not

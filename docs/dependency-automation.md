@@ -33,9 +33,78 @@ after correcting trial controls that had been entered as repository secrets
 instead of repository variables. Before B4, public verification found five
 automatic vulnerability-fix PRs in `budget-analyzer-web` and one in `ext-authz`.
 All use the trial base and have automerge disabled, but the frontend burst
-exceeded the three-PR trial stop threshold. B4 is paused until the shared preset
-publishes a dedicated three-PR vulnerability-alert limit; existing security PRs
-remain open and unmerged as evidence.
+exceeded the three-PR trial stop threshold. The dedicated three-PR
+vulnerability-alert limit was published through orchestration PR #62, and both
+trial-branch workflows passed with zero artifacts. The operator then requested
+all seven B4 cycles. Six were initially green; `workspace` alone reported a
+package lookup warning for `aquasecurity/setup-trivy`. Workspace correction PR
+#9 replaced only that native lookup with a public `git-tags` manager. Its
+automatic corrective cycle refreshed Dashboard #8 with the exact pinned action
+and no repository problem, while image-evidence run 35098592885 passed at
+`110e5f78fd995ed281d425f9da90bc81079f651d` with uploads skipped and zero
+artifacts. Batch B and its public checkpoint are complete. Workspace PR #10
+published the same-repository, trial-targeted image-evidence pull-request path at
+`09ee0a2afecc2af6c3a216b225537c680ef68848`, and pull-request run 35100312719
+passed. The operator explicitly accepted the still-running post-merge run
+35100778569 as successful for the Batch C starting gate; the Phase 1 public
+refresh subsequently confirmed that run completed successfully. Batch C then
+passed: `currency-service` PR #87,
+`budget-analyzer-web` PR #122, `ext-authz` PR #3, and `workspace` PR #11 all
+target the trial branch, contain their intended routine dependency diffs, carry
+the `dependencies` label, and have automerge disabled. Their representative
+runs 35101624894, 35102606776, 35103116099, and 35103462824 passed with trial
+uploads skipped, zero retained artifacts, and no Actions cache entries for the
+PR refs. The Phase 12 completion baseline refreshed public state at
+`2026-09-16T17:05:13Z`: all nine repositories still advertise the protected
+trial branch as default, all recorded main/trial SHAs are unchanged, all twelve
+known Renovate PRs remain open against the trial branch with the expected label
+and GitHub auto-merge unset, and the public Actions cache inventory is empty in
+all nine repositories. It also found a previously unrecorded failed Build run
+on frontend security PR #120: `npm ci` failed before the remaining build gates.
+The public patch changes only `package.json` from Vitest 3 to 4 while leaving
+`package-lock.json` and the grouped Vitest companion packages unchanged, so
+locked installation correctly rejected the malformed proposal. The operator
+identified its creation as an accidental trial-variable side effect and
+accepted it as non-representative; routine frontend PR #122 passed the same
+Build workflow. Keep #120 open and unmerged until planned rollback, but do not
+rerun or repair it merely for trial acceptance. Its explicit disposition means
+it no longer blocks Phase 2 or later batch authorization by itself.
+Public artifact inventory now contains 502,562,266 non-expired bytes: 7,444
+bytes from the retained `service-common` graph diagnostic and 502,554,822 bytes
+from ordinary seven-day Java build artifacts in the four consumer services.
+At the authenticated cost checkpoint, the operator reconfirmed no GitHub
+payment method, reported `$1.07` gross Actions usage fully offset by a `$1.07`
+discount with `$0` billed, and confirmed zero-dollar budgets with **Stop usage**
+enabled. This establishes redundant spend-stopping controls but does not add
+artifact headroom. Follow-up inspection
+proved that eight deploy-unconsumed `app-jar` artifacts account for 501,224,156
+bytes. At `2026-09-17T05:25:38Z`, public APIs confirmed that the eight exact IDs
+are absent, known public storage is 1,338,110 bytes, public caches are zero, and
+the four corrections are merged only to `dependency-automation-trial`; their
+recorded `main` SHAs remain unchanged as the rollback baseline. The corrected
+successful-CI projection is therefore not active on `main`, which may recreate
+`app-jar` before promotion. The completion plan uses a rolling
+one-artifact-plus-one-retry model and a direct workspace helper phase, not
+another remediation meta-plan. Phase 12 completion Phase 2 then completed at
+`2026-09-17T10:55:04Z`: all 15 public repositories still contain 9 non-expired
+artifacts totaling 1,338,110 bytes, zero public caches, and no `app-jar`; all
+eight deleted IDs still return absent; and all recorded main/trial SHAs remain
+exact. The five exact no-upload rows are now recorded. Four report
+`upload_allowed=true`; orchestration alone reports `false` because its
+74,178,560-byte temporary tar still participates in the old helper gate even
+though its final gzip is 7,945,624 bytes. Private artifact and package usage is
+recorded once as `unknown`. Phase 3 corrects orchestration to gate only the
+final gzip, adds an independent 25 MiB retained-size check, and prepares the
+fail-closed Gate C host bridge. The `2026-09-17T11:55:40Z` public refresh still
+found 1,338,110 artifact bytes, zero caches, and no `app-jar`. Including two
+full 25 MiB retained artifacts and a separate 1,330,666-byte future failure
+diagnostic reserve produces a conservative 55,097,576-byte public peak and
+469,190,424 bytes of nominal remaining allowance before unknown private use.
+The bridge remains gated on the reviewed Phase 3 commit being published as the
+exact orchestration trial head and on the operator's separate `UPLOAD BATCH GO`.
+Keep the four Batch C routine PRs and six existing security PRs open and
+unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
+installation remain pending and unauthorized.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -113,9 +182,10 @@ authentication requirement for Maven installation.
 Branch runs use the same account allowances as runs on `main`. Before the first
 hosted trial, record current retained artifact bytes, accrued billing usage,
 the organization plan and allowance, package visibility, and effective no-spend
-controls. Include existing JAR, test-result, and frontend build artifacts that
-bot PRs will trigger. Actions caches have a separate allowance; inventory cache
-producers and account settings separately from pooled artifact/Packages storage.
+controls. Include obsolete artifacts that have not yet expired or been deleted,
+failure-only test results, and any frontend artifacts that bot PRs will trigger.
+Actions caches have a separate allowance; inventory cache producers and account
+settings separately from pooled artifact/Packages storage.
 Runner-local Docker layers and scanner databases are not Actions artifacts unless
 uploaded or saved as caches. The workspace scanner uploads reports and build
 logs, not its built Docker image.
@@ -134,7 +204,11 @@ accrual and expected non-trial use. Compare with the actual billing-cycle
 allowance and keep headroom for retries and overlapping runs. Weekly bundles
 retained seven days average approximately one bundle each; one-day trial
 retention must not be used to understate the seven-day production projection.
-Deletion stops future accrual, not usage already accrued. Billing views may lag.
+Deletion stops future accrual, not usage already accrued. An operator may delete
+an explicitly identified disposable Actions artifact after recording its exact
+artifact ID, repository, workflow run, source SHA, name, API size, expiry, and
+all findings needed from its contents. Target exact IDs only; never delete by a
+name glob or delete an unknown artifact. Billing views may lag.
 If no payment method is present, confirm over-limit use is blocked; otherwise
 require an effective spend-stopping control for every relevant billed product.
 A notification-only budget is insufficient. Stop hosted work if that boundary
@@ -147,6 +221,125 @@ that upload capacity remains. Keep initial uploads disabled, treat a quota-block
 upload as a trial failure rather than a reason to add billing information, and
 replace the unknown with measured artifact bytes only when the hosted platform
 makes them available.
+
+For the remainder of Phase 12, treat the recorded zero-spend checkpoint as a
+standing invariant, not a recurring operator questionnaire. The operator must
+report a change before further hosted work if a payment method, paid trial,
+allowance increase, or spend-stop removal is introduced; otherwise later phases
+must not ask for another confirmation. Let the agent perform every anonymous
+public branch, run, artifact, cache, and exact-ID check directly. If private
+artifact or package totals remain inaccessible, record them as `unknown` without
+asking the operator to re-investigate. After exact no-upload sizing, a single
+capped upload may serve as a fail-closed capacity probe under the standing hard
+stop: a quota rejection fails the trial and never justifies adding billing.
+Credentialed dispatches and settings changes stay in the operator's trusted
+environment, preferably through an agent-authored host helper that emits only a
+sanitized ledger into the shared workspace.
+
+### Phase 12 controlled-upload cost disposition
+
+The 2026-09-16 authenticated checkpoint established a financial hard stop, not
+usable capacity. A fresh unauthenticated inventory of all 15 public organization
+repositories at `2026-09-17T04:56:48Z` still contains 502,562,266 non-expired
+artifact bytes and zero cache entries. Eight obsolete `app-jar` artifacts from
+the four deployable Java services contribute 501,224,156 bytes (99.735220% of
+the ordinary 502,554,822-byte Java artifact set). Their 1,330,666 bytes of
+JUnit XML are reports, not test JARs; the remaining 7,444 bytes are the separate
+long-lived `service-common` graph diagnostic.
+
+The regular Java CI correction is published only on the four protected
+`dependency-automation-trial` branches. One four-service CI cycle retained
+251,277,411 bytes under the old seven-day model; the observed PR cycle plus its
+resulting `main` cycle account for 502,554,822 bytes. If the corrected workflows
+are eventually promoted to `main`, successful regular CI retains zero
+artifacts. A failed main-path cycle then retains only the measured 665,333-byte
+four-service JUnit set for one day; one same-size retry would make the bounded
+failure-diagnostic peak 1,330,666 bytes. Until promotion, `main` may recreate
+`app-jar`. These numbers exclude trial evidence, GitHub Packages, and unknown
+private-repository usage.
+
+Removing future uploads does not remove old artifacts. The operator deleted the
+eight recorded `app-jar` IDs exactly, and unauthenticated public verification at
+`2026-09-17T05:25:38Z` found no remaining public `app-jar`. The currently known
+public residual is 1,338,110 bytes and nominal public headroom against the
+524,288,000-byte allowance is 522,949,890 bytes, before unknown private use.
+The ten public packages remain a separate GitHub Packages surface and add no
+metered package storage under the current GitHub policy; no package is deleted
+or changed by this Actions-artifact correction.
+
+Controlled trial evidence uses a rolling one-at-a-time model. Record the
+required findings, metadata, and retained API size for one artifact before an
+operator optionally deletes that exact ID or waits for its one-day expiry, then
+recompute inventory before the next row. This avoids requiring all current or
+future repositories' evidence bundles to remain retained concurrently. Reserve
+one retry: at the 25 MiB retained-artifact ceiling, the worst rolling public
+window is the 1,338,110-byte residual plus two 26,214,400-byte artifacts, or
+53,766,910 bytes, before private usage. Exact measured bundle sizes replace that
+ceiling when available.
+
+The fresh source-exact workspace evidence is 44,614,250 source bytes, a
+44,636,160-byte temporary tar, and a 6,314,072-byte final `.tar.gz`, replacing
+the earlier historical 42,276,809 / 42,301,440 / 5,754,918 measurement. The
+corrected helper continues to
+measure all three values but gates upload eligibility only on the final archive
+being at most 24 MiB, uploads it with compression disabled, and fails the run if
+the exact retained artifact API size exceeds 25 MiB. The correction is published
+on `dependency-automation-trial` at
+`6a6bf33fb019825b7709693a1b103c8a1dd7d726`; publication-triggered run
+`35187741819` passed with the complete allowlist and retained zero artifacts.
+Public verification found `main` unchanged at
+`383efc840832d474cd9d60e0368ed2ded828e03c`. Do not trim scanner targets or
+reports to satisfy either ceiling.
+
+Phase 3 refreshed all 15 public repositories at `2026-09-17T11:55:40Z` and
+again found 9 non-expired artifacts totaling 1,338,110 bytes, zero public
+caches, and no `app-jar`. It keeps the trial-only corrected projection separate
+from the unchanged `main` rollback state. In addition to the current residual,
+the conservative model reserves two complete 26,214,400-byte artifacts for one
+active row plus one retry and a separate 1,330,666-byte future
+failure-diagnostic window. The resulting peak is 55,097,576 bytes, leaving
+469,190,424 bytes against the public allowance before private usage. Private
+artifact and package usage remains `unknown`; a quota rejection is a safe trial
+failure under the standing hard stop, not evidence of acceptance.
+
+All five controlled-upload rows remain necessary. Each no-upload run proves
+source-exact execution and payload size, but none exposes the retained detailed
+scanner, audit, graph, inventory, or vulnerability report required for final
+acceptance. The exact order remains `ext-authz`, `budget-analyzer-web`,
+`service-common`, `workspace`, then `orchestration`. The first four rows retain
+their Phase 2 SHAs. The orchestration row uses the clean local Phase 3 commit
+that contains the corrected helper and host bridge, and refuses to run unless
+that exact commit is the published `dependency-automation-trial` head.
+
+Orchestration now applies the accepted workspace archive model: the temporary
+tar remains measured but only the final gzip is compared with the 25,165,824
+byte payload ceiling. The workflow independently fails if GitHub reports more
+than 26,214,400 retained bytes. The repo-owned
+`scripts/repo/run-dependency-automation-upload-batch.sh` helper preflights every
+exact SHA, trial default, and false schedule/cache/upload gate; dispatches one
+row at a time; restores uploads to `false` before accepting the run; downloads
+and checksums the exact artifact into ignored `tmp/`; records selected metadata
+in a sanitized JSON ledger; and deletes only that captured artifact ID after
+the local copy is complete. Any mismatch, quota rejection, unsuccessful run,
+unexpected artifact, recurrence, cache, oversize artifact, or failed restore
+stops the batch.
+
+The evidence-backed Phase 3 disposition is **SAFE TO REQUEST UPLOAD BATCH GO**,
+subject to publishing the reviewed Phase 3 change on orchestration's protected
+trial branch. The helper's exact invocation, after the operator replies with
+the required Gate C phrase, is:
+
+```bash
+./scripts/repo/run-dependency-automation-upload-batch.sh --confirm 'UPLOAD BATCH GO'
+```
+
+This recommendation does not itself authorize an upload. Keep every upload,
+schedule, and optional-cache variable `false` until Gate C. Do not add a payment
+method, paid trial, or allowance increase. The detailed cleanup, Phase 2
+measurement ledger, Phase 3 matrix, and next decision sequence live in the
+[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-3-controlled-upload-bridge)
+and the
+[Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md).
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.
@@ -193,6 +386,10 @@ Keep the prepared implementation on `dependency-automation-trial` in all nine
 scoped repositories. Use that exact shared name for trial refs and workflow guards.
 The [Phase 12 operator plan](plans/dependency-automation-phase-12-operator-plan.md)
 owns the checklist, required workflow adaptations, trial limits, and rollback.
+After Batch C, the executable
+[Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md)
+owns cost reconciliation, controlled uploads, real scheduled evidence, rollback
+verification, and decision preparation across explicit human checkpoints.
 This planning change does not perform branch operations or activate anything.
 
 GitHub schedules run only on the repository's default branch. New manual
@@ -421,19 +618,47 @@ and has GitHub auto-merge disabled. Renovate vulnerability-alert PRs ignore the
 top-level `prConcurrentLimit`, `prHourlyLimit`, and schedule by default. Because
 the shared preset had no nested vulnerability limit, the frontend opened five
 PRs and crossed the plan's stop threshold. The durable correction adds
-`vulnerabilityAlerts.prConcurrentLimit: 3`. Publish and validate that correction
-on the shared trial preset before B4. The limit does not close existing PRs:
+`vulnerabilityAlerts.prConcurrentLimit: 3`; it was published and validated on
+the shared trial preset before B4. The limit does not close existing PRs:
 keep `budget-analyzer-web` PRs #116–#120 and `ext-authz` PR #1 open and unmerged,
 and treat them as the post-correction baseline.
+
+The limit was published to the trial preset through
+[orchestration PR #62](https://github.com/budgetanalyzer/orchestration/pull/62)
+at `c9e6f31208a5f668fcccd3e7ff2fea649654443c`. The resulting
+[Dependency Automation Configuration run 35095610585](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610585)
+and
+[Exact Image Security Evidence run 35095610628](https://github.com/budgetanalyzer/orchestration/actions/runs/35095610628)
+both passed with zero artifacts. The operator then requested the seven B4 Mend
+cycles. Six completed green. `workspace` alone initially reported `no-result` for the
+public `aquasecurity/setup-trivy` GitHub tag lookup in
+`.github/workflows/workspace-image-security-evidence.yml`, despite the pinned
+commit resolving exactly to public tag `v0.3.1`. The workspace correction
+disables only that native action record and replaces it with a regex-managed
+`git-tags` lookup against the public Git repository. Workspace PR #9 merged
+that correction into the trial branch at
+`110e5f78fd995ed281d425f9da90bc81079f651d`. The automatic corrective cycle
+updated Dashboard #8 to detect `aquasecurity/setup-trivy v0.3.1` at the exact
+pinned commit with no repository problem. The resulting
+[Workspace Image Security Evidence run 35098592885](https://github.com/budgetanalyzer/workspace/actions/runs/35098592885)
+also passed with uploads skipped and zero artifacts. Post-cycle public
+inspection found the frontend five-PR and `ext-authz` one-PR security baselines
+unchanged, with no open pull request in the other five B4 repositories. Batch B
+is complete; the six earlier green B4 cycles must not be repeated.
 
 ### Trial workflow controls
 
 All nine repositories use the exact protected ref
 `refs/heads/dependency-automation-trial`. Relevant build workflows accept pushes
 to that ref and pull requests whose base is either `main` or the trial branch.
-Scanner and graph workflows accept only direct `main` or trial refs; they reject
-pull-request merge refs and unrelated manual-dispatch refs. Snapshot and release
-publishing workflows remain unchanged.
+Scanner and graph workflows normally accept only direct `main` or trial refs.
+The workspace image-evidence workflow additionally accepts same-repository pull
+requests targeting the trial branch so its Batch C representative PR receives
+the complete no-cache image build and scan. That path uses read-only repository
+permissions, keeps optional caches and uploads behind the trial variables, and
+measures the same sealed evidence allowlist without retaining an artifact while
+uploads are disabled. Unrelated pull-request refs and manual-dispatch refs remain
+rejected. Snapshot and release publishing workflows remain unchanged.
 
 Repository variables control every trial-side expansion and are disabled when
 unset or set to any value other than the exact string `true`:

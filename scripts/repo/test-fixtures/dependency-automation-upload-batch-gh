@@ -79,35 +79,8 @@ case "${command_name}" in
     exit 0
     ;;
   variable)
-    action="$1"
-    variable="$2"
-    shift 2
-    repository=""
-    value=""
-    while [[ "$#" -gt 0 ]]; do
-      case "$1" in
-        --repo) repository="${2#budgetanalyzer/}"; shift 2 ;;
-        --body) value="$2"; shift 2 ;;
-        --json|--jq) shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    state_file="${MOCK_GH_STATE_DIR}/variable-${repository}-${variable}"
-    case "${action}" in
-      get)
-        if [[ -f "${state_file}" ]]; then
-          sed -n '1p' "${state_file}"
-        else
-          printf '%s\n' false
-        fi
-        ;;
-      set)
-        printf '%s\n' "${value}" > "${state_file}"
-        printf '%s %s %s\n' "${repository}" "${variable}" "${value}" \
-          >> "${MOCK_GH_STATE_DIR}/variable.log"
-        ;;
-      *) exit 2 ;;
-    esac
+    echo 'The upload helper must use gh api for repository variables.' >&2
+    exit 2
     ;;
   workflow)
     [[ "$1" == run ]]
@@ -126,12 +99,23 @@ case "${command_name}" in
     method=GET
     jq_expression=""
     endpoint=""
+    api_name=""
+    api_value=""
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
         --method) method="$2"; shift 2 ;;
         --jq) jq_expression="$2"; shift 2 ;;
         --paginate|--slurp) shift ;;
         --header) shift 2 ;;
+        -f|--raw-field)
+          field_name="${2%%=*}"
+          field_value="${2#*=}"
+          case "${field_name}" in
+            name) api_name="${field_value}" ;;
+            value) api_value="${field_value}" ;;
+          esac
+          shift 2
+          ;;
         *) endpoint="$1"; shift ;;
       esac
     done
@@ -148,6 +132,29 @@ case "${command_name}" in
     fi
 
     repository="$(repository_from_endpoint "${endpoint}")"
+    if [[ "${endpoint}" == repos/budgetanalyzer/*/actions/variables/* ]]; then
+      variable="${endpoint##*/}"
+      state_file="${MOCK_GH_STATE_DIR}/variable-${repository}-${variable}"
+      case "${method}" in
+        GET)
+          value=false
+          [[ ! -f "${state_file}" ]] || value="$(sed -n '1p' "${state_file}")"
+          if [[ -n "${jq_expression}" ]]; then
+            printf '%s\n' "${value}"
+          else
+            printf '{"name":"%s","value":"%s"}\n' "${variable}" "${value}"
+          fi
+          ;;
+        PATCH)
+          [[ "${api_name}" == "${variable}" && -n "${api_value}" ]]
+          printf '%s\n' "${api_value}" > "${state_file}"
+          printf '%s %s %s\n' "${repository}" "${variable}" "${api_value}" \
+            >> "${MOCK_GH_STATE_DIR}/variable.log"
+          ;;
+        *) exit 2 ;;
+      esac
+      exit 0
+    fi
     if [[ "${endpoint}" == repos/budgetanalyzer/*/git/ref/heads/* ]]; then
       sha="$(source_sha "${repository}")"
       if [[ -n "${jq_expression}" ]]; then

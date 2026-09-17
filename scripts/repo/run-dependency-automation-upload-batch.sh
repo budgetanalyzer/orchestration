@@ -106,15 +106,18 @@ set_failure() {
 variable_value() {
   local repository="$1"
   local variable_name="$2"
-  "${GH_BIN}" variable get "${variable_name}" \
-    --repo "${ORG}/${repository}" --json value --jq '.value'
+  "${GH_BIN}" api \
+    "repos/${ORG}/${repository}/actions/variables/${variable_name}" \
+    --jq '.value'
 }
 
 set_upload_value() {
   local repository="$1"
   local value="$2"
-  "${GH_BIN}" variable set "${UPLOAD_VARIABLE}" \
-    --repo "${ORG}/${repository}" --body "${value}" >/dev/null
+  "${GH_BIN}" api --method PATCH \
+    "repos/${ORG}/${repository}/actions/variables/${UPLOAD_VARIABLE}" \
+    -f "name=${UPLOAD_VARIABLE}" \
+    -f "value=${value}" >/dev/null
 }
 
 restore_active_upload_gate() {

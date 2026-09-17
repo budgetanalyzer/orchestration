@@ -71,8 +71,9 @@ conservative current-residual-plus-one-retry-plus-future-failure model peaks at
 55,097,576 bytes and leaves 469,190,424 public bytes before unknown private
 usage.
 
-**Last updated:** 2026-09-17 (Phase 3 controlled-upload bridge prepared; Gate C,
-schedules, and final benchmark dispositions remain pending)
+**Last updated:** 2026-09-17 (Gate C stopped before upload on a host GitHub CLI
+compatibility defect; reviewed retry correction, schedules, and final benchmark
+dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -792,6 +793,36 @@ The operator must reply exactly `UPLOAD BATCH GO` before running:
 
 Until that separate Gate C authorization, all upload, schedule, and cache
 variables remain `false`; this section records readiness, not execution.
+
+### Phase 12 completion Phase 4 Gate C preflight stop
+
+The operator supplied the exact `UPLOAD BATCH GO` authorization and invoked the
+published bridge from orchestration source
+`208c2cc96169454f2b96302c623aafe5ceeb6fd0`. The resulting sanitized ledger at
+`tmp/dependency-automation/gate-c-20260917T123144Z/ledger.json` records:
+
+- start `2026-09-17T12:31:44Z` and finish `2026-09-17T12:31:46Z`;
+- `status=failed` and `failure.phase=preflight`;
+- zero accepted rows and no downloaded archives;
+- the unchanged five-row matrix and 26,214,400-byte retained cap; and
+- `final_upload_gate_restore_succeeded=true`.
+
+The host GitHub CLI reported `unknown flag: --json` for
+`gh variable get --json`. Because this occurred while reading preflight state,
+the helper dispatched no workflow and enabled no upload row. Public checks
+immediately after the stop found every frozen trial SHA and trial default still
+exact, including orchestration at `208c2cc96169454f2b96302c623aafe5ceeb6fd0`.
+The existing service-common manual runs predate Gate C; they are not controlled-
+upload evidence.
+
+The corrected bridge uses `gh api` for repository-variable reads and PATCHes,
+interfaces already required by the helper for refs, runs, artifacts, and exact-
+ID deletion. The fixture now rejects any `gh variable` command, and both the
+five-row success path and failed-run restoration path pass with the REST-backed
+implementation. Publish the reviewed correction, verify its exact trial head,
+then require a fresh `UPLOAD BATCH GO` for the retry. Until that succeeds, all
+five detailed rows and the Phase 4 schedule recommendation remain pending;
+**DO NOT AUTHORIZE SCHEDULES**.
 
 ## Phase 1 pilot evidence
 

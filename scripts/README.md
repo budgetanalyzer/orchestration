@@ -153,7 +153,9 @@ scripts/
   preflights frozen refs and disabled expansion gates, serializes dispatches,
   restores each upload variable with a trap, downloads and checksums the exact
   artifact, deletes only that captured ID after the local copy is complete, and
-  writes a sanitized ledger under ignored `tmp/dependency-automation/`.
+  writes a sanitized ledger under ignored `tmp/dependency-automation/`. Variable
+  reads and writes use `gh api` so the bridge does not depend on newer
+  `gh variable get --json` support.
 - `repo/test-run-dependency-automation-upload-batch.sh` - Fixture-driven test
   for the Gate C helper's five-row success path and failed-run restoration path;
   it performs no GitHub requests or repository-variable changes.

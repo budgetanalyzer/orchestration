@@ -42,7 +42,18 @@ upload envelope: current public artifacts consume 95.856145% of the allowance,
 private headroom is unknown, the workspace bundle fails the checked-in
 uncompressed-tar cap, and exact platform-image archive sizing is not publicly
 available. Its recommendation is **DO NOT AUTHORIZE UPLOADS**. Schedules remain
-behind their later explicit gate.
+behind their later explicit gate. A fresh all-public-repository inventory at
+`2026-09-17T04:56:48Z` returned the same total and zero caches. Eight obsolete
+deploy-unconsumed `app-jar` artifacts account for 501,224,156 bytes. Their
+regular-CI removal and failure-only one-day JUnit retention were merged only to
+the four exact `dependency-automation-trial` refs. At
+`2026-09-17T05:25:38Z`, public APIs confirmed the eight IDs absent, a
+1,338,110-byte public residual, zero caches, and unchanged recorded `main` SHAs.
+This preserves rollback but does not activate the correction on `main`, which
+may recreate `app-jar` before promotion. The completion plan applies the
+corrected rolling-storage model directly instead of creating a second
+remediation meta-plan. Uploads remain unauthorized pending the workspace helper
+correction, exact no-upload bundle sizes, and sanitized private-usage accounting.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -600,11 +611,14 @@ refreshed Actions billing/storage, cache use, and the no-payment-method boundary
 That reconciliation is now recorded in the coverage report's
 [Phase 2 cost and upload section](../research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation).
 It found no executable complete upload batch and explicitly says **DO NOT
-AUTHORIZE UPLOADS**. Do not run only the smaller rows: they cannot replace the
-blocked platform-image and workspace-image evidence. Keep every upload, schedule,
-and cache variable `false`; any corrected upload design requires separate
-repo-owned implementation, fresh public inventory, repeated cost reconciliation,
-and a new explicit operator gate.
+AUTHORIZE UPLOADS**. The corrected model no longer tries to prove that seven-day
+`app-jar` retention scales. Follow the completion plan's direct workspace-helper
+phase and exact operator checkpoint: publish the isolated regular-CI fixes,
+verify and delete only the eight recorded IDs, collect five no-upload size
+summaries, and provide sanitized private aggregate usage. Do not run only the
+smaller evidence rows. Keep every upload, schedule, and cache variable `false`
+until Phase 4 recomputes a rolling one-artifact-plus-one-retry envelope and a
+separate `UPLOAD BATCH GO` decision is requested.
 
 ## Stop and rollback
 

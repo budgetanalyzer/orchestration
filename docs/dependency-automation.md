@@ -77,11 +77,18 @@ payment method, reported `$1.07` gross Actions usage fully offset by a `$1.07`
 discount with `$0` billed, and confirmed zero-dollar budgets with **Stop usage**
 enabled. This establishes redundant spend-stopping controls but does not add
 artifact headroom. Phase 12 completion Phase 2 accepted that zero-spend boundary
-but did not find a safe upload envelope: known public artifacts already consume
-95.856145% of the 500 MiB allowance, account-private usage remains unknown, and
-the complete workspace-image evidence exceeds the checked-in uncompressed-tar
-cap while exact platform-image archive sizing is not publicly available. The
-controlled upload recommendation is therefore **DO NOT AUTHORIZE UPLOADS**.
+but did not find a safe upload envelope under that model. Follow-up inspection
+proved that eight deploy-unconsumed `app-jar` artifacts account for 501,224,156
+bytes. At `2026-09-17T05:25:38Z`, public APIs confirmed that the eight exact IDs
+are absent, known public storage is 1,338,110 bytes, public caches are zero, and
+the four corrections are merged only to `dependency-automation-trial`; their
+recorded `main` SHAs remain unchanged as the rollback baseline. The corrected
+successful-CI projection is therefore not active on `main`, which may recreate
+`app-jar` before promotion. The completion plan uses a rolling
+one-artifact-plus-one-retry model and a direct workspace helper phase, not
+another remediation meta-plan. The current recommendation remains **DO NOT
+AUTHORIZE UPLOADS** until the workspace correction, five exact no-upload
+measurements, and sanitized private-usage accounting are complete.
 Keep the four Batch C routine PRs and six existing security PRs open and
 unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
 installation remain pending and unauthorized.
@@ -162,9 +169,10 @@ authentication requirement for Maven installation.
 Branch runs use the same account allowances as runs on `main`. Before the first
 hosted trial, record current retained artifact bytes, accrued billing usage,
 the organization plan and allowance, package visibility, and effective no-spend
-controls. Include existing JAR, test-result, and frontend build artifacts that
-bot PRs will trigger. Actions caches have a separate allowance; inventory cache
-producers and account settings separately from pooled artifact/Packages storage.
+controls. Include obsolete artifacts that have not yet expired or been deleted,
+failure-only test results, and any frontend artifacts that bot PRs will trigger.
+Actions caches have a separate allowance; inventory cache producers and account
+settings separately from pooled artifact/Packages storage.
 Runner-local Docker layers and scanner databases are not Actions artifacts unless
 uploaded or saved as caches. The workspace scanner uploads reports and build
 logs, not its built Docker image.
@@ -183,7 +191,11 @@ accrual and expected non-trial use. Compare with the actual billing-cycle
 allowance and keep headroom for retries and overlapping runs. Weekly bundles
 retained seven days average approximately one bundle each; one-day trial
 retention must not be used to understate the seven-day production projection.
-Deletion stops future accrual, not usage already accrued. Billing views may lag.
+Deletion stops future accrual, not usage already accrued. An operator may delete
+an explicitly identified disposable Actions artifact after recording its exact
+artifact ID, repository, workflow run, source SHA, name, API size, expiry, and
+all findings needed from its contents. Target exact IDs only; never delete by a
+name glob or delete an unknown artifact. Billing views may lag.
 If no payment method is present, confirm over-limit use is blocked; otherwise
 require an effective spend-stopping control for every relevant billed product.
 A notification-only budget is insufficient. Stop hosted work if that boundary
@@ -200,42 +212,64 @@ makes them available.
 ### Phase 12 controlled-upload cost disposition
 
 The 2026-09-16 authenticated checkpoint established a financial hard stop, not
-usable capacity. The public inventory contains 502,562,266 bytes against the
-524,288,000-byte allowance, leaving 21,725,734 bytes (20.719275 MiB) before any
-account-private usage. All nine public cache inventories are empty, the ten
-public packages add no metered package storage under the current GitHub policy,
-and the operator reported no warning, no payment method, `$0` billed Actions
-usage, and zero-dollar Actions and Packages budgets with **Stop usage** enabled.
-Mend remains Community/free with no paid trial or payment method. These facts
-bound spend at zero but do not turn unknown private usage into available
-headroom.
+usable capacity. A fresh unauthenticated inventory of all 15 public organization
+repositories at `2026-09-17T04:56:48Z` still contains 502,562,266 non-expired
+artifact bytes and zero cache entries. Eight obsolete `app-jar` artifacts from
+the four deployable Java services contribute 501,224,156 bytes (99.735220% of
+the ordinary 502,554,822-byte Java artifact set). Their 1,330,666 bytes of
+JUnit XML are reports, not test JARs; the remaining 7,444 bytes are the separate
+long-lived `service-common` graph diagnostic.
 
-The ordinary Java artifact set contributes 78.630829 GiB-hours during one
-seven-day lifetime. If that observed PR-and-main build pattern recurs weekly,
-it occupies 479.273626 MiB continuously, before `service-common`, frontend, or
-scheduled scanner artifacts. One retry of even the smallest observed Java
-consumer build adds more than the current 20.719275 MiB headroom. The nine
-scheduled jobs also overlap in retention; serial human dispatch does not
-serialize their seven-day storage. Optional trial caches therefore stay off and
-contribute zero to the projection.
+The regular Java CI correction is published only on the four protected
+`dependency-automation-trial` branches. One four-service CI cycle retained
+251,277,411 bytes under the old seven-day model; the observed PR cycle plus its
+resulting `main` cycle account for 502,554,822 bytes. If the corrected workflows
+are eventually promoted to `main`, successful regular CI retains zero
+artifacts. A failed main-path cycle then retains only the measured 665,333-byte
+four-service JUnit set for one day; one same-size retry would make the bounded
+failure-diagnostic peak 1,330,666 bytes. Until promotion, `main` may recreate
+`app-jar`. These numbers exclude trial evidence, GitHub Packages, and unknown
+private-repository usage.
 
-The smallest evidence design reuses the existing API-sized Java build artifacts,
-the 7,444-byte automatic diagnostic, accepted SBOMs, and public success and
-failure runs. New retained evidence is still required for exactly five distinct
-surfaces: one representative Java graph plus the platform-image, workspace-image,
-npm-audit, and govulncheck reports. The complete image rows are not eligible for
-a complete batch: the workspace bundle fails the current cap and the
-platform-image bundle's exact eligibility is unproved. Running only the smaller
-rows would consume storage without completing the evidence objective.
+Removing future uploads does not remove old artifacts. The operator deleted the
+eight recorded `app-jar` IDs exactly, and unauthenticated public verification at
+`2026-09-17T05:25:38Z` found no remaining public `app-jar`. The currently known
+public residual is 1,338,110 bytes and nominal public headroom against the
+524,288,000-byte allowance is 522,949,890 bytes, before unknown private use.
+The ten public packages remain a separate GitHub Packages surface and add no
+metered package storage under the current GitHub policy; no package is deleted
+or changed by this Actions-artifact correction.
 
-**DO NOT AUTHORIZE UPLOADS.** Keep all upload, schedule, and optional-cache
-variables `false`. Do not dispatch a partial upload matrix, trim either image
-allowlist, add billing information, or reinterpret a quota rejection as
-acceptance. A later attempt requires a separately reviewed, repo-owned correction
-that preserves complete evidence and the 25 MiB per-run cost ceiling, followed by
-a fresh public artifact inventory and a repeat of this cost reconciliation. The
-detailed measurement ledger and conditional row order live in the
-[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation).
+Controlled trial evidence uses a rolling one-at-a-time model. Record the
+required findings, metadata, and retained API size for one artifact before an
+operator optionally deletes that exact ID or waits for its one-day expiry, then
+recompute inventory before the next row. This avoids requiring all current or
+future repositories' evidence bundles to remain retained concurrently. Reserve
+one retry: at the 25 MiB retained-artifact ceiling, the worst rolling public
+window is the 1,338,110-byte residual plus two 26,214,400-byte artifacts, or
+53,766,910 bytes, before private usage. Exact measured bundle sizes replace that
+ceiling when available.
+
+The workspace evidence is 42,276,809 source bytes, a 42,301,440-byte temporary
+tar, and a 5,754,918-byte final `.tar.gz`. The current helper incorrectly makes
+the intermediate tar an upload-eligibility condition even though only the gzip
+archive is uploaded. The simplest safe correction is to continue measuring all
+three values but gate upload eligibility only on the final archive being at most
+24 MiB, upload it with compression disabled, and fail the run if the exact
+retained artifact API size exceeds 25 MiB. Preserve the complete allowlist and
+fail closed; do not trim scanner targets or reports to satisfy either ceiling.
+
+**DO NOT AUTHORIZE UPLOADS YET.** Keep every upload, schedule, and optional-cache
+variable `false`. Exact-ID cleanup is publicly verified and the four workflow
+corrections are trial-only with unchanged `main` rollback SHAs. The workspace
+helper correction is only proposed, exact compressed-size summaries are still
+missing for the required evidence rows, and private-repository usage remains
+unknown. No payment method, paid trial, or allowance increase is permitted. The
+detailed cleanup ledger,
+measurement gaps, and next decision sequence live in the
+[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation)
+and the
+[Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md).
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.

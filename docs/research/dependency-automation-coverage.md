@@ -47,12 +47,19 @@ workflow. Keep #120 open and unmerged until rollback; its explicit disposition
 removes it as an expansion blocker. Phase 12 completion Phase 2 accepted the
 zero-spend boundary but found no safe complete upload envelope and recorded
 **DO NOT AUTHORIZE UPLOADS**. Scheduled and final benchmark evidence remain
-pending.
+pending. A fresh all-public-repository inventory at
+`2026-09-17T04:56:48Z` returned the same 17 artifacts, 502,562,266 bytes, and
+zero caches. Eight obsolete `app-jar` objects contribute 501,224,156 bytes.
+At `2026-09-17T05:25:38Z`, public APIs confirmed those eight IDs absent, a
+1,338,110-byte public residual, zero caches, exact trial-branch heads for all
+four fixes, and unchanged recorded `main` SHAs. The trial-only correction is
+fully rollbackable but does not change current `main` recurrence. Uploads remain
+unauthorized pending the workspace helper correction, exact no-upload archive
+measurements, and private-usage accounting.
 
-**Last updated:** 2026-09-16 (Checkpoint A zero-spend and Mend state accepted;
-malformed accidental frontend security PR #120 explicitly dispositioned;
-Phase 2 cost reconciliation complete with uploads not authorized; schedules and
-final benchmark dispositions remain pending)
+**Last updated:** 2026-09-17 (exact-ID cleanup and trial-only service merges
+publicly verified; `main` rollback SHAs unchanged; uploads, schedules, and final
+benchmark dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -72,8 +79,8 @@ reported that neither GitHub nor Mend has a payment method. GitHub documents tha
 over-quota Actions use is blocked without a valid payment method, establishing a
 zero-spend boundary. At `2026-09-16T17:27:55Z`, the operator reconfirmed that
 GitHub has no payment method and reported an Actions billing view of `$1.07`
-gross usage, a `$1.07` included-usage discount, and `$0` billed usage. All nine
-At `2026-09-16T17:32:19Z`, the operator additionally confirmed zero-dollar
+gross usage, a `$1.07` included-usage discount, and `$0` billed usage. At
+`2026-09-16T17:32:19Z`, the operator additionally confirmed zero-dollar
 budgets with **Stop usage** enabled. All nine trial refs are now published,
 initial branch measurement runs completed, and default-only App, schedule, and
 alert checks remain deferred.
@@ -120,11 +127,11 @@ pull-request rules. Public SBOM downloads freshly reconfirmed 222, 314, 236,
 238, and 241 packages for the five Java repositories, the exact trial document
 version, and all applicable internal coordinates in the four consumers.
 
-The public artifact and cache inventory is now materially different from the
-pre-trial zero-byte snapshot. The Java artifacts below are ordinary seven-day
-main-path artifacts created by the routing-fix PR and resulting `main` push;
-they are not repo-owned trial uploads. Every scoped repository reports zero
-Actions cache entries.
+The pre-cleanup public artifact and cache inventory was materially different
+from the pre-trial zero-byte snapshot. The Java artifacts in this historical
+table were ordinary seven-day main-path artifacts created by the routing-fix PR
+and resulting `main` push; they were not repo-owned trial uploads. Every scoped
+repository reported zero Actions cache entries.
 
 | Repository | Non-expired public artifacts | Public bytes | Expiry/source note |
 | --- | ---: | ---: | --- |
@@ -137,7 +144,46 @@ Actions cache entries.
 | `budget-analyzer-web` | 0 | 0 | None |
 | `ext-authz` | 0 | 0 | None |
 | `workspace` | 0 | 0 | None |
-| **Total** | **17** | **502,562,266** | About 480 MiB; included in the Phase 2 reconciliation below |
+| **Historical total before exact-ID cleanup** | **17** | **502,562,266** | About 480 MiB; included in the Phase 2 reconciliation below |
+
+A second unauthenticated refresh at `2026-09-17T04:56:48Z` queried all 15
+public organization repositories, not only the nine trial repositories. It
+returned the same 17 non-expired artifacts and 502,562,266 bytes; every public
+cache inventory remained empty. The exact obsolete-artifact cleanup ledger is:
+
+| Repository | Artifact ID | Workflow run | Source SHA | Name | Bytes | Expires UTC | Findings required before deletion |
+| --- | ---: | ---: | --- | --- | ---: | --- | --- |
+| `currency-service` | `10440009083` | [`35081217647`](https://github.com/budgetanalyzer/currency-service/actions/runs/35081217647) | `cb7307b64ae58206b002c69f399debf260eb116f` | `app-jar` | 83,249,543 | `2026-09-23T09:48:32Z` | None; deploy-unconsumed regular-CI JAR |
+| `currency-service` | `10440089489` | [`35081538971`](https://github.com/budgetanalyzer/currency-service/actions/runs/35081538971) | `aa432316849c9231389f8a844325dcf0d64f7335` | `app-jar` | 83,249,543 | `2026-09-23T09:52:05Z` | None; deploy-unconsumed regular-CI JAR |
+| `permission-service` | `10439738759` | [`35081266394`](https://github.com/budgetanalyzer/permission-service/actions/runs/35081266394) | `21485067384b4c0c671df28c8aa27ad4ff4f1410` | `app-jar` | 60,193,521 | `2026-09-23T09:48:29Z` | None; deploy-unconsumed regular-CI JAR |
+| `permission-service` | `10440034884` | [`35081774841`](https://github.com/budgetanalyzer/permission-service/actions/runs/35081774841) | `f2d9d55b149c1f3a00e7f2edd85bafe01a46c5f1` | `app-jar` | 60,193,521 | `2026-09-23T09:53:50Z` | None; deploy-unconsumed regular-CI JAR |
+| `transaction-service` | `10440595892` | [`35081302881`](https://github.com/budgetanalyzer/transaction-service/actions/runs/35081302881) | `79e16d1bcdd028b7fc772890d62e2f773d3db5db` | `app-jar` | 64,327,198 | `2026-09-23T09:49:29Z` | None; deploy-unconsumed regular-CI JAR |
+| `transaction-service` | `10440114874` | [`35081809881`](https://github.com/budgetanalyzer/transaction-service/actions/runs/35081809881) | `ccc459f9ea954296a4d1cea6cdbc4b3acf994e6a` | `app-jar` | 64,327,198 | `2026-09-23T09:55:03Z` | None; deploy-unconsumed regular-CI JAR |
+| `session-gateway` | `10439454814` | [`35081330601`](https://github.com/budgetanalyzer/session-gateway/actions/runs/35081330601) | `ba1011cc225864f215d2de30ab8ddfa87b35374b` | `app-jar` | 42,841,816 | `2026-09-23T09:48:57Z` | None; deploy-unconsumed regular-CI JAR |
+| `session-gateway` | `10441010133` | [`35081846285`](https://github.com/budgetanalyzer/session-gateway/actions/runs/35081846285) | `a37c7a0bb832b857d3d7371e521ac82e99fc3b93` | `app-jar` | 42,841,816 | `2026-09-23T09:54:36Z` | None; deploy-unconsumed regular-CI JAR |
+| **Total** |  |  |  |  | **501,224,156** |  | **99.735220% of ordinary retained Java CI bytes** |
+
+The release path does not download these artifacts: each owning release
+workflow builds its container from source, each Dockerfile runs `bootJar`, and
+orchestration deploys the digest-pinned GHCR image. The JUnit artifacts total
+1,330,666 bytes and contain XML reports, not test classes or dependencies.
+Removing future `app-jar` uploads and deleting these exact IDs therefore leaves
+release images, deployment, and `service-common` GitHub Packages unchanged.
+
+The operator subsequently deleted those eight exact IDs. An unauthenticated
+refresh at `2026-09-17T05:25:38Z` found no public `app-jar`; a fresh cache query
+across all 15 public repositories also found zero entries and zero bytes. The
+remaining public artifact inventory is:
+
+| Repository | Non-expired public artifacts | Public bytes | Contents |
+| --- | ---: | ---: | --- |
+| `currency-service` | 2 | 596,513 | Historical `test-results` XML |
+| `permission-service` | 2 | 68,767 | Historical `test-results` XML |
+| `transaction-service` | 2 | 583,500 | Historical `test-results` XML |
+| `session-gateway` | 2 | 81,886 | Historical `test-results` XML |
+| `service-common` | 1 | 7,444 | Graph diagnostic; separate from regular Java CI |
+| All other public organization repositories | 0 | 0 | None |
+| **Current total** | **9** | **1,338,110** | No public `app-jar` |
 
 GitHub's current
 [Actions billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions#storage-measurement-units)
@@ -551,73 +597,83 @@ exact nine-repository scope. Those controls prevent spend; they do not establish
 available storage. Account-private artifact and package usage remains unknown
 and is not treated as zero.
 
-The complete size ledger keeps source, uncompressed tar, gzip archive, and
-GitHub-retained bytes separate:
+The old and corrected recurring models must not be mixed:
 
-| Evidence | Measurement source | Source bytes | Tar bytes | Gzip bytes | Retained/API bytes and disposition |
-| --- | --- | ---: | ---: | ---: | --- |
-| Four Java consumers' ordinary PR and `main` builds | Public artifact API | — | — | — | 502,554,822 across 16 seven-day artifacts; reuse as representative build-output evidence |
-| `service-common` graph failure path | Public artifact API | — | — | — | 7,444; automatic diagnostic artifact retained through 2026-12-14 and reused as failure evidence |
-| Complete workspace-image allowlist | Current local full-scan output, measured with the checked-in archive shape | 42,276,809 | 42,301,440 | 5,754,918 | Not retained; ineligible because the helper requires both tar and gzip bytes to be at most 25,165,824 |
-| Platform-image allowlist | Successful public no-upload runs | not publicly exposed | not publicly exposed | not publicly exposed | Zero retained bytes; exact runner summary is unavailable without authentication, so eligibility is unproved |
-| Representative Java graph, npm audit, and `govulncheck` allowlists | Successful public no-upload runs and accepted SBOMs | not publicly exposed | not publicly exposed | not publicly exposed | Zero retained bytes; exact archive sizes are not present in public API metadata or an operator-supplied sanitized summary |
+| Surface | Old recurring model | Corrected recurring model |
+| --- | --- | --- |
+| Four deployable Java services, successful regular CI | 251,277,411 bytes per four-service cycle, retained seven days; the current PR cycle plus `main` cycle total 502,554,822 bytes | Zero retained bytes |
+| Four deployable Java services, failed regular CI | Same JAR-plus-XML behavior as success | JUnit XML only, one day; 665,333 bytes for one measured four-service cycle and 1,330,666 bytes with one same-size retry |
+| Controlled Phase 12 evidence | Separate gated archive, initially off | Still separate, one at a time, one-day retention, 24 MiB payload target and 25 MiB retained ceiling |
+| `service-common` packages | GitHub Packages release/snapshot publishing | Unchanged; not an Actions-artifact cleanup target |
 
-The workspace measurement is local sizing evidence, not a claim about the exact
-hosted runner archive. It is sufficient to prove that the complete current
-allowlist cannot pass the current helper because its tar size exceeds the cap by
-17,135,616 bytes. The gzip size does not override that two-part check. The
-platform-image row remains an explicit unknown; Phase 2 does not infer its size
-from a successful run whose upload gate was off.
+The fresh public total remains 502,562,266 bytes, leaving only 21,725,734 bytes
+before unknown private usage while the obsolete JARs remain. Exact-ID removal of
+the eight `app-jar` artifacts reduces known public retained bytes by
+501,224,156. The resulting public residual is 1,338,110 bytes: 1,330,666 bytes
+of JUnit XML plus the 7,444-byte `service-common` graph diagnostic. Nominal
+headroom then becomes 522,949,890 bytes before private usage. Removing future
+uploads alone does not produce this headroom; the old objects must expire or be
+deleted by the operator.
 
-The 524,288,000-byte allowance minus 502,562,266 known public bytes leaves
-21,725,734 bytes (20.719275 MiB), before unknown private use. The
-502,554,822-byte ordinary Java set contributes 78.630829 GiB-hours over one
-seven-day retention period and, if the observed PR-plus-`main` pattern recurs
-weekly, occupies 479.273626 MiB continuously. The smallest observed complete
-consumer retry is `session-gateway` run 35081846285 at 42,882,746 API bytes. It
-adds 6.709528 GiB-hours and would raise the public peak to 545,445,012 bytes
-(520.176899 MiB), 21,157,012 bytes over the allowance.
+The complete evidence-size ledger keeps source, temporary tar, final gzip, and
+GitHub-retained bytes distinct:
 
-For bounds, five 24 MiB trial archives would add at most 125,829,120 bytes and
-2.812500 GiB-hours at one-day retention. The same five weekly archives at
-seven-day retention contribute 19.687500 GiB-hours. Ongoing scheduled operation
-has nine overlapping producers, not five; at the checked-in cap their bounded
-maximum is 226,492,416 bytes and 35.437500 GiB-hours per weekly retention cycle.
-Known public bytes plus that nine-producer bound and one smallest observed retry
-would peak at 736.176899 MiB before private use. These cap-based values are
-conservative bounds, not substitutes for the missing exact archive sizes.
-Optional trial caches remain disabled and contribute zero.
+| Evidence | Source bytes | Temporary tar bytes | Final gzip bytes | Current disposition |
+| --- | ---: | ---: | ---: | --- |
+| Complete workspace-image allowlist | 42,276,809 | 42,301,440 | 5,754,918 | Complete payload is below 24 MiB, but the helper incorrectly rejects the intermediate tar |
+| Platform-image allowlist | Unknown | Unknown | Unknown | Require a fresh no-upload runner summary; do not infer size from a successful run |
+| Representative Java graph | Unknown | Unknown | Unknown | Require a fresh no-upload runner summary |
+| npm audit | Unknown | Unknown | Unknown | Require a fresh no-upload runner summary |
+| `govulncheck` | Unknown | Unknown | Unknown | Require a fresh no-upload runner summary |
 
-The smallest complete trial reuses the accepted SBOMs, ordinary Java build
-artifacts, the automatic diagnostic, successful public runs, and the accepted
-frontend failure disposition. It still needs exactly five non-duplicative
-detailed records. If a later repo-owned correction makes both complete image
-bundles eligible and a fresh account inventory proves enough headroom for the
-whole batch plus one retry, use this order:
+The workspace tar exceeds 25,165,824 bytes by 17,135,616, but that tar is a
+temporary compressor input, not the upload payload or retained artifact. The
+safest minimal correction keeps measuring all three values, bases
+`upload_allowed` only on the final `.tar.gz` being no more than 25,165,824 bytes
+(24 MiB), uploads that already-compressed file with compression level zero, and
+then fails closed if the exact artifact API size is above 26,214,400 bytes
+(25 MiB). The allowlist, reports, scanner metadata, and findings remain complete.
+No target or report may be trimmed merely to pass a size check.
+
+The rolling model does not require all five records, or future repositories'
+records, to remain retained concurrently. After recording an artifact's exact
+ID, run, SHA, name, API size, expiry, and required findings, the operator may
+delete that exact artifact or wait for its one-day expiry before continuing.
+With the 1,338,110-byte public residual and one active artifact plus one retry at
+the full 25 MiB retained ceiling, the conservative public peak is 53,766,910
+bytes and the remaining allowance is 470,521,090 bytes before private usage.
+Actual exact bundle sizes must replace the ceiling in the pre-upload decision.
+Optional caches remain disabled and contribute zero.
+
+Exactly five non-duplicative detailed records remain. Their candidate order is:
 
 | Order | Variables and workflow UI | Frozen trial source | Expected artifact | Row-specific stop condition |
 | ---: | --- | --- | --- | --- |
 | 1 | [`ext-authz` variables](https://github.com/budgetanalyzer/ext-authz/settings/variables/actions); [Go Vulnerability Check](https://github.com/budgetanalyzer/ext-authz/actions/workflows/go-vulnerability-check.yml), no inputs | `dependency-automation-trial` at `75ed2bda4de7460332a8dea656def0459064753f` | `trial-govulncheck-evidence-RUN_ID` | Stop unless the complete archive is eligible and contains the scanner/database metadata and full result |
 | 2 | [`budget-analyzer-web` variables](https://github.com/budgetanalyzer/budget-analyzer-web/settings/variables/actions); [Dependency Audit](https://github.com/budgetanalyzer/budget-analyzer-web/actions/workflows/dependency-audit.yml), no inputs | `dependency-automation-trial` at `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | `trial-npm-audit-evidence-RUN_ID` | Stop unless the full and production audit reports are complete and eligible |
 | 3 | [`service-common` variables](https://github.com/budgetanalyzer/service-common/settings/variables/actions); [Dependency Submission](https://github.com/budgetanalyzer/service-common/actions/workflows/dependency-submission.yml), no inputs | `dependency-automation-trial` at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | `trial-dependency-graph-evidence-RUN_ID` | Stop unless resolution and the complete graph are eligible; keep graph submission enabled |
-| 4 | [`workspace` variables](https://github.com/budgetanalyzer/workspace/settings/variables/actions); [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `09ee0a2afecc2af6c3a216b225537c680ef68848`; replace with the reviewed correction SHA | `trial-workspace-image-evidence-RUN_ID` | Currently blocked: the complete tar exceeds the cap; stop unless a published correction preserves the full allowlist and reports eligible |
-| 5 | [`orchestration` variables](https://github.com/budgetanalyzer/orchestration/settings/variables/actions); [Exact Image Security Evidence](https://github.com/budgetanalyzer/orchestration/actions/workflows/exact-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `c9e6f31208a5f668fcccd3e7ff2fea649654443c`; replace with the reviewed correction SHA if changed | `trial-exact-image-security-evidence-RUN_ID` | Currently blocked: exact complete size is unproved; stop unless all rendered targets remain allowlisted and the archive reports eligible |
+| 4 | [`workspace` variables](https://github.com/budgetanalyzer/workspace/settings/variables/actions); [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `09ee0a2afecc2af6c3a216b225537c680ef68848`; replace with the reviewed correction SHA | `trial-workspace-image-evidence-RUN_ID` | Stop unless the compressed-only correction is published, the complete allowlist is unchanged, and the final archive is eligible |
+| 5 | [`orchestration` variables](https://github.com/budgetanalyzer/orchestration/settings/variables/actions); [Exact Image Security Evidence](https://github.com/budgetanalyzer/orchestration/actions/workflows/exact-image-security-evidence.yml), no inputs | `dependency-automation-trial` at `c9e6f31208a5f668fcccd3e7ff2fea649654443c` | `trial-exact-image-security-evidence-RUN_ID` | Stop unless all rendered targets remain allowlisted and the fresh no-upload summary reports an eligible final archive |
 
 For every row, select the exact trial branch, leave schedule and cache variables
 `false`, enable uploads only for that one serialized run, and restore uploads to
 `false` immediately after completion. Stop on a changed/unreviewed SHA, wrong
 ref, failed or skipped job, `upload_allowed != true`, an unexpected artifact or
 cache, an API artifact size above the remaining verified headroom, or any new PR.
-After each row, replace the estimate with the artifact API's `size_in_bytes` and
-recalculate the remaining one-retry envelope before proceeding.
+After each row, record required findings before any exact-ID deletion, replace
+the estimate with the artifact API's `size_in_bytes`, and recalculate the
+remaining one-retry envelope before proceeding.
 
 This matrix is conditional documentation, not an executable authorization. The
-current decision is **DO NOT AUTHORIZE UPLOADS**: private headroom is unknown,
-one normal retry already exceeds known public headroom, the workspace image row
-cannot pass the current cap, and the platform-image row lacks an exact eligible
-size. Do not run only rows 1–3. A later attempt requires a reviewed repo-owned
-correction, a fresh public and authenticated account inventory, repeated cost
-reconciliation, and a new explicit `UPLOAD BATCH GO` gate.
+current decision remains **DO NOT AUTHORIZE UPLOADS**: exact-ID cleanup and the
+four trial-only merges are verified, but the workspace correction is not
+implemented, final-archive measurements are incomplete, and private-repository
+usage is unknown. `main` remains unchanged for rollback and may recreate
+`app-jar`; do not count the corrected projection as active. Do not run only the
+known smaller rows. A later attempt requires the workspace correction, five
+exact no-upload measurements, a fresh public inventory, an authenticated
+sanitized private-usage aggregate, one-retry reconciliation, and a new explicit
+`UPLOAD BATCH GO` decision.
 
 ## Phase 1 pilot evidence
 
@@ -787,7 +843,7 @@ URL, tool/database version where applicable, and the final status.
 
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
-| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories are public. The `2026-09-14T01:45:30Z` snapshot found zero retained public bytes. The `2026-09-16T17:05:13Z` refresh instead found 17 non-expired public artifacts totaling 502,562,266 bytes: the 7,444-byte `service-common` graph diagnostic plus ordinary seven-day Java JAR/test artifacts in four consumers. GitHub uses binary storage units, so this is 479.280725 MiB, or 95.856145% of the 500 MiB allowance, with 20.719275 MiB current public headroom. Seven-day retention makes the ordinary set equivalent to 111.830513 MiB-month in a 720-hour month. Public caches are zero in all nine repositories. Public inspection also finds six Container Registry and four Maven packages; GitHub policy makes these public packages free and currently makes Container Registry storage free, so they add no metered package storage. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. At `2026-09-16T17:27:55Z`, the operator reconfirmed no GitHub payment method and reported `$1.07` gross Actions usage, a `$1.07` discount, and `$0` billed usage. GitHub's current Actions billing documentation says over-quota usage is blocked without a valid payment method. | Phase 2 included the unknown private headroom, existing non-trial use, one retry, and overlapping scheduled producers. The hard stops bound spend but do not create capacity. Keep uploads and schedules off; treat a quota rejection as failed evidence delivery and do not add a payment method. | **Zero-spend boundary accepted; no safe complete upload envelope — uploads stay off** |
+| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | The operator deleted the eight exact obsolete `app-jar` IDs, and the `2026-09-17T05:25:38Z` unauthenticated refresh found 9 non-expired artifacts, 1,338,110 bytes, and no public `app-jar`; a fresh all-15-repository cache query found zero entries and bytes. The four regular-CI corrections are merged only to exact `dependency-automation-trial` refs, while the recorded `main` SHAs remain unchanged as the rollback baseline. Public packages remain separate and unmetered under current policy. Private artifact/package usage remains unknown. No payment method, `$0` billed Actions usage, and Stop-usage budgets bound spend but do not prove headroom. | Correct the workspace helper on its trial branch, collect five exact no-upload archive summaries, and provide a sanitized private aggregate. Recompute a rolling one-artifact-plus-one-retry envelope; do not promote service fixes to `main`, add billing, or treat a quota rejection as acceptance. | **Cleanup and trial-only service corrections verified; uploads stay off pending exact headroom** |
 | All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. The discovered `main` protection defect is repaired, and the operator restricted initial App access to orchestration. Prove hosted lookup behavior before expansion. | **Bounded Community trial, orchestration switch, protection, and pilot App scope passed — hosted lookup pending** |
 | Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run inspection found only the dynamic default target effective. The first remediation retained quoted patterns; the final saved repair uses exact unquoted refs. | Public verification at `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and `refs/heads/dependency-automation-trial` conditions. Both branches independently receive deletion, non-fast-forward, and pull-request rules; both SHAs remain unchanged. Preserve the ruleset through pilot rollback. | **Passed — both branches independently protected before Step 5.4** |
 | All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata records successful initial branch jobs in all nine repositories with zero artifacts. Phase 2 found the workspace complete tar above the helper cap and exact platform-image sizing unavailable publicly. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial controls and no-upload measurements passed; complete detailed delivery is blocked and uploads are not authorized** |
@@ -897,11 +953,18 @@ baseline supersedes the stale per-repository PR rows for `permission-service`,
 `transaction-service`, and `session-gateway`: their byte-identical build
 workflow, own exact-trial build/graph evidence, and the approved currency PR
 sample leave no unique untested PR workflow. It also records the separate
-frontend security PR #120 `npm ci` failure and 502,562,266 current public
-artifact bytes. PR #120 is now explicitly dispositioned as a malformed,
+frontend security PR #120 `npm ci` failure and the 502,562,266-byte historical
+public artifact peak. PR #120 is now explicitly dispositioned as a malformed,
 non-representative accidental trial proposal; routine PR #122 proves the same
-workflow's accepted path. Phase 2 completed upload sizing and cost
-reconciliation with uploads unauthorized. Scheduled scan cycles and final
-benchmark dispositions remain pending.
+workflow's accepted path. Phase 2 completed the original upload sizing and cost
+reconciliation with uploads unauthorized. The 2026-09-17 refresh showed that
+eight deploy-unconsumed `app-jar` artifacts were 99.735220% of ordinary retained
+Java CI bytes. The operator deleted those exact IDs and merged their
+future-upload removal only to the four protected trial branches. Recorded
+`main` SHAs remain the rollback baseline, so the corrected recurring model is
+not active there and a new `main` run may recreate `app-jar`. The remaining
+upload decision depends on the workspace helper correction, five exact
+no-upload measurements, one-retry headroom, and explicit private usage.
+Scheduled scan cycles and final benchmark dispositions remain pending.
 Existing local misses remain gaps; lifecycle and exploitability assessment
 remain human work.

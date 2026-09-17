@@ -906,6 +906,7 @@ Public output or sanitized exports are the evidence surface when login is needed
    Record a bounded trial decision. Unknown output sizes may be measured in hosted
    runs with uploads and schedules off after the no-spend boundary is established;
    a complete local scan estimate is no longer a prerequisite for that measurement.
+   Keep account-private usage explicit when the billing view does not expose it.
 3. Follow the operator plan to publish all implementation on the identically named
    `dependency-automation-trial` branch in all nine repositories, orchestration
    preset first, with explicit trial preset refs. Preserve outgoing
@@ -918,10 +919,14 @@ Public output or sanitized exports are the evidence surface when login is needed
    mutation simulation, and all errors. A checkout ref or orchestration-only dry
    run does not prove consumer configuration, Maven graphs, or App behavior.
 5. Review complete branch build/scanner measurements and controlled artifact
-   uploads. Include implicit graph artifacts, existing bot-PR JAR/test/frontend
-   outputs, cache use, and failure-path output. Replace estimates with actual
-   artifact bytes, project intended retention and PR volume, and reconcile
-   refreshed billing. Missing detailed output remains an evidence gap.
+   uploads. Treat obsolete regular-CI JARs, failure-only JUnit reports, trial
+   evidence, Actions caches, and GitHub Packages as separate surfaces. Remove
+   future deployable-service `app-jar` uploads because releases build GHCR images
+   directly from source. An operator may delete a disposable artifact only by
+   exact ID after recording repository, run, source SHA, name, API bytes, expiry,
+   and required findings. Replace estimates with actual artifact bytes, reserve
+   one retry, project intended retention and PR volume, and reconcile refreshed
+   billing. Missing detailed output remains an evidence gap.
 6. Record the operator's trial mode. If main remains default, report branch
    results with default-only cron/onboarding/alert checks pending. For a full
    rehearsal, the operator audits default-branch effects and temporarily makes
@@ -939,6 +944,9 @@ Public output or sanitized exports are the evidence surface when login is needed
    scanner and Java graph workflow. Record source refs, timestamps, tool/database
    versions, bytes, duration, and queueing. Do not count skipped/manual jobs as
    scheduled acceptance or hide authentication, timeout, and registry failures.
+   One-at-a-time uploads may use a rolling exact-ID cleanup window after evidence
+   is recorded; future repositories do not require every earlier bundle to remain
+   retained concurrently.
 9. Apply the operator plan's stop/restore procedure before the merge decision:
    pause App/jobs, preserve evidence, restore original defaults/settings, verify
    main SHAs, and record residual repo-wide state. Report trial acceptance,
@@ -966,7 +974,8 @@ Public output or sanitized exports are the evidence surface when login is needed
 Do not edit this executable plan while a runner uses its snapshot; record results
 in the coverage report. Each sibling implementation handoff belongs in that repo's
 context. Branches are not account/billing or credential isolation. Restoring
-defaults does not delete alerts, issues, artifacts, caches, or accrued usage.
+defaults or removing future uploads does not delete alerts, issues, existing
+artifacts, caches, or accrued usage.
 A missing operator decision requires a concrete handoff, never a token request.
 
 ### Validation

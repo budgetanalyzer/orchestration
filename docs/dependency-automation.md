@@ -93,9 +93,15 @@ exact. The five exact no-upload rows are now recorded. Four report
 `upload_allowed=true`; orchestration alone reports `false` because its
 74,178,560-byte temporary tar still participates in the old helper gate even
 though its final gzip is 7,945,624 bytes. Private artifact and package usage is
-recorded once as `unknown`. The current recommendation remains **DO NOT
-AUTHORIZE UPLOADS** until Phase 3 resolves that concrete eligibility blocker,
-recomputes headroom, and prepares the separately gated upload bridge.
+recorded once as `unknown`. Phase 3 corrects orchestration to gate only the
+final gzip, adds an independent 25 MiB retained-size check, and prepares the
+fail-closed Gate C host bridge. The `2026-09-17T11:55:40Z` public refresh still
+found 1,338,110 artifact bytes, zero caches, and no `app-jar`. Including two
+full 25 MiB retained artifacts and a separate 1,330,666-byte future failure
+diagnostic reserve produces a conservative 55,097,576-byte public peak and
+469,190,424 bytes of nominal remaining allowance before unknown private use.
+The bridge remains gated on the reviewed Phase 3 commit being published as the
+exact orchestration trial head and on the operator's separate `UPLOAD BATCH GO`.
 Keep the four Batch C routine PRs and six existing security PRs open and
 unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
 installation remain pending and unauthorized.
@@ -285,16 +291,53 @@ Public verification found `main` unchanged at
 `383efc840832d474cd9d60e0368ed2ded828e03c`. Do not trim scanner targets or
 reports to satisfy either ceiling.
 
-**DO NOT AUTHORIZE UPLOADS YET.** Keep every upload, schedule, and optional-cache
-variable `false`. Exact-ID cleanup is publicly verified, the four workflow
-corrections are trial-only with unchanged `main` rollback SHAs, and all five
-no-upload measurements are complete. The orchestration row is not currently
-eligible because its checked-in helper reports `upload_allowed=false`; private
-repository usage remains `unknown`. Phase 3 owns the resulting headroom and
-bridge decision. No payment method, paid trial, or allowance increase is
-permitted. The detailed cleanup and measurement ledger and next decision
-sequence live in the
-[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation)
+Phase 3 refreshed all 15 public repositories at `2026-09-17T11:55:40Z` and
+again found 9 non-expired artifacts totaling 1,338,110 bytes, zero public
+caches, and no `app-jar`. It keeps the trial-only corrected projection separate
+from the unchanged `main` rollback state. In addition to the current residual,
+the conservative model reserves two complete 26,214,400-byte artifacts for one
+active row plus one retry and a separate 1,330,666-byte future
+failure-diagnostic window. The resulting peak is 55,097,576 bytes, leaving
+469,190,424 bytes against the public allowance before private usage. Private
+artifact and package usage remains `unknown`; a quota rejection is a safe trial
+failure under the standing hard stop, not evidence of acceptance.
+
+All five controlled-upload rows remain necessary. Each no-upload run proves
+source-exact execution and payload size, but none exposes the retained detailed
+scanner, audit, graph, inventory, or vulnerability report required for final
+acceptance. The exact order remains `ext-authz`, `budget-analyzer-web`,
+`service-common`, `workspace`, then `orchestration`. The first four rows retain
+their Phase 2 SHAs. The orchestration row uses the clean local Phase 3 commit
+that contains the corrected helper and host bridge, and refuses to run unless
+that exact commit is the published `dependency-automation-trial` head.
+
+Orchestration now applies the accepted workspace archive model: the temporary
+tar remains measured but only the final gzip is compared with the 25,165,824
+byte payload ceiling. The workflow independently fails if GitHub reports more
+than 26,214,400 retained bytes. The repo-owned
+`scripts/repo/run-dependency-automation-upload-batch.sh` helper preflights every
+exact SHA, trial default, and false schedule/cache/upload gate; dispatches one
+row at a time; restores uploads to `false` before accepting the run; downloads
+and checksums the exact artifact into ignored `tmp/`; records selected metadata
+in a sanitized JSON ledger; and deletes only that captured artifact ID after
+the local copy is complete. Any mismatch, quota rejection, unsuccessful run,
+unexpected artifact, recurrence, cache, oversize artifact, or failed restore
+stops the batch.
+
+The evidence-backed Phase 3 disposition is **SAFE TO REQUEST UPLOAD BATCH GO**,
+subject to publishing the reviewed Phase 3 change on orchestration's protected
+trial branch. The helper's exact invocation, after the operator replies with
+the required Gate C phrase, is:
+
+```bash
+./scripts/repo/run-dependency-automation-upload-batch.sh --confirm 'UPLOAD BATCH GO'
+```
+
+This recommendation does not itself authorize an upload. Keep every upload,
+schedule, and optional-cache variable `false` until Gate C. Do not add a payment
+method, paid trial, or allowance increase. The detailed cleanup, Phase 2
+measurement ledger, Phase 3 matrix, and next decision sequence live in the
+[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-3-controlled-upload-bridge)
 and the
 [Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md).
 

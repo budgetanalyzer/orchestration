@@ -46,28 +46,33 @@ and accepted it as non-representative. Routine PR #122 passed the same Build
 workflow. Keep #120 open and unmerged until rollback; its explicit disposition
 removes it as an expansion blocker. Phase 12 completion Phase 2 accepted the
 zero-spend boundary and completed the five exact no-upload measurements. Four
-rows are eligible; orchestration is not because its old helper still gates on
-the temporary tar. It therefore retains **DO NOT AUTHORIZE UPLOADS** pending
-Phase 3. Scheduled and final benchmark evidence remain
-pending. A fresh all-public-repository inventory at
+rows were eligible; orchestration was not because its old helper still gated on
+the temporary tar. Phase 3 now corrects that gate, adds retained-size
+enforcement, and provides a fixture-tested, fail-closed five-row host bridge.
+Scheduled and final benchmark evidence remain pending. A fresh
+all-public-repository inventory at
 `2026-09-17T04:56:48Z` returned the same 17 artifacts, 502,562,266 bytes, and
 zero caches. Eight obsolete `app-jar` objects contribute 501,224,156 bytes.
 At `2026-09-17T05:25:38Z`, public APIs confirmed those eight IDs absent, a
 1,338,110-byte public residual, zero caches, exact trial-branch heads for all
 four fixes, and unchanged recorded `main` SHAs. The trial-only correction is
 fully rollbackable but does not change current `main` recurrence. Uploads remain
-unauthorized pending Phase 3's headroom and upload-bridge analysis. The
+unauthorized pending the separate Gate C phrase and publication of the reviewed
+Phase 3 commit. The
 `2026-09-17T10:55:04Z` public refresh found the same 9 artifacts and 1,338,110
 bytes, zero caches, no `app-jar`, all eight exact IDs absent, and all nine
 recorded main/trial branch pairs unchanged. The workspace helper correction is
 published at
 `6a6bf33fb019825b7709693a1b103c8a1dd7d726`; run `35187741819` passed at that
 SHA with zero artifacts while `main` remained
-`383efc840832d474cd9d60e0368ed2ded828e03c`.
+`383efc840832d474cd9d60e0368ed2ded828e03c`. The Phase 3 refresh at
+`2026-09-17T11:55:40Z` found that public storage state unchanged. Its
+conservative current-residual-plus-one-retry-plus-future-failure model peaks at
+55,097,576 bytes and leaves 469,190,424 public bytes before unknown private
+usage.
 
-**Last updated:** 2026-09-17 (Phase 2 public baseline and five no-upload rows
-complete; orchestration eligibility blocks upload authorization; schedules and
-final benchmark dispositions remain pending)
+**Last updated:** 2026-09-17 (Phase 3 controlled-upload bridge prepared; Gate C,
+schedules, and final benchmark dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -654,10 +659,10 @@ The corrected workspace helper properly treats its 44,636,160-byte tar as
 temporary compressor input and gates only the 6,314,072-byte gzip. The
 orchestration helper still applies the old tar-and-gzip gate: its gzip is below
 24 MiB, but its tar exceeds 25,165,824 bytes by 49,012,736, so the source-exact
-summary correctly reports `upload_allowed=false` under the checked-in logic.
-No target or report may be trimmed merely to change that result. Phase 3 must
-resolve this concrete eligibility blocker before it can recommend any upload
-batch.
+summary correctly reports `upload_allowed=false` under the then-published logic.
+No target or report may be trimmed merely to change that result. At the Phase 2
+close, Phase 3 therefore had to resolve this concrete eligibility blocker
+before recommending any upload batch; the correction is recorded below.
 
 The selected `ext-authz` and frontend publication-triggered runs overlapped by
 17 seconds. This is the already-recorded publication-batch serialization
@@ -697,17 +702,96 @@ After each row, record required findings before any exact-ID deletion, replace
 the estimate with the artifact API's `size_in_bytes`, and recalculate the
 remaining one-retry envelope before proceeding.
 
-This matrix is conditional documentation, not an executable authorization. The
-current decision remains **DO NOT AUTHORIZE UPLOADS**: exact-ID cleanup and the
+This matrix was conditional Phase 2 documentation, not an executable
+authorization. At the Phase 2 close, the decision remained **DO NOT AUTHORIZE
+UPLOADS**: exact-ID cleanup and the
 four trial-only merges plus the workspace correction are verified and the five
 final-archive measurements are complete, but orchestration currently reports
 `upload_allowed=false`. Private-repository usage also remains `unknown`. `main`
 remains unchanged for rollback and may recreate `app-jar`; do not count the
-corrected projection as active. Phase 3 must reconcile the one-retry envelope,
-minimize the upload matrix, and either resolve the orchestration blocker or
-retain the stop before any new explicit `UPLOAD BATCH GO` decision. Private
+corrected projection as active. The Phase 3 section below supersedes that
+temporary stop after reconciling the one-retry envelope and resolving the
+orchestration blocker. Private
 artifact and package usage remains `unknown`; do not ask the operator to
 re-investigate it.
+
+### Phase 12 completion Phase 3 controlled-upload bridge
+
+The credential-free Phase 3 refresh completed at `2026-09-17T11:55:40Z`. It
+again enumerated all 15 public organization repositories and found 9
+non-expired artifacts totaling 1,338,110 bytes, zero public caches, no
+`app-jar`, all eight deleted artifact IDs absent, and every Phase 2 branch SHA
+unchanged. There is therefore no current `main` recurrence to add to the
+baseline. The correction remains trial-only, so any later `app-jar` recurrence
+is a hard stop for the Gate C helper rather than part of the corrected
+projection.
+
+The conservative upload envelope is:
+
+| Component | Bytes |
+| --- | ---: |
+| Current known public artifacts | 1,338,110 |
+| One retained artifact at the 25 MiB ceiling | 26,214,400 |
+| One same-size retry | 26,214,400 |
+| Separate future four-service failure-diagnostic reserve | 1,330,666 |
+| **Conservative public peak** | **55,097,576** |
+| **Remaining against 524,288,000 bytes** | **469,190,424** |
+
+This deliberately reserves a new failure-diagnostic window in addition to the
+currently retained diagnostics. Private artifact and package bytes remain
+`unknown`. The standing no-payment-method and stop-usage controls bound spend,
+not capacity; a quota rejection stops the trial and never authorizes billing.
+
+No row can be removed from the upload matrix. The five no-upload summaries
+prove exact source execution, allowlist shape, and payload sizing, but GitHub's
+public APIs do not expose the detailed retained contents needed to disposition
+the hosted `govulncheck`, npm audit, Java graph, workspace-image, or platform-
+image findings. The minimized matrix is therefore all five rows, serialized in
+that order. The first four frozen SHAs remain those in the Phase 2 table. The
+orchestration SHA is the clean reviewed commit containing the Phase 3 change;
+the helper resolves it locally and requires the remote trial ref to match it
+exactly before changing any variable.
+
+| Order | Repository and workflow | Exact source rule | Expected artifact | Delete after local checksummed copy |
+| ---: | --- | --- | --- | --- |
+| 1 | `ext-authz` / `go-vulnerability-check.yml` | `75ed2bda4de7460332a8dea656def0459064753f` | `trial-govulncheck-evidence-RUN_ID` | Yes, exact captured ID only |
+| 2 | `budget-analyzer-web` / `dependency-audit.yml` | `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | `trial-npm-audit-evidence-RUN_ID` | Yes, exact captured ID only |
+| 3 | `service-common` / `dependency-submission.yml` | `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | `trial-dependency-graph-evidence-RUN_ID` | Yes, exact captured ID only |
+| 4 | `workspace` / `workspace-image-security-evidence.yml` | `6a6bf33fb019825b7709693a1b103c8a1dd7d726` | `trial-workspace-image-evidence-RUN_ID` | Yes, exact captured ID only |
+| 5 | `orchestration` / `exact-image-security-evidence.yml` | Clean local Phase 3 HEAD must exactly equal the published trial head | `trial-exact-image-security-evidence-RUN_ID` | Yes, exact captured ID only |
+
+The orchestration evidence helper now follows the accepted workspace behavior:
+it measures source, temporary tar, and final gzip bytes, but uses only the final
+gzip for the 25,165,824-byte payload decision. Missing allowlisted paths fail
+instead of silently producing a partial archive. The workflow also checks the
+uploaded artifact through the exact ID returned by `upload-artifact` and fails
+above 26,214,400 retained bytes. Focused tests cover a compressible tar larger
+than the payload cap, an incompressible payload overflow, a missing allowlisted
+path, and traversal rejection.
+
+`scripts/repo/run-dependency-automation-upload-batch.sh` is the complete Gate C
+operator bridge. From a clean checkout it uses the existing authenticated `gh`
+session without exposing its token. It preflights exact SHAs, trial defaults,
+and false schedule/cache/upload variables for every row; inventories all public
+artifacts and caches; refuses `app-jar` recurrence; enables only one upload gate;
+dispatches and waits; restores that gate before run acceptance; requires one
+successful source-exact run and one exact named artifact within the retained
+cap; downloads the exact artifact ID; verifies the wrapper shape and SHA-256 of
+both wrapper and payload; then deletes only that captured ID. It records only
+selected run/artifact metadata and local checksums in an ignored sanitized JSON
+ledger. A trap restores the active upload gate on every exit. Fixture tests
+prove the five-row success path and failure-stop restoration.
+
+The Phase 3 recommendation is **SAFE TO REQUEST UPLOAD BATCH GO** only after the
+reviewed Phase 3 commit is published to orchestration's protected trial branch.
+The operator must reply exactly `UPLOAD BATCH GO` before running:
+
+```bash
+./scripts/repo/run-dependency-automation-upload-batch.sh --confirm 'UPLOAD BATCH GO'
+```
+
+Until that separate Gate C authorization, all upload, schedule, and cache
+variables remain `false`; this section records readiness, not execution.
 
 ## Phase 1 pilot evidence
 
@@ -877,10 +961,10 @@ URL, tool/database version where applicable, and the final status.
 
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
-| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | The operator deleted the eight exact obsolete `app-jar` IDs. The `2026-09-17T10:55:04Z` credential-free refresh found 9 non-expired artifacts, 1,338,110 bytes, zero public caches, no public `app-jar`, and all eight IDs absent. The four regular-CI corrections remain only on exact `dependency-automation-trial` refs, while the recorded `main` SHAs remain unchanged as the rollback baseline. Public packages remain separate and unmetered under current policy. Private artifact/package usage is recorded as unknown. No payment method, `$0` billed Actions usage, and Stop-usage budgets bound spend but do not prove headroom. | Use the five completed no-upload rows in Phase 3 to recompute the rolling one-artifact-plus-one-retry envelope and resolve the orchestration eligibility failure; do not promote service fixes to `main`, add billing, or treat a quota rejection as acceptance. | **Cleanup, trial-only corrections, and exact sizing verified; uploads stay off pending Phase 3** |
+| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | The operator deleted the eight exact obsolete `app-jar` IDs. The `2026-09-17T11:55:40Z` credential-free refresh found 9 non-expired artifacts, 1,338,110 bytes, zero public caches, no public `app-jar`, and all eight IDs absent. The four regular-CI corrections remain only on exact `dependency-automation-trial` refs, while the recorded `main` SHAs remain unchanged as the rollback baseline. Public packages remain separate and unmetered under current policy. Private artifact/package usage is recorded as unknown. No payment method, `$0` billed Actions usage, and Stop-usage budgets bound spend but do not prove headroom. | Phase 3 computes a 55,097,576-byte conservative peak and leaves 469,190,424 public bytes before unknown private usage. Publish the reviewed orchestration correction, then require the exact Gate C phrase and fail-closed host helper; do not promote service fixes to `main`, add billing, or treat a quota rejection as acceptance. | **Cleanup, sizing, headroom, and controlled-upload bridge verified — Gate C pending** |
 | All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. The discovered `main` protection defect is repaired, and the operator restricted initial App access to orchestration. Prove hosted lookup behavior before expansion. | **Bounded Community trial, orchestration switch, protection, and pilot App scope passed — hosted lookup pending** |
 | Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run inspection found only the dynamic default target effective. The first remediation retained quoted patterns; the final saved repair uses exact unquoted refs. | Public verification at `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and `refs/heads/dependency-automation-trial` conditions. Both branches independently receive deletion, non-fast-forward, and pull-request rules; both SHAs remain unchanged. Preserve the ruleset through pilot rollback. | **Passed — both branches independently protected before Step 5.4** |
-| All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata records successful initial branch jobs in all nine repositories with zero artifacts. Phase 2 completed all five exact rows: workspace is eligible under its corrected final-gzip gate, while orchestration is ineligible under its old temporary-tar gate. The two initial publication-triggered consumer jobs overlapped; preserve that recorded deviation and serialize remaining work. | **Trial controls and exact no-upload measurements passed; orchestration blocks upload authorization** |
+| All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted-ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. Phase 2 completed all five exact rows. Phase 3 aligns orchestration with the final-gzip gate, adds exact-ID retained-size enforcement, and supplies a fixture-tested serialized host helper that restores uploads on failure. The two initial publication-triggered consumer jobs overlapped; preserve that recorded deviation and serialize remaining work. | **Trial controls, exact measurements, and Gate C bridge passed locally — reviewed publication and explicit authorization pending** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve the explicit orchestration trial ref. | Orchestration source and preset ref `24ffc8e36bf87a730bb6a25961059becbdb67d72` resolved successfully in hosted dry-run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973); all nine trial refs are publicly resolvable. Keep the preset ref frozen during each evidence batch. | **Trial preset publication and hosted resolution passed** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` or the trial-only marked-push fallback | Local platform mode cannot perform a true full dry run or GitHub lookups. Before the temporary-default switch, GitHub did not expose **Run workflow**, so the branch-only workflow used its reviewed one-repository wrapper. The temporary default now permits normal manual dispatch without changing that read-only execution contract. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) established 109 dependencies in 37 package files and retained the Aqua Security IP-allow-list and anonymous Docker Hub page-11 gaps. Trial-default manual run [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322) then passed on the same exact source/preset SHA: both jobs succeeded sequentially in 2 minutes 27 seconds, all structural hard gates passed, uploads skipped, and artifact count was zero. | **Trial-default hosted mechanics passed — individual Aqua Security and Docker Hub lookup coverage remains incomplete** |
 | All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Mend is restricted to all nine selected repositories and all nine Dashboards exist. The operator reports all seven consumer onboarding jobs green after the narrowly scoped Maven correction. Five consumer graphs are accepted and graph-backed alert counts are recorded. Six representative routine PRs and six consumer vulnerability PRs use the trial base and have automerge disabled. The dedicated vulnerability limit was published through orchestration PR #62. Workspace PR #9 corrected its isolated action lookup, after which Dashboard #8 refreshed with no repository problem. | **All repositories onboarded; Batch B Dashboard and Batch C representative-PR acceptance passed** |
@@ -996,11 +1080,12 @@ eight deploy-unconsumed `app-jar` artifacts were 99.735220% of ordinary retained
 Java CI bytes. The operator deleted those exact IDs and merged their
 future-upload removal only to the four protected trial branches. Recorded
 `main` SHAs remain the rollback baseline, so the corrected recurring model is
-not active there and a new `main` run may recreate `app-jar`. The remaining
-upload decision now depends on Phase 3's one-retry headroom analysis and the
-orchestration helper eligibility failure exposed by the five completed
-no-upload measurements. Private usage remains explicitly `unknown` under the
-standing zero-spend hard stop.
+not active there and a new `main` run may recreate `app-jar`. Phase 3 resolved
+the helper eligibility defect and completed the conservative headroom analysis
+plus the fail-closed operator bridge. Controlled uploads now depend on
+publication of that reviewed orchestration commit and the separate exact Gate C
+phrase. Private usage remains explicitly `unknown` under the standing
+zero-spend hard stop.
 Scheduled scan cycles and final benchmark dispositions remain pending.
 Existing local misses remain gaps; lifecycle and exploitability assessment
 remain human work.

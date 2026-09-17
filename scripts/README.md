@@ -146,6 +146,17 @@ scripts/
   the exact deleted artifact IDs and recorded main/trial SHAs, verifies the five
   source-exact no-upload candidate runs and their job steps, and writes the
   sanitized machine-readable ledger under ignored `tmp/dependency-automation/`.
+- `repo/run-dependency-automation-upload-batch.sh` - Gate C host helper for the
+  five-row controlled-upload batch. It requires the exact `UPLOAD BATCH GO`
+  confirmation, a clean checkout whose HEAD matches the published orchestration
+  trial ref, and the operator's existing authenticated `gh` session. It
+  preflights frozen refs and disabled expansion gates, serializes dispatches,
+  restores each upload variable with a trap, downloads and checksums the exact
+  artifact, deletes only that captured ID after the local copy is complete, and
+  writes a sanitized ledger under ignored `tmp/dependency-automation/`.
+- `repo/test-run-dependency-automation-upload-batch.sh` - Fixture-driven test
+  for the Gate C helper's five-row success path and failed-run restoration path;
+  it performs no GitHub requests or repository-variable changes.
 
 Choose scripts by runtime boundary:
 

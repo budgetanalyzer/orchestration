@@ -40,10 +40,11 @@ until rollback, but do not rerun or repair it for trial acceptance. Completion
 Phase 2 subsequently accepted the zero-spend boundary and completed the five
 exact no-upload rows. Four rows report `upload_allowed=true`; orchestration
 reports `false` because its 74,178,560-byte temporary tar remains part of the
-old helper gate even though its final gzip is 7,945,624 bytes. Its recommendation
-therefore remains **DO NOT AUTHORIZE UPLOADS** pending Phase 3. Private usage is
-recorded once as `unknown`, and schedules remain behind their later explicit
-gate. A fresh all-public-repository inventory at
+old helper gate even though its final gzip is 7,945,624 bytes. Phase 3 now
+corrects that helper, adds retained-size enforcement, and prepares the
+serialized Gate C host bridge. Private usage is recorded once as `unknown`, and
+schedules remain behind their later explicit gate. A fresh
+all-public-repository inventory at
 `2026-09-17T04:56:48Z` returned the same total and zero caches. Eight obsolete
 deploy-unconsumed `app-jar` artifacts account for 501,224,156 bytes. Their
 regular-CI removal and failure-only one-day JUnit retention were merged only to
@@ -59,8 +60,11 @@ SHA with zero artifacts, and `main` remained unchanged. At
 `2026-09-17T10:55:04Z`, the final Phase 2 refresh reconfirmed all 15 public
 repositories, 9 artifacts totaling 1,338,110 bytes, zero caches, no `app-jar`,
 all eight deleted IDs absent, and unchanged recorded branch SHAs. Uploads remain
-unauthorized pending Phase 3's headroom and bridge analysis; private artifact
-and package usage stays explicitly `unknown`.
+unauthorized pending publication of the reviewed Phase 3 commit and the exact
+Gate C phrase. The `2026-09-17T11:55:40Z` refresh found the same public state;
+the conservative rolling peak is 55,097,576 bytes with 469,190,424 public bytes
+remaining before private usage. Private artifact and package usage stays
+explicitly `unknown`.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -617,14 +621,14 @@ measured output/artifact sizes, the 7,444-byte automatic failure artifact,
 refreshed Actions billing/storage, cache use, and the no-payment-method boundary.
 That reconciliation is now recorded in the coverage report's
 [Phase 2 cost and upload section](../research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation).
-It still says **DO NOT AUTHORIZE UPLOADS** because the five completed rows expose
-an orchestration eligibility failure under the old temporary-tar gate. The
-corrected model no longer tries to prove that seven-day `app-jar` retention
-scales. Phase 3 must use the completed public inventory and exact rows to
-recompute the rolling one-artifact-plus-one-retry envelope, minimize the needed
-retained evidence, and either resolve that blocker or retain the stop. Keep every
-upload, schedule, and cache variable `false` until the completion plan publishes
-a separate `UPLOAD BATCH GO` request.
+Phase 3's
+[controlled-upload bridge](../research/dependency-automation-coverage.md#phase-12-completion-phase-3-controlled-upload-bridge)
+supersedes its temporary stop. It corrects the orchestration final-payload gate,
+reserves one active artifact, one retry, and a separate future failure-
+diagnostic window, and concludes that all five detailed artifacts remain
+necessary. The reviewed Phase 3 commit must be published first. Keep every
+upload, schedule, and cache variable `false` until the operator replies exactly
+`UPLOAD BATCH GO`, then run the one repo-owned helper command documented there.
 
 ## Stop and rollback
 

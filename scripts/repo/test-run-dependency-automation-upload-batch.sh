@@ -61,11 +61,72 @@ jq -e '
 ' "${success_ledger}" >/dev/null
 [[ "$(wc -l < "${test_root}/mock-state/deleted.log")" == 5 ]]
 [[ "$(wc -l < "${test_root}/mock-state/variable.log")" == 10 ]]
-if rg -n 'gh variable| variable get| variable set' \
+if rg -n -- 'gh variable| variable get| variable set|--slurp' \
   "${repo_root}/scripts/repo/run-dependency-automation-upload-batch.sh"; then
-  echo 'The upload helper must use gh api for repository-variable access.' >&2
+  echo 'The upload helper uses an unsupported GitHub CLI command or flag.' >&2
   exit 1
 fi
+
+storage_failure_state="${test_root}/storage-failure-state"
+mkdir -p "${storage_failure_state}/zips"
+cp "${test_root}/mock-state/zips/"*.zip "${storage_failure_state}/zips/"
+if MOCK_GH_STATE_DIR="${storage_failure_state}" \
+  MOCK_ORCHESTRATION_SHA="${orchestration_sha}" \
+  MOCK_FAIL_PUBLIC_STORAGE=true \
+  GH_BIN="${test_root}/mock-gh" \
+  PHASE12_RUN_STAMP=storage-failure \
+  PHASE12_WAIT_SECONDS=0 \
+  PHASE12_WAIT_LIMIT=2 \
+  "${repo_root}/scripts/repo/run-dependency-automation-upload-batch.sh" \
+    --confirm 'UPLOAD BATCH GO'; then
+  echo 'Expected a public-storage API failure to stop the upload batch.' >&2
+  exit 1
+fi
+
+storage_failure_ledger="${repo_root}/tmp/dependency-automation/gate-c-storage-failure/ledger.json"
+jq -e '
+  .status == "failed" and
+  (.rows | length) == 0 and
+  .failure.phase == "preflight" and
+  .failure.reason == "Could not collect the complete public artifact and cache inventory." and
+  .final_upload_gate_restore_succeeded == true
+' "${storage_failure_ledger}" >/dev/null
+if find "${storage_failure_state}" -maxdepth 1 -name 'dispatched-*' -print -quit | grep -q .; then
+  echo 'A workflow was dispatched after public-storage collection failed.' >&2
+  exit 1
+fi
+
+resume_state="${test_root}/resume-state"
+mkdir -p "${resume_state}/zips"
+cp "${test_root}/mock-state/zips/"*.zip "${resume_state}/zips/"
+MOCK_GH_STATE_DIR="${resume_state}" \
+MOCK_ORCHESTRATION_SHA="${orchestration_sha}" \
+MOCK_RESUME_ARTIFACT=true \
+GH_BIN="${test_root}/mock-gh" \
+PHASE12_RUN_STAMP=resume \
+PHASE12_WAIT_SECONDS=0 \
+PHASE12_WAIT_LIMIT=2 \
+  "${repo_root}/scripts/repo/run-dependency-automation-upload-batch.sh" \
+    --confirm 'UPLOAD BATCH GO' \
+    --resume-first-run 91001 \
+    --resume-first-artifact 291001
+
+resume_ledger="${repo_root}/tmp/dependency-automation/gate-c-resume/ledger.json"
+jq -e '
+  .status == "completed" and
+  .resume.first_row_run_id == 91001 and
+  .resume.first_row_artifact_id == 291001 and
+  (.rows | length) == 5 and
+  .rows[0].resumed_from_interrupted_batch == true and
+  all(.rows[1:][]; .resumed_from_interrupted_batch == false) and
+  .rows[0].artifact.id == 291001 and
+  .rows[0].artifact.exact_id_deletion_confirmed == true and
+  .final_upload_gate_restore_succeeded == true
+' "${resume_ledger}" >/dev/null
+[[ ! -e "${resume_state}/dispatched-ext-authz" ]]
+for resumed_repository in budget-analyzer-web service-common workspace orchestration; do
+  [[ -e "${resume_state}/dispatched-${resumed_repository}" ]]
+done
 
 failure_state="${test_root}/failure-state"
 mkdir -p "${failure_state}/zips"

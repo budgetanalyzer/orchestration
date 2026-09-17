@@ -101,15 +101,17 @@ full 25 MiB retained artifacts and a separate 1,330,666-byte future failure
 diagnostic reserve produces a conservative 55,097,576-byte public peak and
 469,190,424 bytes of nominal remaining allowance before unknown private use.
 The reviewed Phase 3 commit was published as the exact orchestration trial head,
-and the operator authorized Gate C. The first helper invocation stopped during
-preflight before any upload or workflow dispatch because the host `gh` version
-does not support `gh variable get --json`. Its sanitized ledger contains zero
-rows, records no downloaded artifacts, and confirms the final upload-gate
-restore succeeded. The helper now uses the stable repository-variable REST
-endpoints through `gh api`, with fixture coverage that rejects the incompatible
-`gh variable` path. Publish that reviewed compatibility correction and require
-a fresh exact `UPLOAD BATCH GO` before retrying the batch. Phase 4 detailed
-evidence verification and Gate D remain pending.
+and the operator authorized Gate C. Two host GitHub CLI compatibility stops are
+recorded. The first rejected `gh variable get --json` before dispatch. After its
+REST correction was published and reauthorized, the second rejected
+`gh api --slurp` while collecting the first run's jobs. That first row did run
+successfully, its upload gate was restored, and exact artifact `10496714385`
+remains recoverable from `ext-authz` run `35222448397`; no later row ran. The
+helper now uses `jq -s` for pagination, fails closed on any inventory API error,
+and has an exact-ID resume path that consumes the retained first row without a
+duplicate dispatch. Publish the reviewed recovery correction and require a
+fresh exact `UPLOAD BATCH GO` before retrying. Phase 4 detailed evidence
+verification and Gate D remain pending.
 Keep the four Batch C routine PRs and six existing security PRs open and
 unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
 installation remain pending and unauthorized.
@@ -369,6 +371,42 @@ reviewed helper change: publish it to the protected trial branch, verify the new
 exact head, and obtain a fresh `UPLOAD BATCH GO` before the operator retries the
 same command. Do not enable schedules or claim Phase 4 evidence from the failed
 preflight.
+
+The REST correction was published at orchestration source
+`cb0b20e6408f49e69a2c8e76afd1e8c6c2fa15b3`, and the operator supplied a fresh
+Gate C authorization. The second invocation started at
+`2026-09-17T12:40:00Z`, verified all five frozen refs, trial defaults, and false
+expansion gates, then reached the first serialized row. `ext-authz` run
+`35222448397` completed successfully at the exact frozen SHA, and the helper
+restored its upload gate before the host CLI rejected `gh api --slurp` during
+job collection. The ledger stopped at `2026-09-17T12:41:09Z` with zero accepted
+rows and `final_upload_gate_restore_succeeded=true`.
+
+Do not use that ledger's zero-byte public-storage field or its derived headroom:
+the unsupported pagination flag failed inside the collector, and the old shell
+control flow continued with empty API output. Public APIs independently confirm
+that exact artifact `10496714385`, named
+`trial-govulncheck-evidence-35222448397`, retains 52,768 bytes through
+`2026-09-18T12:40:58Z`. It belongs to exact source
+`75ed2bda4de7460332a8dea656def0459064753f`. Preserve it until the corrected
+helper downloads and checksums it.
+
+The next correction pipes `gh api --paginate` output through the already
+required `jq -s`, turns every public-inventory API failure into an explicit
+pre-dispatch stop, rejects unrecognized retained trial artifacts, and resumes
+only an explicitly supplied first-row run/artifact pair. After publication and
+a fresh Gate C authorization, use exactly:
+
+```bash
+./scripts/repo/run-dependency-automation-upload-batch.sh \
+  --confirm 'UPLOAD BATCH GO' \
+  --resume-first-run 35222448397 \
+  --resume-first-artifact 10496714385
+```
+
+The helper must verify, download, checksum, and delete that exact retained
+artifact before dispatching rows 2–5. Do not dispatch a duplicate `ext-authz`
+row or delete the artifact manually.
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.

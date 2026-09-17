@@ -105,7 +105,11 @@ case "${command_name}" in
       case "$1" in
         --method) method="$2"; shift 2 ;;
         --jq) jq_expression="$2"; shift 2 ;;
-        --paginate|--slurp) shift ;;
+        --paginate) shift ;;
+        --slurp)
+          echo 'The upload helper must use jq -s instead of gh api --slurp.' >&2
+          exit 2
+          ;;
         --header) shift 2 ;;
         -f|--raw-field)
           field_name="${2%%=*}"
@@ -121,13 +125,14 @@ case "${command_name}" in
     done
 
     if [[ "${endpoint}" == "orgs/budgetanalyzer/repos?type=public&per_page=100" ]]; then
-      printf '[[\n'
+      [[ "${MOCK_FAIL_PUBLIC_STORAGE:-}" != true ]] || exit 1
+      printf '[\n'
       separator=""
       for repository in "${repositories[@]}"; do
         printf '%s{"name":"%s","visibility":"public"}' "${separator}" "${repository}"
         separator=,
       done
-      printf '\n]]\n'
+      printf '\n]\n'
       exit 0
     fi
 
@@ -173,11 +178,21 @@ case "${command_name}" in
       exit 0
     fi
     if [[ "${endpoint}" == repos/budgetanalyzer/*/actions/caches\?per_page=100 ]]; then
-      printf '%s\n' '[{"actions_caches":[]}]'
+      printf '%s\n' '{"actions_caches":[]}'
       exit 0
     fi
     if [[ "${endpoint}" == repos/budgetanalyzer/*/actions/artifacts\?per_page=100 ]]; then
-      printf '%s\n' '[{"artifacts":[]}]'
+      if [[ "${MOCK_RESUME_ARTIFACT:-}" == true && "${repository}" == ext-authz ]]; then
+        id="$(run_id "${repository}")"
+        artifact_id="$((id + 200000))"
+        if [[ ! -f "${MOCK_GH_STATE_DIR}/deleted.log" ]] \
+          || ! grep -Fxq "${artifact_id}" "${MOCK_GH_STATE_DIR}/deleted.log"; then
+          printf '{"artifacts":[{"id":%s,"name":"%s","size_in_bytes":512,"expires_at":"2026-09-18T12:00:00Z","expired":false,"workflow_run":{"id":%s,"head_branch":"dependency-automation-trial","head_sha":"%s"}}]}\n' \
+            "${artifact_id}" "$(artifact_name "${repository}")" "${id}" "$(source_sha "${repository}")"
+          exit 0
+        fi
+      fi
+      printf '%s\n' '{"artifacts":[]}'
       exit 0
     fi
     if [[ "${endpoint}" == repos/budgetanalyzer/*/actions/workflows/*/runs\?* ]]; then
@@ -202,7 +217,7 @@ case "${command_name}" in
       repository="$(repository_from_run_id "${id}")"
       conclusion=success
       [[ "${MOCK_FAIL_REPOSITORY:-}" == "${repository}" ]] && conclusion=failure
-      printf '[{"jobs":[{"id":%s,"status":"completed","conclusion":"%s"}]}]\n' \
+      printf '{"jobs":[{"id":%s,"status":"completed","conclusion":"%s"}]}\n' \
         "$((id + 100000))" "${conclusion}"
       exit 0
     fi

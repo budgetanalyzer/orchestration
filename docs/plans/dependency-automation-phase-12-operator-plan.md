@@ -638,6 +638,15 @@ fixture coverage that rejects the incompatible command path. Publish that
 reviewed correction and obtain a fresh exact `UPLOAD BATCH GO` before retrying.
 Schedules remain unauthorized until Phase 4 accepts the downloaded evidence.
 
+After that correction was published and reauthorized, the host CLI also
+rejected `gh api --slurp` while collecting jobs for the successful first row.
+The upload gate was restored; exact `ext-authz` artifact `10496714385` from run
+`35222448397` remains retained and must not be manually deleted or replaced by a
+duplicate dispatch. The bridge now uses `jq -s`, fails closed on inventory API
+errors, and resumes only that reviewed run/artifact pair. Publish the correction
+and obtain another fresh exact `UPLOAD BATCH GO` before using the recovery
+command in the canonical dependency-automation policy.
+
 ## Stop and rollback
 
 Use this after success, a failure, or an early stop:

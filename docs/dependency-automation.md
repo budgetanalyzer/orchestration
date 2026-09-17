@@ -76,8 +76,7 @@ At the authenticated cost checkpoint, the operator reconfirmed no GitHub
 payment method, reported `$1.07` gross Actions usage fully offset by a `$1.07`
 discount with `$0` billed, and confirmed zero-dollar budgets with **Stop usage**
 enabled. This establishes redundant spend-stopping controls but does not add
-artifact headroom. Phase 12 completion Phase 2 accepted that zero-spend boundary
-but did not find a safe upload envelope under that model. Follow-up inspection
+artifact headroom. Follow-up inspection
 proved that eight deploy-unconsumed `app-jar` artifacts account for 501,224,156
 bytes. At `2026-09-17T05:25:38Z`, public APIs confirmed that the eight exact IDs
 are absent, known public storage is 1,338,110 bytes, public caches are zero, and
@@ -86,9 +85,17 @@ recorded `main` SHAs remain unchanged as the rollback baseline. The corrected
 successful-CI projection is therefore not active on `main`, which may recreate
 `app-jar` before promotion. The completion plan uses a rolling
 one-artifact-plus-one-retry model and a direct workspace helper phase, not
-another remediation meta-plan. The current recommendation remains **DO NOT
-AUTHORIZE UPLOADS** until the workspace correction, five exact no-upload
-measurements, and sanitized private-usage accounting are complete.
+another remediation meta-plan. Phase 12 completion Phase 2 then completed at
+`2026-09-17T10:55:04Z`: all 15 public repositories still contain 9 non-expired
+artifacts totaling 1,338,110 bytes, zero public caches, and no `app-jar`; all
+eight deleted IDs still return absent; and all recorded main/trial SHAs remain
+exact. The five exact no-upload rows are now recorded. Four report
+`upload_allowed=true`; orchestration alone reports `false` because its
+74,178,560-byte temporary tar still participates in the old helper gate even
+though its final gzip is 7,945,624 bytes. Private artifact and package usage is
+recorded once as `unknown`. The current recommendation remains **DO NOT
+AUTHORIZE UPLOADS** until Phase 3 resolves that concrete eligibility blocker,
+recomputes headroom, and prepares the separately gated upload bridge.
 Keep the four Batch C routine PRs and six existing security PRs open and
 unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
 installation remain pending and unauthorized.
@@ -264,8 +271,10 @@ window is the 1,338,110-byte residual plus two 26,214,400-byte artifacts, or
 53,766,910 bytes, before private usage. Exact measured bundle sizes replace that
 ceiling when available.
 
-The workspace evidence is 42,276,809 source bytes, a 42,301,440-byte temporary
-tar, and a 5,754,918-byte final `.tar.gz`. The corrected helper continues to
+The fresh source-exact workspace evidence is 44,614,250 source bytes, a
+44,636,160-byte temporary tar, and a 6,314,072-byte final `.tar.gz`, replacing
+the earlier historical 42,276,809 / 42,301,440 / 5,754,918 measurement. The
+corrected helper continues to
 measure all three values but gates upload eligibility only on the final archive
 being at most 24 MiB, uploads it with compression disabled, and fails the run if
 the exact retained artifact API size exceeds 25 MiB. The correction is published
@@ -277,12 +286,13 @@ Public verification found `main` unchanged at
 reports to satisfy either ceiling.
 
 **DO NOT AUTHORIZE UPLOADS YET.** Keep every upload, schedule, and optional-cache
-variable `false`. Exact-ID cleanup is publicly verified and the four workflow
-corrections are trial-only with unchanged `main` rollback SHAs. The workspace
-helper correction is published and verified; exact compressed-size summaries
-are still missing for the required evidence rows, and private-repository usage
-remains unknown. No payment method, paid trial, or allowance increase is
-permitted. The detailed cleanup ledger, measurement gaps, and next decision
+variable `false`. Exact-ID cleanup is publicly verified, the four workflow
+corrections are trial-only with unchanged `main` rollback SHAs, and all five
+no-upload measurements are complete. The orchestration row is not currently
+eligible because its checked-in helper reports `upload_allowed=false`; private
+repository usage remains `unknown`. Phase 3 owns the resulting headroom and
+bridge decision. No payment method, paid trial, or allowance increase is
+permitted. The detailed cleanup and measurement ledger and next decision
 sequence live in the
 [coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation)
 and the

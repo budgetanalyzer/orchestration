@@ -8,7 +8,7 @@ mock_source="${script_dir}/test-fixtures/dependency-automation-upload-batch-gh"
 test_root="$(mktemp -d)"
 trap 'rm -rf "${test_root}"' EXIT
 
-for required_command in git jar jq sha256sum unzip; do
+for required_command in git jar jq rg sha256sum unzip; do
   command -v "${required_command}" >/dev/null 2>&1 || {
     echo "Required test command is unavailable: ${required_command}" >&2
     exit 1
@@ -60,6 +60,12 @@ jq -e '
   .final_upload_gate_restore_succeeded == true
 ' "${success_ledger}" >/dev/null
 [[ "$(wc -l < "${test_root}/mock-state/deleted.log")" == 5 ]]
+[[ "$(wc -l < "${test_root}/mock-state/variable.log")" == 10 ]]
+if rg -n 'gh variable| variable get| variable set' \
+  "${repo_root}/scripts/repo/run-dependency-automation-upload-batch.sh"; then
+  echo 'The upload helper must use gh api for repository-variable access.' >&2
+  exit 1
+fi
 
 failure_state="${test_root}/failure-state"
 mkdir -p "${failure_state}/zips"

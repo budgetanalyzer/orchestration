@@ -100,8 +100,16 @@ found 1,338,110 artifact bytes, zero caches, and no `app-jar`. Including two
 full 25 MiB retained artifacts and a separate 1,330,666-byte future failure
 diagnostic reserve produces a conservative 55,097,576-byte public peak and
 469,190,424 bytes of nominal remaining allowance before unknown private use.
-The bridge remains gated on the reviewed Phase 3 commit being published as the
-exact orchestration trial head and on the operator's separate `UPLOAD BATCH GO`.
+The reviewed Phase 3 commit was published as the exact orchestration trial head,
+and the operator authorized Gate C. The first helper invocation stopped during
+preflight before any upload or workflow dispatch because the host `gh` version
+does not support `gh variable get --json`. Its sanitized ledger contains zero
+rows, records no downloaded artifacts, and confirms the final upload-gate
+restore succeeded. The helper now uses the stable repository-variable REST
+endpoints through `gh api`, with fixture coverage that rejects the incompatible
+`gh variable` path. Publish that reviewed compatibility correction and require
+a fresh exact `UPLOAD BATCH GO` before retrying the batch. Phase 4 detailed
+evidence verification and Gate D remain pending.
 Keep the four Batch C routine PRs and six existing security PRs open and
 unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
 installation remain pending and unauthorized.
@@ -340,6 +348,27 @@ measurement ledger, Phase 3 matrix, and next decision sequence live in the
 [coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-3-controlled-upload-bridge)
 and the
 [Phase 12 completion plan](plans/dependency-automation-phase-12-completion-plan.md).
+
+### Gate C preflight compatibility stop
+
+The operator authorized Gate C and invoked the published helper at
+`2026-09-17T12:31:44Z` from orchestration source
+`208c2cc96169454f2b96302c623aafe5ceeb6fd0`. The host GitHub CLI rejected
+`gh variable get --json` before the helper completed its repository preflight.
+The sanitized ledger finished at `2026-09-17T12:31:46Z` with status `failed`,
+failure phase `preflight`, zero batch rows, no downloaded artifacts, and
+`final_upload_gate_restore_succeeded=true`. Public refs still matched the frozen
+matrix immediately after the stop. This attempt consumed no controlled-upload
+row and supplies no detailed evidence for Phase 4.
+
+The repo-owned helper now reads and updates Actions variables through
+`gh api` repository-variable endpoints. Its fixture substitutes fail if the
+helper falls back to the newer `gh variable` interface, and the complete
+five-row success path plus failed-run restoration path pass. Treat this as a
+reviewed helper change: publish it to the protected trial branch, verify the new
+exact head, and obtain a fresh `UPLOAD BATCH GO` before the operator retries the
+same command. Do not enable schedules or claim Phase 4 evidence from the failed
+preflight.
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.

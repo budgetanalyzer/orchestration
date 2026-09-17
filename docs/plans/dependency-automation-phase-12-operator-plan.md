@@ -630,6 +630,14 @@ necessary. The reviewed Phase 3 commit must be published first. Keep every
 upload, schedule, and cache variable `false` until the operator replies exactly
 `UPLOAD BATCH GO`, then run the one repo-owned helper command documented there.
 
+The first authorized invocation stopped during preflight before any dispatch or
+upload because the host GitHub CLI did not support `gh variable get --json`.
+The sanitized ledger contains zero rows and confirms final upload-gate
+restoration. The bridge now uses `gh api` repository-variable endpoints and has
+fixture coverage that rejects the incompatible command path. Publish that
+reviewed correction and obtain a fresh exact `UPLOAD BATCH GO` before retrying.
+Schedules remain unauthorized until Phase 4 accepts the downloaded evidence.
+
 ## Stop and rollback
 
 Use this after success, a failure, or an early stop:

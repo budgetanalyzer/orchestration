@@ -44,13 +44,15 @@ companions, so `npm ci` correctly rejected it. At `2026-09-16T17:35:49Z`, the
 operator identified its creation as an accidental trial-variable side effect
 and accepted it as non-representative. Routine PR #122 passed the same Build
 workflow. Keep #120 open and unmerged until rollback; its explicit disposition
-removes it as an expansion blocker. Scheduled, upload-size, cost, and final
-benchmark evidence remain pending.
+removes it as an expansion blocker. Phase 12 completion Phase 2 accepted the
+zero-spend boundary but found no safe complete upload envelope and recorded
+**DO NOT AUTHORIZE UPLOADS**. Scheduled and final benchmark evidence remain
+pending.
 
 **Last updated:** 2026-09-16 (Checkpoint A zero-spend and Mend state accepted;
 malformed accidental frontend security PR #120 explicitly dispositioned;
-schedules, uploads, cost reconciliation, and final benchmark dispositions
-remain pending)
+Phase 2 cost reconciliation complete with uploads not authorized; schedules and
+final benchmark dispositions remain pending)
 
 This report records observed extraction and lookup behavior. It is not a list
 of desired dependency versions. The preserved
@@ -135,7 +137,7 @@ Actions cache entries.
 | `budget-analyzer-web` | 0 | 0 | None |
 | `ext-authz` | 0 | 0 | None |
 | `workspace` | 0 | 0 | None |
-| **Total** | **17** | **502,562,266** | About 480 MiB; Phase 2 must include this existing accrual |
+| **Total** | **17** | **502,562,266** | About 480 MiB; included in the Phase 2 reconciliation below |
 
 GitHub's current
 [Actions billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions#storage-measurement-units)
@@ -262,7 +264,9 @@ serialized, while non-triggering administration uses the operator plan's Batch
 A.
 The operator reconfirmed disabled orchestration cache, schedule, and upload gates
 and zero current Actions spend before authorizing the Step 5 temporary-default
-orchestration pilot. Upload sizing remains pending, so uploads remain off.
+orchestration pilot. At that checkpoint upload sizing was still pending, so
+uploads remained off; the completion Phase 2 reconciliation below later closed
+that question with a **DO NOT AUTHORIZE UPLOADS** result.
 The operator subsequently reported that orchestration has no repository
 rulesets or classic branch-protection rules. The absence removes default-target
 migration risk but initially left the trial ref unprotected. The operator then
@@ -528,15 +532,92 @@ problem, while image-evidence run 35098592885 passed with uploads skipped and
 zero artifacts. This completed the seventh B4 cycle without repeating the other
 six.
 
-The executable
-[trial-ref and ignore remediation plan](../plans/dependency-automation-trial-ref-and-ignore-remediation-plan.md)
-owns the completed local preset-reference and generated-state ignore corrections.
-The reviewed trial refs are published; keep them recoverable and frozen during
-each evidence batch.
+The completed trial-ref and ignore remediation work owns the local
+preset-reference and generated-state ignore corrections. The reviewed trial
+refs are published; keep them recoverable and frozen during each evidence
+batch.
 Record source/default refs, main SHAs, actual artifact bytes and retention, cache
 use, billing observations, and detailed report evidence alongside existing
 deferred checks. Report trial acceptance, ongoing installation, and benchmark
 parity separately. A paused successful trial does not mean ongoing activation.
+
+### Phase 12 completion Phase 2 cost and upload reconciliation
+
+Checkpoint A is accepted for the zero-spend boundary. GitHub has no payment
+method, Actions and Packages each have a zero-dollar **Stop usage** budget, the
+operator reported no quota warning and `$0` billed Actions usage, and Mend is
+Community/free with no paid trial or payment method, zero active jobs, and the
+exact nine-repository scope. Those controls prevent spend; they do not establish
+available storage. Account-private artifact and package usage remains unknown
+and is not treated as zero.
+
+The complete size ledger keeps source, uncompressed tar, gzip archive, and
+GitHub-retained bytes separate:
+
+| Evidence | Measurement source | Source bytes | Tar bytes | Gzip bytes | Retained/API bytes and disposition |
+| --- | --- | ---: | ---: | ---: | --- |
+| Four Java consumers' ordinary PR and `main` builds | Public artifact API | — | — | — | 502,554,822 across 16 seven-day artifacts; reuse as representative build-output evidence |
+| `service-common` graph failure path | Public artifact API | — | — | — | 7,444; automatic diagnostic artifact retained through 2026-12-14 and reused as failure evidence |
+| Complete workspace-image allowlist | Current local full-scan output, measured with the checked-in archive shape | 42,276,809 | 42,301,440 | 5,754,918 | Not retained; ineligible because the helper requires both tar and gzip bytes to be at most 25,165,824 |
+| Platform-image allowlist | Successful public no-upload runs | not publicly exposed | not publicly exposed | not publicly exposed | Zero retained bytes; exact runner summary is unavailable without authentication, so eligibility is unproved |
+| Representative Java graph, npm audit, and `govulncheck` allowlists | Successful public no-upload runs and accepted SBOMs | not publicly exposed | not publicly exposed | not publicly exposed | Zero retained bytes; exact archive sizes are not present in public API metadata or an operator-supplied sanitized summary |
+
+The workspace measurement is local sizing evidence, not a claim about the exact
+hosted runner archive. It is sufficient to prove that the complete current
+allowlist cannot pass the current helper because its tar size exceeds the cap by
+17,135,616 bytes. The gzip size does not override that two-part check. The
+platform-image row remains an explicit unknown; Phase 2 does not infer its size
+from a successful run whose upload gate was off.
+
+The 524,288,000-byte allowance minus 502,562,266 known public bytes leaves
+21,725,734 bytes (20.719275 MiB), before unknown private use. The
+502,554,822-byte ordinary Java set contributes 78.630829 GiB-hours over one
+seven-day retention period and, if the observed PR-plus-`main` pattern recurs
+weekly, occupies 479.273626 MiB continuously. The smallest observed complete
+consumer retry is `session-gateway` run 35081846285 at 42,882,746 API bytes. It
+adds 6.709528 GiB-hours and would raise the public peak to 545,445,012 bytes
+(520.176899 MiB), 21,157,012 bytes over the allowance.
+
+For bounds, five 24 MiB trial archives would add at most 125,829,120 bytes and
+2.812500 GiB-hours at one-day retention. The same five weekly archives at
+seven-day retention contribute 19.687500 GiB-hours. Ongoing scheduled operation
+has nine overlapping producers, not five; at the checked-in cap their bounded
+maximum is 226,492,416 bytes and 35.437500 GiB-hours per weekly retention cycle.
+Known public bytes plus that nine-producer bound and one smallest observed retry
+would peak at 736.176899 MiB before private use. These cap-based values are
+conservative bounds, not substitutes for the missing exact archive sizes.
+Optional trial caches remain disabled and contribute zero.
+
+The smallest complete trial reuses the accepted SBOMs, ordinary Java build
+artifacts, the automatic diagnostic, successful public runs, and the accepted
+frontend failure disposition. It still needs exactly five non-duplicative
+detailed records. If a later repo-owned correction makes both complete image
+bundles eligible and a fresh account inventory proves enough headroom for the
+whole batch plus one retry, use this order:
+
+| Order | Variables and workflow UI | Frozen trial source | Expected artifact | Row-specific stop condition |
+| ---: | --- | --- | --- | --- |
+| 1 | [`ext-authz` variables](https://github.com/budgetanalyzer/ext-authz/settings/variables/actions); [Go Vulnerability Check](https://github.com/budgetanalyzer/ext-authz/actions/workflows/go-vulnerability-check.yml), no inputs | `dependency-automation-trial` at `75ed2bda4de7460332a8dea656def0459064753f` | `trial-govulncheck-evidence-RUN_ID` | Stop unless the complete archive is eligible and contains the scanner/database metadata and full result |
+| 2 | [`budget-analyzer-web` variables](https://github.com/budgetanalyzer/budget-analyzer-web/settings/variables/actions); [Dependency Audit](https://github.com/budgetanalyzer/budget-analyzer-web/actions/workflows/dependency-audit.yml), no inputs | `dependency-automation-trial` at `2cbef3f17f546fe167628b221a1cb9dec810c2bd` | `trial-npm-audit-evidence-RUN_ID` | Stop unless the full and production audit reports are complete and eligible |
+| 3 | [`service-common` variables](https://github.com/budgetanalyzer/service-common/settings/variables/actions); [Dependency Submission](https://github.com/budgetanalyzer/service-common/actions/workflows/dependency-submission.yml), no inputs | `dependency-automation-trial` at `e9b91a63eccbc3e7e98528d80cbe89677d0d1f94` | `trial-dependency-graph-evidence-RUN_ID` | Stop unless resolution and the complete graph are eligible; keep graph submission enabled |
+| 4 | [`workspace` variables](https://github.com/budgetanalyzer/workspace/settings/variables/actions); [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `09ee0a2afecc2af6c3a216b225537c680ef68848`; replace with the reviewed correction SHA | `trial-workspace-image-evidence-RUN_ID` | Currently blocked: the complete tar exceeds the cap; stop unless a published correction preserves the full allowlist and reports eligible |
+| 5 | [`orchestration` variables](https://github.com/budgetanalyzer/orchestration/settings/variables/actions); [Exact Image Security Evidence](https://github.com/budgetanalyzer/orchestration/actions/workflows/exact-image-security-evidence.yml), no inputs | Current baseline `dependency-automation-trial` at `c9e6f31208a5f668fcccd3e7ff2fea649654443c`; replace with the reviewed correction SHA if changed | `trial-exact-image-security-evidence-RUN_ID` | Currently blocked: exact complete size is unproved; stop unless all rendered targets remain allowlisted and the archive reports eligible |
+
+For every row, select the exact trial branch, leave schedule and cache variables
+`false`, enable uploads only for that one serialized run, and restore uploads to
+`false` immediately after completion. Stop on a changed/unreviewed SHA, wrong
+ref, failed or skipped job, `upload_allowed != true`, an unexpected artifact or
+cache, an API artifact size above the remaining verified headroom, or any new PR.
+After each row, replace the estimate with the artifact API's `size_in_bytes` and
+recalculate the remaining one-retry envelope before proceeding.
+
+This matrix is conditional documentation, not an executable authorization. The
+current decision is **DO NOT AUTHORIZE UPLOADS**: private headroom is unknown,
+one normal retry already exceeds known public headroom, the workspace image row
+cannot pass the current cap, and the platform-image row lacks an exact eligible
+size. Do not run only rows 1–3. A later attempt requires a reviewed repo-owned
+correction, a fresh public and authenticated account inventory, repeated cost
+reconciliation, and a new explicit `UPLOAD BATCH GO` gate.
 
 ## Phase 1 pilot evidence
 
@@ -689,9 +770,10 @@ public artifact bytes. The #120 patch changes only `package.json` while leaving
 the lockfile and grouped Vitest companions unchanged, so its `npm ci` failure is
 the expected rejection of a malformed proposal. The operator accepted it as a
 non-representative accidental trial side effect; routine PR #122 passed the same
-workflow. Scheduled scanner runs, uploads, cost, and final benchmark
-reconciliation remain pending behind their explicit gates. The nested
-vulnerability limit and workspace lookup correction are published and
+workflow. Phase 12 completion Phase 2 reconciled cost and found no safe complete
+upload batch; detailed uploads remain unauthorized. Scheduled scanner runs and
+final benchmark reconciliation remain pending behind their explicit gates. The
+nested vulnerability limit and workspace lookup correction are published and
 validated.
 
 The operator must follow the ordered
@@ -705,10 +787,10 @@ URL, tool/database version where applicable, and the final status.
 
 | Repository or scope | Check and configuration | Reason deferred | Operator action and required evidence | Disposition |
 | --- | --- | --- | --- | --- |
-| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories are public. The `2026-09-14T01:45:30Z` snapshot found zero retained public bytes. The `2026-09-16T17:05:13Z` refresh instead found 17 non-expired public artifacts totaling 502,562,266 bytes: the 7,444-byte `service-common` graph diagnostic plus ordinary seven-day Java JAR/test artifacts in four consumers. GitHub uses binary storage units, so this is 479.280725 MiB, or 95.856145% of the 500 MiB allowance, with 20.719275 MiB current public headroom. Seven-day retention makes the ordinary set equivalent to 111.830513 MiB-month in a 720-hour month. Public caches are zero in all nine repositories. Public inspection also finds six Container Registry and four Maven packages; GitHub policy makes these public packages free and currently makes Container Registry storage free, so they add no metered package storage. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. At `2026-09-16T17:27:55Z`, the operator reconfirmed no GitHub payment method and reported `$1.07` gross Actions usage, a `$1.07` discount, and `$0` billed usage. GitHub's current Actions billing documentation says over-quota usage is blocked without a valid payment method. | Keep uploads and schedules off. The known public total is within the free allowance and there is no billed overage, but Phase 2 must still account for unknown private headroom before selecting a one-day upload. Treat a quota rejection as failed evidence delivery and do not add a payment method. The completion baseline does not independently expose private variables. | **Known public storage is within the free allowance and billed usage is zero — private upload headroom and upload sizing remain pending; uploads stay off** |
+| All organization repositories and 9 scoped repositories | Visibility and GitHub Actions billing/storage | All nine scoped repositories are public. The `2026-09-14T01:45:30Z` snapshot found zero retained public bytes. The `2026-09-16T17:05:13Z` refresh instead found 17 non-expired public artifacts totaling 502,562,266 bytes: the 7,444-byte `service-common` graph diagnostic plus ordinary seven-day Java JAR/test artifacts in four consumers. GitHub uses binary storage units, so this is 479.280725 MiB, or 95.856145% of the 500 MiB allowance, with 20.719275 MiB current public headroom. Seven-day retention makes the ordinary set equivalent to 111.830513 MiB-month in a 720-hour month. Public caches are zero in all nine repositories. Public inspection also finds six Container Registry and four Maven packages; GitHub policy makes these public packages free and currently makes Container Registry storage free, so they add no metered package storage. The operator reports that private repositories exist but that the observed authenticated UI offered no practical per-artifact inventory; private retained bytes and upload headroom remain unknown. At `2026-09-16T17:27:55Z`, the operator reconfirmed no GitHub payment method and reported `$1.07` gross Actions usage, a `$1.07` discount, and `$0` billed usage. GitHub's current Actions billing documentation says over-quota usage is blocked without a valid payment method. | Phase 2 included the unknown private headroom, existing non-trial use, one retry, and overlapping scheduled producers. The hard stops bound spend but do not create capacity. Keep uploads and schedules off; treat a quota rejection as failed evidence delivery and do not add a payment method. | **Zero-spend boundary accepted; no safe complete upload envelope — uploads stay off** |
 | All 9 scoped repositories | Free Mend Community support, portal profile, durability decision, and App scope | Mend's public documentation confirms that Community is free for unlimited public and private repositories, with one concurrent organization job, four-hour active scheduling, a 30-minute timeout, and hosted credential settings. The App listing says no paid plan is required. The operator reports no Mend payment method and no paid trial. Neither source promises a perpetual free tier, grandfathering, SLA, or Community helpdesk support. | The operator recorded `TRIAL GO` on `2026-09-14`, initially kept `main` default, then authorized and performed the temporary-default orchestration switch after the pre-change audit. The cap remains one 25 MiB one-day bundle and the review date remains `2026-09-21`. The discovered `main` protection defect is repaired, and the operator restricted initial App access to orchestration. Prove hosted lookup behavior before expansion. | **Bounded Community trial, orchestration switch, protection, and pilot App scope passed — hosted lookup pending** |
 | Orchestration | Persistent protection for `main` and `dependency-automation-trial` during the temporary-default pilot | The operator intended active deletion, non-fast-forward, and pull-request rules on both refs. Post-run inspection found only the dynamic default target effective. The first remediation retained quoted patterns; the final saved repair uses exact unquoted refs. | Public verification at `2026-09-14T15:00:04Z` showed exact `refs/heads/main` and `refs/heads/dependency-automation-trial` conditions. Both branches independently receive deletion, non-fast-forward, and pull-request rules; both SHAs remain unchanged. Preserve the ruleset through pilot rollback. | **Passed — both branches independently protected before Step 5.4** |
-| All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata now records successful initial branch jobs in all nine repositories with zero artifacts. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial refs and initial hosted branch jobs passed — detailed report review, default-only behavior, and upload sizing remain pending** |
+| All 9 scoped repositories | Phase 12 branch workflow controls | The trial required exact branch/base triggers, trusted event/ref guards, generation-only Java graphs, disabled schedules/uploads/submissions/caches, complete output measurement, and a total upload cap before publication. | Local implementation uses the exact `dependency-automation-trial` ref, four disabled-by-default repository variables, generation-only Java graph runs until both submission gates pass, cache-controlled build/scan jobs, a shared-shape sealed-archive helper in each repo, a 24 MiB payload ceiling beneath the approved 25 MiB artifact cap, and one-day trial retention. On 2026-09-14, Node `24.20.0` strict validation passed for all nine configs and the shared preset; local extraction completed with 108, 55, 60, 48, 46, 42, 72, 24, and 18 dependency occurrences respectively in orchestration, service-common, currency-service, permission-service, transaction-service, session-gateway, budget-analyzer-web, ext-authz, and workspace. Public metadata records successful initial branch jobs in all nine repositories with zero artifacts. Phase 2 found the workspace complete tar above the helper cap and exact platform-image sizing unavailable publicly. The publication-triggered jobs overlapped, violating the one-job-at-a-time process rule; preserve the deviation and serialize remaining work. | **Trial controls and no-upload measurements passed; complete detailed delivery is blocked and uploads are not authorized** |
 | Orchestration, then all consumers | Shared preset publication order | Consumer `renovate.json` files resolve the explicit orchestration trial ref. | Orchestration source and preset ref `24ffc8e36bf87a730bb6a25961059becbdb67d72` resolved successfully in hosted dry-run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973); all nine trial refs are publicly resolvable. Keep the preset ref frozen during each evidence batch. | **Trial preset publication and hosted resolution passed** |
 | Orchestration | `.github/workflows/dependency-automation-config.yml`, manual dispatch with `run_hosted_dry_run=true` or the trial-only marked-push fallback | Local platform mode cannot perform a true full dry run or GitHub lookups. Before the temporary-default switch, GitHub did not expose **Run workflow**, so the branch-only workflow used its reviewed one-repository wrapper. The temporary default now permits normal manual dispatch without changing that read-only execution contract. | Marked-push run [34848193973](https://github.com/budgetanalyzer/orchestration/actions/runs/34848193973) established 109 dependencies in 37 package files and retained the Aqua Security IP-allow-list and anonymous Docker Hub page-11 gaps. Trial-default manual run [34857399322](https://github.com/budgetanalyzer/orchestration/actions/runs/34857399322) then passed on the same exact source/preset SHA: both jobs succeeded sequentially in 2 minutes 27 seconds, all structural hard gates passed, uploads skipped, and artifact count was zero. | **Trial-default hosted mechanics passed — individual Aqua Security and Docker Hub lookup coverage remains incomplete** |
 | All 9 scoped repositories | Renovate Community App, Dependency Dashboard, dependency graph, Dependabot alerts, and update-PR ownership | Installation and settings changes are administrator-owned. | Mend is restricted to all nine selected repositories and all nine Dashboards exist. The operator reports all seven consumer onboarding jobs green after the narrowly scoped Maven correction. Five consumer graphs are accepted and graph-backed alert counts are recorded. Six representative routine PRs and six consumer vulnerability PRs use the trial base and have automerge disabled. The dedicated vulnerability limit was published through orchestration PR #62. Workspace PR #9 corrected its isolated action lookup, after which Dashboard #8 refreshed with no repository problem. | **All repositories onboarded; Batch B Dashboard and Batch C representative-PR acceptance passed** |
@@ -745,7 +827,7 @@ URL, tool/database version where applicable, and the final status.
 | `ext-authz` | `.github/workflows/go-vulnerability-check.yml` | Local `govulncheck` reproduced GO-2025-3540, but the hosted scanner/database path was unobserved. | Trial push run [34823939945](https://github.com/budgetanalyzer/ext-authz/actions/runs/34823939945) passed at `75ed2bda4de7460332a8dea656def0459064753f` with uploads disabled. Retain/reconcile the detailed finding before claiming advisory parity, and observe one scheduled run later. | **Hosted no-upload measurement passed — detailed finding and scheduled evidence pending** |
 | `ext-authz` | Representative bot PR `build.yml`, graph/alerts, and settings | Onboarding opened a vulnerability PR before the planned representative routine proposal. | Security PR #1 remains the exact open baseline. Routine [PR #3](https://github.com/budgetanalyzer/ext-authz/pull/3) targets the trial branch, changes only `GOVULNCHECK_VERSION` from `v1.7.0` to `v1.8.0`, carries the `dependencies` label, and reports automerge disabled. [Build 35103116099](https://github.com/budgetanalyzer/ext-authz/actions/runs/35103116099) passed at `148adfc33bea6ddbff9e530b22fa6802cfddab85`; uploads skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. | **Batch C representative Go build passed; bounded security baseline retained** |
 | `workspace` | Hosted Renovate lookup for Dockerfile/ARG/download/Actions records | Published preset and GitHub release lookups are hosted-only. | The first B4 cycle reported `no-result` only for native `github-tags` package `aquasecurity/setup-trivy`. Workspace PR #9 disabled that one native record and added the public `git-tags` manager at `110e5f78fd995ed281d425f9da90bc81079f651d`. The automatic corrective cycle refreshed Dashboard #8 with `v0.3.1` and the exact pinned commit and no repository problem. Continue to require digest-only Ubuntu syntax and approval-gated checksum proposals. | **Hosted setup-trivy correction and Batch B second-cycle acceptance passed** |
-| `workspace` | `.github/workflows/workspace-image-security-evidence.yml`, cost, and public downloads | The no-cache build may consume substantial Actions time; hosted download/build/scan paths were previously unobserved. | Trial push run [34823984859](https://github.com/budgetanalyzer/workspace/actions/runs/34823984859) passed at `d8e384474512eafb827970db8194413764b79098` in about six minutes. Corrective [run 35098592885](https://github.com/budgetanalyzer/workspace/actions/runs/35098592885) passed at `110e5f78fd995ed281d425f9da90bc81079f651d` in about four minutes. Workspace PR #10 published the same-repository trial-PR trigger at `09ee0a2afecc2af6c3a216b225537c680ef68848`, and [PR run 35100312719](https://github.com/budgetanalyzer/workspace/actions/runs/35100312719) passed. The operator accepted post-merge [run 35100778569](https://github.com/budgetanalyzer/workspace/actions/runs/35100778569) as successful without waiting; Phase 1 later confirmed its public conclusion as success. Routine [PR #11](https://github.com/budgetanalyzer/workspace/pull/11) targets the trial branch and changes only `MITMPROXY_VERSION` from `12.2.2` to `12.2.3`; [image-evidence run 35103462824](https://github.com/budgetanalyzer/workspace/actions/runs/35103462824) passed at `e44419a4c580ee81bfd611646886cd610e330887`. Upload steps skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. Retain/review the detailed inventory and scan report before claiming parity, and observe one scheduled run later. | **Batch C representative image build and scan passed — detailed report, upload sizing, cost, and scheduled evidence pending** |
+| `workspace` | `.github/workflows/workspace-image-security-evidence.yml`, cost, and public downloads | The no-cache build may consume substantial Actions time; hosted download/build/scan paths were previously unobserved. | Trial push run [34823984859](https://github.com/budgetanalyzer/workspace/actions/runs/34823984859) passed at `d8e384474512eafb827970db8194413764b79098` in about six minutes. Corrective [run 35098592885](https://github.com/budgetanalyzer/workspace/actions/runs/35098592885) passed at `110e5f78fd995ed281d425f9da90bc81079f651d` in about four minutes. Workspace PR #10 published the same-repository trial-PR trigger at `09ee0a2afecc2af6c3a216b225537c680ef68848`, and [PR run 35100312719](https://github.com/budgetanalyzer/workspace/actions/runs/35100312719) passed. The operator accepted post-merge [run 35100778569](https://github.com/budgetanalyzer/workspace/actions/runs/35100778569) as successful without waiting; Phase 1 later confirmed its public conclusion as success. Routine [PR #11](https://github.com/budgetanalyzer/workspace/pull/11) targets the trial branch and changes only `MITMPROXY_VERSION` from `12.2.2` to `12.2.3`; [image-evidence run 35103462824](https://github.com/budgetanalyzer/workspace/actions/runs/35103462824) passed at `e44419a4c580ee81bfd611646886cd610e330887`. Upload steps skipped, zero artifacts were retained, and the PR ref has no Actions cache entry. Phase 2 measured the complete local output with the checked-in archive shape and found its tar exceeds the upload cap; cost reconciliation therefore completed with uploads unauthorized. Retain/review the detailed inventory and scan report before claiming parity, and observe one scheduled run later. | **Batch C representative image build and scan passed; Phase 2 cost/sizing complete — detailed report and scheduled evidence pending** |
 | `workspace` | Graph/alerts, dashboard, and settings | Administrator settings are not visible locally. | Retain sanitized settings, dashboard/proposal and alert evidence, including explicit unversioned apt/npm/PyPI, VIA, Go amd64-only, and lifecycle limitations. | **Pending — no hosted evidence** |
 
 ## Benchmark comparison status
@@ -818,7 +900,8 @@ sample leave no unique untested PR workflow. It also records the separate
 frontend security PR #120 `npm ci` failure and 502,562,266 current public
 artifact bytes. PR #120 is now explicitly dispositioned as a malformed,
 non-representative accidental trial proposal; routine PR #122 proves the same
-workflow's accepted path. Scheduled scan cycles, upload sizing, cost
-reconciliation, and final benchmark dispositions remain pending.
+workflow's accepted path. Phase 2 completed upload sizing and cost
+reconciliation with uploads unauthorized. Scheduled scan cycles and final
+benchmark dispositions remain pending.
 Existing local misses remain gaps; lifecycle and exploitability assessment
 remain human work.

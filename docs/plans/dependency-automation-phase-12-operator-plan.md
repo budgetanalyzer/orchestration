@@ -36,8 +36,13 @@ changes only `package.json` from Vitest 3 to 4 without updating
 `npm ci` rejection deterministic. The operator identified the PR as an
 accidental trial-variable side effect and accepted it as non-representative;
 routine PR #122 passed the same Build workflow. Preserve #120 open and unmerged
-until rollback, but do not rerun or repair it for trial acceptance. Phase 2 may
-proceed; uploads and schedules still require their later explicit gates.
+until rollback, but do not rerun or repair it for trial acceptance. Completion
+Phase 2 subsequently accepted the zero-spend boundary but found no safe complete
+upload envelope: current public artifacts consume 95.856145% of the allowance,
+private headroom is unknown, the workspace bundle fails the checked-in
+uncompressed-tar cap, and exact platform-image archive sizing is not publicly
+available. Its recommendation is **DO NOT AUTHORIZE UPLOADS**. Schedules remain
+behind their later explicit gate.
 
 This is the human operator checklist for
 [Phase 12](dependency-automation-plan.md#phase-12-observe-activation-and-compare-against-the-saved-review).
@@ -592,9 +597,14 @@ Keep these variables `false` in all repositories:
 Manual dispatch is not cron evidence. After Batch C, the agent must reconcile
 measured output/artifact sizes, the 7,444-byte automatic failure artifact,
 refreshed Actions billing/storage, cache use, and the no-payment-method boundary.
-The agent then writes one separate operator checklist for capped uploads and
-scheduled evidence. The operator must explicitly approve that batch before any
-schedule, upload, cache, or allowance increase is enabled.
+That reconciliation is now recorded in the coverage report's
+[Phase 2 cost and upload section](../research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation).
+It found no executable complete upload batch and explicitly says **DO NOT
+AUTHORIZE UPLOADS**. Do not run only the smaller rows: they cannot replace the
+blocked platform-image and workspace-image evidence. Keep every upload, schedule,
+and cache variable `false`; any corrected upload design requires separate
+repo-owned implementation, fresh public inventory, repeated cost reconciliation,
+and a new explicit operator gate.
 
 ## Stop and rollback
 

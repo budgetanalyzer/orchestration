@@ -76,10 +76,15 @@ At the authenticated cost checkpoint, the operator reconfirmed no GitHub
 payment method, reported `$1.07` gross Actions usage fully offset by a `$1.07`
 discount with `$0` billed, and confirmed zero-dollar budgets with **Stop usage**
 enabled. This establishes redundant spend-stopping controls but does not add
-artifact headroom.
+artifact headroom. Phase 12 completion Phase 2 accepted that zero-spend boundary
+but did not find a safe upload envelope: known public artifacts already consume
+95.856145% of the 500 MiB allowance, account-private usage remains unknown, and
+the complete workspace-image evidence exceeds the checked-in uncompressed-tar
+cap while exact platform-image archive sizing is not publicly available. The
+controlled upload recommendation is therefore **DO NOT AUTHORIZE UPLOADS**.
 Keep the four Batch C routine PRs and six existing security PRs open and
-unmerged. Schedules, uploads, cost reconciliation, final benchmark review,
-promotion, and ongoing installation remain pending and unauthorized.
+unmerged. Schedules, uploads, final benchmark review, promotion, and ongoing
+installation remain pending and unauthorized.
 
 This document owns the operating policy for dependency automation across the
 Budget Analyzer repositories. The preserved
@@ -191,6 +196,46 @@ that upload capacity remains. Keep initial uploads disabled, treat a quota-block
 upload as a trial failure rather than a reason to add billing information, and
 replace the unknown with measured artifact bytes only when the hosted platform
 makes them available.
+
+### Phase 12 controlled-upload cost disposition
+
+The 2026-09-16 authenticated checkpoint established a financial hard stop, not
+usable capacity. The public inventory contains 502,562,266 bytes against the
+524,288,000-byte allowance, leaving 21,725,734 bytes (20.719275 MiB) before any
+account-private usage. All nine public cache inventories are empty, the ten
+public packages add no metered package storage under the current GitHub policy,
+and the operator reported no warning, no payment method, `$0` billed Actions
+usage, and zero-dollar Actions and Packages budgets with **Stop usage** enabled.
+Mend remains Community/free with no paid trial or payment method. These facts
+bound spend at zero but do not turn unknown private usage into available
+headroom.
+
+The ordinary Java artifact set contributes 78.630829 GiB-hours during one
+seven-day lifetime. If that observed PR-and-main build pattern recurs weekly,
+it occupies 479.273626 MiB continuously, before `service-common`, frontend, or
+scheduled scanner artifacts. One retry of even the smallest observed Java
+consumer build adds more than the current 20.719275 MiB headroom. The nine
+scheduled jobs also overlap in retention; serial human dispatch does not
+serialize their seven-day storage. Optional trial caches therefore stay off and
+contribute zero to the projection.
+
+The smallest evidence design reuses the existing API-sized Java build artifacts,
+the 7,444-byte automatic diagnostic, accepted SBOMs, and public success and
+failure runs. New retained evidence is still required for exactly five distinct
+surfaces: one representative Java graph plus the platform-image, workspace-image,
+npm-audit, and govulncheck reports. The complete image rows are not eligible for
+a complete batch: the workspace bundle fails the current cap and the
+platform-image bundle's exact eligibility is unproved. Running only the smaller
+rows would consume storage without completing the evidence objective.
+
+**DO NOT AUTHORIZE UPLOADS.** Keep all upload, schedule, and optional-cache
+variables `false`. Do not dispatch a partial upload matrix, trim either image
+allowlist, add billing information, or reinterpret a quota rejection as
+acceptance. A later attempt requires a separately reviewed, repo-owned correction
+that preserves complete evidence and the 25 MiB per-run cost ceiling, followed by
+a fresh public artifact inventory and a repeat of this cost reconciliation. The
+detailed measurement ledger and conditional row order live in the
+[coverage report](research/dependency-automation-coverage.md#phase-12-completion-phase-2-cost-and-upload-reconciliation).
 
 The operator must approve a bounded trial before any workflow-triggering
 publication or App activation; accepting ongoing operation is a later decision.

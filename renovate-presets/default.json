@@ -1,0 +1,191 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Budget Analyzer dependency-update policy shared by the scoped repositories",
+  "extends": [
+    "config:recommended"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Dependency Dashboard",
+  "automerge": false,
+  "timezone": "Etc/UTC",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "separateMajorMinor": true,
+  "separateMinorPatch": true,
+  "separateMultipleMajor": true,
+  "separateMultipleMinor": true,
+  "pinDigests": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": false,
+    "prConcurrentLimit": 3,
+    "labels": [
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ]
+  },
+  "ignorePaths": [
+    "docs/archive/**",
+    ".ai-session-handler/**",
+    ".tilt/**",
+    "tmp/**",
+    "**/docs/archive/**",
+    "**/.ai-session-handler/**",
+    "**/.tilt/**",
+    "**/tmp/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/target/**",
+    "**/tests/setup-flow/**",
+    "**/tests/security-preflight/**",
+    "**/tests/security-guardrails/fixtures/**",
+    "**/kubernetes/kyverno/tests/**",
+    "**/kubernetes/production/apps/**",
+    "**/kubernetes/production/docs-aggregator/**"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep major migrations visible but require dashboard approval",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "major-migration"
+      ]
+    },
+    {
+      "description": "Require compatibility review for every Helm chart update",
+      "matchDatasources": [
+        "helm"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "platform-migration"
+      ]
+    },
+    {
+      "description": "Coordinate Istio chart declarations within each repository",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchPackageNames": [
+        "base",
+        "cni",
+        "gateway",
+        "istiod"
+      ],
+      "groupName": "Istio charts",
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Require stateful workload migration and restore review",
+      "matchPackageNames": [
+        "redis",
+        "postgres",
+        "rabbitmq"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "stateful-migration"
+      ]
+    },
+    {
+      "description": "Require platform compatibility and ARM64 review",
+      "matchPackageNames": [
+        "kindest/node",
+        "k3s-io/k3s",
+        "kubernetes/kubernetes",
+        "kubernetes-sigs/gateway-api",
+        "projectcalico/calico",
+        "istio"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "platform-migration"
+      ]
+    },
+    {
+      "description": "Keep chart image overrides coupled to rendered chart compatibility",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "deploy/helm-values/**",
+        "kubernetes/monitoring/*-values.yaml"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "chart-image-override"
+      ],
+      "prBodyNotes": [
+        "Render the selected chart and verify that every override still names the chart's intended image and tag. A digest-only override must not be refreshed from a registry's floating latest tag."
+      ]
+    },
+    {
+      "description": "Coordinate Prometheus Operator and config reloader images",
+      "matchPackageNames": [
+        "quay.io/prometheus-operator/prometheus-operator",
+        "quay.io/prometheus-operator/prometheus-config-reloader"
+      ],
+      "groupName": "Prometheus Operator images",
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Checksum tables must be regenerated and verified as one reviewed change",
+      "matchFileNames": [
+        "scripts/lib/pinned-tool-versions.sh"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "checksum-required"
+      ],
+      "prBodyNotes": [
+        "This version is coupled to the per-platform SHA-256 table. Regenerate every supported checksum and run the repository guardrails; Renovate does not calculate these arbitrary download checksums."
+      ]
+    },
+    {
+      "description": "Keep first-party local and production artifact promotion under existing release ownership",
+      "matchPackageNames": [
+        "transaction-service",
+        "currency-service",
+        "permission-service",
+        "session-gateway",
+        "ext-authz",
+        "budget-analyzer-web",
+        "budget-analyzer-web-prod-smoke",
+        "ghcr.io/budgetanalyzer/transaction-service",
+        "ghcr.io/budgetanalyzer/currency-service",
+        "ghcr.io/budgetanalyzer/permission-service",
+        "ghcr.io/budgetanalyzer/session-gateway",
+        "ghcr.io/budgetanalyzer/ext-authz",
+        "ghcr.io/budgetanalyzer/budget-analyzer-web"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep routine dependency PRs reviewable",
+      "matchUpdateTypes": [
+        "digest",
+        "pin",
+        "pinDigest",
+        "patch",
+        "minor"
+      ],
+      "labels": [
+        "dependencies"
+      ]
+    }
+  ]
+}

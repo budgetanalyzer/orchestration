@@ -56,6 +56,7 @@ Once the stack is running:
 - [Architecture Overview](docs/architecture/system-overview.md)
 - [Observability Architecture](docs/architecture/observability.md)
 - [Production Deployment](deploy/README.md) — OCI bootstrap scripts and operator runbook
+- [Dependency Automation](docs/dependency-automation.md) — production Renovate policy, graph and scanner workflows, bounded evidence artifacts, cost constraints, and failure triage
 
 ## Service Repositories
 

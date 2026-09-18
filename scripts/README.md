@@ -140,7 +140,6 @@ scripts/
 - `repo/compare-test-coverage.py` - Compares committed coverage on every
   non-main core sibling repository with its local `origin/main` ref without
   switching branches or changing a working tree.
-
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
@@ -150,12 +149,15 @@ Choose scripts by runtime boundary:
 - `ops/` is for interactive local maintenance.
 - `loadtest/` manages synthetic local fixtures.
 - `repo/` coordinates cross-repo maintenance tasks.
+- `security/` prepares repeatable scanner inputs without applying resources or
+  contacting a Kubernetes API.
 
 ## Bootstrap
 
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
-  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, and `kyverno` releases
-  after verifying checked-in SHA-256 values.
+  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, `kyverno`, and `yq`
+  releases from checked-in upstream URLs after verifying each downloaded
+  artifact against its checked-in SHA-256 value.
 - `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
   versions, the host-published public ingress CA, DNS, Docker/Kind
   prerequisites, inotify budgets, pinned Gateway API and Calico state, and
@@ -223,6 +225,21 @@ setup.
   RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
   `redis-data` claim template, and applies the production image Kyverno policy
   to the rendered app overlay.
+
+## Security evidence
+
+- `security/render-image-scan-inputs.sh` renders the production app and
+  infrastructure Kustomize overlays plus the selected Istio, External Secrets,
+  cert-manager, Kyverno, kube-prometheus-stack, and Kiali charts. It uses the
+  checked-in values and observability post-renderers, copies the standalone
+  Jaeger and Kind inputs, and extracts the Tilt Temurin and frontend smoke base
+  refs. The helper is offline with respect to Kubernetes: Helm repository and
+  container-registry network access are still required. The main-push,
+  weekly, and manual exact-image evidence workflow owns YAML extraction,
+  immutable platform resolution, Trivy scanning, summaries, and short-lived
+  artifacts. The workflow uploads its declared evidence paths as one seven-day
+  artifact; the shared evidence policy lives in
+  `../docs/dependency-automation.md`.
 
 Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:

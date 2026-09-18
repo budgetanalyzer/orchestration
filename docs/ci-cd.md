@@ -9,7 +9,8 @@ All backend services use GitHub Actions for continuous integration. Each service
 - Builds on every push to `main` and pull requests
 - Runs all tests (unit, integration)
 - Enforces code quality (Spotless formatting, Checkstyle)
-- Uploads test results and build artifacts
+- For the four deployable Java applications, retains JUnit XML only when CI
+  fails, for one day; successful regular CI retains no application artifact
 
 ## Services with CI
 
@@ -50,7 +51,10 @@ All workflows trigger on:
    - Run Checkstyle validation
    - Execute all tests
    - Package JAR
-7. **Upload artifacts**: Save test results and JARs
+7. **Retain failure diagnostics**: For `currency-service`,
+   `permission-service`, `transaction-service`, and `session-gateway`, upload
+   only JUnit XML after a failed regular CI build and retain it for one day.
+   Do not upload the application JAR from regular CI.
 
 ### Code Quality
 
@@ -112,6 +116,15 @@ review, and one OCI-host apply command:
 ./deploy/scripts/release/deploy-current-oci-manifest.sh
 ```
 
+The deployable Java services do not consume regular-CI Actions artifacts.
+Their `publish-release.yml` workflows check out the selected source and invoke
+Docker Buildx directly; each Dockerfile runs `./gradlew bootJar` in its build
+stage and the workflow pushes the resulting `linux/arm64` image to GHCR. No
+active deployment workflow downloads an `app-jar` artifact. Production then
+uses the immutable GHCR digest recorded in orchestration's checked-in desired
+state. Removing regular-CI `app-jar` uploads therefore does not change release
+or deployment behavior.
+
 The recurring deploy script map and operator run order live in
 [deploy/README.md](../deploy/README.md). This document owns the release and
 deployment terminology.
@@ -158,6 +171,22 @@ but tag names are not production correctness. OCI apply and verification use
 the checked-in desired state and immutable image digests.
 
 ## Orchestration Workflows
+
+Dependency update pull-request ownership, production settings, cost constraints,
+evidence contracts, and failure triage live in
+[Dependency Automation](dependency-automation.md). On relevant pushes and pull
+requests targeting `main`, and on manual dispatch, the focused
+`dependency-automation-config.yml` workflow runs Renovate's official strict
+validator against the repository config and shared preset. It does not install
+the App or open dependency pull requests.
+
+On pushes to `main`, its weekly schedule, and manual dispatch, the
+`exact-image-security-evidence.yml` workflow renders the checked-in production
+and controller sources offline, resolves each rendered ref to an exact platform
+digest, and publishes complete Trivy inventories and vulnerability reports in
+one artifact retained for seven days. Its operating boundary, evidence
+contract, artifact contents, and known coverage gaps are owned by
+[Dependency Automation](dependency-automation.md#exact-image-security-evidence).
 
 ### `security-guardrails.yml`
 
@@ -266,6 +295,11 @@ Planned improvements include:
 `service-common` publishing is no longer a future idea. Release workflows use GitHub
 Packages Maven as CI/release infrastructure while keeping the local
 contributor flow on `mavenLocal()` plus orchestration/Tilt.
+
+GitHub Packages Maven publication is a package-release path, not an Actions
+artifact-retention path. Do not treat removal of a disposable service
+`app-jar` Actions artifact as authority to remove or change a published
+`service-common` package.
 
 Current contract:
 
@@ -400,7 +434,9 @@ issues that cannot be reproduced through the CI workflows.
 
 1. **Spotless check failed**: Run `./gradlew spotlessApply` locally to fix formatting
 2. **Checkstyle violations**: Fix style issues reported in the build log
-3. **Test failures**: Check test output in the uploaded artifacts
+3. **Test failures**: Check the failed run's `test-results` artifact. The four
+   deployable Java services retain this JUnit XML for one day; successful runs
+   intentionally have no regular CI artifact.
 4. **GitHub Packages preflight failed**: Confirm
    `SERVICE_COMMON_PACKAGES_USERNAME` /
    `SERVICE_COMMON_PACKAGES_READ_TOKEN` are configured and that the pinned
@@ -410,4 +446,5 @@ issues that cannot be reproduced through the CI workflows.
 
 - Go to the repository's **Actions** tab
 - Click on the failed workflow run
-- Download the `test-results` artifact for detailed JUnit reports
+- For a failed deployable-Java run, download the one-day `test-results`
+  artifact for detailed JUnit reports

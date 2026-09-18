@@ -1,0 +1,89 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>budgetanalyzer/orchestration//renovate-presets/default"
+  ],
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^kubernetes\\/(?:infrastructure|monitoring\\/jaeger|services)\\/.*\\.ya?ml$/"
+    ]
+  },
+  "helm-values": {
+    "managerFilePatterns": [
+      "/^deploy\\/helm-values\\/.*\\.values\\.ya?ml$/",
+      "/^kubernetes\\/(?:istio|monitoring)\\/.*-values\\.ya?ml$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Extract annotated shell chart, release, and tool versions",
+      "managerFilePatterns": [
+        "/^deploy\\/scripts\\/lib\\/version-contract\\.sh$/",
+        "/^scripts\\/lib\\/pinned-tool-versions\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)(?: registryUrl=(?<registryUrl>[^\\s]+))?(?: versioning=(?<versioning>[^\\s]+))?(?: extractVersion=(?<extractVersion>[^\\s]+))?\\s+(?:export\\s+)?[A-Z0-9_]+=\"(?<currentValue>[^\"]+)\""
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Extract annotated Helm chart versions embedded in Tilt commands",
+      "managerFilePatterns": [
+        "/^Tiltfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=helm depName=(?<depName>[^\\s]+) registryUrl=(?<registryUrl>[^\\s]+)\\s+helm[\\s\\S]{0,320}?--version (?<currentValue>[^\\s\\\\]+)"
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Extract annotated digest-pinned images from Tilt, Kind, and scripts",
+      "managerFilePatterns": [
+        "/^Tiltfile$/",
+        "/^kind-cluster-config\\.yaml$/",
+        "/^(?:deploy\\/)?scripts\\/.*\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=(?<depName>[^\\s]+)\\s+(?:FROM|image:)\\s+[^:\\s]+:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})",
+        "# renovate: datasource=docker depName=(?<depName>[^\\s]+)\\s+[A-Z0-9_]+=\"(?:\\$\\{[A-Z0-9_]+:-)?[^:\"}]+:(?<currentValue>[^@\"}]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Extract the temporary Playwright runner version",
+      "managerFilePatterns": [
+        "/^scripts\\/ops\\/grafana-ui-playwright-debug\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=npm depName=(?<depName>[^\\s]+)\\s+PLAYWRIGHT_VERSION=\"\\$\\{PLAYWRIGHT_VERSION:-(?<currentValue>[^}]+)\\}\""
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Extract Kiali's nonstandard Helm-values image keys",
+      "managerFilePatterns": [
+        "/^kubernetes\\/monitoring\\/kiali-values\\.yaml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=(?<depName>[^\\s]+)\\s+image_name: [^\\s]+\\s+image_version: (?<currentValue>[^\\s]+)\\s+image_digest: (?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Keep the pinned Renovate validator current",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/dependency-automation-config\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=npm depName=renovate\\s+RENOVATE_VERSION: '(?<currentValue>[^']+)'"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "renovate"
+    }
+  ]
+}

@@ -24,6 +24,7 @@
 
 set -euo pipefail
 
+# renovate: datasource=docker depName=postgres
 PROBE_IMAGE="postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50"
 CONNECT_TIMEOUT="${PHASE2_CONNECT_TIMEOUT:-3}"
 DENY_TIMEOUT="${PHASE2_DENY_TIMEOUT:-3}"

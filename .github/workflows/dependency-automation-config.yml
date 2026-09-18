@@ -1,0 +1,42 @@
+name: Dependency Automation Configuration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dependency-automation-config.yml'
+      - 'renovate.json'
+      - 'renovate-presets/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dependency-automation-config.yml'
+      - 'renovate.json'
+      - 'renovate-presets/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: '44.65.5'
+
+jobs:
+  validate-renovate-config:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Validate repository configuration and shared preset
+        run: >-
+          npx --yes --package="renovate@${RENOVATE_VERSION}" renovate-config-validator
+          --strict --no-global renovate.json renovate-presets/default.json

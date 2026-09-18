@@ -159,6 +159,11 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Observability topology and operator access model: `docs/architecture/observability.md`
 - Unified `/api-docs` behavior: `docs-aggregator/README.md`
 - Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`
+- Dependency automation ownership, production workflow and evidence contracts,
+  cost boundary, GitHub/Mend settings, and failure triage:
+  `docs/dependency-automation.md`; read it before changing Renovate
+  configuration, dependency submission or scanning workflows, evidence
+  allowlists, retention, package credentials, or bot settings
 
 Useful discovery commands:
 ```bash
@@ -255,6 +260,13 @@ Keep repository workflows on Node 24-ready action majors. In this repo that mean
 - `docker/login-action@v4`
 - `docker/build-push-action@v7`
 - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope
+
+Treat action-source admission and commit pinning as separate controls. Before
+introducing an external `uses:` reference, confirm that the effective
+organization Actions policy authorizes its source. When an external action is
+not authorized, prefer the repository's checksum-verified CLI contract in
+`scripts/bootstrap/install-verified-tool.sh`; read `scripts/README.md` before
+adding or changing a verified release tool.
 
 When workflow changes span multiple repos, coordinate the shared policy here and make repo-local workflow edits in the owning repos as needed.
 

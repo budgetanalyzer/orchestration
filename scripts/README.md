@@ -228,14 +228,6 @@ setup.
 
 ## Security evidence
 
-- `../.github/scripts/prepare-dependency-evidence.sh` is the reusable production
-  archive helper for scanner workflows. It seals only explicit
-  workspace-relative allowlisted paths, records source/tar/gzip measurements,
-  and marks a compressed payload above 24 MiB ineligible for upload. The owning
-  workflow uploads only the resulting gzip with action compression disabled and
-  seven-day retention. Run
-  `../.github/scripts/test-prepare-dependency-evidence.sh` after changing the
-  helper.
 - `security/render-image-scan-inputs.sh` renders the production app and
   infrastructure Kustomize overlays plus the selected Istio, External Secrets,
   cert-manager, Kyverno, kube-prometheus-stack, and Kiali charts. It uses the
@@ -245,7 +237,9 @@ setup.
   container-registry network access are still required. The main-push,
   weekly, and manual exact-image evidence workflow owns YAML extraction,
   immutable platform resolution, Trivy scanning, summaries, and short-lived
-  artifacts.
+  artifacts. The workflow uploads its declared evidence paths as one seven-day
+  artifact; the shared evidence policy lives in
+  `../docs/dependency-automation.md`.
 
 Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:

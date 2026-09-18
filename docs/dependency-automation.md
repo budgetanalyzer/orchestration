@@ -63,7 +63,7 @@ dependency-submission path, Trivy, `npm audit`, and `govulncheck`.
 GitHub Actions usage and the shared Actions-artifact/GitHub-Packages storage
 allowance are separate from Mend hosting. Keep production evidence bounded and
 short-lived. Do not trim findings, targets, inventories, or logs to fit a
-storage limit; an incomplete archive is an evidence-delivery failure.
+storage limit; an incomplete artifact is an evidence-delivery failure.
 
 The regular-CI artifact contracts are intentionally different from scanner
 evidence:
@@ -75,7 +75,7 @@ evidence:
 - `service-common` retains its package/library JAR and test artifacts because
   those belong to the library build contract.
 - `budget-analyzer-web` retains its normal `dist` build artifact.
-- dependency scanner artifacts retain for seven days under the bounded archive
+- dependency scanner artifacts retain for seven days under the evidence
   contract below.
 
 Review Actions and package storage periodically. A quota rejection is a failed
@@ -132,43 +132,38 @@ defines a stricter policy. Malformed output, failed dependency resolution,
 failed graph submission, failed database download, incomplete inventory,
 platform mismatch, and incomplete scans remain workflow failures.
 
-## Evidence archive contract
+## Evidence artifact contract
 
-Scanner workflows use their repository-local
-`.github/scripts/prepare-dependency-evidence.sh` helper to create exactly one
-allowlisted gzip archive. The helper:
+Each scanner workflow uploads its declared evidence paths directly as exactly
+one GitHub Actions artifact with normal upload-action compression and seven-day
+retention. Keep the upload step under `if: always()` so a failed scan retains
+the diagnostics produced before failure, and keep `if-no-files-found: error` so
+a run cannot silently omit all evidence.
 
-- accepts only workspace-relative paths and rejects traversal;
-- requires every allowlisted input to exist;
-- includes a measurement file with source, temporary tar, and compressed
-  sizes;
-- rejects a compressed payload above 25,165,824 bytes (24 MiB), leaving one
-  MiB of headroom below the former 25 MiB retained-size threshold; and
-- never substitutes a partial archive when the complete payload is too large.
+The allowlist is the successful-run contract. Every declared path and required
+output must be present when scanning succeeds; incomplete successful-run
+evidence is a workflow failure. A failed run may upload only the diagnostic
+paths created before the original failure, and that upload must not turn the
+failed run into a success.
 
-Upload the precompressed archive with action compression disabled and retain it
-for seven days. The upload action must receive only that archive, not the raw
-directories or a second compression pass. No workflow needs a post-upload
-GitHub API size lookup.
-
-The allowlists are semantic contracts, with exact paths declared next to each
-helper invocation:
+The allowlists are semantic contracts, with exact paths declared in each
+workflow's upload step:
 
 - orchestration includes rendered inputs, target maps and completion status,
   scanner/database metadata, and every per-target package inventory and
   vulnerability report;
-- the frontend includes install/audit diagnostics plus both full-tree and
+- the frontend includes audit status and diagnostics plus both full-tree and
   production-only audit reports;
 - `ext-authz` includes scanner metadata and both human-readable and JSON
   reachable-vulnerability reports; and
 - workspace includes build metadata/logs, the exact built-image identity,
   scanner/database metadata, package inventory, vulnerability report, and
-  completion status.
+  required-tool inventory.
 
 Do not add caches, image layers, unrelated workspace files, or credentials to
-an evidence archive. When changing an allowlist, update its helper invocation,
-test the complete archive, and preserve all outputs needed to distinguish
-findings from operational failure.
+an evidence artifact. When changing an allowlist, update the workflow's upload
+paths, verify the complete successful-run artifact, and preserve all outputs
+needed to distinguish findings from operational failure.
 
 ## Exact-image security evidence
 
@@ -266,18 +261,9 @@ not comprehensive end-of-life authorities.
 Before changing Renovate configuration, workflow events, permissions,
 credentials, evidence allowlists, retention, or Mend settings, read this guide
 and the owning repository's instructions. Validate the changed repository with
-its pinned strict Renovate validator, `actionlint`, helper tests, and required
-shell checks. Keep workflows on the repository's Node 24-ready action baseline.
-
-For orchestration, the focused local checks are:
-
-```bash
-bash .github/scripts/test-prepare-dependency-evidence.sh
-bash -n .github/scripts/prepare-dependency-evidence.sh \
-  .github/scripts/test-prepare-dependency-evidence.sh
-shellcheck .github/scripts/prepare-dependency-evidence.sh \
-  .github/scripts/test-prepare-dependency-evidence.sh
-```
+its pinned strict Renovate validator, `actionlint`, and required checks for any
+changed scripts. Keep workflows on the repository's Node 24-ready action
+baseline.
 
 Run the strict validator command from
 `.github/workflows/dependency-automation-config.yml` so the checked-in pinned

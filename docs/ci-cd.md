@@ -184,10 +184,9 @@ On pushes to `main`, its weekly schedule, and manual dispatch, the
 `exact-image-security-evidence.yml` workflow renders the checked-in production
 and controller sources offline, resolves each rendered ref to an exact platform
 digest, and publishes complete Trivy inventories and vulnerability reports in
-one precompressed, allowlisted artifact retained for seven days. The compressed
-payload is capped at 24 MiB before upload and upload-action compression is
-disabled. Its operating boundary, artifact contents, and known coverage gaps are
-owned by [Dependency Automation](dependency-automation.md#exact-image-security-evidence).
+one artifact retained for seven days. Its operating boundary, evidence
+contract, artifact contents, and known coverage gaps are owned by
+[Dependency Automation](dependency-automation.md#exact-image-security-evidence).
 
 ### `security-guardrails.yml`
 

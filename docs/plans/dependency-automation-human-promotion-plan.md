@@ -233,10 +233,9 @@ Record this decision in each pull-request description:
 - [ ] Require a successful production
   [Exact Image Security Evidence](https://github.com/budgetanalyzer/orchestration/actions/workflows/exact-image-security-evidence.yml)
   run on `main`.
-- [ ] Confirm its job summary reports a complete archive and
-  `upload_allowed=true`.
-- [ ] Confirm the `exact-image-security-evidence-<run-id>` artifact is at most
-  25,165,824 bytes and has seven-day retention.
+- [ ] Confirm exactly one `exact-image-security-evidence-<run-id>` artifact
+  exists, has seven-day retention, and contains the complete successful-run
+  evidence set declared in the workflow.
 - [ ] Delete orchestration's remote `dependency-automation-trial` branch.
 
 Keep Mend suspended.
@@ -289,8 +288,9 @@ For each service:
 - [ ] Manually dispatch
   [Dependency Audit](https://github.com/budgetanalyzer/budget-analyzer-web/actions/workflows/dependency-audit.yml)
   on `main` and require operational success.
-- [ ] Confirm the complete `npm-audit-reports` archive is at most 25,165,824
-  bytes and has seven-day retention.
+- [ ] Confirm exactly one `npm-audit-reports` artifact exists, has seven-day
+  retention, and contains the complete successful-run evidence set declared in
+  the workflow.
 - [ ] Delete the remote trial branch.
 
 ### External authorization service
@@ -301,8 +301,9 @@ For each service:
 - [ ] Require a successful
   [Go Vulnerability Check](https://github.com/budgetanalyzer/ext-authz/actions/workflows/go-vulnerability-check.yml)
   on `main`.
-- [ ] Confirm the complete `govulncheck-<sha>` archive is at most 25,165,824
-  bytes and has seven-day retention.
+- [ ] Confirm exactly one `govulncheck-<sha>` artifact exists, has seven-day
+  retention, and contains the complete successful-run evidence set declared in
+  the workflow.
 - [ ] Delete the remote trial branch.
 
 ### Workspace image
@@ -311,8 +312,9 @@ For each service:
 - [ ] Require a successful
   [Workspace Image Security Evidence](https://github.com/budgetanalyzer/workspace/actions/workflows/workspace-image-security-evidence.yml)
   run on `main`.
-- [ ] Confirm the complete `workspace-image-security-evidence-<run-id>` archive
-  is at most 25,165,824 bytes and has seven-day retention.
+- [ ] Confirm exactly one `workspace-image-security-evidence-<run-id>` artifact
+  exists, has seven-day retention, and contains the complete successful-run
+  evidence set declared in the workflow.
 - [ ] Delete the remote trial branch.
 
 Valid vulnerability findings remain reportable and non-gating. Missing output,

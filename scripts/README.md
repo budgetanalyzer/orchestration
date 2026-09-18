@@ -140,30 +140,6 @@ scripts/
 - `repo/compare-test-coverage.py` - Compares committed coverage on every
   non-main core sibling repository with its local `origin/main` ref without
   switching branches or changing a working tree.
-- `repo/collect-dependency-automation-phase-12-baseline.sh` - Collects the
-  credential-free Phase 12 public baseline across every public organization
-  repository. It inventories non-expired Actions artifacts and caches, checks
-  the exact deleted artifact IDs and recorded main/trial SHAs, verifies the five
-  source-exact no-upload candidate runs and their job steps, and writes the
-  sanitized machine-readable ledger under ignored `tmp/dependency-automation/`.
-- `repo/run-dependency-automation-upload-batch.sh` - Gate C host helper for the
-  five-row controlled-upload batch. It requires the exact `UPLOAD BATCH GO`
-  confirmation, a clean checkout whose HEAD matches the published orchestration
-  trial ref, and the operator's existing authenticated `gh` session. It
-  preflights frozen refs and disabled expansion gates, serializes dispatches,
-  restores each upload variable with a trap, downloads and checksums the exact
-  artifact, deletes only that captured ID after the local copy is complete, and
-  writes a sanitized ledger under ignored `tmp/dependency-automation/`. Variable
-  reads and writes use `gh api` so the bridge does not depend on newer
-  `gh variable get --json` support. Paginated responses are slurped with `jq`
-  instead of a newer `gh api --slurp` flag. Exact resume IDs may recover an
-  interrupted first row without dispatching duplicate evidence; unrecognized
-  retained trial artifacts stop the helper.
-- `repo/test-run-dependency-automation-upload-batch.sh` - Fixture-driven test
-  for the Gate C helper's five-row success path, fail-closed public-inventory
-  collection, exact first-row recovery, and failed-run restoration path; it
-  performs no GitHub requests or repository-variable changes.
-
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
@@ -252,15 +228,24 @@ setup.
 
 ## Security evidence
 
+- `../.github/scripts/prepare-dependency-evidence.sh` is the reusable production
+  archive helper for scanner workflows. It seals only explicit
+  workspace-relative allowlisted paths, records source/tar/gzip measurements,
+  and marks a compressed payload above 24 MiB ineligible for upload. The owning
+  workflow uploads only the resulting gzip with action compression disabled and
+  seven-day retention. Run
+  `../.github/scripts/test-prepare-dependency-evidence.sh` after changing the
+  helper.
 - `security/render-image-scan-inputs.sh` renders the production app and
   infrastructure Kustomize overlays plus the selected Istio, External Secrets,
   cert-manager, Kyverno, kube-prometheus-stack, and Kiali charts. It uses the
   checked-in values and observability post-renderers, copies the standalone
   Jaeger and Kind inputs, and extracts the Tilt Temurin and frontend smoke base
   refs. The helper is offline with respect to Kubernetes: Helm repository and
-  container-registry network access are still required. The weekly/manual
-  exact-image evidence workflow owns YAML extraction, immutable platform
-  resolution, Trivy scanning, summaries, and short-lived artifacts.
+  container-registry network access are still required. The main-push,
+  weekly, and manual exact-image evidence workflow owns YAML extraction,
+  immutable platform resolution, Trivy scanning, summaries, and short-lived
+  artifacts.
 
 Run the static OCI lockstep verifier before changing or deploying a production
 deployment baseline:

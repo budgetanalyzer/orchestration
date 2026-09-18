@@ -3,7 +3,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-helper="${script_dir}/prepare-trial-evidence.sh"
+helper="${script_dir}/prepare-dependency-evidence.sh"
 payload_cap_bytes=25165824
 test_root="$(mktemp -d)"
 trap 'rm -rf "${test_root}"' EXIT
@@ -74,4 +74,4 @@ if (
   exit 1
 fi
 
-echo 'prepare-trial-evidence tests passed'
+echo 'prepare-dependency-evidence tests passed'

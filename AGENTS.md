@@ -159,16 +159,11 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Observability topology and operator access model: `docs/architecture/observability.md`
 - Unified `/api-docs` behavior: `docs-aggregator/README.md`
 - Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`
-- Dependency automation ownership, trial workflow controls, cost boundary,
-  activation, and failure triage: `docs/dependency-automation.md`; read it before
-  changing Renovate configuration, dependency-scanning workflows, trial
-  variables, or bot activation
-
-Dependency automation rollout uses credential-free preparation. Follow
-`docs/dependency-automation.md` and the active rollout plan: authenticated checks
-and credential review belong to Phase 12, with credentials kept outside the agent
-environment throughout. Record deferred authentication checks as pending; they
-are not missing prerequisites for completing Phases 1–10.
+- Dependency automation ownership, production workflow and evidence contracts,
+  cost boundary, GitHub/Mend settings, and failure triage:
+  `docs/dependency-automation.md`; read it before changing Renovate
+  configuration, dependency submission or scanning workflows, evidence
+  allowlists, retention, package credentials, or bot settings
 
 Useful discovery commands:
 ```bash

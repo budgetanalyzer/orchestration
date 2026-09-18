@@ -360,42 +360,21 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare capped image security evidence
-        id: evidence
-        if: ${{ always() }}
-        run: >-
-          bash .github/scripts/prepare-dependency-evidence.sh
-          dependency-automation-evidence/image-security-evidence.tar.gz
-          'Exact-image scan'
-          scan-work/evidence
-          scan-work/rendered
-          scan-work/scanner
-          scan-work/raw-targets.tsv
-          scan-work/targets.json
-          scan-work/scan-status.json
-
       - name: Upload short-lived image security evidence
         id: evidence-artifact
-        if: >-
-          ${{
-            always() && steps.evidence.outputs.upload_allowed == 'true'
-          }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: exact-image-security-evidence-${{ github.run_id }}
-          path: dependency-automation-evidence/image-security-evidence.tar.gz
+          path: |
+            scan-work/evidence
+            scan-work/rendered
+            scan-work/scanner
+            scan-work/raw-targets.tsv
+            scan-work/targets.json
+            scan-work/scan-status.json
           if-no-files-found: error
           retention-days: 7
-          compression-level: 0
-
-      - name: Enforce complete image evidence delivery
-        if: >-
-          ${{
-            always() && steps.evidence.outputs.upload_allowed != 'true'
-          }}
-        run: |
-          echo 'The complete image evidence exceeds the capped upload allowance.' >&2
-          exit 1
 
       - name: Link the retained evidence
         if: ${{ always() && steps.evidence-artifact.outputs.artifact-url != '' }}

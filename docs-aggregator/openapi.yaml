@@ -323,6 +323,104 @@ paths:
               example:
                 type: SERVICE_UNAVAILABLE
                 message: Service Unavailable
+  /v1/transactions:
+    get:
+      tags:
+        - Transactions
+      summary: Get transactions
+      description: Returns the complete active transaction collection for the authenticated
+        owner as a plain array. This intentionally unpaged snapshot supports browser-owned
+        filtering, sorting, and aggregation; browser table pagination is presentation
+        only.
+      operationId: getTransactions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
+    post:
+      tags:
+        - Transactions
+      summary: Create a manual transaction
+      description: Creates one active transaction owned by the authenticated user
+        without file import provenance or duplicate suppression.
+      operationId: createTransaction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+        required: true
+      responses:
+        '201':
+          description: Transaction created successfully
+          headers:
+            Location:
+              description: Canonical URL of the created transaction
+              style: simple
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '422':
+          description: TRANSACTION_CURRENCY_INVALID, TRANSACTION_DATE_TOO_OLD, or
+            TRANSACTION_DATE_TOO_FAR_IN_FUTURE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INTERNAL_ERROR
+                message: Internal Server Error
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: SERVICE_UNAVAILABLE
+                message: Service Unavailable
   /v1/transactions/preview:
     post:
       tags:
@@ -1556,43 +1654,6 @@ paths:
               example:
                 type: INVALID_REQUEST
                 message: Bad Request
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INTERNAL_ERROR
-                message: Internal Server Error
-        '503':
-          description: Service Unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
-  /v1/transactions:
-    get:
-      tags:
-        - Transactions
-      summary: Get transactions
-      description: Returns the complete active transaction collection for the authenticated
-        owner as a plain array. This intentionally unpaged snapshot supports browser-owned
-        filtering, sorting, and aggregation; browser table pagination is presentation
-        only.
-      operationId: getTransactions
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TransactionResponse'
         '500':
           description: Internal Server Error
           content:
@@ -2936,6 +2997,122 @@ components:
           minLength: 0
       required:
         - name
+    CreateTransactionRequest:
+      type: object
+      description: Manual transaction data
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2026-09-18'
+        description:
+          type: string
+          description: Description of the transaction
+          example: Grocery shopping
+          maxLength: 500
+          minLength: 0
+        amount:
+          type: number
+          description: Positive transaction amount; direction is specified by type
+          example: 100.5
+        currencyIsoCode:
+          type: string
+          description: Three-character ISO 4217 currency code
+          example: USD
+          maxLength: 3
+          minLength: 3
+        type:
+          type: string
+          description: Direction of the positive transaction amount
+          enum:
+            - CREDIT
+            - DEBIT
+          example: DEBIT
+        bankName:
+          type: string
+          description: Optional bank name; omitted from responses when no bank was
+            recorded
+          example: Capital One
+          maxLength: 255
+          minLength: 0
+        accountId:
+          type: string
+          description: Optional freehand account identifier
+          example: checking-12345
+          maxLength: 100
+          minLength: 0
+      required:
+        - amount
+        - currencyIsoCode
+        - date
+        - description
+        - type
+    TransactionResponse:
+      type: object
+      description: Transaction response representing a financial transaction
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transaction
+          example: 1
+        ownerId:
+          type: string
+          description: ID of the user who owns this transaction
+          example: usr_test123
+        accountId:
+          type: string
+          description: Identifier for the account associated with the transaction
+          example: checking-3223
+        bankName:
+          type: string
+          description: Name of the bank; omitted when no bank was recorded
+          example: Capital One
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+          example: '2025-10-14'
+        currencyIsoCode:
+          type: string
+          description: ISO currency code for the transaction
+          example: USD
+        amount:
+          type: number
+          description: Amount of the transaction
+          example: 100.5
+        type:
+          type: string
+          description: Type of the transaction
+          enum:
+            - CREDIT
+            - DEBIT
+          example: DEBIT
+        description:
+          type: string
+          description: Description of the transaction
+          example: Grocery shopping
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+          example: '2025-10-14T10:30:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+          example: '2025-10-14T10:30:00Z'
+      required:
+        - amount
+        - createdAt
+        - currencyIsoCode
+        - date
+        - description
+        - id
+        - ownerId
+        - type
+        - updatedAt
     PreviewFileImportStatusResponse:
       type: object
       description: File import history status for the previewed upload
@@ -3284,72 +3461,6 @@ components:
         - duplicatesImported
         - duplicatesSkipped
         - files
-    TransactionResponse:
-      type: object
-      description: Transaction response representing a financial transaction
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique identifier for the transaction
-          example: 1
-        ownerId:
-          type: string
-          description: ID of the user who owns this transaction
-          example: usr_test123
-        accountId:
-          type: string
-          description: Identifier for the account associated with the transaction
-          example: checking-3223
-        bankName:
-          type: string
-          description: Name of the bank where the transaction occurred
-          example: Capital One
-        date:
-          type: string
-          format: date
-          description: Date of the transaction
-          example: '2025-10-14'
-        currencyIsoCode:
-          type: string
-          description: ISO currency code for the transaction
-          example: USD
-        amount:
-          type: number
-          description: Amount of the transaction
-          example: 100.5
-        type:
-          type: string
-          description: Type of the transaction
-          enum:
-            - CREDIT
-            - DEBIT
-          example: DEBIT
-        description:
-          type: string
-          description: Description of the transaction
-          example: Grocery shopping
-        createdAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was created
-          example: '2025-10-14T10:30:00Z'
-        updatedAt:
-          type: string
-          format: date-time
-          description: Timestamp when the transaction was last updated
-          example: '2025-10-14T10:30:00Z'
-      required:
-        - amount
-        - bankName
-        - createdAt
-        - currencyIsoCode
-        - date
-        - description
-        - id
-        - ownerId
-        - type
-        - updatedAt
     CreateStatementFormatRequest:
       type: object
       properties:

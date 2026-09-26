@@ -116,7 +116,7 @@ and evidence shape:
 | `orchestration` | Dependency Automation Configuration | Relevant pushes and pull requests on `main`; manual dispatch | Strict validation of the repository config and shared preset under Node 24 |
 | `orchestration` | Exact Image Security Evidence | Pushes to `main`; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
 | `service-common` | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by the workflow | Complete resolved Gradle graph submitted with job-scoped `contents: write` |
-| Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Authenticated package preflight and complete resolved application/runtime/test graph submission |
+| Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
 | `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
 | `ext-authz` | Go Vulnerability Check | Pushes to `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
 | `workspace` | Workspace Image Security Evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | No-start/no-push image build, package inventory, and vulnerability scan |

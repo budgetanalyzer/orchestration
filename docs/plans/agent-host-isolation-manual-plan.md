@@ -12,6 +12,12 @@ the reviewed one-time repository setup and bootstrap the guest, then accept the
 browser and daily Git workflow. Agents may prepare instructions; they do not
 administer your host or push to GitHub.
 
+This is a clean setup, not a migration. Do not copy, export, import or recreate
+host Docker images, containers, volumes, Kind clusters, databases, application
+data or build caches in the VM. The guest creates fresh runtime state from the
+reviewed configuration. Only committed Git objects and the approved
+browser-trusted development TLS files cross from host to guest.
+
 ## How To Use This Checklist
 
 Run commands only in the environment named immediately above the code block:
@@ -56,7 +62,7 @@ disk under a repository path, disabled confinement or an active port conflict.
 | Source files | Guest-local bare repositories and working clones; no shared host workspace |
 | Editor | Native host VS Code UI using Remote SSH; execution and files remain in guest |
 | Browser | Dedicated development profile on the personal host |
-| Runtime | One guest Docker daemon; packaged agent container retained initially |
+| Runtime | One fresh guest Docker daemon; build and run the agent container in the guest |
 | Repository transfer | Explicit host-initiated Git push/fetch over SSH through a `vm` remote |
 | GitHub authority | Host only; no guest GitHub write credential or authenticated GitHub browser |
 | Browser URL | `https://app.budgetanalyzer.localhost`, through host-loopback forwarding |
@@ -66,7 +72,7 @@ manual preparation and handoffs. It does not introduce shared folders, rsync,
 an agent-controlled fork, daily publication automation or routine source
 copying outside Git.
 
-## Step 1: Preserve Work And Check The Host
+## Step 1: Check Host And Source Prerequisites
 
 - [ ] Back up important host repositories, including uncommitted and untracked
   work. A remote branch is not a backup of uncommitted files. For every
@@ -83,23 +89,20 @@ git rev-parse --show-toplevel
 
   Save or back up anything reported by `git status --short`. Success means the
   backup can be located without using the future VM and the intended seed
-  branch is named in the handoff.
+  branch is named in the handoff. This protects source work; it is not a runtime
+  migration step.
 
-- [ ] Inventory the old local runtime without deleting it. Record the commands
-  that stop it and release ports 80/443, but do not run destructive Docker,
-  Kind or volume-removal commands.
+- [ ] Check whether host ports 80 or 443 are currently in use:
 
 **Mint host terminal:**
 
 ```bash
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-kind get clusters
 sudo ss -ltnp '( sport = :80 or sport = :443 )'
 ```
 
-  Success means the handoff identifies what currently owns ports 80 and 443,
-  how to stop that component without deleting its data, and whether the old
-  Kind cluster is still present.
+  Record any current listener so the human operator can stop it before the final
+  forwarding test. Do not inspect, copy or preserve its containers, images,
+  volumes or application data as part of this plan.
 
 - [ ] Confirm free RAM/disk, hardware virtualization and the current firewall
   manager. Run these read-only commands on Mint:
@@ -152,10 +155,10 @@ test ! -d "$(git rev-parse --git-path rebase-apply)"
   and require confirmation; move unrelated repositories outside the selected
   parent or decline the run.
 
-**Step 1 succeeds when:** work is backed up; the old runtime remains recoverable;
-hardware virtualization is usable; RAM and disk are sufficient; the active
-firewall owner is known; and the selected parent, repositories and seed branches
-are recorded. If KVM is unavailable, stop and enable Intel virtualization in
+**Step 1 succeeds when:** source work is backed up; hardware virtualization is
+usable; RAM and disk are sufficient; the active firewall owner and any port-443
+listener are known; and the selected parent, repositories and seed branches are
+recorded. If KVM is unavailable, stop and enable Intel virtualization in
 firmware. Ordinary Docker/Kind inside this VM needs no nested virtualization.
 
 ## Step 2: Install And Create The VM
@@ -868,10 +871,10 @@ getent ahostsv4 app.budgetanalyzer.localhost
 sudo ss -ltnp '( sport = :443 )'
 ```
 
-  Name resolution must include `127.0.0.1`. Record the existing port-443 owner
-  from Step 1. `/etc/hosts` only controls name resolution; it does not forward
-  traffic. Stop the old ingress only for an actual forwarding test, using its
-  recorded non-destructive stop command.
+  Name resolution must include `127.0.0.1`. Record any port-443 listener from
+  Step 1. `/etc/hosts` only controls name resolution; it does not forward
+  traffic. The human operator must stop that listener before the final
+  forwarding test.
 
 ### 5.2 Verify The Existing Host-Owned TLS Material
 
@@ -910,7 +913,7 @@ openssl pkey -in "$KEY" -pubout | sha256sum
 
 ### 5.3 Prepare And Test The Explicit SSH Forward
 
-- [ ] First test on unprivileged host port 8443 so the old port-443 listener can
+- [ ] First test on unprivileged host port 8443 so any port-443 listener can
   remain running. In the guest, start an empty one-connection TCP fixture and
   leave the terminal open:
 
@@ -954,7 +957,7 @@ ls -l /etc/authbind/byport/443
   unprivileged-port threshold or run a root-owned SSH client with personal key
   access.
 
-- [ ] After the old ingress is deliberately stopped and `ss` shows port 443 is
+- [ ] After the current listener is stopped and `ss` shows port 443 is
   free, the reviewed foreground forward command is:
 
 **Mint host terminal:**
@@ -992,9 +995,10 @@ authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
 **Step 5 succeeds when:** the hostname resolves to host loopback; the current
 port owner is known; the approved leaf/key/public CA pass all checks; the
 unprivileged 8443 forwarding fixture succeeds; the reviewed port-443 command
-can bind only `127.0.0.1` when the old ingress is stopped; and a clean browser
-profile exists. Real trusted HTTPS remains pending until Checkpoint A transfers
-the approved files and Checkpoint B runs the application acceptance test.
+can bind only `127.0.0.1` when the current listener is stopped; and a clean
+browser profile exists. Real trusted HTTPS remains pending until Checkpoint A
+transfers the approved files and Checkpoint B runs the application acceptance
+test.
 
 ## Initial Handoff
 
@@ -1059,7 +1063,7 @@ Repositories
   non-main seed branches:
 
 Browser/TLS
-  current host port-443 owner:
+  current host port-443 listener (if any):
   certificate validity/SAN/chain/key-match checks: PASS | FAIL
   8443 SSH forwarding fixture: PASS | FAIL
   final 443 loopback binding: PASS | FAIL | PENDING
@@ -1342,9 +1346,9 @@ npm --version
   do not compensate in orchestration for a service-owned failure.
 
 - [ ] From the guest orchestration working clone—not from the agent container—run
-  the newly documented guest bootstrap command and explicitly select reuse of
-  the copied ingress certificate. Read its destruction prompt: this recreates
-  the **guest** Kind cluster and is not a daily start command. Generate required
+  the newly documented guest bootstrap command and select the copied ingress
+  certificate. Read its destruction prompt: this creates a fresh **guest** Kind
+  cluster and is not a daily start command. Generate required
   infrastructure TLS as the human operator in the guest and configure only
   disposable development `.env` credentials.
 
@@ -1411,12 +1415,11 @@ agent container.
 
 This happens **after implementation Phase 6** has passed guest validation.
 
-### B.1 Cut Over Host Port 443 And Verify The Browser
+### B.1 Start Host Port 443 Forwarding And Verify The Browser
 
-- [ ] Use Step 1's non-destructive stop command for the old runtime and disable
-  automatic restart of only its old privileged DinD agent container. Do not
-  remove the old Kind cluster, images, volumes or repositories. Require this to
-  print no listener before starting the forward:
+- [ ] Stop any process recorded in Step 1 that currently owns host port 443.
+  Managing or preserving that process and its data is outside this plan.
+  Require this to print no listener before starting the forward:
 
 **Mint host terminal:**
 

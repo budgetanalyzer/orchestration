@@ -1,6 +1,6 @@
 # Guest-Local Development VM Implementation Plan
 
-**Status:** Proposed implementation; no VM migration has been performed.
+**Status:** Proposed clean implementation; no runtime migration is planned.
 
 **Companion:** [Manual VM setup and operator checkpoints](agent-host-isolation-manual-plan.md).
 
@@ -9,6 +9,12 @@ source, builds and runtime state on a development VM. Preserve a native host
 editor window and browser, normal GitHub pull-request review, and ordinary Git
 branches without sharing the host workspace or giving the guest GitHub write
 credentials.
+
+The guest starts clean. Do not copy, export, import or reconstruct host Docker
+images, containers, volumes, Kind clusters, databases, application data or
+build caches. Create a new guest Docker daemon, Kind cluster and application
+state from the reviewed configuration. The only host-to-guest inputs are
+committed Git objects and the approved browser-trusted development TLS files.
 
 ## Agreed design
 
@@ -46,10 +52,10 @@ Ubuntu Server 24.04 LTS VM: KVM/QEMU managed by libvirt and virt-manager
   credential and automatic port forwarding. Do not expose host GitHub sessions
   to remote extensions.
 - Assume the agent can administer the guest through its Docker socket and can
-  alter or destroy all guest repositories and development credentials. Retain
-  the agent container for tool packaging, remove DinD, and allow **guest** host
-  networking to preserve localhost access. No privileged container or nested
-  daemon is needed.
+  alter or destroy all guest repositories and development credentials. Build
+  and run the tool-packaging agent container in the guest, remove DinD, and
+  allow **guest** host networking to preserve localhost access. No privileged
+  container or nested daemon is needed.
 - Permit normal Internet access. Deny new guest-initiated connections to all
   personal-host addresses with host-enforced IPv4/IPv6 rules; allow established
   replies and narrowly scoped DNS/DHCP if provided by the host. Internet
@@ -63,10 +69,11 @@ Ubuntu Server 24.04 LTS VM: KVM/QEMU managed by libvirt and virt-manager
   existing host-trusted development leaf certificate/key and public CA into the
   guest through a human-operated transfer; never require the personal browser to
   trust a guest-controlled signing CA or bypass TLS verification.
-- VM snapshots and guest deletion recover guest-local state, but they do not
-  protect committed secrets already present in transferred repository history.
-  Host GitHub credentials remain outside the guest; host branch protections and
-  review remain necessary before publishing agent-authored code or workflows.
+- Treat guest runtime state as disposable and rebuild it from reviewed
+  configuration. Do not use VM snapshots or Docker exports to carry host runtime
+  state into the guest. Host GitHub credentials remain outside the guest; host
+  branch protections and review remain necessary before publishing agent-authored
+  code or workflows.
 
 ## Repository transport contract
 
@@ -117,9 +124,10 @@ real host and guest branch-transfer commands remain human checkpoints.
    after Phase 2.
 3. The human completes **Checkpoint A**: run the reviewed one-time repository
    setup script, transfer approved TLS material, install guest prerequisites,
-   launch the runtime and bootstrap the guest application.
+   and build a clean guest runtime and application state.
 4. Run **Phases 3–6 inside the VM**, with each worker in its declared repository.
-5. The human completes **Checkpoint B** for host-browser acceptance and cutover.
+5. The human completes **Checkpoint B** for host-browser and daily-workflow
+   acceptance.
 
 Keep a redacted acceptance record at
 `docs/plans/agent-host-isolation-acceptance.md` in this repository, created in
@@ -161,17 +169,17 @@ read-only for the current Docker and mount behavior.
 ### Execution steps
 
 1. Update the canonical architecture contract first, then the ownership map and
-   concise instruction links as needed. Distinguish the current container from
-   the proposed guest-local VM profile. Remove shared-workspace assumptions and
+   concise instruction links as needed. Define the guest-local VM profile and
+   its clean-start rule. Remove shared-workspace assumptions and
    document the host-only GitHub credential boundary, VM-local bare remotes,
    Remote SSH editor model and remaining guest/code risks.
 2. Define personal host, development VM and agent container consistently.
-   Preserve the existing host workflow while introducing an explicit guest
-   bootstrap path that selects only the guest-local Docker daemon. Reject remote
+   Keep host GitHub publication separate from an explicit guest bootstrap path
+   that selects only the guest-local Docker daemon. Reject remote
    Docker endpoints and keep `kind-kind`, loopback API and
    `kind-control-plane` checks before agent-authorized mutations. A marker or
    environment variable is an accidental-mislaunch check, not proof of isolation.
-3. Add an explicit ingress certificate import/reuse path: validate the public
+3. Add an explicit ingress certificate installation path: validate the public
    CA, hostname, validity, leaf/key match and required guest files; publish the
    public root and install the TLS Secret without invoking mkcert or altering
    host trust. Document the human-operated host-to-guest copy and installation
@@ -186,11 +194,11 @@ read-only for the current Docker and mount behavior.
 
 ### Implementation notes
 
-The personal host's signing key must not enter the guest. The development
-leaf/key and public root may serve both old and guest environments during
-transition. Missing or expired material goes to the human certificate workflow,
-not an insecure connection or agent-generated replacement. Git transport does
-not carry ignored TLS or environment files; copy and configure them explicitly.
+The personal host's signing key must not enter the guest. Missing or expired
+development TLS material goes to the human certificate workflow, not an
+insecure connection or agent-generated replacement. Git transport does not
+carry ignored TLS or environment files; copy and configure them explicitly.
+Do not add any host-runtime export or guest import path.
 
 ### Validation
 
@@ -238,10 +246,11 @@ bootstrap instructions.
 
 ### Execution steps
 
-1. Remove the DinD feature and obsolete lock entry from the VM profile. Retain
-   the tool image; configure only the guest Docker socket and guest host
-   networking. Remove unnecessary privileged mode/capabilities. Document that
-   socket access still permits complete guest administration.
+1. Remove the DinD feature and obsolete lock entry from the VM profile. Keep
+   the tool-image definition, but build it on the guest daemon; configure only
+   the guest Docker socket and guest host networking. Remove unnecessary
+   privileged mode/capabilities. Document that socket access still permits
+   complete guest administration.
 2. Mount the guest-local common working-clone parent into the agent at an
    identical path as seen by the guest Docker daemon so bind mounts resolve.
    Derive the path from reviewed guest configuration; do not hardcode an
@@ -267,8 +276,9 @@ bootstrap instructions.
    installation. Do not automatically apply reference artifacts to the host.
 7. Write `docs/host-isolation.md` with install/start/stop instructions, the
    one-time setup contract, exact daily branch transfer in both directions,
-   Docker/Testcontainers endpoint discovery, credential handling, recovery and
-   the handoff to Checkpoint A. Update README and affected instructions.
+   Docker/Testcontainers endpoint discovery, credential handling, clean-rebuild
+   procedure and the handoff to Checkpoint A. Update README and affected
+   instructions.
 
 ### Implementation notes
 
@@ -277,7 +287,8 @@ ingress and test ports while there is one Docker networking owner. Keep source,
 Git databases, Docker data, database volumes and build caches on guest disk.
 The setup script transfers committed Git objects, not host `.git` configuration,
 hooks, uncommitted files or credentials. Never silently launch this profile
-against the personal-host daemon.
+against the personal-host daemon. Do not implement host Docker/Kind state
+export, import, volume copy or application-data migration.
 
 ### Validation
 
@@ -336,8 +347,8 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
    executable bits. Do not perform or claim a GitHub push.
 3. Start disposable test containers; verify published-port reachability,
    bind-path resolution and cleanup. Use Checkpoint A's agent restart evidence
-   and a disposable runtime copy for further lifecycle checks; do not terminate
-   the executing worker. Confirm Kind and uncached pulls stay healthy.
+   and a separate disposable fixture for further lifecycle checks; do not
+   terminate the executing worker. Confirm Kind and uncached pulls stay healthy.
 4. Inspect Checkpoint A's Remote SSH save evidence and verify a representative
    build plus Tilt file detection occurs entirely on guest-local storage. Record
    measured build behavior without reviving shared-folder watcher tests.
@@ -351,9 +362,10 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
 
 Firewall evidence must include a working positive control; refusal from an
 absent listener does not demonstrate filtering. A VM marker alone does not
-prove socket or credential isolation. Guest repository loss is recoverable by
+prove socket or credential isolation. Guest repositories can be recreated by
 rerunning reviewed setup and pushing branches from the host, but unreturned
-guest commits remain disposable.
+guest commits remain disposable. Guest runtime state is rebuilt cleanly rather
+than restored from the host.
 
 ### Validation
 
@@ -366,7 +378,7 @@ output.
 
 Repository transfer, guest-local editing, Docker lifecycle, guest networking
 and host-access denial are verified with reproducible evidence. Any failed
-credential, remote, Docker or firewall boundary remains a cutover blocker.
+credential, remote, Docker or firewall boundary remains an acceptance blocker.
 
 ## Phase 4: Verify Currency Service Testcontainers
 
@@ -459,7 +471,7 @@ as the sole Docker integration evidence.
 
 The suite passes using the guest daemon, with evidence available to Phase 6.
 
-## Phase 6: Verify The Application And Publish The Daily Workflow
+## Phase 6: Verify The Application And Document The Daily Workflow
 
 ### Workspace
 
@@ -467,7 +479,8 @@ The suite passes using the guest daemon, with evidence available to Phase 6.
 
 ### Goal
 
-Verify the full guest stack and prepare host-browser acceptance and cutover.
+Verify the full guest stack and prepare host-browser and daily-workflow
+acceptance.
 
 ### Scope
 
@@ -476,8 +489,8 @@ record. Read other phase evidence without modifying its owning repositories.
 
 ### Non-goals
 
-No automatic host cutover, GitHub push or PR creation, deletion of the old
-environment, host firewall edit, certificate generation or production change.
+No automatic host changes, GitHub push or PR creation, host-runtime migration
+or deletion, host firewall edit, certificate generation or production change.
 
 ### Required context
 
@@ -498,20 +511,20 @@ and workspace/service validation evidence.
 3. Update owner docs first, then README/AGENTS summaries as needed. Describe
    one-time repository setup, guest bootstrap versus daily startup, guest-local
    editing, exact bidirectional branch transfer, host-only GitHub publication,
-   HTTPS forwarding, resource use and recovery.
+   HTTPS forwarding, resource use and clean rebuild.
 4. Document the daily Git workflow without a wrapper: host updates `main`,
    creates a feature branch and pushes it to `vm`; the guest fetches/switches,
    the agent commits and pushes only to its local bare `origin`; the host fetches
    `vm`, fast-forwards the same branch, reviews, then independently pushes to
    GitHub and creates the PR. Do not automate host commit, GitHub push or PR
    creation, and do not add rsync.
-5. Document human certificate renewal and safe recovery: recreate guest bare and
-   working repositories from reviewed setup, re-push host branches, restore
-   guest runtime from reviewed configuration and avoid rerunning destructive
-   cluster setup for ordinary Git or networking issues.
-6. Record verified results and remaining human browser/cutover checks. Prepare
+5. Document human certificate renewal and clean rebuild: recreate guest bare and
+   working repositories from reviewed setup, re-push host branches, and create
+   guest runtime state from reviewed configuration. Do not restore or import
+   host Docker, Kind, volume, database, cache or application state.
+6. Record verified results and remaining human browser checks. Prepare
    the exact Checkpoint B sequence; do not claim host acceptance until the human
-   supplies results. Runtime migration remains pending until that checkpoint.
+   supplies results.
 
 ### Implementation notes
 
@@ -530,5 +543,5 @@ DinD test suites as acceptance gates.
 
 The guest implementation and tests pass, the credential-isolated Git workflow
 and daily runtime are documented, and the human has concrete Checkpoint B
-instructions. Overall cutover is complete only when the acceptance record
+instructions. Overall acceptance is complete only when the acceptance record
 includes the operator's final confirmation.

@@ -16,6 +16,12 @@ build caches. Create a new guest Docker daemon, Kind cluster and application
 state from the reviewed configuration. The only host-to-guest inputs are
 committed Git objects and the approved browser-trusted development TLS files.
 
+Implement on feature branches. During VM setup, the operator can return the
+affected host repositories to `main` and rebuild the existing Docker workspace
+if needed. Once the guest agent works, there is no requirement to preserve the
+old installation. Do not add fallback profiles, saved images, recovery drills
+or a retirement phase.
+
 ## Agreed design
 
 ```text
@@ -91,8 +97,10 @@ Phase 2 creates a reviewed host-run one-time script at
    verification and never enable agent forwarding.
 5. Create one guest bare repository and one guest working clone per discovered
    repository, add the `vm` remote to each host clone, and seed `main` plus the
-   current checked-out branch when different. Do not mirror all refs, tags,
-   hooks, host Git configuration or uncommitted files.
+   current checked-out branch when different. Check out that selected branch
+   in the guest working clone so bootstrap uses the implementation changes.
+   Do not mirror all refs, tags, hooks, host Git configuration or uncommitted
+   files.
 6. Configure each guest working clone's `origin` as its guest-local bare
    repository. Do not add a GitHub remote or copy any GitHub credential into the
    guest.
@@ -124,7 +132,8 @@ real host and guest branch-transfer commands remain human checkpoints.
    after Phase 2.
 3. The human completes **Checkpoint A**: run the reviewed one-time repository
    setup script, transfer approved TLS material, install guest prerequisites,
-   and build a clean guest runtime and application state.
+   and launch and authenticate the guest agent before bootstrapping Kind/Tilt
+   and fresh application state. The agent is available to help diagnose bootstrap.
 4. Run **Phases 3–6 inside the VM**, with each worker in its declared repository.
 5. The human completes **Checkpoint B** for host-browser and daily-workflow
    acceptance.
@@ -185,6 +194,8 @@ read-only for the current Docker and mount behavior.
    host trust. Document the human-operated host-to-guest copy and installation
    of the public root into guest trust stores. Preserve the lazy container trust
    helper and human-owned infrastructure certificate generation in the guest.
+   Document host-only certificate renewal without running `setup.sh` or
+   recreating the host cluster.
 4. Keep Kind, Calico, ingress, security policies, persistence and Tilt behavior
    intact. Preserve the atomic frontend production-smoke image target. Add useful
    image-pull diagnostics before CNI readiness if bootstrap fails.
@@ -253,9 +264,16 @@ bootstrap instructions.
    complete guest administration.
 2. Mount the guest-local common working-clone parent into the agent at an
    identical path as seen by the guest Docker daemon so bind mounts resolve.
+   Also mount the guest bare-repository parent read/write at its identical
+   guest path so local `origin` URLs work inside the container.
    Derive the path from reviewed guest configuration; do not hardcode an
-   operator path. Mount only the exact guest Kind kubeconfig. Do not mount a
-   personal-host workspace, home directory or credential path.
+   operator path. Allow agent startup before Kind exists, without a kubeconfig
+   mount; after bootstrap, recreate the container with only the exact guest Kind
+   kubeconfig mounted. Do not mount a personal-host workspace, home directory or
+   credential path. Adapt the entrypoint, launchers and hooks to the configured
+   working-clone parent, including AI Session Handler installation. Remove
+   automatic GitHub cloning and origin rewriting from guest startup; report
+   missing repositories instead.
 3. Disable credential, SSH-agent and GitHub-auth forwarding. Provide a Remote
    SSH workflow in which the host UI connects to guest-local files while remote
    extensions, terminals, tasks and language servers execute in the guest. Do
@@ -270,6 +288,8 @@ bootstrap instructions.
    trust utilities as required by owner docs. Verify the setup script discovers
    every immediate sibling Git repository selected by the operator, including
    `ext-authz`, without encoding a static repository inventory.
+   Document launching and authenticating the guest agent before application
+   bootstrap, using only its provider credentials, with no GitHub login.
 6. Record the actual VM/storage/network setup supplied by the operator as
    minimal, reproducible reference configuration. Keep trusted host launch and
    SSH settings outside guest-writable storage; updates require human review and
@@ -290,14 +310,21 @@ hooks, uncommitted files or credentials. Never silently launch this profile
 against the personal-host daemon. Do not implement host Docker/Kind state
 export, import, volume copy or application-data migration.
 
+When authoring from the existing container, follow workspace instructions for
+staging edits to its read-only sandbox directory under `tmp/`; the human applies
+those reviewed files before committing the feature branch for Checkpoint A.
+
 ### Validation
 
 Render the effective Dev Container/Compose configuration, including feature
-metadata; check mounts, namespaces, absence of DinD and endpoint fallback.
+metadata; check working/bare repository mounts, namespaces, absence of DinD,
+startup without kubeconfig and endpoint fallback. Check guest startup preserves
+local origins and resolves helper paths from the configured workspace root.
 Test the setup script against disposable host/guest Git fixtures covering
 repository discovery, names with safe supported characters, initial `main`, a
-different current branch, partial rerun, mismatched `vm` remote, non-empty guest
-destination, no-force behavior and failure cleanup. Prove fixture guest clones
+different current branch selected in the guest, partial rerun, mismatched `vm`
+remote, non-empty guest destination, no-force behavior and failure cleanup.
+Prove fixture guest clones
 have only guest-local origins and receive no host hooks or Git configuration.
 Run `bash -n` and ShellCheck on every changed shell script, check documentation
 links and run `git diff --check`. Do not contact GitHub or a real VM.
@@ -338,12 +365,13 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
 
 1. Verify every selected repository has one guest-local bare repository and one
    working clone whose `origin` resolves only to that bare repository. Confirm
-   the agent sees the intended guest working-clone parent, exact guest
-   kubeconfig and guest Docker socket, with no personal-host workspace,
-   credential mount, GitHub remote or forwarded authentication socket.
+   the agent sees the intended guest working-clone and bare-repository parents,
+   exact guest kubeconfig and guest Docker socket, with no personal-host
+   workspace, credential mount, GitHub remote or forwarded authentication socket.
 2. Inspect Checkpoint A evidence for the human-run host-to-VM push and VM-to-host
-   fetch. In a disposable guest fixture, verify working-clone commits push to the
-   guest bare repository and preserve commit identity, additions, deletions and
+   fetch. From inside the agent container, use a disposable guest fixture to
+   verify working-clone commits push to the guest bare repository and preserve
+   commit identity, additions, deletions and
    executable bits. Do not perform or claim a GitHub push.
 3. Start disposable test containers; verify published-port reachability,
    bind-path resolution and cleanup. Use Checkpoint A's agent restart evidence
@@ -352,10 +380,12 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
 4. Inspect Checkpoint A's Remote SSH save evidence and verify a representative
    build plus Tilt file detection occurs entirely on guest-local storage. Record
    measured build behavior without reviving shared-folder watcher tests.
-5. Combine host-side dummy-listener evidence with guest probes: prove new
-   connections to host addresses are denied while DNS, downloads and
+5. Combine host-side native and Docker-published dummy-listener evidence with
+   guest probes: prove new connections to host services and host containers are
+   denied across INPUT and Docker forwarding paths while DNS, downloads and
    host-initiated SSH/Git connections work. Cover IPv4/IPv6 and inspect the
-   operator's after-restart evidence. Probe known dummy targets only.
+   operator's evidence; host-reboot verification remains Checkpoint B. Probe
+   known dummy targets only.
 6. Record actual results and unresolved issues in `docs/host-isolation.md`.
 
 ### Implementation notes

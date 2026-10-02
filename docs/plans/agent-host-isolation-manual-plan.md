@@ -18,6 +18,12 @@ data or build caches in the VM. The guest creates fresh runtime state from the
 reviewed configuration. Only committed Git objects and the approved
 browser-trusted development TLS files cross from host to guest.
 
+Work on feature branches. While setting up the VM, you can check out `main`
+in the affected host repositories and rebuild the existing Docker workspace
+to use an agent there. Once the guest agent works, preserving the old setup is
+unnecessary. There is no fallback test, saved-image requirement or retirement
+phase.
+
 ## How To Use This Checklist
 
 Run commands only in the environment named immediately above the code block:
@@ -100,9 +106,9 @@ git rev-parse --show-toplevel
 sudo ss -ltnp '( sport = :80 or sport = :443 )'
 ```
 
-  Record any current listener so the human operator can stop it before the final
-  forwarding test. Do not inspect, copy or preserve its containers, images,
-  volumes or application data as part of this plan.
+  Record the owner, including Docker port mappings, so the human operator can
+  stop it at Checkpoint B. Leave it running during initial setup; the preliminary
+  forwarding test uses port 8443. No runtime data needs to be copied or retained.
 
 - [ ] Confirm free RAM/disk, hardware virtualization and the current firewall
   manager. Run these read-only commands on Mint:
@@ -707,6 +713,9 @@ ip -6 address show dev "$VM_BRIDGE"
 
 ### 4.2 Install The Host-Input Policy
 
+These input rules cover native host services. Docker-published ports can take
+a DNAT/FORWARD path instead; complete the Docker check below as well.
+
 - [ ] Re-run `sudo ufw status verbose`. If it says `Status: active`, use the UFW
   sequence below. Replace `<bridge-ipv4>` with the bridge's IPv4 address but
   keep `$VM_BRIDGE` in the same terminal. These rules permit only DHCP and DNS
@@ -740,11 +749,21 @@ sudo ufw status numbered
   manager-specific commands before applying them. An unowned ad-hoc nftables
   rule is not a durable completion.
 
+- [ ] Inspect the host Docker firewall backend and bridge networks. Using that
+  backend's supported persistent filtering mechanism, deny new traffic arriving
+  from `agent-nat` toward host Docker containers, including published ports.
+  For an iptables backend this normally uses `DOCKER-USER`; an nftables backend
+  needs the corresponding forward-hook policy. Match the incoming VM bridge
+  and Docker destinations after DNAT, preserve established replies, and keep
+  guest Internet access working. Review the exact commands for the installed
+  backend before applying them; UFW input rules alone are insufficient.
+
 | Traffic | Required behavior |
 | --- | --- |
 | New host-to-guest connections | Permit operator SSH, Git transfer and application access |
 | Replies to host-initiated connections | Permit established reply traffic |
 | New guest-to-personal-host connections | Deny across all host addresses, IPv4 and IPv6 |
+| New guest-to-host-Docker connections | Deny published-port and direct container routes |
 | Guest DNS/DHCP to host, if used | Permit only the required service/address/interface |
 | Guest Internet traffic | Preserve ordinary outbound access and replies |
 
@@ -811,6 +830,15 @@ nc -4 -vz -w 3 <host-ipv4> 18080
 nc -6 -vz -w 3 '<host-ipv6>%<guest-interface>' 18081
 ```
 
+- [ ] Test the Docker path with a disposable HTTP container using a reviewed
+  digest-pinned image, no host mounts and unused published port 18082. Bind it
+  to the host's libvirt bridge address. Confirm a host request to that published
+  address succeeds, then require guest requests to both the published address
+  and container IP/port to fail. Inspect Docker's port mapping even if `ss`
+  shows no listener: kernel DNAT need not create a listening process. Cover
+  IPv6 too if host Docker provides IPv6 routes or published bindings. Remove
+  only this fixture afterward. Record the image, commands and results.
+
 - [ ] Prove required traffic still works after the deny:
 
 **Guest SSH session:**
@@ -832,9 +860,8 @@ ssh budget-agent-vm 'printf "host-to-guest SSH works\n"'
   Stop both fixture servers with `Ctrl+C`, then remove the two empty temporary
   directories shown in their shell variables with `rmdir`.
 
-- [ ] Reboot the VM from its console, wait for SSH, and repeat the fixture denial,
-  guest Internet check and host-to-guest SSH check. Before final acceptance,
-  reboot Mint once and repeat them again. After each reboot, also run:
+- [ ] Keep the persistent-rule listing for Checkpoint B, which performs the
+  host-reboot check once after the complete runtime is installed:
 
 **Mint host terminal:**
 
@@ -853,10 +880,9 @@ negative checks.
 
 **Step 4 succeeds when:** a host-owned persistent rule set blocks new IPv4 and
 IPv6 guest connections to every host address on the dedicated bridge, permits
-only required DHCP/DNS exceptions, preserves Internet and host-initiated SSH,
-and passes the same tests after a guest reboot. Host-reboot persistence may
-remain explicitly pending until Checkpoint B, but it may not be recorded as
-passed before it is tested.
+only required DHCP/DNS exceptions, blocks Docker forwarding paths, and preserves
+Internet and host-initiated SSH. Reboot persistence remains pending until
+Checkpoint B.
 
 ## Step 5: Prepare Browser Forwarding And TLS Transfer
 
@@ -891,8 +917,7 @@ KEY=nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem
 CA=nginx/certs/k8s/_mkcert-rootCA.pem
 test -r "$CERT" && test -r "$KEY" && test -r "$CA"
 openssl x509 -in "$CERT" -noout -checkend 2592000
-openssl x509 -in "$CERT" -noout -ext subjectAltName | \
-  rg 'DNS:.*budgetanalyzer\.localhost'
+openssl x509 -in "$CERT" -noout -checkhost app.budgetanalyzer.localhost
 openssl x509 -in "$CA" -noout -text | rg 'CA:TRUE'
 openssl verify -CAfile "$CA" "$CERT"
 openssl x509 -in "$CERT" -pubkey -noout | sha256sum
@@ -902,10 +927,25 @@ openssl pkey -in "$KEY" -pubout | sha256sum
   Success means all files are readable, the leaf remains valid for at least 30
   days, its SAN covers the local hostname, the public root is a CA, verification
   prints `<certificate path>: OK`, and the final two public-key hashes are
-  identical. Never print or copy the key contents into the handoff. If a check
-  fails, stop and run the existing host-owned `./setup.sh` workflow on Mint
-  before resuming; never create or rotate browser certificates in the agent
-  container.
+  identical. Never print or copy the key contents into the handoff. If renewal
+  is needed, use the following certificate-only commands on Mint, then repeat
+  the checks above. `setup.sh` recreates Kind and is unnecessary for renewal.
+
+**Mint host terminal, from this repository, only when certificate renewal is needed:**
+
+```bash
+mkcert -install
+mkdir -p nginx/certs/k8s
+mkcert -cert-file nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem \
+  -key-file nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem \
+  '*.budgetanalyzer.localhost' budgetanalyzer.localhost
+install -m 0644 "$(mkcert -CAROOT)/rootCA.pem" nginx/certs/k8s/_mkcert-rootCA.pem
+chmod 600 nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem
+```
+
+  These commands generate host-owned browser certificates only; they do not
+  rebuild Kind or update its TLS Secret. Never run them in an agent container
+  or the guest. If mkcert or host trust is broken, repair it on Mint first.
 
 - [ ] Record the exact three source paths for Checkpoint A. Only those leaf,
   leaf-key and public-root files may be copied to the guest. The host mkcert CA
@@ -957,8 +997,8 @@ ls -l /etc/authbind/byport/443
   unprivileged-port threshold or run a root-owned SSH client with personal key
   access.
 
-- [ ] After the current listener is stopped and `ss` shows port 443 is
-  free, the reviewed foreground forward command is:
+- [ ] Reserve the following command for Checkpoint B, after freeing host port
+  443. Do not stop the existing listener to test it during initial setup:
 
 **Mint host terminal:**
 
@@ -967,7 +1007,7 @@ authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:443:127.0.0.1:443 budget-agent-vm-forward
 ```
 
-  Keep it in a dedicated terminal for the initial acceptance. In another host
+  At Checkpoint B, keep it in a dedicated terminal. In another host
   terminal, `sudo ss -ltnp '( sport = :443 )'` must show only
   `127.0.0.1:443`, never `0.0.0.0`, a LAN address or `[::]:443`. A supervised
   user service may replace the foreground command only after its exact unit is
@@ -994,11 +1034,10 @@ authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
 
 **Step 5 succeeds when:** the hostname resolves to host loopback; the current
 port owner is known; the approved leaf/key/public CA pass all checks; the
-unprivileged 8443 forwarding fixture succeeds; the reviewed port-443 command
-can bind only `127.0.0.1` when the current listener is stopped; and a clean
-browser profile exists. Real trusted HTTPS remains pending until Checkpoint A
-transfers the approved files and Checkpoint B runs the application acceptance
-test.
+unprivileged 8443 forwarding fixture succeeds; port-443 forwarding is prepared
+for Checkpoint B; and a clean browser profile exists. Real trusted HTTPS remains
+pending until Checkpoint A transfers the approved files and Checkpoint B runs
+the application acceptance test.
 
 ## Initial Handoff
 
@@ -1045,9 +1084,10 @@ Network boundary
   DHCP/DNS exceptions:
   guest-to-host IPv4 fixture result:
   guest-to-host IPv6 fixture result:
+  guest-to-host Docker fixture result / firewall backend:
   guest Internet positive control:
   host-to-guest SSH positive control:
-  guest reboot persistence:
+  guest reboot persistence: PENDING until Checkpoint B
   host reboot persistence: PASS | FAIL | PENDING
   LAN/VPN peer isolation: OUT OF SCOPE
 
@@ -1159,19 +1199,24 @@ git -C /srv/budget-analyzer/worktrees/<repo> branch --all
   The bare check must print `true`; the guest working clone must have only one
   remote named `origin`, and that URL must be the guest-local bare repository.
   `main` and the explicitly selected non-main branch, if any, must exist. No
-  guest remote may contain `github.com`.
+  guest remote may contain `github.com`. Run `git branch --show-current` in
+  each guest working clone and require the selected seed branch; orchestration
+  and workspace must use the feature branches containing Phases 1–2.
 
 ### A.2 Prove A Full Git Round Trip Without GitHub
 
 - [ ] Choose one non-sensitive repository and require a clean host and guest
-  worktree. Use the same fixture branch name in all three terminals:
+  worktree. Save each side's starting branch in its terminal and keep those
+  terminals open through cleanup. Start from the selected seed branch; this
+  fixture needs no GitHub operation. Before running it, stop if either worktree
+  is dirty, either HEAD is detached, the fixture branch exists, or the fixture
+  filename is already present. Use the same fixture branch name on both sides:
 
 **Mint host terminal, in the selected host checkout:**
 
 ```bash
 git status --short
-git switch main
-git pull --ff-only
+HOST_START_BRANCH="$(git branch --show-current)"
 FIXTURE_BRANCH=host-isolation-roundtrip
 git switch -c "$FIXTURE_BRANCH"
 printf 'host fixture\n' > host-isolation-roundtrip.txt
@@ -1180,14 +1225,11 @@ git commit -m 'test: verify host to guest Git transfer'
 git push --set-upstream vm "$FIXTURE_BRANCH"
 ```
 
-  `git pull --ff-only` is the only GitHub-facing command in this fixture and is
-  run by the human on Mint. Stop if the host worktree was not clean or the
-  fixture branch already exists.
-
 **Guest SSH session, in the matching guest working clone:**
 
 ```bash
 FIXTURE_BRANCH=host-isolation-roundtrip
+GUEST_START_BRANCH="$(git branch --show-current)"
 git fetch origin
 git switch --track "origin/$FIXTURE_BRANCH"
 printf 'guest fixture\n' >> host-isolation-roundtrip.txt
@@ -1203,7 +1245,7 @@ FIXTURE_BRANCH=host-isolation-roundtrip
 git fetch vm "refs/heads/$FIXTURE_BRANCH:refs/remotes/vm/$FIXTURE_BRANCH"
 git merge --ff-only "vm/$FIXTURE_BRANCH"
 git log --oneline --decorate -2
-git diff main...HEAD -- host-isolation-roundtrip.txt
+git diff "$HOST_START_BRANCH"...HEAD -- host-isolation-roundtrip.txt
 ```
 
   Success means the log shows both fixture commits, the diff shows both lines,
@@ -1213,21 +1255,21 @@ git diff main...HEAD -- host-isolation-roundtrip.txt
 **Guest SSH session, in the matching guest working clone:**
 
 ```bash
-git switch main
+git switch "$GUEST_START_BRANCH"
 git branch -D host-isolation-roundtrip
 ```
 
 **Mint host terminal, in the selected host checkout:**
 
 ```bash
-git switch main
+git switch "$HOST_START_BRANCH"
 git branch -D host-isolation-roundtrip
 git push vm --delete host-isolation-roundtrip
-rm host-isolation-roundtrip.txt 2>/dev/null || true
 ```
 
   Do not run the cleanup if the branch contains anything except the two known
-  fixture commits.
+  fixture commits. Switching back removes the tracked fixture file. Confirm
+  both starting branches are restored before continuing bootstrap.
 
 ### A.3 Prove The Guest Has No GitHub Authority
 
@@ -1323,7 +1365,7 @@ curl --fail --show-error \
   Curl must exit zero without `--insecure`. Stop both temporary processes with
   `Ctrl+C` before the real guest ingress starts.
 
-### A.5 Provision And Bootstrap The Guest Runtime
+### A.5 Start The Guest Agent, Then Bootstrap The Application
 
 - [ ] From a human-operated guest SSH session, follow the exact prerequisite
   command sequence produced by implementation Phases 1–2. It must install the
@@ -1345,9 +1387,19 @@ npm --version
   `orchestration`, `workspace` and `ext-authz`. Stop on a missing prerequisite;
   do not compensate in orchestration for a service-owned failure.
 
+- [ ] Build and start the reviewed agent container now, before Kind or Tilt.
+  Use only the guest Docker socket and guest working/bare repository mounts.
+  The initial launch omits the kubeconfig mount because Kind does not exist
+  yet. Follow Phase 2's launch instructions and authenticate the chosen agent
+  provider directly in the guest container, without GitHub credentials or host
+  credential forwarding. Ask the agent to read a guest repository file and
+  require a successful response. The guest agent can now help diagnose the
+  remaining bootstrap; continued availability of the old workspace is not a
+  completion requirement.
+
 - [ ] From the guest orchestration working clone—not from the agent container—run
   the newly documented guest bootstrap command and select the copied ingress
-  certificate. Read its destruction prompt: this creates a fresh **guest** Kind
+  certificate. This creates a fresh **guest** Kind
   cluster and is not a daily start command. Generate required
   infrastructure TLS as the human operator in the guest and configure only
   disposable development `.env` credentials.
@@ -1365,9 +1417,10 @@ docker ps --format 'table {{.Names}}\t{{.Status}}'
   Success requires cluster `kind`, context and referenced cluster `kind-kind`,
   a loopback Kubernetes API URL, and a Ready `kind-control-plane` node.
 
-- [ ] Start Tilt using the implementation's documented guest command and wait
-  for its required resources. Launch the reviewed agent container against only
-  the guest Docker socket and guest-local paths. Then run:
+- [ ] Recreate the agent container with the exact newly generated guest Kind
+  kubeconfig mounted, using Phase 2's instructions; authenticate again if
+  necessary. Start Tilt using the documented guest command and wait for its
+  required resources, using the agent to diagnose failures. Then run:
 
 **Guest SSH session:**
 
@@ -1395,17 +1448,16 @@ sudo ss -ltnp '( sport = :443 )'
   healthy; restarting the agent must not restart a nested Docker daemon or
   destroy Kind networking.
 
-- [ ] Shut down and restart the VM. Repeat Step 4's IPv4/IPv6 dummy-listener
-  denials plus DNS/download and host-to-guest SSH positive controls. Start guest
-  Tilt and the agent again using only the documented daily commands. Supply the
-  redacted repository, TLS, runtime, live-update and restart results to
-  implementation Phases 3 and 6.
+  Supply the redacted repository, TLS, runtime, live-update and agent-restart
+  results to implementation Phases 3 and 6. The full restart/persistence check
+  runs once at Checkpoint B.
 
 **Checkpoint A succeeds when:** repository setup and a two-commit round trip
 pass without guest GitHub authority; only approved TLS files enter the guest;
-verified HTTPS forwarding works; the guest Kind/Tilt/agent stack is healthy;
-Java and frontend live updates work from Remote SSH; and the boundary plus
-runtime survive a VM restart. Every pending or failed item remains explicit.
+verified HTTPS forwarding works; the guest agent responds before application
+bootstrap; the guest Kind/Tilt/agent stack is healthy; and Java/frontend live
+updates and agent restart work. Host/VM reboot persistence remains pending
+until Checkpoint B.
 
 **Handoff:** Run implementation Phases 3–6 from the guest environment. Use
 Remote SSH for guest-local source; do not mount or edit the host clones from the
@@ -1417,9 +1469,11 @@ This happens **after implementation Phase 6** has passed guest validation.
 
 ### B.1 Start Host Port 443 Forwarding And Verify The Browser
 
-- [ ] Stop any process recorded in Step 1 that currently owns host port 443.
-  Managing or preserving that process and its data is outside this plan.
-  Require this to print no listener before starting the forward:
+- [ ] Stop the owner of host port 443 recorded in Step 1. For the existing Kind
+  stack, stop host Tilt and the identified Kind node container publishing 443;
+  `tilt down` alone does not release the node's Docker port mapping. Keep the
+  host Docker daemon running. Confirm Docker no longer publishes that port and
+  the following prints no listener before starting the forward:
 
 **Mint host terminal:**
 
@@ -1457,39 +1511,18 @@ openssl s_client -connect 127.0.0.1:443 \
   frontend WebSocket connection/update. No request may be redirected to HTTP or
   a public/host observability endpoint.
 
-### B.2 Exercise The Daily Git Workflow
+### B.2 Confirm Git And Live-Update Results
 
-- [ ] Repeat the A.2 round trip on a new disposable branch named
-  `host-isolation-daily-flow`, but model actual daily use:
+- [ ] Use A.2's Git round-trip results, A.6's live-update results and Phase 3's
+  in-container Git check. Review Phase 6's daily Git commands. Repeat a check
+  only if the relevant implementation changed or its earlier result failed.
 
-  1. On Mint, update `main` with `git pull --ff-only`, create the branch and
-     explicitly `git push --set-upstream vm host-isolation-daily-flow`.
-  2. In the guest working clone, `git fetch origin`, switch to the tracking
-     branch, make one harmless commit with both an added and deleted line, and
-     `git push origin host-isolation-daily-flow`.
-  3. On Mint, run
-     `git fetch vm refs/heads/host-isolation-daily-flow:refs/remotes/vm/host-isolation-daily-flow`,
-     then fast-forward only with
-     `git merge --ff-only vm/host-isolation-daily-flow`.
-  4. Compare `git log --oneline`, `git diff --stat main...HEAD` and the file
-     contents on both sides.
-  5. Delete only the verified fixture branch and file using A.2's cleanup
-     sequence. Never push this fixture to GitHub.
+### B.3 Verify Restart Persistence
 
-  Success means commit IDs, additions and deletions match on both sides, and the
-  guest still has no GitHub remote or credential.
+- [ ] Shut down the VM, reboot Mint, then start the VM, guest Tilt/agent and the
+  foreground HTTPS forward using only the documented daily commands. Repeat:
 
-### B.3 Recheck Live Update, Isolation And Persistence
-
-- [ ] Save and restore the documented disposable Java and frontend edits through
-  the Remote SSH window while Tilt runs. Require the expected live-update or
-  rebuild result and a clean host checkout afterward; do not use reset/clean
-  commands that could remove unrelated work.
-
-- [ ] Reboot Mint, start the VM, guest Tilt/agent and the foreground HTTPS
-  forward using only the documented daily commands. Repeat:
-
-  - Step 4's host fixture positive control and guest-to-host IPv4/IPv6 denials;
+  - Step 4's native and Docker fixture positive controls and guest denials;
   - the guest DNS/download and host-to-guest SSH positive controls;
   - `ss` proof that forwarding is loopback-only;
   - the guest environment/credential-helper checks from A.3; and

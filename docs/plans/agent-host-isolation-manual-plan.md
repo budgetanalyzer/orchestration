@@ -327,14 +327,50 @@ virsh --connect qemu:///system net-dumpxml agent-nat
 
 ### 2.4 Create The VM In virt-manager
 
-- [ ] Create a dedicated system storage pool before creating the VM:
+- [ ] Confirm the installed UI version and that `/data` is the mounted backing
+  filesystem rather than an ordinary directory on the root filesystem:
 
-  1. Select the `qemu:///system` connection.
-  2. Open **Edit → Connection Details → Storage**.
-  3. Select **+**, name the pool `agent-vm-images`, choose a **dir: Filesystem
-     Directory** pool and set its target to
-     `/data/libvirt/agent-vm-images`.
-  4. Finish, start the pool and enable **Autostart on boot**.
+**Mint host terminal:**
+
+```bash
+virt-manager --version
+findmnt --target /data/libvirt/agent-vm-images \
+  --output TARGET,SOURCE,FSTYPE,OPTIONS
+df -h /data/libvirt/agent-vm-images
+```
+
+  The packaged Linux Mint 22.1/Ubuntu 24.04 version is virt-manager 4.1.x. The
+  `findmnt` target must be `/data`, and `df` must show enough free space for the
+  qcow2 file to grow to 200 GiB. Stop if `/data` is not mounted. The detailed
+  labels below describe the 4.1.x UI; record the installed version if a newer
+  package changes a label.
+
+- [ ] If a previous installation attempt created a VM named
+  `budget-analyzer-agent`, remove that failed definition before retrying. In the
+  main virt-manager window, right-click the stopped VM and select **Delete**.
+  Leave **Delete associated storage files** unselected. In the storage-pool
+  steps below, separately remove only an unwanted volume named
+  `budget-analyzer-agent.qcow2`; do not remove the pool directory or installer
+  ISO. If the VM name is absent, continue without doing anything.
+
+- [ ] Create or verify the dedicated system storage pool before creating the
+  VM. These labels match virt-manager 4.1.x, the Ubuntu 24.04 package used by
+  Linux Mint 22.1:
+
+  1. In the main virt-manager window, single-click the **QEMU/KVM** connection
+     that represents `qemu:///system`; do not select **QEMU/KVM User Session**.
+  2. Open **Edit → Connection Details**, then select the **Storage** tab.
+  3. If `agent-vm-images` is already listed, select it and verify its
+     **Location** is `/data/libvirt/agent-vm-images`. Do not create a second
+     pool. Stop if the existing pool has another location. Otherwise, select
+     the **+** button whose tooltip is **Add Pool**.
+  4. In **Add a New Storage Pool**, enter `agent-vm-images` for **Name**, choose
+     `dir: Filesystem Directory` for **Type**, and select **Forward**.
+  5. Enter `/data/libvirt/agent-vm-images` in **Target Path**, then select
+     **Finish**. This target is the pool directory, not a virtual disk.
+  6. Select `agent-vm-images` in the pool list. If its **State** is inactive,
+     select the triangular **Start Pool** button. Enable **Autostart**. Do not
+     select **Browse Local** when defining this pool.
 
 **Mint host terminal:**
 
@@ -363,29 +399,95 @@ virsh --connect qemu:///system vol-list agent-vm-images
   The volume list must show the ISO. Do not loosen home-directory permissions or
   disable AppArmor to make a system VM read an ISO from `Downloads`.
 
-- [ ] In virt-manager, select **File → New Virtual Machine** and perform these
-  actions in order:
+- [ ] Create the virtual-disk volume before opening the New VM wizard. This
+  makes the pool directory and the disk file impossible to confuse:
 
-  1. Select **Local install media (ISO image or CDROM)**.
-  2. Select **Browse**, open the `agent-vm-images` storage pool, choose the
-     verified server ISO and verify the detected operating system is Ubuntu
-     24.04 LTS. Manually select it if detection is blank; do not choose a
-     different release.
-  3. Set memory to `24576 MiB` and CPUs to `8`.
-  4. Create a `200 GiB` disk in the `agent-vm-images` storage pool. Use
-     `qcow2`/sparse allocation. Do not browse to a home directory, repository
-     parent, mounted host workspace or removable disk.
-  5. Name the VM `budget-analyzer-agent` and select **Customize configuration
-     before install**.
-  6. In **NIC**, choose **Virtual network 'agent-nat': NAT** and the virtio
-     device model. Do not use a host bridge, macvtap or direct attachment.
-  7. Keep the normal QEMU emulator, UEFI firmware and virtio disk defaults. Do
-     not enable nested virtualization.
-  8. Use a local-only VNC display for the installation console. Remove USB
-     redirection devices and any SPICE WebDAV channel. Do not add Filesystem,
-     Host device, USB host device, PCI host device, TPM passthrough or smartcard
-     hardware.
-  9. Select **Begin Installation**.
+  1. Return to **Edit → Connection Details → Storage** and select the
+     `agent-vm-images` pool.
+  2. In the **Volumes** pane, remove an unwanted volume only if its exact name is
+     `budget-analyzer-agent.qcow2`: select that row, select the button whose
+     tooltip is **Delete Volume**, and confirm the displayed path ends in that
+     exact filename. Keep the verified `.iso` volume.
+  3. Select the **+** button immediately above the **Volumes** list. Its tooltip
+     identifies it as the control for creating a new volume; it is not the
+     **Add Pool** button on the left.
+  4. In **Add a Storage Volume**, enter `budget-analyzer-agent.qcow2` for
+     **Name**, select `qcow2` for **Format**, and set **Capacity** to `200 GiB`.
+  5. Leave **Allocate entire volume now** unselected so the file is sparse.
+     Leave **Backing store** empty, then select **Finish**.
+  6. Confirm the **Volumes** list contains two distinct files: the verified
+     Ubuntu `.iso` and `budget-analyzer-agent.qcow2`. A row representing
+     `/data/libvirt/agent-vm-images` itself is not a disk volume.
+
+**Mint host terminal:**
+
+```bash
+virsh --connect qemu:///system vol-info \
+  --pool agent-vm-images budget-analyzer-agent.qcow2
+virsh --connect qemu:///system vol-path \
+  --pool agent-vm-images budget-analyzer-agent.qcow2
+sudo qemu-img info \
+  /data/libvirt/agent-vm-images/budget-analyzer-agent.qcow2
+```
+
+  Success requires a 200 GiB capacity, an allocation much smaller than the
+  capacity, the exact path
+  `/data/libvirt/agent-vm-images/budget-analyzer-agent.qcow2`, and `file format:
+  qcow2`. Stop if `qemu-img` reports `raw`, if the path is the pool directory,
+  or if the full 200 GiB was allocated.
+
+- [ ] Create the VM and explicitly select the two previously created file
+  volumes:
+
+  1. Close **Connection Details**, select **File → New Virtual Machine**, choose
+     **Local install media (ISO image or CDROM)**, and select **Forward**.
+  2. At **Choose ISO or CDROM install media**, select **Browse...**. In **Choose
+     Storage Volume**, select `agent-vm-images` in the left pool list, select the
+     verified Ubuntu `.iso` file in the right **Volumes** list, and select
+     **Choose Volume**. Do not select **Browse Local** and do not select only the
+     pool name.
+  3. Back in the wizard, verify the media field ends in the exact `.iso`
+     filename. Verify the detected operating system is Ubuntu 24.04 LTS;
+     manually select that release if detection is blank. Select **Forward**.
+  4. Set **Memory** to `24576 MiB`, set **CPUs** to `8`, and select **Forward**.
+  5. On the storage page, select **Select or create custom storage**, then
+     select **Manage...**. In **Choose Storage Volume**, select
+     `agent-vm-images` on the left, select
+     `budget-analyzer-agent.qcow2` in the right **Volumes** list, and select
+     **Choose Volume**.
+  6. Verify the custom-storage field contains the full path
+     `/data/libvirt/agent-vm-images/budget-analyzer-agent.qcow2`, not the
+     directory `/data/libvirt/agent-vm-images`. Do not select **Create a disk
+     image for the virtual machine**, because the checked qcow2 volume already
+     exists. Select **Forward**.
+  7. Enter `budget-analyzer-agent` for **Name**, select **Customize configuration
+     before install**, choose **Virtual network 'agent-nat': NAT** for the
+     network selection, and select **Finish**. Do not select a host bridge,
+     macvtap or direct attachment.
+
+- [ ] In **Customize configuration**, check every relevant device before
+  starting the VM:
+
+  1. In **Overview**, keep **KVM** virtualization, the normal QEMU emulator,
+     `x86_64` architecture and UEFI firmware. Do not enable nested
+     virtualization.
+  2. Select the 200 GiB disk entry. Its source path must end in
+     `budget-analyzer-agent.qcow2`, its storage format must be `qcow2`, and its
+     disk bus must be `VirtIO`. A source path ending at `agent-vm-images` is an
+     error; remove that device and return to the preceding storage-selection
+     steps.
+  3. Select the CD-ROM entry and confirm its source path ends in the verified
+     Ubuntu `.iso` filename.
+  4. Select **NIC** and set **Network source** to **Virtual network
+     'agent-nat': NAT** and **Device model** to `virtio`.
+  5. Select **Display**, set **Type** to **VNC server**, **Listen type** to
+     **Address**, and **Address** to **Localhost only**. Leave automatic port
+     selection enabled.
+  6. Remove each **USB Redirector** device and any channel whose name is
+     `spice-space.webdav`. Do not add Filesystem, Host device, USB host device,
+     PCI host device, TPM passthrough or smartcard hardware.
+  7. Recheck the disk and CD-ROM source paths, then select **Begin
+     Installation**.
 
 - [ ] While the installer is running, verify the disk location from another
   host terminal:
@@ -395,14 +497,19 @@ virsh --connect qemu:///system vol-list agent-vm-images
 ```bash
 virsh --connect qemu:///system domblklist budget-analyzer-agent --details
 virsh --connect qemu:///system dumpxml budget-analyzer-agent | \
-  rg -n "<source file=|<filesystem|<hostdev|<redirdev|spice-space.webdav"
+  sed -n '/<disk /,/<\/disk>/p'
+virsh --connect qemu:///system dumpxml budget-analyzer-agent | \
+  rg -n "<graphics|<listen|<filesystem|<hostdev|<redirdev|spice-space.webdav"
 ```
 
-  The disk source must be below
-  `/data/libvirt/agent-vm-images` and outside every repository
-  directory. The search must show the disk source and no `<filesystem>`,
-  `<hostdev>`, `<redirdev>` or SPICE WebDAV device. Shut down and correct the
-  hardware before OS setup if it does not.
+  `domblklist` must show a `file`/`disk` row whose source is exactly
+  `/data/libvirt/agent-vm-images/budget-analyzer-agent.qcow2` and a
+  `file`/`cdrom` row whose source is the verified ISO. The disk XML must show
+  `<disk type='file' device='disk'>`, a qcow2 driver and a `<source file=...>`;
+  it must not show `<disk type='dir'>`. The final search must show VNC listening
+  on `127.0.0.1` and no `<filesystem>`, `<hostdev>`, `<redirdev>` or SPICE
+  WebDAV device. Shut down and correct the hardware before OS setup if any
+  check fails.
 
 ### 2.5 Install And Update The Guest
 

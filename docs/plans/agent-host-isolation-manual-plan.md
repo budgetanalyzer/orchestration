@@ -117,7 +117,7 @@ sudo ss -ltnp '( sport = :80 or sport = :443 )'
 lscpu
 free -h
 df -h .
-df -h /var/lib/libvirt/images 2>/dev/null || true
+df -h /data/libvirt/agent-vm-images 2>/dev/null || true
 test -c /dev/kvm && ls -l /dev/kvm
 lsmod | grep -E '^kvm'
 sudo ufw status verbose
@@ -132,9 +132,9 @@ sudo nft list ruleset
   - At least 24 GiB plus several GiB for Mint remains available while the VM is
     running. Do not allocate the VM if doing so would force the host into swap
     during normal use.
-  - The filesystem that will hold `/var/lib/libvirt/images` can accommodate a
-    sparse disk that may grow to 200 GiB. Sparse allocation does not reserve
-    that free space.
+  - The filesystem that will hold `/data/libvirt/agent-vm-images` can
+    accommodate a sparse disk that may grow to 200 GiB. Sparse allocation does
+    not reserve that free space.
   - The handoff says whether UFW is active and whether another nftables manager
     owns persistent rules. Do not enable, disable or flush either one yet.
 
@@ -333,7 +333,7 @@ virsh --connect qemu:///system net-dumpxml agent-nat
   2. Open **Edit → Connection Details → Storage**.
   3. Select **+**, name the pool `agent-vm-images`, choose a **dir: Filesystem
      Directory** pool and set its target to
-     `/var/lib/libvirt/images/agent-vm-images`.
+     `/data/libvirt/agent-vm-images`.
   4. Finish, start the pool and enable **Autostart on boot**.
 
 **Mint host terminal:**
@@ -344,7 +344,7 @@ virsh --connect qemu:///system pool-path agent-vm-images
 ```
 
   Success means the pool is active, autostarts and its canonical path is exactly
-  `/var/lib/libvirt/images/agent-vm-images`, outside all repository trees.
+  `/data/libvirt/agent-vm-images`, outside all repository trees.
 
 - [ ] Copy the already verified public installer ISO into that pool so normal
   libvirt/AppArmor access applies. Replace `<iso-filename>` with the exact file
@@ -355,7 +355,7 @@ virsh --connect qemu:///system pool-path agent-vm-images
 ```bash
 sudo install -o root -g root -m 0644 \
   "$HOME/Downloads/ubuntu-24.04-server-verify/<iso-filename>" \
-  /var/lib/libvirt/images/agent-vm-images/
+  /data/libvirt/agent-vm-images/
 virsh --connect qemu:///system pool-refresh agent-vm-images
 virsh --connect qemu:///system vol-list agent-vm-images
 ```
@@ -399,7 +399,7 @@ virsh --connect qemu:///system dumpxml budget-analyzer-agent | \
 ```
 
   The disk source must be below
-  `/var/lib/libvirt/images/agent-vm-images` and outside every repository
+  `/data/libvirt/agent-vm-images` and outside every repository
   directory. The search must show the disk source and no `<filesystem>`,
   `<hostdev>`, `<redirdev>` or SPICE WebDAV device. Shut down and correct the
   hardware before OS setup if it does not.

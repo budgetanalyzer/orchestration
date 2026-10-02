@@ -27,6 +27,7 @@ or a retirement phase.
 ```text
 Personal workstation: Linux Mint 22.1
   GitHub credentials and canonical clones stay here
+  libvirt storage pool -> /data/libvirt/agent-vm-images
   VS Code UI -- Remote SSH --------------------------> guest-local working clones
   browser -> host loopback HTTPS forward ------------> guest ingress
   git push/fetch through host-initiated SSH ----------> guest bare repositories

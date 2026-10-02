@@ -40,13 +40,19 @@ redacted text record of command versions, resource values, interface names and
 pass/fail results; do not record passwords, private keys, tokens, certificate
 private-key contents or private remote URLs.
 
-Use these names unless there is a collision. The subnet is deliberately not
-preselected; Step 2 requires checking active host routes first.
+Use these names unless there is a collision. Host route checks in Step 2
+confirmed `192.168.231.0/24` for the dedicated VM network, with gateway
+`192.168.231.1`, dynamic DHCP range `192.168.231.128` through
+`192.168.231.254`, and reserved guest address `192.168.231.10`.
 
 ```text
 VM name:                 budget-analyzer-agent
 libvirt connection:     qemu:///system
 libvirt network name:   agent-nat
+libvirt subnet:          192.168.231.0/24
+libvirt gateway:         192.168.231.1
+dynamic DHCP range:      192.168.231.128-192.168.231.254
+reserved guest address: 192.168.231.10
 libvirt storage pool:   agent-vm-images
 guest hostname:         budget-analyzer-agent
 SSH alias:              budget-agent-vm
@@ -565,15 +571,17 @@ df -h /
   24.04 LTS, SSH is active, the guest has an address on `agent-nat`, its default
   route uses that network, and the root filesystem reflects the virtual disk.
 
-- [ ] Reserve a stable guest address so the SSH aliases do not silently point at
-  a different DHCP client later. Choose an unused address in the selected subnet
-  but outside the dynamic DHCP range, replace `<reserved-guest-ip>`, and run:
+- [ ] Reserve the selected stable guest address so the SSH aliases do not
+  silently point at a different DHCP client later. `192.168.231.10` is inside
+  the selected `192.168.231.0/24` subnet, avoids the `192.168.231.1` gateway,
+  and is outside the dynamic DHCP range `192.168.231.128` through
+  `192.168.231.254`. Run:
 
 **Mint host terminal:**
 
 ```bash
 GUEST_MAC="$(virsh --connect qemu:///system domiflist budget-analyzer-agent | awk '$3 == "agent-nat" {print $5}')"
-RESERVED_GUEST_IP='<reserved-guest-ip>'
+RESERVED_GUEST_IP='192.168.231.10'
 printf 'MAC=%s reserved IP=%s\n' "$GUEST_MAC" "$RESERVED_GUEST_IP"
 virsh --connect qemu:///system net-update agent-nat add-last ip-dhcp-host \
   "<host mac='$GUEST_MAC' name='budget-analyzer-agent' ip='$RESERVED_GUEST_IP'/>" \

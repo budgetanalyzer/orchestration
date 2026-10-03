@@ -1,15 +1,19 @@
 # Development VM Manual Setup Plan
 
-**Status:** Ready for operator preparation; no host changes have been made.
+**Status:** Operator preparation is in progress. Step 4.1 is complete and the
+operator has reached Step 4.2; the discovered host firewall and Docker-network
+state is recorded there, but the host-isolation policy has not yet been
+installed or accepted.
 
 **Audience:** The human operating the personal Linux Mint workstation.
 
 **Companion:** [Agent implementation plan](agent-host-isolation-plan.md).
 
 This is a manual checklist, not an AI Session Handler execution plan. Complete
-Steps 1–5 before agent implementation. Two checkpoints remain afterward: run
-the reviewed one-time repository setup and bootstrap the guest, then accept the
-browser and daily Git workflow. Agents may prepare instructions; they do not
+Steps 1–5 before agent implementation. Three checkpoints remain afterward: run
+the reviewed one-time repository setup and bootstrap the guest, accept the
+browser and daily Git workflow after implementation, then establish the final
+guest-only Docker architecture. Agents may prepare instructions; they do not
 administer your host or push to GitHub.
 
 This is a clean setup, not a migration. Do not copy, export, import or recreate
@@ -21,8 +25,11 @@ browser-trusted development TLS files cross from host to guest.
 Work on feature branches. While setting up the VM, you can check out `main`
 in the affected host repositories and rebuild the existing Docker workspace
 to use an agent there. Once the guest agent works, preserving the old setup is
-unnecessary. There is no fallback test, saved-image requirement or retirement
-phase.
+unnecessary. Do not create a saved-image or runtime fallback. The one retirement
+step is Checkpoint C, after every implementation phase and Checkpoint B have
+finished: uninstall Mint Docker, remove its runtime state and remove the
+temporary Docker-specific firewall integration. Do not begin that cutover while
+an implementation agent still depends on host Docker.
 
 ## How To Use This Checklist
 
@@ -74,7 +81,7 @@ disk under a repository path, disabled confinement or an active port conflict.
 | Source files | Guest-local bare repositories and working clones; no shared host workspace |
 | Editor | Native host VS Code UI using Remote SSH; execution and files remain in guest |
 | Browser | Dedicated development profile on the personal host |
-| Runtime | One fresh guest Docker daemon; build and run the agent container in the guest |
+| Runtime | Keep Mint Docker through implementation and Checkpoint B; final state is one fresh guest Docker daemon |
 | Repository transfer | Explicit host-initiated Git push/fetch over SSH through a `vm` remote |
 | GitHub authority | Host only; no guest GitHub write credential or authenticated GitHub browser |
 | Browser URL | `https://app.budgetanalyzer.localhost`, through host-loopback forwarding |
@@ -141,8 +148,10 @@ sudo nft list ruleset
   - The filesystem that will hold `/data/libvirt/agent-vm-images` can
     accommodate a sparse disk that may grow to 200 GiB. Sparse allocation does
     not reserve that free space.
-  - The handoff says whether UFW is active and whether another nftables manager
-    owns persistent rules. Do not enable, disable or flush either one yet.
+  - The handoff says whether UFW is active, whether another nftables manager
+    owns persistent rules, or whether no persistent host firewall is active.
+    Do not enable, disable or flush anything yet; Step 4 owns the reviewed
+    adoption path when no manager is active.
 
 - [ ] Confirm each ecosystem repository that should enter the VM is an immediate
   child of one common parent, has a local `main` branch and has no operation in
@@ -168,10 +177,12 @@ test ! -d "$(git rev-parse --git-path rebase-apply)"
   parent or decline the run.
 
 **Step 1 succeeds when:** source work is backed up; hardware virtualization is
-usable; RAM and disk are sufficient; the active firewall owner and any port-443
-listener are known; and the selected parent, repositories and seed branches are
-recorded. If KVM is unavailable, stop and enable Intel virtualization in
-firmware. Ordinary Docker/Kind inside this VM needs no nested virtualization.
+usable; RAM and disk are sufficient; the firewall ownership state and any
+port-443 listener are known, including an explicit record when there is no
+active persistent firewall owner; and the selected parent, repositories and
+seed branches are recorded. If KVM is unavailable, stop and enable Intel
+virtualization in firmware. Ordinary Docker/Kind inside this VM needs no nested
+virtualization.
 
 ## Step 2: Install And Create The VM
 
@@ -810,7 +821,7 @@ disabled.
 
 ### 4.1 Identify The Enforcement Interface
 
-- [ ] Resolve the dedicated libvirt bridge and gateway; do not assume a bridge
+- [x] Resolve the dedicated libvirt bridge and gateway; do not assume a bridge
   name such as `virbr0`.
 
 **Mint host terminal:**
@@ -831,47 +842,241 @@ ip -6 address show dev "$VM_BRIDGE"
 These input rules cover native host services. Docker-published ports can take
 a DNAT/FORWARD path instead; complete the Docker check below as well.
 
-- [ ] Re-run `sudo ufw status verbose`. If it says `Status: active`, use the UFW
-  sequence below. Replace `<bridge-ipv4>` with the bridge's IPv4 address but
-  keep `$VM_BRIDGE` in the same terminal. These rules permit only DHCP and DNS
-  requests to libvirt's host-side service, then deny other new guest-to-host
-  traffic. UFW's existing established/related handling preserves replies to
-  host-initiated SSH and Git connections.
+#### Recorded Host State
 
-**Mint host terminal, only when UFW is already active:**
+The Step 1 and Step 4 discovery performed on the Mint host on 2026-10-03 found
+the following state. This is setup-specific evidence, not a portable inventory
+to reuse on a different host:
+
+| Item | Observed state |
+| --- | --- |
+| UFW | Installed but inactive; no added user rules |
+| Other persistent manager | `nftables` inactive/disabled; `firewalld` absent |
+| UFW defaults | IPv6 enabled; deny incoming; allow outgoing; deny routed |
+| Active compatibility backend | `iptables` and `ip6tables` both resolve to `xtables-nft-multi` |
+| Dedicated VM network | `agent-nat`; `virbr1`; gateway `192.168.231.1` |
+| Docker default bridge | `docker0`; network ID prefix `a87d6b19b4e1`; `172.17.0.0/16` |
+| Docker Kind bridge | `br-77a017d8bb5e`; network ID prefix `77a017d8bb5e`; `172.18.0.0/16` and `fc00:f853:ccd:e793::/64` |
+| Docker filtering | IPv4 and IPv6 `DOCKER-USER` chains exist; host ports 80 and 443 are Docker-published |
+| Native listeners relevant to the boundary | libvirt DNS/DHCP on `virbr0`/`virbr1`; Avahi on wildcard UDP; remaining non-Docker TCP listeners are loopback-only |
+
+The `nft` tables visible during discovery are created through the active
+`iptables-nft` compatibility backend by Docker/libvirt; they are not evidence
+of a persistent host firewall manager. Both `iptables` commands also warned
+that legacy tables exist. Inspect those tables read-only before adoption, but
+do not flush them or install this policy through the legacy alternatives:
+
+**Mint host terminal:**
 
 ```bash
+sudo iptables-legacy -S
+sudo ip6tables-legacy -S
+```
+
+- [ ] Review the recorded listener and legacy-table inventory. Deliberately
+  adopt UFW as the workstation's ongoing host-input firewall, not as a
+  temporary way to pass this checklist. Enabling it applies the default-deny
+  input policy across the host. Loopback-only editor, printing, VNC and SSH
+  forwarding listeners remain local; unsolicited native LAN access and some
+  discovery behavior may change. Do not add a host SSH allow merely for the
+  host-initiated connection to the guest.
+
+#### Adopt UFW For Native Host Input
+
+- [ ] Re-resolve and validate the bridge in the same terminal, add the rules
+  while UFW is inactive, review the stored rules, and then enable UFW. These
+  rules permit only DHCP and DNS requests to libvirt's host-side service and
+  deny other guest-to-host input. UFW's established/related handling preserves
+  replies to host-initiated SSH and Git connections.
+
+**Mint host terminal:**
+
+```bash
+VM_BRIDGE="$(
+  virsh --connect qemu:///system net-info agent-nat |
+    awk '/^Bridge:/ {print $2}'
+)"
+test "$VM_BRIDGE" = 'virbr1'
+BRIDGE_IPV4='192.168.231.1'
+ip -4 address show dev "$VM_BRIDGE" | rg -F "$BRIDGE_IPV4/24"
+
 sudo ufw insert 1 deny in on "$VM_BRIDGE" comment 'deny agent VM to host'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto tcp \
-  from any to <bridge-ipv4> port 53 comment 'agent VM DNS TCP'
+  from any to "$BRIDGE_IPV4" port 53 comment 'agent VM DNS TCP'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto udp \
-  from any to <bridge-ipv4> port 53 comment 'agent VM DNS UDP'
+  from any to "$BRIDGE_IPV4" port 53 comment 'agent VM DNS UDP'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto udp \
   from any port 68 to any port 67 comment 'agent VM DHCP'
+
+sudo ufw show added
+sudo ufw --force enable
+sudo ufw status verbose
 sudo ufw status numbered
 ```
 
-  Confirm the three narrow allows appear before the bridge-wide deny, UFW's
-  IPv6 support remains enabled, and no earlier broad allow on the same bridge
-  defeats the deny. UFW's packaged IPv6 pre-rules must retain essential neighbor
-  discovery; do not add an IPv6 application allow for the guest.
+  Confirm the three narrow allows appear before the bridge-wide deny, an
+  equivalent IPv6 bridge-wide deny is present, UFW reports active and IPv6
+  support remains enabled. UFW's packaged IPv6 pre-rules must retain essential
+  neighbor discovery; do not add an IPv6 application allow for the guest. If
+  activation changes an unrelated host service that the operator requires,
+  stop and review a narrowly scoped allow; do not disable the boundary or add a
+  broad allow on `virbr1`.
 
-  If UFW is inactive, **do not enable it just for this plan and do not run raw
-  `nft flush` or replacement rulesets**. Stop this step and prepare equivalent
-  persistent input-chain rules in the firewall manager identified in Step 1:
-  established/related first, DHCP/DNS on the exact libvirt bridge second, and a
-  final IPv4/IPv6 reject for other input from that bridge. Review the resulting
-  manager-specific commands before applying them. An unowned ad-hoc nftables
-  rule is not a durable completion.
+#### Persist Docker Forward-Path Isolation
 
-- [ ] Inspect the host Docker firewall backend and bridge networks. Using that
-  backend's supported persistent filtering mechanism, deny new traffic arriving
-  from `agent-nat` toward host Docker containers, including published ports.
-  For an iptables backend this normally uses `DOCKER-USER`; an nftables backend
-  needs the corresponding forward-hook policy. Match the incoming VM bridge
-  and Docker destinations after DNAT, preserve established replies, and keep
-  guest Internet access working. Review the exact commands for the installed
-  backend before applying them; UFW input rules alone are insufficient.
+Docker-published ports are translated before UFW's input rules, so the native
+UFW policy is not sufficient. Docker on this host uses the supported
+`iptables-nft` compatibility backend. Install rules in its `DOCKER-USER` chains
+rather than editing raw nftables state or Docker-owned chains. The rules below
+reject only new traffic arriving from `virbr1` and leaving through the default
+Docker bridge or a Docker-generated `br-...` bridge. Established replies and
+guest Internet traffic through a non-Docker host interface remain eligible for
+the later rules. This follows Docker's documented
+[`DOCKER-USER` filtering model](https://docs.docker.com/engine/network/firewall-iptables/)
+and uses UFW's documented
+[`after.init` customization hook](https://manpages.ubuntu.com/manpages/noble/man8/ufw-framework.8.html)
+for reload ordering.
+
+This is a transitional defense, not the final architecture. Keep it installed
+for the entire period in which the host-resident implementation agents require
+Mint Docker, including all phases of the companion implementation plan and
+Checkpoint B. Remove it only in Checkpoint C after Mint Docker has been stopped
+and uninstalled. The permanent UFW rules protecting native Mint input on
+`virbr1` remain after that cleanup.
+
+- [ ] Use a host editor to create
+  `/usr/local/sbin/agent-vm-docker-isolation` with the exact reviewed content
+  below. The `br-+` spelling is the `iptables` interface-prefix match and covers
+  the current Kind bridge plus future Docker-generated bridge names.
+
+```sh
+#!/bin/sh
+set -eu
+
+VM_BRIDGE='virbr1'
+
+add_new_reject() {
+    firewall=$1
+    docker_output=$2
+
+    if ! "$firewall" --wait -C DOCKER-USER \
+        -i "$VM_BRIDGE" -o "$docker_output" \
+        -m conntrack --ctstate NEW \
+        -m comment --comment 'deny agent VM to Docker' \
+        -j REJECT 2>/dev/null; then
+        "$firewall" --wait -I DOCKER-USER 1 \
+            -i "$VM_BRIDGE" -o "$docker_output" \
+            -m conntrack --ctstate NEW \
+            -m comment --comment 'deny agent VM to Docker' \
+            -j REJECT
+    fi
+}
+
+/usr/sbin/iptables --wait -n -L DOCKER-USER >/dev/null
+/usr/sbin/ip6tables --wait -n -L DOCKER-USER >/dev/null
+add_new_reject /usr/sbin/iptables docker0
+add_new_reject /usr/sbin/iptables 'br-+'
+add_new_reject /usr/sbin/ip6tables docker0
+add_new_reject /usr/sbin/ip6tables 'br-+'
+```
+
+**Mint host terminal:**
+
+```bash
+sudo chown root:root /usr/local/sbin/agent-vm-docker-isolation
+sudo chmod 0755 /usr/local/sbin/agent-vm-docker-isolation
+sudo sh -n /usr/local/sbin/agent-vm-docker-isolation
+sudo shellcheck /usr/local/sbin/agent-vm-docker-isolation
+```
+
+- [ ] Make the helper run after every Docker start. Create the systemd drop-in
+  directory first:
+
+**Mint host terminal:**
+
+```bash
+sudo install -d -o root -g root -m 0755 \
+  /etc/systemd/system/docker.service.d
+```
+
+  Then use a host editor to create
+  `/etc/systemd/system/docker.service.d/agent-vm-isolation.conf` with:
+
+```systemd
+[Service]
+ExecStartPost=/usr/local/sbin/agent-vm-docker-isolation
+```
+
+**Mint host terminal:**
+
+```bash
+sudo chown root:root \
+  /etc/systemd/system/docker.service.d/agent-vm-isolation.conf
+sudo chmod 0644 \
+  /etc/systemd/system/docker.service.d/agent-vm-isolation.conf
+sudo systemctl daemon-reload
+sudo systemd-analyze verify docker.service
+sudo systemctl cat docker.service
+```
+
+- [ ] Make UFW reloads reapply the same Docker rules. First inspect whether a
+  local customization already exists:
+
+**Mint host terminal:**
+
+```bash
+sudo test ! -e /etc/ufw/after.init || sudo sed -n '1,240p' /etc/ufw/after.init
+```
+
+  If the file exists, stop and merge the behavior below without deleting its
+  existing policy. Otherwise use a host editor to create `/etc/ufw/after.init`
+  with:
+
+```sh
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    start)
+        if systemctl --quiet is-active docker.service; then
+            /usr/local/sbin/agent-vm-docker-isolation
+        fi
+        ;;
+    stop|status|flush-all)
+        ;;
+esac
+
+exit 0
+```
+
+**Mint host terminal:**
+
+```bash
+sudo chown root:root /etc/ufw/after.init
+sudo chmod 0755 /etc/ufw/after.init
+sudo sh -n /etc/ufw/after.init
+sudo shellcheck /etc/ufw/after.init
+```
+
+- [ ] Apply the Docker rules without restarting the currently running Docker
+  workloads, reload UFW to exercise its persistence hook, and inspect both
+  address families. Do not use `iptables-save`/`netfilter-persistent` to save
+  Docker- or libvirt-generated rules.
+
+**Mint host terminal:**
+
+```bash
+sudo /usr/local/sbin/agent-vm-docker-isolation
+sudo ufw reload
+sudo iptables -S DOCKER-USER
+sudo ip6tables -S DOCKER-USER
+```
+
+  Each chain must contain one new-connection reject for `virbr1` to `docker0`
+  and one for `virbr1` to `br-+`, with no duplicate copies. Re-run the helper
+  and confirm the listing is unchanged to prove idempotence. If Docker later
+  uses an explicitly named bridge that does not match `docker0` or `br-+`, add
+  that exact output interface to the reviewed helper before using the network.
 
 | Traffic | Required behavior |
 | --- | --- |
@@ -982,16 +1187,21 @@ ssh budget-agent-vm 'printf "host-to-guest SSH works\n"'
 
 ```bash
 sudo ufw status numbered
+sudo iptables -S DOCKER-USER
+sudo ip6tables -S DOCKER-USER
+sudo systemctl cat docker.service
 virsh --connect qemu:///system net-info agent-nat
 ```
 
-  Success means the ordered rules remain present and `agent-nat` is active. If
-  another firewall manager is in use, substitute its persistent-rule listing.
+  Success means the ordered UFW rules and four Docker bridge rejects remain
+  present, the Docker service includes the reviewed `ExecStartPost`, and
+  `agent-nat` is active.
 
-Exact firewall commands depend on active UFW/nftables/libvirt configuration.
-If assistance is needed, provide only a sanitized description. Do not paste a
-generic ruleset, disable the firewall or claim success without positive and
-negative checks.
+The commands above are specific to the recorded Mint/UFW, libvirt and
+Docker-`iptables-nft` configuration. Re-run discovery and review this section
+before applying it on a different host or after changing Docker's firewall
+backend. Do not substitute raw nftables or legacy-iptables rules, disable the
+firewall or claim success without the positive and negative checks.
 
 **Step 4 succeeds when:** a host-owned persistent rule set blocks new IPv4 and
 IPv6 guest connections to every host address on the dedicated bridge, permits
@@ -1195,7 +1405,9 @@ Network boundary
   libvirt network / bridge / selected CIDR:
   NAT active + autostart: PASS | FAIL
   guest IPv4:
-  firewall manager and persistent rule location:
+  UFW active + native bridge-rule order: PASS | FAIL
+  Docker backend / bridge matches:
+  Docker helper / Docker-start hook / UFW-reload hook:
   DHCP/DNS exceptions:
   guest-to-host IPv4 fixture result:
   guest-to-host IPv6 fixture result:
@@ -1204,6 +1416,7 @@ Network boundary
   host-to-guest SSH positive control:
   guest reboot persistence: PENDING until Checkpoint B
   host reboot persistence: PASS | FAIL | PENDING
+  Mint Docker retirement: PENDING until Checkpoint C
   LAN/VPN peer isolation: OUT OF SCOPE
 
 Guest access
@@ -1574,9 +1787,11 @@ bootstrap; the guest Kind/Tilt/agent stack is healthy; and Java/frontend live
 updates and agent restart work. Host/VM reboot persistence remains pending
 until Checkpoint B.
 
-**Handoff:** Run implementation Phases 3–6 from the guest environment. Use
-Remote SSH for guest-local source; do not mount or edit the host clones from the
-agent container.
+**Handoff:** Continue implementation Phases 3–6 without retiring Mint Docker;
+the implementation agents remain hosted by the existing Mint Docker
+environment until the complete plan run ends. Guest-runtime proof must still
+execute in the VM using the reviewed guest access path. Do not mount host clones
+or the host Docker socket into the guest.
 
 ## Checkpoint B: Accept Browser And Daily Git Workflow
 
@@ -1587,8 +1802,10 @@ This happens **after implementation Phase 6** has passed guest validation.
 - [ ] Stop the owner of host port 443 recorded in Step 1. For the existing Kind
   stack, stop host Tilt and the identified Kind node container publishing 443;
   `tilt down` alone does not release the node's Docker port mapping. Keep the
-  host Docker daemon running. Confirm Docker no longer publishes that port and
-  the following prints no listener before starting the forward:
+  host Docker daemon and the transitional Step 4 rules running because the
+  implementation agents still depend on them. Do not uninstall or disable
+  Docker here. Confirm Docker no longer publishes that port and the following
+  prints no listener before starting the forward:
 
 **Mint host terminal:**
 
@@ -1677,7 +1894,262 @@ kubectl top pods -A 2>/dev/null || true
 **Checkpoint B succeeds when:** host port 443 is loopback-only; normal TLS trust
 and browser behavior pass; the explicit daily Git flow preserves history and
 content without guest GitHub authority; Remote SSH live update works; and the
-firewall, forwarding and credential boundary survive a host reboot.
+firewall, forwarding and credential boundary survive a host reboot. Mint Docker
+and its Step 4 protection remain transitional until Checkpoint C.
+
+## Checkpoint C: Establish The Guest-Only Docker Final Architecture
+
+This is the final step. Run it only after all phases of
+`agent-host-isolation-plan.md` and Checkpoint B have succeeded, their evidence
+has been returned to the host repositories, and every implementation-agent
+session that depends on Mint Docker has ended. Do not perform any part of this
+checkpoint from an agent container that the commands would stop.
+
+The goal is one Docker daemon in the development architecture: the daemon
+inside `budget-analyzer-agent`. Libvirt, UFW, host Git, Remote SSH and the
+loopback HTTPS forward remain on Mint. No host Docker image, container, volume,
+Kind cluster, database, cache or application state is copied to the guest.
+
+### C.1 Prove The Implementation Is Safe To Cut Over
+
+- [ ] From a normal Mint terminal, confirm all implementation work has been
+  saved in the intended host repositories and backed up through the human-owned
+  Git workflow. Close host VS Code devcontainers and all implementation-agent
+  sessions. Inventory the remaining host containers without stopping them yet:
+
+**Mint host terminal:**
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+docker volume ls
+docker network ls
+```
+
+  Stop if any remaining container owns work that has not been returned to a
+  host repository or otherwise backed up. Runtime state is deliberately not a
+  migration input, but source work must not be stranded inside a container.
+
+- [ ] Prove the guest is independently usable before touching Mint Docker:
+
+**Mint host terminal:**
+
+```bash
+ssh budget-agent-vm \
+  'docker info >/dev/null && kind get clusters && kubectl get node kind-control-plane'
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+```
+
+  Require guest Docker, Kind, the control-plane node and the forwarded
+  application request to succeed. Failure is a stop condition, not permission
+  to retain a hidden host-runtime dependency.
+
+### C.2 Inventory The Mint Installation And Its Cleanup Targets
+
+- [ ] Record how Docker was installed before selecting an uninstall command.
+  Do not assume Docker CE, distribution `docker.io` or a standalone binary:
+
+**Mint host terminal:**
+
+```bash
+systemctl is-active docker.service docker.socket containerd.service
+systemctl is-enabled docker.service docker.socket containerd.service
+docker info --format 'DockerRootDir={{.DockerRootDir}}'
+dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\t${Version}\n' 2>/dev/null | \
+  rg '^ii\s+(docker|containerd|runc)'
+getent group docker || true
+sudo du -sh /var/lib/docker /var/lib/containerd 2>/dev/null || true
+sudo readlink -f /var/lib/docker /var/lib/containerd 2>/dev/null || true
+sudo findmnt --target /var/lib/docker 2>/dev/null || true
+sudo findmnt --target /var/lib/containerd 2>/dev/null || true
+sudo ls -ld /etc/docker 2>/dev/null || true
+sudo ls -l /etc/apt/sources.list.d/docker.sources \
+  /etc/apt/sources.list.d/docker.list \
+  /etc/apt/keyrings/docker.asc \
+  /etc/apt/keyrings/docker.gpg 2>/dev/null || true
+```
+
+  Require Docker's reported data root and resolved path to be
+  `/var/lib/docker`; stop and amend the reviewed cleanup if either differs.
+  Record the installed Docker package family and whether `containerd`/`runc`
+  has any non-Docker consumer. Stop for review rather than removing a shared
+  runtime. Do not print Docker client configuration because it may contain
+  registry credentials; inspect it privately and remove Docker-only credentials
+  during cleanup.
+
+### C.3 Stop And Disable Mint Docker
+
+- [ ] Stop the reviewed host containers, then disable both activation paths.
+  Use the exact container names from C.1; do not use a blanket container-removal
+  command while an unidentified workload remains.
+
+**Mint host terminal, after the reviewed containers are stopped:**
+
+```bash
+sudo systemctl disable --now docker.service docker.socket
+! systemctl is-active --quiet docker.service
+! systemctl is-active --quiet docker.socket
+test ! -S /var/run/docker.sock
+! docker info >/dev/null 2>&1
+sudo ss -ltnp '( sport = :80 or sport = :443 )'
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+ssh budget-agent-vm 'docker info >/dev/null'
+```
+
+  Port 80 must have no old Docker listener. Port 443 may show only the existing
+  `127.0.0.1:443` SSH forward. The host Docker query must fail while the guest
+  Docker query and application request continue to succeed. Do not disable
+  `containerd.service` until C.2 proves it belongs only to the retired Docker
+  installation.
+
+### C.4 Uninstall Mint Docker And Remove Retired Runtime State
+
+- [ ] Purge only the package family proven by C.2. For an official Docker CE
+  installation whose `containerd.io` has no other consumer, use the package set
+  from Docker's
+  [official uninstall guidance](https://docs.docker.com/engine/install/ubuntu/#uninstall-docker-engine):
+
+**Mint host terminal, Docker CE installations only:**
+
+```bash
+sudo apt purge \
+  docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
+  docker-compose-plugin docker-ce-rootless-extras
+```
+
+  For a distribution `docker.io` installation, use the installed package list
+  from C.2 instead; do not run the Docker CE command as a substitute. Review any
+  `apt` autoremove proposal before accepting it, and do not remove a shared
+  `containerd` or `runc` package.
+
+- [ ] Package removal does not delete Docker runtime data. After confirming one
+  final time that no host runtime data is an approved retention item, remove
+  the exact retired Docker data root. Remove the containerd data root only when
+  C.2 proved it was exclusive to this Docker installation. These deletions are
+  irreversible:
+
+**Mint host terminal:**
+
+```bash
+test "$(sudo readlink -f /var/lib/docker)" = '/var/lib/docker'
+if sudo test -d /var/lib/docker; then
+  sudo du -sh /var/lib/docker
+fi
+sudo rm -rf -- /var/lib/docker
+```
+
+**Mint host terminal, only for an exclusive retired containerd installation:**
+
+```bash
+test "$(sudo readlink -f /var/lib/containerd)" = '/var/lib/containerd'
+if sudo test -d /var/lib/containerd; then
+  sudo du -sh /var/lib/containerd
+fi
+sudo rm -rf -- /var/lib/containerd
+```
+
+- [ ] If C.2 identified Docker-owned APT source/key files, inspect each exact
+  path and remove only those files. Remove the Mint user's Docker registry
+  credentials and client configuration only after private review confirms they
+  are not used for another Docker endpoint. Inspect and remove `/etc/docker`
+  only when it contains configuration solely for the retired daemon. If the
+  `docker` group remains, remove the Mint user from it and delete the group only
+  after confirming it has no remaining purpose; the final reboot clears cached
+  supplementary groups.
+
+### C.5 Remove The Transitional Docker Firewall Integration
+
+- [ ] Remove the UFW reload hook before deleting the helper it invokes. Inspect
+  `/etc/ufw/after.init`. If Step 4 created the whole file and it
+  still contains only the reviewed Docker helper hook, remove that exact file.
+  If Step 4 merged the hook into a pre-existing file, edit out only the Docker
+  helper behavior and preserve the pre-existing policy. Do not remove the UFW
+  `virbr1` DNS/DHCP/deny rules: they remain the permanent native host boundary.
+  Validate any retained script before reloading UFW:
+
+**Mint host terminal:**
+
+```bash
+sudo sed -n '1,240p' /etc/ufw/after.init
+```
+
+**Mint host terminal, when preserving a pre-existing edited file:**
+
+```bash
+sudo sh -n /etc/ufw/after.init
+sudo shellcheck /etc/ufw/after.init
+sudo ufw reload
+sudo ufw status numbered
+```
+
+**Mint host terminal, only when Step 4 created the entire dedicated file:**
+
+```bash
+sudo rm -- /etc/ufw/after.init
+sudo ufw reload
+sudo ufw status numbered
+```
+
+- [ ] After UFW reload succeeds without the Docker hook, remove the helper and
+  Docker service drop-in installed by Step 4:
+
+**Mint host terminal:**
+
+```bash
+sudo ls -l /usr/local/sbin/agent-vm-docker-isolation \
+  /etc/systemd/system/docker.service.d/agent-vm-isolation.conf
+sudo rm -- /usr/local/sbin/agent-vm-docker-isolation
+sudo rm -- /etc/systemd/system/docker.service.d/agent-vm-isolation.conf
+sudo rmdir --ignore-fail-on-non-empty \
+  /etc/systemd/system/docker.service.d
+sudo systemctl daemon-reload
+```
+
+  Do not manually flush or delete Docker chains. Stopping/uninstalling Docker
+  and the final reboot own their removal; UFW and libvirt continue to own their
+  separate rules.
+
+### C.6 Reboot And Accept The Guest-Only Final State
+
+- [ ] Reboot Mint, start the VM, guest Tilt/agent and loopback HTTPS forward
+  using only the documented daily commands, then run:
+
+**Mint host terminal:**
+
+```bash
+! systemctl is-active --quiet docker.service
+! systemctl is-active --quiet docker.socket
+test ! -S /var/run/docker.sock
+! command -v docker >/dev/null 2>&1
+! dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 2>/dev/null | \
+  rg -q '^ii\s+(docker-ce|docker.io|docker-buildx|docker-compose)'
+! sudo iptables -S | rg -q '(^-N DOCKER| -j DOCKER)'
+! sudo ip6tables -S | rg -q '(^-N DOCKER| -j DOCKER)'
+sudo ufw status numbered
+sudo ss -ltnp '( sport = :80 or sport = :443 )'
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+ssh budget-agent-vm \
+  'docker info >/dev/null && kind get clusters && kubectl get node kind-control-plane'
+```
+
+  Require no host Docker command, package, socket, service, chain or port-80
+  listener; require only the loopback SSH forward on host port 443. The
+  permanent UFW bridge rules, guest Docker/Kind node and trusted application
+  request must still pass. When C.2 proved `containerd.io` was Docker-exclusive,
+  also require that package and `/var/lib/containerd` to be absent. When a
+  non-Docker consumer required a containerd package, record the narrowly scoped
+  exception rather than misreporting it as Docker Engine.
+
+- [ ] Update `docs/plans/agent-host-isolation-acceptance.md` through the normal
+  host Git workflow with the package family removed, the explicit data and
+  transitional-file cleanup results, final reboot evidence and the guest-only
+  runtime result. Do not record registry credentials or a full firewall dump.
+
+**Checkpoint C succeeds when:** all implementation agents have finished; Mint
+has no Docker daemon, socket, CLI, installed engine packages, Docker firewall
+chains or retained runtime state; the transitional Step 4 helper/hooks are
+gone; the permanent UFW/libvirt boundary remains; and guest Docker, Kind,
+trusted HTTPS and the daily Git/editor workflow pass after the final reboot.
 
 Daily use starts the VM, guest Tilt/agent, Remote SSH editor and HTTPS forward.
 For a task, the host updates `main`, creates a feature branch and explicitly

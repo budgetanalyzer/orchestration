@@ -1,6 +1,7 @@
 # Guest-Local Development VM Implementation Plan
 
-**Status:** Proposed clean implementation; no runtime migration is planned.
+**Status:** Manual host preparation is in progress; clean implementation is
+proposed and no runtime migration is planned.
 
 **Companion:** [Manual VM setup and operator checkpoints](agent-host-isolation-manual-plan.md).
 
@@ -19,14 +20,20 @@ committed Git objects and the approved browser-trusted development TLS files.
 Implement on feature branches. During VM setup, the operator can return the
 affected host repositories to `main` and rebuild the existing Docker workspace
 if needed. Once the guest agent works, there is no requirement to preserve the
-old installation. Do not add fallback profiles, saved images, recovery drills
-or a retirement phase.
+old installation. Keep Mint Docker available for the host-resident agents
+through the entire implementation plan and Checkpoint B; do not add fallback
+profiles, saved images or recovery drills. The human performs the one explicit
+retirement step only afterward in manual Checkpoint C, producing the final
+guest-only Docker architecture and removing the transitional host-Docker
+firewall integration.
 
 ## Agreed design
 
 ```text
 Personal workstation: Linux Mint 22.1
   GitHub credentials and canonical clones stay here
+  Docker hosts implementation agents through Phase 6 and Checkpoint B only
+  final state has no Docker daemon, socket, CLI, runtime data or Docker rules
   libvirt storage pool -> /data/libvirt/agent-vm-images
   VS Code UI -- Remote SSH --------------------------> guest-local working clones
   browser -> host loopback HTTPS forward ------------> guest ingress
@@ -67,10 +74,20 @@ Ubuntu Server 24.04 LTS VM: KVM/QEMU managed by libvirt and virt-manager
   personal-host addresses with host-enforced IPv4/IPv6 rules; allow established
   replies and narrowly scoped DNS/DHCP if provided by the host. Internet
   destination allowlists and additional LAN/VPN isolation are outside this plan.
+- Adopt UFW as the Mint host's persistent native-input manager with its recorded
+  deny-incoming, allow-outgoing and deny-routed defaults. During implementation,
+  the discovered host Docker `iptables-nft` backend is protected through IPv4
+  and IPv6 `DOCKER-USER` rules reapplied after Docker starts and UFW reloads.
+  Those Docker rules and hooks are transitional: manual Checkpoint C removes
+  them after every implementation agent has finished and Mint Docker is
+  uninstalled. The native UFW `virbr1` boundary remains permanent. Do not use
+  raw nftables, legacy-iptables or a saved copy of Docker/libvirt-generated
+  rules. The companion manual plan owns the exact host-specific commands,
+  bridge/network evidence and final cleanup.
 - Use the personal browser with a dedicated development profile and identities.
   Its profile and debugging interface are not shared. Forward host loopback
-  HTTPS to the guest; keep Docker, Kubernetes and observability private to the
-  guest.
+  HTTPS to the guest; in the final architecture keep Docker, Kubernetes and
+  observability private to the guest.
 - Development server keys and infrastructure CA material may remain in the
   guest. Keep the personal host's mkcert signing key outside it. Copy only the
   existing host-trusted development leaf certificate/key and public CA into the
@@ -125,7 +142,9 @@ Disposable local Git fixtures explicitly required by a phase are allowed; all
 real host and guest branch-transfer commands remain human checkpoints.
 
 1. The human completes **Steps 1–5** of the manual plan and supplies its handoff
-   record. Resolve missing VM, storage, SSH and firewall prerequisites before
+   record. This includes the deliberate UFW adoption, persistent IPv4/IPv6
+   `DOCKER-USER` policy and native/Docker positive and negative tests recorded
+   in Step 4. Resolve missing VM, storage, SSH and firewall prerequisites before
    implementation.
 2. Run **Phases 1–2** to prepare reviewable orchestration and workspace changes.
    These are offline authoring phases and may run in the current environment;
@@ -135,9 +154,19 @@ real host and guest branch-transfer commands remain human checkpoints.
    setup script, transfer approved TLS material, install guest prerequisites,
    and launch and authenticate the guest agent before bootstrapping Kind/Tilt
    and fresh application state. The agent is available to help diagnose bootstrap.
-4. Run **Phases 3–6 inside the VM**, with each worker in its declared repository.
-5. The human completes **Checkpoint B** for host-browser and daily-workflow
-   acceptance.
+4. Run **Phases 3–6** while the implementation agents remain hosted by Mint
+   Docker. Guest-runtime validation commands and evidence must come from the VM
+   through the reviewed guest access path; host residency does not authorize a
+   host Docker fallback for guest tests. Do not disable or uninstall Mint Docker
+   during any implementation phase.
+5. The human completes **Checkpoint B** for host-browser, restart and
+   daily-workflow acceptance while Mint Docker and its transitional protection
+   remain available to the implementation agents.
+6. After the Phase 1–6 run and Checkpoint B are complete and every
+   implementation-agent session has ended, the human completes **Checkpoint C**
+   to uninstall Mint Docker, delete its approved retired runtime state, remove
+   the Docker-specific firewall helper/hooks and accept the guest-only Docker
+   final architecture.
 
 Keep a redacted acceptance record at
 `docs/plans/agent-host-isolation-acceptance.md` in this repository, created in
@@ -383,10 +412,12 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
    measured build behavior without reviving shared-folder watcher tests.
 5. Combine host-side native and Docker-published dummy-listener evidence with
    guest probes: prove new connections to host services and host containers are
-   denied across INPUT and Docker forwarding paths while DNS, downloads and
-   host-initiated SSH/Git connections work. Cover IPv4/IPv6 and inspect the
-   operator's evidence; host-reboot verification remains Checkpoint B. Probe
-   known dummy targets only.
+   denied across UFW INPUT and IPv4/IPv6 `DOCKER-USER` paths while DNS,
+   downloads and host-initiated SSH/Git connections work. Confirm the recorded
+   `virbr1` input rules, Docker `docker0`/`br-+` output matches, Docker-start
+   hook and UFW-reload hook are present and idempotent. Cover IPv4/IPv6 and
+   inspect the operator's evidence; host-reboot verification remains Checkpoint
+   B. Probe known dummy targets only.
 6. Record actual results and unresolved issues in `docs/host-isolation.md`.
 
 ### Implementation notes
@@ -510,13 +541,14 @@ The suite passes using the guest daemon, with evidence available to Phase 6.
 
 ### Goal
 
-Verify the full guest stack and prepare host-browser and daily-workflow
-acceptance.
+Verify the full guest stack and prepare host-browser, daily-workflow and final
+guest-only Docker acceptance.
 
 ### Scope
 
-Application/security smoke checks, owner documentation and final acceptance
-record. Read other phase evidence without modifying its owning repositories.
+Application/security smoke checks, owner documentation and acceptance-record
+preparation. Read other phase evidence without modifying its owning
+repositories.
 
 ### Non-goals
 
@@ -553,9 +585,13 @@ and workspace/service validation evidence.
    working repositories from reviewed setup, re-push host branches, and create
    guest runtime state from reviewed configuration. Do not restore or import
    host Docker, Kind, volume, database, cache or application state.
-6. Record verified results and remaining human browser checks. Prepare
-   the exact Checkpoint B sequence; do not claim host acceptance until the human
-   supplies results.
+6. Record verified results and remaining human browser checks. Prepare the
+   exact Checkpoint B sequence and the separate post-plan Checkpoint C cutover.
+   Checkpoint C must preserve host Docker until all implementation workers have
+   ended, then remove the host daemon, socket, CLI, approved runtime data and
+   transitional Docker firewall integration without removing the permanent UFW
+   VM boundary. Do not claim final acceptance until the human supplies both
+   checkpoint results.
 
 ### Implementation notes
 
@@ -573,6 +609,9 @@ DinD test suites as acceptance gates.
 ### Completion criteria
 
 The guest implementation and tests pass, the credential-isolated Git workflow
-and daily runtime are documented, and the human has concrete Checkpoint B
-instructions. Overall acceptance is complete only when the acceptance record
-includes the operator's final confirmation.
+and daily runtime are documented, and the human has concrete Checkpoint B and C
+instructions. The implementation run ends before host Docker retirement.
+Overall acceptance is complete only when the acceptance record includes the
+operator's post-reboot Checkpoint C proof that Mint Docker and its transitional
+workarounds are gone while guest Docker and the permanent host boundary remain
+healthy.

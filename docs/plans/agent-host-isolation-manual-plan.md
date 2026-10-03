@@ -1,9 +1,10 @@
 # Development VM Manual Setup Plan
 
 **Status:** Operator preparation Steps 1–5 and the Initial Handoff were
-completed and verified by the operator on 2026-10-03. The post-implementation
-Checkpoints A–C remain pending and must not be treated as completed by this
-preparation status.
+completed and verified by the operator on 2026-10-03. The later-discovered
+VS Code Git credential-injection controls in Step 3.3 remain pending and are
+repeated in Checkpoint A.3. The post-implementation Checkpoints A–C remain
+pending and must not be treated as completed by this preparation status.
 
 **Audience:** The human operating the personal Linux Mint workstation.
 
@@ -810,12 +811,21 @@ ssh budget-agent-vm 'hostname; test -z "${SSH_AUTH_SOCK:-}"'
      it for this profile if VS Code offers a profile-scoped disable action. Do
      not disable it globally in a way that changes the normal host profile.
 
+- [ ] Before Checkpoint A, return to the dedicated `Budget Analyzer VM`
+  profile. Search for **Git: Terminal Authentication** and clear it; its setting
+  ID is `git.terminalAuthentication`. Search for **Git: Use Integrated Ask
+  Pass** and clear it; its setting ID is `git.useIntegratedAskPass`. Require
+  both settings to be `false` in this profile. Use **Terminal: Kill All
+  Terminals**, then create a new Remote SSH terminal. Existing terminals retain
+  the environment from before a setting change and are not valid
+  credential-injection evidence.
+
 **VS Code remote terminal:**
 
 ```bash
 hostname
 pwd
-env | rg '^(SSH_AUTH_SOCK|GITHUB_TOKEN|GH_TOKEN)=' || true
+env | rg '^(SSH_AUTH_SOCK|GITHUB_TOKEN|GH_TOKEN|GIT_ASKPASS|SSH_ASKPASS)=' || true
 git config --show-origin --get-all credential.helper || true
 ```
 
@@ -832,8 +842,8 @@ SSH alias it will use.
 **Step 3 succeeds when:** the guest storage root and free-space result are
 recorded; the host reaches the guest with the dedicated key and verified host
 key; no SSH agent is forwarded; and the dedicated VS Code profile opens only
-guest-local files with automatic port forwarding and personal extensions
-disabled.
+guest-local files with automatic port forwarding, integrated Git credential
+injection and personal extensions disabled.
 
 ## Step 4: Block Guest-Initiated Access To Host Services
 
@@ -1688,6 +1698,23 @@ find /srv/budget-analyzer/worktrees -mindepth 2 -maxdepth 2 -name .git \
   authenticated host, and every printed guest remote is guest-local. Do not
   prove isolation by attempting a GitHub write or entering a host credential.
 
+- [ ] In the dedicated `Budget Analyzer VM` Remote SSH window, confirm
+  `git.terminalAuthentication` and `git.useIntegratedAskPass` are both `false`.
+  Use **Terminal: Kill All Terminals**, create a new terminal, and repeat the
+  environment check there:
+
+**New VS Code Remote SSH terminal:**
+
+```bash
+hostname
+env | rg '^(SSH_AUTH_SOCK|GITHUB_TOKEN|GH_TOKEN|GIT_ASKPASS|SSH_ASKPASS)=' || true
+git config --show-origin --get-all credential.helper || true
+```
+
+  The hostname must be `budget-analyzer-agent`; the other two commands must
+  print nothing. A check from a terminal created before the settings changed is
+  not evidence that VS Code credential injection is disabled.
+
 ### A.4 Transfer And Validate Only Approved TLS Files
 
 - [ ] From the host orchestration checkout, repeat Step 5's TLS checks, then copy
@@ -1834,16 +1861,183 @@ done
 
 - [ ] Build and start the reviewed guest agent container now, before Kind or
   Tilt, using Phase 2's separate
-  `ai-agent-sandbox/docker-compose.agent-vm.yml` instructions. Use only the
-  guest Docker socket and guest working/bare repository mounts. The initial
-  launch omits the kubeconfig mount because Kind does not exist yet.
-  Authenticate the chosen agent provider directly in the guest container,
-  without GitHub credentials or host credential forwarding. Ask the guest
-  agent to read a guest repository file and require a successful response. This
-  proves the target runtime and makes an agent available for guest bootstrap
-  diagnosis; it does not move the Phase 1–6 implementation workflow out of the
-  existing Mint devcontainer. Keep that Mint devcontainer available through
-  Phase 6 and Checkpoint B.
+  `ai-agent-sandbox/docker-compose.agent-vm.yml`. First prove this shell and
+  Docker endpoint belong to the guest, create the ignored runtime environment
+  file, and render only the base configuration. If `agent-vm.env` already
+  exists, stop and review it instead of overwriting it.
+
+**Guest SSH session:**
+
+```bash
+test "$(hostname)" = budget-analyzer-agent
+test -z "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}${TESTCONTAINERS_HOST_OVERRIDE:-}"
+test "$(docker context show)" = default
+test "$(docker info --format '{{.DockerRootDir}}')" = /var/lib/docker
+
+cd /srv/budget-analyzer/worktrees/workspace/ai-agent-sandbox
+test ! -e agent-vm.env
+install -m 0600 agent-vm.env.example agent-vm.env
+git check-ignore --quiet agent-vm.env
+
+guest_uid=$(id -u)
+guest_gid=$(id -g)
+docker_gid=$(getent group docker | cut -d: -f3)
+test -n "$guest_uid"
+test -n "$guest_gid"
+test -n "$docker_gid"
+
+sed -i \
+  -e "s/^AGENT_VM_USER_UID=.*/AGENT_VM_USER_UID=$guest_uid/" \
+  -e "s/^AGENT_VM_USER_GID=.*/AGENT_VM_USER_GID=$guest_gid/" \
+  -e "s/^AGENT_VM_DOCKER_GID=.*/AGENT_VM_DOCKER_GID=$docker_gid/" \
+  agent-vm.env
+
+grep -Fx 'AGENT_VM_WORKTREES=/srv/budget-analyzer/worktrees' agent-vm.env
+grep -Fx 'AGENT_VM_BARE=/srv/budget-analyzer/bare' agent-vm.env
+grep -Fx "AGENT_VM_USER_UID=$guest_uid" agent-vm.env
+grep -Fx "AGENT_VM_USER_GID=$guest_gid" agent-vm.env
+grep -Fx "AGENT_VM_DOCKER_GID=$docker_gid" agent-vm.env
+
+base_render=$(docker compose --env-file agent-vm.env \
+  -f docker-compose.agent-vm.yml config)
+printf '%s\n' "$base_render"
+printf '%s\n' "$base_render" | grep -F 'name: budget-analyzer-agent'
+printf '%s\n' "$base_render" | grep -F 'network_mode: host'
+printf '%s\n' "$base_render" | grep -F 'source: /var/run/docker.sock'
+printf '%s\n' "$base_render" | grep -F 'source: /srv/budget-analyzer/worktrees'
+printf '%s\n' "$base_render" | grep -F 'target: /srv/budget-analyzer/worktrees'
+printf '%s\n' "$base_render" | grep -F 'source: /srv/budget-analyzer/bare'
+printf '%s\n' "$base_render" | grep -F 'target: /srv/budget-analyzer/bare'
+! printf '%s\n' "$base_render" | \
+  grep -E 'KUBECONFIG|/home/vscode/.kube/config|privileged: true|docker-in-docker|dind'
+```
+
+  Review the render before continuing. It must use project
+  `budget-analyzer-agent`, service `agent`, `network_mode: host`, the guest
+  `/var/run/docker.sock`, and identical source/target paths for
+  `/srv/budget-analyzer/worktrees` and `/srv/budget-analyzer/bare`. It must not
+  contain `KUBECONFIG`, `/home/vscode/.kube/config`, a host home-directory
+  source, privileged mode, DinD, or the kubeconfig override file. The
+  `AGENT_VM_KUBECONFIG` placeholder may remain in `agent-vm.env`; the base file
+  does not consume it.
+
+  Build and start that base configuration on the already verified guest daemon,
+  then inspect the resulting container rather than relying only on source text:
+
+**Guest SSH session, still in `workspace/ai-agent-sandbox`:**
+
+```bash
+compose=(
+  docker compose --env-file agent-vm.env
+  -f docker-compose.agent-vm.yml
+)
+
+"${compose[@]}" up -d --build
+"${compose[@]}" ps
+
+agent_id=$("${compose[@]}" ps -q agent)
+test -n "$agent_id"
+test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$agent_id")" = host
+test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$agent_id")" = false
+
+diff -u \
+  <(printf '%s\n' \
+    'bind|/srv/budget-analyzer/bare|/srv/budget-analyzer/bare|true' \
+    'bind|/srv/budget-analyzer/worktrees|/srv/budget-analyzer/worktrees|true' \
+    'bind|/var/run/docker.sock|/var/run/docker.sock|true') \
+  <(docker inspect --format \
+    '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Type "|" .Source "|" .Destination "|" .RW}}{{end}}{{end}}' \
+    "$agent_id" | sed 's/ | /|/g' | sort)
+
+"${compose[@]}" exec -T agent bash -lc '
+  set -euo pipefail
+  test -S /var/run/docker.sock
+  test "$(docker context show)" = default
+  test "$(docker info --format "{{.DockerRootDir}}")" = /var/lib/docker
+  test -z "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}${TESTCONTAINERS_HOST_OVERRIDE:-}"
+  test -z "${SSH_AUTH_SOCK:-}${GITHUB_TOKEN:-}${GH_TOKEN:-}${GIT_ASKPASS:-}${SSH_ASKPASS:-}"
+  test -z "${KUBECONFIG:-}"
+  test ! -e /home/vscode/.kube/config
+  test -d /srv/budget-analyzer/worktrees/workspace/.git
+  test -d /srv/budget-analyzer/bare/workspace.git
+  test -z "$(git config --global --get-all credential.helper 2>/dev/null || true)"
+  if command -v gh >/dev/null 2>&1; then
+    ! gh auth status >/dev/null 2>&1
+  fi
+  for repo in /srv/budget-analyzer/worktrees/*; do
+    test -e "$repo/.git" || continue
+    ! git -C "$repo" remote -v | grep -q github.com
+  done
+'
+```
+
+  The mount comparison must show exactly the two guest repository parents and
+  the guest Docker socket as bind mounts. Named provider-configuration volumes
+  are expected and are intentionally excluded from that comparison. Any extra
+  bind mount, kubeconfig before Kind exists, privileged mode, remote Docker
+  endpoint, GitHub remote, forwarded credential, or authenticated `gh` state is
+  a stop condition.
+
+  Choose exactly one installed AI provider and authenticate it interactively in
+  the container. Do not run `gh auth login`, add a GitHub remote, or enter a
+  GitHub credential. For Gemini, finish sign-in and exit its interactive prompt
+  before continuing.
+
+**Guest SSH session, still in `workspace/ai-agent-sandbox`:**
+
+```bash
+export AGENT_PROVIDER=codex  # Choose exactly one: claude, codex, or gemini.
+
+case "$AGENT_PROVIDER" in
+  claude) "${compose[@]}" exec agent claude auth login ;;
+  codex)  "${compose[@]}" exec agent codex login ;;
+  gemini) "${compose[@]}" exec agent gemini ;;
+  *) printf 'Unsupported provider: %s\n' "$AGENT_PROVIDER" >&2; exit 1 ;;
+esac
+```
+
+  Prove the selected provider can read a guest-local repository file. The
+  direct first-line check is a control; the provider command must then return a
+  line containing exactly `GUEST_WORKSPACE_READ_OK`.
+
+**Guest SSH session, still in `workspace/ai-agent-sandbox`:**
+
+```bash
+"${compose[@]}" exec -T agent \
+  sed -n '1p' /srv/budget-analyzer/worktrees/workspace/AGENTS.md | \
+  grep -Fx '# Workspace Entry Point'
+
+case "$AGENT_PROVIDER" in
+  claude)
+    agent_response=$("${compose[@]}" exec -T agent bash -lc '
+      cd /srv/budget-analyzer/worktrees/workspace
+      claude -p "Read AGENTS.md. If its first line is exactly # Workspace Entry Point, output exactly GUEST_WORKSPACE_READ_OK and nothing else."
+    ')
+    ;;
+  codex)
+    agent_response=$("${compose[@]}" exec -T agent bash -lc '
+      cd /srv/budget-analyzer/worktrees/workspace
+      codex exec --sandbox read-only "Read AGENTS.md. If its first line is exactly # Workspace Entry Point, output exactly GUEST_WORKSPACE_READ_OK and nothing else."
+    ')
+    ;;
+  gemini)
+    agent_response=$("${compose[@]}" exec -T agent bash -lc '
+      cd /srv/budget-analyzer/worktrees/workspace
+      gemini -p "Read AGENTS.md. If its first line is exactly # Workspace Entry Point, output exactly GUEST_WORKSPACE_READ_OK and nothing else."
+    ')
+    ;;
+esac
+
+printf '%s\n' "$agent_response"
+printf '%s\n' "$agent_response" | grep -Fx GUEST_WORKSPACE_READ_OK
+```
+
+  Leave the base agent container running so it can diagnose guest bootstrap.
+  This proves the target runtime before Kind exists; it does not move the Phase
+  1–6 implementation workflow out of the existing Mint devcontainer. Keep that
+  Mint devcontainer available through Phase 6 and Checkpoint B. Do not add the
+  kubeconfig override until the later post-bootstrap step explicitly requires
+  it.
 
 - [ ] From the guest orchestration working clone—not from the agent container—
   validate the imported files once more, then run the explicit guest bootstrap:

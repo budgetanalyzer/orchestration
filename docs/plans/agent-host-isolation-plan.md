@@ -17,15 +17,18 @@ build caches. Create a new guest Docker daemon, Kind cluster and application
 state from the reviewed configuration. The only host-to-guest inputs are
 committed Git objects and the approved browser-trusted development TLS files.
 
-Implement on feature branches. During VM setup, the operator can return the
-affected host repositories to `main` and rebuild the existing Docker workspace
-if needed. Once the guest agent works, there is no requirement to preserve the
-old installation. Keep Mint Docker available for the host-resident agents
-through the entire implementation plan and Checkpoint B; do not add fallback
-profiles, saved images or recovery drills. The human performs the one explicit
-retirement step only afterward in manual Checkpoint C, producing the final
-guest-only Docker architecture and removing the transitional host-Docker
-firewall integration.
+Implement on feature branches from the existing working Mint-hosted workspace
+devcontainer. It is defined by sibling workspace
+`.devcontainer/devcontainer.json` and `ai-agent-sandbox/docker-compose.yml` and
+remains the implementation runner through Phases 1–6 and Checkpoint B. Phase 2
+adds a separate guest runtime at
+`ai-agent-sandbox/docker-compose.agent-vm.yml`; it must not convert, replace or
+silently select guest wiring for the Mint devcontainer. Do not retire Mint
+Docker merely because the guest agent starts successfully. The human performs
+the one explicit retirement step only afterward in manual Checkpoint C,
+producing the final guest-only Docker architecture and removing the
+transitional host-Docker firewall integration. Do not add saved images or
+recovery drills.
 
 ## Agreed design
 
@@ -43,8 +46,8 @@ Personal workstation: Linux Mint 22.1
 Ubuntu Server 24.04 LTS VM: KVM/QEMU managed by libvirt and virt-manager
   guest-local bare repositories and working clones; no shared host workspace
   guest-local OS, Docker storage, build caches and persistent volumes
-  one Docker daemon: Kind + Testcontainers + workspace agent container
-  Tilt/build tools run in the guest; agent tools run in the guest container
+  one Docker daemon: Kind + Testcontainers + target guest agent container
+  guest agent supports bootstrap validation and becomes the post-cutover runtime
   working-clone origin -> guest-local bare repository, never GitHub
 ```
 
@@ -147,18 +150,22 @@ real host and guest branch-transfer commands remain human checkpoints.
    in Step 4. Resolve missing VM, storage, SSH and firewall prerequisites before
    implementation.
 2. Run **Phases 1–2** to prepare reviewable orchestration and workspace changes.
-   These are offline authoring phases and may run in the current environment;
-   do not launch the guest profile or administer the host. End the invocation
-   after Phase 2.
+   Run them from the existing Mint-hosted workspace devcontainer. These are
+   offline authoring phases; do not launch the guest agent-container
+   configuration or administer the host. Preserve the current Mint
+   devcontainer as a working implementation runner and end the invocation after
+   Phase 2.
 3. The human completes **Checkpoint A**: run the reviewed one-time repository
    setup script, transfer approved TLS material, install guest prerequisites,
    and launch and authenticate the guest agent before bootstrapping Kind/Tilt
    and fresh application state. The agent is available to help diagnose bootstrap.
-4. Run **Phases 3–6** while the implementation agents remain hosted by Mint
-   Docker. Guest-runtime validation commands and evidence must come from the VM
-   through the reviewed guest access path; host residency does not authorize a
-   host Docker fallback for guest tests. Do not disable or uninstall Mint Docker
-   during any implementation phase.
+4. Run **Phases 3–6** from the same existing Mint-hosted workspace devcontainer.
+   The separately launched guest agent container proves and diagnoses the target
+   runtime; it does not run the implementation plan. Guest-runtime validation
+   commands and evidence must still come from the VM through the reviewed guest
+   access path. Host residency does not authorize a host Docker fallback for
+   guest tests. Do not disable or uninstall Mint Docker during any
+   implementation phase.
 5. The human completes **Checkpoint B** for host-browser, restart and
    daily-workflow acceptance while Mint Docker and its transitional protection
    remain available to the implementation agents.
@@ -208,8 +215,9 @@ read-only for the current Docker and mount behavior.
 ### Execution steps
 
 1. Update the canonical architecture contract first, then the ownership map and
-   concise instruction links as needed. Define the guest-local VM profile and
-   its clean-start rule. Remove shared-workspace assumptions and
+   concise instruction links as needed. Define the separate guest agent-container
+   configuration and its clean-start rule without calling it a VM or Mint
+   profile. Remove shared-workspace assumptions and
    document the host-only GitHub credential boundary, VM-local bare remotes,
    Remote SSH editor model and remaining guest/code risks.
 2. Define personal host, development VM and agent container consistently.
@@ -263,19 +271,22 @@ pending behavior and the host-only GitHub credential boundary.
 ### Goal
 
 Provide a reproducible guest runtime, the one-time ecosystem repository setup
-script and launch instructions for Checkpoint A.
+script and launch instructions for Checkpoint A while preserving the existing
+Mint-hosted devcontainer as the Phase 1–6 implementation runner.
 
 ### Scope
 
-Devcontainer/Compose/Dockerfile/entrypoint wiring, guest prerequisite helpers,
-the host-run repository setup script, reference configuration and workspace
-documentation.
+The existing Mint Dev Container contract, a separate guest Compose runtime,
+shared Dockerfile and guest-specific entrypoint wiring, guest prerequisite
+helpers, the host-run repository setup script, reference configuration and
+workspace documentation.
 
 ### Non-goals
 
-No launch on the personal host, repository transfer, host package installation,
-firewall changes, hypervisor administration, GitHub operation, daily sync or
-publication command, or application service change.
+No launch on the personal host, conversion or retirement of the working Mint
+devcontainer, repository transfer, host package installation, firewall changes,
+hypervisor administration, GitHub operation, daily sync or publication command,
+or application service change.
 
 ### Required context
 
@@ -287,11 +298,15 @@ bootstrap instructions.
 
 ### Execution steps
 
-1. Remove the DinD feature and obsolete lock entry from the VM profile. Keep
-   the tool-image definition, but build it on the guest daemon; configure only
-   the guest Docker socket and guest host networking. Remove unnecessary
-   privileged mode/capabilities. Document that socket access still permits
-   complete guest administration.
+1. Preserve `.devcontainer/devcontainer.json`, its DinD feature lock and
+   `ai-agent-sandbox/docker-compose.yml` as the working Mint-hosted
+   implementation environment. Add the distinct guest runtime at
+   `ai-agent-sandbox/docker-compose.agent-vm.yml`; do not add a second VS Code
+   profile or describe it as a “VM profile.” Build the shared tool image on the
+   guest daemon, mount only the guest Docker socket and use guest host
+   networking. Do not use a DinD feature, privileged mode or unnecessary
+   capabilities in the guest runtime. Document that guest Docker-socket access
+   still permits complete guest administration.
 2. Mount the guest-local common working-clone parent into the agent at an
    identical path as seen by the guest Docker daemon so bind mounts resolve.
    Also mount the guest bare-repository parent read/write at its identical
@@ -300,14 +315,19 @@ bootstrap instructions.
    operator path. Allow agent startup before Kind exists, without a kubeconfig
    mount; after bootstrap, recreate the container with only the exact guest Kind
    kubeconfig mounted. Do not mount a personal-host workspace, home directory or
-   credential path. Adapt the entrypoint, launchers and hooks to the configured
-   working-clone parent, including AI Session Handler installation. Remove
-   automatic GitHub cloning and origin rewriting from guest startup; report
+   credential path. Add guest-specific entrypoint behavior, launchers and hooks
+   for the configured working-clone parent, including AI Session Handler
+   installation. Preserve the existing Mint devcontainer's startup contract.
+   Guest startup must not clone from GitHub or rewrite origins; it reports
    missing repositories instead.
-3. Disable credential, SSH-agent and GitHub-auth forwarding. Provide a Remote
-   SSH workflow in which the host UI connects to guest-local files while remote
-   extensions, terminals, tasks and language servers execute in the guest. Do
-   not require host Reopen in Container or automatic port forwarding.
+3. Disable credential, SSH-agent and GitHub-auth forwarding for the guest.
+   Provide a Remote SSH workflow in which the host UI connects to guest-local
+   files while remote extensions, terminals, tasks and language servers execute
+   in the guest. Make clear that the `Budget Analyzer VM` VS Code profile is
+   editor configuration only, whereas the guest agent container is started
+   from `docker-compose.agent-vm.yml`. Do not require Reopen in Container from
+   the Remote SSH window or automatic port forwarding. These guest rules do not
+   change how the existing Mint devcontainer hosts implementation agents.
 4. Add `scripts/setup-agent-vm-repositories.sh` implementing the plan-wide
    repository transport contract. Keep it host-run, interactive and limited to
    one-time discovery, VM bare/working repository creation, host `vm` remote
@@ -336,20 +356,25 @@ Guest host networking is deliberate: agent localhost reaches guest Kind,
 ingress and test ports while there is one Docker networking owner. Keep source,
 Git databases, Docker data, database volumes and build caches on guest disk.
 The setup script transfers committed Git objects, not host `.git` configuration,
-hooks, uncommitted files or credentials. Never silently launch this profile
-against the personal-host daemon. Do not implement host Docker/Kind state
-export, import, volume copy or application-data migration.
+hooks, uncommitted files or credentials. Never launch the guest Compose
+configuration against the personal-host daemon, and never select it implicitly
+from the existing Mint Dev Container configuration. Do not implement host
+Docker/Kind state export, import, volume copy or application-data migration.
 
-When authoring from the existing container, follow workspace instructions for
-staging edits to its read-only sandbox directory under `tmp/`; the human applies
-those reviewed files before committing the feature branch for Checkpoint A.
+When authoring from the existing Mint devcontainer, follow workspace
+instructions for staging edits to its read-only sandbox directory under `tmp/`;
+the human applies those reviewed files before committing the feature branch for
+Checkpoint A.
 
 ### Validation
 
-Render the effective Dev Container/Compose configuration, including feature
-metadata; check working/bare repository mounts, namespaces, absence of DinD,
-startup without kubeconfig and endpoint fallback. Check guest startup preserves
-local origins and resolves helper paths from the configured workspace root.
+Render the existing Mint Dev Container/Compose configuration and prove it still
+selects `ai-agent-sandbox/docker-compose.yml`, retains its required feature
+metadata and remains usable as the implementation runner. Separately render
+`docker-compose.agent-vm.yml`; check working/bare repository mounts,
+namespaces, guest Docker-socket selection, absence of DinD, startup without
+kubeconfig and endpoint fallback. Check guest startup preserves local origins
+and resolves helper paths from the configured workspace root.
 Test the setup script against disposable host/guest Git fixtures covering
 repository discovery, names with safe supported characters, initial `main`, a
 different current branch selected in the guest, partial rerun, mismatched `vm`
@@ -361,10 +386,12 @@ links and run `git diff --check`. Do not contact GitHub or a real VM.
 
 ### Completion criteria
 
-The operator can review and install a complete guest runtime and run one script
-to establish every selected ecosystem repository. Static and disposable-fixture
-checks pass, no GitHub or daily publication capability is introduced, and no
-live validation is claimed. Stop the invocation for manual Checkpoint A.
+The existing Mint devcontainer remains a working implementation runner. The
+operator can separately review and install the complete guest runtime and run
+one script to establish every selected ecosystem repository. Static and
+disposable-fixture checks pass, no GitHub or daily publication capability is
+introduced, and no live validation is claimed. Stop the invocation for manual
+Checkpoint A.
 
 ## Phase 3: Verify Repository Transport And Guest Runtime Isolation
 

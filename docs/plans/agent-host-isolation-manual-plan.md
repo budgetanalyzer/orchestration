@@ -1,9 +1,12 @@
 # Development VM Manual Setup Plan
 
-**Status:** Operator preparation is in progress. Step 4.1 is complete and the
-operator has reached Step 4.2; the discovered host firewall and Docker-network
-state is recorded there, but the host-isolation policy has not yet been
-installed or accepted.
+**Status:** Operator preparation is in progress. Steps 4.1 and 4.2 are complete.
+Step 4.3 is in progress: the host-address inventory is recorded, and the native
+IPv4 negative tests timed out for every inventoried non-loopback address. The
+guest has no route to the host Docker IPv6 ULA. The scoped IPv6 link-local
+test, Docker-path fixture test and required-traffic positive controls remain
+open. The persistent-rule listing for the later Checkpoint B reboot comparison
+has been captured.
 
 **Audience:** The human operating the personal Linux Mint workstation.
 
@@ -22,14 +25,16 @@ data or build caches in the VM. The guest creates fresh runtime state from the
 reviewed configuration. Only committed Git objects and the approved
 browser-trusted development TLS files cross from host to guest.
 
-Work on feature branches. While setting up the VM, you can check out `main`
-in the affected host repositories and rebuild the existing Docker workspace
-to use an agent there. Once the guest agent works, preserving the old setup is
-unnecessary. Do not create a saved-image or runtime fallback. The one retirement
-step is Checkpoint C, after every implementation phase and Checkpoint B have
-finished: uninstall Mint Docker, remove its runtime state and remove the
-temporary Docker-specific firewall integration. Do not begin that cutover while
-an implementation agent still depends on host Docker.
+Work on feature branches. The existing Mint-hosted workspace devcontainer is
+the implementation runner for Phases 1–6. It is the currently working container
+defined by sibling workspace `.devcontainer/devcontainer.json` and
+`ai-agent-sandbox/docker-compose.yml`; keep it available through Checkpoint B.
+The guest agent container is a separate target runtime, not a replacement for
+the implementation runner during those phases. Do not create a saved-image or
+runtime fallback. The one retirement step is Checkpoint C, after every
+implementation phase and Checkpoint B have finished: close the Mint-hosted
+devcontainer, uninstall Mint Docker, remove its runtime state and remove the
+temporary Docker-specific firewall integration.
 
 ## How To Use This Checklist
 
@@ -40,6 +45,20 @@ Run commands only in the environment named immediately above the code block:
 - **Guest console** means virt-manager's console for the new VM.
 - **Guest SSH session** means a terminal reached through the dedicated SSH
   alias created in Step 3.
+
+Container and editor terms are deliberately distinct:
+
+- **Existing Mint devcontainer** means the working agent environment hosted by
+  Mint Docker. It runs the AI Session Handler implementation phases.
+- **Guest agent container** means the separate guest-Docker configuration that
+  implementation Phase 2 adds at
+  `../workspace/ai-agent-sandbox/docker-compose.agent-vm.yml`. It is launched
+  during Checkpoint A for guest bootstrap, validation and eventual daily use.
+- **`Budget Analyzer VM` VS Code profile** means only the host editor settings
+  and extension selection used for Remote SSH. It is not a Docker or Dev
+  Container configuration.
+
+There is no object called a “Mint profile” or “VM profile” in this plan.
 
 Do not copy a leading `$` or substitute commands from an agent container. A
 checkbox is complete only when its stated success evidence is visible. Save a
@@ -79,9 +98,11 @@ disk under a repository path, disabled confinement or an active port conflict.
 | Guest | Ubuntu Server 24.04 LTS, x86-64 |
 | Initial resources | 8 vCPUs, 24 GiB RAM, 200 GiB sparse guest disk; verify actual free space |
 | Source files | Guest-local bare repositories and working clones; no shared host workspace |
-| Editor | Native host VS Code UI using Remote SSH; execution and files remain in guest |
+| Guest editor | Native host VS Code UI using Remote SSH; guest files, terminals and extensions remain in the VM |
 | Browser | Dedicated development profile on the personal host |
 | Runtime | Keep Mint Docker through implementation and Checkpoint B; final state is one fresh guest Docker daemon |
+| Implementation runner | Existing Mint-hosted workspace devcontainer through Phases 1–6 |
+| Guest agent runtime | Separate `docker-compose.agent-vm.yml` configuration created in Phase 2 |
 | Repository transfer | Explicit host-initiated Git push/fetch over SSH through a `vm` remote |
 | GitHub authority | Host only; no guest GitHub write credential or authenticated GitHub browser |
 | Browser URL | `https://app.budgetanalyzer.localhost`, through host-loopback forwarding |
@@ -873,7 +894,7 @@ sudo iptables-legacy -S
 sudo ip6tables-legacy -S
 ```
 
-- [ ] Review the recorded listener and legacy-table inventory. Deliberately
+- [x] Review the recorded listener and legacy-table inventory. Deliberately
   adopt UFW as the workstation's ongoing host-input firewall, not as a
   temporary way to pass this checklist. Enabling it applies the default-deny
   input policy across the host. Loopback-only editor, printing, VNC and SSH
@@ -883,7 +904,7 @@ sudo ip6tables-legacy -S
 
 #### Adopt UFW For Native Host Input
 
-- [ ] Re-resolve and validate the bridge in the same terminal, add the rules
+- [x] Re-resolve and validate the bridge in the same terminal, add the rules
   while UFW is inactive, review the stored rules, and then enable UFW. These
   rules permit only DHCP and DNS requests to libvirt's host-side service and
   deny other guest-to-host input. UFW's established/related handling preserves
@@ -900,13 +921,13 @@ test "$VM_BRIDGE" = 'virbr1'
 BRIDGE_IPV4='192.168.231.1'
 ip -4 address show dev "$VM_BRIDGE" | rg -F "$BRIDGE_IPV4/24"
 
-sudo ufw insert 1 deny in on "$VM_BRIDGE" comment 'deny agent VM to host'
+sudo ufw prepend deny in on "$VM_BRIDGE" comment 'deny agent VM to host'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto tcp \
   from any to "$BRIDGE_IPV4" port 53 comment 'agent VM DNS TCP'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto udp \
   from any to "$BRIDGE_IPV4" port 53 comment 'agent VM DNS UDP'
 sudo ufw insert 1 allow in on "$VM_BRIDGE" proto udp \
-  from any port 68 to any port 67 comment 'agent VM DHCP'
+  from 0.0.0.0/0 port 68 to 0.0.0.0/0 port 67 comment 'agent VM DHCP'
 
 sudo ufw show added
 sudo ufw --force enable
@@ -914,13 +935,16 @@ sudo ufw status verbose
 sudo ufw status numbered
 ```
 
-  Confirm the three narrow allows appear before the bridge-wide deny, an
-  equivalent IPv6 bridge-wide deny is present, UFW reports active and IPv6
-  support remains enabled. UFW's packaged IPv6 pre-rules must retain essential
-  neighbor discovery; do not add an IPv6 application allow for the guest. If
-  activation changes an unrelated host service that the operator requires,
-  stop and review a narrowly scoped allow; do not disable the boundary or add a
-  broad allow on `virbr1`.
+  `prepend` is required when the initial UFW user ruleset is empty; `insert 1`
+  has no valid target position in that state. The explicit IPv4 wildcard on the
+  DHCP rule prevents UFW from generating an irrelevant UDP 68-to-67 IPv6 rule.
+  Confirm the three narrow IPv4 allows appear before the IPv4 bridge-wide deny,
+  the only IPv6 user rule is the equivalent bridge-wide deny, UFW reports
+  active and IPv6 support remains enabled. UFW's packaged IPv6 pre-rules must
+  retain essential neighbor discovery; do not add an IPv6 application allow
+  for the guest. If activation changes an unrelated host service that the
+  operator requires, stop and review a narrowly scoped allow; do not disable
+  the boundary or add a broad allow on `virbr1`.
 
 #### Persist Docker Forward-Path Isolation
 
@@ -944,7 +968,7 @@ Checkpoint B. Remove it only in Checkpoint C after Mint Docker has been stopped
 and uninstalled. The permanent UFW rules protecting native Mint input on
 `virbr1` remain after that cleanup.
 
-- [ ] Use a host editor to create
+- [x] Use a host editor to create
   `/usr/local/sbin/agent-vm-docker-isolation` with the exact reviewed content
   below. The `br-+` spelling is the `iptables` interface-prefix match and covers
   the current Kind bridge plus future Docker-generated bridge names.
@@ -989,7 +1013,7 @@ sudo sh -n /usr/local/sbin/agent-vm-docker-isolation
 sudo shellcheck /usr/local/sbin/agent-vm-docker-isolation
 ```
 
-- [ ] Make the helper run after every Docker start. Create the systemd drop-in
+- [x] Make the helper run after every Docker start. Create the systemd drop-in
   directory first:
 
 **Mint host terminal:**
@@ -1019,7 +1043,7 @@ sudo systemd-analyze verify docker.service
 sudo systemctl cat docker.service
 ```
 
-- [ ] Make UFW reloads reapply the same Docker rules. First inspect whether a
+- [x] Make UFW reloads reapply the same Docker rules. First inspect whether a
   local customization already exists:
 
 **Mint host terminal:**
@@ -1058,7 +1082,7 @@ sudo sh -n /etc/ufw/after.init
 sudo shellcheck /etc/ufw/after.init
 ```
 
-- [ ] Apply the Docker rules without restarting the currently running Docker
+- [x] Apply the Docker rules without restarting the currently running Docker
   workloads, reload UFW to exercise its persistence hook, and inspect both
   address families. Do not use `iptables-save`/`netfilter-persistent` to save
   Docker- or libvirt-generated rules.
@@ -1078,6 +1102,14 @@ sudo ip6tables -S DOCKER-USER
   uses an explicitly named bridge that does not match `docker0` or `br-+`, add
   that exact output interface to the reviewed helper before using the network.
 
+  Recorded result: the packaged `/etc/ufw/after.init` placeholder was retained
+  and its `start)` branch was extended with the reviewed helper call. After a
+  UFW reload, both the IPv4 and IPv6 `DOCKER-USER` chains contained exactly one
+  new-connection reject for `virbr1` to `docker0` and one for `virbr1` to
+  `br-+`. Re-running the helper did not add duplicates. The expected warnings
+  about separately present legacy tables remained informational; the installed
+  policy uses the active `iptables-nft` compatibility backend.
+
 | Traffic | Required behavior |
 | --- | --- |
 | New host-to-guest connections | Permit operator SSH, Git transfer and application access |
@@ -1089,7 +1121,7 @@ sudo ip6tables -S DOCKER-USER
 
 ### 4.3 Run Positive And Negative Boundary Tests
 
-- [ ] Inventory every address assigned to the host, including the libvirt
+- [x] Inventory every address assigned to the host, including the libvirt
   bridge, LAN/Wi-Fi, VPN, Docker bridges and IPv6 link-local addresses:
 
 **Mint host terminal:**
@@ -1101,6 +1133,13 @@ ip -brief -6 address show
 
   Build a test list from these results. This checks host destinations only; it
   does not claim to isolate the guest from other LAN or VPN devices.
+
+  Recorded inventory: IPv4 addresses were `192.168.50.178` on `wlp0s20f3`,
+  `192.168.231.1` on `virbr1`, `192.168.122.1` on down `virbr0`, `172.17.0.1`
+  on down `docker0`, and `172.18.0.1` on `br-77a017d8bb5e`. `virbr1` had no
+  IPv6 address. The Docker bridge had `fc00:f853:ccd:e793::1/64`; host
+  link-local addresses were also recorded for Wi-Fi, the Docker bridge, its
+  veth and `vnet0`.
 
 - [ ] Start a temporary empty fixture on an unused host port. Keep this terminal
   open and stop it with `Ctrl+C` after the tests.
@@ -1131,7 +1170,7 @@ sudo ss -ltnp '( sport = :18081 )'
   The host curl must succeed and `ss` must show the Python fixture. The empty
   directory prevents accidental exposure of personal files.
 
-- [ ] From the guest, attempt the fixture against every relevant host IPv4
+- [x] From the guest, attempt the fixture against every relevant host IPv4
   address recorded above. Replace `<host-ipv4>` each time; do not test only the
   libvirt gateway.
 
@@ -1142,13 +1181,23 @@ nc -4 -vz -w 3 <host-ipv4> 18080
 ```
 
   Every guest attempt must fail by rejection or timeout. A connection success
-  is a failed boundary and must be fixed before continuing. When the host has an
-  IPv6 address reachable on the VM link, run the equivalent scoped test against
-  the proven IPv6 fixture and require failure:
+  is a failed boundary and must be fixed before continuing.
+
+  Recorded result: from guest interface `enp1s0` at `192.168.231.10`, attempts
+  to all five inventoried non-loopback IPv4 addresses timed out.
+
+- [ ] When the host has an IPv6 address reachable on the VM link, run the
+  equivalent scoped test against the proven IPv6 fixture and require failure:
 
 ```bash
 nc -6 -vz -w 3 '<host-ipv6>%<guest-interface>' 18081
 ```
+
+  Recorded partial result: the guest reported `Network is unreachable` for
+  `fc00:f853:ccd:e793::1`, so do not add a route merely to manufacture that
+  test. The current scoped candidate is the host-side `vnet0` link-local
+  address `fe80::fc54:ff:fed9:c270`; test it from guest interface `enp1s0`
+  while the proven IPv6 fixture is running.
 
 - [ ] Test the Docker path with a disposable HTTP container using a reviewed
   digest-pinned image, no host mounts and unused published port 18082. Bind it
@@ -1180,7 +1229,7 @@ ssh budget-agent-vm 'printf "host-to-guest SSH works\n"'
   Stop both fixture servers with `Ctrl+C`, then remove the two empty temporary
   directories shown in their shell variables with `rmdir`.
 
-- [ ] Keep the persistent-rule listing for Checkpoint B, which performs the
+- [x] Keep the persistent-rule listing for Checkpoint B, which performs the
   host-reboot check once after the complete runtime is installed:
 
 **Mint host terminal:**
@@ -1196,6 +1245,15 @@ virsh --connect qemu:///system net-info agent-nat
   Success means the ordered UFW rules and four Docker bridge rejects remain
   present, the Docker service includes the reviewed `ExecStartPost`, and
   `agent-nat` is active.
+
+  Recorded result: UFW was active with the IPv4 DHCP and two DNS allows ordered
+  before the IPv4 `virbr1` deny, followed by only the equivalent IPv6 `virbr1`
+  deny. Each `DOCKER-USER` chain contained exactly one reject from `virbr1` to
+  `br-+` and one to `docker0`, with no duplicates. `systemctl cat` showed
+  `/etc/systemd/system/docker.service.d/agent-vm-isolation.conf` and its
+  `ExecStartPost=/usr/local/sbin/agent-vm-docker-isolation`. The `agent-nat`
+  network was active, persistent and configured to autostart on `virbr1`. The
+  legacy-table notices remained the previously reviewed informational warnings.
 
 The commands above are specific to the recorded Mint/UFW, libvirt and
 Docker-`iptables-nft` configuration. Re-run discovery and review this section
@@ -1448,10 +1506,15 @@ Provide a redacted handoff for
 `docs/plans/agent-host-isolation-acceptance.md` during Phase 1. Do not include
 credentials, private keys, browser state or unrelated host configuration.
 
-**Handoff:** Run implementation Phases 1–2 only. They prepare guest
-configuration, `scripts/setup-agent-vm-repositories.sh`, and exact bootstrap
-commands. Do not reopen the existing workspace devcontainer in the guest
-unchanged; it would bring back DinD and the old mount assumptions.
+**Handoff:** From the existing Mint-hosted workspace devcontainer, run
+implementation Phases 1–2 only. Keep that devcontainer running and usable; it
+remains the implementation runner through Phase 6. These phases add the
+separate guest configuration
+`ai-agent-sandbox/docker-compose.agent-vm.yml`,
+`scripts/setup-agent-vm-repositories.sh`, and exact bootstrap commands. Do not
+copy or launch the existing Mint devcontainer configuration in the guest: its
+DinD feature and host-workspace mount assumptions belong to the transitional
+Mint environment, not the guest target.
 
 ## Checkpoint A: Set Up Repositories And Bootstrap The Guest
 
@@ -1715,15 +1778,18 @@ npm --version
   `orchestration`, `workspace` and `ext-authz`. Stop on a missing prerequisite;
   do not compensate in orchestration for a service-owned failure.
 
-- [ ] Build and start the reviewed agent container now, before Kind or Tilt.
-  Use only the guest Docker socket and guest working/bare repository mounts.
-  The initial launch omits the kubeconfig mount because Kind does not exist
-  yet. Follow Phase 2's launch instructions and authenticate the chosen agent
-  provider directly in the guest container, without GitHub credentials or host
-  credential forwarding. Ask the agent to read a guest repository file and
-  require a successful response. The guest agent can now help diagnose the
-  remaining bootstrap; continued availability of the old workspace is not a
-  completion requirement.
+- [ ] Build and start the reviewed guest agent container now, before Kind or
+  Tilt, using Phase 2's separate
+  `ai-agent-sandbox/docker-compose.agent-vm.yml` instructions. Use only the
+  guest Docker socket and guest working/bare repository mounts. The initial
+  launch omits the kubeconfig mount because Kind does not exist yet.
+  Authenticate the chosen agent provider directly in the guest container,
+  without GitHub credentials or host credential forwarding. Ask the guest
+  agent to read a guest repository file and require a successful response. This
+  proves the target runtime and makes an agent available for guest bootstrap
+  diagnosis; it does not move the Phase 1–6 implementation workflow out of the
+  existing Mint devcontainer. Keep that Mint devcontainer available through
+  Phase 6 and Checkpoint B.
 
 - [ ] From the guest orchestration working clone—not from the agent container—run
   the newly documented guest bootstrap command and select the copied ingress

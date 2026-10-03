@@ -2073,9 +2073,96 @@ docker ps --format 'table {{.Names}}\t{{.Status}}'
   a loopback Kubernetes API URL, and a Ready `kind-control-plane` node.
 
 - [ ] Recreate the agent container with the exact newly generated guest Kind
-  kubeconfig mounted, using Phase 2's instructions; authenticate again if
-  necessary. Start Tilt from the human-operated guest shell and wait for its
-  required resources, using the agent to diagnose failures:
+  kubeconfig mounted. The agent container is the long-running `agent` service
+  created by the guest Docker daemon; it is not a Kubernetes pod or another
+  VM. The base container started earlier can use the guest repositories and
+  Docker socket, but it deliberately started before Kind existed and therefore
+  has no kubeconfig. Docker cannot add a mount to an existing container, so
+  replace that container with the same service plus Phase 2's read-only
+  kubeconfig override.
+
+  Resolve the guest user's newly generated kubeconfig and write its exact
+  absolute path to the existing ignored runtime environment file. Do not use a
+  literal `~`, copy a host kubeconfig or recreate `agent-vm.env`.
+
+**Guest SSH session:**
+
+```bash
+kubeconfig_path=$(realpath "$HOME/.kube/config")
+printf '%s\n' "$kubeconfig_path"
+test -f "$kubeconfig_path"
+
+cd /srv/budget-analyzer/worktrees/workspace/ai-agent-sandbox
+sed -i \
+  "s|^AGENT_VM_KUBECONFIG=.*$|AGENT_VM_KUBECONFIG=$kubeconfig_path|" \
+  agent-vm.env
+grep -Fx "AGENT_VM_KUBECONFIG=$kubeconfig_path" agent-vm.env
+```
+
+  Define a new Compose command that includes both the base file and the
+  kubeconfig override. Shell arrays do not survive a new SSH session, so do
+  not rely on the earlier `compose` array. Render and review the combined
+  configuration before replacing the service:
+
+```bash
+compose_kube=(
+  docker compose --env-file agent-vm.env
+  -f docker-compose.agent-vm.yml
+  -f docker-compose.agent-vm-kubeconfig.yml
+)
+
+declare -p compose_kube
+"${compose_kube[@]}" config
+"${compose_kube[@]}" up -d --force-recreate
+"${compose_kube[@]}" ps
+```
+
+  The combined render must preserve the base service's guest-local repository
+  and Docker-socket mounts and add only the exact guest kubeconfig at
+  `/home/vscode/.kube/config` with `read_only: true`. Recreating the service
+  preserves the named AI-provider configuration volumes and does not recreate
+  Kind or delete repositories. Prove the source path and read-only setting,
+  then prove the container selects only the guest-local cluster:
+
+```bash
+agent_id=$("${compose_kube[@]}" ps -q agent)
+test -n "$agent_id"
+test "$(docker inspect --format \
+  '{{range .Mounts}}{{if eq .Destination "/home/vscode/.kube/config"}}{{println .Source "|" .Destination "|" .RW}}{{end}}{{end}}' \
+  "$agent_id" | sed 's/ | /|/g')" = \
+  "$kubeconfig_path|/home/vscode/.kube/config|false"
+
+"${compose_kube[@]}" exec -T agent bash -lc '
+  set -euo pipefail
+  test "$KUBECONFIG" = /home/vscode/.kube/config
+  test -r "$KUBECONFIG"
+  test "$(kubectl config current-context)" = kind-kind
+  cluster_name=$(kubectl config view --minify \
+    -o jsonpath="{.clusters[0].name}")
+  test "$cluster_name" = kind-kind
+  api_server=$(kubectl config view --minify \
+    -o jsonpath="{.clusters[0].cluster.server}")
+  printf "%s\n" "$api_server"
+  printf "%s\n" "$api_server" | \
+    grep -Eq "^https://(127\\.0\\.0\\.1|localhost|\\[::1\\]):[0-9]+$"
+  kubectl wait --for=condition=Ready node/kind-control-plane --timeout=60s
+'
+```
+
+  If the selected AI provider reports that authentication is missing, repeat
+  only that provider's login command. Its configuration should normally
+  survive recreation in the guest-Docker named volume. For the selected Codex
+  provider, the recovery command is:
+
+```bash
+"${compose_kube[@]}" exec agent codex login
+```
+
+  Start Tilt from the human-operated guest shell, not from the agent container.
+  Keep this first guest terminal open because `tilt up` remains in the
+  foreground:
+
+**Guest SSH terminal 1:**
 
 ```bash
 cd /srv/budget-analyzer/worktrees/orchestration
@@ -2083,14 +2170,35 @@ cd /srv/budget-analyzer/worktrees/orchestration
 tilt up
 ```
 
-  Keep `tilt up` running, then use another guest shell to run:
+  Use a second guest shell to wait for required Tilt resources and Kubernetes
+  pods to become healthy and to confirm a guest-local ingress listener:
 
-**Guest SSH session:**
+**Guest SSH terminal 2:**
 
 ```bash
 tilt get uiresources
 kubectl get pods -A
 sudo ss -ltnp '( sport = :443 )'
+```
+
+  If startup fails, launch the selected provider inside the agent container so
+  it can inspect the guest-local repositories, Docker daemon, Tilt state and
+  `kind-kind` cluster. For Codex, use a third guest shell and start it in the
+  orchestration working clone:
+
+**Guest SSH terminal 3, only when diagnosis is needed:**
+
+```bash
+cd /srv/budget-analyzer/worktrees/workspace/ai-agent-sandbox
+compose_kube=(
+  docker compose --env-file agent-vm.env
+  -f docker-compose.agent-vm.yml
+  -f docker-compose.agent-vm-kubeconfig.yml
+)
+"${compose_kube[@]}" exec agent bash -lc '
+  cd /srv/budget-analyzer/worktrees/orchestration
+  exec codex
+'
 ```
 
   Require healthy Tilt resources/pods and a guest-local ingress listener. The

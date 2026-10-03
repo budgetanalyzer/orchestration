@@ -1,12 +1,9 @@
 # Development VM Manual Setup Plan
 
-**Status:** Operator preparation is in progress. Steps 4.1 and 4.2 are complete.
-Step 4.3 is in progress: the host-address inventory is recorded, and the native
-IPv4 negative tests timed out for every inventoried non-loopback address. The
-guest has no route to the host Docker IPv6 ULA. The scoped IPv6 link-local
-test, Docker-path fixture test and required-traffic positive controls remain
-open. The persistent-rule listing for the later Checkpoint B reboot comparison
-has been captured.
+**Status:** Operator preparation Steps 1–5 and the Initial Handoff were
+completed and verified by the operator on 2026-10-03. The post-implementation
+Checkpoints A–C remain pending and must not be treated as completed by this
+preparation status.
 
 **Audience:** The human operating the personal Linux Mint workstation.
 
@@ -114,7 +111,7 @@ copying outside Git.
 
 ## Step 1: Check Host And Source Prerequisites
 
-- [ ] Back up important host repositories, including uncommitted and untracked
+- [x] Back up important host repositories, including uncommitted and untracked
   work. A remote branch is not a backup of uncommitted files. For every
   repository that will enter the VM, run the following from its host checkout
   and review the output:
@@ -132,7 +129,7 @@ git rev-parse --show-toplevel
   branch is named in the handoff. This protects source work; it is not a runtime
   migration step.
 
-- [ ] Check whether host ports 80 or 443 are currently in use:
+- [x] Check whether host ports 80 or 443 are currently in use:
 
 **Mint host terminal:**
 
@@ -144,7 +141,7 @@ sudo ss -ltnp '( sport = :80 or sport = :443 )'
   stop it at Checkpoint B. Leave it running during initial setup; the preliminary
   forwarding test uses port 8443. No runtime data needs to be copied or retained.
 
-- [ ] Confirm free RAM/disk, hardware virtualization and the current firewall
+- [x] Confirm free RAM/disk, hardware virtualization and the current firewall
   manager. Run these read-only commands on Mint:
 
 ```bash
@@ -174,7 +171,7 @@ sudo nft list ruleset
     Do not enable, disable or flush anything yet; Step 4 owns the reviewed
     adoption path when no manager is active.
 
-- [ ] Confirm each ecosystem repository that should enter the VM is an immediate
+- [x] Confirm each ecosystem repository that should enter the VM is an immediate
   child of one common parent, has a local `main` branch and has no operation in
   progress. For each selected repository, run:
 
@@ -192,7 +189,7 @@ test ! -d "$(git rev-parse --git-path rebase-apply)"
   the time Checkpoint A runs, and no merge/rebase operation may be active.
   Private repositories remain on the host until the reviewed setup script
   transfers committed Git objects to the VM.
-- [ ] Decide which current checked-out branch, if different from `main`, should
+- [x] Decide which current checked-out branch, if different from `main`, should
   be seeded for each repository. The setup script will print the discovered set
   and require confirmation; move unrelated repositories outside the selected
   parent or decline the run.
@@ -209,7 +206,7 @@ virtualization.
 
 ### 2.1 Install And Validate KVM/libvirt
 
-- [ ] Install the distribution packages on Mint:
+- [x] Install the distribution packages on Mint:
 
 **Mint host terminal:**
 
@@ -219,7 +216,7 @@ sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients virt-manager ovm
   gnupg ripgrep shellcheck
 ```
 
-- [ ] Start the packaged libvirt system service and run its host validator:
+- [x] Start the packaged libvirt system service and run its host validator:
 
 **Mint host terminal:**
 
@@ -238,7 +235,7 @@ virsh --connect qemu:///system list --all
   blockers because this VM uses neither device passthrough nor confidential-VM
   features; do not dismiss a KVM, QEMU or confinement failure as optional.
 
-- [ ] Open **Menu → Administration → Virtual Machine Manager**. In virt-manager:
+- [x] Open **Menu → Administration → Virtual Machine Manager**. In virt-manager:
 
   1. Select **File → Add Connection** if no connection is shown.
   2. Choose **QEMU/KVM** as the hypervisor.
@@ -269,7 +266,7 @@ virsh --connect qemu:///system list --all
 
 ### 2.2 Download And Verify Ubuntu Server
 
-- [ ] In a host browser, open the official
+- [x] In a host browser, open the official
   [Ubuntu 24.04 LTS release directory](https://releases.ubuntu.com/24.04/).
   Download all three files from the same directory:
 
@@ -280,7 +277,7 @@ virsh --connect qemu:///system list --all
   Do not use a search-result mirror, a daily build, a desktop ISO or a file for
   another CPU architecture.
 
-- [ ] Put the three files in one otherwise empty directory, then verify the
+- [x] Put the three files in one otherwise empty directory, then verify the
   signature and ISO checksum. The Ubuntu CD Image signing key fingerprint is
   `8439 38DF 228D 22F7 B374 2BC0 D94A A3F0 EFE2 1092`; independently compare it
   with Ubuntu's current
@@ -316,7 +313,7 @@ sha256sum ubuntu-24.04*-live-server-amd64.iso
 
 ### 2.3 Select And Create A Non-Overlapping NAT Network
 
-- [ ] Inventory every currently active host, Docker, libvirt and VPN route:
+- [x] Inventory every currently active host, Docker, libvirt and VPN route:
 
 **Mint host terminal:**
 
@@ -333,13 +330,13 @@ virsh --connect qemu:///system net-list --all
   If Docker has no networks, its inspect command may print its usage text; that
   does not invalidate the other checks.
 
-- [ ] Choose one unused RFC1918 `/24` for the dedicated VM network. For example,
+- [x] Choose one unused RFC1918 `/24` for the dedicated VM network. For example,
   `192.168.231.0/24` is acceptable only if no route, Docker/Kind network,
   libvirt network or VPN route contains or overlaps it. Record the selected
   network, gateway (normally `.1`) and DHCP range. Recheck after connecting any
   VPN used during development.
 
-- [ ] In virt-manager, create the network:
+- [x] In virt-manager, create the network:
 
   1. Select the `qemu:///system` connection.
   2. Open **Edit → Connection Details → Virtual Networks**.
@@ -365,7 +362,7 @@ virsh --connect qemu:///system net-dumpxml agent-nat
 
 ### 2.4 Create The VM In virt-manager
 
-- [ ] Confirm the installed UI version and that `/data` is the mounted backing
+- [x] Confirm the installed UI version and that `/data` is the mounted backing
   filesystem rather than an ordinary directory on the root filesystem:
 
 **Mint host terminal:**
@@ -383,7 +380,7 @@ df -h /data/libvirt/agent-vm-images
   labels below describe the 4.1.x UI; record the installed version if a newer
   package changes a label.
 
-- [ ] If a previous installation attempt created a VM named
+- [x] If a previous installation attempt created a VM named
   `budget-analyzer-agent`, remove that failed definition before retrying. In the
   main virt-manager window, right-click the stopped VM and select **Delete**.
   Leave **Delete associated storage files** unselected. In the storage-pool
@@ -391,7 +388,7 @@ df -h /data/libvirt/agent-vm-images
   `budget-analyzer-agent.qcow2`; do not remove the pool directory or installer
   ISO. If the VM name is absent, continue without doing anything.
 
-- [ ] Create or verify the dedicated system storage pool before creating the
+- [x] Create or verify the dedicated system storage pool before creating the
   VM. These labels match virt-manager 4.1.x, the Ubuntu 24.04 package used by
   Linux Mint 22.1:
 
@@ -420,7 +417,7 @@ virsh --connect qemu:///system pool-path agent-vm-images
   Success means the pool is active, autostarts and its canonical path is exactly
   `/data/libvirt/agent-vm-images`, outside all repository trees.
 
-- [ ] Copy the already verified public installer ISO into that pool so normal
+- [x] Copy the already verified public installer ISO into that pool so normal
   libvirt/AppArmor access applies. Replace `<iso-filename>` with the exact file
   that passed Step 2.2:
 
@@ -437,7 +434,7 @@ virsh --connect qemu:///system vol-list agent-vm-images
   The volume list must show the ISO. Do not loosen home-directory permissions or
   disable AppArmor to make a system VM read an ISO from `Downloads`.
 
-- [ ] Create the virtual-disk volume before opening the New VM wizard. This
+- [x] Create the virtual-disk volume before opening the New VM wizard. This
   makes the pool directory and the disk file impossible to confuse:
 
   1. Return to **Edit → Connection Details → Storage** and select the
@@ -474,7 +471,7 @@ sudo qemu-img info \
   qcow2`. Stop if `qemu-img` reports `raw`, if the path is the pool directory,
   or if the full 200 GiB was allocated.
 
-- [ ] Create the VM and explicitly select the two previously created file
+- [x] Create the VM and explicitly select the two previously created file
   volumes:
 
   1. Close **Connection Details**, select **File → New Virtual Machine**, choose
@@ -503,7 +500,7 @@ sudo qemu-img info \
      network selection, and select **Finish**. Do not select a host bridge,
      macvtap or direct attachment.
 
-- [ ] In **Customize configuration**, check every relevant device before
+- [x] In **Customize configuration**, check every relevant device before
   starting the VM:
 
   1. In **Overview**, keep **KVM** virtualization, the normal QEMU emulator,
@@ -527,7 +524,7 @@ sudo qemu-img info \
   7. Recheck the disk and CD-ROM source paths, then select **Begin
      Installation**.
 
-- [ ] While the installer is running, verify the disk location from another
+- [x] While the installer is running, verify the disk location from another
   host terminal:
 
 **Mint host terminal:**
@@ -551,7 +548,7 @@ virsh --connect qemu:///system dumpxml budget-analyzer-agent | \
 
 ### 2.5 Install And Update The Guest
 
-- [ ] Complete the Ubuntu installer from virt-manager's console:
+- [x] Complete the Ubuntu installer from virt-manager's console:
 
   1. Choose the required language and keyboard layout.
   2. Choose the standard **Ubuntu Server** installation, not a minimized or
@@ -571,7 +568,7 @@ virsh --connect qemu:///system dumpxml budget-analyzer-agent | \
   8. Select no featured server snaps. Finish installation, reboot and allow
      virt-manager to disconnect the ISO when prompted.
 
-- [ ] Log in through the virt-manager console first and install updates and the
+- [x] Log in through the virt-manager console first and install updates and the
   minimal Step 2 tools:
 
 **Guest console:**
@@ -603,7 +600,7 @@ df -h /
   24.04 LTS, SSH is active, the guest has an address on `agent-nat`, its default
   route uses that network, and the root filesystem reflects the virtual disk.
 
-- [ ] Reserve the selected stable guest address so the SSH aliases do not
+- [x] Reserve the selected stable guest address so the SSH aliases do not
   silently point at a different DHCP client later. `192.168.231.10` is inside
   the selected `192.168.231.0/24` subnet, avoids the `192.168.231.1` gateway,
   and is outside the dynamic DHCP range `192.168.231.128` through
@@ -628,7 +625,7 @@ virsh --connect qemu:///system net-dumpxml agent-nat
 
 ### 2.6 Prove Confinement And The Absence Of Host Integration
 
-- [ ] With the VM running, perform these read-only host checks:
+- [x] With the VM running, perform these read-only host checks:
 
 **Mint host terminal:**
 
@@ -645,7 +642,7 @@ sudo qemu-img info --force-share "$(virsh --connect qemu:///system domblklist bu
   a 200 GiB virtual size. Do not switch QEMU to an unconfined profile to fix an
   access problem.
 
-- [ ] Confirm from the guest that host authority did not enter it:
+- [x] Confirm from the guest that host authority did not enter it:
 
 **Guest console:**
 
@@ -678,7 +675,7 @@ details. Do not disable confinement to fix a permission issue.
 
 ### 3.1 Reserve Guest-Local Storage
 
-- [ ] Use `/srv/budget-analyzer` as the guest-local project root unless the VM
+- [x] Use `/srv/budget-analyzer` as the guest-local project root unless the VM
   has a separately reviewed guest disk. Create only the parent locations now;
   do not create per-repository bare repositories or working clones before the
   Phase 2 setup script exists.
@@ -705,7 +702,7 @@ findmnt --target /srv/budget-analyzer
 
 ### 3.2 Establish A Dedicated Host-To-Guest SSH Identity
 
-- [ ] Find and record the guest's DHCP address and SSH host-key fingerprint.
+- [x] Find and record the guest's DHCP address and SSH host-key fingerprint.
 
 **Guest console:**
 
@@ -724,7 +721,7 @@ virsh --connect qemu:///system net-dhcp-leases agent-nat
   selected subnet. Keep the console-displayed ED25519 fingerprint visible for
   the first SSH connection.
 
-- [ ] Create a key used only for this VM. Accept the proposed filename below;
+- [x] Create a key used only for this VM. Accept the proposed filename below;
   use a passphrase stored by the human, but do not add the key to a forwarded
   agent.
 
@@ -736,7 +733,7 @@ ssh-keygen -t ed25519 -a 100 \
   -C 'budget-analyzer-agent host-to-guest'
 ```
 
-- [ ] Copy only the public key. Replace `<guest-user>` and `<guest-ip>` with the
+- [x] Copy only the public key. Replace `<guest-user>` and `<guest-ip>` with the
   guest-only account and DHCP address. At the first-connect prompt, compare the
   displayed ED25519 fingerprint character-for-character with the one read from
   the guest console before answering `yes`.
@@ -753,7 +750,7 @@ ssh-copy-id -i "$HOME/.ssh/budget-analyzer-agent-vm.pub" \
   copy a host private key, `known_hosts`, SSH agent socket or `.ssh` directory
   into the guest.
 
-- [ ] Open `~/.ssh/config` on Mint in a host editor and add the following two
+- [x] Open `~/.ssh/config` on Mint in a host editor and add the following two
   aliases, replacing the two placeholders. The second alias exists only for an
   explicit loopback forward; neither alias permits agent or X11 forwarding.
 
@@ -794,7 +791,7 @@ ssh budget-agent-vm 'hostname; test -z "${SSH_AUTH_SOCK:-}"'
 
 ### 3.3 Create A Dedicated VS Code Remote Profile
 
-- [ ] On Mint, install the Microsoft **Remote - SSH** extension in the local VS
+- [x] On Mint, install the Microsoft **Remote - SSH** extension in the local VS
   Code UI if it is not already installed. Then:
 
   1. Select **Manage (gear) → Profiles → Create Profile**.
@@ -1141,7 +1138,7 @@ ip -brief -6 address show
   link-local addresses were also recorded for Wi-Fi, the Docker bridge, its
   veth and `vnet0`.
 
-- [ ] Start a temporary empty fixture on an unused host port. Keep this terminal
+- [x] Start a temporary empty fixture on an unused host port. Keep this terminal
   open and stop it with `Ctrl+C` after the tests.
 
 **Mint host terminal 1:**
@@ -1186,7 +1183,7 @@ nc -4 -vz -w 3 <host-ipv4> 18080
   Recorded result: from guest interface `enp1s0` at `192.168.231.10`, attempts
   to all five inventoried non-loopback IPv4 addresses timed out.
 
-- [ ] When the host has an IPv6 address reachable on the VM link, run the
+- [x] When the host has an IPv6 address reachable on the VM link, run the
   equivalent scoped test against the proven IPv6 fixture and require failure:
 
 ```bash
@@ -1199,7 +1196,7 @@ nc -6 -vz -w 3 '<host-ipv6>%<guest-interface>' 18081
   address `fe80::fc54:ff:fed9:c270`; test it from guest interface `enp1s0`
   while the proven IPv6 fixture is running.
 
-- [ ] Test the Docker path with a disposable HTTP container using a reviewed
+- [x] Test the Docker path with a disposable HTTP container using a reviewed
   digest-pinned image, no host mounts and unused published port 18082. Bind it
   to the host's libvirt bridge address. Confirm a host request to that published
   address succeeds, then require guest requests to both the published address
@@ -1208,7 +1205,7 @@ nc -6 -vz -w 3 '<host-ipv6>%<guest-interface>' 18081
   IPv6 too if host Docker provides IPv6 routes or published bindings. Remove
   only this fixture afterward. Record the image, commands and results.
 
-- [ ] Prove required traffic still works after the deny:
+- [x] Prove required traffic still works after the deny:
 
 **Guest SSH session:**
 
@@ -1271,7 +1268,7 @@ Checkpoint B.
 
 ### 5.1 Verify Name Resolution And Port Availability
 
-- [ ] Check the browser name and current listener before changing anything:
+- [x] Check the browser name and current listener before changing anything:
 
 **Mint host terminal:**
 
@@ -1287,7 +1284,7 @@ sudo ss -ltnp '( sport = :443 )'
 
 ### 5.2 Verify The Existing Host-Owned TLS Material
 
-- [ ] From the host orchestration checkout, inspect the three files owned by the
+- [x] From the host orchestration checkout, inspect the three files owned by the
   existing local TLS workflow. These are read-only checks; do not run `mkcert`,
   OpenSSL key-generation commands or either certificate-generation script from
   an agent/container.
@@ -1330,13 +1327,13 @@ chmod 600 nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem
   rebuild Kind or update its TLS Secret. Never run them in an agent container
   or the guest. If mkcert or host trust is broken, repair it on Mint first.
 
-- [ ] Record the exact three source paths for Checkpoint A. Only those leaf,
+- [x] Record the exact three source paths for Checkpoint A. Only those leaf,
   leaf-key and public-root files may be copied to the guest. The host mkcert CA
   signing key (normally named `rootCA-key.pem`) must never enter the guest.
 
 ### 5.3 Prepare And Test The Explicit SSH Forward
 
-- [ ] First test on unprivileged host port 8443 so any port-443 listener can
+- [x] First test on unprivileged host port 8443 so any port-443 listener can
   remain running. In the guest, start an empty one-connection TCP fixture and
   leave the terminal open:
 
@@ -1363,7 +1360,7 @@ printf 'forward-test\n' | nc -N 127.0.0.1 8443
   `Ctrl+C`. This proves direction and loopback binding but is not the HTTPS
   acceptance test.
 
-- [ ] Install a narrow host mechanism that permits the current Mint user, only
+- [x] Install a narrow host mechanism that permits the current Mint user, only
   when explicitly invoking `authbind`, to bind port 443 on IPv4 loopback
   without running SSH as root. `authbind` cannot restrict this authorization
   by transport protocol or executable; the later `ssh -L` command supplies the
@@ -1387,7 +1384,7 @@ ls -l '/etc/authbind/byaddr/127.0.0.1,443'
   lower the system-wide unprivileged-port threshold or run a root-owned SSH
   client with personal key access.
 
-- [ ] Reserve the following command for Checkpoint B, after freeing host port
+- [x] Reserve the following command for Checkpoint B, after freeing host port
   443. Do not stop the existing listener to test it during initial setup:
 
 **Mint host terminal:**
@@ -1412,7 +1409,7 @@ authbind ssh -N -T -o ExitOnForwardFailure=yes \
 
 ### 5.4 Create The Dedicated Browser Profile
 
-- [ ] Create a clean host browser profile:
+- [x] Create a clean host browser profile:
 
   - Firefox: enter `about:profiles`, select **Create a New Profile**, name it
     `Budget Analyzer Development`, then **Launch profile in new browser**.
@@ -1433,7 +1430,7 @@ the application acceptance test.
 
 ## Initial Handoff
 
-- [ ] Capture the version and VM evidence without including the full domain XML
+- [x] Capture the version and VM evidence without including the full domain XML
   (which can contain local paths and MAC addresses):
 
 **Mint host terminal:**
@@ -1456,7 +1453,7 @@ git --version
 systemctl is-active ssh
 ```
 
-- [ ] Fill in this redacted handoff template. Use repository basenames, not
+- [x] Fill in this redacted handoff template. Use repository basenames, not
   private URLs or absolute personal-host paths:
 
 ```text
@@ -1505,7 +1502,7 @@ Browser/TLS
   dedicated browser profile created: PASS | FAIL
 ```
 
-- [ ] Store trusted VM, firewall, SSH and forwarding configuration in
+- [x] Store trusted VM, firewall, SSH and forwarding configuration in
   human-owned host storage outside the guest. The handoff may name settings but
   must omit passwords, tokens, private keys, certificate private-key contents,
   browser state, private remote URLs, personal paths and unrelated host

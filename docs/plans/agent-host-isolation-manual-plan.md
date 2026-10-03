@@ -1363,22 +1363,29 @@ printf 'forward-test\n' | nc -N 127.0.0.1 8443
   `Ctrl+C`. This proves direction and loopback binding but is not the HTTPS
   acceptance test.
 
-- [ ] Install a narrow host mechanism that permits the current Mint user to
-  bind only TCP port 443 without running SSH as root:
+- [ ] Install a narrow host mechanism that permits the current Mint user, only
+  when explicitly invoking `authbind`, to bind port 443 on IPv4 loopback
+  without running SSH as root. `authbind` cannot restrict this authorization
+  by transport protocol or executable; the later `ssh -L` command supplies the
+  TCP listener and repeats the explicit loopback address:
 
 **Mint host terminal:**
 
 ```bash
 sudo apt install authbind
+test ! -e /etc/authbind/byport/443
 sudo install -o "$USER" -g "$(id -gn)" -m 0500 \
-  /dev/null /etc/authbind/byport/443
-ls -l /etc/authbind/byport/443
+  /dev/null '/etc/authbind/byaddr/127.0.0.1,443'
+ls -l '/etc/authbind/byaddr/127.0.0.1,443'
 ```
 
   The file must be owned by the current Mint user and executable only by that
-  user. Do not grant a blanket capability to `ssh`, lower the system-wide
-  unprivileged-port threshold or run a root-owned SSH client with personal key
-  access.
+  user. The broad `/etc/authbind/byport/443` marker must not exist. If the
+  `test` command fails, stop and determine who owns that authorization; if it
+  was created while following an earlier version of this plan, remove that
+  exact marker before continuing. Do not grant a blanket capability to `ssh`,
+  lower the system-wide unprivileged-port threshold or run a root-owned SSH
+  client with personal key access.
 
 - [ ] Reserve the following command for Checkpoint B, after freeing host port
   443. Do not stop the existing listener to test it during initial setup:
@@ -1386,7 +1393,7 @@ ls -l /etc/authbind/byport/443
 **Mint host terminal:**
 
 ```bash
-authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
+authbind ssh -N -T -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:443:127.0.0.1:443 budget-agent-vm-forward
 ```
 
@@ -1394,7 +1401,9 @@ authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
   terminal, `sudo ss -ltnp '( sport = :443 )'` must show only
   `127.0.0.1:443`, never `0.0.0.0`, a LAN address or `[::]:443`. A supervised
   user service may replace the foreground command only after its exact unit is
-  reviewed and proves the same binding and `ExitOnForwardFailure` behavior.
+  reviewed and proves the same binding and `ExitOnForwardFailure` behavior. Do
+  not add `--deep`; only the directly invoked SSH client needs the scoped bind
+  authorization.
 
   During Checkpoint A, repeat the test with a temporary TLS fixture using the
   copied approved leaf/key and verify it with the copied public CA. Do not use
@@ -1884,7 +1893,7 @@ sudo ss -ltnp '( sport = :443 )'
 **Mint host terminal 1:**
 
 ```bash
-authbind --deep ssh -N -T -o ExitOnForwardFailure=yes \
+authbind ssh -N -T -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:443:127.0.0.1:443 budget-agent-vm-forward
 ```
 

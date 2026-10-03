@@ -28,6 +28,17 @@ print_error() {
     echo "✗ $1" >&2
 }
 
+show_image_pull_diagnostics() {
+    echo "  Image and runtime diagnostics:" >&2
+    kubectl get pods -n "${CALICO_NAMESPACE}" -o wide >&2 || true
+    kubectl get events -n "${CALICO_NAMESPACE}" \
+        --sort-by='.lastTimestamp' >&2 || true
+    docker exec kind-control-plane crictl images >&2 || true
+    docker exec kind-control-plane crictl ps -a >&2 || true
+    docker exec kind-control-plane journalctl -u kubelet \
+        --no-pager --lines=80 >&2 || true
+}
+
 require_cluster_access() {
     if ! kubectl cluster-info --context kind-kind >/dev/null 2>&1; then
         print_error "Cannot reach cluster context kind-kind"
@@ -92,6 +103,7 @@ ensure_kube_proxy_ready() {
         print_error "kube-proxy did not become ready"
         kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=kube-proxy || true
         kubectl logs -n "${CALICO_NAMESPACE}" -l k8s-app=kube-proxy --tail=50 || true
+        show_image_pull_diagnostics
         exit 1
     fi
 }
@@ -109,14 +121,23 @@ main() {
         kubectl apply -f "${CALICO_MANIFEST_URL}" >/dev/null
 
         print_step "Waiting for calico-node daemonset rollout..."
-        kubectl rollout status daemonset/calico-node -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+        if ! kubectl rollout status daemonset/calico-node -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null; then
+            print_error "calico-node did not become ready"
+            show_image_pull_diagnostics
+            exit 1
+        fi
 
         print_step "Waiting for calico-kube-controllers deployment..."
-        kubectl wait --for=condition=Available deployment/calico-kube-controllers -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null
+        if ! kubectl wait --for=condition=Available deployment/calico-kube-controllers -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null; then
+            print_error "calico-kube-controllers did not become ready"
+            show_image_pull_diagnostics
+            exit 1
+        fi
 
         if ! is_calico_ready; then
             print_error "Calico resources exist but are not ready"
             kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=calico-node || true
+            show_image_pull_diagnostics
             exit 1
         fi
 
@@ -131,6 +152,7 @@ main() {
     if ! kubectl rollout status deployment/coredns -n "${CALICO_NAMESPACE}" --timeout=5m >/dev/null; then
         print_error "CoreDNS did not become ready after Calico setup"
         kubectl get pods -n "${CALICO_NAMESPACE}" -l k8s-app=kube-dns || true
+        show_image_pull_diagnostics
         exit 1
     fi
 

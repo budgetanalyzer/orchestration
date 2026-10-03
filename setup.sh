@@ -12,6 +12,41 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/scripts/lib/pinned-tool-versions.sh"
 
+SETUP_MODE="standard"
+
+usage() {
+    cat <<'EOF'
+Usage: ./setup.sh [--guest-local]
+
+  no option      Recreate the standard local Kind environment and generate
+                 browser-facing TLS from this host's mkcert CA.
+  --guest-local  Recreate Kind on the development VM's local Docker daemon and
+                 install the three previously imported ingress TLS files.
+
+This is a destructive Kind bootstrap, not a daily start command.
+EOF
+}
+
+case "${1:-}" in
+    "") ;;
+    --guest-local)
+        SETUP_MODE="guest-local"
+        ;;
+    --help|-h)
+        usage
+        exit 0
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
+
+if [[ $# -gt 1 ]]; then
+    usage >&2
+    exit 2
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -231,8 +266,17 @@ check_kind_cluster_network_model() {
     fi
 }
 
-print_header "Budget Analyzer - Development Setup"
+print_header "Budget Analyzer - Development Setup (${SETUP_MODE})"
 assert_host_execution
+
+if [[ "$SETUP_MODE" == "guest-local" ]]; then
+    print_step "Checking development VM prerequisites and local Docker target..."
+    "$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh"
+    print_success "Development VM prerequisites and local Docker target verified"
+    print_step "Validating imported ingress TLS before recreating Kind..."
+    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
+    print_success "Imported ingress TLS files verified"
+fi
 
 # =============================================================================
 # Step 1: Check required tools
@@ -275,7 +319,9 @@ ensure_pinned_tool "kubectl"
 ensure_pinned_tool "kind"
 ensure_supported_helm
 ensure_pinned_tool "tilt"
-ensure_pinned_tool "mkcert"
+if [[ "$SETUP_MODE" == "standard" ]]; then
+    ensure_pinned_tool "mkcert"
+fi
 
 # =============================================================================
 # Step 2: Create Kind cluster
@@ -394,9 +440,13 @@ fi
 # =============================================================================
 # Step 7: Generate TLS certificates
 # =============================================================================
-print_step "Setting up TLS certificates..."
-
-"$SCRIPT_DIR/scripts/bootstrap/setup-k8s-tls.sh"
+if [[ "$SETUP_MODE" == "guest-local" ]]; then
+    print_step "Validating imported ingress TLS and installing guest trust..."
+    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --install-system-trust
+else
+    print_step "Setting up TLS certificates..."
+    "$SCRIPT_DIR/scripts/bootstrap/setup-k8s-tls.sh"
+fi
 
 # =============================================================================
 # Step 8: Generate infrastructure TLS certificates
@@ -422,6 +472,10 @@ fi
 # Setup Complete!
 # =============================================================================
 print_header "Setup Complete!"
+
+if [[ "$SETUP_MODE" == "guest-local" ]]; then
+    print_warning "Guest bootstrap recreated Kind. Do not use ./setup.sh as a daily VM-start command."
+fi
 
 echo -e "${GREEN}Almost ready!${NC} Just configure your external services:"
 echo ""

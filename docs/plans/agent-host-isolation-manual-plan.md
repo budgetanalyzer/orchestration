@@ -1716,19 +1716,17 @@ rm /tmp/budget-analyzer-tls-import/_wildcard.budgetanalyzer.localhost.pem \
   /tmp/budget-analyzer-tls-import/_wildcard.budgetanalyzer.localhost-key.pem \
   /tmp/budget-analyzer-tls-import/_mkcert-rootCA.pem
 rmdir /tmp/budget-analyzer-tls-import
-CERT="$CERT_DIR/_wildcard.budgetanalyzer.localhost.pem"
-KEY="$CERT_DIR/_wildcard.budgetanalyzer.localhost-key.pem"
-CA="$CERT_DIR/_mkcert-rootCA.pem"
-openssl verify -CAfile "$CA" "$CERT"
-openssl x509 -in "$CERT" -pubkey -noout | sha256sum
-openssl pkey -in "$KEY" -pubout | sha256sum
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
 find /srv/budget-analyzer -name rootCA-key.pem -print
 ```
 
-  Verification must print `OK`, the two public-key hashes must match, and the
-  final search must print nothing. If the implementation changes the documented
-  guest certificate destination, use that reviewed destination consistently
-  instead of creating a second copy.
+  Validation must report that the files are valid for
+  `app.budgetanalyzer.localhost`, and the final search must print nothing. The
+  validator proves the public root is a current CA, the leaf is current and
+  covers the hostname, the chain verifies, and the leaf/key pair matches. If
+  the implementation changes the documented guest certificate destination,
+  use that reviewed destination consistently instead of creating a second
+  copy.
 
 - [ ] Before application bootstrap, prove trusted forwarding with a temporary
   TLS endpoint:
@@ -1764,25 +1762,75 @@ curl --fail --show-error \
 
 ### A.5 Start The Guest Agent, Then Bootstrap The Application
 
-- [ ] From a human-operated guest SSH session, follow the exact prerequisite
-  command sequence produced by implementation Phases 1–2. It must install the
-  guest Docker daemon and the Java/Node/npm/Tilt prerequisites outside the
-  agent container. Run its read-only verification and require these commands to
-  succeed:
+- [ ] From a human-operated guest SSH session, install the guest-host
+  prerequisites outside the agent container. These commands use Ubuntu's
+  Docker package plus the same signed NodeSource and Azul package repositories
+  as the reviewed workspace image:
 
 **Guest SSH session:**
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y \
+  ca-certificates curl docker.io docker-compose-v2 git gnupg openssl shellcheck
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+
+install -d -m 0755 /tmp/budget-analyzer-prerequisites
+curl -fsSLo /tmp/budget-analyzer-prerequisites/nodesource.key \
+  https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+gpg --dearmor \
+  < /tmp/budget-analyzer-prerequisites/nodesource.key \
+  > /tmp/budget-analyzer-prerequisites/nodesource.gpg
+sudo install -m 0644 /tmp/budget-analyzer-prerequisites/nodesource.gpg \
+  /etc/apt/keyrings/nodesource.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main' |
+  sudo tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+
+curl -fsSLo /tmp/budget-analyzer-prerequisites/azul.key \
+  https://repos.azul.com/azul-repo.key
+gpg --dearmor \
+  < /tmp/budget-analyzer-prerequisites/azul.key \
+  > /tmp/budget-analyzer-prerequisites/azul.gpg
+sudo install -m 0644 /tmp/budget-analyzer-prerequisites/azul.gpg \
+  /etc/apt/keyrings/azul.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/azul.gpg] https://repos.azul.com/zulu/deb stable main' |
+  sudo tee /etc/apt/sources.list.d/zulu.list >/dev/null
+
+sudo apt-get update
+sudo apt-get install -y nodejs zulu25-jdk
+rm -r /tmp/budget-analyzer-prerequisites
+```
+
+  End the SSH session and reconnect so the new `docker` group membership takes
+  effect. Do not use `newgrp` to leave an ambiguous nested shell around the
+  remaining checkpoint. Then run the Phase 1 read-only preflight from the guest
+  orchestration clone:
+
+```bash
+cd /srv/budget-analyzer/worktrees/orchestration
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
 docker info
 git --version
 java -version
 node --version
 npm --version
+for repo in \
+  orchestration budget-analyzer-web ext-authz session-gateway service-common \
+  workspace currency-service permission-service transaction-service; do
+  test -d "/srv/budget-analyzer/worktrees/$repo/.git"
+done
 ```
 
-  Also verify all expected working-clone basenames exist, including
-  `orchestration`, `workspace` and `ext-authz`. Stop on a missing prerequisite;
-  do not compensate in orchestration for a service-owned failure.
+  The preflight must confirm Ubuntu 24.04 and reject remote Docker environment
+  variables, a non-default context, a non-Unix endpoint, an inactive local
+  service, a daemon-name mismatch or a Docker data root other than
+  `/var/lib/docker`. It also rejects a forwarded SSH agent, GitHub token/askpass
+  variables and a global Git credential helper. Require all version commands to
+  succeed. The final loop must verify every basename from the Initial Handoff,
+  including `orchestration`, `workspace` and `ext-authz`. Stop on a missing
+  prerequisite; do not compensate in orchestration for a service-owned
+  failure.
 
 - [ ] Build and start the reviewed guest agent container now, before Kind or
   Tilt, using Phase 2's separate
@@ -1797,12 +1845,25 @@ npm --version
   existing Mint devcontainer. Keep that Mint devcontainer available through
   Phase 6 and Checkpoint B.
 
-- [ ] From the guest orchestration working clone—not from the agent container—run
-  the newly documented guest bootstrap command and select the copied ingress
-  certificate. This creates a fresh **guest** Kind
-  cluster and is not a daily start command. Generate required
-  infrastructure TLS as the human operator in the guest and configure only
-  disposable development `.env` credentials.
+- [ ] From the guest orchestration working clone—not from the agent container—
+  validate the imported files once more, then run the explicit guest bootstrap:
+
+```bash
+cd /srv/budget-analyzer/worktrees/orchestration
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+./setup.sh --guest-local
+cd ../budget-analyzer-web
+npm install
+cd ../orchestration
+```
+
+  `./setup.sh --guest-local` repeats local-Docker selection, creates a fresh
+  **guest** Kind cluster, installs the copied public root into the guest OS
+  trust store, applies the ingress TLS Secret only after exact `kind-kind`,
+  loopback API and `kind-control-plane` checks, and generates required
+  infrastructure TLS as the human operator in the guest. Configure only
+  disposable development `.env` credentials. This command deletes and
+  recreates Kind; it is never a daily VM-start command.
 
 **Guest SSH session, after bootstrap:**
 
@@ -1819,8 +1880,16 @@ docker ps --format 'table {{.Names}}\t{{.Status}}'
 
 - [ ] Recreate the agent container with the exact newly generated guest Kind
   kubeconfig mounted, using Phase 2's instructions; authenticate again if
-  necessary. Start Tilt using the documented guest command and wait for its
-  required resources, using the agent to diagnose failures. Then run:
+  necessary. Start Tilt from the human-operated guest shell and wait for its
+  required resources, using the agent to diagnose failures:
+
+```bash
+cd /srv/budget-analyzer/worktrees/orchestration
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
+tilt up
+```
+
+  Keep `tilt up` running, then use another guest shell to run:
 
 **Guest SSH session:**
 

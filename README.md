@@ -14,7 +14,13 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 
 **Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full production stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
-**AI agents can debug the full stack.** The development environment runs inside a sandboxed Docker container ([workspace](https://github.com/budgetanalyzer/workspace)) that has kubectl, helm, tilt, and host-network access to the Kind cluster. An AI coding agent operating in this container can inspect pods, read logs, restart deployments, run tests, and trace requests through the mesh — the same workflow a human operator would use, with no special tooling or adapters.
+**AI agents can debug the full stack.** The current implementation runner is a
+Docker devcontainer from [workspace](https://github.com/budgetanalyzer/workspace).
+The isolated target is a separate agent container on a development VM, with
+guest-local repositories, Docker and Kind while GitHub publication remains on
+the personal host. The
+[boundary contract](docs/architecture/autonomous-ai-execution.md) defines both
+arrangements and the migration checkpoints.
 
 **Production deployment is documented and scripted.** The `deploy/` directory contains the complete, numbered script sequence to bootstrap a k3s cluster on OCI from scratch — Istio mesh, cert-manager with ACME HTTP-01, OCI Vault secret synchronization via External Secrets Operator, Kyverno admission policies, Prometheus/Grafana monitoring, Jaeger tracing, and public TLS. Every step produces reviewable rendered YAML under `tmp/` before anything touches the cluster.
 
@@ -36,7 +42,10 @@ tilt up       # start everything
 
 Run `./setup.sh` on the host. In addition to configuring browser TLS, it
 publishes the public local ingress CA consumed by the workspace's lazy
-agent-container trust command.
+agent-container trust command. The development VM instead uses the explicit
+`./setup.sh --guest-local` first-bootstrap path after the human transfers the
+three approved ingress TLS files. Both modes recreate Kind; neither is a daily
+start command.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 

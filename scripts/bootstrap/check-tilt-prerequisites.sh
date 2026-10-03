@@ -9,6 +9,30 @@ WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/pinned-tool-versions.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
+# shellcheck source=scripts/lib/local-docker-target.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/../lib/local-docker-target.sh"
+
+GUEST_LOCAL=false
+case "${1:-}" in
+    "") ;;
+    --guest-local)
+        GUEST_LOCAL=true
+        ;;
+    --help|-h)
+        echo "Usage: scripts/bootstrap/check-tilt-prerequisites.sh [--guest-local]"
+        exit 0
+        ;;
+    *)
+        echo "ERROR: unknown argument: $1" >&2
+        exit 2
+        ;;
+esac
+
+if [[ $# -gt 1 ]]; then
+    echo "ERROR: expected at most one argument" >&2
+    exit 2
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -381,8 +405,12 @@ fi
 if check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"; then
     check_pinned_tool_version tilt
 fi
-if check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"; then
-    check_pinned_tool_version mkcert
+if [[ "$GUEST_LOCAL" == false ]]; then
+    if check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"; then
+        check_pinned_tool_version mkcert
+    fi
+else
+    echo -e "${GREEN}✓${NC} Guest-local mode uses imported ingress TLS; mkcert is not required"
 fi
 if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
     check_java_version
@@ -405,6 +433,14 @@ else
     echo -e "${RED}✗${NC} Docker daemon is NOT running or not accessible"
     echo "  Start Docker or add user to docker group: sudo usermod -aG docker \$USER && newgrp docker"
     ((ERRORS++))
+fi
+
+if [[ "$GUEST_LOCAL" == true ]]; then
+    if assert_local_docker_target; then
+        echo -e "${GREEN}✓${NC} Docker target is the development VM's default local Unix socket"
+    else
+        ((ERRORS++))
+    fi
 fi
 
 echo
@@ -629,19 +665,31 @@ LOCAL_INGRESS_CERT="$ORCHESTRATION_DIR/nginx/certs/k8s/_wildcard.budgetanalyzer.
 
 if [ ! -r "$PUBLISHED_LOCAL_CA" ]; then
     echo -e "${RED}✗${NC} Published public local CA is missing: $PUBLISHED_LOCAL_CA"
-    echo "  Run ./setup.sh from the host orchestration checkout to publish it."
+    if [[ "$GUEST_LOCAL" == true ]]; then
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+    else
+        echo "  Run ./setup.sh from the host orchestration checkout to publish it."
+    fi
     ((ERRORS++))
 elif ! command -v openssl >/dev/null 2>&1; then
     echo -e "${RED}✗${NC} Cannot validate the published public local CA because OpenSSL is unavailable"
     ((ERRORS++))
 elif ! openssl x509 -in "$PUBLISHED_LOCAL_CA" -noout >/dev/null 2>&1; then
     echo -e "${RED}✗${NC} Published public local CA is invalid: $PUBLISHED_LOCAL_CA"
-    echo "  Run ./setup.sh from the host orchestration checkout to replace it."
+    if [[ "$GUEST_LOCAL" == true ]]; then
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+    else
+        echo "  Run ./setup.sh from the host orchestration checkout to replace it."
+    fi
     ((ERRORS++))
 elif [ ! -r "$LOCAL_INGRESS_CERT" ] \
     || ! openssl verify -CAfile "$PUBLISHED_LOCAL_CA" "$LOCAL_INGRESS_CERT" >/dev/null 2>&1; then
     echo -e "${RED}✗${NC} Published public local CA is stale for the wildcard ingress certificate: $PUBLISHED_LOCAL_CA"
-    echo "  Run ./setup.sh from the host orchestration checkout to reconcile local TLS."
+    if [[ "$GUEST_LOCAL" == true ]]; then
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+    else
+        echo "  Run ./setup.sh from the host orchestration checkout to reconcile local TLS."
+    fi
     ((ERRORS++))
 else
     echo -e "${GREEN}✓${NC} Published public local CA verifies the wildcard ingress certificate"
@@ -684,7 +732,11 @@ if [ "$CLUSTER_CONNECTED" = true ]; then
         for missing in "${PHASE4_MISSING[@]}"; do
             echo "  Missing: $missing"
         done
-        echo "  Run ./scripts/bootstrap/setup-infra-tls.sh on your host, then rerun the prerequisite check."
+        if [[ "$GUEST_LOCAL" == true ]]; then
+            echo "  Run ./scripts/bootstrap/setup-infra-tls.sh from the human-operated VM shell, then rerun this check."
+        else
+            echo "  Run ./scripts/bootstrap/setup-infra-tls.sh on your host, then rerun the prerequisite check."
+        fi
         ((ERRORS++))
     fi
 else

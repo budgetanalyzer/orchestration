@@ -95,3 +95,31 @@ addresses or unrelated host configuration.
   traffic positive controls while following the manual plan.
 - The persistent-rule listing was captured for the later Checkpoint B reboot
   comparison; it is not reboot-persistence proof.
+
+## Phase 1 Static Preparation
+
+- Guest-local boundary contract and host-only GitHub publication model:
+  `IMPLEMENTED - pending runtime proof at Checkpoint A`
+- Explicit local-Docker preflight and `./setup.sh --guest-local` path:
+  `IMPLEMENTED - statically validated; not launched in Phase 1`
+- Imported ingress TLS validation, guest trust/Secret installation and
+  host-only renewal path:
+  `IMPLEMENTED - non-generating validation passed; guest install pending`
+- Kind, Calico, Gateway API, infrastructure TLS, persistence and Tilt behavior:
+  `UNCHANGED - guest runtime proof pending`
+- Atomic frontend production-smoke image target:
+  `UNCHANGED - guest live-update proof pending`
+- Guest agent compose configuration and one-time repository setup script:
+  `PENDING implementation Phase 2`
+- Checkpoint A repository, GitHub-authority, TLS, bootstrap, agent restart and
+  live-update acceptance: `PENDING`
+
+Static validation passed for all changed shell files with `bash -n` and
+ShellCheck; the existing approved TLS files passed the non-generating
+validation path; local Docker socket selection passed while a synthetic remote
+`DOCKER_HOST` was rejected; changed-document local links and `git diff --check`
+passed; and the aggregate static security manifest guardrail passed. No guest
+bootstrap or live-runtime acceptance is claimed.
+
+Phase 1 made no live cluster mutation, VM change, certificate generation,
+repository transfer, firewall change or GitHub write.

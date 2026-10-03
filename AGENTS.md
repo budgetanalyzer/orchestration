@@ -72,10 +72,11 @@ repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-The default debugging model is split across host and container:
-- Tilt runs on the host machine
-- AI agents run inside the container
-- The container has shared workspace access and full `kubectl` access to the host-managed cluster
+During the host-isolation migration, the implementation runner remains the
+Mint-hosted workspace devcontainer through Phase 6 and Checkpoint B. The target
+runtime is a separate guest agent container with guest-local repositories,
+Docker, Kind and kubeconfig. Do not reinterpret the existing devcontainer as
+the guest target or share the personal-host workspace with the guest.
 
 The agent container is inside the trusted local-development boundary. Local
 workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated
@@ -91,6 +92,13 @@ container Docker daemon cannot enumerate the host-managed Kind cluster. For
 the full boundary and API-test target checks, read
 `docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
 credential, Kubernetes-access, or autonomous execution behavior.
+
+Keep GitHub credentials and publication on the personal host. The development
+VM uses guest-local bare remotes and working clones; do not add a GitHub remote,
+credential proxy, forwarded SSH/GPG agent, shared folder, host Docker/libvirt
+socket or host kubeconfig. Read
+`docs/architecture/autonomous-ai-execution.md` before changing guest bootstrap,
+repository transport, Remote SSH, Docker endpoint selection or TLS transfer.
 
 Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
 - Shape: `VM.Standard.A1.Flex`
@@ -151,6 +159,8 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Service ports and exposure rules: `docs/architecture/port-reference.md`
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
+- Agent host-isolation boundary and guest-local runtime contract: `docs/architecture/autonomous-ai-execution.md`
+- Development VM operator checkpoints and exact host/guest handoffs: `docs/plans/agent-host-isolation-manual-plan.md`
 - Containerized dev environment setup: sibling `../workspace` repository
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
@@ -393,7 +403,12 @@ public root into container-local trust stores. Use
 this flow.
 
 If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
-ask the user to run `./setup.sh` from the orchestration checkout on the host.
+follow the environment-specific human workflow in
+`docs/development/local-environment.md#development-vm-import-and-renewal`.
+The standard local path may require host `./setup.sh`; the development VM path
+requires host-only renewal when necessary, explicit transfer of the three
+approved files, and the guest imported-TLS installer. It must not recreate a
+host cluster.
 Do not generate or rotate certificates in-container, and do not bypass
 verification with HTTP, `--insecure`, `verify=False`, or
 `ignore_https_errors`.

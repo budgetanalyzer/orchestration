@@ -257,43 +257,16 @@ echo
 echo "Certificate files:"
 ls -lh "$K8S_CERTS_DIR"/_wildcard.budgetanalyzer.localhost*.pem 2>/dev/null || echo "  (none found)"
 
-# Create Kubernetes TLS secret
+# Validate the complete imported-file contract and reconcile the Secret only
+# after the strict loopback kind-kind target checks pass.
 echo
-echo "Creating Kubernetes TLS secret..."
-
-NAMESPACE="default"
-SECRET_NAME="budgetanalyzer-localhost-wildcard-tls"
-
-# Delete existing secret if present
-if kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" &>/dev/null; then
-    echo "Deleting existing secret..."
-    kubectl delete secret "$SECRET_NAME" -n "$NAMESPACE"
-fi
-
-# Create the TLS secret
-kubectl create secret tls "$SECRET_NAME" \
-    --cert="$CERT_FILE" \
-    --key="$KEY_FILE" \
-    -n "$NAMESPACE"
-
-echo "[OK] TLS secret '$SECRET_NAME' created in namespace '$NAMESPACE'"
-
-# Verify the secret
-echo
-echo "Verifying secret..."
-kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.type}' | grep -q "kubernetes.io/tls" && \
-    echo "[OK] Secret is correctly typed as kubernetes.io/tls" || \
-    echo "[WARN] Secret type may be incorrect"
-
-# Show secret details
-echo
-echo "Secret details:"
-kubectl get secret "$SECRET_NAME" -n "$NAMESPACE"
+echo "Validating ingress files and reconciling the Kubernetes TLS secret..."
+"$SCRIPT_DIR/install-imported-ingress-tls.sh"
 
 echo
 echo "=== Setup Complete! ==="
 echo
-echo "The TLS secret '$SECRET_NAME' is now available for the Istio ingress gateway."
+echo "The TLS secret 'budgetanalyzer-localhost-wildcard-tls' is now available for the Istio ingress gateway."
 echo "The public local CA is available to trusted workspace consumers at:"
 echo "  $PUBLISHED_CA_FILE"
 echo

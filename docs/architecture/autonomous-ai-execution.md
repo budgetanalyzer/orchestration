@@ -2,695 +2,241 @@
 
 ## Overview
 
-**Core Principle**: An effective technique for running AI coding agents is to give them a clear task, define success criteria, and let them execute autonomously in a safe sandbox.
+Budget Analyzer gives coding agents broad authority inside a disposable local
+development boundary. That authority is useful for builds, tests, Docker,
+Kubernetes and local API diagnostics, but it is not authority over the personal
+workstation, GitHub publication, staging or production.
 
-This document explains the architectural pattern that makes this possible:
-containerized AI agent execution with broad capability inside an explicitly
-local development trust boundary.
+Two development arrangements exist during the host-isolation migration:
 
-## Local Development Trust Boundary
+- The **transitional Mint workspace devcontainer** is the existing
+  implementation runner. It mounts the host's sibling-repository workspace and
+  kubeconfig and uses the Mint Docker environment. Keep it available through
+  implementation Phases 1–6 and Checkpoint B.
+- The **guest agent container** is the target runtime defined separately by the
+  sibling workspace repository's `ai-agent-sandbox/docker-compose.agent-vm.yml`.
+  It runs on the development VM's Docker daemon against guest-local files and
+  guest-local Kind. It is not a Mint profile, a VM definition, or a replacement
+  compose file for the existing devcontainer.
 
-The Budget Analyzer agent container is trusted with the local development
-environment. The shared workspace, host-managed local Kind kubeconfig, local
-Kubernetes Secrets, generated development TLS private keys, and local API-test
-credentials are not confidentiality boundaries against an agent running in
-this container. This is an intentional tradeoff for implementing and verifying
-the local stack and the `budget-analyzer-api-tests` repository.
+The transition ends only after the human completes the explicit Docker
+retirement checkpoint in
+[`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md).
 
-That trust does not extend to staging or production:
+## Boundary Terminology
 
-- Never mount staging or production kubeconfigs, cloud credentials, deployment
-  credentials, user credentials, or session cookies into the agent container.
-- Never use an agent session to deploy or administer staging or production.
-- Treat authenticated API-test credentials supplied to an agent as disposable
-  local test credentials only.
-- Before an agent-authorized workflow mutates the local cluster from inside the
-  container, fail closed unless the current context and referenced cluster are
-  both exactly `kind-kind`, the Kubernetes API endpoint is loopback-bound, and
-  `kubectl get node kind-control-plane` succeeds. The container's Docker daemon
-  cannot enumerate the host-managed Kind cluster, so reserve `kind get
-  clusters` as an additional check for host-only bootstrap commands.
-- For agent-run API-test acceptance, require the selected configuration to
-  declare `environment_type: local` and target exactly
-  `https://app.budgetanalyzer.localhost`. A configuration name such as `local`
-  is not sufficient by itself.
+- **Personal host**: the Linux Mint workstation. It owns GitHub credentials,
+  canonical GitHub remotes, the native VS Code and browser UIs, the mkcert
+  signing key, libvirt and the host-enforced VM firewall boundary.
+- **Development VM**: the Ubuntu guest. It owns working clones, local bare Git
+  repositories, Docker storage, dependency caches, Kind, Tilt, Kubernetes
+  state, development credentials and application data.
+- **Agent container**: a container created by the development VM's Docker
+  daemon. It can administer that daemon and therefore must be assumed able to
+  read, alter or destroy all guest repositories, local credentials, Kind state
+  and other guest runtime data.
 
-The host mkcert `rootCA.pem` certificate is public trust material, not a
-credential. It may contain locally identifying subject metadata and a stable
-fingerprint, so keep it ignored by Git and out of uploaded artifacts and logs.
-The corresponding `rootCA-key.pem` remains prohibited from the workspace and
-agent container.
+A marker, compose-project name, environment variable or command-line flag can
+prevent an accidental launch in the wrong place. It does not prove isolation.
+Isolation comes from the VM boundary, guest-local storage and Docker endpoint,
+the absence of host mounts and credentials, and host-enforced network policy.
 
-## The Pattern
+## Target Guest-Local Architecture
 
-### Autonomous Execution Flow
+```text
+Personal host
+  GitHub credentials + canonical clones
+  native VS Code UI -- Remote SSH ----------> development VM working clones
+  browser -- loopback-only SSH forward ------> development VM ingress
+  git push/fetch over host-initiated SSH ----> development VM bare repositories
+  mkcert signing key (never copied)
 
+Development VM
+  /srv/budget-analyzer/bare/<repo>.git
+  /srv/budget-analyzer/worktrees/<repo>
+  /var/lib/docker (one guest-local Docker daemon)
+    Kind + Testcontainers + guest agent container
 ```
-1. Define the task clearly
-2. Set testable success criteria
-3. Run agent with --dangerously-skip-permissions
-4. Verify results against success criteria
-```
 
-### Why `--dangerously-skip-permissions` is Essential
+There is no shared host workspace. Each guest working clone has only a
+guest-local bare `origin`; the personal host has the explicit `vm` remote. The
+host pushes reviewed committed objects into the bare repository, and later
+fetches agent commits from it. Only the host contacts GitHub or creates a pull
+request. Do not add rsync, a shared folder, an authenticated GitHub remote, a
+credential proxy, automatic publication or a forwarded SSH/GPG agent.
 
-AI agents need to execute **autonomously** to be effective. Permission prompts break the execution flow:
+VS Code Remote SSH keeps the editor UI on the personal host while remote
+extensions, terminals, language servers, tasks and files execute in the guest.
+Use the dedicated host profile from the manual plan. Keep SSH-agent, X11,
+credential and automatic port forwarding disabled, and do not install remote
+extensions that expose a personal GitHub session.
 
-- Agent makes a plan
-- Agent executes step 1
-- Agent needs sudo for step 2 → **BLOCKS waiting for permission**
-- Human approves
-- Agent executes step 2
-- Agent needs to install a package → **BLOCKS again**
-- Human approves
-- And so on...
+## Authority And Remaining Risk
 
-**This is not how AI should work.** The pattern should be:
+The guest agent may:
 
-1. Human reviews the plan
-2. Agent executes entire plan autonomously
-3. Human verifies results
+- modify guest working clones and push commits to guest-local bare remotes;
+- run builds and tests, create Testcontainers workloads, and administer the
+  guest Docker daemon;
+- inspect and mutate the approved guest-local `kind-kind` cluster;
+- read development Kubernetes Secrets, imported ingress keys, generated
+  infrastructure keys and disposable local API-test credentials.
 
-### Bash Alias for Quick Access
+The guest agent must not receive or use:
 
-The project provides a convenient alias:
+- GitHub write credentials, host credential helpers, personal SSH/GPG agents,
+  authenticated browser state or personal home-directory mounts;
+- the host Docker or libvirt socket, host kubeconfig, host workspace, staging
+  or production kubeconfigs, cloud/deployment credentials, user credentials or
+  session cookies;
+- authority to deploy or administer staging or production.
+
+The VM boundary protects the personal workstation; it does not protect guest
+assets from the agent. Host review, branch protection and normal pull-request
+controls remain necessary before publishing agent-authored commits or workflow
+changes. Normal Internet access is permitted, so secrets placed in the guest
+must be considered accessible to the agent. LAN/VPN destination isolation and
+Internet allowlisting are outside this contract.
+
+## Docker And Kubernetes Target Selection
+
+The guest uses Docker-outside-of-Docker: the agent container mounts the
+**guest's** `/var/run/docker.sock`. It does not run a nested daemon and does not
+need privileged mode. Guest host networking is allowed so local Kind, Tilt and
+application endpoints retain their normal loopback behavior.
+
+Before guest bootstrap, `scripts/bootstrap/check-agent-vm-prerequisites.sh`
+fails closed unless Docker uses the default local Unix socket, no remote-Docker
+environment is selected, the service is active on the current machine, and the
+daemon reports its normal guest-local data root. `./setup.sh --guest-local`
+repeats that check before recreating Kind. Do not use `DOCKER_HOST`, an SSH/TCP
+Docker context, a nested daemon, or a host socket forwarded into the VM.
+
+Before an agent-authorized Kubernetes mutation, require all of the following:
+
+1. `kubectl config current-context` is exactly `kind-kind`.
+2. The referenced kubeconfig cluster is exactly `kind-kind`.
+3. Its API server is HTTPS on `127.0.0.1`, `localhost` or IPv6 loopback.
+4. `kubectl get node kind-control-plane` succeeds.
+
+On the VM host, `kind get clusters` must additionally contain the expected
+`kind` cluster before bootstrap-owned secret installation. It is only an
+additional host-side check; an agent container can reach the same guest daemon
+but a container marker or cluster name alone is not boundary proof.
+
+For local API-test acceptance, require the selected configuration to declare
+`environment_type: local` and target exactly
+`https://app.budgetanalyzer.localhost`. A configuration name such as `local`
+is insufficient.
+
+## Clean Bootstrap And Daily Startup
+
+The VM starts from committed Git objects and explicitly transferred TLS files.
+Do not copy, export, import or reconstruct host Docker images, containers,
+volumes, Kind clusters, databases, application data or build caches.
+
+The explicit first-bootstrap command is:
 
 ```bash
-alias dangerous="claude --dangerously-skip-permissions"
+./setup.sh --guest-local
 ```
 
-Use this for autonomous execution sessions where you've already reviewed the plan.
+It is a destructive local bootstrap: like the standard setup path, it deletes
+and recreates the `kind` cluster, installs Calico and Gateway API prerequisites,
+installs the imported ingress certificate, generates guest-owned
+infrastructure TLS and prepares `.env`. It is not a VM-start or daily-start
+command. Daily work starts the VM, the reviewed guest agent container, Tilt and
+the host loopback HTTPS forward without rerunning `setup.sh`.
 
-### Headless/CI Mode
+The standard `./setup.sh` path remains the supported transitional/local-host
+bootstrap. Do not silently select guest behavior from hostname, a marker file
+or environment. The `--guest-local` option is an explicit accidental-mislaunch
+guard, and the local-Docker checks provide the endpoint evidence.
 
-For automated workflows:
+## Browser TLS Contract
 
-```bash
-claude -p "fix all lint errors" \
-  --dangerously-skip-permissions \
-  --output-format json
+The personal host owns browser trust and the mkcert signing key. The guest may
+receive only these ignored files:
+
+```text
+nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
+nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem
+nginx/certs/k8s/_mkcert-rootCA.pem
 ```
 
-## Container Architecture: Safety Through Isolation
-
-### The VS Code Devcontainer Sandbox
-
-**Key Insight**: Give the agent broad local-development capability inside a
-reviewed trust boundary. The container reduces accidental host-system changes;
-it is not a confidentiality boundary for mounted workspace files, kubeconfig,
-local cluster Secrets, or credentials deliberately supplied to local tests.
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Host Machine (Protected)                          │
-│  ┌────────────────────────────────────────────┐   │
-│  │  VS Code Devcontainer (Isolated)            │   │
-│  │  ┌────────────────────────────────────────┐│   │
-│  │  │  Claude Code Agent                     ││   │
-│  │  │  - Full sudo access                    ││   │
-│  │  │  - Install any package                 ││   │
-│  │  │  - Modify system config                ││   │
-│  │  │  - Run any command                     ││   │
-│  │  │  ✓ Safe: cannot affect host            ││   │
-│  │  └────────────────────────────────────────┘│   │
-│  │  Workspace Volume: /workspace              │   │
-│  │  (only accessible location)                │   │
-│  └────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-```
-
-### What Claude CAN Do (Inside Container)
-
-- Run `sudo` commands without restrictions
-- Install packages: `apt-get install`, `npm install -g`, `pip install`
-- Modify system configurations (e.g., configure nginx, set environment variables)
-- Compile and build anything (Java, Node.js, Go, Rust, etc.)
-- Create, modify, delete files in `/workspace`
-- Run Docker commands (via wormhole pattern - see below)
-- Execute integration tests with TestContainers
-- Start local Kubernetes clusters (Kind)
-
-### What Claude CANNOT Do By Policy
-
-- Deploy or administer staging or production
-- Receive staging or production kubeconfigs, cloud credentials, user
-  credentials, or session cookies
-- Modify the sandbox configuration itself (mounted read-only at `.devcontainer/`)
-
-Do not infer a stronger technical isolation claim from this list. The current
-local sandbox intentionally mounts the shared workspace and local kubeconfig
-and uses host networking. Review the active workspace compose configuration
-before changing or expanding that authority.
-
-### Self-Protecting Configuration
-
-The sandbox directory is mounted read-only to prevent accidental modification:
-
-```yaml
-# ai-agent-sandbox/docker-compose.yml
-volumes:
-  - .:/workspace/orchestration/ai-agent-sandbox:ro  # read-only
-```
-
-Claude cannot "shoot itself in the foot" by modifying its own container config.
-
-## Docker Access Patterns
-
-This project implements two complementary Docker patterns, each serving different needs.
-
-### Pattern 1: Wormhole (Docker-outside-of-Docker)
-
-**Implemented in**: PR #3, commit `00a27ae`
-**Use case**: Running TestContainers integration tests
-
-#### The Problem
-
-Spring Boot services use [TestContainers](https://testcontainers.com/) for integration testing - they spin up real PostgreSQL, Redis, and RabbitMQ containers during tests.
-
-Claude Code runs in a container. How does it run Docker commands to create test containers?
-
-#### The Solution: Docker Socket Wormhole
-
-Mount the host's Docker socket into the Claude container:
-
-```yaml
-# ai-agent-sandbox/docker-compose.yml
-volumes:
-  - /var/run/docker.sock:/var/run/docker.sock  # "Wormhole" to host Docker
-
-environment:
-  - TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-  - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
-  - TESTCONTAINERS_REUSE_ENABLE=true
-```
-
-#### How It Works
-
-```
-┌───────────────────────────────────────────────────────┐
-│  Host Machine                                         │
-│  ┌─────────────────────────────────────────────┐     │
-│  │  Docker Daemon (dockerd)                     │     │
-│  │  ├─ claude-dev container (Claude Code)       │     │
-│  │  ├─ postgres-test container (TestContainers) │     │
-│  │  └─ redis-test container (TestContainers)    │     │
-│  └──────────────┬──────────────────────────────┘     │
-│                 │                                      │
-│  /var/run/docker.sock (Unix socket)                   │
-│                 │                                      │
-│  ┌──────────────┴──────────────────────────────┐     │
-│  │  Claude Container                            │     │
-│  │  /var/run/docker.sock (mounted from host)    │     │
-│  │  → docker ps                                 │     │
-│  │  → ./gradlew test (TestContainers)           │     │
-│  └──────────────────────────────────────────────┘     │
-└───────────────────────────────────────────────────────┘
-```
-
-When Claude runs `docker` commands or `./gradlew test`:
-1. Command goes to `/var/run/docker.sock` inside container
-2. Socket is actually the host's Docker socket (mounted)
-3. Host Docker daemon receives the command
-4. Containers are created as **siblings** to the Claude container (not nested)
-
-#### Benefits
-
-- No Docker-in-Docker complexity (no dind daemon)
-- Test containers run at native speed
-- Claude can run full integration test suites
-- Containers are reused across test runs (`TESTCONTAINERS_REUSE_ENABLE=true`)
-
-#### Why It's Called "Wormhole"
-
-The Docker socket acts like a wormhole - commands issued inside the container "teleport" to the host Docker daemon. From Claude's perspective, it has Docker. From the host's perspective, Claude is just another Docker client.
-
-### Pattern 2: True Docker-in-Docker (CI Testing)
-
-**Implemented in**: `tests/setup-flow/` and `tests/security-preflight/`
-**Use case**: Testing the complete developer onboarding flow and the isolated platform security prerequisite baseline
-
-Security guardrail status: these retained DinD suites are stale against the current
-Istio-only baseline and are non-gating until they are explicitly
-realigned. Keep them as reference assets, not as current completion proof.
-
-#### The Problem
-
-We need to test that a brand new developer can:
-1. Clone the repo
-2. Run `./setup.sh`
-3. Run `tilt up`
-4. Access the application at `https://app.budgetanalyzer.localhost`
-
-We also need a second isolated suite that proves the platform security prerequisite baseline:
-- Calico-backed `NetworkPolicy` enforcement
-- Pod Security Admission behavior
-- Istio readiness and sidecar injection
-- Kyverno smoke-policy rejection
-
-But we can't use the wormhole pattern here - that would pollute the CI host's Docker daemon with Kind clusters, test containers, and other artifacts.
-
-#### The Solution: True Docker-in-Docker
-
-Run a Docker daemon **inside** a container, completely isolated from the host:
-
-```yaml
-# tests/setup-flow/docker-compose.test.yml
-services:
-  dind:
-    image: docker:27-dind
-    privileged: true
-    command:
-      - --default-ulimit=nofile=1048576:1048576
-    environment:
-      - DOCKER_TLS_CERTDIR=
-    network_mode: bridge
-
-  test-runner:
-    build:
-      context: ../shared
-      dockerfile: Dockerfile.test-env
-    depends_on:
-      dind:
-        condition: service_healthy
-    environment:
-      - DOCKER_HOST=tcp://127.0.0.1:2375
-    volumes:
-      - test-repos:/repos
-      - test-kubeconfig:/home/testuser/.kube
-    network_mode: service:dind
-```
-
-#### How It Works
-
-```
-┌─────────────────────────────────────────────────────┐
-│  CI Host (GitHub Actions / GitLab CI)              │
-│  ┌───────────────────────────────────────────────┐ │
-│  │  docker-compose.test.yml                       │ │
-│  │  ┌─────────────┐    ┌──────────────────────┐  │ │
-│  │  │ dind        │    │ test-runner          │  │ │
-│  │  │ (docker:dind)│◄───│ (test-env image)     │  │ │
-│  │  │             │2375│                      │  │ │
-│  │  │ Docker      │    │ - kind               │  │ │
-│  │  │ daemon      │    │ - kubectl            │  │ │
-│  │  │             │    │ - mkcert             │  │ │
-│  │  └─────────────┘    │ - run tests          │  │ │
-│  │                     └──────────────────────┘  │ │
-│  └───────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-```
-
-When the test-runner executes Docker commands:
-1. Commands go to `DOCKER_HOST=tcp://127.0.0.1:2375`
-2. The dind container's Docker daemon handles them
-3. Containers run **inside** the dind container's environment
-4. Completely isolated from the CI host's Docker
-
-#### Benefits
-
-- True isolation - no pollution of host Docker
-- Reproducible - simulates fresh developer machine
-- CI-friendly - exit code 0 = success, 1 = failure
-- Fast cleanup - destroy the dind container, everything is gone
-
-#### Running the Test
-
-```bash
-./tests/setup-flow/run-test.sh
-./tests/security-preflight/run-test.sh
-```
-
-Expected:
-- `setup-flow`: exit code 0, runtime ~5-10 minutes
-- `security-preflight`: exit code 0, runtime ~10-20 minutes
-
-### When to Use Which Pattern
-
-| Pattern | Use Case | Tradeoff |
-|---------|----------|----------|
-| **Wormhole (DooD)** | Development, TestContainers tests | Faster, simpler, but shares host Docker |
-| **True DinD** | CI, isolated testing, validating bootstrap and runtime platform behavior | Slower, more complex, but fully isolated |
-
-The Budget Analyzer project uses **wormhole for development** (Claude's devcontainer) and **true DinD for CI validation** (setup-flow and security-preflight tests).
-
-## Why This Architecture Matters
-
-### For AI Agents
-
-**Traditional approach** (AI on host machine):
-- User nervous about giving AI sudo access
-- AI needs permission for every sensitive operation
-- Constant interruptions break execution flow
-- Risk of accidental host system damage
-
-**Containerized approach** (this architecture):
-- AI has full sudo access (safe due to isolation)
-- No permission prompts needed
-- Autonomous execution from start to finish
-- Zero risk to host system
-
-**Result**: AI agents can actually work the way they're supposed to - autonomously.
-
-### For Developers
-
-**Benefits**:
-- Consistent environment (everyone uses same container)
-- Pre-installed tooling (JDK, Node.js, Docker, kubectl, etc.)
-- No "works on my machine" issues
-- Easy onboarding (open in VS Code, done)
-
-### For Learning & Experimentation
-
-This project is designed as a **learning resource for AI-assisted development**. The container architecture lets you:
-
-- Experiment fearlessly (can't break your host)
-- Try new tools without permanent installation
-- Test agent prompts safely
-- Learn by observing what AI agents do autonomously
-
-## Success Criteria Pattern
-
-To make autonomous execution effective, define **clear, testable success criteria** before running the agent.
-
-### Example: From the Security Hardening Plan
-
-```markdown
-## Success Criteria
-
-### Platform Preconditions
-- [ ] Local Kind clusters enforce `NetworkPolicy`
-- [ ] Pod Security Admission labels are applied without breaking current workloads
-- [ ] Kyverno is installed with a scoped smoke policy
-- [ ] Deterministic verification proves the platform preconditions work
-```
-
-### Pattern Characteristics
-
-1. **Checkbox-based** - clear yes/no for each item
-2. **Testable** - specific HTTP codes, behaviors
-3. **Phased** - break large tasks into smaller milestones
-4. **Prerequisites** - explicit dependencies between phases
-
-### Agent Execution Workflow
-
-```bash
-# 1. Human reviews plan and success criteria
-cat docs/architecture/security-architecture.md
-
-# 2. Human starts agent in autonomous mode
-claude --dangerously-skip-permissions
-
-# 3. Agent executes plan (human monitors but doesn't interrupt)
-
-# 4. Human verifies success criteria
-./scripts/smoketest/verify-security-prereqs.sh
-# Should prove NetworkPolicy, PSA, Istio, and Kyverno prerequisites
-```
-
-## Security Constraints
-
-Even in a sandbox, some operations are forbidden because they would cause issues outside the container.
-
-### SSL/TLS Certificates (CRITICAL)
-
-**Do not generate browser-facing certificates inside the devcontainer.**
-
-#### Why
-
-- Claude's container has its own `mkcert` CA (unique to container)
-- User's browser trusts their **host machine's** `mkcert` CA
-- These are **different CAs** (different root certificates)
-- Certificates generated in container → browser shows SSL warnings
-
-This constraint applies to the developer container and the real local setup flow. It does **not** block the isolated DinD test suites, because those tests only validate certificate generation and secret creation inside disposable containers. They are not trying to produce host-trusted browser certificates.
-
-#### Forbidden Operations
-
-```bash
-# DO NOT run these inside Claude's container:
-mkcert "*.budgetanalyzer.localhost"
-openssl genrsa -out server.key 2048
-openssl req -new -key server.key -out server.csr
-./scripts/bootstrap/setup-k8s-tls.sh  # (generates certificates)
-```
-
-#### Allowed Operations (Read-Only)
-
-```bash
-# These are fine (inspection only):
-openssl x509 -text -noout -in /workspace/orchestration/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
-kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls -o yaml
-openssl verify -CAfile ~/.local/share/mkcert/rootCA.pem /workspace/orchestration/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
-```
-
-#### Resolution
-
-When SSL issues occur, guide the user to run certificate generation scripts **on their host machine**:
-
-```bash
-# User runs on host (outside container):
-cd /path/to/orchestration
-./scripts/bootstrap/setup-k8s-tls.sh
-```
-
-## Configuration Files
-
-### Devcontainer Setup
-
-**File**: `.devcontainer/devcontainer.json`
-
-```json
-{
-  "name": "Budget Analyzer",
-  "dockerComposeFile": "../ai-agent-sandbox/docker-compose.yml",
-  "service": "claude-dev",
-  "workspaceFolder": "/workspace/orchestration",
-  "shutdownAction": "none",  // Container persists across sessions
-
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "anthropic.claude-code"  // Pre-install Claude Code extension
-      ]
-    }
-  }
-}
-```
-
-### Docker Compose Configuration
-
-**File**: `ai-agent-sandbox/docker-compose.yml`
-
-Key configurations:
-
-```yaml
-services:
-  claude-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile
-
-    volumes:
-      # Workspace (all repos accessible)
-      - ../..:/workspace
-
-      # Sandbox config (read-only)
-      - .:/workspace/orchestration/ai-agent-sandbox:ro
-
-      # Docker socket wormhole
-      - /var/run/docker.sock:/var/run/docker.sock
-
-    environment:
-      # TestContainers configuration
-      - TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
-      - TESTCONTAINERS_REUSE_ENABLE=true
-
-    # User mapping (prevents permission issues)
-    user: "${HOST_UID}:${HOST_GID}"
-```
-
-### Bash Aliases
-
-**File**: `ai-agent-sandbox/bash_aliases.sh`
-
-Sourced automatically on container startup:
-
-```bash
-# Quick access to autonomous mode
-alias dangerous="claude --dangerously-skip-permissions"
-
-# Example headless usage (commented):
-# claude -p "fix all lint errors" --dangerously-skip-permissions --output-format json
-```
-
-## Best Practices
-
-### 1. Plan First, Execute Second
-
-```bash
-# BAD: Run agent without plan
-claude --dangerously-skip-permissions -p "make the app better"
-
-# GOOD: Review plan, then execute
-claude -p "implement user authentication"  # Plan mode
-# Review plan, ask clarifying questions
-# Once plan approved:
-dangerous -p "implement the plan we just discussed"
-```
-
-### 2. Define Success Criteria Before Execution
-
-Create a checklist before running the agent:
-
-```markdown
-## Success Criteria
-- [ ] Unit tests pass
-- [ ] Integration tests pass
-- [ ] No linting errors
-- [ ] Documentation updated
-- [ ] Feature works in browser
-```
-
-### 3. Use Phased Execution for Large Tasks
-
-Break large tasks into phases:
-
-```bash
-# Milestone 1: Setup
-dangerous -p "create database migrations for user auth"
-
-# Verify setup success
-./gradlew flywayMigrate
-
-# Milestone 2: Implementation
-dangerous -p "implement auth endpoints"
-
-# Verify implementation success
-./gradlew test
-
-# Milestone 3: Integration
-dangerous -p "integrate auth with frontend"
-```
-
-### 4. Monitor Logs During Execution
-
-Even though execution is autonomous, monitoring is valuable:
-
-```bash
-# Terminal 1: Run agent
-dangerous -p "implement feature X"
-
-# Terminal 2: Monitor test output
-watch -n 2 'kubectl get pods -n default'
-
-# Terminal 3: Check application logs
-kubectl logs -f -n default deployment/session-gateway
-```
-
-### 5. Verify Results Against Criteria
-
-After execution, systematically verify each success criterion:
-
-```bash
-# Automated verification
-./gradlew test
-./gradlew build
-kubectl get pods -n default  # App pods should be Running
-kubectl get pods -n infrastructure  # Infra pods should be Running
-
-# Manual verification
-open https://app.budgetanalyzer.localhost
-# Test the feature in browser
-```
-
-## Troubleshooting
-
-### Agent Gets Stuck Waiting for Permission
-
-**Symptom**: Agent stops mid-execution, waiting for user approval.
-
-**Cause**: Not running with `--dangerously-skip-permissions`.
-
-**Solution**:
-```bash
-# Exit current session (Ctrl+C)
-# Restart with dangerous mode
-dangerous
-```
-
-### Container Can't Run Docker Commands
-
-**Symptom**: `docker: command not found` or `Cannot connect to the Docker daemon`.
-
-**Cause**: Docker socket not mounted, or incorrect permissions.
-
-**Solution**:
-```bash
-# Check socket is mounted
-ls -la /var/run/docker.sock
-
-# Check user is in docker group
-groups | grep docker
-
-# Rebuild container
-cd ai-agent-sandbox
-docker compose down
-docker compose up -d
-```
-
-### TestContainers Tests Fail with "Cannot connect to Docker"
-
-**Symptom**: Tests fail with Docker connection errors.
-
-**Cause**: TestContainers environment variables not set.
-
-**Solution**:
-```bash
-# Check environment variables
-env | grep TESTCONTAINERS
-
-# Should see:
-# TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-# TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
-# TESTCONTAINERS_REUSE_ENABLE=true
-
-# If missing, rebuild container
-cd ai-agent-sandbox
-docker compose down
-docker compose build --no-cache
-docker compose up -d
-```
-
-### Agent Tries to Generate SSL Certificates
-
-**Symptom**: Agent runs `mkcert` or `openssl genrsa`, browser shows SSL warnings.
-
-**Cause**: Agent doesn't understand SSL constraint.
-
-**Solution**: Remind agent of constraint:
-```
-STOP. SSL certificates must be generated on the host machine, not in this container.
-The browser trusts the host's mkcert CA, not this container's CA.
-
-Please guide me to run:
-./scripts/bootstrap/setup-k8s-tls.sh
-
-on my host machine (outside the container).
-```
-
-## Related Documentation
-
-- [Session Edge Authorization + API Gateway Pattern](session-edge-authorization-pattern.md) - Request flow and routing architecture
-- [Security Architecture](security-architecture.md) - Defense-in-depth security model
-- [Workspace README](../../../workspace/README.md) - Devcontainer and sandbox entry point
-- [Setup Flow Testing](../../tests/setup-flow/README.md) - Docker-in-Docker bootstrap validation
-- [Security Preflight Testing](../../tests/security-preflight/README.md) - Docker-in-Docker platform prerequisite validation
-
-## References
-
-- **PR #3**: "allow claude to run docker so it can work on TestContainers tests" - Implemented wormhole pattern
-- **Commit `00a27ae`**: "wormhole pattern for docker" - Core Docker socket mounting logic
-- **TestContainers**: https://testcontainers.com/ - Integration testing with real containers
-- **Docker-in-Docker**: https://hub.docker.com/_/docker - Official Docker-in-Docker image
-- **VS Code Dev Containers**: https://code.visualstudio.com/docs/devcontainers/containers
+The public root can contain workstation-identifying subject metadata and a
+stable fingerprint. Keep it out of Git, logs and uploaded artifacts. The
+mkcert `rootCA-key.pem` must never enter the workspace, guest or agent
+container.
+
+`scripts/bootstrap/install-imported-ingress-tls.sh` does not generate
+certificates. It validates that the three files exist, the public root is a
+valid CA, the leaf and CA are currently valid, the leaf covers
+`app.budgetanalyzer.localhost`, the chain verifies, and the leaf matches the
+private key. In install mode it also enforces the local `kind-kind` target,
+optionally installs the public root into the guest OS trust store, and applies
+the ingress TLS Secret.
+
+The human copies the three files over the dedicated host-to-guest SSH path and
+runs the installer in the guest. The agent-container's
+`ensure-budget-analyzer-local-ca-trust` command remains the lazy container-local
+trust path. Infrastructure certificates are separate, disposable guest
+material generated by the human-owned guest bootstrap; they are not copied
+from the personal host.
+
+If the leaf is missing, expired, mismatched or otherwise invalid, stop. Do not
+use HTTP, `--insecure`, `verify=False`, `ignore_https_errors`, a guest-generated
+browser CA or an agent-generated replacement. Renew on the personal host with
+`scripts/bootstrap/renew-host-ingress-tls.sh`, recopy the three approved files,
+and rerun the guest installer. Renewal does not run `setup.sh` and does not
+require or recreate a host Kind cluster.
+
+## Transitional Mint Runner
+
+The sibling workspace `.devcontainer/devcontainer.json` and
+`ai-agent-sandbox/docker-compose.yml` remain the implementation runner until
+Checkpoint B. They currently mount the shared sibling-repository parent and
+host kubeconfig and use host networking; their Docker-in-Docker devcontainer
+feature belongs to that transitional environment. Do not copy this
+configuration to the VM, reinterpret it as the guest target or claim that it
+isolates mounted host files from the agent.
+
+The separate guest compose configuration is owned by the sibling workspace
+repository. It must mount only guest-local working/bare repositories, the
+guest Docker socket and, after Kind exists, the guest kubeconfig. It must not
+mount a personal host path, host credential socket, host kubeconfig, libvirt
+socket or nested Docker data directory.
+
+The retained `tests/setup-flow` and `tests/security-preflight` DinD suites are
+stale, non-gating reference assets. They are not the guest runtime and are not
+completion proof for this migration.
+
+## Autonomous Execution Workflow
+
+Use autonomy only after the boundary and success criteria are reviewed:
+
+1. Define the task and explicit success criteria.
+2. Confirm the selected workspace, Docker endpoint, kubeconfig and credential
+   boundary.
+3. Let the agent execute within that boundary.
+4. Verify the result with repo-owned checks and human review before publication.
+
+Permission bypass flags do not create safety. The VM, mounts, credentials,
+network policy and target checks create the operating boundary. If a required
+prerequisite is absent, stop instead of weakening a control or hiding a
+service-owned defect with orchestration.
+
+## Operator References
+
+- Guest VM preparation, firewall rules and checkpoints:
+  [`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md)
+- Redacted migration evidence:
+  [`../plans/agent-host-isolation-acceptance.md`](../plans/agent-host-isolation-acceptance.md)
+- Supported setup and guest bootstrap commands:
+  [`../development/getting-started.md`](../development/getting-started.md)
+- Local mechanics, TLS ownership and live update:
+  [`../development/local-environment.md`](../development/local-environment.md)
+- Script catalog and verifier entry points:
+  [`../../scripts/README.md`](../../scripts/README.md)
+- Workspace-owned guest agent configuration and trust helper:
+  the sibling `../workspace` repository documentation

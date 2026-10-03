@@ -2,8 +2,8 @@
 
 **Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
 
-The supported containerized developer workspace lives in the sibling
-`workspace` repository:
+The supported transitional containerized developer workspace lives in the
+sibling `workspace` repository:
 
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
@@ -12,6 +12,13 @@ git clone https://github.com/budgetanalyzer/workspace.git
 Open the workspace in VS Code and choose **Reopen in Container**. After the
 devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
+
+The isolated target uses a separate guest agent-container configuration and
+VS Code Remote SSH. Its working clones, Docker daemon, Kind cluster and runtime
+state live in the development VM; it does not share this host workspace. Read
+the boundary contract in
+[`../architecture/autonomous-ai-execution.md`](../architecture/autonomous-ai-execution.md)
+before changing either configuration.
 
 Full local Tilt expects the Budget Analyzer repositories to be cloned
 side-by-side. That includes `../ext-authz`, which owns the Go external
@@ -54,6 +61,46 @@ If it reports that the host publication is missing, run `./setup.sh` from the
 host; do not generate or rotate certificates in the container. The publication
 contract and diagnostics live in
 [`local-environment.md`](local-environment.md#host-published-local-ingress-ca).
+
+## Development VM First Bootstrap
+
+Use this path only after the manual plan's initial host/VM handoff and
+Checkpoint A repository/TLS transfer are complete. Run it from a human-operated
+shell in the guest orchestration working clone, not from the agent container:
+
+```bash
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+./setup.sh --guest-local
+cd ../budget-analyzer-web
+npm install
+cd ../orchestration
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
+tilt up
+```
+
+The guest preflight rejects a remote Docker environment or context and requires
+the guest's default `/var/run/docker.sock`, normal `/var/lib/docker` data root,
+JDK 25, Node.js 20+ and npm 10+. The imported-TLS validation checks the public
+CA, validity period, hostname, chain and leaf/key match without changing trust
+or Kubernetes. `./setup.sh --guest-local` repeats the Docker check, recreates a
+fresh guest `kind` cluster, installs the public root in the guest trust store,
+and applies the ingress TLS Secret only after the strict loopback `kind-kind`
+checks pass.
+
+`./setup.sh` in either mode recreates Kind. It is a first-bootstrap or explicit
+clean-rebuild command, never a daily VM-start command. Daily guest startup is:
+
+```bash
+tilt up
+```
+
+Start the reviewed guest agent container and host loopback SSH forward using
+the sibling workspace and manual-plan commands. Do not import any Mint Docker
+state or run the standard host certificate generator in the guest. Exact OS
+prerequisite installation, TLS transfer and Checkpoint A acceptance commands
+live in
+[`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md#checkpoint-a-set-up-repositories-and-bootstrap-the-guest).
 
 ## Validation
 

@@ -26,7 +26,18 @@ scripts/
 ## Canonical Entry Points
 
 - `../setup.sh` - Standard local platform bootstrap from the repository root.
+- `../setup.sh --guest-local` - Explicit first bootstrap for the development
+  VM's local Docker daemon using imported host-created ingress TLS. Both setup
+  modes recreate Kind and are not daily-start commands.
+- `bootstrap/check-agent-vm-prerequisites.sh` - Read-only development VM check
+  for Ubuntu, local Docker endpoint/data-root selection, required build tools
+  and absence of forwarded GitHub/SSH authority.
+- `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
+  validator and strict local-`kind-kind` Secret installer; use
+  `--validate-only` for static file checks.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
+  Pass `--guest-local` in the development VM to skip mkcert and require the
+  local guest Docker endpoint.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
@@ -163,6 +174,19 @@ Choose scripts by runtime boundary:
   prerequisites, inotify budgets, pinned Gateway API and Calico state, and
   optional runtime security state. It reports drift and install commands
   without performing interactive cluster changes.
+- `bootstrap/check-agent-vm-prerequisites.sh` fails closed unless the Ubuntu
+  development VM is using its default local Unix Docker socket and normal
+  `/var/lib/docker` data root. It also checks Git, OpenSSL, JDK 25, Node.js 20+
+  and npm 10+ and rejects forwarded agent/token/credential-helper state.
+- `bootstrap/install-imported-ingress-tls.sh` validates the three approved
+  host-created ingress files without invoking mkcert. Install mode optionally
+  adds the public root to the guest OS trust store and applies the TLS Secret
+  only after exact context, referenced-cluster, loopback-API, Kind-cluster and
+  control-plane-node checks pass.
+- `bootstrap/renew-host-ingress-tls.sh` is the human-operated personal-host
+  renewal path. It creates and validates a replacement leaf/key using the
+  existing host mkcert CA, republishes only the public root and never contacts
+  or recreates Kubernetes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
   used by `setup.sh` and Tilt. Tilt reruns the host-only
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
@@ -184,8 +208,10 @@ Choose scripts by runtime boundary:
   `nginx/certs/k8s/_mkcert-rootCA.pem` for the workspace lazy-trust command.
   The publication remains ignored by Git; no CA private key is published.
 
-Use `../setup.sh` when you want the full local bootstrap to converge
-repo-managed prerequisites and recreate the local Kind cluster. Use
+Use `../setup.sh` when you want the standard local bootstrap to converge
+repo-managed prerequisites and recreate the local Kind cluster. Use the
+explicit `../setup.sh --guest-local` path only after the development VM has the
+approved imported TLS files and its guest-local prerequisites pass. Use
 `bootstrap/install-verified-tool.sh` for a single pinned binary, and use
 `bootstrap/check-tilt-prerequisites.sh` as a read-only report before or after
 setup.

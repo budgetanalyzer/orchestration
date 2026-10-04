@@ -135,6 +135,29 @@ but the human runs a reviewed copy on the host. The guest cannot invoke it on
 the host. All later host-to-VM and VM-to-host transfers are explicit Git pushes
 and fetches initiated at the appropriate side.
 
+Phase 2 also creates reviewed guest-run lifecycle helpers for the agent
+container. These helpers are operational wrappers, not repository-transfer or
+publication automation. They must:
+
+1. Provide stable start, stop, restart, status and interactive-shell entry
+   points under the workspace `scripts/` directory.
+2. Resolve the workspace and Compose paths relative to the installed helper;
+   do not depend on the caller's current directory or hardcode the common
+   parent path.
+3. Use `agent-vm.env`, `docker-compose.agent-vm.yml` and, for normal daily
+   operation, `docker-compose.agent-vm-kubeconfig.yml` together so operators do
+   not have to reconstruct a shell array in every SSH session.
+4. Require the reviewed guest-local Docker endpoint and exact kubeconfig input
+   for normal start, restart and shell operations. If pre-Kind bootstrap needs
+   the base Compose file alone, expose that only through a distinctly named,
+   explicit bootstrap option that cannot become the accidental daily path.
+5. Preserve provider configuration volumes on stop/restart, avoid rebuilding
+   unless explicitly requested, and never start or restart Kind, Tilt, the VM,
+   host forwarding or a nested Docker daemon as a side effect.
+6. Fail clearly when the environment file, Compose files, Docker endpoint,
+   kubeconfig or agent service is missing or invalid. Print the effective
+   operation without printing credentials or full environment contents.
+
 ## Execution and handoff
 
 This plan follows the [AI Session Handler format](../../../ai-session-handler/docs/plan-format.md).
@@ -271,22 +294,24 @@ pending behavior and the host-only GitHub credential boundary.
 ### Goal
 
 Provide a reproducible guest runtime, the one-time ecosystem repository setup
-script and launch instructions for Checkpoint A while preserving the existing
-Mint-hosted devcontainer as the Phase 1–6 implementation runner.
+script, concise agent-container lifecycle helpers and launch instructions for
+Checkpoint A while preserving the existing Mint-hosted devcontainer as the
+Phase 1–6 implementation runner.
 
 ### Scope
 
 The existing Mint Dev Container contract, a separate guest Compose runtime,
 shared Dockerfile and guest-specific entrypoint wiring, guest prerequisite
-helpers, the host-run repository setup script, reference configuration and
-workspace documentation.
+helpers, guest-run agent-container lifecycle helpers, the host-run repository
+setup script, reference configuration and workspace documentation.
 
 ### Non-goals
 
 No launch on the personal host, conversion or retirement of the working Mint
 devcontainer, repository transfer, host package installation, firewall changes,
 hypervisor administration, GitHub operation, daily sync or publication command,
-or application service change.
+application service change, or a helper that implicitly starts the VM, Kind,
+Tilt or host SSH forwarding.
 
 ### Required context
 
@@ -333,22 +358,32 @@ bootstrap instructions.
    one-time discovery, VM bare/working repository creation, host `vm` remote
    configuration and initial branch seeding. Do not add rsync, GitHub access,
    daily transfer wrappers, commit automation, force pushes or PR publication.
-5. Prepare repeatable guest provisioning for Docker and the prerequisites Tilt
+5. Add guest-run agent-container lifecycle helpers implementing the plan-wide
+   helper contract. Provide stable start, stop, restart, status and interactive
+   shell commands backed by one shared implementation so the Compose file list,
+   environment-file selection and validation cannot drift between entry points.
+   Normal daily commands must use the kubeconfig override and must work from
+   any current directory. Keep a pre-Kind base-only mode explicit and visibly
+   bootstrap-only. Do not couple these helpers to repository transfer, Kind,
+   Tilt, VM lifecycle, host forwarding, provider login or image rebuilds.
+6. Prepare repeatable guest provisioning for Docker and the prerequisites Tilt
    runs outside the agent container: Java, Node/npm, Git, OpenSSL and browser
    trust utilities as required by owner docs. Verify the setup script discovers
    every immediate sibling Git repository selected by the operator, including
    `ext-authz`, without encoding a static repository inventory.
    Document launching and authenticating the guest agent before application
    bootstrap, using only its provider credentials, with no GitHub login.
-6. Record the actual VM/storage/network setup supplied by the operator as
+7. Record the actual VM/storage/network setup supplied by the operator as
    minimal, reproducible reference configuration. Keep trusted host launch and
    SSH settings outside guest-writable storage; updates require human review and
    installation. Do not automatically apply reference artifacts to the host.
-7. Write `docs/host-isolation.md` with install/start/stop instructions, the
-   one-time setup contract, exact daily branch transfer in both directions,
+8. Write `docs/host-isolation.md` with the canonical helper interface and
+   install/start/stop/restart/status/shell instructions, the one-time setup
+   contract, exact daily branch transfer in both directions,
    Docker/Testcontainers endpoint discovery, credential handling, clean-rebuild
    procedure and the handoff to Checkpoint A. Update README and affected
-   instructions.
+   instructions. Operator-facing daily instructions must call the helpers
+   instead of duplicating the multi-file Compose invocation.
 
 ### Implementation notes
 
@@ -375,6 +410,13 @@ metadata and remains usable as the implementation runner. Separately render
 namespaces, guest Docker-socket selection, absence of DinD, startup without
 kubeconfig and endpoint fallback. Check guest startup preserves local origins
 and resolves helper paths from the configured workspace root.
+Exercise every lifecycle helper against disposable Compose fixtures from a
+working directory outside the workspace. Prove normal start, restart, status
+and shell operations select the base and kubeconfig files, while the explicit
+bootstrap-only mode selects only the base file. Prove stop/restart preserve
+named provider volumes, do not rebuild images, and do not change the Kind node
+container or invoke Tilt. Cover missing/invalid environment, kubeconfig,
+Docker endpoint and service failures without exposing environment contents.
 Test the setup script against disposable host/guest Git fixtures covering
 repository discovery, names with safe supported characters, initial `main`, a
 different current branch selected in the guest, partial rerun, mismatched `vm`
@@ -388,10 +430,11 @@ links and run `git diff --check`. Do not contact GitHub or a real VM.
 
 The existing Mint devcontainer remains a working implementation runner. The
 operator can separately review and install the complete guest runtime and run
-one script to establish every selected ecosystem repository. Static and
-disposable-fixture checks pass, no GitHub or daily publication capability is
-introduced, and no live validation is claimed. Stop the invocation for manual
-Checkpoint A.
+one script to establish every selected ecosystem repository. The operator can
+manage the guest agent container through concise, validated lifecycle helpers
+without reconstructing Compose arguments. Static and disposable-fixture checks
+pass, no GitHub or daily publication capability is introduced, and no live
+validation is claimed. Stop the invocation for manual Checkpoint A.
 
 ## Phase 3: Verify Repository Transport And Guest Runtime Isolation
 
@@ -600,8 +643,10 @@ and workspace/service validation evidence.
    Do not modify sibling service source to manufacture evidence.
 3. Update owner docs first, then README/AGENTS summaries as needed. Describe
    one-time repository setup, guest bootstrap versus daily startup, guest-local
-   editing, exact bidirectional branch transfer, host-only GitHub publication,
-   HTTPS forwarding, resource use and clean rebuild.
+   editing, the canonical agent-container lifecycle helpers, exact bidirectional
+   branch transfer, host-only GitHub publication, HTTPS forwarding, resource
+   use and clean rebuild. Daily operator instructions must use the helpers and
+   must not repeat the raw multi-file Compose command.
 4. Document the daily Git workflow without a wrapper: host updates `main`,
    creates a feature branch and pushes it to `vm`; the guest fetches/switches,
    the agent commits and pushes only to its local bare `origin`; the host fetches
@@ -612,7 +657,12 @@ and workspace/service validation evidence.
    working repositories from reviewed setup, re-push host branches, and create
    guest runtime state from reviewed configuration. Do not restore or import
    host Docker, Kind, volume, database, cache or application state.
-6. Record verified results and remaining human browser checks. Prepare the
+6. Run the lifecycle helpers from a fresh guest SSH session and a working
+   directory outside the workspace. Verify start, restart, status and shell
+   access preserve the exact guest kubeconfig mount and provider state while
+   leaving Kind and Tilt healthy; verify stop affects only the agent service,
+   then restore it with the start helper.
+7. Record verified results and remaining human browser checks. Prepare the
    exact Checkpoint B sequence and the separate post-plan Checkpoint C cutover.
    Checkpoint C must preserve host Docker until all implementation workers have
    ended, then remove the host daemon, socket, CLI, approved runtime data and
@@ -622,10 +672,12 @@ and workspace/service validation evidence.
 
 ### Implementation notes
 
-Daily use is VM start, guest Tilt/agent start, Remote SSH editing, explicit Git
-branch transfer and host HTTPS forwarding. The one-time setup script is not a
-daily launcher. GitHub Actions and workflow files transfer like all committed
-files, but the host remains the only GitHub writer and PR publisher.
+Daily use is VM start, helper-driven guest agent-container lifecycle, guest
+Tilt start, Remote SSH editing, explicit Git branch transfer and host HTTPS
+forwarding. The one-time repository setup script is not a daily launcher. The
+lifecycle helpers do not start the VM, Kind, Tilt or host forwarding. GitHub
+Actions and workflow files transfer like all committed files, but the host
+remains the only GitHub writer and PR publisher.
 
 ### Validation
 
@@ -636,8 +688,9 @@ DinD test suites as acceptance gates.
 ### Completion criteria
 
 The guest implementation and tests pass, the credential-isolated Git workflow
-and daily runtime are documented, and the human has concrete Checkpoint B and C
-instructions. The implementation run ends before host Docker retirement.
+and helper-driven daily runtime are documented and verified, and the human has
+concrete Checkpoint B and C instructions. The implementation run ends before
+host Docker retirement.
 Overall acceptance is complete only when the acceptance record includes the
 operator's post-reboot Checkpoint C proof that Mint Docker and its transitional
 workarounds are gone while guest Docker and the permanent host boundary remain

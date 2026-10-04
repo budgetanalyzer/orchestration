@@ -13,9 +13,12 @@ Open the workspace in VS Code and choose **Reopen in Container**. After the
 devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
 
-The isolated target uses a separate guest agent-container configuration and
-VS Code Remote SSH. Its working clones, Docker daemon, Kind cluster and runtime
-state live in the development VM; it does not share this host workspace. Read
+The selected isolated target uses native agents and VS Code Remote SSH in a
+development VM. Native provisioning is planned in the
+[execution plan](../plans/agent-vm-native-execution-plan.md), with a separate
+[human installation/cutover checklist](../plans/agent-vm-native-manual-plan.md).
+The current guest agent container is a temporary preparation runner. Working
+clones, Docker, Kind and runtime state stay guest-local. Read
 the boundary contract in
 [`../architecture/autonomous-ai-execution.md`](../architecture/autonomous-ai-execution.md)
 before changing either configuration.
@@ -64,9 +67,11 @@ contract and diagnostics live in
 
 ## Development VM First Bootstrap
 
-Use this path only after the manual plan's initial host/VM handoff and
-Checkpoint A repository/TLS transfer are complete. Run it from a human-operated
-shell in the guest orchestration working clone, not from the agent container:
+Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
+after guest provisioning, repository setup and approved TLS transfer. The
+[native migration](../plans/agent-vm-native-manual-plan.md) reuses the existing
+healthy cluster and must not run this sequence simply to move agents out of
+Docker. Run bootstrap from a human-operated guest OS shell:
 
 ```bash
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh
@@ -95,12 +100,11 @@ clean-rebuild command, never a daily VM-start command. Daily guest startup is:
 tilt up
 ```
 
-Start the reviewed guest agent container and host loopback SSH forward using
-the sibling workspace and manual-plan commands. Do not import any Mint Docker
-state or run the standard host certificate generator in the guest. Exact OS
-prerequisite installation, TLS transfer and Checkpoint A acceptance commands
-live in
-[`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md#checkpoint-a-set-up-repositories-and-bootstrap-the-guest).
+Follow the [native manual plan](../plans/agent-vm-native-manual-plan.md) for the
+agent installation gate and daily startup. Until that gate passes, the existing
+guest container is used only for preparation. Do not import Mint Docker state
+or run the standard host certificate generator in the guest. Imported TLS
+ownership and renewal remain in the local-environment guide.
 
 ## Validation
 

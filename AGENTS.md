@@ -65,20 +65,22 @@ Prefer discovery commands over static inventories:
 
 This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
-This project is designed for AI-assisted development. The containerized development environment lives in the sibling `../workspace` repository; that repo owns the devcontainer configuration.
+This project is designed for AI-assisted development. The sibling `../workspace`
+repository owns development tooling, native VM provisioning and the transitional
+devcontainer configuration.
 
 The `ext-authz` Go service implementation lives in the sibling `../ext-authz`
 repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-After the host-isolation manual continuation handoff, run the VM continuation
-plan inside the separate guest agent container with guest-local repositories,
-Docker, Kind and kubeconfig. Keep Mint Docker available until the human-owned
-retirement checkpoint; it is not the continuation runner. Read
-`docs/plans/agent-host-isolation-vm-continuation-plan.md` and the manual handoff
-before resuming this work. Do not reinterpret the existing Mint devcontainer
-as the guest target or share the personal-host workspace with the guest.
+The selected host-isolation target runs agents directly in the development VM.
+Read `docs/plans/agent-vm-native-execution-plan.md` and its companion manual
+plan before resuming migration work. Only Phases 1–2 use the existing guest
+container to prepare installers; after human native installation, Phases 3–8
+run directly in the same guest checkout. Keep Mint Docker until the human-owned
+retirement checkpoint. Do not share personal-host files with the guest, execute
+the old continuation, or claim native acceptance before its gates pass.
 
 The agent container is inside the trusted local-development boundary. Local
 workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated
@@ -162,7 +164,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
 - Agent host-isolation boundary and guest-local runtime contract: `docs/architecture/autonomous-ai-execution.md`
-- Development VM operator checkpoints and exact host/guest handoffs: `docs/plans/agent-host-isolation-manual-plan.md`
+- Development VM native installation, operator checkpoints and host/guest handoffs: `docs/plans/agent-vm-native-manual-plan.md`
 - Containerized dev environment setup: sibling `../workspace` repository
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`

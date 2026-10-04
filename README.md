@@ -14,15 +14,16 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 
 **Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full production stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
-**AI agents can debug the full stack.** The host-isolation continuation runs in
-the separate development-VM agent container from
-[workspace](https://github.com/budgetanalyzer/workspace), after the
-[manual handoff](docs/plans/agent-host-isolation-manual-plan.md#continuation-handoff-start-the-vm-execution-plan).
+**AI agents can debug the full stack.** The selected target runs agents directly
+in a dedicated development VM, with repeatable tooling owned by
+[workspace](https://github.com/budgetanalyzer/workspace). The
+[native execution plan](docs/plans/agent-vm-native-execution-plan.md) and
+[human checkpoints](docs/plans/agent-vm-native-manual-plan.md) replace the
+container-based migration; implementation and acceptance remain pending.
 Repositories, Docker and Kind stay guest-local while GitHub publication remains
-on the personal host. Mint Docker remains available until its retirement
-checkpoint. The
-[boundary contract](docs/architecture/autonomous-ai-execution.md) defines both
-arrangements and the migration checkpoints.
+on the personal host. The
+[boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
+target and existing transitional environments.
 
 **Production deployment is documented and scripted.** The `deploy/` directory contains the complete, numbered script sequence to bootstrap a k3s cluster on OCI from scratch — Istio mesh, cert-manager with ACME HTTP-01, OCI Vault secret synchronization via External Secrets Operator, Kyverno admission policies, Prometheus/Grafana monitoring, Jaeger tracing, and public TLS. Every step produces reviewable rendered YAML under `tmp/` before anything touches the cluster.
 

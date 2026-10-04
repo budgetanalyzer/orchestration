@@ -1,16 +1,78 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** Operator preparation Steps 1–5 and the Initial Handoff were
+**Status:** Native migration planned; all new acceptance gates below are pending.
+Prior container migration evidence is retained below and is not native proof.
+Operator preparation Steps 1–5 and the Initial Handoff were
 completed and verified by the operator on 2026-10-03. Checkpoint A repository,
 credential, TLS, bootstrap, stack-health and agent-restart checks were completed
 on 2026-10-04; its Java and frontend live-update checks are explicitly deferred
 to Checkpoint B. Checkpoints A–C therefore remain pending final acceptance.
+
+The active contracts are the [native execution plan](agent-vm-native-execution-plan.md)
+and [human checkpoints](agent-vm-native-manual-plan.md). References to original
+phase numbers and Checkpoints A–C in the historical sections describe the old
+container migration, not the new native A–D checkpoints.
 
 This record contains redacted acceptance evidence for the development VM host
 isolation work. Keep repository references to basenames. Do not add private
 remote URLs, absolute personal-host paths, credentials, private keys,
 certificate private-key contents, browser state, full firewall dumps, MAC
 addresses or unrelated host configuration.
+
+## Native Preparation Handoff
+
+**Status:** PENDING human Checkpoint A; no native plan invocation recorded.
+
+| Evidence | Result |
+| --- | --- |
+| Old workers ended; source preserved; new reviewed plan/tool sources transferred | PENDING |
+| Guest-local checkout/bare origins and handler revision; no imported old runner state | PENDING |
+| Current VM confinement, no host integration, Remote SSH/credential boundary | PENDING |
+| Paired native/Docker host firewall fixtures, positives, IPv4/IPv6 applicability and hooks | PENDING |
+| Guest OS prerequisites, default local Docker, exact Kind target and healthy Tilt | PENDING |
+| Existing guest container identity/mounts and provider/handler availability | PENDING |
+| First invocation capped at two phases in the guest checkout | PENDING |
+
+## Native Execution Handoff
+
+**Status:** PENDING human Checkpoint B after preparation Phases 1–2.
+
+| Evidence | Result |
+| --- | --- |
+| Installer revision, full tool inventory and tracked fixture results reviewed | PENDING |
+| System/user installation and repeat-run idempotence; no unintended runtime restart | PENDING |
+| Native user/home, fresh-shell tool resolution, handler import and selected permissions | PENDING |
+| Native provider workspace-read and sandbox-mode proof without credential disclosure | PENDING |
+| curl/Python/Node/Playwright verified app trust and public-root preservation | PENDING |
+| Guest origins/credential boundary and current Docker/Kind/Tilt health | PENDING |
+| Old guest agent stopped, cleanup IDs recorded privately, provider volumes preserved | PENDING |
+| Same new-plan guest state selects Phase 3; paired host evidence still applicable | PENDING |
+
+## Native Execution Results
+
+| Phase | Owner evidence | Result |
+| --- | --- | --- |
+| 1: system installer/tool inventory | workspace `docs/host-isolation.md` | PENDING |
+| 2: user environment/helpers | workspace `docs/host-isolation.md` | PENDING |
+| 3: native runtime and workspace checks | workspace `docs/host-isolation.md` | PENDING |
+| 4: orchestration native preflight/docs | This record | PENDING |
+| 5: native shared-library build/publication | service-common active development docs | PENDING |
+| 6: native currency Testcontainers | currency-service `docs/local-development.md` | PENDING |
+| 7: native gateway Testcontainers | session-gateway `docs/local-development.md` | PENDING |
+| 8: application/security proof and final procedures | This record | PENDING |
+
+## Native Human Acceptance
+
+- Checkpoint C trusted browser, Java/frontend save/restoration, native session
+  lifecycle and host/guest reboot persistence: PENDING.
+- Checkpoint C guest agent resource retirement, native independence and
+  measured guest resource use: PENDING.
+- Checkpoint D reviewed source returned, Mint Docker/runtime/hooks retired,
+  permanent host policy retained and final reboot proof: PENDING.
+- Optional proxy activation: NOT EXECUTED; installed capability/offline checks
+  still required in workspace evidence.
+- Overall native migration acceptance: PENDING human C/D; no result inferred
+  from planning, installer fixtures or historical container passes.
 
 ## Initial Operator Handoff
 
@@ -159,18 +221,18 @@ addresses or unrelated host configuration.
 - Host/VM restart persistence, host loopback port 443, trusted browser behavior
   and the final daily workflow remain `PENDING Checkpoint B`.
 
-The [VM continuation plan](agent-host-isolation-vm-continuation-plan.md) replaces
-the stopped Mint-hosted execution after its manual handoff. Neither Checkpoint
-A nor Checkpoint B may be marked fully accepted until both named live-update
-smoke edits pass. Original phase numbers below describe historical results.
+The former container continuation was superseded by the
+[native execution plan](agent-vm-native-execution-plan.md). The old incomplete
+results remain historical; native acceptance still requires both named
+live-update proofs. Original phase numbers below describe historical results.
 
 ## VM Continuation Handoff
 
-**Status:** `PENDING operator H.1–H.4`; creating the continuation plan does not
-complete its prerequisites. Follow the
-[manual handoff](agent-host-isolation-manual-plan.md#continuation-handoff-start-the-vm-execution-plan)
-and replace pending entries only with actual results. Earlier bare firewall
-PASS summaries need the detailed paired evidence specified in H.2.
+**Status:** SUPERSEDED, not executed. These pending entries preserve the former
+container-continuation handoff; do not execute or complete it. Use the native
+handoffs above and [human checklist](agent-vm-native-manual-plan.md). Earlier
+bare firewall PASS summaries still require detailed paired evidence for native
+acceptance.
 
 | Prerequisite | Evidence / status |
 | --- | --- |

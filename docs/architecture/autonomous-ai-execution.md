@@ -7,23 +7,34 @@ development boundary. That authority is useful for builds, tests, Docker,
 Kubernetes and local API diagnostics, but it is not authority over the personal
 workstation, GitHub publication, staging or production.
 
-Two development arrangements exist during the host-isolation migration:
+The selected target is **native agents in the development VM**, with Docker
+reserved for application builds, Kind, infrastructure and test containers.
+Workspace-owned system/user installers will replace the agent tool image and
+entrypoints. This is a planned transition, not a claim of native acceptance.
+Read the [native execution plan](../plans/agent-vm-native-execution-plan.md)
+and [human checkpoints](../plans/agent-vm-native-manual-plan.md) before resuming.
+
+The existing environments remain transitional inputs until those gates pass:
 
 - The **transitional Mint workspace devcontainer** hosted the original
   preparation phases. It mounts the host's sibling-repository workspace and
   kubeconfig and uses the Mint Docker environment. Keep Mint Docker available
   through Checkpoint B; availability does not require running workers there.
-- The **guest agent container** is the target runtime defined separately by the
+- The **guest agent container** is the previous runtime defined separately by the
   sibling workspace repository's `ai-agent-sandbox/docker-compose.agent-vm.yml`.
   It runs on the development VM's Docker daemon against guest-local files and
-  guest-local Kind. After the manual continuation handoff, it also runs the
-  [VM continuation plan](../plans/agent-host-isolation-vm-continuation-plan.md).
+  guest-local Kind. It runs only the native plan's two preparation phases,
+  then the human installs the native tools and stops it before Phase 3.
   It is not a Mint profile, a VM definition, or a replacement compose file for
   the existing devcontainer.
 
 The transition ends only after the human completes the explicit Docker
 retirement checkpoint in
-[`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md).
+[the native manual plan](../plans/agent-vm-native-manual-plan.md#checkpoint-d-return-work-and-retire-mint-docker).
+
+The detailed container procedures below describe the existing implementation
+until the native plan replaces them in their owning repositories. They do not
+override its native target, execution locations or human handoffs.
 
 ## Boundary Terminology
 
@@ -33,7 +44,12 @@ retirement checkpoint in
 - **Development VM**: the Ubuntu guest. It owns working clones, local bare Git
   repositories, Docker storage, dependency caches, Kind, Tilt, Kubernetes
   state, development credentials and application data.
-- **Agent container**: a container created by the development VM's Docker
+- **Native agent (target)**: a process of the normal guest development user,
+  sharing that user's tool environment and build caches with Tilt. Access to
+  the rootful guest Docker daemon confers guest-root-equivalent authority.
+  Native command sandboxing can constrain ordinary commands, but unrestricted
+  Docker access remains a route to control guest assets.
+- **Agent container (transitional)**: a container created by the development VM's Docker
   daemon. It can administer that daemon and therefore must be assumed able to
   read, alter or destroy all guest repositories, local credentials, Kind state
   and other guest runtime data.
@@ -43,7 +59,7 @@ prevent an accidental launch in the wrong place. It does not prove isolation.
 Isolation comes from the VM boundary, guest-local storage and Docker endpoint,
 the absence of host mounts and credentials, and host-enforced network policy.
 
-## Target Guest-Local Architecture
+## Existing Guest-Container Architecture
 
 ```text
 Personal host
@@ -211,11 +227,11 @@ guest Docker socket and, after Kind exists, the guest kubeconfig. It must not
 mount a personal host path, host credential socket, host kubeconfig, libvirt
 socket or nested Docker data directory.
 
-The manual plan's continuation handoff owns source transfer, guest-OS preflight
-and operator-produced host firewall evidence before the run. Workers inspect
-that evidence and directly verify the guest runtime; they do not administer
-Mint or require host listeners to remain running. Reboot and browser proof stay
-in Checkpoint B, and Mint Docker retirement stays in Checkpoint C.
+The native manual plan owns source transfer, guest-OS preflight and human
+firewall evidence. Its A/B gates separate container preparation from native
+execution; C owns browser/reboot acceptance and guest-agent resource retirement,
+and D owns Mint Docker retirement. Workers never administer Mint or require
+host listeners to remain running after paired evidence is collected.
 
 Run guest-OS bootstrap prerequisite checks from the human guest shell. Their
 systemd and hostname checks are not agent-container checks. Inside the agent,
@@ -249,7 +265,7 @@ service-owned defect with orchestration.
 ## Operator References
 
 - Guest VM preparation, firewall rules and checkpoints:
-  [`../plans/agent-host-isolation-manual-plan.md`](../plans/agent-host-isolation-manual-plan.md)
+  [native manual plan](../plans/agent-vm-native-manual-plan.md)
 - Redacted migration evidence:
   [`../plans/agent-host-isolation-acceptance.md`](../plans/agent-host-isolation-acceptance.md)
 - Supported setup and guest bootstrap commands:

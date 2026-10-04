@@ -1538,7 +1538,7 @@ This happens **after implementation Phase 2**, not during initial VM creation.
 
 ### A.1 Review And Run The One-Time Repository Setup
 
-- [ ] On Mint, review the Phase 1 orchestration diff and Phase 2 workspace diff,
+- [x] On Mint, review the Phase 1 orchestration diff and Phase 2 workspace diff,
   including every line of the new setup script. Confirm that the implementation
   documentation contains one exact invocation matching the script's `--help`;
   do not infer missing flags.
@@ -1556,7 +1556,7 @@ workspace/scripts/setup-agent-vm-repositories.sh --help
   Stop if either repository has unexpected changes, shell validation fails, or
   the documented invocation does not agree with `--help`.
 
-- [ ] Because the setup script transfers committed Git objects and rejects dirty
+- [x] Because the setup script transfers committed Git objects and rejects dirty
   repositories, use the normal human-owned Git workflow to commit the accepted
   Phase 1 orchestration changes and Phase 2 workspace changes on their intended
   seed branches. Do not ask an agent to commit or push them. Then require every
@@ -1576,7 +1576,7 @@ test ! -d "$(git rev-parse --git-path rebase-apply)"
   setup, but they must be present on the selected local branches so the guest
   receives them.
 
-- [ ] Run the exact documented setup command from this same human-operated Mint
+- [x] Run the exact documented setup command from this same human-operated Mint
   terminal, supplying the reviewed common parent, `budget-agent-vm` alias and
   `/srv/budget-analyzer` root. The script must print its resolved host parent,
   guest destination and repository basenames before it changes anything. Read
@@ -1586,7 +1586,7 @@ test ! -d "$(git rev-parse --git-path rebase-apply)"
   non-empty destination, copying uncommitted files or contacting GitHub from the
   guest. Save the redacted summary, not private remote URLs.
 
-- [ ] For every selected repository basename `<repo>`, verify both sides:
+- [x] For every selected repository basename `<repo>`, verify both sides:
 
 **Mint host terminal, from the common repository parent:**
 
@@ -1612,7 +1612,7 @@ git -C /srv/budget-analyzer/worktrees/<repo> branch --all
 
 ### A.2 Prove A Full Git Round Trip Without GitHub
 
-- [ ] Choose one non-sensitive repository and require a clean host and guest
+- [x] Choose one non-sensitive repository and require a clean host and guest
   worktree. Save each side's starting branch in its terminal and keep those
   terminals open through cleanup. Start from the selected seed branch; this
   fixture needs no GitHub operation. Before running it, stop if either worktree
@@ -1680,7 +1680,7 @@ git push vm --delete host-isolation-roundtrip
 
 ### A.3 Prove The Guest Has No GitHub Authority
 
-- [ ] Run the following without entering any credential:
+- [x] Run the following without entering any credential:
 
 **Guest SSH session:**
 
@@ -1698,7 +1698,7 @@ find /srv/budget-analyzer/worktrees -mindepth 2 -maxdepth 2 -name .git \
   authenticated host, and every printed guest remote is guest-local. Do not
   prove isolation by attempting a GitHub write or entering a host credential.
 
-- [ ] In the dedicated `Budget Analyzer VM` Remote SSH window, confirm
+- [x] In the dedicated `Budget Analyzer VM` Remote SSH window, confirm
   `git.terminalAuthentication` and `git.useIntegratedAskPass` are both `false`.
   Use **Terminal: Kill All Terminals**, create a new terminal, and repeat the
   environment check there:
@@ -1717,7 +1717,7 @@ git config --show-origin --get-all credential.helper || true
 
 ### A.4 Transfer And Validate Only Approved TLS Files
 
-- [ ] From the host orchestration checkout, repeat Step 5's TLS checks, then copy
+- [x] From the host orchestration checkout, repeat Step 5's TLS checks, then copy
   the three approved files to a temporary guest location:
 
 **Mint host terminal, from this repository:**
@@ -1755,7 +1755,7 @@ find /srv/budget-analyzer -name rootCA-key.pem -print
   use that reviewed destination consistently instead of creating a second
   copy.
 
-- [ ] Before application bootstrap, prove trusted forwarding with a temporary
+- [x] Before application bootstrap, prove trusted forwarding with a temporary
   TLS endpoint:
 
 **Guest SSH session, leave running:**
@@ -1789,7 +1789,7 @@ curl --fail --show-error \
 
 ### A.5 Start The Guest Agent, Then Bootstrap The Application
 
-- [ ] From a human-operated guest SSH session, install the guest-host
+- [x] From a human-operated guest SSH session, install the guest-host
   prerequisites outside the agent container. These commands use Ubuntu's
   Docker package plus the same signed NodeSource and Azul package repositories
   as the reviewed workspace image:
@@ -1859,7 +1859,7 @@ done
   prerequisite; do not compensate in orchestration for a service-owned
   failure.
 
-- [ ] Build and start the reviewed guest agent container now, before Kind or
+- [x] Build and start the reviewed guest agent container now, before Kind or
   Tilt, using Phase 2's separate
   `ai-agent-sandbox/docker-compose.agent-vm.yml`. First prove this shell and
   Docker endpoint belong to the guest, create the ignored runtime environment
@@ -2039,7 +2039,7 @@ printf '%s\n' "$agent_response" | grep -Fx GUEST_WORKSPACE_READ_OK
   kubeconfig override until the later post-bootstrap step explicitly requires
   it.
 
-- [ ] From the guest orchestration working clone—not from the agent container—
+- [x] From the guest orchestration working clone—not from the agent container—
   validate the imported files once more, then run the explicit guest bootstrap:
 
 ```bash
@@ -2072,7 +2072,7 @@ docker ps --format 'table {{.Names}}\t{{.Status}}'
   Success requires cluster `kind`, context and referenced cluster `kind-kind`,
   a loopback Kubernetes API URL, and a Ready `kind-control-plane` node.
 
-- [ ] Recreate the agent container with the exact newly generated guest Kind
+- [x] Recreate the agent container with the exact newly generated guest Kind
   kubeconfig mounted. The agent container is the long-running `agent` service
   created by the guest Docker daemon; it is not a Kubernetes pod or another
   VM. The base container started earlier can use the guest repositories and
@@ -2214,7 +2214,11 @@ compose_kube=(
   restore only that fixture edit. Confirm the corresponding Mint host checkout
   remains unchanged with `git status --short`.
 
-- [ ] Restart the reviewed agent container once. Require `kind get clusters`,
+  **Deferred on 2026-10-04:** the operator intentionally deferred both smoke
+  edits. Keep this item unchecked and carry it to Checkpoint B; do not infer a
+  pass from healthy Tilt resources or the successful agent restart.
+
+- [x] Restart the reviewed agent container once. Require `kind get clusters`,
   `kubectl get node kind-control-plane` and `tilt get uiresources` to remain
   healthy; restarting the agent must not restart a nested Docker daemon or
   destroy Kind networking.
@@ -2229,6 +2233,12 @@ verified HTTPS forwarding works; the guest agent responds before application
 bootstrap; the guest Kind/Tilt/agent stack is healthy; and Java/frontend live
 updates and agent restart work. Host/VM reboot persistence remains pending
 until Checkpoint B.
+
+For this handoff, the repository, credential, TLS, bootstrap, stack-health and
+agent-restart portions passed, while Java/frontend live-update proof remains
+explicitly deferred. Implementation Phases 3–6 may proceed using that recorded
+limitation, but Checkpoint A is not fully accepted and Checkpoint B cannot pass
+until both smoke edits succeed.
 
 **Handoff:** Continue implementation Phases 3–6 without retiring Mint Docker;
 the implementation agents remain hosted by the existing Mint Docker

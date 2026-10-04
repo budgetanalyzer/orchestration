@@ -1,8 +1,10 @@
 # Agent Host Isolation Acceptance Record
 
 **Status:** Operator preparation Steps 1–5 and the Initial Handoff were
-completed and verified by the operator on 2026-10-03. The post-implementation
-Checkpoints A–C remain pending.
+completed and verified by the operator on 2026-10-03. Checkpoint A repository,
+credential, TLS, bootstrap, stack-health and agent-restart checks were completed
+on 2026-10-04; its Java and frontend live-update checks are explicitly deferred
+to Checkpoint B. Checkpoints A–C therefore remain pending final acceptance.
 
 This record contains redacted acceptance evidence for the development VM host
 isolation work. Keep repository references to basenames. Do not add private
@@ -60,9 +62,11 @@ addresses or unrelated host configuration.
 
 - Selected host parent description:
   `Common parent containing sibling Budget Analyzer repositories`
-- Selected repository basenames: `orchestration`, `budget-analyzer-web`,
-  `ext-authz`, `session-gateway`, `service-common`, `workspace`,
-  `currency-service`, `permission-service`, `transaction-service`
+- Selected repository basenames: `ai-session-handler`,
+  `basic-repository-template`, `budget-analyzer-api-tests`,
+  `budget-analyzer-web`, `checkstyle-config`, `currency-service`, `ext-authz`,
+  `orchestration`, `permission-service`, `service-common`, `session-gateway`,
+  `transaction-service`, `workspace`
 - Non-main seed branches:
   `orchestration: vm-workspace`; `workspace: vm-workspace`
 
@@ -95,6 +99,67 @@ addresses or unrelated host configuration.
   traffic positive controls while following the manual plan.
 - The persistent-rule listing was captured for the later Checkpoint B reboot
   comparison; it is not reboot-persistence proof.
+
+## Checkpoint A Operator Handoff
+
+### Repository And Credential Boundary
+
+- One-time repository setup and host/guest topology checks:
+  `PASS - operator verified`; every selected host checkout has the reviewed
+  `vm` remote, and guest working clones use guest-local bare origins.
+- Two-commit Git round trip:
+  `PASS - checkstyle-config`; host-to-guest commit `63903c2`, guest-to-host
+  commit `6ce57cf`; the host fast-forwarded the guest result, then removed the
+  fixture branch and file and restored a clean worktree.
+- Guest GitHub authority checks:
+  `PASS - operator verified`; no forwarded SSH agent, GitHub token/askpass
+  variable, global credential helper, authenticated GitHub CLI state or GitHub
+  remote was present in the checked guest paths.
+- Dedicated Remote SSH credential-injection checks:
+  `PASS - operator verified`.
+
+### TLS And Guest Runtime
+
+- Approved TLS transfer and validation:
+  `PASS - operator verified`; only the reviewed wildcard leaf, leaf key and
+  public root were transferred, the guest validation and trusted temporary
+  forwarding test passed, and no mkcert root signing key entered the guest.
+- Guest prerequisites and local Docker selection:
+  `PASS - operator verified`; the guest used its default Unix Docker endpoint
+  and `/var/lib/docker` data root.
+- Guest agent before Kind bootstrap:
+  `PASS - operator verified`; the reviewed base container started and the
+  selected provider read the guest-local workspace without GitHub authority.
+- Fresh guest bootstrap:
+  `PASS - operator verified`; cluster `kind`, context and referenced cluster
+  `kind-kind`, loopback Kubernetes API selection and Ready
+  `kind-control-plane` were confirmed.
+- Agent kubeconfig recreation:
+  `PASS - operator verified`; the exact guest kubeconfig was mounted read-only
+  and the agent selected `kind-kind`.
+- Tilt/application health:
+  `PASS - operator verified`; required Tilt resources and Kubernetes pods were
+  healthy. The guest listener was `docker-proxy` on `0.0.0.0:443`, matching the
+  reviewed Kind `30443` to guest port `443` mapping; this is not the later Mint
+  loopback-only forwarding check.
+- Agent-container restart:
+  `PASS - operator verified`; the agent returned to running state, guest and
+  in-agent `kubectl` reported `kind-control-plane` Ready, and Kind/Tilt remained
+  healthy.
+
+### Deferred Acceptance
+
+- Java Remote SSH live-update smoke edit: `NOT TESTED - deferred to Checkpoint B`.
+- Frontend Remote SSH live-update smoke edit:
+  `NOT TESTED - deferred to Checkpoint B`.
+- Guest agent-container lifecycle helpers:
+  `PENDING Phase 3`; this requirement was added after the original Phase 2 run.
+- Host/VM restart persistence, host loopback port 443, trusted browser behavior
+  and the final daily workflow remain `PENDING Checkpoint B`.
+
+Implementation Phases 3–6 may proceed with these limitations recorded. Neither
+Checkpoint A nor Checkpoint B may be marked fully accepted until both named
+live-update smoke edits pass.
 
 ## Phase 1 Static Preparation
 

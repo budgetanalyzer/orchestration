@@ -444,12 +444,15 @@ validation is claimed. Stop the invocation for manual Checkpoint A.
 
 ### Goal
 
-Prove the repository transport and guest runtime work after manual Checkpoint A.
+Implement the lifecycle-helper requirement added after the original Phase 2
+run, then prove the repository transport and guest runtime work after manual
+Checkpoint A.
 
 ### Scope
 
-Guest repository topology, local Git round trip, runtime checks, focused
-workspace verifiers and implementation evidence.
+Guest-run agent-container lifecycle helpers, guest repository topology, local
+Git round trip, runtime checks, focused workspace verifiers and implementation
+evidence.
 
 ### Non-goals
 
@@ -463,24 +466,35 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
 
 ### Execution steps
 
-1. Verify every selected repository has one guest-local bare repository and one
+1. Implement the plan-wide agent-container lifecycle-helper contract and its
+   disposable fixtures in the workspace repository. The original Phase 2 run
+   predates this requirement, so absence at Checkpoint A is expected for this
+   invocation. Provide stable start, stop, restart, status and interactive-shell
+   commands backed by one shared implementation, update the canonical workspace
+   documentation, and run the Phase 2 helper validation. Do not modify the
+   one-time repository-transfer contract or couple the helpers to Kind, Tilt,
+   VM lifecycle, host forwarding, provider login or image rebuilds.
+2. Verify every selected repository has one guest-local bare repository and one
    working clone whose `origin` resolves only to that bare repository. Confirm
    the agent sees the intended guest working-clone and bare-repository parents,
    exact guest kubeconfig and guest Docker socket, with no personal-host
    workspace, credential mount, GitHub remote or forwarded authentication socket.
-2. Inspect Checkpoint A evidence for the human-run host-to-VM push and VM-to-host
+3. Inspect Checkpoint A evidence for the human-run host-to-VM push and VM-to-host
    fetch. From inside the agent container, use a disposable guest fixture to
    verify working-clone commits push to the guest bare repository and preserve
    commit identity, additions, deletions and
    executable bits. Do not perform or claim a GitHub push.
-3. Start disposable test containers; verify published-port reachability,
+4. Start disposable test containers; verify published-port reachability,
    bind-path resolution and cleanup. Use Checkpoint A's agent restart evidence
    and a separate disposable fixture for further lifecycle checks; do not
    terminate the executing worker. Confirm Kind and uncached pulls stay healthy.
-4. Inspect Checkpoint A's Remote SSH save evidence and verify a representative
-   build plus Tilt file detection occurs entirely on guest-local storage. Record
-   measured build behavior without reviving shared-folder watcher tests.
-5. Combine host-side native and Docker-published dummy-listener evidence with
+5. Inspect Checkpoint A's Remote SSH evidence. The operator deferred the Java
+   and frontend smoke edits to Checkpoint B, so do not manufacture or claim save
+   evidence in this phase. Verify a representative build and read-only Tilt file
+   detection occur entirely on guest-local storage, record measured behavior,
+   and preserve the two named live-update checks as explicit Checkpoint B
+   blockers without reviving shared-folder watcher tests.
+6. Combine host-side native and Docker-published dummy-listener evidence with
    guest probes: prove new connections to host services and host containers are
    denied across UFW INPUT and IPv4/IPv6 `DOCKER-USER` paths while DNS,
    downloads and host-initiated SSH/Git connections work. Confirm the recorded
@@ -488,7 +502,7 @@ handoff and Checkpoint A evidence, and the orchestration boundary contract.
    hook and UFW-reload hook are present and idempotent. Cover IPv4/IPv6 and
    inspect the operator's evidence; host-reboot verification remains Checkpoint
    B. Probe known dummy targets only.
-6. Record actual results and unresolved issues in `docs/host-isolation.md`.
+7. Record actual results and unresolved issues in `docs/host-isolation.md`.
 
 ### Implementation notes
 
@@ -501,15 +515,17 @@ than restored from the host.
 
 ### Validation
 
-Run the focused checks above and shell/Compose validation for any fixes.
-Confirm host evidence supports the branch round trip and network boundary.
-Keep credentials, personal paths and certificate metadata out of recorded
-output.
+Run the focused checks above, the lifecycle-helper disposable fixtures,
+`bash -n` and ShellCheck for every changed shell script, and shell/Compose
+validation for any fixes. Confirm host evidence supports the branch round trip
+and network boundary. Keep credentials, personal paths and certificate metadata
+out of recorded output.
 
 ### Completion criteria
 
-Repository transfer, guest-local editing, Docker lifecycle, guest networking
-and host-access denial are verified with reproducible evidence. Any failed
+The required lifecycle helpers are implemented and documented; repository
+transfer, guest-local editing, Docker lifecycle, guest networking and
+host-access denial are verified with reproducible evidence. Any failed
 credential, remote, Docker or firewall boundary remains an acceptance blocker.
 
 ## Phase 4: Verify Currency Service Testcontainers
@@ -637,10 +653,11 @@ and workspace/service validation evidence.
    identity before mutations. Run the prerequisite checker and aggregate
    `./scripts/smoketest/smoketest.sh` after Tilt is healthy, plus focused security
    and internal-only observability checks required by changed behavior.
-2. Inspect Checkpoint A's Remote SSH edit evidence and corresponding guest
-   rollouts for Java live update and frontend development and production-smoke
-   paths. Verify fresh image pulls and application HTTPS after agent restart.
-   Do not modify sibling service source to manufacture evidence.
+2. Inspect Checkpoint A's Remote SSH evidence and corresponding guest runtime.
+   The operator deferred the Java and frontend smoke edits, so prepare their
+   exact Checkpoint B procedure and retain them as acceptance blockers rather
+   than modifying sibling service source to manufacture evidence. Verify fresh
+   image pulls and application HTTPS after agent restart.
 3. Update owner docs first, then README/AGENTS summaries as needed. Describe
    one-time repository setup, guest bootstrap versus daily startup, guest-local
    editing, the canonical agent-container lifecycle helpers, exact bidirectional
@@ -657,11 +674,13 @@ and workspace/service validation evidence.
    working repositories from reviewed setup, re-push host branches, and create
    guest runtime state from reviewed configuration. Do not restore or import
    host Docker, Kind, volume, database, cache or application state.
-6. Run the lifecycle helpers from a fresh guest SSH session and a working
-   directory outside the workspace. Verify start, restart, status and shell
-   access preserve the exact guest kubeconfig mount and provider state while
-   leaving Kind and Tilt healthy; verify stop affects only the agent service,
-   then restore it with the start helper.
+6. Inspect Phase 3's lifecycle-helper fixture evidence and prepare the exact
+   Checkpoint B commands for live use after the human-owned Git workflow carries
+   the implementation into the guest. Require the operator to run the helpers
+   from a fresh guest SSH session and a working directory outside the workspace,
+   verify start, restart, status and shell access preserve the exact guest
+   kubeconfig mount and provider state while leaving Kind and Tilt healthy, and
+   verify stop affects only the agent service before restoring it with start.
 7. Record verified results and remaining human browser checks. Prepare the
    exact Checkpoint B sequence and the separate post-plan Checkpoint C cutover.
    Checkpoint C must preserve host Docker until all implementation workers have
@@ -688,9 +707,9 @@ DinD test suites as acceptance gates.
 ### Completion criteria
 
 The guest implementation and tests pass, the credential-isolated Git workflow
-and helper-driven daily runtime are documented and verified, and the human has
-concrete Checkpoint B and C instructions. The implementation run ends before
-host Docker retirement.
+and helper-driven daily runtime are documented and fixture-validated, and the
+human has concrete Checkpoint B live-helper and Checkpoint C instructions. The
+implementation run ends before host Docker retirement.
 Overall acceptance is complete only when the acceptance record includes the
 operator's post-reboot Checkpoint C proof that Mint Docker and its transitional
 workarounds are gone while guest Docker and the permanent host boundary remain

@@ -1,6 +1,9 @@
 # Native VM Agents: Human Preparation And Cutover
 
-**Status:** Not executed. Earlier VM/container results remain prior evidence.
+**Status:** Checkpoint A completed by operator on 2026-10-04; Phases 1–2 are
+cleared to run. The native execution plan has not yet been invoked. Earlier
+VM/container results remain prior evidence unless explicitly recorded in the
+acceptance record.
 **Execution plan:** [Native agents in the VM](agent-vm-native-execution-plan.md).
 **Evidence:** [Host-isolation acceptance record](agent-host-isolation-acceptance.md).
 

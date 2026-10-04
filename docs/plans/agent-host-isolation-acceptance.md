@@ -1,12 +1,12 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** Native migration planned; all new acceptance gates below are pending.
-Prior container migration evidence is retained below and is not native proof.
-Operator preparation Steps 1–5 and the Initial Handoff were
-completed and verified by the operator on 2026-10-03. Checkpoint A repository,
-credential, TLS, bootstrap, stack-health and agent-restart checks were completed
-on 2026-10-04; its Java and frontend live-update checks are explicitly deferred
-to Checkpoint B. Checkpoints A–C therefore remain pending final acceptance.
+**Status:** Native migration planned; preparation Checkpoint A is complete and
+Phases 1–2 are ready to run. Native implementation and later acceptance gates
+remain pending. Prior container migration evidence is retained below and is
+not native proof. Operator preparation Steps 1–5 and the Initial Handoff were
+completed and verified on 2026-10-03. Checkpoint A repository, credential, TLS,
+bootstrap, stack-health and agent-restart checks were completed on 2026-10-04;
+the Java and frontend live-update checks remain deferred to Checkpoint B.
 
 The active contracts are the [native execution plan](agent-vm-native-execution-plan.md)
 and [human checkpoints](agent-vm-native-manual-plan.md). References to original
@@ -21,17 +21,24 @@ addresses or unrelated host configuration.
 
 ## Native Preparation Handoff
 
-**Status:** PENDING human Checkpoint A; no native plan invocation recorded.
+**Status:** COMPLETE; operator verified Checkpoint A on 2026-10-04. The first
+native-plan invocation has not yet been recorded. Phases 1–2 are cleared to
+start in the existing guest container.
 
 | Evidence | Result |
 | --- | --- |
-| Old workers ended; source preserved; new reviewed plan/tool sources transferred | PENDING |
-| Guest-local checkout/bare origins and handler revision; no imported old runner state | PENDING |
-| Current VM confinement, no host integration, Remote SSH/credential boundary | PENDING |
-| Paired native/Docker host firewall fixtures, positives, IPv4/IPv6 applicability and hooks | PENDING |
-| Guest OS prerequisites, default local Docker, exact Kind target and healthy Tilt | PENDING |
-| Existing guest container identity/mounts and provider/handler availability | PENDING |
-| First invocation capped at two phases in the guest checkout | PENDING |
+| Old workers ended; source preserved; new reviewed plan/tool sources transferred | PASS — operator verified; no old native-plan workers were running |
+| Guest-local checkout/bare origins and handler revision; no imported old runner state | PASS — operator verified; workspace and orchestration clean at 8222890 and 99af5c5, respectively; local workspace origin; fresh native-plan state |
+| Current VM confinement, no host integration, Remote SSH/credential boundary | PASS — operator verified on the personal host and guest |
+| Paired native/Docker host firewall fixtures, positives, IPv4/IPv6 applicability and hooks | PASS — operator verified paired results, applicable address families, positive controls, and persistent policy hooks |
+| Guest OS prerequisites, default local Docker, exact Kind target and healthy Tilt | PASS — read-only checks; default Unix Docker endpoint, `/var/lib/docker`, context/cluster `kind-kind`, loopback API, Ready `kind-control-plane`, healthy Tilt and workloads |
+| Existing guest container identity/mounts and provider/handler availability | PASS — operator verified nonprivileged guest agent, host networking, same-path guest source/bare mounts, read-only guest kubeconfig, and available provider/handler |
+| First invocation capped at two phases in the guest checkout | READY — first invocation must use the command below with `--max-phases 2`; no native-plan invocation recorded yet |
+
+Checkpoint A evidence was reviewed on 2026-10-04. The in-container
+`systemd-detect-virt` command is unavailable and was not used as VM proof;
+personal-host VM inspection and confinement evidence were verified by the
+operator. Java and frontend live-update checks remain deferred to Checkpoint B.
 
 ## Native Execution Handoff
 

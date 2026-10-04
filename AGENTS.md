@@ -72,11 +72,13 @@ repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-During the host-isolation migration, the implementation runner remains the
-Mint-hosted workspace devcontainer through Phase 6 and Checkpoint B. The target
-runtime is a separate guest agent container with guest-local repositories,
-Docker, Kind and kubeconfig. Do not reinterpret the existing devcontainer as
-the guest target or share the personal-host workspace with the guest.
+After the host-isolation manual continuation handoff, run the VM continuation
+plan inside the separate guest agent container with guest-local repositories,
+Docker, Kind and kubeconfig. Keep Mint Docker available until the human-owned
+retirement checkpoint; it is not the continuation runner. Read
+`docs/plans/agent-host-isolation-vm-continuation-plan.md` and the manual handoff
+before resuming this work. Do not reinterpret the existing Mint devcontainer
+as the guest target or share the personal-host workspace with the guest.
 
 The agent container is inside the trusted local-development boundary. Local
 workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated

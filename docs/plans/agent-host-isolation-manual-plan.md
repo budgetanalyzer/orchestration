@@ -1,14 +1,16 @@
 # Development VM Manual Setup Plan
 
-**Status:** Operator preparation Steps 1–5 and the Initial Handoff were
-completed and verified by the operator on 2026-10-03. The later-discovered
-VS Code Git credential-injection controls in Step 3.3 remain pending and are
-repeated in Checkpoint A.3. The post-implementation Checkpoints A–C remain
-pending and must not be treated as completed by this preparation status.
+**Status:** Operator preparation Steps 1–5 and the Initial Handoff passed on
+2026-10-03. Checkpoint A repository, credential, TLS, bootstrap, stack-health
+and agent-restart checks passed on 2026-10-04; Java/frontend live-update checks
+remain deferred to Checkpoint B. The new continuation handoff below is pending.
+Checkpoints B/C and overall acceptance remain pending.
 
 **Audience:** The human operating the personal Linux Mint workstation.
 
-**Companion:** [Agent implementation plan](agent-host-isolation-plan.md).
+**Active execution plan:** [Guest agent continuation](agent-host-isolation-vm-continuation-plan.md).
+The [original implementation plan](agent-host-isolation-plan.md) records prior
+preparation and the stopped Mint-hosted attempt; do not resume it.
 
 This is a manual checklist, not an AI Session Handler execution plan. Complete
 Steps 1–5 before agent implementation. Three checkpoints remain afterward: run
@@ -23,16 +25,14 @@ data or build caches in the VM. The guest creates fresh runtime state from the
 reviewed configuration. Only committed Git objects and the approved
 browser-trusted development TLS files cross from host to guest.
 
-Work on feature branches. The existing Mint-hosted workspace devcontainer is
-the implementation runner for Phases 1–6. It is the currently working container
-defined by sibling workspace `.devcontainer/devcontainer.json` and
-`ai-agent-sandbox/docker-compose.yml`; keep it available through Checkpoint B.
-The guest agent container is a separate target runtime, not a replacement for
-the implementation runner during those phases. Do not create a saved-image or
-runtime fallback. The one retirement step is Checkpoint C, after every
-implementation phase and Checkpoint B have finished: close the Mint-hosted
-devcontainer, uninstall Mint Docker, remove its runtime state and remove the
-temporary Docker-specific firewall integration.
+Work on feature branches. The original preparation ran in the Mint-hosted
+workspace devcontainer. Remaining implementation runs inside the separate guest
+agent container after the continuation handoff below. Keep Mint Docker and its
+transitional firewall protection available through Checkpoint B; this does not
+require keeping implementation workers on Mint. Do not create a saved-image or
+runtime fallback. Checkpoint C remains the one retirement step after the
+continuation and Checkpoint B: close Mint devcontainers, uninstall Mint Docker,
+remove its reviewed retired runtime state and temporary Docker firewall hooks.
 
 ## How To Use This Checklist
 
@@ -47,11 +47,12 @@ Run commands only in the environment named immediately above the code block:
 Container and editor terms are deliberately distinct:
 
 - **Existing Mint devcontainer** means the working agent environment hosted by
-  Mint Docker. It runs the AI Session Handler implementation phases.
+  Mint Docker. It hosted the original preparation and stopped Phase 3 attempt.
 - **Guest agent container** means the separate guest-Docker configuration that
   implementation Phase 2 adds at
   `../workspace/ai-agent-sandbox/docker-compose.agent-vm.yml`. It is launched
-  during Checkpoint A for guest bootstrap, validation and eventual daily use.
+  during Checkpoint A for bootstrap and validation, then runs the new
+  continuation plan and daily agent work.
 - **`Budget Analyzer VM` VS Code profile** means only the host editor settings
   and extension selection used for Remote SSH. It is not a Docker or Dev
   Container configuration.
@@ -99,7 +100,7 @@ disk under a repository path, disabled confinement or an active port conflict.
 | Guest editor | Native host VS Code UI using Remote SSH; guest files, terminals and extensions remain in the VM |
 | Browser | Dedicated development profile on the personal host |
 | Runtime | Keep Mint Docker through implementation and Checkpoint B; final state is one fresh guest Docker daemon |
-| Implementation runner | Existing Mint-hosted workspace devcontainer through Phases 1–6 |
+| Continuation runner | Existing guest agent container after the continuation handoff |
 | Guest agent runtime | Separate `docker-compose.agent-vm.yml` configuration created in Phase 2 |
 | Repository transfer | Explicit host-initiated Git push/fetch over SSH through a `vm` remote |
 | GitHub authority | Host only; no guest GitHub write credential or authenticated GitHub browser |
@@ -969,9 +970,9 @@ and uses UFW's documented
 for reload ordering.
 
 This is a transitional defense, not the final architecture. Keep it installed
-for the entire period in which the host-resident implementation agents require
-Mint Docker, including all phases of the companion implementation plan and
-Checkpoint B. Remove it only in Checkpoint C after Mint Docker has been stopped
+while Mint Docker remains available, including the guest continuation run and
+Checkpoint B. Moving workers to the guest does not remove host Docker's exposed
+forwarding paths. Remove it only in Checkpoint C after Mint Docker has been stopped
 and uninstalled. The permanent UFW rules protecting native Mint input on
 `virbr1` remain after that cleanup.
 
@@ -1523,9 +1524,8 @@ Provide a redacted handoff for
 credentials, private keys, browser state or unrelated host configuration.
 
 **Handoff:** From the existing Mint-hosted workspace devcontainer, run
-implementation Phases 1–2 only. Keep that devcontainer running and usable; it
-remains the implementation runner through Phase 6. These phases add the
-separate guest configuration
+original implementation Phases 1–2 only. Those preparation phases are now
+complete; do not rerun them for the continuation. They added the separate guest configuration
 `ai-agent-sandbox/docker-compose.agent-vm.yml`,
 `scripts/setup-agent-vm-repositories.sh`, and exact bootstrap commands. Do not
 copy or launch the existing Mint devcontainer configuration in the guest: its
@@ -2033,11 +2033,10 @@ printf '%s\n' "$agent_response" | grep -Fx GUEST_WORKSPACE_READ_OK
 ```
 
   Leave the base agent container running so it can diagnose guest bootstrap.
-  This proves the target runtime before Kind exists; it does not move the Phase
-  1–6 implementation workflow out of the existing Mint devcontainer. Keep that
-  Mint devcontainer available through Phase 6 and Checkpoint B. Do not add the
-  kubeconfig override until the later post-bootstrap step explicitly requires
-  it.
+  This proves the target runtime before Kind exists. The continuation starts
+  only after the post-Kind configuration and the handoff below are verified.
+  Keep Mint Docker available through Checkpoint B. Do not add the kubeconfig
+  override until the later post-bootstrap step explicitly requires it.
 
 - [x] From the guest orchestration working clone—not from the agent container—
   validate the imported files once more, then run the explicit guest bootstrap:
@@ -2224,8 +2223,8 @@ compose_kube=(
   destroy Kind networking.
 
   Supply the redacted repository, TLS, runtime, live-update and agent-restart
-  results to implementation Phases 3 and 6. The full restart/persistence check
-  runs once at Checkpoint B.
+  results to the continuation handoff. The full restart/persistence check
+  runs at Checkpoint B.
 
 **Checkpoint A succeeds when:** repository setup and a two-commit round trip
 pass without guest GitHub authority; only approved TLS files enter the guest;
@@ -2236,27 +2235,252 @@ until Checkpoint B.
 
 For this handoff, the repository, credential, TLS, bootstrap, stack-health and
 agent-restart portions passed, while Java/frontend live-update proof remains
-explicitly deferred. Implementation Phases 3–6 may proceed using that recorded
-limitation, but Checkpoint A is not fully accepted and Checkpoint B cannot pass
-until both smoke edits succeed.
+explicitly deferred. The VM continuation may proceed after the handoff below,
+but Checkpoint A is not fully accepted and Checkpoint B cannot pass until both
+smoke edits succeed. Do not rerun setup or recreate the working Kind cluster.
 
-**Handoff:** Continue implementation Phases 3–6 without retiring Mint Docker;
-the implementation agents remain hosted by the existing Mint Docker
-environment until the complete plan run ends. Guest-runtime proof must still
-execute in the VM using the reviewed guest access path. Do not mount host clones
-or the host Docker socket into the guest.
+**Handoff:** Complete the following continuation prerequisites, then launch the
+new plan inside the guest agent container. Keep Mint Docker available. Do not
+mount host clones or the host Docker socket into the guest.
+
+## Continuation Handoff: Start The VM Execution Plan
+
+Complete H.1–H.4 once before starting
+`agent-host-isolation-vm-continuation-plan.md`. These prerequisites replace the
+old Mint-worker SSH handoff. No temporary worker SSH key is required. Keep the
+human's existing host-to-guest SSH identity on Mint. Do not rerun repository
+setup, VM provisioning, certificate generation or `setup.sh` merely to resume.
+
+### H.1 Preserve Prior Work And Transfer Reviewed Source
+
+- [ ] End the stopped original handler invocation and any surviving workers.
+  Preserve its plan, generated state and transcripts on Mint. Do not copy or
+  rewrite `.ai-session-handler/` state to make the guest appear to have completed
+  phases. The continuation has a new path and independent Phase 1–5 numbering.
+- [ ] Review and commit the intended changes yourself in each affected host
+  repository. At this handoff, inspect orchestration and workspace in
+  particular. The stopped worker left `scripts/agent-vm-container-*.sh`
+  untracked in workspace; include the reviewed helpers, not just tracked diffs.
+  `git diff` alone does not show untracked files. Review any unrelated work
+  separately and preserve it.
+
+**Mint host terminal, in each affected repository:**
+
+```bash
+git status --short
+git diff --stat
+```
+
+  Commit through your normal workflow. Include the new plan, manual handoff,
+  updated instructions/owner docs and lifecycle helpers. The old helper fixture
+  under workspace `tmp/agent-host-isolation/validation/` is ignored and is not
+  a Git-transfer prerequisite: continuation Phase 1 will create a tracked,
+  repeatable verifier. Do not transfer ignored scratch trees or agent state.
+
+- [ ] Use the existing
+  [explicit daily branch-transfer commands](../../../workspace/docs/host-isolation.md#daily-branch-transfer)
+  for each affected repository: push the reviewed host branch to `vm`, then
+  fetch/select/fast-forward it in the matching guest clone. Do not rerun the
+  one-time setup script, force-push or discard guest work. Reconcile divergent
+  work manually before launch. Keep guest origins local and record branch and
+  commit IDs; host and guest source commits must match at this handoff.
+- [ ] Confirm the selected guest checkouts include the intended revisions of
+  `ai-session-handler`, `workspace`, `orchestration`, `service-common`,
+  `currency-service` and `session-gateway`. Compare producer/consumer
+  `service-common` versions in their checked-in Gradle files. Missing or
+  mismatched source is resolved by reviewed Git transfer before launch, not by
+  adding GitHub Packages credentials or changing dependency versions mid-run.
+
+### H.2 Collect Operator-Owned Evidence Before Launch
+
+- [ ] From the **guest OS**, in its orchestration working clone, run the
+  read-only preflight and health checks. Do not run these bootstrap prerequisite
+  checkers from the agent container: they check guest systemd/hostname context.
+
+**Guest SSH session, in the guest orchestration checkout:**
+
+```bash
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
+docker info --format 'name={{.Name}} root={{.DockerRootDir}}'
+kind get clusters
+kubectl config current-context
+kubectl get node kind-control-plane
+tilt get uiresources
+kubectl get pods -A
+```
+
+  Require both checkers to pass, the reviewed guest daemon and local Kind
+  target, and healthy required resources. Keep the guest Tilt terminal running.
+  If daily startup is needed, use the documented daily commands; do not
+  recreate the cluster or certificates. Record command/exit/result summaries.
+
+- [ ] Supply the complete Step 4.2–4.3 firewall evidence before launching the
+  worker. Retain earlier evidence only if its commands, paired results and
+  unchanged policy/topology can be established; otherwise repeat those steps
+  now from the named host and guest terminals. Bare `PASS - operator verified`
+  summaries alone do not supply the missing fixture details. Record:
+
+  | Evidence | Required detail |
+  | --- | --- |
+  | Policy | UFW bridge rule order and exceptions; IPv4/IPv6 Docker `docker0`/`br-+` reject counts; Docker-start and UFW-reload hook presence/idempotence |
+  | Native fixtures | Test ports/address coverage; successful host curl and listener binding; corresponding guest command, exit and denial while the listener was running |
+  | Docker fixtures | Reviewed image digest, published binding and container route; successful host request; corresponding guest published/direct-container denials |
+  | IPv6 | Which native/Docker paths exist, scoped guest interface where needed, positive controls and actual denials; explicitly distinguish absent routes from tested filtering |
+  | Allowed traffic | Successful guest DNS and verified HTTPS download, and host-initiated SSH/Git; A.2 may supply unchanged Git round-trip proof |
+  | Provenance | Collection time, relevant network/policy identity, exact commands and sanitized results; host/guest reboot proof remains pending B |
+
+  A connection refusal with no listener, or `Network is unreachable`, is not
+  proof of firewall enforcement. If a path is not present in the configured
+  topology, record it as not exercised with the reason and rule inspection;
+  never relabel it PASS. Resolve unexplained missing coverage before launch.
+  Do not add routes or weaken rules solely to manufacture a test.
+
+  Stop and remove only your dummy listeners/containers after collecting their
+  paired evidence. Workers will inspect this package, not ask you to keep them
+  running. Keep Mint Docker and its real protection enabled. Checkpoint B
+  repeats the applicable boundary tests after reboot; C tests the final state.
+
+### H.3 Prove The Actual Continuation Container Is Ready
+
+- [ ] Use the **guest OS** lifecycle helpers in normal daily mode. The kubeconfig
+  source path in `agent-vm.env` belongs to the guest OS and need not exist at
+  that same location inside the container. Do not invoke these live helpers
+  from the agent itself. From the guest workspace checkout:
+
+**Guest SSH session:**
+
+```bash
+./scripts/agent-vm-container-status.sh
+./scripts/agent-vm-container-shell.sh
+```
+
+  If the agent is stopped, use the documented normal start helper first. If the
+  container/image/configuration must be updated, finish the reviewed build or
+  recreation now using the workspace lifecycle documentation and A.5 mount
+  proof. Do not use bootstrap-only mode after Kind exists. Do not restart or
+  recreate the agent between continuation phases; Phase 2 builds its local
+  Maven prerequisites for the following service tests.
+
+- [ ] From the guest OS, inspect the running service as in A.5 and record its
+  container ID and daemon identity, same-path guest working/bare mounts,
+  guest Docker socket, host networking, non-privileged configuration and exact
+  read-only kubeconfig source/destination. Preserve only sanitized evidence,
+  not a full `docker inspect` dump. Require no personal-host mount, nested
+  daemon, GitHub credential or forwarded authentication socket.
+- [ ] In the shell opened **inside the guest agent**, run this preflight:
+
+**Guest agent container:**
+
+```bash
+set -euo pipefail
+test -n "${BUDGET_ANALYZER_WORKTREE_PARENT:-}"
+test -n "${BUDGET_ANALYZER_BARE_PARENT:-}"
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+for required_tool in bash git docker java python3 shellcheck jq curl openssl \
+  kubectl tilt nc ai-session-handler ai-session-handler-codex-high \
+  ensure-budget-analyzer-local-ca-trust; do
+  command -v "$required_tool" >/dev/null
+done
+for forbidden_variable in DOCKER_HOST DOCKER_CONTEXT TESTCONTAINERS_HOST_OVERRIDE \
+  SSH_AUTH_SOCK GITHUB_TOKEN GH_TOKEN GIT_ASKPASS SSH_ASKPASS; do
+  test -z "${!forbidden_variable:-}"
+done
+for endpoint_variable in DOCKER_HOST DOCKER_CONTEXT TESTCONTAINERS_HOST_OVERRIDE; do
+  test ! -v "$endpoint_variable"
+done
+test "$(docker context show)" = default
+test "$(docker context inspect default --format '{{.Endpoints.docker.Host}}')" \
+  = unix:///var/run/docker.sock
+docker info --format 'name={{.Name}} root={{.DockerRootDir}}'
+test "$(kubectl config current-context)" = kind-kind
+test "$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')" = kind-kind
+api_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+printf '%s\n' "$api_server" | \
+  grep -Eq '^https://(127\.0\.0\.1|localhost|\[::1\]):[0-9]+$'
+kubectl get node kind-control-plane
+java -version
+ai-session-handler --version
+ai-session-handler-codex-high --help >/dev/null
+ensure-budget-analyzer-local-ca-trust
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+```
+
+  Compare the daemon/container/mount evidence to the guest-OS inspection;
+  require JDK 25 and the guest `kind-kind` target. The image contains the
+  handler installed through pipx, so use commands on `PATH`, not the old Mint
+  `.venv` path. Confirm writable build/scratch directories and the guest
+  repositories' root `AGENTS.md` files. Do not print tokens or certificate
+  metadata when reporting a failure.
+
+- [ ] Repeat the selected provider's short workspace-read proof from A.5 in
+  this final container. If needed, authenticate only that provider inside the
+  guest, never GitHub. Verify the same provider used by the handler works
+  noninteractively; displaying `--help` alone is not authentication proof.
+- [ ] Review any **guest-local** orchestration `.ai-session-handler/config.json`
+  for obsolete Mint paths, premature stop patterns and timeouts unsuitable for
+  cold builds. Do not import host generated state, credentials or configuration.
+  Keep the installed handler version stable for this run. A missing config
+  uses defaults; the explicit launch command below supplies the worker command.
+
+  Do not manually populate Maven Local as a hidden prerequisite. Continuation
+  Phase 2 will build/publish `service-common` as the agent user, in its own
+  repository context. A working guest-OS Tilt stack does not populate this
+  separate home directory.
+
+### H.4 Record The Handoff And Launch Fresh State
+
+- [ ] In the guest orchestration checkout, fill the **VM Continuation Handoff**
+  section of `docs/plans/agent-host-isolation-acceptance.md` with H.1–H.3 results.
+  It may remain a reviewed worktree edit when the worker starts. Do not mark
+  untested checks complete. Record the selected revisions, inspected container
+  identity, paired firewall evidence and any deliberately deferred B/C checks.
+- [ ] Stop competing editors/agents from changing these guest checkouts or the
+  plan during the run. Leave the VM, guest Docker, agent, Kind and guest-OS Tilt
+  running. Do not start another Tilt or handler instance on these repositories.
+  Keep the launch terminal connected until the handler exits.
+  Host port 443/browser forwarding is still Checkpoint B work; in-agent HTTPS
+  reaches guest ingress directly.
+
+**Guest agent container, in the guest orchestration checkout:**
+
+```bash
+ai-session-handler status \
+  --plan "$PWD/docs/plans/agent-host-isolation-vm-continuation-plan.md"
+ai-session-handler run \
+  --plan "$PWD/docs/plans/agent-host-isolation-vm-continuation-plan.md" \
+  --max-phases 999 \
+  --quiet \
+  --agent-cmd "ai-session-handler-codex-high"
+```
+
+  For the first launch, status must show no prior state for this new plan. Do
+  not pass `--retry-stopped` or `--accept-plan-change` to import the old history.
+  If this new run later stops, inspect its own result and use the handler's
+  normal retry workflow for this path. Preserve its generated state in the
+  guest; do not hand-edit completion records. All remaining phases run there
+  without intermediate host Git transfers. After completion, review and commit
+  guest work yourself, return it through the documented local-bare/host-fetch
+  workflow, and perform Checkpoint B before C.
+
+**Handoff succeeds when:** reviewed sources and detailed operator evidence are
+available in the guest, the actual container/provider can execute the plan,
+and all known host-only prerequisites are complete. B/C acceptance remains
+pending; no worker SSH capability or host runtime migration has been introduced.
 
 ## Checkpoint B: Accept Browser And Daily Git Workflow
 
-This happens **after implementation Phase 6** has passed guest validation.
+This happens **after all five VM continuation phases** have passed guest
+validation and the handler and its workers have ended. Do not reboot the VM or
+exercise live agent stop/restart while a continuation worker is active.
 
 ### B.1 Start Host Port 443 Forwarding And Verify The Browser
 
 - [ ] Stop the owner of host port 443 recorded in Step 1. For the existing Kind
   stack, stop host Tilt and the identified Kind node container publishing 443;
   `tilt down` alone does not release the node's Docker port mapping. Keep the
-  host Docker daemon and the transitional Step 4 rules running because the
-  implementation agents still depend on them. Do not uninstall or disable
+  host Docker daemon and the transitional Step 4 rules running until the
+  separately reviewed Checkpoint C retirement. Do not uninstall or disable
   Docker here. Confirm Docker no longer publishes that port and the following
   prints no listener before starting the forward:
 
@@ -2298,9 +2522,20 @@ openssl s_client -connect 127.0.0.1:443 \
 
 ### B.2 Confirm Git And Live-Update Results
 
-- [ ] Use A.2's Git round-trip results, A.6's live-update results and Phase 3's
-  in-container Git check. Review Phase 6's daily Git commands. Repeat a check
-  only if the relevant implementation changed or its earlier result failed.
+- [ ] Use A.2's Git round-trip results and continuation Phase 1's in-container
+  Git check. Run both deferred A.6 smoke edits using the exact Java/frontend
+  procedures supplied by continuation Phase 5. Verify the expected guest Tilt
+  update and application behavior, restore only each fixture edit, and confirm
+  the Mint source checkout did not change. Healthy builds alone are not save
+  evidence. Review the documented daily Git commands; repeat other checks only
+  if their implementation changed or the earlier result failed.
+
+- [ ] After every continuation worker has ended, run the live lifecycle-helper
+  procedure supplied by continuation Phase 5 from a fresh guest SSH session
+  and outside the workspace. Prove start, restart, status and shell use the
+  exact guest kubeconfig and preserve provider state, stop affects only the
+  agent, and start restores it while Kind/Tilt remain healthy. Do not count
+  Phase 1's disposable helper fixtures as this live acceptance.
 
 ### B.3 Verify Restart Persistence
 
@@ -2352,8 +2587,9 @@ and its Step 4 protection remain transitional until Checkpoint C.
 
 ## Checkpoint C: Establish The Guest-Only Docker Final Architecture
 
-This is the final step. Run it only after all phases of
-`agent-host-isolation-plan.md` and Checkpoint B have succeeded, their evidence
+This is the final step. Run it only after the original preparation, all five
+phases of `agent-host-isolation-vm-continuation-plan.md`, and Checkpoint B have
+succeeded, their evidence
 has been returned to the host repositories, and every implementation-agent
 session that depends on Mint Docker has ended. Do not perform any part of this
 checkpoint from an agent container that the commands would stop.

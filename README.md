@@ -14,11 +14,13 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 
 **Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full production stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
-**AI agents can debug the full stack.** The current implementation runner is a
-Docker devcontainer from [workspace](https://github.com/budgetanalyzer/workspace).
-The isolated target is a separate agent container on a development VM, with
-guest-local repositories, Docker and Kind while GitHub publication remains on
-the personal host. The
+**AI agents can debug the full stack.** The host-isolation continuation runs in
+the separate development-VM agent container from
+[workspace](https://github.com/budgetanalyzer/workspace), after the
+[manual handoff](docs/plans/agent-host-isolation-manual-plan.md#continuation-handoff-start-the-vm-execution-plan).
+Repositories, Docker and Kind stay guest-local while GitHub publication remains
+on the personal host. Mint Docker remains available until its retirement
+checkpoint. The
 [boundary contract](docs/architecture/autonomous-ai-execution.md) defines both
 arrangements and the migration checkpoints.
 

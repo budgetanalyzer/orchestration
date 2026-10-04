@@ -153,13 +153,60 @@ addresses or unrelated host configuration.
 - Frontend Remote SSH live-update smoke edit:
   `NOT TESTED - deferred to Checkpoint B`.
 - Guest agent-container lifecycle helpers:
-  `PENDING Phase 3`; this requirement was added after the original Phase 2 run.
+  `IMPLEMENTED in the original partial Phase 3 - fixture results recorded in
+  workspace docs/host-isolation.md; tracked verifier and direct guest proof
+  pending continuation Phase 1; live helper acceptance pending Checkpoint B`.
 - Host/VM restart persistence, host loopback port 443, trusted browser behavior
   and the final daily workflow remain `PENDING Checkpoint B`.
 
-Implementation Phases 3–6 may proceed with these limitations recorded. Neither
-Checkpoint A nor Checkpoint B may be marked fully accepted until both named
-live-update smoke edits pass.
+The [VM continuation plan](agent-host-isolation-vm-continuation-plan.md) replaces
+the stopped Mint-hosted execution after its manual handoff. Neither Checkpoint
+A nor Checkpoint B may be marked fully accepted until both named live-update
+smoke edits pass. Original phase numbers below describe historical results.
+
+## VM Continuation Handoff
+
+**Status:** `PENDING operator H.1–H.4`; creating the continuation plan does not
+complete its prerequisites. Follow the
+[manual handoff](agent-host-isolation-manual-plan.md#continuation-handoff-start-the-vm-execution-plan)
+and replace pending entries only with actual results. Earlier bare firewall
+PASS summaries need the detailed paired evidence specified in H.2.
+
+| Prerequisite | Evidence / status |
+| --- | --- |
+| Original handler/workers ended; original state retained on Mint | PENDING |
+| Reviewed orchestration/workspace changes and lifecycle helpers transferred | PENDING; record selected branches, revisions and any relevant worktree changes |
+| Guest handler/service-common/consumer revisions and shared coordinates aligned | PENDING |
+| Guest-OS prerequisite checkers, Docker/Kind/Tilt/pod health | PENDING; commands, collection time, exits and sanitized results |
+| Native INPUT fixtures and positive controls | PENDING; H.2 commands, bindings/address coverage and paired results |
+| Docker forwarding fixtures and positive controls | PENDING; H.2 digest/bindings/routes and paired results |
+| IPv4/IPv6 coverage and policy/hook inspection | PENDING; distinguish tested paths, absent routes and unexplained gaps |
+| Allowed DNS/HTTPS/host-initiated SSH/Git | PENDING; command/results or unchanged detailed A.2 evidence |
+| Final agent identity, mounts, socket, namespace and kubeconfig | PENDING; compare guest-OS inspection with in-agent checks |
+| Provider workspace-read proof and handler/wrapper availability | PENDING; versions/results, never credentials |
+| Container HTTPS trust, tools and writable build directories | PENDING |
+| New plan has fresh state and guest-local command paths | PENDING |
+
+The worker inspects host-owned evidence and directly executes guest-owned
+checks. Host fixtures may be removed after paired evidence is recorded; no
+worker SSH key or mid-run host source transfer is required. Network/policy
+changes invalidate the affected host evidence. Guest-OS bootstrap checkers are
+not run inside the agent. Its Maven artifacts are prepared by continuation
+Phase 2, not inferred from the healthy guest-OS Tilt stack.
+
+## VM Continuation Results
+
+| Phase | Owner record | Result |
+| --- | --- | --- |
+| 1: guest/runtime/helper fixtures | workspace `docs/host-isolation.md` | PENDING |
+| 2: agent-local shared-library build/publication | service-common active development documentation | PENDING |
+| 3: currency Testcontainers | currency-service `docs/local-development.md` | PENDING |
+| 4: session Testcontainers | session-gateway `docs/local-development.md` | PENDING |
+| 5: application/security checks and operator procedures | This record and the manual plan | PENDING |
+
+Continuation completion is distinct from overall acceptance. Java/frontend
+Remote SSH saves, live lifecycle-helper operations, trusted host browser,
+restart persistence and final Mint Docker retirement remain B/C requirements.
 
 ## Phase 1 Static Preparation
 

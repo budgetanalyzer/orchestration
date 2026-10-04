@@ -9,15 +9,17 @@ workstation, GitHub publication, staging or production.
 
 Two development arrangements exist during the host-isolation migration:
 
-- The **transitional Mint workspace devcontainer** is the existing
-  implementation runner. It mounts the host's sibling-repository workspace and
-  kubeconfig and uses the Mint Docker environment. Keep it available through
-  implementation Phases 1–6 and Checkpoint B.
+- The **transitional Mint workspace devcontainer** hosted the original
+  preparation phases. It mounts the host's sibling-repository workspace and
+  kubeconfig and uses the Mint Docker environment. Keep Mint Docker available
+  through Checkpoint B; availability does not require running workers there.
 - The **guest agent container** is the target runtime defined separately by the
   sibling workspace repository's `ai-agent-sandbox/docker-compose.agent-vm.yml`.
   It runs on the development VM's Docker daemon against guest-local files and
-  guest-local Kind. It is not a Mint profile, a VM definition, or a replacement
-  compose file for the existing devcontainer.
+  guest-local Kind. After the manual continuation handoff, it also runs the
+  [VM continuation plan](../plans/agent-host-isolation-vm-continuation-plan.md).
+  It is not a Mint profile, a VM definition, or a replacement compose file for
+  the existing devcontainer.
 
 The transition ends only after the human completes the explicit Docker
 retirement checkpoint in
@@ -194,10 +196,12 @@ require or recreate a host Kind cluster.
 ## Transitional Mint Runner
 
 The sibling workspace `.devcontainer/devcontainer.json` and
-`ai-agent-sandbox/docker-compose.yml` remain the implementation runner until
-Checkpoint B. They currently mount the shared sibling-repository parent and
-host kubeconfig and use host networking; their Docker-in-Docker devcontainer
-feature belongs to that transitional environment. Do not copy this
+`ai-agent-sandbox/docker-compose.yml` remain available until Checkpoint B.
+The continuation workers run inside the guest agent container, with no
+worker SSH key or cross-machine source synchronization. The Mint configuration
+currently mounts the shared sibling-repository parent and host kubeconfig and
+uses host networking; its Docker-in-Docker devcontainer feature belongs to that
+transitional environment. Do not copy this
 configuration to the VM, reinterpret it as the guest target or claim that it
 isolates mounted host files from the agent.
 
@@ -206,6 +210,22 @@ repository. It must mount only guest-local working/bare repositories, the
 guest Docker socket and, after Kind exists, the guest kubeconfig. It must not
 mount a personal host path, host credential socket, host kubeconfig, libvirt
 socket or nested Docker data directory.
+
+The manual plan's continuation handoff owns source transfer, guest-OS preflight
+and operator-produced host firewall evidence before the run. Workers inspect
+that evidence and directly verify the guest runtime; they do not administer
+Mint or require host listeners to remain running. Reboot and browser proof stay
+in Checkpoint B, and Mint Docker retirement stays in Checkpoint C.
+
+Run guest-OS bootstrap prerequisite checks from the human guest shell. Their
+systemd and hostname checks are not agent-container checks. Inside the agent,
+verify the inspected guest socket/mount contract and exact Kubernetes target.
+Likewise, guest-OS Tilt's Maven Local repository is separate from the agent
+user's Maven Local: build and publish shared libraries inside the agent before
+container-side service tests. Do not add GitHub package credentials or mount a
+personal-host cache to bridge that difference. Do not recreate the executing
+agent during the continuation; container recreation may discard its build
+caches and requires preparing those prerequisites again.
 
 The retained `tests/setup-flow` and `tests/security-preflight` DinD suites are
 stale, non-gating reference assets. They are not the guest runtime and are not

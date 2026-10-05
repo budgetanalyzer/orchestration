@@ -1,12 +1,13 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** Native migration planned; preparation Checkpoint A is complete and
-Phases 1–2 are ready to run. Native implementation and later acceptance gates
-remain pending. Prior container migration evidence is retained below and is
-not native proof. Operator preparation Steps 1–5 and the Initial Handoff were
-completed and verified on 2026-10-03. Checkpoint A repository, credential, TLS,
-bootstrap, stack-health and agent-restart checks were completed on 2026-10-04;
-the Java and frontend live-update checks remain deferred to Checkpoint B.
+**Status:** Native preparation Phases 1–2 and human Checkpoint B are complete.
+The preserved runner state selects Phase 3 for the first native execution on
+2026-10-05; Checkpoints C–D and overall native acceptance remain pending. Prior
+container migration evidence is retained below and is not native proof.
+Operator preparation Steps 1–5 and the Initial Handoff were completed and
+verified on 2026-10-03. Checkpoint A repository, credential, TLS, bootstrap,
+stack-health and agent-restart checks were completed on 2026-10-04; the Java
+and frontend live-update checks remain deferred to Checkpoint C.
 
 The active contracts are the [native execution plan](agent-vm-native-execution-plan.md)
 and [human checkpoints](agent-vm-native-manual-plan.md). References to original
@@ -42,26 +43,90 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
 
 ## Native Execution Handoff
 
-**Status:** PENDING human Checkpoint B after preparation Phases 1–2.
+**Status:** COMPLETE on 2026-10-05; cleared to resume at Phase 3 from the
+native guest OS. This does not complete Checkpoints C–D.
 
 | Evidence | Result |
 | --- | --- |
-| Installer revision, full tool inventory and tracked fixture results reviewed | PENDING |
-| System/user installation and repeat-run idempotence; no unintended runtime restart | PENDING |
-| Native user/home, fresh-shell tool resolution, handler import and selected permissions | PENDING |
-| Native provider workspace-read and sandbox-mode proof without credential disclosure | PENDING |
-| curl/Python/Node/Playwright verified app trust and public-root preservation | PENDING |
-| Guest origins/credential boundary and current Docker/Kind/Tilt health | PENDING |
-| All old guest containers/volumes removed; clean guest-local rebuild and application proof | PENDING |
-| Same new-plan guest state selects Phase 3; paired host evidence still applicable | PENDING |
+| Installer revision, full tool inventory and tracked fixture results reviewed | PASS — workspace installation base `faa63e9`, reviewed B.2/B.3 revisions `42c0896` and `0195929`; handler `619cdd1`; prior Phase 1/2 fixture evidence retained |
+| System/user installation and repeat-run idempotence; no unintended runtime restart | PASS — live system install plus initial and repeated user installs completed; unrelated configuration was preserved and the pre-cutover Docker runtime was not restarted by installation |
+| Native user/home, fresh-shell tool resolution, handler import and selected permissions | PASS — `budgetops`, normal home, native `.local/bin` commands, editable guest-local handler import and unrestricted high-reasoning handler mode verified |
+| Native provider workspace-read and sandbox-mode proof without credential disclosure | PASS — native Codex 0.160.0 read the guest checkout; selected process used the documented full-guest bypass mode; separate `codex sandbox` bubblewrap proof passed and is not misrepresented as the selected mode |
+| curl/Python/Node/Playwright verified app trust and public-root preservation | PASS — all four clients returned verified HTTPS success for the exact local app; established host-published public-root identity remained unchanged |
+| Guest origins/credential boundary and current Docker/Kind/Tilt health | PASS — 13 local repository pairs, no prohibited credential bridge variables, local Unix Docker, loopback `kind-kind`, Ready node and healthy Tilt resources |
+| All old guest containers/volumes removed; clean guest-local rebuild and application proof | PASS — human-confirmed empty container/volume checks preceded the rebuild; no old container, image or Docker volume was retained; rebuilt ingress, app and full smoke test passed |
+| Same new-plan guest state selects Phase 3; paired host evidence still applicable | PASS — accepted plan SHA-256 unchanged, status selects Phase 3, and Checkpoint A host evidence remains applicable pending its required C repetition |
+
+### Recorded Native Handoff Evidence
+
+- The live installation report identifies native user `budgetops`, the normal
+  guest home, workspace base `faa63e9`, handler `619cdd1`, and the reviewed npm
+  lock. Its four B.1 dirty workspace paths were incorporated by the reviewed
+  B.2/B.3 revisions; workspace is clean at `0195929`. Installed user tools
+  include Claude 2.1.289, Codex 0.160.0, Gemini 0.62.0, Playwright 1.63.0,
+  mitmproxy 12.2.3 and the editable AI Session Handler 0.2.0. The existing
+  Phase 1 and Phase 2 records retain their 36-case and 76-case fixture results
+  and the later focused-harness limitation.
+- Guest-native identity checks returned user `budgetops`, container detection
+  `none` and VM detection `kvm`. The native verifier passed for all 13 local
+  repository pairs, provider/browser/helper versions, browser/package/home
+  paths and fresh-shell resolution. A fresh login shell resolved every selected
+  provider, Playwright and handler command from the native user's `.local/bin`;
+  the handler imported from the guest-local `ai-session-handler` checkout.
+- The selected provider proof used native Codex 0.160.0 with configured model
+  `gpt-5.6-sol`, high reasoning and the explicit
+  `dangerously-bypass-approvals-and-sandbox` / `never` /
+  `danger-full-access` behavior. It read and updated this guest checkout. That
+  mode has full guest access and is not an OS sandbox. Independently,
+  `codex sandbox -- sh ...` passed through the loaded scoped bubblewrap policy,
+  proving the sandbox mechanism remains available without claiming that the
+  selected provider/handler mode uses it.
+- The human trust installer and read-only trust check verified the same
+  host-published ingress root. Verified requests to the exact local HTTPS app
+  passed with curl, Python, Node and headless Playwright/Chromium, each returning
+  HTTP 200 without an insecure option. No ingress or proxy CA was generated,
+  copied or activated; optional inspection remains unused.
+- The native preflight passed on Ubuntu 24.04 with default Docker context,
+  `unix:///var/run/docker.sock`, guest daemon `budget-analyzer-agent` and
+  `/var/lib/docker`. The credential-boundary check found no forwarded SSH/GPG
+  agent, GitHub token or askpass bridge. Kubernetes selected context and cluster
+  `kind-kind`, a loopback HTTPS API and Ready `kind-control-plane`.
+- Before the cutover, the human reviewed the exact disposable guest Docker
+  inventory and confirmed both post-removal empty-state checks. Every old guest
+  container and every old named or anonymous volume was deleted, followed by
+  the reviewed image/cache/network prune. **No old agent container, agent image,
+  provider volume or other pre-reset Docker volume was retained.** The current
+  Docker state contains only the rebuilt `kind-control-plane`; its sole
+  anonymous `/var` volume was newly created by the clean bootstrap.
+- `./setup.sh --guest-local`, frontend dependency installation, the guest-local
+  Tilt preflight and `tilt up` rebuilt the environment from retained guest
+  files. All required Tilt resources report `ok`; the ingress TLS resource
+  logged validation of the imported files and Secret installation without
+  certificate generation. Established trust and direct app curl passed. After
+  the GNU awk portability repair in the edge verifier, its focused run reported
+  84/84 blocking checks and the nested runtime-hardening cascade reported
+  176/176; the operator then confirmed the complete smoke-test umbrella passed.
+- The accepted execution-plan SHA-256 remains
+  `feadfeb5d8c1d2d915352e6db438053bb95945d446230e880bf32e658668b75b`;
+  no plan-change acceptance was used. The same guest-local runner state reports
+  `next phase: phase-3 Prove Native Workspace Execution` with execution workspace
+  `workspace`.
+- Checkpoint A's paired native/Docker host denials, listener positives,
+  DNS/verified-download and host-initiated SSH/Git evidence remain the human
+  host-boundary authority; no B change altered that policy. Checkpoint C must
+  still prove trusted host browser behavior, Java/frontend Remote SSH saves and
+  restoration, native session lifecycle, restart persistence, repeated boundary
+  tests, absence of legacy resources and measured guest use. Checkpoint D must
+  still return reviewed source, retire Mint Docker and repeat the final boundary
+  proof.
 
 ## Native Execution Results
 
 | Phase | Owner evidence | Result |
 | --- | --- | --- |
-| 1: system installer/tool inventory | workspace `docs/host-isolation.md` | PENDING |
-| 2: user environment/helpers | workspace `docs/host-isolation.md` | PENDING |
-| 3: native runtime and workspace checks | workspace `docs/host-isolation.md` | PENDING |
+| 1: system installer/tool inventory | workspace `docs/host-isolation.md` | COMPLETE — preparation evidence and live B.1 install recorded |
+| 2: user environment/helpers | workspace `docs/host-isolation.md` | COMPLETE — preparation evidence and live B.1/B.2 verification recorded |
+| 3: native runtime and workspace checks | workspace `docs/host-isolation.md` | READY — native handoff complete; phase not yet invoked |
 | 4: orchestration native preflight/docs | This record | PENDING |
 | 5: native shared-library build/publication | service-common active development docs | PENDING |
 | 6: native currency Testcontainers | currency-service `docs/local-development.md` | PENDING |
@@ -115,7 +180,7 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
   `PASS - operator verified / iptables-nft compatibility backend`
 - Guest Internet positive control: `PASS - operator verified`
 - Host-to-guest SSH positive control: `PASS - operator verified`
-- Guest reboot persistence: `PENDING until Checkpoint B`
+- Guest reboot persistence: `PENDING until Checkpoint C`
 - Host reboot persistence: `PENDING`
 - Mint Docker retirement: `PENDING until Checkpoint C`
 - LAN/VPN peer isolation: `OUT OF SCOPE`
@@ -145,7 +210,7 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
   `Mint Docker-published listener`
 - Certificate validity/SAN/chain/key-match checks: `PASS - operator verified`
 - 8443 SSH forwarding fixture: `PASS - operator verified`
-- Final 443 loopback binding: `PENDING until Checkpoint B`
+- Final 443 loopback binding: `PENDING until Checkpoint C`
 - Dedicated browser profile created: `PASS - operator verified`
 
 ## Evidence Notes
@@ -218,15 +283,15 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
 
 ### Deferred Acceptance
 
-- Java Remote SSH live-update smoke edit: `NOT TESTED - deferred to Checkpoint B`.
+- Java Remote SSH live-update smoke edit: `NOT TESTED - deferred to Checkpoint C`.
 - Frontend Remote SSH live-update smoke edit:
-  `NOT TESTED - deferred to Checkpoint B`.
+  `NOT TESTED - deferred to Checkpoint C`.
 - Guest agent-container lifecycle helpers:
   `IMPLEMENTED in the original partial Phase 3 - fixture results recorded in
   workspace docs/host-isolation.md; tracked verifier and direct guest proof
   pending continuation Phase 1; live helper acceptance pending Checkpoint B`.
 - Host/VM restart persistence, host loopback port 443, trusted browser behavior
-  and the final daily workflow remain `PENDING Checkpoint B`.
+  and the final daily workflow remain `PENDING Checkpoint C`.
 
 The former container continuation was superseded by the
 [native execution plan](agent-vm-native-execution-plan.md). The old incomplete

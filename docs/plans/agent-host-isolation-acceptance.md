@@ -1,11 +1,15 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** COMPLETE. All eight native execution phases and human Checkpoints
-A–D are complete. On 2026-10-05 the operator confirmed that the full execution
+**Status:** Operator-attested migration COMPLETE; independent security review
+OPEN with confirmed firewall and retirement discrepancies. On 2026-10-05 the
+operator confirmed that all eight execution phases and human Checkpoints A–D
+were complete and that the full execution
 and manual plans had finished and all checks passed, and requested this record
 be updated. C/D completion is attributed to that confirmation, not a new agent
 inspection of the personal host. The separate post-migration security review
-below remains open. Prior timestamped evidence is preserved as collected.
+below remains open. The subsequently supplied host report does not satisfy
+the claimed final Docker-retirement state; see the dated review below.
+Prior timestamped evidence is preserved as collected.
 Operator preparation Steps 1–5 and the Initial Handoff were completed and
 verified on 2026-10-03. Checkpoint A repository, credential, TLS, bootstrap,
 stack-health and agent-restart checks were completed on 2026-10-04; the Java
@@ -285,9 +289,10 @@ against local `main`. The operator requested a new remediation plan after review
 | Required native npm lock missing from committed source | Local lock exists but is ignored; `git ls-tree HEAD native/npm/` lists only package.json. Include the reviewed lock and prove source-only input closure. | OPEN |
 | TLS hostname rejection ineffective | Real `openssl x509 -checkhost unrelated.invalid` reported mismatch with exit 0. Use hostname-aware chain verification and negative coverage. | OPEN |
 | Kubernetes loopback authority check too broad | Mocked target guard accepted `https://127.0.0.1:6443@outside.invalid:443`; URL authority is remote. Require strict actual authority validation. | OPEN |
-| Full host firewall order/protocol coverage | Existing acceptance probes cover TCP; earlier UFW/libvirt rules and UDP/multicast require additional effective-policy review. No live exposure is asserted without host evidence. | AWAITING HOST AUDIT |
+| Full host firewall order/protocol coverage | Supplied host report confirms early UFW multicast acceptance and broader libvirt DNS/DHCP acceptance before the bridge deny. See dated review below; repair and paired protocol/reboot evidence remain required. | CONFIRMED POLICY DEFECTS |
 | Duplicate managed guest CA roots | Both orchestration/workspace destinations exist with the same certificate. Consolidate ownership and safely converge the exact legacy duplicate. | OPEN |
 | Transitional source/workflow/helper duplication | Mint retirement is operator-confirmed; remove obsolete active guidance and duplicate implementations with their consumers accounted for. | OPEN |
+| Final host Docker retirement discrepancy | Supplied report shows inactive/disabled Docker units but retained bridge, rules in both backends and helper/drop-in files. Complete and independently verify the intended D.3 state without restarting Docker. | OPEN |
 
 Review checks passed: 12 workspace native unit tests, 11 orchestration preflight
 fixtures, manifest/environment checks, changed-shell Bash/ShellCheck, diff
@@ -300,6 +305,71 @@ The [host audit runbook](../runbooks/host-isolation-audit.md) and read-only
 collector are available for human host execution. Collector fixture success
 does not mean the live host has been inspected. Record additional audit results
 here with explicit attribution after privately reviewed evidence arrives.
+
+### Host Report Review — 2026-10-05
+
+Source: operator-supplied `candidate-report.md`, collected at
+`2026-10-05T16:58:47.449548+00:00`; SHA-256
+`0ab72f8421b930d166f48ae8ef42c412dd92033951c0e4d23699b2f737af6c34`.
+This is an agent review of supplied evidence, not direct agent access to the
+personal host. No active packet probes or host changes occurred in this review.
+
+Findings:
+
+- **P1 — VM input denial is too late for multicast.** Both live rules and
+  persistent UFW before-rules accept mDNS/SSDP before the user-input chain that
+  contains the bridge deny. IPv4 allows UDP to the mDNS and SSDP multicast
+  groups on ports 5353/1900 without an ingress-interface restriction; IPv6 has
+  corresponding earlier accepts. Avahi listens on IPv4/IPv6 wildcard port 5353.
+  This proves the firewall policy allows these paths, not that a particular
+  guest packet reached Avahi or exploited it. Multicast membership/interface
+  delivery and post-repair denial require paired fixtures.
+- **P2 — Libvirt bypasses the intended DNS/DHCP scope.** INPUT reaches
+  `LIBVIRT_INP` before UFW. That chain accepts guest-bridge TCP/UDP destination
+  ports 53 and 67 on any host destination, before UFW's gateway-only DNS and
+  UDP client-port-constrained DHCP rules. No matching early restrictive chain
+  appears in the supplied nft/legacy input paths. This is broader firewall
+  permission, not proof that every corresponding application listener responds.
+- **P2 — Final retirement is not established.** Docker service/socket are
+  loaded, inactive and disabled, but `docker0`, nft and legacy Docker rules,
+  `agent-vm-docker-isolation` and `agent-vm-isolation.conf` remain. D.3 requires
+  those remnants absent after the final reboot. The package query returned a
+  nonzero exit with its partial output withheld; package absence cannot be
+  inferred. UFW's hook contents also remain private-only. Preserve the earlier
+  attestation as history; reconcile this contradictory snapshot before claiming
+  independently verified retirement. Containerd needs consumer discovery,
+  not automatic removal.
+
+Positive evidence: the running VM uses the selected NAT network, its live
+AppArmor label is enforcing in both libvirt info and process labels, UFW is
+active/enabled with root-owned non-writable policy files, and app HTTPS/VNC
+listeners bind to loopback. The captured device summaries show no filesystem
+or host-device passthrough. A QEMU guest-agent channel exists but is reported
+disconnected; it is not a demonstrated host escape. Empty persistent security
+labels alone do not contradict live dynamic AppArmor enforcement.
+
+The repair must constrain VM-originated host input independently of earlier
+generic UFW/libvirt accepts, preserving only reviewed DNS/DHCP, required IPv6
+control traffic and legitimate host-initiated replies. Merely adding another
+`ufw deny` user rule or changing only UFW's before-chain cannot close both
+ordering defects. Review host IPv6 tap/bridge ingress applicability as well;
+an absent routed IPv6 network is not proof of absent link-local access. Keep
+host policy changes human-owned, persistent and narrow; do not flush tables,
+revive host Docker or change unrelated LAN/VPN policy.
+
+Remaining proof: concrete reviewed host repair, applicable paired TCP/UDP/
+multicast IPv4/IPv6 positives and denials with counters/ingress evidence,
+post-reboot persistence, continued DNS/HTTPS/SSH/Git/app functionality, and
+retirement inventory. Existing multicast counters are host-wide and do not
+attribute traffic to this VM. No independent host-isolation PASS is recorded.
+
+Collector follow-up: the supplied report reveals incomplete redaction of
+iptables comments and shortened bridge MAC identifiers, and over-redaction of
+a subnet mask. Its partial package output handling also limits retirement
+review. Fix these narrowly with representative offline fixtures before another
+collection. The report is currently Git-tracked; privately review publication
+scope before sending it to an external remote. No report or Git history was
+removed or rewritten by the agent.
 
 ## Initial Operator Handoff
 

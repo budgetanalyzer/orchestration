@@ -8,15 +8,20 @@ the migration's destructive bootstrap, retirement or installation checkpoints.
 
 Close the final review findings against orchestration `3b67af2` and workspace
 `fed714c`: missing tracked npm lock, ineffective TLS hostname rejection, weak
-Kubernetes URL authority checks, incomplete host firewall protocol/order proof,
-duplicate guest CA installation, and obsolete transitional workflows/helpers.
+Kubernetes URL authority checks, confirmed host firewall precedence defects,
+incomplete Mint Docker retirement, duplicate guest CA installation, and
+obsolete transitional workflows/helpers.
 Keep the existing simple runtime: one VM, one guest user/home, native agents,
 one guest Docker daemon, host-initiated Git/SSH, no host mounts or credentials.
 
 The plan authoring change supplies the read-only host evidence collector and
 its [runbook](../runbooks/host-isolation-audit.md), and records operator-attested
 migration completion. Those are prerequisites available to the phases below,
-not evidence that any remediation phase or additional firewall review passed.
+not evidence that any remediation phase passed. The first operator-supplied
+host report confirms early multicast and libvirt DNS/DHCP accepts plus retained
+Mint Docker artifacts. It also supplies positive confinement and loopback-bind
+evidence. Firewall repair, post-reboot protocol proof and final retirement
+evidence remain human-owned acceptance gates.
 
 ## Execution And Authority
 
@@ -40,12 +45,17 @@ not evidence that any remediation phase or additional firewall review passed.
 - Do not generate browser/infrastructure certificates even for a test. Use
   checked-in public certificate fixtures without private keys, pure command
   fixtures and parsing tests, or established real certificates read-only.
-- Human host evidence collection may happen while Phases 1–5 proceed. Before
-  Phase 6 can complete, the human must provide the privately reviewed report,
-  any required paired protocol/reboot results, and live trust/tool acceptance.
-  Missing evidence leaves Phase 6 stopped, never an inferred PASS. A host rule
-  change requires a concrete reviewed repair and human execution, not an
-  agent-applied change or broad firewall rewrite.
+- Human host repair and evidence collection may happen only after Phase 6 has
+  produced a concrete reviewable handoff. Before Phase 7 can complete, the
+  human must apply the reviewed repair, complete the remaining D.3 retirement,
+  reboot, privately review the new report and provide the required paired
+  protocol and live trust/tool results. Missing evidence leaves Phase 7
+  stopped, never an inferred PASS. An agent must not administer the host or
+  install guest-authored policy there.
+- Treat every candidate host report as private until a human reviews its
+  publication scope. The current Git-tracked report is evidence input, not a
+  source file to quote or replicate; this plan does not authorize Git removal,
+  history rewriting or external publication of that report.
 - This authorizes planned repository fixes and retirement of obsolete tracked
   container support after its consumers have been accounted for. It does not
   authorize removing host/guest runtime data or discarding unrelated tooling.
@@ -377,7 +387,7 @@ Native commands/capabilities have one maintained source, no active docs or
 automation require the retired container, and any required human refresh is
 explicitly recorded without claiming it has occurred.
 
-## Phase 6: Close Host Evidence And Integrated Acceptance
+## Phase 6: Prepare The Host Repair And Evidence Handoff
 
 ### Workspace
 
@@ -385,81 +395,204 @@ explicitly recorded without claiming it has occurred.
 
 ### Goal
 
-Close the additional host security review with actual evidence, align remaining
-orchestration documentation, and verify the final native configuration.
+Turn the confirmed firewall and retirement discrepancies into a narrow,
+reviewable host repair contract, and make the next evidence collection safe and
+decisive enough for final review.
 
 ### Scope
 
-Audit collector/runbook improvements justified by received host evidence,
-focused protocol fixtures if needed, native workflow docs and the distinct
-post-migration acceptance record.
+Audit collector/runbook improvements justified by the supplied report, a
+concrete host-owned firewall and Docker-retirement handoff, and focused protocol
+fixtures needed to test the repaired boundary.
 
 ### Non-goals
 
-No host administration from an agent, broad policy rewrite, revived Docker
-fixture on the retired host, service logic changes, hidden credentials, or
-claim that VM isolation eliminates host-client/hypervisor vulnerabilities.
+No host administration from an agent, firewall installation or reload, reboot,
+live probes, broad policy rewrite, revived Docker fixture on the retired host,
+service logic changes, report publication or claim that VM isolation eliminates
+host-client/hypervisor vulnerabilities.
 
 ### Required context
 
 Read `AGENTS.md`, `docs/agents-md-checkstyle.md`, `docs/OWNERSHIP.md`,
 `docs/runbooks/host-isolation-audit.md`, the collector and its tests, the boundary
-contract, completed migration acceptance, new post-migration review, relevant
-workspace results and human-provided privately reviewed host evidence.
+contract, the manual plan's D.3 retirement contract, completed migration
+acceptance, the dated post-migration report review, relevant workspace results
+and the human-provided privately reviewed host evidence. Do not copy report
+identifiers or full rule dumps into repository documentation or test fixtures.
+
+### Execution steps
+
+1. Use the dated acceptance-record review as the finding baseline. Preserve its
+   distinction between proven policy reachability and unproven delivery: early
+   IPv4/IPv6 mDNS/SSDP accepts and broad libvirt port 53/67 accepts are confirmed
+   defects; actual guest delivery to Avahi or another listener is not yet
+   established. Preserve the positive AppArmor, device and loopback-bind
+   evidence without treating it as a firewall pass.
+2. Fix the collector's best-effort redaction with synthetic tests. Redact full
+   iptables/nft comment values, including the argument after a comment module;
+   consistently alias custom domain, network, bridge and tap identifiers while
+   preserving their relationships; and preserve CIDR masks and rule semantics.
+   Make Docker package collection distinguish an empty installed-package result
+   from command failure and account for the discovered Docker engine/CLI,
+   containerd and runc package families without publishing unrelated packages.
+3. Write the exact human-owned firewall repair contract into the audit runbook.
+   Require a root-owned persistent enforcement point that sees input from the
+   dedicated VM bridge/tap before both libvirt's `LIBVIRT_INP` accepts and UFW's
+   multicast/before-rule accepts in every applicable address family. Prove no
+   active path exposed through any installed firewall backend bypasses that
+   enforcement point. Default-deny VM-originated host input there while
+   allowing only reviewed established replies, gateway-scoped TCP/UDP DNS,
+   narrowly formed DHCP and required IPv6 control traffic. Explicitly deny
+   mDNS, SSDP and every other unapproved host destination. Another ordinary UFW
+   user rule, or a change only to UFW before-rules, is not an acceptable repair.
+4. Make the firewall handoff lifecycle-safe. It must use discovered interfaces
+   and addresses, coexist with UFW/libvirt without flushing either ruleset,
+   remain effective across UFW reload, libvirt network restart and host reboot,
+   and fail closed if its persistent policy cannot load. Require root ownership,
+   no guest-writable source, syntax validation and read-back of actual hook
+   priority/order before human application. Keep LAN/VPN and Internet policy
+   outside this repair.
+5. Add a D.3 reconciliation checklist for the human. Without starting Docker,
+   identify package and containerd consumers, remove only retired Mint Docker
+   packages/data and the reviewed isolation helper, service drop-in and UFW
+   hook call, then reboot. Final evidence must show no Docker daemon/socket/CLI
+   or engine packages, `docker0`, Docker nft/legacy chains, retired runtime data,
+   helper or drop-in. Retained containerd/runc requires a named non-Docker
+   consumer and must not recreate Docker state.
+6. Implement a small explicit host-listener/guest-probe helper only where the
+   reviewed topology needs one. It must never alter firewall, routing or
+   services; must bind only the selected interface/address; use nonce-bearing
+   harmless payloads; refuse occupied ports; stop cleanly; and distinguish a
+   positive control, observed ingress/drop counter and receiver non-delivery
+   from a missing route, group membership or listener. For occupied mDNS/SSDP
+   ports, require a reviewed counter/scoped-capture method rather than sending
+   discovery traffic to a real service or stopping that service.
+7. Specify the post-repair matrix: applicable unicast TCP/UDP and multicast
+   IPv4/IPv6 attempts from the guest, gateway DNS/DHCP and required IPv6
+   positives, counter or scoped-ingress attribution, and repeated results after
+   reboot. Also require guest verified HTTPS/Internet, host-initiated SSH/Git/
+   app HTTPS and read-only guest Docker/Kind/Tilt health. Host Docker-path tests
+   are inapplicable after retirement and must be replaced by absence evidence.
+8. Validate collector and helper fixtures offline, compile changed Python under
+   `tmp/`, run Bash syntax/ShellCheck for changed shell, and run doc/link and
+   diff checks. Record the exact human commands, expected outputs, rollback
+   boundary and stop conditions without running them. Do not mark the confirmed
+   findings repaired in the acceptance record during this phase.
+
+### Implementation notes
+
+The supplied report is enough to design the repair, but it is not evidence that
+the repair exists. Prefer one early VM-specific policy boundary over duplicated
+exceptions in several generated chains. Its allowlist must be derived from the
+actual libvirt network and working flows, especially DHCP and IPv6 control; do
+not guess protocol allowances or weaken unrelated host policy. Keep the current
+report private and avoid embedding real identifiers in fixtures.
+
+### Validation
+
+Run collector offline tests, any new protocol-helper negative/positive fixtures,
+changed-shell Bash/ShellCheck, Python compilation under `tmp/`, plan/doc links
+and diff checks. Inspect the generated handoff against the supplied rule order
+and D.3 contract. No live host or guest network operation is needed in this
+phase.
+
+### Completion criteria
+
+The repository contains tested redaction/package-evidence fixes, a precise
+persistent firewall repair contract, a bounded D.3 cleanup checklist and a
+controlled post-repair proof matrix. The human can review and execute the
+handoff without inventing policy or reviving Docker. The acceptance record still
+shows the firewall and retirement findings open.
+
+## Phase 7: Close Host Evidence And Integrated Acceptance
+
+### Workspace
+
+.
+
+### Goal
+
+Review the human-applied host repair and retirement evidence, align remaining
+orchestration documentation, and accept only the final verified native boundary.
+
+### Scope
+
+The new privately reviewed host report and paired protocol/reboot results,
+remaining native workflow documentation, relevant guest read-only checks and
+the distinct post-migration acceptance record.
+
+### Non-goals
+
+No host administration from an agent, report publication, repeated destructive
+migration, revived host Docker, unrelated firewall hardening, service logic
+changes, hidden credentials or claim that the VM removes host-client/hypervisor
+risk.
+
+### Required context
+
+Read `AGENTS.md`, `docs/agents-md-checkstyle.md`, `docs/OWNERSHIP.md`,
+`docs/runbooks/host-isolation-audit.md`, the boundary contract, Phase 6's
+reviewed handoff and tests, the manual plan's D.3 contract, completed migration
+acceptance, relevant workspace results and the human-provided post-repair
+evidence. The human must have privately reviewed the candidate report before it
+is made available; request only narrow redacted follow-up evidence when needed.
 
 ### Execution steps
 
 1. Confirm Phase 1's reviewed lock is committed and survives source-only Git
    export through human evidence; inspect sibling source read-only. Confirm
    human native refresh/trust convergence and HTTPS results for Phases 3–5.
-2. Review full effective IPv4/IPv6 firewall ordering, all installed backends,
-   UFW before-rules, nft priorities, native/forwarded/DNAT paths, interfaces,
-   listeners, mDNS/SSDP/other protocol exceptions, live confinement and persistent
-   definitions using the runbook. Missing or redacted-away decisive evidence
-   requires a narrowly specified follow-up, not a guessed conclusion.
-3. If policy requires repair, describe the precise host-owned rule change and
-   expected effect for human review/application. Do not execute it or install
-   guest-authored policy on the host. Require post-change collection.
-4. Specify and, if useful, implement a small explicit host-listener/guest-probe
-   fixture for the actual UDP/multicast paths. It must not change firewall,
-   routing or services, must bind only the selected interface/address, use
-   nonce-bearing harmless payloads, refuse occupied ports, stop cleanly and
-   distinguish positive controls/denials from missing routes/listeners. The
-   human runs host fixtures; do not probe unrelated destinations or treat a
-   UDP timeout as proof. Validate helpers offline before handing them over.
-5. Require paired applicable TCP/UDP/IPv4/IPv6 results with counter or scoped
-   ingress evidence, repeated after human reboot; require positive guest DNS/
-   verified HTTPS and host-initiated SSH/Git/app HTTPS. Docker-path tests are
-   inapplicable after host retirement, whose absence must be evidenced.
+2. Trace the post-repair IPv4/IPv6 input path through every active nft and
+   compatibility backend. Prove the VM-specific enforcement point precedes and
+   cannot be bypassed by libvirt DNS/DHCP or UFW multicast accepts, permits only
+   the reviewed allowlist, and remains active after UFW/libvirt lifecycle events
+   and the final reboot. Missing or redacted-away decisive evidence requires a
+   narrowly specified follow-up, never a guessed PASS.
+3. Review paired applicable TCP/UDP/multicast IPv4/IPv6 results. Require
+   nonce-bearing positive controls plus scoped ingress/drop attribution and
+   receiver non-delivery; a timeout, zero counter without proven routing, or
+   host-wide multicast counter is NOT TESTED. Confirm gateway DNS/DHCP, required
+   IPv6 behavior, guest verified HTTPS/Internet and host-initiated SSH/Git/app
+   HTTPS still work.
+4. Reconcile D.3 after reboot. Require absence of the host Docker daemon/socket/
+   CLI and engine packages, `docker0`, Docker chains in every installed backend,
+   retired runtime data, the isolation helper/drop-in and its UFW hook call.
+   Confirm any retained containerd/runc consumer is explicit and unrelated.
+   Do not restart Docker or infer absence from inactive units alone.
+5. Reconfirm the running VM's enforcing dynamic AppArmor label, selected
+   dedicated network, no filesystem/host-device passthrough, and loopback-only
+   app HTTPS/VNC listeners. Treat these as required positive boundary evidence,
+   not substitutes for packet-policy proof.
 6. Finish orchestration native-only daily guidance and cross-links, retaining
    human-only fresh bootstrap and historical migration records. Remove active
    transitional instructions; preserve the immutable migration execution plan.
-7. Run relevant guest preflight/static checks and focused smoke checks justified
-   by actual runtime changes. Record revisions, commands, attribution, failures
-   and residual host-client/hypervisor risk. Update post-migration acceptance
-   only for independently reviewed or explicitly attributed human results.
+7. Run the read-only native runtime preflight and focused guest checks justified
+   by actual runtime changes, with exact local target gates. Record revisions,
+   commands, timestamps, attribution, failures, untested cases and residual
+   host-client/hypervisor risk. Update post-migration acceptance only for
+   independently reviewed or explicitly attributed human results.
 
 ### Implementation notes
 
-The collector produces evidence, not a pass/fail firewall theorem. A rule set
-that blocks TCP fixtures can still accept unwanted UDP earlier in traversal.
-No available host report means this phase cannot complete; Phases 1–5 remain
-valid independent checkpoints. Do not reopen the completed migration or rerun
-its destructive operations to obtain this new audit evidence.
+The original migration acceptance remains historical operator attestation. The
+new report resolves its contradictory snapshot only if it proves the repaired
+state after reboot. Do not copy complete firewall dumps or identifying values
+into the acceptance record; record the relevant order, behavior and attribution.
 
 ### Validation
 
-Run collector offline tests, any new protocol-helper negative/positive fixtures,
-changed-shell Bash/ShellCheck, Python compilation under `tmp/`, plan/doc links,
+Run focused collector/helper tests when Phase 6 code changed, plan/doc links,
 diff checks and the read-only native runtime preflight after human refresh.
-Collect actual host audit/paired-reboot results through the runbook. Run broader
-guest smoke checks only for affected runtime behavior, with exact target gates.
+Review actual host audit and paired-reboot results through the runbook. Run
+broader guest smoke checks only for affected runtime behavior and only after the
+exact target gates pass.
 
 ### Completion criteria
 
-All three concrete defects are closed, trust ownership and helpers are
+All confirmed review defects are closed, trust ownership and helpers are
 consolidated, obsolete active guidance is gone, fresh Git source is complete,
-human live installation has passed, and host firewall/confinement/protocol/
-persistence evidence supports the documented boundary. The new review record
-lists actual coverage and residual risks; original migration acceptance remains
-completed and unchanged in meaning.
+human live installation has passed, and post-reboot host firewall/confinement/
+protocol/retirement evidence supports the documented boundary. The new review
+record lists actual coverage and residual risks; original migration acceptance
+remains completed and unchanged in meaning.

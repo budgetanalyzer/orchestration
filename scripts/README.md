@@ -31,14 +31,20 @@ scripts/
   modes recreate Kind and are not daily-start commands.
 - `bootstrap/check-agent-vm-prerequisites.sh` - Read-only development VM check
   for Ubuntu, local Docker endpoint/data-root selection, required build tools
-  and absence of forwarded GitHub/SSH authority.
+  and absence of forwarded host authority. Pass `--native-runtime` for daily
+  native user/home/tool/repository verification through the workspace owner
+  plus the exact live loopback `kind-kind` target.
 - `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
   validator and strict local-`kind-kind` Secret installer; use
   `--validate-only` for static file checks. Tilt uses its default install mode
   to reconcile the existing files into the Secret in both local runtime modes.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
   Pass `--guest-local` in the development VM to skip mkcert and require the
-  local guest Docker endpoint.
+  local guest Docker endpoint plus the Ready loopback `kind-kind` target.
+- `../tests/native-guest-preflight/test-native-guest-preflight.sh` - Tracked
+  fail-closed fixtures for native/container execution, forwarded credentials,
+  remote Docker selection, wrong Kubernetes context/referenced cluster,
+  nonloopback API and missing control-plane node.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
@@ -178,7 +184,12 @@ Choose scripts by runtime boundary:
 - `bootstrap/check-agent-vm-prerequisites.sh` fails closed unless the Ubuntu
   development VM is using its default local Unix Docker socket and normal
   `/var/lib/docker` data root. It also checks Git, OpenSSL, JDK 25, Node.js 20+
-  and npm 10+ and rejects forwarded agent/token/credential-helper state.
+  and npm 10+ and rejects forwarded agent/token/credential-helper state. Its
+  `--native-runtime` mode delegates the complete native tool/user/home and
+  repository-pair contract to the workspace verifier, then requires the exact
+  Ready local Kind target. The bootstrap-only mode intentionally does not
+  require Docker Compose merely to launch the retired guest agent container;
+  Compose remains workspace-owned for other supported tooling.
 - `bootstrap/install-imported-ingress-tls.sh` validates the three approved
   host-created ingress files without invoking mkcert. Install mode optionally
   adds the public root to the guest OS trust store and applies the TLS Secret
@@ -217,8 +228,11 @@ repo-managed prerequisites and recreate the local Kind cluster. Use the
 explicit `../setup.sh --guest-local` path only after the development VM has the
 approved imported TLS files and its guest-local prerequisites pass. Use
 `bootstrap/install-verified-tool.sh` for a single pinned binary, and use
-`bootstrap/check-tilt-prerequisites.sh` as a read-only report before or after
-setup.
+`bootstrap/check-tilt-prerequisites.sh` as a diagnostic before or after setup;
+its live security proof creates and cleans named disposable probe resources.
+For normal native guest startup, run
+`bootstrap/check-agent-vm-prerequisites.sh --native-runtime` and then
+`tilt up`; never rerun `setup.sh` as a daily start command.
 
 ## Guardrails
 

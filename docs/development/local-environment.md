@@ -35,6 +35,15 @@ including `../ext-authz`, and frontend `node_modules`. The guest-local path
 imports host-created ingress files and therefore neither installs nor invokes
 `mkcert`.
 
+In the development VM, the sibling workspace
+[`native/toolchain.json`](../../../workspace/native/toolchain.json) is the
+version and package authority for the complete native agent/developer
+toolchain. Its installer provides Docker/Compose, Maven and the provider tools
+in addition to this orchestration runtime subset. Do not reproduce that
+inventory here or create a separate agent home. The orchestration native
+runtime preflight delegates full user/home/tool/repository validation to the
+workspace verifier.
+
 The sibling `budget-analyzer-web` repo must also have local npm dependencies
 installed because the `budget-analyzer-web-prod-smoke` image build runs on the
 host:
@@ -49,6 +58,10 @@ npm install
 ```bash
 # Run the check script
 ./scripts/bootstrap/check-tilt-prerequisites.sh
+
+# In the development VM, verify the complete native runtime and exact target
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
 
 # Or check manually:
 docker --version
@@ -164,9 +177,9 @@ fs.inotify.max_user_instances >= 8192
 fs.inotify.max_user_watches >= 524288
 ```
 
-Run `./scripts/bootstrap/check-tilt-prerequisites.sh` for read-only visibility
-into the host/container values and any reachable Kind node values. If a Kind
-node is below baseline in a running Tilt session, trigger the
+Run `./scripts/bootstrap/check-tilt-prerequisites.sh` to report local-machine
+and reachable Kind-node values and exercise the disposable runtime-security
+probes. If a Kind node is below baseline in a running Tilt session, trigger the
 `kind-node-inotify-budget` Tilt resource or run
 `./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on the host. A one-off
 `docker exec kind-control-plane sysctl ...` can recover a live cluster during
@@ -207,15 +220,15 @@ certificate. `scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing,
 invalid, or stale publication without printing certificate subject or issuer
 metadata.
 
-The sibling workspace devcontainer can install this public root lazily into
-its container-local system, Python, and Chromium trust stores. For live agent
-work against exactly `https://app.budgetanalyzer.localhost`, run
-`ensure-budget-analyzer-local-ca-trust`; use
-`check-budget-analyzer-local-ca-trust` for read-only diagnosis. Detailed
-container behavior lives in `../workspace/docs/local-budget-analyzer-tls.md`.
-If the publication is missing or stale, stop and ask the user to run
-orchestration `./setup.sh` on the host. Never run mkcert or either certificate
-setup script from the agent container.
+The sibling workspace devcontainer retains its own lazy container-local trust
+path for the standard personal-host workflow. Native development-VM trust is
+installed once by the human procedure below. In native execution,
+`ensure-budget-analyzer-local-ca-trust` and
+`check-budget-analyzer-local-ca-trust` are both read-only checks of the already
+established system, Python, Node and Chromium trust. Detailed ownership lives
+in [`../../../workspace/docs/local-budget-analyzer-tls.md`](../../../workspace/docs/local-budget-analyzer-tls.md).
+If the publication is missing or stale, stop and use the owner workflow; never
+run mkcert or a browser-certificate generator from an agent process.
 
 ### Development VM Import And Renewal
 
@@ -234,10 +247,9 @@ Guest `./setup.sh --guest-local` runs the installer in mutation mode. The
 installer validates the public CA, current validity, hostname, chain and
 leaf/key match, installs the public root in the guest OS trust store, enforces
 the exact `kind-kind` context/referenced cluster, loopback API and
-`kind-control-plane` node, then applies the ingress Secret. The guest agent
-container still installs that same public root lazily with
-`ensure-budget-analyzer-local-ca-trust`; the guest OS trust update does not
-replace the container helper.
+Ready `kind-control-plane` node, then applies the ingress Secret. The native
+workspace trust installer establishes the same root in the normal guest user's
+NSS database; daily native checks never modify either trust store.
 
 If the leaf expires or needs replacement, renew it only from a human-operated
 personal-host shell in the host orchestration checkout:
@@ -394,7 +406,7 @@ NGINX serves that bundle at
 `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other
 browser-security checks while `/` and `/login` stay on the live Vite route.
 
-That local smoke-build path depends on host/devcontainer npm state in the
+That local smoke-build path depends on the current local user's npm state in the
 sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
 or refresh, make sure `npm install` has been run there so
 `npm run build:prod-smoke` can execute locally. This is intentionally separate
@@ -725,7 +737,8 @@ code    151299 devex   93u  IPv4 584246      0t0  TCP localhost:10350 (LISTEN)
 }
 ```
 
-Then restart VS Code. See the [Sandboxed Container Configuration](#sandboxed-container-configuration) section for more details.
+Then restart VS Code. See the [Remote SSH Configuration](#remote-ssh-configuration)
+section for more details.
 
 ### Pod Not Starting
 
@@ -852,7 +865,8 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 
 ## IDE Setup
 
-> **Note:** IntelliJ IDEA is not supported. It cannot run containerized AI agents, making it unsuitable for AI-assisted development workflows.
+> **Note:** The supported development-VM editor path is VS Code Remote SSH so
+> terminals, extensions, language servers and file writes execute in the guest.
 
 ### VS Code
 
@@ -878,9 +892,11 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 }
 ```
 
-**Sandboxed Container Configuration:**
+**Remote SSH Configuration:**
 
-When running VS Code in a sandboxed container (e.g., for AI agent development), disable automatic port forwarding to ensure complete isolation:
+Use the dedicated development-VM profile from the native manual plan. Disable
+automatic port forwarding and do not forward personal SSH/GPG agents or host
+credentials:
 
 ```json
 // VS Code User Settings (not workspace settings)
@@ -889,10 +905,9 @@ When running VS Code in a sandboxed container (e.g., for AI agent development), 
 }
 ```
 
-**Why disable port forwarding?**
-- **True isolation**: No accidental leakage between container and host
-- **No port conflicts**: VS Code won't claim ports needed by Tilt or other services
-- **Cleaner workflow**: No need to manage or kill processes on the host
+This prevents VS Code from claiming Tilt/application ports and keeps forwarding
+limited to the reviewed host loopback path. The VM boundary and absence of host
+mounts/credentials provide isolation; this setting alone does not.
 
 **Note:** This setting goes in your VS Code user settings (`Ctrl/Cmd + ,`), not in the workspace `.vscode/settings.json` file.
 

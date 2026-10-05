@@ -2,8 +2,8 @@
 
 **Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
 
-The supported transitional containerized developer workspace lives in the
-sibling `workspace` repository:
+The sibling `workspace` repository owns developer tooling and the supported
+personal-host devcontainer:
 
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
@@ -13,13 +13,13 @@ Open the workspace in VS Code and choose **Reopen in Container**. After the
 devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
 
-The selected isolated target uses native agents and VS Code Remote SSH in a
-development VM. Native provisioning is planned in the
-[execution plan](../plans/agent-vm-native-execution-plan.md), with a separate
-[human installation/cutover checklist](../plans/agent-vm-native-manual-plan.md).
-The current guest agent container is a temporary preparation runner. Working
-clones, Docker, Kind and runtime state stay guest-local. Read
-the boundary contract in
+The isolated development-VM target uses native agents and VS Code Remote SSH.
+All eight repository execution phases passed on 2026-10-05; human Remote SSH,
+live-update, reboot and Mint-retirement acceptance remain in the
+[human checklist](../plans/agent-vm-native-manual-plan.md). Working clones, the
+normal guest home, Docker, Kind and runtime state stay guest-local. The old
+guest agent container is retired and must not be reconstructed. Read the
+boundary contract in
 [`../architecture/autonomous-ai-execution.md`](../architecture/autonomous-ai-execution.md)
 before changing either configuration.
 
@@ -45,7 +45,8 @@ This is the supported local startup path for the repository:
   Kind, Tilt, `mkcert`, Calico, and Gateway API CRDs, installs a supported
   Helm 3 binary when needed, recreates the local `kind` cluster, configures
   browser and internal TLS, publishes the public local ingress CA for lazy
-  agent-container trust installation, sets up local DNS, and prepares `.env`.
+  workspace-devcontainer trust installation, sets up local DNS, and prepares
+  `.env`.
 - Edit `.env` before `tilt up`. Auth0 values and `FRED_API_KEY` are required
   for local startup.
 - `tilt up` is the supported entry point for the full local stack.
@@ -65,7 +66,15 @@ host; do not generate or rotate certificates in the container. The publication
 contract and diagnostics live in
 [`local-environment.md`](local-environment.md#host-published-local-ingress-ca).
 
-## Development VM First Bootstrap
+## Development VM Native Workflow
+
+The workspace-owned installer establishes the normal guest user's native tool
+environment before application bootstrap. Follow the exact human installation,
+provider authentication and trust procedure in the
+[native user-tools guide](../../../workspace/docs/native-user-tools.md). Do not
+install tools ad hoc from orchestration or create a second agent-specific home.
+
+### Development VM First Bootstrap
 
 Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
 after guest provisioning, repository setup and approved TLS transfer. The
@@ -96,11 +105,8 @@ and applies the ingress TLS Secret only after the strict loopback `kind-kind`
 checks pass.
 
 `./setup.sh` in either mode recreates Kind. It is a first-bootstrap or explicit
-clean-rebuild command, never a daily VM-start command. Daily guest startup is:
-
-```bash
-tilt up
-```
+clean-rebuild command, never a daily VM-start command. Use the daily native
+startup below for ordinary guest work.
 
 The `ingress-tls-secret` Tilt resource validates the already transferred files
 and reconciles the local Kind Secret on startup. It does not run mkcert or alter
@@ -108,10 +114,47 @@ guest trust. Missing, expired, or replaced files return to the host renewal and
 guest import workflow; they are not repaired by `tilt up`.
 
 Follow the [native manual plan](../plans/agent-vm-native-manual-plan.md) for the
-agent installation gate and daily startup. Until that gate passes, the existing
-guest container is used only for preparation. Do not import Mint Docker state
-or run the standard host certificate generator in the guest. Imported TLS
-ownership and renewal remain in the local-environment guide.
+remaining human checkpoints. Do not import Mint Docker state or run the
+standard host certificate generator in the guest. Imported TLS ownership and
+renewal remain in the local-environment guide.
+
+### Daily Native Startup
+
+Open a fresh guest shell as the normal development user. The managed shell
+environment should already be loaded; the native runtime preflight verifies
+that user/home, every local working/bare repository pair, pinned user tools,
+the credential boundary, guest Docker and the exact loopback Kind target still
+agree:
+
+```bash
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+tilt up
+```
+
+Run `./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local` when
+diagnosing tool, repository, cluster or runtime-security drift. It also fails
+closed on the exact guest-local Docker and Kubernetes targets before its
+runtime security proof creates and cleans named disposable probe resources.
+The native runtime preflight is read-only; neither command installs packages,
+changes trust or recreates the cluster. Do not run `setup.sh` during daily
+startup.
+
+Launch agents and AI Session Handler from that same fresh guest shell, never
+through Docker Compose or a separate agent home. Plain provider commands keep
+their upstream defaults; use the reviewed wrapper when a plan calls for it:
+
+```bash
+codex
+# Or, from a repository that owns PLAN_NAME:
+ai-run PLAN_NAME
+```
+
+Exit the agent independently when its work is complete. Tilt, guest Docker,
+Kind and the application remain running, and the next fresh login shell reuses
+the normal user's provider state, Maven Local and Gradle caches. Run
+`check-budget-analyzer-local-ca-trust` when diagnosing native HTTPS trust; it is
+read-only. The migration checklist owns the one-time proof of fresh-shell PATH
+resolution, agent exit/reentry, live saves and reboot persistence.
 
 ## Validation
 

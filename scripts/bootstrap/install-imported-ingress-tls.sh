@@ -8,13 +8,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=../lib/local-kubernetes-target.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime.
+. "$SCRIPT_DIR/../lib/local-kubernetes-target.sh"
 CERT_DIR="$ORCHESTRATION_DIR/nginx/certs/k8s"
 VALIDATE_ONLY=false
 INSTALL_SYSTEM_TRUST=false
 EXPECTED_HOSTNAME="app.budgetanalyzer.localhost"
-EXPECTED_CONTEXT="kind-kind"
-EXPECTED_CLUSTER="kind-kind"
-EXPECTED_KIND_CLUSTER="kind"
 SECRET_NAME="budgetanalyzer-localhost-wildcard-tls"
 NAMESPACE="default"
 
@@ -121,28 +121,7 @@ if [[ -f /.dockerenv || -f /run/.containerenv ]]; then
     fail "install mode must run on the machine hosting the local Kind cluster, not in a container"
 fi
 
-for command_name in kubectl kind; do
-    command -v "$command_name" >/dev/null 2>&1 || fail "required command is missing: $command_name"
-done
-
-ACTIVE_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
-[[ "$ACTIVE_CONTEXT" == "$EXPECTED_CONTEXT" ]] \
-    || fail "current Kubernetes context is '${ACTIVE_CONTEXT:-none}', expected '$EXPECTED_CONTEXT'"
-
-REFERENCED_CLUSTER="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}' 2>/dev/null || true)"
-[[ "$REFERENCED_CLUSTER" == "$EXPECTED_CLUSTER" ]] \
-    || fail "current context references '${REFERENCED_CLUSTER:-none}', expected '$EXPECTED_CLUSTER'"
-
-API_SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
-case "$API_SERVER" in
-    https://127.0.0.1:*|https://localhost:*|https://\[::1\]:*) ;;
-    *) fail "Kubernetes API is not loopback-bound: ${API_SERVER:-unknown}" ;;
-esac
-
-kind get clusters 2>/dev/null | grep -Fxq "$EXPECTED_KIND_CLUSTER" \
-    || fail "local Kind cluster '$EXPECTED_KIND_CLUSTER' is absent"
-kubectl get node kind-control-plane >/dev/null 2>&1 \
-    || fail "required node kind-control-plane is not reachable"
+assert_local_kind_target || exit 1
 
 if [[ "$INSTALL_SYSTEM_TRUST" == true ]]; then
     command -v update-ca-certificates >/dev/null 2>&1 \

@@ -82,18 +82,18 @@ run directly in the same guest checkout. Keep Mint Docker until the human-owned
 retirement checkpoint. Do not share personal-host files with the guest, execute
 the old continuation, or claim native acceptance before its gates pass.
 
-The agent container is inside the trusted local-development boundary. Local
-workspace files, the local Kind kubeconfig and Kubernetes Secrets, generated
-development TLS keys, and disposable local API-test credentials are not hidden
-from the agent. Never expose staging or production kubeconfigs, cloud or
-deployment credentials, user credentials, or session cookies to this
-container, and never use an agent session to deploy or administer staging or
-production. Before an in-container agent-authorized cluster mutation, require
-the current context and referenced cluster to equal `kind-kind`, require a
-loopback Kubernetes API endpoint, and require the `kind-control-plane` node.
-Use `kind get clusters` only as an additional host-side check because the
-container Docker daemon cannot enumerate the host-managed Kind cluster. For
-the full boundary and API-test target checks, read
+Native agents run as the normal development-VM user inside the trusted local
+development boundary. Local workspace files, the local Kind kubeconfig and
+Kubernetes Secrets, generated development TLS keys, and disposable local
+API-test credentials are not hidden from the agent. Never expose staging or
+production kubeconfigs, cloud or deployment credentials, user credentials, or
+session cookies to the guest, and never use an agent session to deploy or
+administer staging or production. Before an agent-authorized cluster mutation,
+require the current context and referenced cluster to equal `kind-kind`,
+require a loopback Kubernetes API endpoint, require the local `kind` cluster
+and require the `kind-control-plane` node to be Ready. A VM marker, cluster
+name or process name alone does not prove personal-host isolation. For the full
+boundary and API-test target checks, read
 `docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
 credential, Kubernetes-access, or autonomous execution behavior.
 
@@ -236,6 +236,12 @@ Use the prerequisite script rather than guessing tool or environment state:
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
+In the development VM, run
+`./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime` before
+native daily work and use `check-tilt-prerequisites.sh --guest-local` for the
+deeper Tilt/runtime-security report. Neither command replaces the human-owned
+destructive first bootstrap.
+
 Supported local startup path:
 - `docs/development/getting-started.md` owns the exact bootstrap and verifier sequence
 - `tilt up` remains the supported full-stack entry point after the documented prerequisites are complete
@@ -365,11 +371,13 @@ headings.
 Run a specific plan through the workspace wrapper with:
 
 ```bash
+repo_root=$(git rev-parse --show-toplevel)
+workspace_parent=$(dirname "$repo_root")
 ai-session-handler run \
-  --plan /workspace/REPOSITORY/docs/plans/PLAN.md \
+  --plan "$repo_root/docs/plans/PLAN.md" \
   --max-phases 999 \
   --quiet \
-  --agent-cmd "/workspace/ai-session-handler/.venv/bin/ai-session-handler-codex-high --model MODEL"
+  --agent-cmd "$workspace_parent/ai-session-handler/.venv/bin/ai-session-handler-codex-high --model MODEL"
 ```
 
 Omit `--model MODEL` from the quoted agent command to use the wrapper's
@@ -381,9 +389,10 @@ The preferred AI execution pattern in this repo is autonomous execution with cle
 
 ## SSL/TLS Certificate Constraints
 
-NEVER run SSL write operations from the AI container.
+NEVER run browser or infrastructure TLS write operations from an AI agent.
 
-The container has its own `mkcert` CA, but the user's browser trusts the host CA. Certificates generated inside the container will cause browser trust failures.
+The personal host owns the browser-trusted mkcert CA. Certificates generated
+by a native guest agent or container will cause browser trust failures.
 
 Forbidden operations that must be run by the user on the host:
 - `mkcert`
@@ -398,13 +407,14 @@ Allowed read-only operations:
 - `kubectl get secret -o yaml`
 - Certificate file reads for debugging
 
-For live agent work against exactly
+For native live agent work against exactly
 `https://app.budgetanalyzer.localhost`, agents may run the workspace-owned
-`ensure-budget-analyzer-local-ca-trust` command to install the host-published
-public root into container-local trust stores. Use
-`check-budget-analyzer-local-ca-trust` for read-only trust diagnosis. Read
-`../workspace/docs/local-budget-analyzer-tls.md` before changing or debugging
-this flow.
+`ensure-budget-analyzer-local-ca-trust` or
+`check-budget-analyzer-local-ca-trust` commands as read-only trust checks. The
+human-owned native installer establishes guest system/NSS trust. The standard
+workspace devcontainer retains its separate lazy container-local trust path.
+Read `../workspace/docs/local-budget-analyzer-tls.md` before changing or
+debugging either flow.
 
 If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
 follow the environment-specific human workflow in
@@ -413,7 +423,7 @@ The standard local path may require host `./setup.sh`; the development VM path
 requires host-only renewal when necessary, explicit transfer of the three
 approved files, and the guest imported-TLS installer. It must not recreate a
 host cluster.
-Do not generate or rotate certificates in-container, and do not bypass
+Do not generate or rotate certificates from an agent process, and do not bypass
 verification with HTTP, `--insecure`, `verify=False`, or
 `ignore_https_errors`.
 

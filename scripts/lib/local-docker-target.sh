@@ -7,7 +7,9 @@ assert_local_docker_target() {
     local context endpoint server_name local_hostname docker_root
     local remote_variable
 
-    for remote_variable in DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH; do
+    for remote_variable in \
+        DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH \
+        TESTCONTAINERS_HOST_OVERRIDE; do
         if [[ -n "${!remote_variable:-}" ]]; then
             printf 'ERROR: %s is set; refusing a possibly remote Docker endpoint.\n' "$remote_variable" >&2
             return 1

@@ -19,9 +19,10 @@ in a dedicated development VM, with repeatable tooling owned by
 [workspace](https://github.com/budgetanalyzer/workspace). The
 [native execution plan](docs/plans/agent-vm-native-execution-plan.md) and
 [human checkpoints](docs/plans/agent-vm-native-manual-plan.md) replace the
-container-based migration; implementation and acceptance remain pending.
-Repositories, Docker and Kind stay guest-local while GitHub publication remains
-on the personal host. The
+container-based migration. All eight native execution phases passed on
+2026-10-05; Remote SSH/live-update/reboot acceptance and final Mint retirement
+remain human checkpoints. Repositories, the normal guest home, Docker and Kind
+stay guest-local while GitHub publication remains on the personal host. The
 [boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
 target and existing transitional environments.
 
@@ -45,10 +46,11 @@ tilt up       # start everything
 
 Run `./setup.sh` on the host. In addition to configuring browser TLS, it
 publishes the public local ingress CA consumed by the workspace's lazy
-agent-container trust command. The development VM instead uses the explicit
+devcontainer trust command. The development VM instead uses the explicit
 `./setup.sh --guest-local` first-bootstrap path after the human transfers the
 three approved ingress TLS files. Both modes recreate Kind; neither is a daily
-start command.
+start command. Native guest daily work uses the read-only runtime preflight and
+`tilt up`; see Getting Started.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 

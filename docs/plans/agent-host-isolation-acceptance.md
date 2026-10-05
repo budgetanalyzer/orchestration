@@ -1,9 +1,9 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** Native preparation Phases 1–2 and human Checkpoint B are complete.
-The preserved runner state selects Phase 3 for the first native execution on
-2026-10-05; Checkpoints C–D and overall native acceptance remain pending. Prior
-container migration evidence is retained below and is not native proof.
+**Status:** Native preparation Phases 1–2, human Checkpoint B and all native
+execution Phases 3–8 are complete as of 2026-10-05. Human Checkpoints C–D and
+overall native acceptance remain pending. Prior container migration evidence
+is retained below and is not native proof.
 Operator preparation Steps 1–5 and the Initial Handoff were completed and
 verified on 2026-10-03. Checkpoint A repository, credential, TLS, bootstrap,
 stack-health and agent-restart checks were completed on 2026-10-04; the Java
@@ -124,18 +124,125 @@ native guest OS. This does not complete Checkpoints C–D.
   still return reviewed source, retire Mint Docker and repeat the final boundary
   proof.
 
+## Native Phase 4 Orchestration Evidence
+
+Execution: 2026-10-05, AI Session Handler run
+`20261005T115915Z-phase-4-7a906cf9-081c-4a42-a614-933ce235f822`, native
+`budgetops` process in the KVM guest with home `/home/budgetops`. The
+orchestration input revision was
+`75ea1c5b4a6482cc91645eef5e2ebb3019b0ddde` and the worktree was initially
+clean. The accepted execution plan was not modified.
+
+Phase 4 aligned orchestration with the workspace-owned native tool/user/home
+contract. The bootstrap preflight no longer requires Compose merely for the
+retired guest agent container. Its new `--native-runtime` mode invokes the
+workspace verifier and then checks the exact local Kubernetes target. Shared
+helpers now fail closed on native-versus-container execution, forwarded host
+authority, remote Docker/Testcontainers selection, context and referenced
+cluster `kind-kind`, loopback HTTPS API, local Kind cluster `kind`, and a Ready
+`kind-control-plane`. The imported-TLS installer and guest Tilt preflight use
+the same Kubernetes target helper.
+
+Canonical boundary, startup and local-environment docs now make one normal
+guest user/home the supported native path, keep first bootstrap/clean rebuild
+explicitly destructive and human-owned, and define daily startup as the
+read-only native runtime preflight followed by `tilt up`. The deeper Tilt
+preflight is documented accurately: its target gate is fail-closed and its
+runtime-security proof creates and cleans named disposable probe resources.
+Personal-host GitHub/mkcert/publication authority, exact local API target,
+internal-only observability, native sandbox qualification and production
+exclusions remain unchanged. A read-only sibling-doc search found no active
+service-owner changes; workspace references to the removed guest Compose path
+remain only in explicitly historical sections.
+
+Validation results:
+
+| Proof | Result |
+| --- | --- |
+| Native runtime preflight | PASS — workspace verifier checked `budgetops`, `/home/budgetops`, 13 working/bare repository pairs, pinned user tools, browser/trust paths and editable handler import; orchestration then verified local Docker and exact Ready Kind target |
+| Target/boundary fixtures | PASS — 11 checks covering native and container execution, forwarded GitHub authority, remote Docker, Testcontainers override, non-Unix endpoint, valid target, wrong context, wrong referenced cluster, nonloopback API and missing node |
+| Guest Tilt prerequisite/security proof | PASS — pinned tools, six service checkouts, Docker/Kind/Calico/Gateway API/TLS state and all four runtime-security proofs |
+| Imported TLS validation | PASS — existing host-created files validated without trust or Kubernetes mutation |
+| Static security guardrails | PASS — full manifest gate and intentional-failure self-test |
+| Shell and documentation checks | PASS — Bash syntax and ShellCheck for all seven affected shell files; local links for eight changed docs; AGENTS checkstyle review; portable-path review; `git diff --check` |
+| Preserved runtime | PASS — default Unix Docker at `/var/lib/docker`, cluster/context `kind`/`kind-kind`, loopback API, Ready node, 45/45 healthy Tilt resources, 34/34 healthy pods and verified HTTPS 200 from the exact app origin |
+
+Reports are under `tmp/native-phase-4/validation/`. No package installation,
+certificate generation/trust change, cluster recreation, service code change,
+sibling write, production access or real-repository Git write occurred.
+
+Read-only Maven inspection found `service-common` group
+`org.budgetanalyzer`, version `0.0.17-SNAPSHOT`, with all four Java consumers
+selecting the same `serviceCommon` version. Phase 4 did not infer publication
+from the healthy stack or existing Maven Local contents. Native publication,
+library tests and consumer-owned Testcontainers proofs remain assigned to
+Phases 5–7. Human Checkpoint C still owns Remote SSH live edits, browser/session
+acceptance and reboot/boundary repetition; Checkpoint D still owns Mint
+retirement.
+
+## Native Phase 8 Orchestration Evidence
+
+Execution: 2026-10-05, AI Session Handler run
+`20261005T145138Z-phase-8-4a362fcd-457e-4a0d-b604-eb5407b33b74`, native
+`budgetops` process in the KVM guest with home `/home/budgetops`. The
+orchestration input revision was
+`75ea1c5b4a6482cc91645eef5e2ebb3019b0ddde`; the worktree contained the expected
+cumulative Phase 4 implementation and documentation changes. The accepted
+execution plan was not modified.
+
+Phase 8 reviewed the completed workspace and service-owner evidence before
+application acceptance. Phase 5 built and published the existing
+`org.budgetanalyzer:0.0.17-SNAPSHOT` library artifacts to the native user's
+Maven Local after 183 service-core and 545 service-web tests passed. Phase 6
+passed all 252 currency-service tests against fresh PostgreSQL, Redis and
+RabbitMQ Testcontainers. Phase 7 passed all 127 session-gateway tests against a
+fresh Redis Testcontainer and its 90% line/65% branch coverage gates. Both
+consumer runs proved Ryuk cleanup back to only `kind-control-plane`; their
+documented shutdown connection warnings remain harmless limitations.
+
+Fresh Phase 8 results:
+
+| Proof | Result |
+| --- | --- |
+| Native identity and target | PASS — `budgetops`, `/home/budgetops`, container detection `none`, VM detection `kvm`, native tool/repository verifier, default Unix Docker at `/var/lib/docker`, loopback `kind-kind` and Ready node |
+| Existing runtime | PASS — only `kind-control-plane` ran in Docker; all 45 Tilt resources and 34 pods were healthy before and after validation; no legacy agent/provider image or volume name was present |
+| Exact HTTPS trust | PASS — the read-only native trust helper and verified curl returned HTTP 200 for `https://app.budgetanalyzer.localhost/`; no bypass, trust write or certificate operation occurred |
+| Aggregate application/security proof | PASS — `./scripts/smoketest/smoketest.sh` completed, including 16/16 monitoring checks, loopback-only Grafana/Prometheus/Jaeger/Kiali access, 38/38 shared-session checks, 84/84 edge checks, 176/176 runtime-hardening checks and 69/69 NetworkPolicy checks |
+| Disposable-resource cleanup | PASS — observability forwards and security/network probes reported cleanup; the runtime returned to the rebuilt Kind/application baseline |
+| Human procedure review | PASS — Checkpoint C now specifies exact fresh-shell agent exit/reentry, browser, Java JAR-sync/JVM-restart and frontend HMR save/restoration proofs; Checkpoint D has scoped Mint discovery, host-policy ownership, source return and post-retirement native build/Testcontainers proofs |
+| Changed-source validation | PASS — Bash syntax and ShellCheck passed for all seven cumulative shell files; the native boundary suite passed 11/11; static guardrail intentional-failure self-test, changed-document links, portable-path review and `git diff --check` passed |
+| Immutable plan and final baseline | PASS — execution-plan SHA-256 remained `feadfeb5d8c1d2d915352e6db438053bb95945d446230e880bf32e658668b75b`; app, API docs and production-smoke routes returned 200, and both documented fixture sources remained at baseline |
+
+The Java fixture changes only the `getAll` OpenAPI summary in
+currency-service `CurrencySeriesController.java`; direct runtime inspection
+confirmed the baseline summary and health endpoint before documenting it. The
+frontend fixture changes only the login-page sentence in `LoginPage.tsx`; the
+live Vite module and browser route exposed the baseline text before the
+procedure was recorded. Both require Remote SSH save events, unchanged
+pod/container identities, exact hash restoration, clean source diffs and
+unchanged personal-host files. The worker did not perform or claim those human
+save proofs.
+
+No package installation, provider authentication, proxy activation,
+certificate/trust write, VM or Docker restart, Kind recreation, human browser
+login, source fixture edit, sibling service-source edit, runtime retirement,
+host administration, production access or Git write occurred. Checkpoint C
+still owns Remote SSH saves, native process reentry, browser/session behavior,
+reboot persistence and repeated host-boundary evidence. Checkpoint D still owns
+reviewed source return and Mint Docker retirement.
+
 ## Native Execution Results
 
 | Phase | Owner evidence | Result |
 | --- | --- | --- |
-| 1: system installer/tool inventory | workspace `docs/host-isolation.md` | COMPLETE — preparation evidence and live B.1 install recorded |
-| 2: user environment/helpers | workspace `docs/host-isolation.md` | COMPLETE — preparation evidence and live B.1/B.2 verification recorded |
-| 3: native runtime and workspace checks | workspace `docs/host-isolation.md` | READY — native handoff complete; phase not yet invoked |
-| 4: orchestration native preflight/docs | This record | PENDING |
-| 5: native shared-library build/publication | service-common active development docs | PENDING |
-| 6: native currency Testcontainers | currency-service `docs/local-development.md` | PENDING |
-| 7: native gateway Testcontainers | session-gateway `docs/local-development.md` | PENDING |
-| 8: application/security proof and final procedures | This record | PENDING |
+| 1: system installer/tool inventory | [workspace host-isolation evidence](../../../workspace/docs/host-isolation.md) | COMPLETE — preparation evidence and live B.1 install recorded |
+| 2: user environment/helpers | [workspace host-isolation evidence](../../../workspace/docs/host-isolation.md) | COMPLETE — preparation evidence and live B.1/B.2 verification recorded |
+| 3: native runtime and workspace checks | [workspace host-isolation evidence](../../../workspace/docs/host-isolation.md) | COMPLETE — native tool, provider, sandbox distinction, Git/Docker/trust and preserved-runtime evidence recorded |
+| 4: orchestration native preflight/docs | This record | COMPLETE — native preflight, shared target checks, tracked fixtures, owner docs and preserved guest health recorded |
+| 5: native shared-library build/publication | [service-common README](../../../service-common/README.md#native-vm-maven-local-verification) | COMPLETE — native build, 728 tests, quality gates and four Maven Local publications passed |
+| 6: native currency Testcontainers | [currency-service local development](../../../currency-service/docs/local-development.md#native-vm-testcontainers-verification) | COMPLETE — 252 tests passed with PostgreSQL, Redis and RabbitMQ lifecycle/cleanup evidence |
+| 7: native gateway Testcontainers | [session-gateway local development](../../../session-gateway/docs/local-development.md#native-vm-testcontainers-verification) | COMPLETE — 127 tests and coverage gates passed with Redis lifecycle/cleanup evidence |
+| 8: application/security proof and final procedures | This record | COMPLETE — native target/trust, aggregate smoke/security/observability proof and concrete C/D procedures passed review |
 
 ## Native Human Acceptance
 
@@ -145,6 +252,12 @@ native guest OS. This does not complete Checkpoints C–D.
   rebuilt application persistence and measured guest resource use: PENDING.
 - Checkpoint D reviewed source returned, Mint Docker/runtime/hooks retired,
   permanent host policy retained and final reboot proof: PENDING.
+- Installed native tool parity and required capability checks: COMPLETE; this
+  establishes tooling, not human C/D acceptance.
+- Representative native shared-library and Testcontainers execution: COMPLETE;
+  these runs do not establish Remote SSH save or reboot persistence.
+- Repository execution workers: COMPLETE through Phase 8; no worker completion
+  is relabeled as the pending human browser, host-policy or retirement proof.
 - Optional proxy activation: NOT EXECUTED; installed capability and offline
   checks are recorded in workspace evidence, and live activation is not required.
 - Overall native migration acceptance: PENDING human C/D; no result inferred
@@ -186,7 +299,7 @@ native guest OS. This does not complete Checkpoints C–D.
 - Host-to-guest SSH positive control: `PASS - operator verified`
 - Guest reboot persistence: `PENDING until Checkpoint C`
 - Host reboot persistence: `PENDING`
-- Mint Docker retirement: `PENDING until Checkpoint C`
+- Mint Docker retirement: `PENDING until Checkpoint D`
 - LAN/VPN peer isolation: `OUT OF SCOPE`
 
 ### Guest Access

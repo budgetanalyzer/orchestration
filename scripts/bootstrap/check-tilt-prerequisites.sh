@@ -12,6 +12,9 @@ WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/local-docker-target.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/local-docker-target.sh"
+# shellcheck source=scripts/lib/local-kubernetes-target.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/../lib/local-kubernetes-target.sh"
 
 GUEST_LOCAL=false
 case "${1:-}" in
@@ -438,6 +441,11 @@ fi
 if [[ "$GUEST_LOCAL" == true ]]; then
     if assert_local_docker_target; then
         echo -e "${GREEN}✓${NC} Docker target is the development VM's default local Unix socket"
+    else
+        ((ERRORS++))
+    fi
+    if assert_local_kind_target; then
+        echo -e "${GREEN}✓${NC} Kubernetes target is the Ready guest-local loopback kind-kind cluster"
     else
         ((ERRORS++))
     fi

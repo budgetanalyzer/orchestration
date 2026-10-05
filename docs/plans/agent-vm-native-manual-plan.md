@@ -1,9 +1,9 @@
 # Native VM Agents: Human Preparation And Cutover
 
-**Status:** Checkpoint A completed by operator on 2026-10-04; Phases 1–2 are
-cleared to run. The native execution plan has not yet been invoked. Earlier
-VM/container results remain prior evidence unless explicitly recorded in the
-acceptance record.
+**Status:** Checkpoints A–B and all eight repository execution phases completed
+by 2026-10-05. Human Checkpoints C–D remain pending; overall native migration
+acceptance is not yet complete. Earlier VM/container results remain prior
+evidence unless explicitly recorded in the acceptance record.
 **Execution plan:** [Native agents in the VM](agent-vm-native-execution-plan.md).
 **Evidence:** [Host-isolation acceptance record](agent-host-isolation-acceptance.md).
 
@@ -25,9 +25,10 @@ container, agent Compose lifecycle or separate agent Maven home.
   transfers source, or retires Mint Docker.
 - **Guest OS:** a normal console/SSH terminal in the Ubuntu VM, outside any
   container. The human runs system/user provisioning and provider login here.
-- **Existing guest container:** used once for execution Phases 1–2. It must be
-  on guest Docker with guest-local files. Checkpoint B.3 destroys it with all
-  old guest Docker state before rebuilding the application for native phases.
+- **Retired guest container:** used once for execution Phases 1–2 on guest
+  Docker with guest-local files. Checkpoint B.3 destroyed it with all old guest
+  Docker state before rebuilding the application for native phases. It is no
+  longer an available execution path.
 - **Native agent:** normal guest process after Checkpoint B. It can administer
   guest Docker and approved Kind, so all guest assets are in its trust boundary.
 
@@ -536,51 +537,260 @@ stopped attempt, inspect its artifacts, end any surviving worker and use
 
 Run only after all eight phases pass and every handler/worker has ended.
 
-1. Review native tool, representative service and application evidence. All
-   required tool capabilities must be installed and checked; optional proxy
-   activation can remain unused with that limitation recorded. Test a new
-   agent session, exit it, then start another. Provider state and Maven/Gradle
-   caches persist; Docker, Kind and Tilt keep running. No agent container starts.
-2. On the **personal host**, stop only the identified old app/Kind publisher
-   occupying port 443. Keep Mint Docker and its firewall hooks until D. Confirm
-   the port is free and start the existing restricted forward:
+### C.1 Review Evidence And Prove The Native Process Lifecycle
 
-   ```bash
-   authbind ssh -N -T -o ExitOnForwardFailure=yes \
-     -L 127.0.0.1:443:127.0.0.1:443 budget-agent-vm-forward
-   ```
+Review the acceptance record plus the workspace, service-common,
+currency-service and session-gateway owner evidence. Installed tool parity,
+representative builds/tests and execution-phase completion are prerequisites;
+they are not substitutes for this human checkpoint. Optional proxy activation
+may remain unused, but record that limitation.
 
-   Require the pre-existing host authbind permission and dedicated SSH alias;
-   do not launch a root SSH session as a workaround. In a second host terminal:
+Open a new Remote SSH terminal, not a reused worker shell, and run from the
+guest orchestration checkout:
 
-   ```bash
-   sudo ss -ltnp '( sport = :443 )'
-   curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
-   openssl s_client -connect 127.0.0.1:443 \
-     -servername app.budgetanalyzer.localhost -verify_return_error </dev/null
-   ```
+```bash
+test "$(id -un)" = budgetops
+test "$HOME" = /home/budgetops
+test "$(systemd-detect-virt --container || true)" = none
+test "$(systemd-detect-virt --vm)" = kvm
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) printf 'native user bin is absent from PATH\n' >&2; exit 1 ;;
+esac
+command -v codex claude gemini ai-session-handler ai-session-handler-codex-high ai-run
+check-budget-analyzer-local-ca-trust
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+test -d "$HOME/.m2/repository/org/budgetanalyzer/service-web/0.0.17-SNAPSHOT"
+test -d "$HOME/.gradle/caches"
 
-   Require only `127.0.0.1:443`, normal trusted curl and certificate verification
-   success. Keep observability ClusterIP-only and any operator forwards on
-   loopback; no public monitoring hostname.
-3. In the dedicated host development browser profile, test trusted HTTPS,
-   disposable development login/logout/login, an API-backed page and expected
-   frontend WebSocket behavior. Do not expose personal cookies to the guest.
-4. Perform the two exact reversible Java/frontend save fixtures supplied by
-   execution Phase 8 in this document. Require Remote SSH saves to trigger the
-   expected guest Tilt update and visible behavior, restore only fixture edits,
-   and verify restoration and unchanged personal-host source. These procedures
-   are a required Phase 8 deliverable; C cannot pass without them.
-5. Shut down the guest cleanly, reboot the personal host, restart the VM, guest
-   Tilt, native agent and loopback forward using the daily flow below. Repeat
-   A.3's paired native/Docker boundary tests and positive controls, trust,
-   credential checks, native tool preflight and browser acceptance. Record
-   actual post-reboot evidence; pre-reboot passes do not establish persistence.
-6. Confirm B.3 left no legacy guest agent container, image or provider volume
-   and that the rebuilt Kind/application state remains healthy. Do not repeat
-   the blanket prune during acceptance or delete newly rebuilt PVC/application
-   data. Prove native provider sessions and the app remain independent of all
-   retired agent-container state.
+native_kind_id=$(docker container inspect kind-control-plane --format '{{.Id}}')
+test "$(docker container ls --format '{{.Names}}')" = kind-control-plane
+ai-session-handler status \
+  --plan "$PWD/docs/plans/agent-vm-native-execution-plan.md"
+```
+
+Require status to show all eight phases complete. Start `codex` normally in
+that terminal, make one benign read-only request about the current checkout,
+then exit it normally. Do not stop Tilt. After the process exits, require the
+application and runtime to remain alive:
+
+```bash
+test "$native_kind_id" = \
+  "$(docker container inspect kind-control-plane --format '{{.Id}}')"
+kubectl get node kind-control-plane
+tilt get uiresources \
+  -o custom-columns='NAME:.metadata.name,UPDATE:.status.updateStatus,RUNTIME:.status.runtimeStatus'
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+```
+
+Close that SSH terminal. Open another fresh Remote SSH terminal, repeat the
+identity, PATH, trust and native preflight checks, then start a second benign
+`codex` session. Successful noninteractive authentication in the new process
+is the provider-state persistence proof; do not print provider configuration or
+tokens. Confirm the Maven Local and Gradle cache directories still exist and
+the app stayed healthy. No agent container may appear before, during or after
+either session. The completed Phase 3 and Phase 8 handler runs provide the
+ordinary native handler proof; `ai-run PLAN_NAME` is the daily entry point for
+a new reviewed plan.
+
+### C.2 Establish Host Browser Access
+
+On the **personal host**, stop only the identified old app/Kind publisher
+occupying port 443. Keep Mint Docker and its firewall hooks until D. Confirm the
+port is free and start the existing restricted forward:
+
+```bash
+authbind ssh -N -T -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:443:127.0.0.1:443 budget-agent-vm-forward
+```
+
+Require the pre-existing host authbind permission and dedicated SSH alias; do
+not launch a root SSH session as a workaround. In a second host terminal:
+
+```bash
+sudo ss -ltnp '( sport = :443 )'
+curl --fail --show-error https://app.budgetanalyzer.localhost/ >/dev/null
+openssl s_client -connect 127.0.0.1:443 \
+  -servername app.budgetanalyzer.localhost -verify_return_error </dev/null
+```
+
+Require only `127.0.0.1:443`, normal trusted curl and certificate verification
+success. Keep observability ClusterIP-only and any operator forwards on
+loopback; no public monitoring hostname.
+
+In the dedicated host development browser profile, test trusted HTTPS,
+disposable development login/logout/login, an API-backed page and the
+`/_prod-smoke/` browser console with no CSP errors. Confirm the Vite WebSocket
+is connected before the frontend fixture below. Do not expose personal cookies
+to the guest.
+
+### C.3 Perform And Restore The Two Remote SSH Save Fixtures
+
+These are save-event proofs, not test/build substitutes. Before editing, record
+`git status --short` and SHA-256 for each named file in both the guest checkout
+and its separate personal-host canonical checkout. The host files must keep
+their original hashes throughout. Make each edit through the Remote SSH editor,
+save once, observe the named behavior, then restore only that exact line and
+save again. Do not commit either fixture.
+
+For the **Java fixture**, start in the guest orchestration checkout and capture
+the clean source and running object identities:
+
+```bash
+currency_source=../currency-service/src/main/java/org/budgetanalyzer/currency/api/CurrencySeriesController.java
+git -C ../currency-service diff --quiet -- \
+  src/main/java/org/budgetanalyzer/currency/api/CurrencySeriesController.java
+currency_hash_before=$(sha256sum "$currency_source" | awk '{print $1}')
+currency_pod_before=$(kubectl get pod -l app=currency-service \
+  -o jsonpath='{.items[0].metadata.uid}')
+currency_container_before=$(kubectl get pod -l app=currency-service \
+  -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="currency-service")].containerID}')
+curl --fail --show-error --silent \
+  http://127.0.0.1:8084/currency-service/v3/api-docs \
+  | jq -e '.paths["/v1/currencies"].get.summary == "Get all currency series"'
+```
+
+In that file, change only the `@Operation` summary for `getAll` from
+`Get all currency series` to
+`Get all currency series (native live-update proof)` and save. Require
+`currency-service-compile` and `currency-service` to return to update status
+`ok`. Tilt must compile with native Gradle, sync the new JAR and restart the
+Java process inside the existing container:
+
+```bash
+tilt get uiresources currency-service-compile currency-service \
+  -o custom-columns='NAME:.metadata.name,UPDATE:.status.updateStatus,RUNTIME:.status.runtimeStatus'
+tilt logs currency-service-compile --tail 100
+tilt logs currency-service --tail 100
+curl --fail --show-error --silent \
+  http://127.0.0.1:8084/currency-service/v3/api-docs \
+  | jq -e '.paths["/v1/currencies"].get.summary == "Get all currency series (native live-update proof)"'
+curl --fail --show-error \
+  http://127.0.0.1:8084/currency-service/actuator/health >/dev/null
+test "$currency_pod_before" = "$(kubectl get pod -l app=currency-service \
+  -o jsonpath='{.items[0].metadata.uid}')"
+test "$currency_container_before" = "$(kubectl get pod -l app=currency-service \
+  -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="currency-service")].containerID}')"
+```
+
+Restore the original summary through Remote SSH and save again. Wait for both
+Tilt resources to return to `ok`, require the OpenAPI summary and health check
+to return to baseline, then prove exact source restoration:
+
+```bash
+curl --fail --show-error --silent \
+  http://127.0.0.1:8084/currency-service/v3/api-docs \
+  | jq -e '.paths["/v1/currencies"].get.summary == "Get all currency series"'
+test "$currency_hash_before" = "$(sha256sum "$currency_source" | awk '{print $1}')"
+git -C ../currency-service diff --quiet -- \
+  src/main/java/org/budgetanalyzer/currency/api/CurrencySeriesController.java
+```
+
+For the **frontend fixture**, first open
+`https://app.budgetanalyzer.localhost/login` in the dedicated host browser and
+confirm it displays `Sign in to access your account`. In the guest orchestration
+checkout capture the clean source and pod identity:
+
+```bash
+frontend_source=../budget-analyzer-web/src/features/auth/pages/LoginPage.tsx
+git -C ../budget-analyzer-web diff --quiet -- \
+  src/features/auth/pages/LoginPage.tsx
+frontend_hash_before=$(sha256sum "$frontend_source" | awk '{print $1}')
+frontend_pod_before=$(kubectl get pod -l app=budget-analyzer-web \
+  -o jsonpath='{.items[0].metadata.uid}')
+frontend_container_before=$(kubectl get pod -l app=budget-analyzer-web \
+  -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="budget-analyzer-web")].containerID}')
+```
+
+In that file, change only `Sign in to access your account` to
+`Native live update confirmed` and save. Require the open browser page to
+change through Vite HMR without a manual reload or document navigation, and
+record the WebSocket update. Then verify the served module and unchanged pod:
+
+```bash
+tilt get uiresources budget-analyzer-web \
+  -o custom-columns='NAME:.metadata.name,UPDATE:.status.updateStatus,RUNTIME:.status.runtimeStatus'
+tilt logs budget-analyzer-web --tail 100
+curl --fail --show-error --silent \
+  https://app.budgetanalyzer.localhost/src/features/auth/pages/LoginPage.tsx \
+  | rg -q 'Native live update confirmed'
+test "$frontend_pod_before" = "$(kubectl get pod -l app=budget-analyzer-web \
+  -o jsonpath='{.items[0].metadata.uid}')"
+test "$frontend_container_before" = "$(kubectl get pod -l app=budget-analyzer-web \
+  -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="budget-analyzer-web")].containerID}')"
+```
+
+Restore `Sign in to access your account` through Remote SSH and save again.
+Require HMR to restore the original visible sentence without a manual reload,
+then prove the served module and source are back at baseline:
+
+```bash
+curl --fail --show-error --silent \
+  https://app.budgetanalyzer.localhost/src/features/auth/pages/LoginPage.tsx \
+  | rg -q 'Sign in to access your account'
+test "$frontend_hash_before" = "$(sha256sum "$frontend_source" | awk '{print $1}')"
+git -C ../budget-analyzer-web diff --quiet -- \
+  src/features/auth/pages/LoginPage.tsx
+```
+
+Finally, repeat the personal-host SHA-256 and status checks. Require both host
+files to be unchanged, both guest files to equal their pre-fixture hashes, and
+all affected Tilt resources, pods and verified HTTPS behavior to be healthy.
+
+### C.4 Reboot And Repeat The Boundary Proof
+
+Shut the guest down cleanly, reboot the personal host, then restart the VM.
+Pre-reboot passes do not establish persistence. From a new Remote SSH terminal,
+repeat C.1's user/home/PATH/trust checks and use only the daily startup path:
+
+```bash
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+tilt up
+```
+
+Do not run `setup.sh`, reinstall tools, recreate Kind or restore a container.
+Restart the host loopback forward, repeat trusted browser login/logout/login,
+the API-backed page and `/_prod-smoke/` console checks, then run the aggregate
+guest proof:
+
+```bash
+./scripts/smoketest/smoketest.sh
+free -h
+df -h / "$BUDGET_ANALYZER_WORKTREE_PARENT"
+docker system df
+kubectl get pvc -A
+```
+
+On the personal host, repeat A.3's paired native and Docker-path denials,
+listener positives, DNS/download and host-initiated SSH/Git controls. Recheck
+the dedicated SSH/credential boundary and the root-owned firewall persistence
+hooks. Start and exit one more native agent session and prove the application
+continues running. Record actual post-reboot commands, results, revisions and
+measured guest memory/disk use, not full process or environment dumps.
+
+### C.5 Confirm The Retired Guest-Agent Inventory Stays Absent
+
+B.3 already removed all pre-cutover guest Docker state. Confirm these exact
+former Compose resources remain absent without deleting anything:
+
+```bash
+test -z "$(docker container ls --all --quiet \
+  --filter name='^/budget-analyzer-agent-agent-1$')"
+test -z "$(docker image ls --quiet budget-analyzer-agent:local)"
+for retired_volume in \
+  budget-analyzer-agent_claude-config \
+  budget-analyzer-agent_codex-config \
+  budget-analyzer-agent_gemini-config; do
+  ! docker volume inspect "$retired_volume" >/dev/null 2>&1
+done
+test "$(docker container ls --format '{{.Names}}')" = kind-control-plane
+```
+
+Keep the rebuilt Kind node, application images, PVCs, guest Docker daemon and
+native provider/cache state. Do not repeat B.3's blanket prune. Any failure or
+unexpected legacy object leaves C pending; returning to a container is not a
+native pass.
 
 Record C results and measured guest memory/disk use, not full process/env dumps.
 Any failure leaves acceptance pending. Returning to a container is not a native
@@ -623,12 +833,41 @@ configuration. Useful read-only checks:
 ```bash
 docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
 docker volume ls
+docker network ls
+docker ps -a --filter label=com.docker.compose.service=ai-dev \
+  --format 'container={{.ID}} name={{.Names}} image={{.Image}} status={{.Status}}'
+docker image ls --filter label=com.docker.compose.project \
+  --format 'image={{.ID}} repository={{.Repository}} tag={{.Tag}}'
+docker volume ls --filter label=com.docker.compose.project
+docker network ls --filter label=com.docker.compose.project
 docker info --format '{{.DockerRootDir}}'
+docker system df -v
 systemctl is-active docker.service docker.socket containerd.service
 dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\t${Version}\n' 2>/dev/null | rg '^ii\s+(docker|containerd|runc)'
 sudo readlink -f /var/lib/docker /var/lib/containerd
 sudo findmnt --target /var/lib/docker
 ```
+
+The expected transitional workspace Compose service is `ai-dev`, but names and
+project labels are discovery inputs, not deletion authorization. Inspect every
+matched object's labels and mounts, identify devcontainer-created resources,
+and separately account for any unrelated host consumer. Build an explicit
+retirement list of object IDs/names, package names, package-source/key files,
+daemon configuration, service drop-ins and canonical data roots. Do not use an
+unfiltered container/image/volume prune as the retirement mechanism.
+
+Before changing the host daemon, record the guest inventory independently so
+it cannot be confused with Mint state:
+
+```bash
+ssh budget-agent-vm \
+  'docker info --format "{{.Name}} {{.DockerRootDir}}"; \
+   docker system df; kubectl get node kind-control-plane; kubectl get pvc -A'
+```
+
+The guest daemon must report `budget-analyzer-agent /var/lib/docker`. Its Kind
+container, application images, PVC data, native caches and provider state are
+out of scope for D and must be retained.
 
 Prove the guest app and Docker work independently through SSH/verified HTTPS.
 Stop only identified Mint workloads, then disable both Docker activation paths:
@@ -658,6 +897,26 @@ or package wildcard against an uninspected installation.
 
 ### D.3 Remove Transitional Hooks And Prove The Final State
 
+Before removal, prove the operator-installed policy files are personal-host
+system files, not symlinks or guest-writable workspace content:
+
+```bash
+for host_policy_file in \
+  /etc/ufw/after.init \
+  /etc/systemd/system/docker.service.d/agent-vm-isolation.conf \
+  /usr/local/sbin/agent-vm-docker-isolation; do
+  sudo test -f "$host_policy_file"
+  sudo test ! -L "$host_policy_file"
+  sudo stat -c '%U:%G %a %n' "$host_policy_file"
+  test -z "$(sudo find "$host_policy_file" -maxdepth 0 \
+    -perm /022 -print -quit)"
+done
+```
+
+Require `root:root` ownership and no group/world write bit. Recheck the VM XML
+has no host filesystem passthrough. Never stage these host firewall files in a
+guest-accessible repository or copy a guest-authored replacement into place.
+
 Remove only the Docker-isolation call from the host's existing
 `/etc/ufw/after.init`; preserve other content. Validate the retained script with
 `sh -n` and ShellCheck, reload UFW, and confirm the permanent bridge DHCP/DNS/
@@ -674,6 +933,23 @@ host-initiated SSH/Git, trusted loopback HTTPS, native agent and guest
 Docker/Kind/Tilt health. Docker-path fixtures are now inapplicable because Mint
 Docker is absent; record absence rather than inventing a filtering pass.
 
+Finally rerun a native Maven Local build and a representative guest
+Testcontainers suite after Mint Docker is absent:
+
+```bash
+ssh budget-agent-vm \
+  'cd "$BUDGET_ANALYZER_WORKTREE_PARENT/service-common" && \
+   ./gradlew build publishToMavenLocal --no-build-cache'
+ssh budget-agent-vm \
+  'cd "$BUDGET_ANALYZER_WORKTREE_PARENT/session-gateway" && \
+   ./gradlew test --rerun-tasks --no-build-cache'
+```
+
+Require both to pass against the guest-native toolchain and guest Docker, with
+Testcontainers cleanup returning to only `kind-control-plane`. This proves
+host retirement retained guest build/test capability; an existing image or
+cached report alone is not evidence.
+
 Complete the native acceptance section with C/D results, revisions, commands,
 limitations and the human's final acceptance. Do not relabel historical
 container results as native evidence.
@@ -683,9 +959,18 @@ container results as native evidence.
 1. Start the VM from the personal host and connect using the dedicated Remote
    SSH profile. Use guest working clones; no shared folder or container reopen.
 2. In the guest orchestration checkout, run the native tool/runtime preflight
-   and start `tilt up` only if that Tilt instance is not already running. Tilt
-   reconciles the existing imported ingress files into the Kind Secret; it
-   never generates browser-facing certificates or changes guest trust.
+   below and start `tilt up` only if that Tilt instance is not already running:
+
+   ```bash
+   ./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+   tilt up
+   ```
+
+   Tilt reconciles the existing imported ingress files into the Kind Secret;
+   it never generates browser-facing certificates or changes guest trust. Use
+   `./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local` for deeper
+   diagnosis; its runtime security proof creates and cleans named disposable
+   probe resources after the exact local target gate passes.
 3. Start the host loopback HTTPS forward and dedicated development browser.
 4. In a normal guest terminal, run the selected agent command, or use
    `ai-run PLAN_NAME` from the owning repository. Plain commands keep their

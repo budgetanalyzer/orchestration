@@ -7,34 +7,19 @@ development boundary. That authority is useful for builds, tests, Docker,
 Kubernetes and local API diagnostics, but it is not authority over the personal
 workstation, GitHub publication, staging or production.
 
-The selected target is **native agents in the development VM**, with Docker
-reserved for application builds, Kind, infrastructure and test containers.
-Workspace-owned system/user installers will replace the agent tool image and
-entrypoints. This is a planned transition, not a claim of native acceptance.
+The supported development-VM target is **native agents**, with Docker reserved
+for application builds, Kind, infrastructure and Testcontainers. Workspace-
+owned system/user installers and the normal guest home now provide the agent
+toolchain, provider state, Maven Local, Gradle caches and browser data. All
+eight repository execution phases passed on 2026-10-05; the human Remote SSH,
+live-update, reboot and final Mint Docker retirement checkpoints remain.
+
 Read the [native execution plan](../plans/agent-vm-native-execution-plan.md)
-and [human checkpoints](../plans/agent-vm-native-manual-plan.md) before resuming.
-
-The existing environments remain transitional inputs until those gates pass:
-
-- The **transitional Mint workspace devcontainer** hosted the original
-  preparation phases. It mounts the host's sibling-repository workspace and
-  kubeconfig and uses the Mint Docker environment. Keep Mint Docker available
-  through Checkpoint B; availability does not require running workers there.
-- The **guest agent container** is the previous runtime defined separately by the
-  sibling workspace repository's `ai-agent-sandbox/docker-compose.agent-vm.yml`.
-  It runs on the development VM's Docker daemon against guest-local files and
-  guest-local Kind. It runs only the native plan's two preparation phases,
-  then the human installs the native tools and stops it before Phase 3.
-  It is not a Mint profile, a VM definition, or a replacement compose file for
-  the existing devcontainer.
-
-The transition ends only after the human completes the explicit Docker
-retirement checkpoint in
-[the native manual plan](../plans/agent-vm-native-manual-plan.md#checkpoint-d-return-work-and-retire-mint-docker).
-
-The detailed container procedures below describe the existing implementation
-until the native plan replaces them in their owning repositories. They do not
-override its native target, execution locations or human handoffs.
+and [human checkpoints](../plans/agent-vm-native-manual-plan.md) before
+continuing migration acceptance. The old guest agent container has been
+retired and is not an alternative daily path. The personal-host Mint
+devcontainer remains only until the explicit Checkpoint D retirement; do not
+resume native work there or reconstruct the removed guest container.
 
 ## Boundary Terminology
 
@@ -44,22 +29,21 @@ override its native target, execution locations or human handoffs.
 - **Development VM**: the Ubuntu guest. It owns working clones, local bare Git
   repositories, Docker storage, dependency caches, Kind, Tilt, Kubernetes
   state, development credentials and application data.
-- **Native agent (target)**: a process of the normal guest development user,
+- **Native agent**: a process of the normal guest development user,
   sharing that user's tool environment and build caches with Tilt. Access to
   the rootful guest Docker daemon confers guest-root-equivalent authority.
   Native command sandboxing can constrain ordinary commands, but unrestricted
   Docker access remains a route to control guest assets.
-- **Agent container (transitional)**: a container created by the development VM's Docker
-  daemon. It can administer that daemon and therefore must be assumed able to
-  read, alter or destroy all guest repositories, local credentials, Kind state
-  and other guest runtime data.
+- **Retired guest agent container**: the preparation bridge used only through
+  native Phases 1–2. Its tracked Compose/lifecycle sources and Docker state are
+  gone. Historical evidence does not authorize recreating it.
 
 A marker, compose-project name, environment variable or command-line flag can
 prevent an accidental launch in the wrong place. It does not prove isolation.
 Isolation comes from the VM boundary, guest-local storage and Docker endpoint,
 the absence of host mounts and credentials, and host-enforced network policy.
 
-## Existing Guest-Container Architecture
+## Native Guest Architecture
 
 ```text
 Personal host
@@ -70,10 +54,13 @@ Personal host
   mkcert signing key (never copied)
 
 Development VM
-  /srv/budget-analyzer/bare/<repo>.git
-  /srv/budget-analyzer/worktrees/<repo>
+  <guest-storage>/bare/<repo>.git
+  <guest-storage>/worktrees/<repo>
+  normal guest home
+    provider state + Maven Local + Gradle/browser caches
+  native agent + AI Session Handler + Tilt
   /var/lib/docker (one guest-local Docker daemon)
-    Kind + Testcontainers + guest agent container
+    Kind + application images + Testcontainers
 ```
 
 There is no shared host workspace. Each guest working clone has only a
@@ -118,29 +105,31 @@ Internet allowlisting are outside this contract.
 
 ## Docker And Kubernetes Target Selection
 
-The guest uses Docker-outside-of-Docker: the agent container mounts the
-**guest's** `/var/run/docker.sock`. It does not run a nested daemon and does not
-need privileged mode. Guest host networking is allowed so local Kind, Tilt and
-application endpoints retain their normal loopback behavior.
+Native agents use the guest's default `/var/run/docker.sock` directly. Do not
+set `DOCKER_HOST`, `DOCKER_CONTEXT` or `TESTCONTAINERS_HOST_OVERRIDE`, select a
+TCP/SSH endpoint, run a nested daemon, or forward another machine's socket.
+Docker-group authority is guest-root-equivalent even when the selected agent
+command uses a native command sandbox.
 
 Before guest bootstrap, `scripts/bootstrap/check-agent-vm-prerequisites.sh`
-fails closed unless Docker uses the default local Unix socket, no remote-Docker
-environment is selected, the service is active on the current machine, and the
-daemon reports its normal guest-local data root. `./setup.sh --guest-local`
-repeats that check before recreating Kind. Do not use `DOCKER_HOST`, an SSH/TCP
-Docker context, a nested daemon, or a host socket forwarded into the VM.
+fails closed unless execution is native, Docker uses the default local Unix
+socket, no remote-Docker environment is selected, the service is active on the
+current machine, the daemon name matches the guest and its data root is
+`/var/lib/docker`. `./setup.sh --guest-local` repeats that non-runtime check
+before recreating Kind. The `--native-runtime` mode additionally delegates the
+full tool/user/home/repository proof to the workspace-owned native verifier and
+requires the exact live Kind target.
 
 Before an agent-authorized Kubernetes mutation, require all of the following:
 
 1. `kubectl config current-context` is exactly `kind-kind`.
 2. The referenced kubeconfig cluster is exactly `kind-kind`.
 3. Its API server is HTTPS on `127.0.0.1`, `localhost` or IPv6 loopback.
-4. `kubectl get node kind-control-plane` succeeds.
+4. `kubectl get node kind-control-plane` reports the node Ready.
 
-On the VM host, `kind get clusters` must additionally contain the expected
-`kind` cluster before bootstrap-owned secret installation. It is only an
-additional host-side check; an agent container can reach the same guest daemon
-but a container marker or cluster name alone is not boundary proof.
+`kind get clusters` must additionally contain the expected `kind` cluster.
+This is useful native daemon evidence, but a cluster name, VM marker or process
+name alone is not personal-host isolation proof.
 
 For local API-test acceptance, require the selected configuration to declare
 `environment_type: local` and target exactly
@@ -163,8 +152,18 @@ It is a destructive local bootstrap: like the standard setup path, it deletes
 and recreates the `kind` cluster, installs Calico and Gateway API prerequisites,
 installs the imported ingress certificate, generates guest-owned
 infrastructure TLS and prepares `.env`. It is not a VM-start or daily-start
-command. Daily work starts the VM, the reviewed guest agent container, Tilt and
-the host loopback HTTPS forward without rerunning `setup.sh`.
+command. Daily work starts the VM, verifies the native runtime, starts Tilt and
+uses the host loopback HTTPS forward without rerunning `setup.sh`.
+
+Agents and AI Session Handler are ordinary processes of the same guest user
+that runs Tilt. Start them from a fresh guest login shell after the native
+runtime preflight. Exiting an agent or handler must not stop Tilt, Docker, Kind
+or the application; a later fresh shell reuses the normal user's provider
+state, Maven Local and Gradle caches. No agent container, separate home or
+Compose lifecycle belongs in this daily path. Exact daily commands live in
+[Getting Started](../development/getting-started.md#daily-native-startup), and
+the remaining human process/reboot proof lives in the
+[native manual plan](../plans/agent-vm-native-manual-plan.md#checkpoint-c-accept-native-daily-operation).
 
 The standard `./setup.sh` path remains the supported transitional/local-host
 bootstrap. Do not silently select guest behavior from hostname, a marker file
@@ -184,8 +183,7 @@ nginx/certs/k8s/_mkcert-rootCA.pem
 
 The public root can contain workstation-identifying subject metadata and a
 stable fingerprint. Keep it out of Git, logs and uploaded artifacts. The
-mkcert `rootCA-key.pem` must never enter the workspace, guest or agent
-container.
+mkcert `rootCA-key.pem` must never enter the workspace or guest.
 
 `scripts/bootstrap/install-imported-ingress-tls.sh` does not generate
 certificates. It validates that the three files exist, the public root is a
@@ -196,11 +194,11 @@ optionally installs the public root into the guest OS trust store, and applies
 the ingress TLS Secret.
 
 The human copies the three files over the dedicated host-to-guest SSH path and
-runs the installer in the guest. The agent-container's
-`ensure-budget-analyzer-local-ca-trust` command remains the lazy container-local
-trust path. Infrastructure certificates are separate, disposable guest
-material generated by the human-owned guest bootstrap; they are not copied
-from the personal host.
+runs the trust installer in the guest. Native `ensure-budget-analyzer-local-ca-trust`
+and `check-budget-analyzer-local-ca-trust` are read-only verification commands;
+they never modify trust. Infrastructure certificates are separate, disposable
+guest material generated by the human-owned guest bootstrap; they are not
+copied from the personal host.
 
 If the leaf is missing, expired, mismatched or otherwise invalid, stop. Do not
 use HTTP, `--insecure`, `verify=False`, `ignore_https_errors`, a guest-generated
@@ -209,51 +207,28 @@ browser CA or an agent-generated replacement. Renew on the personal host with
 and rerun the guest installer. Renewal does not run `setup.sh` and does not
 require or recreate a host Kind cluster.
 
-## Transitional Mint Runner
+## Historical Runners And Remaining Cutover
 
-The sibling workspace `.devcontainer/devcontainer.json` and
-`ai-agent-sandbox/docker-compose.yml` remain available until Checkpoint B.
-The continuation workers run inside the guest agent container, with no
-worker SSH key or cross-machine source synchronization. The Mint configuration
-currently mounts the shared sibling-repository parent and host kubeconfig and
-uses host networking; its Docker-in-Docker devcontainer feature belongs to that
-transitional environment. Do not copy this
-configuration to the VM, reinterpret it as the guest target or claim that it
-isolates mounted host files from the agent.
+The native manual plan owns source transfer, human firewall evidence, browser
+and reboot acceptance, and final Mint Docker retirement. Native agents, Tilt
+and service builds now share one guest user/home, so there is no duplicate
+agent-container Maven Local or provider volume to populate. Do not add GitHub
+package credentials, mount a personal-host cache, or recreate the removed
+guest Compose path to bridge a failure.
 
-The separate guest compose configuration is owned by the sibling workspace
-repository. It must mount only guest-local working/bare repositories, the
-guest Docker socket and, after Kind exists, the guest kubeconfig. It must not
-mount a personal host path, host credential socket, host kubeconfig, libvirt
-socket or nested Docker data directory.
-
-The native manual plan owns source transfer, guest-OS preflight and human
-firewall evidence. Its A/B gates separate container preparation from native
-execution; C owns browser/reboot acceptance and guest-agent resource retirement,
-and D owns Mint Docker retirement. Workers never administer Mint or require
-host listeners to remain running after paired evidence is collected.
-
-Run guest-OS bootstrap prerequisite checks from the human guest shell. Their
-systemd and hostname checks are not agent-container checks. Inside the agent,
-verify the inspected guest socket/mount contract and exact Kubernetes target.
-Likewise, guest-OS Tilt's Maven Local repository is separate from the agent
-user's Maven Local: build and publish shared libraries inside the agent before
-container-side service tests. Do not add GitHub package credentials or mount a
-personal-host cache to bridge that difference. Do not recreate the executing
-agent during the continuation; container recreation may discard its build
-caches and requires preparing those prerequisites again.
-
-The retained `tests/setup-flow` and `tests/security-preflight` DinD suites are
-stale, non-gating reference assets. They are not the guest runtime and are not
-completion proof for this migration.
+The sibling workspace's Mint devcontainer files remain for its supported
+transitional purpose until Checkpoint D. They do not define the development-VM
+runtime and must not be copied into the guest. The retained orchestration
+`tests/setup-flow` and `tests/security-preflight` DinD suites are stale,
+non-gating reference assets and are not native completion proof.
 
 ## Autonomous Execution Workflow
 
 Use autonomy only after the boundary and success criteria are reviewed:
 
 1. Define the task and explicit success criteria.
-2. Confirm the selected workspace, Docker endpoint, kubeconfig and credential
-   boundary.
+2. Confirm the native guest user/home, selected workspace, Docker endpoint,
+   kubeconfig and credential boundary with the repo-owned preflight.
 3. Let the agent execute within that boundary.
 4. Verify the result with repo-owned checks and human review before publication.
 
@@ -274,5 +249,5 @@ service-owned defect with orchestration.
   [`../development/local-environment.md`](../development/local-environment.md)
 - Script catalog and verifier entry points:
   [`../../scripts/README.md`](../../scripts/README.md)
-- Workspace-owned guest agent configuration and trust helper:
-  the sibling `../workspace` repository documentation
+- Workspace-owned native tool manifest, provisioning, user environment and
+  trust verifier: the sibling `../workspace` repository documentation

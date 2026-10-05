@@ -22,9 +22,9 @@ addresses or unrelated host configuration.
 
 ## Native Preparation Handoff
 
-**Status:** COMPLETE; operator verified Checkpoint A on 2026-10-04. The first
-native-plan invocation has not yet been recorded. Phases 1–2 are cleared to
-start in the existing guest container.
+**Status:** COMPLETE; operator verified Checkpoint A on 2026-10-04. This section
+preserves the pre-invocation handoff state. The capped first invocation and
+preparation Phases 1–2 subsequently completed before the native handoff above.
 
 | Evidence | Result |
 | --- | --- |
@@ -34,12 +34,13 @@ start in the existing guest container.
 | Paired native/Docker host firewall fixtures, positives, IPv4/IPv6 applicability and hooks | PASS — operator verified paired results, applicable address families, positive controls, and persistent policy hooks |
 | Guest OS prerequisites, default local Docker, exact Kind target and healthy Tilt | PASS — read-only checks; default Unix Docker endpoint, `/var/lib/docker`, context/cluster `kind-kind`, loopback API, Ready `kind-control-plane`, healthy Tilt and workloads |
 | Existing guest container identity/mounts and provider/handler availability | PASS — operator verified nonprivileged guest agent, host networking, same-path guest source/bare mounts, read-only guest kubeconfig, and available provider/handler |
-| First invocation capped at two phases in the guest checkout | READY — first invocation must use the command below with `--max-phases 2`; no native-plan invocation recorded yet |
+| First invocation capped at two phases in the guest checkout | PASS — the initial run used the two-phase cap, committed Phases 1–2 and left the same runner state selecting Phase 3 |
 
 Checkpoint A evidence was reviewed on 2026-10-04. The in-container
 `systemd-detect-virt` command is unavailable and was not used as VM proof;
 personal-host VM inspection and confinement evidence were verified by the
-operator. Java and frontend live-update checks remain deferred to Checkpoint B.
+operator. Java and frontend live-update checks were deferred at this collection
+point and remain Checkpoint C work after the completed native handoff.
 
 ## Native Execution Handoff
 
@@ -59,10 +60,11 @@ native guest OS. This does not complete Checkpoints C–D.
 
 ### Recorded Native Handoff Evidence
 
-- The live installation report identifies native user `budgetops`, the normal
-  guest home, workspace base `faa63e9`, handler `619cdd1`, and the reviewed npm
+- The live installation report identifies native user `budgetops`, home
+  `/home/budgetops`, workspace base `faa63e9`, handler `619cdd1`, and the reviewed npm
   lock. Its four B.1 dirty workspace paths were incorporated by the reviewed
-  B.2/B.3 revisions; workspace is clean at `0195929`. Installed user tools
+  B.2/B.3 revisions; the workspace source baseline was clean at `0195929`
+  before these handoff evidence edits. Installed user tools
   include Claude 2.1.289, Codex 0.160.0, Gemini 0.62.0, Playwright 1.63.0,
   mitmproxy 12.2.3 and the editable AI Session Handler 0.2.0. The existing
   Phase 1 and Phase 2 records retain their 36-case and 76-case fixture results
@@ -108,7 +110,9 @@ native guest OS. This does not complete Checkpoints C–D.
   176/176; the operator then confirmed the complete smoke-test umbrella passed.
 - The accepted execution-plan SHA-256 remains
   `feadfeb5d8c1d2d915352e6db438053bb95945d446230e880bf32e658668b75b`;
-  no plan-change acceptance was used. The same guest-local runner state reports
+  no plan-change acceptance was used. The resumed orchestration handoff revision
+  is `c1a3a2b`, containing the GNU awk verifier repair and this B.3 evidence.
+  The same guest-local runner state reports
   `next phase: phase-3 Prove Native Workspace Execution` with execution workspace
   `workspace`.
 - Checkpoint A's paired native/Docker host denials, listener positives,
@@ -141,8 +145,8 @@ native guest OS. This does not complete Checkpoints C–D.
   rebuilt application persistence and measured guest resource use: PENDING.
 - Checkpoint D reviewed source returned, Mint Docker/runtime/hooks retired,
   permanent host policy retained and final reboot proof: PENDING.
-- Optional proxy activation: NOT EXECUTED; installed capability/offline checks
-  still required in workspace evidence.
+- Optional proxy activation: NOT EXECUTED; installed capability and offline
+  checks are recorded in workspace evidence, and live activation is not required.
 - Overall native migration acceptance: PENDING human C/D; no result inferred
   from planning, installer fixtures or historical container passes.
 

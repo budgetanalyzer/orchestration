@@ -1,15 +1,18 @@
 # Agent Host Isolation Acceptance Record
 
-**Status:** Native preparation Phases 1–2, human Checkpoint B and all native
-execution Phases 3–8 are complete as of 2026-10-05. Human Checkpoints C–D and
-overall native acceptance remain pending. Prior container migration evidence
-is retained below and is not native proof.
+**Status:** COMPLETE. All eight native execution phases and human Checkpoints
+A–D are complete. On 2026-10-05 the operator confirmed that the full execution
+and manual plans had finished and all checks passed, and requested this record
+be updated. C/D completion is attributed to that confirmation, not a new agent
+inspection of the personal host. The separate post-migration security review
+below remains open. Prior timestamped evidence is preserved as collected.
 Operator preparation Steps 1–5 and the Initial Handoff were completed and
 verified on 2026-10-03. Checkpoint A repository, credential, TLS, bootstrap,
 stack-health and agent-restart checks were completed on 2026-10-04; the Java
-and frontend live-update checks remain deferred to Checkpoint C.
+and frontend live-update checks were deferred then and subsequently completed
+in Checkpoint C according to the operator's final confirmation.
 
-The active contracts are the [native execution plan](agent-vm-native-execution-plan.md)
+The completed migration used the [native execution plan](agent-vm-native-execution-plan.md)
 and [human checkpoints](agent-vm-native-manual-plan.md). References to original
 phase numbers and Checkpoints A–C in the historical sections describe the old
 container migration, not the new native A–D checkpoints.
@@ -247,21 +250,56 @@ reviewed source return and Mint Docker retirement.
 ## Native Human Acceptance
 
 - Checkpoint C trusted browser, Java/frontend save/restoration, native session
-  lifecycle and host/guest reboot persistence: PENDING.
+  lifecycle and host/guest reboot persistence: COMPLETE — operator-confirmed.
 - Checkpoint C absence of legacy guest agent resources, native independence,
-  rebuilt application persistence and measured guest resource use: PENDING.
+  rebuilt application persistence and measured guest resource use: COMPLETE —
+  operator-confirmed; no new measurements are invented in this update.
 - Checkpoint D reviewed source returned, Mint Docker/runtime/hooks retired,
-  permanent host policy retained and final reboot proof: PENDING.
+  permanent host policy retained and final reboot proof: COMPLETE —
+  operator-confirmed.
 - Installed native tool parity and required capability checks: COMPLETE; this
   establishes tooling, not human C/D acceptance.
 - Representative native shared-library and Testcontainers execution: COMPLETE;
   these runs do not establish Remote SSH save or reboot persistence.
 - Repository execution workers: COMPLETE through Phase 8; no worker completion
-  is relabeled as the pending human browser, host-policy or retirement proof.
+  is relabeled as human browser, host-policy or retirement proof.
 - Optional proxy activation: NOT EXECUTED; installed capability and offline
   checks are recorded in workspace evidence, and live activation is not required.
-- Overall native migration acceptance: PENDING human C/D; no result inferred
-  from planning, installer fixtures or historical container passes.
+- Overall native migration acceptance: COMPLETE — operator confirmed the full
+  execution/manual plans and all checks passed on 2026-10-05.
+
+This completion update records the operator's attestation. Exact C/D command
+transcripts, individual run timestamps, host configuration and measurements
+were not supplied in this conversation and are not fabricated here. Earlier
+sections that said C/D were pending preserve their historical collection state.
+The original execution-plan bytes and runner state remain unchanged.
+
+## Post-Migration Security Review
+
+**Status:** OPEN; distinct from completed migration acceptance.
+Review baseline: orchestration `3b67af2`, workspace `fed714c`, both compared
+against local `main`. The operator requested a new remediation plan after review.
+
+| Finding / improvement | Evidence and next action | Status |
+| --- | --- | --- |
+| Required native npm lock missing from committed source | Local lock exists but is ignored; `git ls-tree HEAD native/npm/` lists only package.json. Include the reviewed lock and prove source-only input closure. | OPEN |
+| TLS hostname rejection ineffective | Real `openssl x509 -checkhost unrelated.invalid` reported mismatch with exit 0. Use hostname-aware chain verification and negative coverage. | OPEN |
+| Kubernetes loopback authority check too broad | Mocked target guard accepted `https://127.0.0.1:6443@outside.invalid:443`; URL authority is remote. Require strict actual authority validation. | OPEN |
+| Full host firewall order/protocol coverage | Existing acceptance probes cover TCP; earlier UFW/libvirt rules and UDP/multicast require additional effective-policy review. No live exposure is asserted without host evidence. | AWAITING HOST AUDIT |
+| Duplicate managed guest CA roots | Both orchestration/workspace destinations exist with the same certificate. Consolidate ownership and safely converge the exact legacy duplicate. | OPEN |
+| Transitional source/workflow/helper duplication | Mint retirement is operator-confirmed; remove obsolete active guidance and duplicate implementations with their consumers accounted for. | OPEN |
+
+Review checks passed: 12 workspace native unit tests, 11 orchestration preflight
+fixtures, manifest/environment checks, changed-shell Bash/ShellCheck, diff
+checks and read-only live native preflight. These results do not negate the
+reproduced defects or constitute the new host audit.
+
+Implementation is owned by the
+[security review remediation plan](agent-vm-security-review-remediation-plan.md).
+The [host audit runbook](../runbooks/host-isolation-audit.md) and read-only
+collector are available for human host execution. Collector fixture success
+does not mean the live host has been inspected. Record additional audit results
+here with explicit attribution after privately reviewed evidence arrives.
 
 ## Initial Operator Handoff
 

@@ -1,9 +1,11 @@
 # Native VM Agents: Human Preparation And Cutover
 
-**Status:** Checkpoints A–B and all eight repository execution phases completed
-by 2026-10-05. Human Checkpoints C–D remain pending; overall native migration
-acceptance is not yet complete. Earlier VM/container results remain prior
-evidence unless explicitly recorded in the acceptance record.
+**Status:** COMPLETE — all eight repository phases and human Checkpoints A–D
+passed, confirmed by the operator on 2026-10-05. The procedures below are the
+completed migration checklist, not authorization to repeat destructive steps.
+The [new remediation plan](agent-vm-security-review-remediation-plan.md) owns
+review fixes and additional firewall evidence; see the acceptance record for
+the distinction between operator confirmation and independently reviewed proof.
 **Execution plan:** [Native agents in the VM](agent-vm-native-execution-plan.md).
 **Evidence:** [Host-isolation acceptance record](agent-host-isolation-acceptance.md).
 

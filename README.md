@@ -19,9 +19,11 @@ in a dedicated development VM, with repeatable tooling owned by
 [workspace](https://github.com/budgetanalyzer/workspace). The
 [native execution plan](docs/plans/agent-vm-native-execution-plan.md) and
 [human checkpoints](docs/plans/agent-vm-native-manual-plan.md) replace the
-container-based migration. All eight native execution phases passed on
-2026-10-05; Remote SSH/live-update/reboot acceptance and final Mint retirement
-remain human checkpoints. Repositories, the normal guest home, Docker and Kind
+container-based migration. All eight native execution phases and the human
+checkpoints are complete, including Mint retirement, by operator confirmation.
+The [follow-up review plan](docs/plans/agent-vm-security-review-remediation-plan.md)
+tracks implementation fixes, simplification and additional host firewall proof.
+Repositories, the normal guest home, Docker and Kind
 stay guest-local while GitHub publication remains on the personal host. The
 [boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
 target and existing transitional environments.
@@ -66,6 +68,7 @@ Once the stack is running:
 
 - [Getting Started](docs/development/getting-started.md) — setup walkthrough
 - [Local Environment Mechanics](docs/development/local-environment.md) — live update pipeline, mixed workflows
+- [Host Isolation Audit](docs/runbooks/host-isolation-audit.md) — human-only read-only host evidence collection and security review
 - [Service-Common Artifact Resolution](docs/development/service-common-artifact-resolution.md) — local vs. GitHub Packages
 - [Architecture Overview](docs/architecture/system-overview.md)
 - [Observability Architecture](docs/architecture/observability.md)

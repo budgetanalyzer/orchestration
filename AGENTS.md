@@ -74,13 +74,16 @@ repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-The selected host-isolation target runs agents directly in the development VM.
-Read `docs/plans/agent-vm-native-execution-plan.md` and its companion manual
-plan before resuming migration work. Only Phases 1–2 use the existing guest
-container to prepare installers; after human native installation, Phases 3–8
-run directly in the same guest checkout. Keep Mint Docker until the human-owned
-retirement checkpoint. Do not share personal-host files with the guest, execute
-the old continuation, or claim native acceptance before its gates pass.
+The accepted host-isolation target runs agents directly in the development VM.
+Migration and Mint runtime retirement are operator-confirmed complete in
+`docs/plans/agent-host-isolation-acceptance.md`. Preserve the original execution
+plan and runner state; do not rerun destructive migration steps or reconstruct
+retired agent containers. Before review follow-up work, read
+`docs/plans/agent-vm-security-review-remediation-plan.md`. Before collecting or
+reviewing host firewall/confinement evidence, read
+`docs/runbooks/host-isolation-audit.md`. The human runs the read-only collector
+on the personal host; agents may test it offline and review explicitly supplied
+redacted evidence, but must not acquire host access or change host policy.
 
 Native agents run as the normal development-VM user inside the trusted local
 development boundary. Local workspace files, the local Kind kubeconfig and

@@ -11,15 +11,22 @@ The supported development-VM target is **native agents**, with Docker reserved
 for application builds, Kind, infrastructure and Testcontainers. Workspace-
 owned system/user installers and the normal guest home now provide the agent
 toolchain, provider state, Maven Local, Gradle caches and browser data. All
-eight repository execution phases passed on 2026-10-05; the human Remote SSH,
-live-update, reboot and final Mint Docker retirement checkpoints remain.
+eight repository execution phases passed on 2026-10-05; the operator also
+confirmed completion of all human checkpoints, including Remote SSH, live
+updates, reboot proof and Mint Docker retirement. See the
+[acceptance record](../plans/agent-host-isolation-acceptance.md#native-human-acceptance)
+for attribution and the separate open post-migration security review.
 
 Read the [native execution plan](../plans/agent-vm-native-execution-plan.md)
 and [human checkpoints](../plans/agent-vm-native-manual-plan.md) before
-continuing migration acceptance. The old guest agent container has been
-retired and is not an alternative daily path. The personal-host Mint
-devcontainer remains only until the explicit Checkpoint D retirement; do not
-resume native work there or reconstruct the removed guest container.
+consulting migration history. Both the old guest agent container and the
+personal-host Mint runtime are retired; do not resume native work there or
+reconstruct them. The
+[remediation plan](../plans/agent-vm-security-review-remediation-plan.md) owns
+remaining source cleanup and review fixes. Before collecting or reviewing host
+firewall/confinement evidence, read the
+[host audit runbook](../runbooks/host-isolation-audit.md); live host collection
+is human-only and does not give a guest agent host administration access.
 
 ## Boundary Terminology
 
@@ -162,7 +169,7 @@ or the application; a later fresh shell reuses the normal user's provider
 state, Maven Local and Gradle caches. No agent container, separate home or
 Compose lifecycle belongs in this daily path. Exact daily commands live in
 [Getting Started](../development/getting-started.md#daily-native-startup), and
-the remaining human process/reboot proof lives in the
+the completed human process/reboot procedure lives in the
 [native manual plan](../plans/agent-vm-native-manual-plan.md#checkpoint-c-accept-native-daily-operation).
 
 The standard `./setup.sh` path remains the supported transitional/local-host
@@ -207,7 +214,7 @@ browser CA or an agent-generated replacement. Renew on the personal host with
 and rerun the guest installer. Renewal does not run `setup.sh` and does not
 require or recreate a host Kind cluster.
 
-## Historical Runners And Remaining Cutover
+## Historical Runners And Follow-Up Review
 
 The native manual plan owns source transfer, human firewall evidence, browser
 and reboot acceptance, and final Mint Docker retirement. Native agents, Tilt
@@ -216,9 +223,10 @@ agent-container Maven Local or provider volume to populate. Do not add GitHub
 package credentials, mount a personal-host cache, or recreate the removed
 guest Compose path to bridge a failure.
 
-The sibling workspace's Mint devcontainer files remain for its supported
-transitional purpose until Checkpoint D. They do not define the development-VM
-runtime and must not be copied into the guest. The retained orchestration
+The sibling workspace's Mint devcontainer files remain as source pending
+reviewed cleanup; the operator confirmed runtime retirement at Checkpoint D.
+They do not define the development-VM runtime and must not be launched or
+copied into the guest. The retained orchestration
 `tests/setup-flow` and `tests/security-preflight` DinD suites are stale,
 non-gating reference assets and are not native completion proof.
 

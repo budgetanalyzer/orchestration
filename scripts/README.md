@@ -25,6 +25,15 @@ scripts/
 
 ## Canonical Entry Points
 
+- `ops/collect-host-isolation-evidence.py` - Human-run read-only Mint host
+  collector for complete firewall order, UFW persistence, listeners and VM
+  confinement evidence. Run with `python3` and `--confirm-personal-host` after
+  `sudo -v` on the personal workstation. Writes private raw captures and a
+  candidate redacted report outside the checkout; does not change host policy,
+  run probes or certify isolation. Read the
+  [host audit runbook](../docs/runbooks/host-isolation-audit.md) before execution
+  or sharing. Offline tests: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
+  discover -s tests/host-isolation-audit -v` from the repository root.
 - `../setup.sh` - Standard local platform bootstrap from the repository root.
 - `../setup.sh --guest-local` - Explicit first bootstrap for the development
   VM's local Docker daemon using imported host-created ingress TLS. Both setup

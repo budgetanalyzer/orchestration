@@ -2,8 +2,10 @@
 
 **Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
 
-The sibling `workspace` repository owns developer tooling and the supported
-personal-host devcontainer:
+The sibling `workspace` repository owns developer tooling. The accepted daily
+workflow uses native tools in the VM through Remote SSH. The following
+personal-host devcontainer onboarding is retained as historical guidance
+pending source cleanup; do not use it for the accepted VM workflow:
 
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
@@ -14,9 +16,13 @@ devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
 
 The isolated development-VM target uses native agents and VS Code Remote SSH.
-All eight repository execution phases passed on 2026-10-05; human Remote SSH,
-live-update, reboot and Mint-retirement acceptance remain in the
-[human checklist](../plans/agent-vm-native-manual-plan.md). Working clones, the
+All eight repository phases and human Remote SSH, live-update, reboot and
+Mint-retirement checkpoints are operator-confirmed complete; see the
+[acceptance record](../plans/agent-host-isolation-acceptance.md#native-human-acceptance).
+The retained personal-host container instructions above are historical for
+this accepted VM workflow; use the native daily path below. The
+[follow-up plan](../plans/agent-vm-security-review-remediation-plan.md) owns
+their source cleanup and additional security review. Working clones, the
 normal guest home, Docker, Kind and runtime state stay guest-local. The old
 guest agent container is retired and must not be reconstructed. Read the
 boundary contract in

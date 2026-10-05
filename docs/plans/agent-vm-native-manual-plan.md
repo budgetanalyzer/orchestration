@@ -324,6 +324,13 @@ Use Phase 2's native trust flow to install the public root in the guest system
 and this user's Chromium NSS database, preserving public roots. Prove curl,
 Python, Node and Playwright verified access to the exact local HTTPS app.
 
+Native `tilt up` uses the non-generating `ingress-tls-secret` resource to
+validate those same files and reconcile the local Kind Secret. Require that
+resource and `istio-ingress-config` to become healthy before the HTTPS proof.
+If Tilt reports `mkcert-tls-secret` or invokes `setup-k8s-tls.sh`, stop because
+the guest checkout predates the native-TLS wiring; do not install mkcert or
+select guest behavior through an environment variable, hostname or marker.
+
 If inputs expired or changed, the human renews only on the personal host with
 `scripts/bootstrap/renew-host-ingress-tls.sh`, explicitly recopies only the
 three approved files over host-initiated SSH, and follows
@@ -543,7 +550,9 @@ container results as native evidence.
 1. Start the VM from the personal host and connect using the dedicated Remote
    SSH profile. Use guest working clones; no shared folder or container reopen.
 2. In the guest orchestration checkout, run the native tool/runtime preflight
-   and start `tilt up` only if that Tilt instance is not already running.
+   and start `tilt up` only if that Tilt instance is not already running. Tilt
+   reconciles the existing imported ingress files into the Kind Secret; it
+   never generates browser-facing certificates or changes guest trust.
 3. Start the host loopback HTTPS forward and dedicated development browser.
 4. In a normal guest terminal, run the selected agent command, or use
    `ai-run PLAN_NAME` from the owning repository. Plain commands keep their

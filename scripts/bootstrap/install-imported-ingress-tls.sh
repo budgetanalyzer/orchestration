@@ -118,7 +118,7 @@ if [[ "$VALIDATE_ONLY" == true ]]; then
 fi
 
 if [[ -f /.dockerenv || -f /run/.containerenv ]]; then
-    fail "install mode must run from the development VM host, not an agent container"
+    fail "install mode must run on the machine hosting the local Kind cluster, not in a container"
 fi
 
 for command_name in kubectl kind; do

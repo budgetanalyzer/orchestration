@@ -1221,11 +1221,12 @@ local_resource(
 # ISTIO INGRESS GATEWAY
 # ============================================================================
 
-# Wildcard TLS certificate for *.budgetanalyzer.localhost (using mkcert)
-# This runs on the HOST machine to install the CA in browser trust stores
+# Validate the existing host-owned ingress files and reconcile the Kubernetes
+# Secret. Certificate generation and trust-store installation stay outside Tilt.
 local_resource(
-    'mkcert-tls-secret',
-    cmd='./scripts/bootstrap/setup-k8s-tls.sh',
+    'ingress-tls-secret',
+    cmd='./scripts/bootstrap/install-imported-ingress-tls.sh',
+    deps=['scripts/bootstrap/install-imported-ingress-tls.sh'],
     resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
@@ -1267,7 +1268,7 @@ local_resource(
         'kubernetes/istio/ingress-gateway-config.yaml',
         'kubernetes/istio/istio-gateway.yaml',
     ],
-    resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'mkcert-tls-secret'],
+    resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'ingress-tls-secret'],
     labels=['gateway'],
 )
 

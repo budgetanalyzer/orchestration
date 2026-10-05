@@ -34,7 +34,8 @@ scripts/
   and absence of forwarded GitHub/SSH authority.
 - `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
   validator and strict local-`kind-kind` Secret installer; use
-  `--validate-only` for static file checks.
+  `--validate-only` for static file checks. Tilt uses its default install mode
+  to reconcile the existing files into the Secret in both local runtime modes.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
   Pass `--guest-local` in the development VM to skip mkcert and require the
   local guest Docker endpoint.
@@ -182,7 +183,10 @@ Choose scripts by runtime boundary:
   host-created ingress files without invoking mkcert. Install mode optionally
   adds the public root to the guest OS trust store and applies the TLS Secret
   only after exact context, referenced-cluster, loopback-API, Kind-cluster and
-  control-plane-node checks pass.
+  control-plane-node checks pass. The `ingress-tls-secret` Tilt resource uses
+  install mode without `--install-system-trust`, so daily startup reconciles
+  only the existing files and Secret; it never generates certificates or
+  changes host/guest trust.
 - `bootstrap/renew-host-ingress-tls.sh` is the human-operated personal-host
   renewal path. It creates and validates a replacement leaf/key using the
   existing host mkcert CA, republishes only the public root and never contacts
@@ -227,7 +231,9 @@ setup.
   that resources without `resource_deps` match
   `lib/tilt-intentional-root-resources.txt`. It requires the standard
   side-by-side workspace checkout because Tiltfile evaluation references
-  sibling service repositories.
+  sibling service repositories. It also requires the ingress TLS resource to
+  use the non-generating installer and rejects any Tilt command that invokes
+  the host-only certificate generator.
 - `guardrails/verify-static-security-manifests.sh` runs kubeconform,
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook

@@ -100,6 +100,11 @@ clean-rebuild command, never a daily VM-start command. Daily guest startup is:
 tilt up
 ```
 
+The `ingress-tls-secret` Tilt resource validates the already transferred files
+and reconciles the local Kind Secret on startup. It does not run mkcert or alter
+guest trust. Missing, expired, or replaced files return to the host renewal and
+guest import workflow; they are not repaired by `tilt up`.
+
 Follow the [native manual plan](../plans/agent-vm-native-manual-plan.md) for the
 agent installation gate and daily startup. Until that gate passes, the existing
 guest container is used only for preparation. Do not import Mint Docker state

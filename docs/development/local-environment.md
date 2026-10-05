@@ -144,6 +144,14 @@ difference is that it validates and installs the three human-transferred files
 instead of invoking mkcert. Both setup modes recreate Kind and are inappropriate
 for daily startup.
 
+On every `tilt up`, the `ingress-tls-secret` resource runs the non-generating
+`scripts/bootstrap/install-imported-ingress-tls.sh` path. In both local modes,
+that resource validates the three existing ingress files and reconciles only
+the Kubernetes TLS Secret after the strict local Kind target checks pass. Tilt
+never invokes mkcert, generates browser-facing key material, or changes a trust
+store. Standard host bootstrap and renewal own certificate generation; the
+development VM import workflow owns transfer and guest trust installation.
+
 Tilt runs `./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on every
 `tilt up` before workload resources start. The Calico reconciliation script
 uses the same helper. Tilt log streaming and `kubectl logs -f` use Kubernetes
@@ -816,10 +824,14 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ### SSL Certificate Errors
 
 ```bash
-# Re-run browser-facing wildcard certificate setup on HOST
+# Reconcile the existing ingress files into the local Kind Secret
+./scripts/bootstrap/install-imported-ingress-tls.sh
+tilt trigger ingress-tls-secret
+
+# On the standard local host only, repair initial certificate setup
 ./scripts/bootstrap/setup-k8s-tls.sh
 
-# Or renew host-owned ingress files without changing a host cluster
+# On the personal host only, renew files without changing a cluster
 ./scripts/bootstrap/renew-host-ingress-tls.sh
 
 # Verify wildcard secret exists

@@ -26,7 +26,8 @@ container, agent Compose lifecycle or separate agent Maven home.
 - **Guest OS:** a normal console/SSH terminal in the Ubuntu VM, outside any
   container. The human runs system/user provisioning and provider login here.
 - **Existing guest container:** used once for execution Phases 1–2. It must be
-  on guest Docker with guest-local files. It is stopped before native phases.
+  on guest Docker with guest-local files. Checkpoint B.3 destroys it with all
+  old guest Docker state before rebuilding the application for native phases.
 - **Native agent:** normal guest process after Checkpoint B. It can administer
   guest Docker and approved Kind, so all guest assets are in its trust boundary.
 
@@ -46,15 +47,16 @@ inside the guest is permitted; its state is accessible within the guest.
 | Checkpoint | Human action | Next execution |
 | --- | --- | --- |
 | A | Preserve source, verify existing guest and host boundary, transfer this plan | Phases 1–2 in the existing guest container, then stop |
-| B | Review/run native installers, establish trust, authenticate, stop old guest agent | Phases 3–8 natively in the same guest checkout/state |
-| C | Verify browser, live updates, native daily workflow and reboot; retire guest agent resources | No active handler |
+| B | Review/run native installers, establish trust/authentication, destroy old guest Docker state and clean-rebuild the application | Phases 3–8 natively in the same guest checkout/state |
+| C | Verify browser, live updates, native daily workflow, reboot and absence of legacy agent resources | No active handler |
 | D | Return reviewed work, retire Mint Docker, repeat final boundary proof | Native daily work |
 
-Do not reboot, change authentication or install over a running worker. Do not
-run `setup.sh` to switch the agent's execution environment: it recreates Kind.
-Missing prerequisites stop the relevant checkpoint. A source fix needing a
-new installation is reviewed, installed by the human after the worker exits,
-then retried using the new plan's normal runner recovery.
+Do not reboot, change authentication or install over a running worker. The only
+migration-time `setup.sh` invocation is the explicitly destructive guest-local
+clean rebuild in B.3 after every old worker exits. Missing prerequisites stop
+the relevant checkpoint. A source fix needing a new installation is reviewed,
+installed by the human after the worker exits, then retried using the new
+plan's normal runner recovery.
 
 ## Checkpoint A: Prepare The Existing Guest
 
@@ -365,36 +367,170 @@ environment. `SSH_AUTH_SOCK`, `GITHUB_TOKEN`, `GH_TOKEN`, `GIT_ASKPASS` and
 bridges. Require native sandbox proof for the mode actually selected; do not
 disable AppArmor globally to make bubblewrap start.
 
-### B.3 Stop The Old Agent And Resume In The Same Guest Checkout
+### B.3 Destroy Guest Docker State, Clean-Rebuild, And Resume
 
-Confirm all old container workers/handler processes exited. Record its exact
-container/image IDs and provider-volume names for C. From the **guest OS**, use
-the existing `agent-vm-container-stop.sh` to stop only that agent. Preserve its
-volumes/image until acceptance. Confirm Kind, Docker, Tilt and the application
-stay healthy; never use `docker compose down -v`, daemon stop or prune.
+This is the selected destructive cutover. It deletes every container and every
+named or anonymous volume from the development VM's local Docker daemon, then
+prunes unused images, build cache and custom networks. The old agent container,
+its image and provider volumes are intentionally not retained. All application
+database/PVC state is also discarded. Native provider state in the normal
+guest user's home, working and bare repositories, orchestration `.env`, the
+three imported TLS files and `.ai-session-handler/` runner state are ordinary
+guest files and are not Docker prune targets.
 
-Record **Native Execution Handoff** in the guest acceptance record: actual
-installer revisions, fixture/live results, user/home and command resolution,
-native provider proof, sandbox mode, trust, identity/target checks, container
-stopped, host boundary evidence and remaining C/D work. Leave the accepted
-execution-plan bytes unchanged. Changes to the companion/evidence are allowed.
+Do not run this section from the old agent container. Finish and exit every old
+handler/worker, preserve any required work in the guest repositories, and open
+a fresh guest OS shell. Do not proceed if any identity, durable-input or Docker
+target check fails.
 
-From the **native guest OS orchestration checkout**:
+First prove the durable inputs and Phase 1–2 runner state exist outside Docker:
 
 ```bash
-ai-session-handler status --plan "$PWD/docs/plans/agent-vm-native-execution-plan.md"
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+
+id -un
+systemd-detect-virt --container || true
+systemd-detect-virt --vm
+
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+test -s .env
+
+ai-session-handler status \
+  --plan "$PWD/docs/plans/agent-vm-native-execution-plan.md"
+```
+
+Require the expected normal guest user, container detection `none`, QEMU/KVM
+VM detection, passing guest-local/TLS checks, an existing `.env` and status
+selecting Phase 3. A missing input or runner state is a stop condition.
+
+From another guest shell, stop Tilt-managed resources:
+
+```bash
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+tilt down
+```
+
+Press `Ctrl+C` in the terminal that was running `tilt up`. Then verify Tilt is
+stopped and review the exact Docker resources that will be destroyed:
+
+```bash
+if pgrep -a -x tilt; then
+  printf 'ERROR: stop every Tilt process before deleting Docker state.\n' >&2
+  exit 1
+fi
+
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+docker context show
+docker context inspect default --format '{{.Endpoints.docker.Host}}'
+docker info --format 'daemon={{.Name}} root={{.DockerRootDir}}'
+
+docker container ls --all \
+  --format 'container={{.ID}} name={{.Names}} image={{.Image}} status={{.Status}}'
+docker volume ls
+docker image ls
+docker system df
+```
+
+Require context `default`, endpoint `unix:///var/run/docker.sock`, daemon name
+equal to the guest's short hostname and root `/var/lib/docker`. This inventory
+is final human review, not retained cleanup evidence. If anything belongs
+outside this disposable development-VM environment, stop instead of deleting
+it.
+
+After review, delete all guest Docker containers and volumes, then prune all
+unused image, build-cache and custom-network state:
+
+```bash
+read -r -p \
+  'Type DELETE-ALL-GUEST-DOCKER-DATA to continue: ' \
+  docker_reset_confirmation
+test "$docker_reset_confirmation" = DELETE-ALL-GUEST-DOCKER-DATA
+unset docker_reset_confirmation
+
+docker container ls --all --quiet \
+  | xargs --no-run-if-empty docker container rm --force --volumes
+
+docker volume prune --all --force
+docker system prune --all --force --volumes
+
+test -z "$(docker container ls --all --quiet)"
+test -z "$(docker volume ls --quiet)"
+docker system df
+```
+
+Both empty-state checks must pass. Default Docker networks remain. Do not
+delete `/var/lib/docker`, stop the daemon, remove repositories or delete native
+home-directory state.
+
+Rebuild the complete guest-local Kind environment through the supported clean
+bootstrap:
+
+```bash
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+./setup.sh --guest-local
+
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/budget-analyzer-web"
+npm install
+
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
+tilt up
+```
+
+Leave `tilt up` running. In a second fresh guest shell, repeat the resource
+status command until required resources are healthy, then prove the rebuilt
+ingress and application:
+
+```bash
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+
+tilt get uiresources \
+  -o custom-columns='NAME:.metadata.name,UPDATE:.status.updateStatus,RUNTIME:.status.runtimeStatus'
+tilt logs ingress-tls-secret --tail 100
+
+check-budget-analyzer-local-ca-trust
+curl --fail --show-error \
+  https://app.budgetanalyzer.localhost/ >/dev/null
+
+./scripts/smoketest/smoketest.sh
+```
+
+Do not continue while a required resource is pending or reports an error. The
+TLS log must show validation and Secret installation from the imported files,
+never guest certificate generation.
+
+Record **Native Execution Handoff** in the acceptance record and workspace
+handoff evidence: actual installer revisions, fixture/live results, user/home
+and command resolution, native provider proof, actual sandbox mode, trust,
+identity/target checks, empty Docker-state proof, clean-bootstrap result,
+rebuilt Tilt/application proof, host boundary evidence and remaining C/D work.
+State explicitly that no old container or Docker volume was retained. Do not
+claim this evidence before the commands pass. Leave the accepted execution-plan
+bytes unchanged; this human cutover does not use `--accept-plan-change`.
+
+Only after the evidence exists, resume from the native guest OS orchestration
+checkout:
+
+```bash
+cd "$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration"
+
+ai-session-handler status \
+  --plan "$PWD/docs/plans/agent-vm-native-execution-plan.md"
+
 ai-session-handler run \
   --plan "$PWD/docs/plans/agent-vm-native-execution-plan.md" \
   --max-phases 999 --quiet \
   --agent-cmd "ai-session-handler-codex-high"
 ```
 
-Status must select Phase 3 in the existing new-plan state. Missing state is a
-path/transfer problem to inspect, not permission to manufacture completed phases
-or import old state. For a genuinely stopped attempt, inspect its artifacts,
-end any surviving worker and use `--retry-stopped`. Do not use
-`--accept-plan-change` unless the human deliberately changed and reviewed this
-new plan between invocations. Keep the shell connected until completion.
+Status must still select Phase 3. Missing state is a path/transfer problem, not
+permission to manufacture completed phases or import old state. For a genuinely
+stopped attempt, inspect its artifacts, end any surviving worker and use
+`--retry-stopped`. Keep the native shell connected until completion.
 
 ## Checkpoint C: Accept Native Daily Operation
 
@@ -440,14 +576,11 @@ Run only after all eight phases pass and every handler/worker has ended.
    A.3's paired native/Docker boundary tests and positive controls, trust,
    credential checks, native tool preflight and browser acceptance. Record
    actual post-reboot evidence; pre-reboot passes do not establish persistence.
-6. Retire only the recorded guest agent container, its dedicated image and
-   provider volumes after confirming needed user-authored files/conversations
-   are retained privately or intentionally discarded. Prefer fresh provider
-   login; no wholesale credential-volume migration. Review exact IDs, volume
-   consumers and image use first. Remove named retired resources individually,
-   never prune, wildcard-remove containers, or delete Kind/PVC/application data.
-   Record no remaining guest agent container and prove native tools/app still
-   work. Source retirement was owned by Phase 3; runtime deletion is human-only.
+6. Confirm B.3 left no legacy guest agent container, image or provider volume
+   and that the rebuilt Kind/application state remains healthy. Do not repeat
+   the blanket prune during acceptance or delete newly rebuilt PVC/application
+   data. Prove native provider sessions and the app remain independent of all
+   retired agent-container state.
 
 Record C results and measured guest memory/disk use, not full process/env dumps.
 Any failure leaves acceptance pending. Returning to a container is not a native

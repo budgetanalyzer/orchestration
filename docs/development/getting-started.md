@@ -69,9 +69,11 @@ contract and diagnostics live in
 
 Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
 after guest provisioning, repository setup and approved TLS transfer. The
-[native migration](../plans/agent-vm-native-manual-plan.md) reuses the existing
-healthy cluster and must not run this sequence simply to move agents out of
-Docker. Run bootstrap from a human-operated guest OS shell:
+[native migration](../plans/agent-vm-native-manual-plan.md) invokes this path
+once during its explicitly destructive B.3 cutover, after native trust/provider
+proof and all old workers have ended. Outside first bootstrap or that reviewed
+cutover, do not run it simply to restart agents. Run bootstrap from a
+human-operated guest OS shell:
 
 ```bash
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh

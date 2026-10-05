@@ -52,7 +52,7 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
 | Native provider workspace-read and sandbox-mode proof without credential disclosure | PENDING |
 | curl/Python/Node/Playwright verified app trust and public-root preservation | PENDING |
 | Guest origins/credential boundary and current Docker/Kind/Tilt health | PENDING |
-| Old guest agent stopped, cleanup IDs recorded privately, provider volumes preserved | PENDING |
+| All old guest containers/volumes removed; clean guest-local rebuild and application proof | PENDING |
 | Same new-plan guest state selects Phase 3; paired host evidence still applicable | PENDING |
 
 ## Native Execution Results
@@ -72,8 +72,8 @@ operator. Java and frontend live-update checks remain deferred to Checkpoint B.
 
 - Checkpoint C trusted browser, Java/frontend save/restoration, native session
   lifecycle and host/guest reboot persistence: PENDING.
-- Checkpoint C guest agent resource retirement, native independence and
-  measured guest resource use: PENDING.
+- Checkpoint C absence of legacy guest agent resources, native independence,
+  rebuilt application persistence and measured guest resource use: PENDING.
 - Checkpoint D reviewed source returned, Mint Docker/runtime/hooks retired,
   permanent host policy retained and final reboot proof: PENDING.
 - Optional proxy activation: NOT EXECUTED; installed capability/offline checks

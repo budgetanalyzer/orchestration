@@ -66,8 +66,8 @@ Prefer discovery commands over static inventories:
 This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
 This project is designed for AI-assisted development. The sibling `../workspace`
-repository owns development tooling, native VM provisioning and the transitional
-devcontainer configuration.
+repository owns development tooling, native VM provisioning and the separate
+local-host devcontainer configuration.
 
 The `ext-authz` Go service implementation lives in the sibling `../ext-authz`
 repository. This orchestration repository owns its Kubernetes manifests, Istio
@@ -75,15 +75,13 @@ repository. This orchestration repository owns its Kubernetes manifests, Istio
 policy, and deployment documentation.
 
 The accepted host-isolation target runs agents directly in the development VM.
-Migration and Mint runtime retirement are operator-confirmed complete in
-`docs/plans/agent-host-isolation-acceptance.md`. Preserve the original execution
-plan and runner state; do not rerun destructive migration steps or reconstruct
-retired agent containers. Before review follow-up work, read
-`docs/plans/agent-vm-security-review-remediation-plan.md`. Before preparing the
-human-owned host repair or collecting/reviewing firewall/confinement evidence, read
-`docs/runbooks/host-isolation-audit.md`. The human runs the read-only collector
-on the personal host; agents may test it offline and review explicitly supplied
-redacted evidence, but must not acquire host access or change host policy.
+The former guest agent container and personal-host agent runtime are retired;
+do not reconstruct them or rerun destructive cutover work. Before preparing a
+human-owned host repair or collecting/reviewing firewall/confinement evidence,
+read `docs/runbooks/host-isolation-audit.md`. The human runs the read-only
+collector on the personal host; agents may test it offline and review explicitly
+supplied redacted evidence, but must not acquire host access or change host
+policy.
 
 Native agents run as the normal development-VM user inside the trusted local
 development boundary. Local workspace files, the local Kind kubeconfig and
@@ -168,7 +166,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
 - Agent host-isolation boundary and guest-local runtime contract: `docs/architecture/autonomous-ai-execution.md`
-- Development VM native installation, operator checkpoints and host/guest handoffs: `docs/plans/agent-vm-native-manual-plan.md`
+- Development VM provisioning, native installation and host/guest handoffs: sibling `../workspace/docs/host-isolation.md` and `../workspace/docs/native-user-tools.md`
 - Containerized dev environment setup: sibling `../workspace` repository
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`

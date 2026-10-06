@@ -24,7 +24,7 @@
 #
 # Safety:
 #   Refuses to run against any kubectl context that does not start with
-#   `kind-`. See `docs/plans/load-testing-synthetic-users-2026-04-09.md`.
+#   `kind-`. See the load-test fixture section in `scripts/README.md`.
 
 set -euo pipefail
 

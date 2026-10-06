@@ -16,17 +16,13 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 
 **AI agents can debug the full stack.** The selected target runs agents directly
 in a dedicated development VM, with repeatable tooling owned by
-[workspace](https://github.com/budgetanalyzer/workspace). The
-[native execution plan](docs/plans/agent-vm-native-execution-plan.md) and
-[human checkpoints](docs/plans/agent-vm-native-manual-plan.md) replace the
-container-based migration. All eight native execution phases and the human
-checkpoints are complete, including Mint retirement, by operator confirmation.
-The [follow-up review plan](docs/plans/agent-vm-security-review-remediation-plan.md)
-tracks implementation fixes, simplification and additional host firewall proof.
-Repositories, the normal guest home, Docker and Kind
-stay guest-local while GitHub publication remains on the personal host. The
+[workspace](https://github.com/budgetanalyzer/workspace). Repositories, the
+normal guest home, Docker and Kind stay guest-local while GitHub publication
+remains on the personal host. The former guest agent container and
+personal-host agent runtime are retired and must not be reconstructed. The
 [boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
-target and existing transitional environments.
+target, and the [host-isolation audit](docs/runbooks/host-isolation-audit.md)
+owns the human-only firewall and confinement evidence workflow.
 
 **Production deployment is documented and scripted.** The `deploy/` directory contains the complete, numbered script sequence to bootstrap a k3s cluster on OCI from scratch — Istio mesh, cert-manager with ACME HTTP-01, OCI Vault secret synchronization via External Secrets Operator, Kyverno admission policies, Prometheus/Grafana monitoring, Jaeger tracing, and public TLS. Every step produces reviewable rendered YAML under `tmp/` before anything touches the cluster.
 

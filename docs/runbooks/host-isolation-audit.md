@@ -1,10 +1,9 @@
 # Personal-Host Isolation Audit
 
 This runbook owns evidence collection and review of the boundary between the
-personal Mint workstation and the root-capable development VM. The completed
-[migration acceptance](../plans/agent-host-isolation-acceptance.md#native-human-acceptance)
-is operator-attested. The subsequent review of firewall rule ordering and
-protocol coverage is a separate audit; neither a successful collector exit nor
+personal Mint workstation and the root-capable development VM. The native VM
+is the accepted agent runtime. Firewall rule ordering and protocol coverage
+require their own current audit; neither a successful collector exit nor
 passed guest application tests constitute that audit's acceptance.
 
 ## Current Go/No-Go Check
@@ -83,7 +82,7 @@ excerpt if the reviewer needs them.
 Return only the reviewed candidate report through an explicit human transfer
 or paste its relevant sections. For a guest-local file, keep it under ignored
 `tmp/host-isolation-audit/`; do not commit raw or full redacted rule dumps into
-the acceptance record. If the report is large, provide it in numbered sections
+the repository. If the report is large, provide it in numbered sections
 without dropping rule order. Do not upload the private directory or index.
 
 ## Review The Effective Boundary
@@ -119,7 +118,7 @@ The reviewer must account for these paths before an isolation conclusion:
    after a human-owned reboot. Host firewall files remain host-owned and outside
    guest-writable source. A policy defect requires a concrete, separately
    reviewed human-applied repair; this collector never repairs policy.
-6. Retain the dedicated SSH/editor/browser boundaries from the migration:
+6. Retain the dedicated SSH/editor/browser boundaries for native operation:
    strict host keys, no agent/X11/credential forwarding, no automatic editor
    port forwarding, reviewed extensions, loopback HTTPS forwarding and the
    dedicated browser profile. Those intentional host clients process
@@ -128,7 +127,7 @@ The reviewer must account for these paths before an isolation conclusion:
 
 ## Confirmed Finding Baseline
 
-The privately reviewed post-migration report establishes two policy defects:
+The privately reviewed baseline report establishes two policy defects:
 IPv4 and IPv6 mDNS/SSDP accepts occur before the intended UFW user-input bridge
 deny, and libvirt accepts bridge-originated TCP/UDP ports 53 and 67 before the
 narrower UFW rules. Those paths are reachable in policy. The report does **not**
@@ -150,12 +149,13 @@ An agent must not apply, reload or test host policy. Do not install a repository
 file as host policy: create the final source in a root-owned host directory,
 review every concrete value there and keep it inaccessible to the guest.
 
-Before host repair, complete the workspace-owned
-[Phase 5 native source refresh](../../../workspace/docs/native-user-tools.md#phase-5-native-source-refresh)
-and the orchestration
-[Phase 3/4 trust handoff](../development/local-environment.md#phase-34-human-trust-handoff)
+Before host repair, refresh the workspace-owned native user environment as
+documented in the
+[native user-tools guide](../../../workspace/docs/native-user-tools.md), then
+complete the orchestration
+[development VM trust handoff](../development/local-environment.md#development-vm-human-trust-handoff)
 from fresh guest shells. Both are human installation steps after workers stop;
-offline phase results are not live installation evidence. Stop if the repeated
+offline test results are not live installation evidence. Stop if the repeated
 native user install, sole-managed-CA check or verified curl/Python/Node/browser
 matrix fails.
 
@@ -504,11 +504,13 @@ Docker chains or repopulate the retired data root.
 Build and privately review four exact lists: installed Docker engine/CLI and
 exclusive runtime packages; Docker-owned source/key/config files; the canonical
 Docker data root plus exclusively Docker-owned containerd data; and the three
-transitional policy locations from manual-plan D.3. Simulate package purge and
-review autoremove before applying it. Quarantine each validated data root by an
-exact canonical path in a root-only host location before eventual deletion; do
-not use a wildcard, unfiltered prune or recursive command against a variable
-that has not been printed and confirmed.
+retired host-Docker policy locations: `/usr/local/sbin/agent-vm-docker-isolation`,
+`/etc/systemd/system/docker.service.d/agent-vm-isolation.conf`, and the
+`agent-vm-docker-isolation` hook in `/etc/ufw/after.init`. Simulate package
+purge and review autoremove before applying it. Quarantine each validated data
+root by an exact canonical path in a root-only host location before eventual
+deletion; do not use a wildcard, unfiltered prune or recursive command against
+a variable that has not been printed and confirmed.
 
 Put only exact discovered package names in the array, print it, and review the
 simulation. An empty array means no package action; any proposed unrelated
@@ -620,10 +622,10 @@ are intentionally not represented by a generic deletion command here.
 
 ## Prove Protocol Behavior After Rule Review
 
-Use the original manual plan's
-[paired native listener tests](../plans/agent-vm-native-manual-plan.md#a3-revalidate-host-isolation)
-as the TCP baseline, but bind each server to the selected VM-facing host address
-rather than a wildcard. Do not recreate retired host Docker.
+For the TCP baseline, bind each server to the selected VM-facing host address
+rather than a wildcard. Require a successful local host request before the
+guest attempt, and record the applicable early-policy counter or scoped capture.
+Do not recreate retired host Docker.
 
 For each family, use an unused high port and an empty host directory. Start the
 listener on the selected VM-facing address, prove it locally, then issue the
@@ -753,8 +755,7 @@ invalidates affected rows and requires review before retesting.
 
 Record collection time, reviewed source revisions, rule-order conclusions,
 protocol/family coverage, confinement, persistence, positives/denials and any
-limitations in the follow-up section of the
-[acceptance record](../plans/agent-host-isolation-acceptance.md#post-migration-security-review).
-Keep operator-reported results distinct from independently reviewed artifacts.
-The native migration remains completed even while this additional review is
-open; the additional review becomes complete only when its own evidence passes.
+limitations in a dated private audit result. Keep operator-reported results
+distinct from independently reviewed artifacts. The native VM remains the
+selected runtime while an audit is open; mark the audit complete only when its
+own evidence passes.

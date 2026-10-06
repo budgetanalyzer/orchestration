@@ -744,14 +744,14 @@ Browser → Envoy → ext_authz (session validation) → NGINX → Backend Servi
 2. Per-service credential hardening (PostgreSQL, RabbitMQ, Redis ACLs)
 3. Production secret-source integration
 4. Runtime pod hardening and admission policy expansion
-5. Remaining security-hardening plan phases and production validation
+5. Target-environment security validation
 
 **Impact:**
 - The auth topology is no longer the blocker.
 - The blocker is the remaining hardening work needed to close in-cluster bypass paths and remove shared credentials.
 - A GCP deployment can still make sense for infrastructure validation, but it should not be treated as the finished production security posture.
 
-**Recommendation:** Use the current stack for infrastructure learning and controlled environments, and gate any public production deployment on the remaining hardening phases.
+**Recommendation:** Use the current stack for infrastructure learning and controlled environments, and gate any public production deployment on the acceptance criteria below.
 
 **Acceptance Criteria for Production:**
 - [ ] Session Gateway and ext_authz tested in the target environment

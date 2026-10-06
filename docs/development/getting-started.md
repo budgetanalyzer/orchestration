@@ -3,9 +3,9 @@
 **Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
 
 The sibling `workspace` repository owns developer tooling. The accepted daily
-workflow uses native tools in the VM through Remote SSH. The following
-personal-host devcontainer onboarding is retained as historical guidance
-pending source cleanup; do not use it for the accepted VM workflow:
+agent workflow uses native tools in the VM through Remote SSH. The following
+personal-host devcontainer onboarding is a separate local-host workflow; do
+not use it as the development-VM agent environment:
 
 ```bash
 git clone https://github.com/budgetanalyzer/workspace.git
@@ -16,16 +16,10 @@ devcontainer starts, open the `orchestration` repository in its own VS Code
 window so the repo-local `AGENTS.md` instructions load for that session.
 
 The isolated development-VM target uses native agents and VS Code Remote SSH.
-All eight repository phases and human Remote SSH, live-update, reboot and
-Mint-retirement checkpoints are operator-confirmed complete; see the
-[acceptance record](../plans/agent-host-isolation-acceptance.md#native-human-acceptance).
-The retained personal-host container instructions above are historical for
-this accepted VM workflow; use the native daily path below. The
-[follow-up plan](../plans/agent-vm-security-review-remediation-plan.md) owns
-their source cleanup and additional security review. Working clones, the
-normal guest home, Docker, Kind and runtime state stay guest-local. The old
-guest agent container is retired and must not be reconstructed. Read the
-boundary contract in
+The personal-host container instructions above do not apply to that target;
+use the native daily path below. Working clones, the normal guest home, Docker,
+Kind and runtime state stay guest-local. The old guest agent container is
+retired and must not be reconstructed. Read the boundary contract in
 [`../architecture/autonomous-ai-execution.md`](../architecture/autonomous-ai-execution.md)
 before changing either configuration.
 
@@ -83,12 +77,10 @@ install tools ad hoc from orchestration or create a second agent-specific home.
 ### Development VM First Bootstrap
 
 Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
-after guest provisioning, repository setup and approved TLS transfer. The
-[native migration](../plans/agent-vm-native-manual-plan.md) invokes this path
-once during its explicitly destructive B.3 cutover, after native trust/provider
-proof and all old workers have ended. Outside first bootstrap or that reviewed
-cutover, do not run it simply to restart agents. Run bootstrap from a
-human-operated guest OS shell:
+after guest provisioning, repository setup, native trust/provider verification
+and approved TLS transfer. End affected workers before a clean rebuild. Do not
+run this path simply to restart agents. Run bootstrap from a human-operated
+guest OS shell:
 
 ```bash
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh
@@ -126,10 +118,9 @@ guest trust. Missing, expired, or replaced files return to the host renewal,
 three-file transfer, workspace trust and orchestration Secret-reconciliation
 workflow; they are not repaired by `tilt up`.
 
-Follow the [native manual plan](../plans/agent-vm-native-manual-plan.md) for the
-remaining human checkpoints. Do not import Mint Docker state or run the
-standard host certificate generator in the guest. Imported TLS ownership and
-renewal remain in the local-environment guide.
+Do not import personal-host Docker state or run the standard host certificate
+generator in the guest. Imported TLS ownership and renewal remain in the
+local-environment guide.
 
 ### Daily Native Startup
 
@@ -166,8 +157,9 @@ Exit the agent independently when its work is complete. Tilt, guest Docker,
 Kind and the application remain running, and the next fresh login shell reuses
 the normal user's provider state, Maven Local and Gradle caches. Run
 `check-budget-analyzer-local-ca-trust` when diagnosing native HTTPS trust; it is
-read-only. The migration checklist owns the one-time proof of fresh-shell PATH
-resolution, agent exit/reentry, live saves and reboot persistence.
+read-only. After provisioning or a reboot, verify fresh-shell PATH resolution,
+agent exit/reentry, live saves and runtime persistence before relying on the
+environment.
 
 ## Validation
 

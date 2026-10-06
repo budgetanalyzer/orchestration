@@ -11,19 +11,9 @@ The supported development-VM target is **native agents**, with Docker reserved
 for application builds, Kind, infrastructure and Testcontainers. Workspace-
 owned system/user installers and the normal guest home now provide the agent
 toolchain, provider state, Maven Local, Gradle caches and browser data. All
-eight repository execution phases passed on 2026-10-05; the operator also
-confirmed completion of all human checkpoints, including Remote SSH, live
-updates, reboot proof and Mint Docker retirement. See the
-[acceptance record](../plans/agent-host-isolation-acceptance.md#native-human-acceptance)
-for attribution and the separate open post-migration security review.
-
-Read the [native execution plan](../plans/agent-vm-native-execution-plan.md)
-and [human checkpoints](../plans/agent-vm-native-manual-plan.md) before
-consulting migration history. Both the old guest agent container and the
-personal-host Mint runtime are retired; do not resume native work there or
-reconstruct them. The
-[remediation plan](../plans/agent-vm-security-review-remediation-plan.md) owns
-remaining source cleanup and review fixes. Before collecting or reviewing host
+supported agent work runs natively in the development VM. Both the old guest
+agent container and the personal-host agent runtime are retired; do not resume
+agent work there or reconstruct them. Before collecting or reviewing host
 firewall/confinement evidence, read the
 [host audit runbook](../runbooks/host-isolation-audit.md); live host collection
 is human-only and does not give a guest agent host administration access.
@@ -41,9 +31,9 @@ is human-only and does not give a guest agent host administration access.
   the rootful guest Docker daemon confers guest-root-equivalent authority.
   Native command sandboxing can constrain ordinary commands, but unrestricted
   Docker access remains a route to control guest assets.
-- **Retired guest agent container**: the preparation bridge used only through
-  native Phases 1–2. Its tracked Compose/lifecycle sources and Docker state are
-  gone. Historical evidence does not authorize recreating it.
+- **Retired guest agent container**: the former preparation environment. Its
+  tracked Compose/lifecycle sources and Docker state are gone. Historical
+  evidence does not authorize recreating it.
 
 A marker, compose-project name, environment variable or command-line flag can
 prevent an accidental launch in the wrong place. It does not prove isolation.
@@ -79,9 +69,10 @@ credential proxy, automatic publication or a forwarded SSH/GPG agent.
 
 VS Code Remote SSH keeps the editor UI on the personal host while remote
 extensions, terminals, language servers, tasks and files execute in the guest.
-Use the dedicated host profile from the manual plan. Keep SSH-agent, X11,
-credential and automatic port forwarding disabled, and do not install remote
-extensions that expose a personal GitHub session.
+Use the dedicated host profile documented in the sibling workspace's
+[host-isolation guide](../../../workspace/docs/host-isolation.md). Keep
+SSH-agent, X11, credential and automatic port forwarding disabled, and do not
+install remote extensions that expose a personal GitHub session.
 
 ## Authority And Remaining Risk
 
@@ -177,11 +168,9 @@ runtime preflight. Exiting an agent or handler must not stop Tilt, Docker, Kind
 or the application; a later fresh shell reuses the normal user's provider
 state, Maven Local and Gradle caches. No agent container, separate home or
 Compose lifecycle belongs in this daily path. Exact daily commands live in
-[Getting Started](../development/getting-started.md#daily-native-startup), and
-the completed human process/reboot procedure lives in the
-[native manual plan](../plans/agent-vm-native-manual-plan.md#checkpoint-c-accept-native-daily-operation).
+[Getting Started](../development/getting-started.md#daily-native-startup).
 
-The standard `./setup.sh` path remains the supported transitional/local-host
+The standard `./setup.sh` path remains the supported local-host
 bootstrap. Do not silently select guest behavior from hostname, a marker file
 or environment. The `--guest-local` option is an explicit accidental-mislaunch
 guard, and the local-Docker checks provide the endpoint evidence.
@@ -227,19 +216,16 @@ rerun the workspace trust installer, and reconcile the Secret with
 `scripts/bootstrap/install-imported-ingress-tls.sh`. Renewal does not run
 `setup.sh` and does not require or recreate a host Kind cluster.
 
-## Historical Runners And Follow-Up Review
+## Retired Runners
 
-The native manual plan owns source transfer, human firewall evidence, browser
-and reboot acceptance, and final Mint Docker retirement. Native agents, Tilt
-and service builds now share one guest user/home, so there is no duplicate
-agent-container Maven Local or provider volume to populate. Do not add GitHub
-package credentials, mount a personal-host cache, or recreate the removed
-guest Compose path to bridge a failure.
+Native agents, Tilt and service builds share one guest user/home, so there is
+no duplicate agent-container Maven Local or provider volume to populate. Do
+not add GitHub package credentials, mount a personal-host cache, or recreate
+the removed guest Compose path to bridge a failure.
 
-The sibling workspace's Mint devcontainer files remain as source pending
-reviewed cleanup; the operator confirmed runtime retirement at Checkpoint D.
-They do not define the development-VM runtime and must not be launched or
-copied into the guest. The retained orchestration
+Any sibling-workspace devcontainer material supports a separate local-host
+workflow. It does not define the development-VM runtime and must not be copied
+into the guest as an agent environment. The retained orchestration
 `tests/setup-flow` and `tests/security-preflight` DinD suites are stale,
 non-gating reference assets and are not native completion proof.
 
@@ -260,10 +246,9 @@ service-owned defect with orchestration.
 
 ## Operator References
 
-- Guest VM preparation, firewall rules and checkpoints:
-  [native manual plan](../plans/agent-vm-native-manual-plan.md)
-- Redacted migration evidence:
-  [`../plans/agent-host-isolation-acceptance.md`](../plans/agent-host-isolation-acceptance.md)
+- Guest VM provisioning, native tools and dedicated Remote SSH profile:
+  [`../../../workspace/docs/host-isolation.md`](../../../workspace/docs/host-isolation.md)
+  and [`../../../workspace/docs/native-user-tools.md`](../../../workspace/docs/native-user-tools.md)
 - Supported setup and guest bootstrap commands:
   [`../development/getting-started.md`](../development/getting-started.md)
 - Local mechanics, TLS ownership and live update:

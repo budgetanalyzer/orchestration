@@ -220,9 +220,10 @@ This section is deliberately honest about what we're protecting and what we're n
 
 ---
 
-## 7. Action items for the deployment plan
+## 7. Deployment implications
 
-These feed into the implementation plan doc (`docs/plans/single-instance-demo-hosting-plan.md`, to be created):
+Use the active deployment documentation and manifests when applying these
+research findings:
 
 1. **Create `~/.config/budget-analyzer/` directory** on the project owner's machine. Populate `instance.env` after OCI instance is provisioned.
 2. **Create OCI Vault** in the same compartment as the compute instance. Use the default Virtual Vault (free tier).

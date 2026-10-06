@@ -1,6 +1,9 @@
 # Getting Started
 
-**Tested with:** VS Code Remote SSH, Claude Code, Codex, and Gemini.
+The application workflow is editor-independent. It is tested from native guest
+shells, including VS Code Remote SSH terminals, with Claude Code, Codex, and
+Gemini. Other clients must preserve the workspace-owned host-isolation and
+credential boundary.
 
 The native development VM is the only supported agent environment. The sibling
 `workspace` repository owns VM provisioning, repositories, the normal guest

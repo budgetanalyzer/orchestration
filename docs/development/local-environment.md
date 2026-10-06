@@ -809,10 +809,16 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 # Restart browser to clear certificate cache
 ```
 
-## IDE Setup
+## Optional Editor Setup
 
-> **Note:** The supported development-VM editor path is VS Code Remote SSH so
-> terminals, extensions, language servers and file writes execute in the guest.
+Orchestration does not require a specific editor. Agents and development
+commands must run as the normal user inside the development VM, and every
+client must preserve the workspace-owned credential, forwarding, and
+host-isolation controls.
+
+The VS Code Remote SSH guidance below is retained as a tested option. In that
+configuration, terminals, extensions, language servers, and file writes execute
+in the guest.
 
 ### VS Code
 

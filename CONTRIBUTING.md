@@ -27,7 +27,8 @@ Budget Analyzer is a reference architecture for enterprise architects and senior
    [development VM workflow](../workspace/docs/host-isolation.md) to provision
    the guest and its side-by-side repositories.
 2. Complete the workspace-owned native tool and trust preparation.
-3. Open the guest repositories through the reviewed VS Code Remote SSH profile.
+3. Open the guest repositories from a shell or editor connected to the
+   development VM. VS Code users should use the reviewed Remote SSH profile.
 4. Follow orchestration's [Getting Started guide](docs/development/getting-started.md)
    for first application bootstrap or daily `tilt up` startup.
 
@@ -35,7 +36,10 @@ The native development VM is the only supported agent environment. The
 orchestration first-bootstrap command recreates Kind with the required Calico
 configuration; do not delete or replace the cluster outside that workflow.
 
-> **Note**: VS Code is required. We use open source tools only—Cursor is closed source.
+> **Note**: Orchestration does not require a specific editor. VS Code Remote
+> SSH is a documented and tested option. Other editor or terminal workflows
+> must keep agent and development processes inside the guest and preserve the
+> workspace-owned credential, forwarding, and host-isolation controls.
 
 ## How to Contribute
 

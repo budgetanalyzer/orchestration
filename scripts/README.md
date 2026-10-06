@@ -25,6 +25,13 @@ scripts/
 
 ## Canonical Entry Points
 
+- `ops/verify-agent-host-isolation.sh` - Personal-host binary go/no-go check
+  for the reviewed `budget-analyzer-agent` deployment. Run it as root on the
+  Linux Mint host; it prints only `SUCCESS` or `ERROR`. It requires the exact
+  reviewed VM/network identity, live and persistent confinement, early nftables
+  policy and systemd ordering, plus retired host Docker state. It is a strict
+  current-state safety check, not a reusable topology discovery tool or an
+  evidence collector.
 - `ops/collect-host-isolation-evidence.py` - Human-run read-only Mint host
   collector for complete firewall order, UFW persistence, listeners and VM
   confinement evidence. Run with `python3` and `--confirm-personal-host` after

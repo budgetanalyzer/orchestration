@@ -7,6 +7,28 @@ is operator-attested. The subsequent review of firewall rule ordering and
 protocol coverage is a separate audit; neither a successful collector exit nor
 passed guest application tests constitute that audit's acceptance.
 
+## Current Go/No-Go Check
+
+For the already reviewed, unchanged host topology, the practical hard limit is
+the binary verifier:
+
+```bash
+sudo scripts/ops/verify-agent-host-isolation.sh
+```
+
+`SUCCESS` means the exact reviewed VM identity and dedicated network are live,
+the VM has enforcing dynamic AppArmor confinement and no host passthrough, the
+root-owned six-rule nftables boundary is active and boot-ordered ahead of UFW
+and libvirt, and the retired host Docker path remains absent. `ERROR` means do
+not run agents until the drift is understood. The script intentionally embeds
+the reviewed bridge, MAC and IPv4 values; a topology change must be reviewed
+and reflected in the script rather than discovered and accepted automatically.
+
+This is a present-state operational gate. It does not create audit evidence,
+exercise every protocol, prove isolation against hypervisor/kernel defects, or
+replace ordinary host security updates. Those are not required to decide
+whether this unchanged VM is safe enough to use now.
+
 ## Collect On The Personal Host
 
 Use a normal **personal-host terminal** and a reviewed personal-host checkout.

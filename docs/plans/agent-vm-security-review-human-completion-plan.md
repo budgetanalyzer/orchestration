@@ -275,7 +275,7 @@ host_orchestration_root=$(git rev-parse --show-toplevel)
 cd "$host_orchestration_root"
 git status --short
 sudo -v
-read -r -p 'Reviewed development VM domain: ' vm_domain
+vm_domain=budget-analyzer-agent
 vm_network=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
   | awk '$2 == "network" {print $3}')
 vm_tap=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
@@ -285,9 +285,11 @@ vm_mac=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
 test "$(printf '%s\n' "$vm_network" | sed '/^$/d' | wc -l)" -eq 1
 test "$(printf '%s\n' "$vm_tap" | sed '/^$/d' | wc -l)" -eq 1
 test "$(printf '%s\n' "$vm_mac" | sed '/^$/d' | wc -l)" -eq 1
+test "$vm_network" = agent-nat
+test "$vm_mac" = 52:54:00:d9:c2:70
 vm_bridge=$(sudo virsh --connect qemu:///system net-info "$vm_network" \
   | awk '$1 == "Bridge:" {print $2}')
-test -n "$vm_bridge"
+test "$vm_bridge" = virbr1
 printf 'domain=%s\nnetwork=%s\nbridge=%s\ntap=%s\nmac=%s\n' \
   "$vm_domain" "$vm_network" "$vm_bridge" "$vm_tap" "$vm_mac"
 ip -details link show dev "$vm_bridge"
@@ -337,8 +339,21 @@ systemctl list-dependencies --reverse --all virtqemud.service 2>/dev/null || tru
 systemctl list-dependencies --reverse --all virtnetworkd.service 2>/dev/null || true
 ```
 
-Identify every libvirt service and socket that can start the selected network
-or domain. Record those exact unit names privately for Step 7.
+The reviewed monolithic libvirt unit set is:
+
+```text
+libvirt-guests.service
+libvirtd.service
+libvirtd-admin.socket
+libvirtd-ro.socket
+libvirtd-tcp.socket
+libvirtd-tls.socket
+libvirtd.socket
+```
+
+The TCP/TLS sockets are disabled but remain in the dependency set so that a
+later enable cannot bypass the host-input service. Stop and revise the plan if
+the discovered unit files differ from this list.
 
 ## Step 7: Author And Validate The Early Host Boundary
 
@@ -369,48 +384,38 @@ sudo install -d -o root -g root -m 0755 /etc/nftables.d
 sudoedit /etc/nftables.d/budget-agent-host-input.nft
 ```
 
-Enter the following policy in the editor. Replace every uppercase token with
-the exact privately reviewed value from Step 6. Remove an IPv6 or DHCPv6 block
-only when the Step 6 evidence proves it inapplicable. Replace
-`REVIEWED_NUMERIC_TYPES` with the individually justified numeric ICMPv6 types.
+Enter the following policy exactly. It contains the reviewed domain network
+values: bridge `virbr1`, VM MAC `52:54:00:d9:c2:70`, guest
+`192.168.231.10`, gateway `192.168.231.1` and limited DHCP broadcast
+`255.255.255.255`. The selected guest has only link-local IPv6 on `enp1s0`,
+the libvirt network has no IPv6 gateway, and the guest has no IPv6 default
+route, so this policy intentionally adds no IPv6 allow rule.
 
 ```nft
 table inet budget_agent_host_input {
   chain early_vm_host_input {
     type filter hook input priority -190; policy accept;
 
-    iifname "VM_BRIDGE" ether saddr != VM_MAC counter drop
-    iifname "VM_BRIDGE" ct state established,related counter accept
+    iifname "virbr1" ether saddr != 52:54:00:d9:c2:70 counter drop
+    iifname "virbr1" ct state established,related counter accept
 
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip saddr GUEST_V4 \
-      ip daddr GATEWAY_V4 meta l4proto { tcp, udp } th dport 53 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC \
-      ip saddr { 0.0.0.0, GUEST_V4 } \
-      ip daddr { GATEWAY_V4, DHCP_BROADCAST_V4 } \
+    iifname "virbr1" ether saddr 52:54:00:d9:c2:70 \
+      ip saddr 192.168.231.10 ip daddr 192.168.231.1 \
+      meta l4proto { tcp, udp } th dport 53 counter accept
+    iifname "virbr1" ether saddr 52:54:00:d9:c2:70 \
+      ip saddr { 0.0.0.0, 192.168.231.10 } \
+      ip daddr { 192.168.231.1, 255.255.255.255 } \
       udp sport 68 udp dport 67 counter accept
 
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      ip6 daddr GATEWAY_V6 meta l4proto { tcp, udp } th dport 53 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      ip6 daddr DHCPV6_DESTINATION udp sport 546 udp dport 547 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      icmpv6 type { REVIEWED_NUMERIC_TYPES } counter accept
-
-    iifname "VM_BRIDGE" udp dport { 1900, 5353 } counter drop
-    iifname "VM_BRIDGE" counter drop
+    iifname "virbr1" udp dport { 1900, 5353 } counter drop
+    iifname "virbr1" counter drop
   }
 }
 ```
 
-Reject unresolved template tokens and set ownership/mode:
+Set ownership and mode:
 
 ```bash
-if sudo rg -n \
-  'VM_BRIDGE|VM_MAC|GUEST_|GATEWAY_|DHCP_|REVIEWED_' \
-  /etc/nftables.d/budget-agent-host-input.nft; then
-  printf 'ERROR: unresolved policy token\n' >&2
-  exit 1
-fi
 sudo chown root:root /etc/nftables.d/budget-agent-host-input.nft
 sudo chmod 0600 /etc/nftables.d/budget-agent-host-input.nft
 ```
@@ -505,19 +510,26 @@ sudo chown root:root /etc/systemd/system/budget-agent-host-input.service
 sudo chmod 0644 /etc/systemd/system/budget-agent-host-input.service
 ```
 
-For each reviewed libvirt service and socket discovered in Step 6, run this
-exact command with its real unit name:
+For each concrete libvirt service and socket, open its drop-in editor:
 
 ```bash
-read -r -p 'Reviewed libvirt service or socket unit: ' reviewed_libvirt_unit
-test -n "$reviewed_libvirt_unit"
-systemctl list-unit-files "$reviewed_libvirt_unit" --no-legend \
-  | rg -F "$reviewed_libvirt_unit"
-sudo systemctl edit "$reviewed_libvirt_unit"
+reviewed_libvirt_units=(
+  libvirt-guests.service
+  libvirtd.service
+  libvirtd-admin.socket
+  libvirtd-ro.socket
+  libvirtd-tcp.socket
+  libvirtd-tls.socket
+  libvirtd.socket
+)
+for reviewed_libvirt_unit in "${reviewed_libvirt_units[@]}"; do
+  systemctl list-unit-files "$reviewed_libvirt_unit" --no-legend \
+    | rg -F "$reviewed_libvirt_unit" || exit 1
+  sudo systemctl edit "$reviewed_libvirt_unit"
+done
 ```
 
-Enter exactly this drop-in body, save, and repeat the command for the next
-reviewed service or socket:
+Enter exactly this drop-in body and save it in each editor:
 
 ```systemd
 [Unit]
@@ -585,11 +597,21 @@ systemctl show budget-agent-host-input.service \
   -p Before -p ActiveState -p UnitFileState
 ```
 
-For each reviewed libvirt service/socket, run:
+Verify every concrete libvirt service and socket:
 
 ```bash
-read -r -p 'Reviewed libvirt service or socket unit: ' reviewed_libvirt_unit
-systemctl show "$reviewed_libvirt_unit" -p Requires -p After
+reviewed_libvirt_units=(
+  libvirt-guests.service
+  libvirtd.service
+  libvirtd-admin.socket
+  libvirtd-ro.socket
+  libvirtd-tcp.socket
+  libvirtd-tls.socket
+  libvirtd.socket
+)
+for reviewed_libvirt_unit in "${reviewed_libvirt_units[@]}"; do
+  systemctl show "$reviewed_libvirt_unit" -p Requires -p After
+done
 ```
 
 Require the custom service in both `Requires` and `After`. Require exactly one

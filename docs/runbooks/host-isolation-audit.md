@@ -153,12 +153,14 @@ backend. Keep LAN/VPN peer and Internet policy outside this repair.
 
 ### Discover Concrete Inputs
 
-Use private shell variables and record only reviewed aliases in returned
-evidence. Select one domain after comparing `virsh list --all` with its live and
-persistent XML; do not infer names from this runbook.
+The reviewed deployment uses domain `budget-analyzer-agent`, network
+`agent-nat`, bridge `virbr1`, VM MAC `52:54:00:d9:c2:70`, guest IPv4
+`192.168.231.10/24`, gateway `192.168.231.1` and limited DHCP broadcast
+`255.255.255.255`. Discover the current tap because its name is ephemeral, and
+fail if the stable values have drifted from the reviewed deployment.
 
 ```bash
-read -r -p 'Reviewed development VM domain: ' vm_domain
+vm_domain=budget-analyzer-agent
 vm_network=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" |
   awk '$2 == "network" {print $3}')
 vm_tap=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" |
@@ -168,9 +170,11 @@ vm_mac=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" |
 test "$(printf '%s\n' "$vm_network" | sed '/^$/d' | wc -l)" -eq 1
 test "$(printf '%s\n' "$vm_tap" | sed '/^$/d' | wc -l)" -eq 1
 test "$(printf '%s\n' "$vm_mac" | sed '/^$/d' | wc -l)" -eq 1
+test "$vm_network" = agent-nat
+test "$vm_mac" = 52:54:00:d9:c2:70
 vm_bridge=$(sudo virsh --connect qemu:///system net-info "$vm_network" |
   awk '$1 == "Bridge:" {print $2}')
-test -n "$vm_bridge"
+test "$vm_bridge" = virbr1
 ip -details link show dev "$vm_bridge"
 ip -details link show dev "$vm_tap"
 ip -4 -o address show dev "$vm_bridge"
@@ -229,33 +233,31 @@ contain, in this order:
 6. Count and drop mDNS UDP 5353 and SSDP UDP 1900 explicitly in each applicable
    family, then count and drop every other VM-originated host-input packet.
 
-Use the non-identifying table and chain names below. Replace every uppercase
-network token with one reviewed concrete value and omit only family-specific
-blocks proven inapplicable. This is a contract, not an installable policy file.
+Use the concrete policy below. The selected guest has only link-local IPv6 on
+`enp1s0`, the libvirt network has no IPv6 gateway, and the guest has no IPv6
+default route. The policy therefore has no IPv6 DNS, DHCPv6 or ICMPv6 allow;
+new guest IPv6 host-input reaches the explicit multicast drop or final drop.
+If that network configuration changes, stop and revise the policy before
+applying it.
 
 ```nft
 table inet budget_agent_host_input {
   chain early_vm_host_input {
     type filter hook input priority -190; policy accept;
 
-    iifname "VM_BRIDGE" ether saddr != VM_MAC counter drop
-    iifname "VM_BRIDGE" ct state established,related counter accept
+    iifname "virbr1" ether saddr != 52:54:00:d9:c2:70 counter drop
+    iifname "virbr1" ct state established,related counter accept
 
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip saddr GUEST_V4 \
-      ip daddr GATEWAY_V4 meta l4proto { tcp, udp } th dport 53 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC \
-      ip saddr { 0.0.0.0, GUEST_V4 } ip daddr { GATEWAY_V4, DHCP_BROADCAST_V4 } \
+    iifname "virbr1" ether saddr 52:54:00:d9:c2:70 \
+      ip saddr 192.168.231.10 ip daddr 192.168.231.1 \
+      meta l4proto { tcp, udp } th dport 53 counter accept
+    iifname "virbr1" ether saddr 52:54:00:d9:c2:70 \
+      ip saddr { 0.0.0.0, 192.168.231.10 } \
+      ip daddr { 192.168.231.1, 255.255.255.255 } \
       udp sport 68 udp dport 67 counter accept
 
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      ip6 daddr GATEWAY_V6 meta l4proto { tcp, udp } th dport 53 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      ip6 daddr DHCPV6_DESTINATION udp sport 546 udp dport 547 counter accept
-    iifname "VM_BRIDGE" ether saddr VM_MAC ip6 saddr GUEST_V6 \
-      icmpv6 type { REVIEWED_NUMERIC_TYPES } counter accept
-
-    iifname "VM_BRIDGE" udp dport { 1900, 5353 } counter drop
-    iifname "VM_BRIDGE" counter drop
+    iifname "virbr1" udp dport { 1900, 5353 } counter drop
+    iifname "virbr1" counter drop
   }
 }
 ```
@@ -334,6 +336,21 @@ systemctl list-dependencies --reverse --all virtqemud.service 2>/dev/null || tru
 systemctl list-dependencies --reverse --all virtnetworkd.service 2>/dev/null || true
 ```
 
+The reviewed host uses the monolithic libvirt unit set below. Apply the
+dependency drop-in to all seven units; the disabled TCP/TLS sockets remain in
+the set so enabling an installed activation socket later cannot bypass the
+boundary service. Stop and revise this list if discovery differs.
+
+```text
+libvirt-guests.service
+libvirtd.service
+libvirtd-admin.socket
+libvirtd-ro.socket
+libvirtd-tcp.socket
+libvirtd-tls.socket
+libvirtd.socket
+```
+
 Use this exact unit body at
 `/etc/systemd/system/budget-agent-host-input.service`:
 
@@ -353,8 +370,8 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ```
 
-For every discovered libvirt service **and socket** that can start the selected
-network or domain, add a root-owned systemd drop-in containing exactly:
+For every listed libvirt service and socket, add a root-owned systemd drop-in
+containing exactly:
 
 ```systemd
 [Unit]

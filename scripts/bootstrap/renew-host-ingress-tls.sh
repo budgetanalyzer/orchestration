@@ -2,7 +2,8 @@
 
 # Human-operated personal-host renewal. Generates only a new ingress leaf/key
 # from the existing host mkcert CA and republishes that CA's public root. It
-# never contacts Kubernetes and must never run in an agent container or guest.
+# never contacts Kubernetes and must never run in the development VM or by an
+# agent process.
 
 set -euo pipefail
 

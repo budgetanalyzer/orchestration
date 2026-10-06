@@ -16,8 +16,8 @@ echo
 
 assert_host_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        echo "[ERROR] This script must be run from your host machine, not from the devcontainer or Tilt." >&2
-        echo "        Open a host terminal in $ORCHESTRATION_DIR and run:" >&2
+        echo "[ERROR] This script must be run by the human from the personal-host OS, not from a container or Tilt." >&2
+        echo "        Open a personal-host terminal in $ORCHESTRATION_DIR and run:" >&2
         echo "        ./scripts/bootstrap/setup-k8s-tls.sh" >&2
         exit 1
     fi

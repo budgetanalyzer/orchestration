@@ -23,12 +23,17 @@ Budget Analyzer is a reference architecture for enterprise architects and senior
 
 ## Getting Started
 
-1. Clone all repositories side-by-side in a common parent directory
-2. Open in VS Code—the devcontainer auto-configures your environment
-3. Follow the setup in the [orchestration README](README.md)
-4. Run `./setup.sh` on the host, then `tilt up`
+1. Use the sibling workspace's
+   [development VM workflow](../workspace/docs/host-isolation.md) to provision
+   the guest and its side-by-side repositories.
+2. Complete the workspace-owned native tool and trust preparation.
+3. Open the guest repositories through the reviewed VS Code Remote SSH profile.
+4. Follow orchestration's [Getting Started guide](docs/development/getting-started.md)
+   for first application bootstrap or daily `tilt up` startup.
 
-If you already have an older local Kind cluster, delete it first. The platform security prerequisites require a rebuilt cluster with `disableDefaultCNI` plus Calico.
+The native development VM is the only supported agent environment. The
+orchestration first-bootstrap command recreates Kind with the required Calico
+configuration; do not delete or replace the cluster outside that workflow.
 
 > **Note**: VS Code is required. We use open source tools only—Cursor is closed source.
 

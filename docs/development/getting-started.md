@@ -1,78 +1,31 @@
 # Getting Started
 
-**Tested with:** VS Code, Claude Code (extension or terminal), Codex, and Gemini.
+**Tested with:** VS Code Remote SSH, Claude Code, Codex, and Gemini.
 
-The sibling `workspace` repository owns developer tooling. The accepted daily
-agent workflow uses native tools in the VM through Remote SSH. The following
-personal-host devcontainer onboarding is a separate local-host workflow; do
-not use it as the development-VM agent environment:
+The native development VM is the only supported agent environment. The sibling
+`workspace` repository owns VM provisioning, repositories, the normal guest
+user and home, native tools, guest Docker, Remote SSH, trust installation and
+the host-isolation audit. Complete its human-operated
+[development VM setup](../../../workspace/docs/host-isolation.md) and
+[native user/tool preparation](../../../workspace/docs/native-user-tools.md)
+before application bootstrap. Former guest-specific and personal-host agent
+runtimes are retired and must not be reconstructed.
 
-```bash
-git clone https://github.com/budgetanalyzer/workspace.git
-```
-
-Open the workspace in VS Code and choose **Reopen in Container**. After the
-devcontainer starts, open the `orchestration` repository in its own VS Code
-window so the repo-local `AGENTS.md` instructions load for that session.
-
-The isolated development-VM target uses native agents and VS Code Remote SSH.
-The personal-host container instructions above do not apply to that target;
-use the native daily path below. Working clones, the normal guest home, Docker,
-Kind and runtime state stay guest-local. The old guest agent container is
-retired and must not be reconstructed. Read the boundary contract in
-[`../architecture/autonomous-ai-execution.md`](../architecture/autonomous-ai-execution.md)
-before changing either configuration.
+Orchestration owns the application bootstrap, exact local Kind target, Tilt,
+imported ingress-file validation and Kubernetes Secret reconciliation. Read the
+[application authority contract](../architecture/autonomous-ai-execution.md)
+before changing those controls.
 
 Full local Tilt expects the Budget Analyzer repositories to be cloned
-side-by-side. That includes `../ext-authz`, which owns the Go external
-authorization service source that Tilt builds into the local `ext-authz` image.
+side-by-side by the workspace-owned repository workflow. That includes
+`../ext-authz`, which owns the Go external authorization service source that
+Tilt builds into the local `ext-authz` image.
 
-## Supported Local Happy Path
+## Native VM Application Workflow
 
-Run the platform bootstrap from your host terminal, not from inside the
-devcontainer:
-
-```bash
-cd path/to/workspace/orchestration
-./setup.sh
-vim .env
-tilt up
-```
-
-This is the supported local startup path for the repository:
-
-- `./setup.sh` converges repo-managed pinned prerequisites such as `kubectl`,
-  Kind, Tilt, `mkcert`, Calico, and Gateway API CRDs, installs a supported
-  Helm 3 binary when needed, recreates the local `kind` cluster, configures
-  browser and internal TLS, publishes the public local ingress CA for lazy
-  workspace-devcontainer trust installation, sets up local DNS, and prepares
-  `.env`.
-- Edit `.env` before `tilt up`. Auth0 values and `FRED_API_KEY` are required
-  for local startup.
-- `tilt up` is the supported entry point for the full local stack.
-- [`local-environment.md`](local-environment.md) explains how the local
-  environment works once that stack is up, including Tilt live update, mixed
-  local-and-cluster workflows, and troubleshooting.
-- [`scripts/README.md`](../../scripts/README.md) owns the full verifier catalog
-  and targeted capability checks.
-
-Open `https://app.budgetanalyzer.localhost` after the app workloads are green
-in Tilt.
-
-Agents that need verified HTTPS access to that exact origin may run
-`ensure-budget-analyzer-local-ca-trust` inside a rebuilt workspace container.
-If it reports that the host publication is missing, run `./setup.sh` from the
-host; do not generate or rotate certificates in the container. The publication
-contract and diagnostics live in
-[`local-environment.md`](local-environment.md#host-published-local-ingress-ca).
-
-## Development VM Native Workflow
-
-The workspace-owned installer establishes the normal guest user's native tool
-environment before application bootstrap. Follow the exact human installation,
-provider authentication and trust procedure in the
-[native user-tools guide](../../../workspace/docs/native-user-tools.md). Do not
-install tools ad hoc from orchestration or create a second agent-specific home.
+Do not install native tools ad hoc from orchestration or create a second
+agent-specific home. Edit `.env` before `tilt up`; Auth0 values and
+`FRED_API_KEY` are required for local startup.
 
 ### Development VM First Bootstrap
 
@@ -83,12 +36,12 @@ run this path simply to restart agents. Run bootstrap from a human-operated
 guest OS shell:
 
 ```bash
-./scripts/bootstrap/check-agent-vm-prerequisites.sh
 ./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
 . "$HOME/.config/budget-analyzer-native/env.sh"
 ../workspace/scripts/install-agent-vm-local-ca-trust.sh \
   --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
   --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
 ./setup.sh --guest-local
 cd ../budget-analyzer-web
 npm install
@@ -97,18 +50,17 @@ cd ../orchestration
 tilt up
 ```
 
-The guest preflight rejects a remote Docker environment or context and requires
-the guest's default `/var/run/docker.sock`, normal `/var/lib/docker` data root,
-JDK 25, Node.js 20+ and npm 10+. The imported-TLS validation checks the public
-CA, validity period, hostname, chain and leaf/key match without changing trust
-or Kubernetes. The reviewed workspace command is the only guest OS/NSS trust
-writer and fails closed when its native identity, repository or trust
-prerequisites are not satisfied. `./setup.sh --guest-local` repeats the Docker
-check, recreates a fresh guest `kind` cluster, and applies the ingress TLS
-Secret only after the strict loopback `kind-kind` checks pass; it does not
-change guest trust.
+The orchestration guest preflight invokes workspace's complete read-only native
+runtime verifier, including VM/user identity, repository topology, forwarded
+authority, guest Docker, manifest-owned tools and established trust. The
+imported-TLS validation checks the public CA, validity period, hostname, chain
+and leaf/key match without changing trust or Kubernetes. The reviewed workspace
+command is the only guest OS/NSS trust writer. `./setup.sh --guest-local`
+repeats the full workspace verifier before any Kind deletion, recreates a fresh
+guest `kind` cluster, and applies the ingress TLS Secret only after the strict
+loopback `kind-kind` checks pass; it does not change guest trust.
 
-`./setup.sh` in either mode recreates Kind. It is a first-bootstrap or explicit
+`./setup.sh --guest-local` recreates Kind. It is a first-bootstrap or explicit
 clean-rebuild command, never a daily VM-start command. Use the daily native
 startup below for ordinary guest work.
 
@@ -137,15 +89,17 @@ tilt up
 
 Run `./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local` when
 diagnosing tool, repository, cluster or runtime-security drift. It also fails
-closed on the exact guest-local Docker and Kubernetes targets before its
-runtime security proof creates and cleans named disposable probe resources.
+closed through workspace's complete native verifier and orchestration's exact
+Kubernetes target before its runtime security proof creates and cleans named
+disposable probe resources.
 The native runtime preflight is read-only; neither command installs packages,
 changes trust or recreates the cluster. Do not run `setup.sh` during daily
 startup.
 
-Launch agents and AI Session Handler from that same fresh guest shell, never
-through Docker Compose or a separate agent home. Plain provider commands keep
-their upstream defaults; use the reviewed wrapper when a plan calls for it:
+Launch agents and AI Session Handler from that same fresh guest shell. Do not
+recreate a retired runtime or use a separate agent home. Plain provider
+commands keep their upstream defaults; use the reviewed wrapper when a plan
+calls for it:
 
 ```bash
 codex

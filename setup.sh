@@ -97,10 +97,10 @@ version_lt() {
 
 assert_host_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        print_error "Run ./setup.sh from the host terminal, not from the devcontainer."
+        print_error "Run ./setup.sh from a human-operated OS shell, not from a container."
         echo "Standard setup writes browser-facing TLS; guest setup requires the reviewed workspace trust workflow."
         echo "Both modes generate infrastructure TLS and must be run by the human on the selected machine."
-        echo "Open a host terminal in this repository and run:"
+        echo "Open a human-operated OS terminal in this repository and run:"
         echo "  ./setup.sh"
         exit 1
     fi
@@ -272,9 +272,9 @@ print_header "Budget Analyzer - Development Setup (${SETUP_MODE})"
 assert_host_execution
 
 if [[ "$SETUP_MODE" == "guest-local" ]]; then
-    print_step "Checking development VM prerequisites and local Docker target..."
+    print_step "Checking the complete workspace-owned native runtime..."
     "$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh"
-    print_success "Development VM prerequisites and local Docker target verified"
+    print_success "Workspace-owned native runtime verified"
     print_step "Validating imported ingress TLS before recreating Kind..."
     "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
     print_success "Imported ingress TLS files verified"

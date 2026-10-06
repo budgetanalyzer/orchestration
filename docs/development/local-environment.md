@@ -8,41 +8,13 @@ environment works after startup
 
 ### Required Software
 
-**Minimum versions:**
-- Docker 24.0+
-- Kind 0.31.0 (`setup.sh` auto-installs this pinned version if missing or
-  mismatched)
-- kubectl 1.35.4 (`setup.sh` auto-installs this pinned version if missing or
-  mismatched; it stays on the same Kubernetes minor as `kindest/node:v1.35.0`)
-- OpenSSL 3.x+
-- Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
-- Tilt 0.37.3 (`setup.sh` auto-installs this pinned version if Tilt is missing
-  or mismatched)
-- Git 2.40+
-- mkcert 1.4.4 (`setup.sh` auto-installs this pinned binary if missing or
-  mismatched; Linux still needs host `libnss3-tools` for browser trust stores)
-- JDK 25 (required by host-side Gradle local resources before service images are built)
-- Node.js 20+ and npm 10+ (required by the local frontend prod-smoke image build)
-
-Gradle does not need to be installed globally for the normal Tilt path; use the
-checked-in `./gradlew` wrappers.
-
-Repo-managed pinned prerequisites are `kubectl`, Kind, Tilt, Calico and Gateway
-API CRDs; standard host bootstrap also manages `mkcert`. Helm is repo-installed
-when missing or outside the supported Helm 3 range. Host-managed prerequisites
-remain Docker, Git, OpenSSL, JDK, Node.js, npm, sibling repository checkouts
-including `../ext-authz`, and frontend `node_modules`. The guest-local path
-imports host-created ingress files and therefore neither installs nor invokes
-`mkcert`.
-
-In the development VM, the sibling workspace
-[`native/toolchain.json`](../../../workspace/native/toolchain.json) is the
-version and package authority for the complete native agent/developer
-toolchain. Its installer provides Docker/Compose, Maven and the provider tools
-in addition to this orchestration runtime subset. Do not reproduce that
-inventory here or create a separate agent home. The orchestration native
-runtime preflight delegates full user/home/tool/repository validation to the
-workspace verifier.
+Workspace owns the development VM's complete software, user, repository,
+credential, guest Docker and trust contract. Follow its
+[native runtime owner document](../../../workspace/docs/host-isolation.md)
+for installation and version requirements instead of reproducing that
+inventory here. Orchestration's application preflight delegates to workspace
+and adds only the exact local Kind target in daily mode. Repo-managed cluster
+inputs and their pinned versions remain in the setup scripts and manifests.
 
 The sibling `budget-analyzer-web` repo must also have local npm dependencies
 installed because the `budget-analyzer-web-prod-smoke` image build runs on the
@@ -62,19 +34,6 @@ npm install
 # In the development VM, verify the complete native runtime and exact target
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
 ./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
-
-# Or check manually:
-docker --version
-kind --version
-kubectl version --client
-openssl version
-helm version
-tilt version
-git --version
-mkcert --version
-java -version
-node --version
-npm --version
 ```
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
@@ -91,79 +50,53 @@ egress gateway uses
 now flow through Gateway `spec.infrastructure.parametersRef` via
 `kubernetes/istio/ingress-gateway-config.yaml`.
 
-For host-side binary installs, prefer the checked-in verified installer:
-`./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno>`.
-It uses pinned release artifacts with checked-in SHA-256 values instead of
-floating installer endpoints.
-
 ## Workspace Shape
 
 The supported onboarding path lives in
 [getting-started.md](getting-started.md). This document assumes that path is
 already in place and explains the local environment mechanics behind it.
 
-If you clone repositories manually instead of using the sibling `workspace`
-repo, keep them side by side under a common parent directory:
-
-```text
-parent-directory/
-├── orchestration/
-├── service-common/
-├── transaction-service/
-├── currency-service/
-├── session-gateway/
-├── permission-service/
-├── ext-authz/
-└── budget-analyzer-web/
-```
-
-That side-by-side layout is required for the repo's relative-path workflow,
-cross-repo scripts, and documentation links.
+Workspace owns repository creation and transport. Orchestration requires the
+resulting sibling layout for relative-path builds and documentation links; do
+not maintain a separate manual clone procedure here.
 
 ## Supported Startup Path
 
 [getting-started.md](getting-started.md) owns the supported happy-path
 checklist for:
 
-- `./setup.sh`
+- `./setup.sh --guest-local`
 - `.env` review
 - `tilt up`
 - the optional validation flow after startup
 
 This document owns the mechanics behind that workflow instead:
 
-- what `setup.sh` assembles locally
+- what `setup.sh --guest-local` assembles locally
 - how Tilt renders local config and secrets
 - how live update works for Java services, the frontend, and `service-common`
 - how to debug mixed local-and-cluster development workflows
 
 The current local platform baseline still works like this:
 
-1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
+1. `./setup.sh --guest-local` deletes any existing `kind` cluster and recreates it from
    scratch, which is the clean-state contract for PVC-backed local
    infrastructure such as Redis.
-2. It rejects older `kindnet`-based clusters that cannot enforce
-   `NetworkPolicy`.
-3. It installs or version-corrects repo-managed pinned binaries before cluster
-   creation, and ensures a supported Helm `3.20.x` binary is present before
-   Helm-backed setup continues.
-4. It installs or reconciles pinned Calico and waits for CoreDNS readiness.
-5. It applies pinned Gateway API CRDs, configures local DNS plus
-   browser-facing and internal transport TLS, and prepares `.env`.
+2. Before deletion it invokes workspace's complete native runtime verifier and
+   validates the three human-transferred ingress files.
+3. It installs or reconciles pinned Calico and Gateway API inputs, waits for
+   cluster readiness, configures local DNS and infrastructure TLS, reconciles
+   the imported ingress Secret, and prepares `.env`.
 
-`./setup.sh --guest-local` preserves that Kind, Calico, Gateway API,
-infrastructure TLS, persistence and Tilt behavior. Its only browser-TLS
-difference is that it validates the three human-transferred files and
-reconciles the ingress Secret instead of invoking mkcert. Workspace trust must
-already be established by the human-owned workflow below. Both setup modes
-recreate Kind and are inappropriate for daily startup.
+Workspace trust must already be established by the human-owned workflow below.
+Bootstrap recreates Kind and is inappropriate for daily startup.
 
 On every `tilt up`, the `ingress-tls-secret` resource runs the non-generating
-`scripts/bootstrap/install-imported-ingress-tls.sh` path. In both local modes,
-that resource validates the three existing ingress files and reconciles only
+`scripts/bootstrap/install-imported-ingress-tls.sh` path. That resource
+validates the three existing ingress files and reconciles only
 the Kubernetes TLS Secret after the strict local Kind target checks pass. Tilt
 never invokes mkcert, generates browser-facing key material, or changes a trust
-store. Standard host bootstrap and renewal own certificate generation;
+store. Personal-host publication and renewal own certificate generation;
 orchestration owns transfer validation and Secret reconciliation; workspace
 alone owns native guest OS/NSS trust installation and verification.
 
@@ -183,7 +116,7 @@ Run `./scripts/bootstrap/check-tilt-prerequisites.sh` to report local-machine
 and reachable Kind-node values and exercise the disposable runtime-security
 probes. If a Kind node is below baseline in a running Tilt session, trigger the
 `kind-node-inotify-budget` Tilt resource or run
-`./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on the host. A one-off
+`./scripts/bootstrap/reconcile-kind-inotify-budget.sh` in the guest OS. A one-off
 `docker exec kind-control-plane sysctl ...` can recover a live cluster during
 diagnosis, but the repo-owned fix is the Tilt preflight helper.
 
@@ -222,15 +155,13 @@ certificate. `scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing,
 invalid, or stale publication without printing certificate subject or issuer
 metadata.
 
-The sibling workspace devcontainer retains its own lazy container-local trust
-path for the standard personal-host workflow. Native development-VM trust is
-installed once by the human procedure below. In native execution,
-`ensure-budget-analyzer-local-ca-trust` and
-`check-budget-analyzer-local-ca-trust` are both read-only checks of the already
-established system, Python, Node and Chromium trust. Detailed ownership lives
-in [`../../../workspace/docs/local-budget-analyzer-tls.md`](../../../workspace/docs/local-budget-analyzer-tls.md).
-If the publication is missing or stale, stop and use the owner workflow; never
-run mkcert or a browser-certificate generator from an agent process.
+Workspace alone owns native development-VM OS/NSS trust installation and
+read-only trust verification. Follow its
+[local TLS owner document](../../../workspace/docs/local-budget-analyzer-tls.md)
+for the human procedure and diagnostics. Orchestration does not reproduce or
+write that trust. If the publication is missing or stale, stop and use the
+owner workflow; never run mkcert or another browser-certificate generator from
+an agent process.
 
 ### Development VM Import And Renewal
 
@@ -245,24 +176,12 @@ Before bootstrap, this non-generating check is safe to run against those files:
 ./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
 ```
 
-The human must establish trust through the workspace owner before running guest
-bootstrap. From the orchestration checkout in a fresh guest shell with the
-reviewed native environment installed and loaded:
-
-```bash
-. "$HOME/.config/budget-analyzer-native/env.sh"
-../workspace/scripts/install-agent-vm-local-ca-trust.sh \
-  --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
-  --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
-```
-
-That command is the only native guest OS/NSS trust writer. It validates the
-approved root and exact ingress leaf, installs the canonical system source,
-safely converges the identity-matching legacy orchestration source, and updates
-the normal user's NSS database. Missing workspace prerequisites stop with a
-diagnostic; orchestration has no fallback implementation. The retired
-`--install-system-trust` option fails with this command instead of silently
-ignoring the requested import.
+The human must establish trust through workspace's owner workflow before
+running guest bootstrap. The one end-to-end invocation is retained in
+[Getting Started](getting-started.md#development-vm-first-bootstrap);
+orchestration has no fallback trust implementation. The retired
+`--install-system-trust` option fails with the workspace-owned remediation
+instead of silently ignoring the requested import.
 
 Guest `./setup.sh --guest-local` then runs the orchestration installer only to
 validate the public CA, current validity, the
@@ -285,42 +204,12 @@ personal-host shell in the host orchestration checkout:
 That command uses the existing host mkcert CA, validates the new files before
 replacement, and does not access or recreate Kubernetes. Recopy exactly the
 three approved files. After affected workers have ended, the human reviews the
-workspace and orchestration changes, reruns the workspace trust command above,
+workspace and orchestration changes, repeats the workspace-owned trust flow,
 then runs `./scripts/bootstrap/install-imported-ingress-tls.sh` in the guest to
-reconcile the existing Kind Secret. Do not run `setup.sh`, create a new
+reconcile the existing Kind Secret. Do not run `setup.sh`, create a
 guest-controlled browser CA, or bypass certificate verification for renewal.
 Guest-owned infrastructure TLS is separate and may be regenerated by the human
-guest bootstrap.
-
-### Development VM Human Trust Handoff
-
-Repository implementation does not change live trust. For the combined
-workspace/orchestration rollout, the human must:
-
-1. End all workers that could use the old revisions, then review and install
-   the workspace trust-owner implementation together with this orchestration
-   change. Update the installed workspace helpers before trust convergence:
-
-   ```bash
-   ../workspace/scripts/install-agent-vm-user-tools.sh \
-     --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
-     --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
-   . "$HOME/.config/budget-analyzer-native/env.sh"
-   ```
-
-2. Run the workspace human trust installer above from a fresh guest shell. It
-   must leave the canonical
-   `/usr/local/share/ca-certificates/budget-analyzer-local-mkcert.crt` as the
-   only managed source and remove the exact identity-matching legacy
-   `budget-analyzer-local-ingress-ca.crt`; an unknown legacy identity requires
-   private human review and must not be deleted automatically.
-3. Run `check-budget-analyzer-local-ca-trust`, inspect the one-source checks,
-   and execute the verified curl, Python, Node and Playwright/Chromium HTTPS
-   matrix against exactly `https://app.budgetanalyzer.localhost` from the
-   [workspace native user-tools guide](../../../workspace/docs/native-user-tools.md#establish-exact-ingress-trust).
-
-An agent must not perform this handoff, write live trust, or treat offline
-fixtures as human acceptance.
+guest bootstrap. Agents must not perform the trust handoff or write live trust.
 
 ## Observability Access
 
@@ -898,7 +787,7 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ./scripts/bootstrap/install-imported-ingress-tls.sh
 tilt trigger ingress-tls-secret
 
-# On the standard local host only, repair initial certificate setup
+# On the personal host only, repair initial browser-certificate setup
 ./scripts/bootstrap/setup-k8s-tls.sh
 
 # On the personal host only, renew files without changing a cluster
@@ -907,7 +796,7 @@ tilt trigger ingress-tls-secret
 # Verify wildcard secret exists
 kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 
-# Re-run internal transport-TLS setup on HOST
+# Human-only: regenerate internal transport TLS in the guest OS
 ./scripts/bootstrap/setup-infra-tls.sh
 
 # Verify infra secrets exist
@@ -951,23 +840,10 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 
 **Remote SSH Configuration:**
 
-Use the dedicated development-VM profile documented in the sibling workspace's
-[host-isolation guide](../../../workspace/docs/host-isolation.md). Disable
-automatic port forwarding and do not forward personal SSH/GPG agents or host
-credentials:
-
-```json
-// VS Code User Settings (not workspace settings)
-{
-  "remote.autoForwardPorts": false
-}
-```
-
-This prevents VS Code from claiming Tilt/application ports and keeps forwarding
-limited to the reviewed host loopback path. The VM boundary and absence of host
-mounts/credentials provide isolation; this setting alone does not.
-
-**Note:** This setting goes in your VS Code user settings (`Ctrl/Cmd + ,`), not in the workspace `.vscode/settings.json` file.
+Use the workspace-owned Remote SSH profile documented in the
+[development VM guide](../../../workspace/docs/host-isolation.md). Workspace
+owns forwarding, credential and extension-host controls; do not restate or
+override them in orchestration settings.
 
 ## Next Steps
 

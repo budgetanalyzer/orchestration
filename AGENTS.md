@@ -66,22 +66,22 @@ Prefer discovery commands over static inventories:
 This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
 This project is designed for AI-assisted development. The sibling `../workspace`
-repository owns development tooling, native VM provisioning and the separate
-local-host devcontainer configuration.
+repository owns development-VM provisioning, native users and tools,
+guest-local repositories and Docker, Remote SSH, exact OS/NSS trust and the
+personal-host isolation audit.
 
 The `ext-authz` Go service implementation lives in the sibling `../ext-authz`
 repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-The accepted host-isolation target runs agents directly in the development VM.
-The former guest agent container and personal-host agent runtime are retired;
-do not reconstruct them or rerun destructive cutover work. Before preparing a
-human-owned host repair or collecting/reviewing firewall/confinement evidence,
-read `docs/runbooks/host-isolation-audit.md`. The human runs the read-only
-collector on the personal host; agents may test it offline and review explicitly
-supplied redacted evidence, but must not acquire host access or change host
-policy.
+Run agents only as the normal user in the development VM. Former guest-specific
+and personal-host agent runtimes are retired; do not reconstruct them or rerun
+destructive cutover work. Read `../workspace/docs/host-isolation.md` before
+changing or diagnosing VM identity, native tooling, repository transport,
+Remote SSH, guest Docker, trust or host isolation. The human alone may access
+or change the personal host, collect live host evidence or apply host policy;
+agents may review only explicitly supplied redacted evidence.
 
 Native agents run as the normal development-VM user inside the trusted local
 development boundary. Local workspace files, the local Kind kubeconfig and
@@ -94,17 +94,15 @@ require the current context and referenced cluster to equal `kind-kind`,
 require an exact loopback HTTPS Kubernetes API authority with no kubeconfig
 proxy override, require the local `kind` cluster and require the
 `kind-control-plane` node to be Ready. A VM marker, cluster name or process
-name alone does not prove personal-host isolation. For the full boundary and
-API-test target checks, read
-`docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
+name alone does not prove personal-host isolation. For orchestration's
+application authority and API-test target checks, read
+`docs/architecture/autonomous-ai-execution.md` before changing agent
 credential, Kubernetes-access, or autonomous execution behavior.
 
-Keep GitHub credentials and publication on the personal host. The development
-VM uses guest-local bare remotes and working clones; do not add a GitHub remote,
-credential proxy, forwarded SSH/GPG agent, shared folder, host Docker/libvirt
-socket or host kubeconfig. Read
-`docs/architecture/autonomous-ai-execution.md` before changing guest bootstrap,
-repository transport, Remote SSH, Docker endpoint selection or TLS transfer.
+Keep GitHub credentials and publication on the personal host. Do not expose a
+personal-host credential, mount, Docker/libvirt socket or kubeconfig to the
+guest. Consult workspace before changing guest bootstrap, repository transport,
+Remote SSH, Docker selection or trust.
 
 Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
 - Shape: `VM.Standard.A1.Flex`
@@ -165,9 +163,9 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Service ports and exposure rules: `docs/architecture/port-reference.md`
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
-- Agent host-isolation boundary and guest-local runtime contract: `docs/architecture/autonomous-ai-execution.md`
-- Development VM provisioning, native installation and host/guest handoffs: sibling `../workspace/docs/host-isolation.md` and `../workspace/docs/native-user-tools.md`
-- Containerized dev environment setup: sibling `../workspace` repository
+- Agent application authority, exact local targets and production exclusions: `docs/architecture/autonomous-ai-execution.md`
+- Development VM, native tools, repository/Docker boundary, trust and host isolation: sibling `../workspace/docs/host-isolation.md`
+- Personal-host isolation audit, private evidence handling and repair handoff: sibling `../workspace/docs/host-isolation-audit.md`
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
 - NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
@@ -393,8 +391,8 @@ The preferred AI execution pattern in this repo is autonomous execution with cle
 
 NEVER run browser or infrastructure TLS write operations from an AI agent.
 
-The personal host owns the browser-trusted mkcert CA. Certificates generated
-by a native guest agent or container will cause browser trust failures.
+The personal host owns the browser-trusted mkcert CA. Certificates generated by
+an agent or in the development VM will cause browser trust failures.
 
 Forbidden operations that must be run by the user on the host:
 - `mkcert`
@@ -411,12 +409,9 @@ Allowed read-only operations:
 
 For native live agent work against exactly
 `https://app.budgetanalyzer.localhost`, agents may run the workspace-owned
-`ensure-budget-analyzer-local-ca-trust` or
-`check-budget-analyzer-local-ca-trust` commands as read-only trust checks. The
-human-owned native installer establishes guest system/NSS trust. The standard
-workspace devcontainer retains its separate lazy container-local trust path.
-Read `../workspace/docs/local-budget-analyzer-tls.md` before changing or
-debugging either flow.
+read-only trust checks. The human-owned workspace installer alone establishes
+guest system/NSS trust. Read `../workspace/docs/local-budget-analyzer-tls.md`
+before changing or debugging that flow.
 
 Keep native guest trust ownership singular. The workspace human installer is
 the only OS/NSS trust writer; orchestration validates the three transferred
@@ -429,10 +424,9 @@ before changing guest bootstrap, renewal or imported-TLS behavior.
 If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
 follow the environment-specific human workflow in
 `docs/development/local-environment.md#development-vm-import-and-renewal`.
-The standard local path may require host `./setup.sh`; the development VM path
-requires host-only renewal when necessary, explicit transfer of the three
-approved files, the workspace human trust installer and orchestration Secret
-reconciliation. It must not recreate a host cluster.
+The development VM path requires host-only renewal when necessary, explicit
+transfer of the three approved files, the workspace human trust installer and
+orchestration Secret reconciliation. Renewal must not recreate a host cluster.
 Do not generate or rotate certificates from an agent process, and do not bypass
 verification with HTTP, `--insecure`, `verify=False`, or
 `ignore_https_errors`.

@@ -9,12 +9,10 @@ WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/pinned-tool-versions.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
-# shellcheck source=scripts/lib/local-docker-target.sh
-# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
-. "$SCRIPT_DIR/../lib/local-docker-target.sh"
 # shellcheck source=scripts/lib/local-kubernetes-target.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/local-kubernetes-target.sh"
+NATIVE_PREFLIGHT="$SCRIPT_DIR/check-agent-vm-prerequisites.sh"
 
 GUEST_LOCAL=false
 case "${1:-}" in
@@ -45,6 +43,7 @@ NC='\033[0m' # No Color
 
 ERRORS=0
 WARNINGS=0
+NATIVE_PREFLIGHT_PASSED=false
 INOTIFY_MIN_INSTANCES=8192
 INOTIFY_MIN_WATCHES=524288
 
@@ -55,6 +54,19 @@ echo
 echo "Orchestration directory: $ORCHESTRATION_DIR"
 echo "Looking for service repos in: $WORKSPACE_DIR"
 echo
+
+if [[ "$GUEST_LOCAL" == true ]]; then
+    echo "0. Checking workspace-owned native runtime..."
+    echo "---------------------------------------------"
+    if "$NATIVE_PREFLIGHT"; then
+        NATIVE_PREFLIGHT_PASSED=true
+        echo -e "${GREEN}✓${NC} Complete workspace native runtime contract passed"
+    else
+        echo -e "${RED}✗${NC} Complete workspace native runtime contract failed"
+        ((ERRORS++))
+    fi
+    echo
+fi
 
 # Function to check if command exists
 check_command() {
@@ -394,7 +406,13 @@ check_kind_node_inotify_budget() {
 echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
-check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
+if [[ "$GUEST_LOCAL" == false ]]; then
+    check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
+elif [[ "$NATIVE_PREFLIGHT_PASSED" == true ]]; then
+    echo -e "${GREEN}✓${NC} Docker, native identity, credentials and managed tools verified by workspace"
+else
+    echo -e "${RED}✗${NC} Docker, native identity, credentials and managed tools were not established"
+fi
 if check_command "kind" "Kind" "$(phase7_install_hint kind "$ORCHESTRATION_DIR")"; then
     check_pinned_tool_version kind
 fi
@@ -415,14 +433,16 @@ if [[ "$GUEST_LOCAL" == false ]]; then
 else
     echo -e "${GREEN}✓${NC} Guest-local mode uses imported ingress TLS; mkcert is not required"
 fi
-if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
-    check_java_version
-fi
-if check_command "node" "Node.js" "Install Node.js 20+ from your OS package manager, nvm, or Volta"; then
-    check_node_version
-fi
-if check_command "npm" "npm" "Install npm 10+ with Node.js"; then
-    check_npm_version
+if [[ "$GUEST_LOCAL" == false ]]; then
+    if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
+        check_java_version
+    fi
+    if check_command "node" "Node.js" "Install Node.js 20+ from your OS package manager, nvm, or Volta"; then
+        check_node_version
+    fi
+    if check_command "npm" "npm" "Install npm 10+ with Node.js"; then
+        check_npm_version
+    fi
 fi
 
 echo
@@ -430,7 +450,13 @@ echo
 echo "2. Checking Docker daemon..."
 echo "---------------------------------------------"
 
-if docker info &> /dev/null; then
+if [[ "$GUEST_LOCAL" == true ]]; then
+    if [[ "$NATIVE_PREFLIGHT_PASSED" == true ]]; then
+        echo -e "${GREEN}✓${NC} Docker daemon and exact guest-local target were checked by workspace"
+    else
+        echo -e "${RED}✗${NC} Docker daemon and exact guest-local target remain unverified"
+    fi
+elif docker info &> /dev/null; then
     echo -e "${GREEN}✓${NC} Docker daemon is running"
 else
     echo -e "${RED}✗${NC} Docker daemon is NOT running or not accessible"
@@ -439,11 +465,6 @@ else
 fi
 
 if [[ "$GUEST_LOCAL" == true ]]; then
-    if assert_local_docker_target; then
-        echo -e "${GREEN}✓${NC} Docker target is the development VM's default local Unix socket"
-    else
-        ((ERRORS++))
-    fi
     if assert_local_kind_target; then
         echo -e "${GREEN}✓${NC} Kubernetes target is the Ready guest-local loopback kind-kind cluster"
     else

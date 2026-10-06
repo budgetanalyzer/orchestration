@@ -292,6 +292,18 @@ kubectl
 # TEMPORARY FILES & BACKUPS
 # =============================================================================
 
+# Personal-host isolation evidence is private operator material. The producer
+# lives in workspace, but accidental copies remain prohibited here.
+candidate-report.md
+**/candidate-report.md
+budget-host-audit-*
+**/budget-host-audit-*
+host-isolation-raw-*
+host-isolation-index.json
+tmp/host-isolation-audit/
+**/host-isolation-audit/raw/
+**/host-isolation-audit/index.json
+
 tmp/
 *.tmp
 *.temp

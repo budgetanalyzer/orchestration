@@ -25,39 +25,18 @@ scripts/
 
 ## Canonical Entry Points
 
-- `ops/verify-agent-host-isolation.sh` - Personal-host binary go/no-go check
-  for the reviewed `budget-analyzer-agent` deployment. Run it as root on the
-  Linux Mint host; it prints only `SUCCESS` or `ERROR`. It requires the exact
-  reviewed VM/network identity, live and persistent confinement, early nftables
-  policy and systemd ordering, plus retired host Docker state. It is a strict
-  current-state safety check, not a reusable topology discovery tool or an
-  evidence collector.
-- `ops/collect-host-isolation-evidence.py` - Human-run read-only Mint host
-  collector for complete firewall order, UFW persistence, listeners and VM
-  confinement evidence. Run with `python3` and `--confirm-personal-host` after
-  `sudo -v` on the personal workstation. Writes private raw captures and a
-  candidate redacted report outside the checkout; does not change host policy,
-  run probes or certify isolation. Read the
-  [host audit runbook](../docs/runbooks/host-isolation-audit.md) before execution
-  or sharing. Offline tests: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
-  discover -s tests/host-isolation-audit -v` from the repository root.
-- `ops/host-isolation-protocol-fixture.py` - Human-coordinated, selected-address
-  UDP listener/sender for the post-repair host-isolation matrix. It uses
-  nonce-bearing non-protocol payloads, refuses wildcard and occupied listeners,
-  and distinguishes delivered probes, missing controls and receiver
-  non-delivery. It never changes policy, routes or services, and receiver
-  non-delivery requires separate early-rule counter or scoped-capture evidence.
-  Read the host audit runbook before use; its offline fixtures run with the
-  collector tests above.
+- [Workspace host-isolation audit](../../workspace/docs/host-isolation-audit.md) - Workspace-owned entry point
+  for the human-only personal-host isolation audit, private evidence handling,
+  collector, protocol fixture and binary verifier. Orchestration does not keep
+  fallback copies of those tools.
 - `../setup.sh` - Standard local platform bootstrap from the repository root.
 - `../setup.sh --guest-local` - Explicit first bootstrap for the development
   VM's local Docker daemon using imported host-created ingress TLS. Both setup
   modes recreate Kind and are not daily-start commands.
-- `bootstrap/check-agent-vm-prerequisites.sh` - Read-only development VM check
-  for Ubuntu, local Docker endpoint/data-root selection, required build tools
-  and absence of forwarded host authority. Pass `--native-runtime` for daily
-  native user/home/tool/repository verification through the workspace owner
-  plus the exact live loopback `kind-kind` target.
+- `bootstrap/check-agent-vm-prerequisites.sh` - Thin read-only application
+  preflight that invokes workspace's complete native verifier. Pass
+  `--native-runtime` to add orchestration's exact live loopback `kind-kind`
+  target for daily work.
 - `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
   validator and strict local-`kind-kind` Secret installer; use
   `--validate-only` for static file checks. Tilt uses its default install mode
@@ -65,14 +44,17 @@ scripts/
   The retired `--install-system-trust` interface fails with the canonical
   workspace human command; this script never changes guest trust.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
-  Pass `--guest-local` in the development VM to skip mkcert and require the
-  local guest Docker endpoint plus the Ready loopback `kind-kind` target.
-- `../tests/native-guest-preflight/test-native-guest-preflight.sh` - Tracked
-  fail-closed fixtures for native/container execution, forwarded credentials,
-  remote Docker selection, wrong Kubernetes context/referenced cluster,
+  Pass `--guest-local` in the development VM to delegate the complete native
+  boundary to workspace and retain orchestration repository, tool compatibility,
+  Ready loopback `kind-kind`, Tilt and runtime-security diagnostics.
+- `../tests/local-kubernetes-target/test-local-kubernetes-target.sh` - Tracked
+  fail-closed fixtures for wrong Kubernetes context/referenced cluster,
   nonloopback, malformed or deceptive API authorities, kubeconfig proxy
   redirection and missing control-plane node. Invalid authority/proxy fixtures
   use command stubs and assert rejection before cluster access.
+- `../tests/native-preflight-wrapper/test-native-preflight-wrapper.sh` - Offline
+  wrapper fixtures proving exact workspace argument forwarding, bootstrap versus
+  daily Kind behavior, fail-closed setup ordering and Tilt delegation.
 - `../tests/imported-ingress-tls/test-install-imported-ingress-tls.sh` -
   Offline command fixtures that reproduce the zero-exit `x509 -checkhost`
   mismatch, require hostname-aware chain verification, accept the matching
@@ -213,15 +195,12 @@ Choose scripts by runtime boundary:
   prerequisites, inotify budgets, pinned Gateway API and Calico state, and
   optional runtime security state. It reports drift and install commands
   without performing interactive cluster changes.
-- `bootstrap/check-agent-vm-prerequisites.sh` fails closed unless the Ubuntu
-  development VM is using its default local Unix Docker socket and normal
-  `/var/lib/docker` data root. It also checks Git, OpenSSL, JDK 25, Node.js 20+
-  and npm 10+ and rejects forwarded agent/token/credential-helper state. Its
-  `--native-runtime` mode delegates the complete native tool/user/home and
-  repository-pair contract to the workspace verifier, then requires the exact
-  Ready local Kind target. The bootstrap-only mode intentionally does not
-  require Docker Compose merely to launch the retired guest agent container;
-  Compose remains workspace-owned for other supported tooling.
+- `bootstrap/check-agent-vm-prerequisites.sh` resolves the sibling workspace,
+  requires the managed worktree/bare-parent inputs and invokes workspace's
+  complete native runtime verifier for both guest bootstrap and daily work.
+  The optional `--native-runtime` mode then adds the exact Ready local Kind
+  target. VM identity, user/home, repository, credential, Docker, tool and
+  trust checks have no orchestration fallback implementation.
 - `bootstrap/install-imported-ingress-tls.sh` validates the three approved
   host-created ingress files without invoking mkcert, including one
   hostname-aware chain verification for `app.budgetanalyzer.localhost`.
@@ -248,13 +227,14 @@ Choose scripts by runtime boundary:
   reconciliation helper. A live `docker exec kind-control-plane sysctl ...`
   recovery command is diagnostic only; use the helper or Tilt resource for the
   durable local fix.
-- `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are host-only
-  certificate bootstrap scripts. Do not run them from an AI container because
-  the browser must trust the host mkcert CA. `setup-k8s-tls.sh` fails closed
+- `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are
+  human-operated certificate bootstrap scripts. Agents must not run them
+  because the browser must trust the personal-host mkcert CA and certificate
+  writes remain human-only. `setup-k8s-tls.sh` fails closed
   unless the target is the host `kind-kind` context backed by the `kind`
   cluster, then atomically publishes only the public mkcert root at
-  `nginx/certs/k8s/_mkcert-rootCA.pem` for the workspace lazy-trust command.
-  The publication remains ignored by Git; no CA private key is published.
+  `nginx/certs/k8s/_mkcert-rootCA.pem`. The publication remains ignored by Git;
+  no CA private key is published.
 
 Use `../setup.sh` when you want the standard local bootstrap to converge
 repo-managed prerequisites and recreate the local Kind cluster. Use the

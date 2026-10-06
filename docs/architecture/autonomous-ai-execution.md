@@ -1,259 +1,149 @@
 # Autonomous AI Execution Pattern
 
-## Overview
+## Scope
 
-Budget Analyzer gives coding agents broad authority inside a disposable local
-development boundary. That authority is useful for builds, tests, Docker,
-Kubernetes and local API diagnostics, but it is not authority over the personal
-workstation, GitHub publication, staging or production.
+Orchestration grants agents broad authority over the disposable Budget Analyzer
+application environment inside the native development VM. That authority covers
+local builds, tests, Tilt, application containers, the approved Kind cluster,
+development Kubernetes Secrets and disposable local API-test credentials. It
+does not cover the personal host, GitHub publication, staging or production.
 
-The supported development-VM target is **native agents**, with Docker reserved
-for application builds, Kind, infrastructure and Testcontainers. Workspace-
-owned system/user installers and the normal guest home now provide the agent
-toolchain, provider state, Maven Local, Gradle caches and browser data. All
-supported agent work runs natively in the development VM. Both the old guest
-agent container and the personal-host agent runtime are retired; do not resume
-agent work there or reconstruct them. Before collecting or reviewing host
-firewall/confinement evidence, read the
-[host audit runbook](../runbooks/host-isolation-audit.md); live host collection
-is human-only and does not give a guest agent host administration access.
+The native development VM is the only supported agent environment. Former
+guest-specific and personal-host agent runtimes are retired and must not be
+reconstructed. The sibling workspace's
+[development VM owner document](../../../workspace/docs/host-isolation.md)
+owns VM identity, native users and tools, repositories, Git transport, Remote
+SSH, guest Docker, exact OS/NSS trust, personal-host isolation and its audit.
+Read that document before changing or diagnosing any of those concerns; do not
+duplicate its procedures here.
 
-## Boundary Terminology
+This document owns only the application-facing authority enforced by
+orchestration:
 
-- **Personal host**: the Linux Mint workstation. It owns GitHub credentials,
-  canonical GitHub remotes, the native VS Code and browser UIs, the mkcert
-  signing key, libvirt and the host-enforced VM firewall boundary.
-- **Development VM**: the Ubuntu guest. It owns working clones, local bare Git
-  repositories, Docker storage, dependency caches, Kind, Tilt, Kubernetes
-  state, development credentials and application data.
-- **Native agent**: a process of the normal guest development user,
-  sharing that user's tool environment and build caches with Tilt. Access to
-  the rootful guest Docker daemon confers guest-root-equivalent authority.
-  Native command sandboxing can constrain ordinary commands, but unrestricted
-  Docker access remains a route to control guest assets.
-- **Retired guest agent container**: the former preparation environment. Its
-  tracked Compose/lifecycle sources and Docker state are gone. Historical
-  evidence does not authorize recreating it.
+- application bootstrap and daily Tilt behavior;
+- the exact local Kubernetes mutation target;
+- local API-test origin selection;
+- imported ingress-file validation and Kubernetes Secret reconciliation;
+- local development credential exposure and staging/production exclusions.
 
-A marker, compose-project name, environment variable or command-line flag can
-prevent an accidental launch in the wrong place. It does not prove isolation.
-Isolation comes from the VM boundary, guest-local storage and Docker endpoint,
-the absence of host mounts and credentials, and host-enforced network policy.
+## Application Authority
 
-## Native Guest Architecture
+Within the verified native VM boundary, an agent may:
 
-```text
-Personal host
-  GitHub credentials + canonical clones
-  native VS Code UI -- Remote SSH ----------> development VM working clones
-  browser -- loopback-only SSH forward ------> development VM ingress
-  git push/fetch over host-initiated SSH ----> development VM bare repositories
-  mkcert signing key (never copied)
-
-Development VM
-  <guest-storage>/bare/<repo>.git
-  <guest-storage>/worktrees/<repo>
-  normal guest home
-    provider state + Maven Local + Gradle/browser caches
-  native agent + AI Session Handler + Tilt
-  /var/lib/docker (one guest-local Docker daemon)
-    Kind + application images + Testcontainers
-```
-
-There is no shared host workspace. Each guest working clone has only a
-guest-local bare `origin`; the personal host has the explicit `vm` remote. The
-host pushes reviewed committed objects into the bare repository, and later
-fetches agent commits from it. Only the host contacts GitHub or creates a pull
-request. Do not add rsync, a shared folder, an authenticated GitHub remote, a
-credential proxy, automatic publication or a forwarded SSH/GPG agent.
-
-VS Code Remote SSH keeps the editor UI on the personal host while remote
-extensions, terminals, language servers, tasks and files execute in the guest.
-Use the dedicated host profile documented in the sibling workspace's
-[host-isolation guide](../../../workspace/docs/host-isolation.md). Keep
-SSH-agent, X11, credential and automatic port forwarding disabled, and do not
-install remote extensions that expose a personal GitHub session.
-
-## Authority And Remaining Risk
-
-The guest agent may:
-
-- modify guest working clones and push commits to guest-local bare remotes;
-- run builds and tests, create Testcontainers workloads, and administer the
-  guest Docker daemon;
-- inspect and mutate the approved guest-local `kind-kind` cluster;
-- read development Kubernetes Secrets, imported ingress keys, generated
+- modify guest working clones and run application builds and tests;
+- build and run application images and Testcontainers workloads;
+- inspect and mutate the approved local `kind-kind` cluster;
+- read local Kubernetes Secrets, imported ingress keys, generated
   infrastructure keys and disposable local API-test credentials.
 
-The guest agent must not receive or use:
+An agent must never receive or use staging or production kubeconfigs, cloud or
+deployment credentials, user credentials, session cookies, GitHub publication
+credentials, personal-host credentials, or personal-host administration
+authority. Never deploy to or administer staging or production from an agent
+session.
 
-- GitHub write credentials, host credential helpers, personal SSH/GPG agents,
-  authenticated browser state or personal home-directory mounts;
-- the host Docker or libvirt socket, host kubeconfig, host workspace, staging
-  or production kubeconfigs, cloud/deployment credentials, user credentials or
-  session cookies;
-- authority to deploy or administer staging or production.
+Local development secrets are inside the trusted guest boundary and are not
+hidden from the agent. Use disposable test identities and local-only
+credentials. Human review, branch protection and pull-request controls remain
+required before publication.
 
-The VM boundary protects the personal workstation; it does not protect guest
-assets from the agent. Host review, branch protection and normal pull-request
-controls remain necessary before publishing agent-authored commits or workflow
-changes. Normal Internet access is permitted, so secrets placed in the guest
-must be considered accessible to the agent. LAN/VPN destination isolation and
-Internet allowlisting are outside this contract.
-
-## Docker And Kubernetes Target Selection
-
-Native agents use the guest's default `/var/run/docker.sock` directly. Do not
-set `DOCKER_HOST`, `DOCKER_CONTEXT` or `TESTCONTAINERS_HOST_OVERRIDE`, select a
-TCP/SSH endpoint, run a nested daemon, or forward another machine's socket.
-Docker-group authority is guest-root-equivalent even when the selected agent
-command uses a native command sandbox.
-
-Before guest bootstrap, `scripts/bootstrap/check-agent-vm-prerequisites.sh`
-fails closed unless execution is native, Docker uses the default local Unix
-socket, no remote-Docker environment is selected, the service is active on the
-current machine, the daemon name matches the guest and its data root is
-`/var/lib/docker`. `./setup.sh --guest-local` repeats that non-runtime check
-before recreating Kind. The `--native-runtime` mode additionally delegates the
-full tool/user/home/repository proof to the workspace-owned native verifier and
-requires the exact live Kind target.
+## Exact Local Kubernetes Target
 
 Before an agent-authorized Kubernetes mutation, require all of the following:
 
 1. `kubectl config current-context` is exactly `kind-kind`.
 2. The referenced kubeconfig cluster is exactly `kind-kind`.
 3. Its API server is an exact HTTPS authority on `127.0.0.1`, `localhost` or
-   `[::1]` with a valid port and no userinfo, path, query or fragment.
+   `[::1]`, with a valid port and no userinfo, path, query or fragment.
 4. The selected kubeconfig cluster has no `proxy-url` override.
-5. `kubectl get node kind-control-plane` reports the node Ready.
+5. `kind get clusters` contains the `kind` cluster.
+6. `kubectl get node kind-control-plane` reports the node Ready.
 
-`kind get clusters` must additionally contain the expected `kind` cluster.
-This is useful native daemon evidence, but a cluster name, VM marker or process
-name alone is not personal-host isolation proof. These fail-closed target
-checks prevent accidental operations against a remote authority; they are not
-containment against hostile guest root, which can change guest configuration
-and binaries. The configuration-only checks use `kubectl config view`; they do
-not contact the API server or invoke kubeconfig credential plugins merely to
-inspect the selected server and proxy fields.
+These checks reject accidental remote authority. A VM marker, cluster name or
+process name alone is insufficient. Configuration-only checks use `kubectl
+config view`; they must not invoke credential plugins or contact an API server
+merely to inspect the selected authority.
 
-For local API-test acceptance, require the selected configuration to declare
-`environment_type: local` and target exactly
-`https://app.budgetanalyzer.localhost`. A configuration name such as `local`
-is insufficient.
+`scripts/lib/local-kubernetes-target.sh` owns the reusable implementation.
+`scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime` adds that
+check after workspace's complete native-runtime verifier. Bootstrap and
+Secret-install paths repeat the applicable guard before mutation.
 
-## Clean Bootstrap And Daily Startup
+## Bootstrap And Daily Startup
 
-The VM starts from committed Git objects and explicitly transferred TLS files.
-Do not copy, export, import or reconstruct host Docker images, containers,
-volumes, Kind clusters, databases, application data or build caches.
-
-The explicit first-bootstrap command is:
+The explicit first application bootstrap is:
 
 ```bash
 ./setup.sh --guest-local
 ```
 
-It is a destructive local bootstrap: like the standard setup path, it deletes
-and recreates the `kind` cluster, installs Calico and Gateway API prerequisites,
-validates the imported ingress files and reconciles their Secret, generates guest-owned
+It is a destructive local rebuild. It verifies workspace-owned native
+prerequisites and the imported ingress files before deleting Kind, then creates
+the cluster, installs application prerequisites, generates guest-owned
 infrastructure TLS and prepares `.env`. It is not a VM-start or daily-start
-command. The human must first run the workspace-owned native trust installer
-documented in [Getting Started](../development/getting-started.md#development-vm-first-bootstrap).
-Daily work starts the VM, verifies the native runtime, starts Tilt and uses the
-host loopback HTTPS forward without rerunning `setup.sh`.
+command.
 
-Agents and AI Session Handler are ordinary processes of the same guest user
-that runs Tilt. Start them from a fresh guest login shell after the native
-runtime preflight. Exiting an agent or handler must not stop Tilt, Docker, Kind
-or the application; a later fresh shell reuses the normal user's provider
-state, Maven Local and Gradle caches. No agent container, separate home or
-Compose lifecycle belongs in this daily path. Exact daily commands live in
-[Getting Started](../development/getting-started.md#daily-native-startup).
+Daily work starts from a fresh normal-user guest shell:
 
-The standard `./setup.sh` path remains the supported local-host
-bootstrap. Do not silently select guest behavior from hostname, a marker file
-or environment. The `--guest-local` option is an explicit accidental-mislaunch
-guard, and the local-Docker checks provide the endpoint evidence.
-
-## Browser TLS Contract
-
-The personal host owns browser trust and the mkcert signing key. The guest may
-receive only these ignored files:
-
-```text
-nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem
-nginx/certs/k8s/_wildcard.budgetanalyzer.localhost-key.pem
-nginx/certs/k8s/_mkcert-rootCA.pem
+```bash
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+tilt up
 ```
 
-The public root can contain workstation-identifying subject metadata and a
-stable fingerprint. Keep it out of Git, logs and uploaded artifacts. The
-mkcert `rootCA-key.pem` must never enter the workspace or guest.
+Agents and AI Session Handler are ordinary guest-user processes and remain
+independent of Tilt, Kind and the application lifecycle. Do not recreate a
+retired runtime or a separate agent home. The exact first-bootstrap sequence,
+including its human trust prerequisite, lives in
+[Getting Started](../development/getting-started.md#development-vm-first-bootstrap).
 
-`scripts/bootstrap/install-imported-ingress-tls.sh` does not generate
-certificates. It validates that the three files exist, the public root is a
-valid CA, the leaf and CA are currently valid, the leaf covers
-`app.budgetanalyzer.localhost` while the chain verifies in the same
-hostname-aware OpenSSL operation, and the leaf matches the private key. In
-install mode it enforces the local `kind-kind` target and applies the ingress
-TLS Secret. Its retired `--install-system-trust` option fails with the canonical
-workspace human command; orchestration and Tilt do not write native guest
-trust.
+## Local API-Test Gate
 
-The human copies the three files over the dedicated host-to-guest SSH path and
-runs the workspace-owned trust installer in the guest before first bootstrap
-or after renewal. Native `ensure-budget-analyzer-local-ca-trust` and
-`check-budget-analyzer-local-ca-trust` are read-only verification commands;
-they never modify trust. Infrastructure certificates are separate, disposable
-guest material generated by the human-owned guest bootstrap; they are not
-copied from the personal host.
+Agent-driven live API tests may use automatic local trust verification only
+when the resolved configuration declares `environment_type: local` and targets
+exactly `https://app.budgetanalyzer.localhost`. A configuration name such as
+`local`, a hostname alias, or a loopback address by itself is insufficient.
 
-If the leaf is missing, expired, mismatched or otherwise invalid, stop. Do not
-use HTTP, `--insecure`, `verify=False`, `ignore_https_errors`, a guest-generated
-browser CA or an agent-generated replacement. Renew on the personal host with
-`scripts/bootstrap/renew-host-ingress-tls.sh`, recopy the three approved files,
-rerun the workspace trust installer, and reconcile the Secret with
-`scripts/bootstrap/install-imported-ingress-tls.sh`. Renewal does not run
-`setup.sh` and does not require or recreate a host Kind cluster.
+Do not run local trust helpers for staging, production, arbitrary HTTPS
+origins, or public Internet trust failures. Never weaken verification with
+HTTP, `--insecure`, `verify=False` or `ignore_https_errors`.
 
-## Retired Runners
+## Ingress TLS Boundary
 
-Native agents, Tilt and service builds share one guest user/home, so there is
-no duplicate agent-container Maven Local or provider volume to populate. Do
-not add GitHub package credentials, mount a personal-host cache, or recreate
-the removed guest Compose path to bridge a failure.
+The personal host owns browser certificate generation and renewal. Workspace
+owns human-operated guest OS/NSS trust installation and read-only trust
+verification. Orchestration receives only the approved wildcard leaf, leaf key
+and public CA; it validates those files and reconciles the local Kubernetes TLS
+Secret.
 
-Any sibling-workspace devcontainer material supports a separate local-host
-workflow. It does not define the development-VM runtime and must not be copied
-into the guest as an agent environment. The retained orchestration
-`tests/setup-flow` and `tests/security-preflight` DinD suites are stale,
-non-gating reference assets and are not native completion proof.
+`scripts/bootstrap/install-imported-ingress-tls.sh` never generates
+certificates or writes guest trust. In install mode it applies the Secret only
+after the exact local Kubernetes checks pass. Tilt uses that same
+non-generating path for the `ingress-tls-secret` resource.
+
+If an imported file is missing, expired or mismatched, stop. Do not generate a
+replacement in the guest. Follow the host-only renewal and approved
+three-file-transfer flow in
+[Local Environment Mechanics](../development/local-environment.md#development-vm-import-and-renewal),
+then reconcile the Secret without recreating Kind.
 
 ## Autonomous Execution Workflow
 
-Use autonomy only after the boundary and success criteria are reviewed:
-
 1. Define the task and explicit success criteria.
-2. Confirm the native guest user/home, selected workspace, Docker endpoint,
-   kubeconfig and credential boundary with the repo-owned preflight.
-3. Let the agent execute within that boundary.
-4. Verify the result with repo-owned checks and human review before publication.
+2. Run the workspace-owned native prerequisite through orchestration's wrapper.
+3. Require the exact local Kubernetes target before any cluster mutation.
+4. Confirm live API tests select the exact local origin when applicable.
+5. Execute only within the local application authority described above.
+6. Verify the result with repo-owned checks and human review before publication.
 
-Permission bypass flags do not create safety. The VM, mounts, credentials,
-network policy and target checks create the operating boundary. If a required
+Permission-bypass flags do not establish the operating boundary. If a required
 prerequisite is absent, stop instead of weakening a control or hiding a
-service-owned defect with orchestration.
+service-owned defect with an orchestration workaround.
 
-## Operator References
+## Orchestration References
 
-- Guest VM provisioning, native tools and dedicated Remote SSH profile:
-  [`../../../workspace/docs/host-isolation.md`](../../../workspace/docs/host-isolation.md)
-  and [`../../../workspace/docs/native-user-tools.md`](../../../workspace/docs/native-user-tools.md)
-- Supported setup and guest bootstrap commands:
-  [`../development/getting-started.md`](../development/getting-started.md)
-- Local mechanics, TLS ownership and live update:
-  [`../development/local-environment.md`](../development/local-environment.md)
-- Script catalog and verifier entry points:
-  [`../../scripts/README.md`](../../scripts/README.md)
-- Workspace-owned native tool manifest, provisioning, user environment and
-  trust verifier: the sibling `../workspace` repository documentation
+- Supported application bootstrap and daily startup:
+  [Getting Started](../development/getting-started.md)
+- Ingress publication, imported-file validation, renewal and Secret behavior:
+  [Local Environment Mechanics](../development/local-environment.md)
+- Script interfaces and focused verifiers:
+  [scripts/README.md](../../scripts/README.md)

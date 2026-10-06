@@ -162,7 +162,8 @@ Run the browser-facing certificate bootstrap on the host:
 ./scripts/bootstrap/setup-k8s-tls.sh
 ```
 
-Do not run host-trust certificate generation from an AI container.
+Agents must not run host-trust certificate generation; use the documented
+human-operated personal-host workflow.
 
 ### 6. Generate Internal Transport TLS Material
 

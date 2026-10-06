@@ -41,8 +41,8 @@ require_command() {
 
 assert_host_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        error "This script must be run from your host machine, not from the devcontainer or Tilt."
-        echo "        Open a host terminal in $ORCHESTRATION_DIR and run:" >&2
+        error "This script must be run by the human from the selected OS, not from a container or Tilt."
+        echo "        Open a human-operated OS terminal in $ORCHESTRATION_DIR and run:" >&2
         echo "        ./scripts/bootstrap/setup-infra-tls.sh" >&2
         exit 1
     fi
@@ -193,7 +193,7 @@ recreate_ca_secret() {
 echo "=== Budget Analyzer - Infrastructure TLS Setup ==="
 echo
 echo "This script generates internal CA material for Redis, PostgreSQL, and RabbitMQ."
-echo "Run it from your host terminal before 'tilt up'."
+echo "Run it from the human-operated OS shell before 'tilt up'."
 echo
 
 assert_host_execution

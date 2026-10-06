@@ -8,17 +8,13 @@ FIXTURE_DIR="$(mktemp -d)"
 MOCK_BIN="$FIXTURE_DIR/bin"
 KUBECTL_LOG="$FIXTURE_DIR/kubectl.log"
 KIND_LOG="$FIXTURE_DIR/kind.log"
-mkdir -p "$MOCK_BIN" "$FIXTURE_DIR/native-root/run" "$FIXTURE_DIR/container-root/run"
+mkdir -p "$MOCK_BIN"
 touch "$KUBECTL_LOG" "$KIND_LOG"
 export KUBECTL_LOG KIND_LOG
 trap 'rm -rf "$FIXTURE_DIR"' EXIT
 
-# shellcheck source=scripts/lib/local-docker-target.sh
-. "$REPO_DIR/scripts/lib/local-docker-target.sh"
 # shellcheck source=scripts/lib/local-kubernetes-target.sh
 . "$REPO_DIR/scripts/lib/local-kubernetes-target.sh"
-# shellcheck source=scripts/lib/native-guest-boundary.sh
-. "$REPO_DIR/scripts/lib/native-guest-boundary.sh"
 
 pass_count=0
 
@@ -44,40 +40,6 @@ expect_fail() {
     printf 'PASS: %s rejected\n' "$description"
     ((pass_count += 1))
 }
-
-touch "$FIXTURE_DIR/container-root/.dockerenv"
-expect_pass "native process fixture" \
-    assert_native_guest_process "$FIXTURE_DIR/native-root"
-expect_fail "container process fixture" \
-    assert_native_guest_process "$FIXTURE_DIR/container-root"
-
-expect_fail "forwarded GitHub credential" \
-    env GH_TOKEN=fixture-token bash -c \
-        ". '$REPO_DIR/scripts/lib/native-guest-boundary.sh'; assert_no_forwarded_host_authority"
-
-expect_fail "remote Docker environment" \
-    env DOCKER_HOST=tcp://127.0.0.1:2375 bash -c \
-        ". '$REPO_DIR/scripts/lib/local-docker-target.sh'; assert_local_docker_target"
-expect_fail "Testcontainers host override" \
-    env TESTCONTAINERS_HOST_OVERRIDE=192.0.2.10 bash -c \
-        ". '$REPO_DIR/scripts/lib/local-docker-target.sh'; assert_local_docker_target"
-
-cat > "$MOCK_BIN/docker" <<'EOF'
-#!/usr/bin/env bash
-case "$1 $2 $3" in
-    "context show ") printf 'default\n' ;;
-    "context inspect default") printf '%s\n' "${FIXTURE_DOCKER_ENDPOINT:-unix:///var/run/docker.sock}" ;;
-    "info --format {{.Name}}") hostname -s ;;
-    "info --format {{.DockerRootDir}}") printf '/var/lib/docker\n' ;;
-    "info  ") exit 0 ;;
-    *) exit 1 ;;
-esac
-EOF
-chmod +x "$MOCK_BIN/docker"
-
-expect_fail "non-Unix Docker endpoint" \
-    env PATH="$MOCK_BIN:$PATH" FIXTURE_DOCKER_ENDPOINT=tcp://127.0.0.1:2375 \
-        bash -c ". '$REPO_DIR/scripts/lib/local-docker-target.sh'; assert_local_docker_target"
 
 cat > "$MOCK_BIN/kubectl" <<'EOF'
 #!/usr/bin/env bash
@@ -182,4 +144,4 @@ expect_fail "missing Kind control-plane node" \
     env PATH="$MOCK_BIN:$PATH" FIXTURE_NODE_PRESENT=false bash -c \
         ". '$REPO_DIR/scripts/lib/local-kubernetes-target.sh'; assert_local_kind_target"
 
-printf 'Native guest preflight fixtures passed: %s checks.\n' "$pass_count"
+printf 'Local Kubernetes target fixtures passed: %s checks.\n' "$pass_count"

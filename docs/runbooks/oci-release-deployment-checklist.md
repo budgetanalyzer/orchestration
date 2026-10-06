@@ -41,7 +41,7 @@ below.
 - [ ] On the OCI host, `KUBECONFIG` points at the intended k3s cluster.
 - [ ] On the OCI host, `~/.config/budget-analyzer/instance.env` exists.
 - [ ] Any required certificate generation is run by the human operator on the
-  host, not from the AI container.
+  operator host, never from an agent session.
 
 ## Release Summary
 

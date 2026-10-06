@@ -91,7 +91,8 @@ From a **guest terminal**:
 orchestration_root=$(git rev-parse --show-toplevel)
 worktree_parent=$(dirname "$orchestration_root")
 workspace_root="$worktree_parent/workspace"
-test -d "$workspace_root/.git"
+test -e "$workspace_root/.git"
+git -C "$workspace_root" rev-parse --is-inside-work-tree
 cd "$workspace_root"
 git status --short
 git rev-parse --short HEAD
@@ -341,7 +342,27 @@ or domain. Record those exact unit names privately for Step 7.
 
 ## Step 7: Author And Validate The Early Host Boundary
 
-Create the root-owned policy directory from the **personal host**:
+First require that no prior partial installation occupies the managed paths.
+From the **personal host**:
+
+```bash
+for managed_path in \
+  /etc/nftables.d/budget-agent-host-input.nft \
+  /usr/local/sbin/load-budget-agent-host-input \
+  /etc/systemd/system/budget-agent-host-input.service; do
+  if sudo test -e "$managed_path" || sudo test -L "$managed_path"; then
+    printf 'ERROR: existing managed path requires private review: %s\n' \
+      "$managed_path" >&2
+    exit 1
+  fi
+done
+```
+
+An existing path means a prior application was attempted. Stop and reconcile
+it against the runbook and private backups; do not overwrite it with this
+first-install sequence.
+
+Create the root-owned policy directory:
 
 ```bash
 sudo install -d -o root -g root -m 0755 /etc/nftables.d
@@ -765,22 +786,60 @@ install -d -m 0700 "$matrix_dir"
 printf 'matrix evidence directory: %s\n' "$matrix_dir"
 ```
 
-Resolve selected addresses from Step 6 in the host shell. Type the literal
-addresses without CIDR suffixes:
+Resolve the repository, domain, network and selected addresses again so this
+matrix does not depend on shell state left by Step 6. Type address literals
+without CIDR suffixes:
 
 ```bash
+host_orchestration_root=$(git rev-parse --show-toplevel)
+cd "$host_orchestration_root"
+read -r -p 'Reviewed development VM domain: ' vm_domain
+vm_network=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
+  | awk '$2 == "network" {print $3}')
+vm_tap=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
+  | awk '$2 == "network" {print $1}')
+vm_mac=$(sudo virsh --connect qemu:///system domiflist "$vm_domain" \
+  | awk '$2 == "network" {print $5}')
+vm_bridge=$(sudo virsh --connect qemu:///system net-info "$vm_network" \
+  | awk '$1 == "Bridge:" {print $2}')
+test "$(printf '%s\n' "$vm_network" | sed '/^$/d' | wc -l)" -eq 1
+test "$(printf '%s\n' "$vm_tap" | sed '/^$/d' | wc -l)" -eq 1
+test "$(printf '%s\n' "$vm_mac" | sed '/^$/d' | wc -l)" -eq 1
+test -n "$vm_bridge"
 read -r -p 'Selected host VM-facing IPv4 address: ' host_v4
 read -r -p 'Selected guest IPv4 address: ' guest_v4
 read -r -p 'Selected guest interface: ' guest_interface
 read -r -p 'Selected host non-VM IPv4 address for denied DNS proof: ' host_other_v4
 printf 'host_v4=%s guest_v4=%s guest_interface=%s host_other_v4=%s\n' \
   "$host_v4" "$guest_v4" "$guest_interface" "$host_other_v4"
+matrix_inputs="$matrix_dir/host-inputs.sh"
+umask 077
+{
+  printf 'host_orchestration_root=%q\n' "$host_orchestration_root"
+  printf 'vm_domain=%q\n' "$vm_domain"
+  printf 'vm_network=%q\n' "$vm_network"
+  printf 'vm_tap=%q\n' "$vm_tap"
+  printf 'vm_mac=%q\n' "$vm_mac"
+  printf 'vm_bridge=%q\n' "$vm_bridge"
+  printf 'host_v4=%q\n' "$host_v4"
+  printf 'guest_v4=%q\n' "$guest_v4"
+  printf 'guest_interface=%q\n' "$guest_interface"
+  printf 'host_other_v4=%q\n' "$host_other_v4"
+} >"$matrix_inputs"
+chmod 0600 "$matrix_inputs"
 ```
 
-Run the following IPv4 rows. Run the corresponding IPv6 rows afterward only
-with the Step 6 reviewed IPv6 literals, scopes and interfaces. If IPv6 is
-inapplicable, record the concrete routing/address evidence; do not infer that
-from a missing global route alone.
+At the start of every new **host terminal A/B** used in Steps 10.1–10.7, run:
+
+```bash
+read -r -p 'Exact matrix evidence directory: ' matrix_dir
+test -f "$matrix_dir/host-inputs.sh"
+. "$matrix_dir/host-inputs.sh"
+cd "$host_orchestration_root"
+```
+
+Do not copy this file into the guest or repository. It remains private on the
+personal host and contains the unredacted topology values.
 
 ### Step 10.1: IPv4 Unicast TCP
 
@@ -800,6 +859,7 @@ python3 -m http.server "$tcp_port" --bind "$host_v4" \
 In **host terminal B**:
 
 ```bash
+tcp_port=48180
 curl --noproxy '*' --fail --max-time 3 \
   "http://$host_v4:$tcp_port/"
 sudo nft -a list table inet budget_agent_host_input
@@ -811,6 +871,12 @@ In a **guest terminal**:
 read -r -p 'Selected host VM-facing IPv4 address: ' host_v4
 tcp_port=48180
 nc -4 -vz -w 3 "$host_v4" "$tcp_port"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
 ```
 
 The guest attempt must fail and increment the attributable early final-drop
@@ -831,6 +897,8 @@ udp_port=48181
 control_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
 probe_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
 test "$control_nonce" != "$probe_nonce"
+printf 'control_nonce=%s\nprobe_nonce=%s\n' \
+  "$control_nonce" "$probe_nonce"
 python3 scripts/ops/host-isolation-protocol-fixture.py listen \
   --family ipv4 --bind-address "$host_v4" --port "$udp_port" \
   --control-nonce "$control_nonce" --probe-nonce "$probe_nonce" \
@@ -842,6 +910,8 @@ After `LISTENER_READY`, in **host terminal B**:
 
 ```bash
 cd "$host_orchestration_root"
+udp_port=48181
+read -r -p 'Control nonce from host terminal A: ' control_nonce
 python3 scripts/ops/host-isolation-protocol-fixture.py send \
   --family ipv4 --source-address "$host_v4" \
   --destination-address "$host_v4" --port "$udp_port" \
@@ -849,8 +919,8 @@ python3 scripts/ops/host-isolation-protocol-fixture.py send \
 sudo nft -a list table inet budget_agent_host_input
 ```
 
-In a **guest terminal**, use a newly generated guest probe nonce copied from
-host terminal A's `$probe_nonce` value:
+In a **guest terminal**, use the printed `$probe_nonce` value from host
+terminal A:
 
 ```bash
 orchestration_root=$(git rev-parse --show-toplevel)
@@ -863,6 +933,12 @@ python3 scripts/ops/host-isolation-protocol-fixture.py send \
   --family ipv4 --source-address "$guest_v4" \
   --destination-address "$host_v4" --port "$udp_port" \
   --nonce "$probe_nonce"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
 ```
 
 Host terminal A must report `CONTROL_RECEIVED` and
@@ -881,6 +957,8 @@ multicast_port=48182
 control_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
 probe_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
 test "$control_nonce" != "$probe_nonce"
+printf 'control_nonce=%s\nprobe_nonce=%s\n' \
+  "$control_nonce" "$probe_nonce"
 python3 scripts/ops/host-isolation-protocol-fixture.py listen \
   --family ipv4 --bind-address "$host_v4" --port "$multicast_port" \
   --interface "$vm_bridge" --multicast-group "$multicast_group" \
@@ -893,6 +971,9 @@ After `LISTENER_READY`, in **host terminal B**:
 
 ```bash
 cd "$host_orchestration_root"
+multicast_group=239.255.0.42
+multicast_port=48182
+read -r -p 'Control nonce from host terminal A: ' control_nonce
 python3 scripts/ops/host-isolation-protocol-fixture.py send \
   --family ipv4 --source-address "$host_v4" \
   --destination-address "$multicast_group" \
@@ -916,6 +997,12 @@ python3 scripts/ops/host-isolation-protocol-fixture.py send \
   --destination-address "$multicast_group" \
   --interface "$guest_interface" --port "$multicast_port" \
   --nonce "$probe_nonce"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
 ```
 
 Require the host positive control, guest receiver non-delivery and exact early
@@ -949,6 +1036,12 @@ python3 scripts/ops/host-isolation-protocol-fixture.py send \
   --family ipv4 --source-address "$guest_v4" \
   --destination-address 224.0.0.251 --interface "$guest_interface" \
   --port 5353 --nonce "$mdns_nonce"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
 ```
 
 Require one exact capture and an increment in the early mDNS/SSDP drop. Repeat
@@ -1004,6 +1097,7 @@ Do not force a lease renewal. From the **guest**, record the working lease and
 resolver state:
 
 ```bash
+read -r -p 'Selected guest interface: ' guest_interface
 ip -4 -o address show dev "$guest_interface"
 ip -4 route show default
 resolvectl status "$guest_interface"
@@ -1020,17 +1114,320 @@ sudo virsh --connect qemu:///system net-dhcp-leases "$vm_network" \
 sudo nft -a list table inet budget_agent_host_input
 ```
 
-For IPv6, repeat Steps 10.1–10.4 using `--family ipv6`, bracketed IPv6 HTTP
-URLs, `nc -6`, the reviewed host/guest scopes, `ff02::fb` for mDNS and
-`ff02::f` for SSDP. Each allowlisted ICMPv6 numeric type must have a named
-working purpose and attributable counter. If a command reports
-`Network is unreachable`, mark that row `NOT TESTED`; do not call it denied.
+### Step 10.7: Exact IPv6 Rows
 
-### Step 10.7: Required Positive Flows And Guest Runtime
+First determine IPv6 applicability from the actual host and guest state. In a
+**host terminal** initialized with `host-inputs.sh`:
+
+```bash
+ip -6 -o address show dev "$vm_bridge"
+ip -6 -o address show dev "$vm_tap"
+ip -6 route show
+sudo ss -H -lunp | rg ':(5353|1900)\b'
+read -r -p 'Selected host VM-facing IPv6 address with scope when needed: ' \
+  host_v6_scoped
+read -r -p 'Host interface owning that IPv6 address: ' host_v6_interface
+read -r -p 'Selected guest IPv6 address with scope when needed: ' \
+  guest_v6_scoped
+read -r -p 'Guest IPv6 interface: ' guest_v6_interface
+host_v6_literal=${host_v6_scoped%%%*}
+guest_v6_literal=${guest_v6_scoped%%%*}
+test -n "$host_v6_literal"
+test -n "$guest_v6_literal"
+ip -6 address show dev "$host_v6_interface" | rg -F "$host_v6_literal"
+ipv6_inputs="$matrix_dir/ipv6-inputs.sh"
+{
+  printf 'host_v6_scoped=%q\n' "$host_v6_scoped"
+  printf 'host_v6_literal=%q\n' "$host_v6_literal"
+  printf 'host_v6_interface=%q\n' "$host_v6_interface"
+  printf 'guest_v6_scoped=%q\n' "$guest_v6_scoped"
+  printf 'guest_v6_literal=%q\n' "$guest_v6_literal"
+  printf 'guest_v6_interface=%q\n' "$guest_v6_interface"
+} >"$ipv6_inputs"
+chmod 0600 "$ipv6_inputs"
+```
+
+If no host/guest IPv6 pair exists, do not enter empty values. Record the exact
+address, route and listener output above plus the guest commands below as the
+applicability evidence:
+
+```bash
+ip -6 -o address show
+ip -6 route show
+ip -6 neigh show
+```
+
+An absent global route alone does not make link-local multicast inapplicable.
+If a link-local pair exists, run every IPv6 row below.
+
+At the start of each new **host terminal A/B** for the IPv6 rows, run:
+
+```bash
+read -r -p 'Exact matrix evidence directory: ' matrix_dir
+test -f "$matrix_dir/host-inputs.sh"
+test -f "$matrix_dir/ipv6-inputs.sh"
+. "$matrix_dir/host-inputs.sh"
+. "$matrix_dir/ipv6-inputs.sh"
+cd "$host_orchestration_root"
+```
+
+For IPv6 unicast TCP, in **host terminal A**:
+
+```bash
+tcp6_port=48183
+if sudo ss -H -ltn "sport = :$tcp6_port" | rg -q .; then
+  printf 'ERROR: selected IPv6 TCP port is occupied\n' >&2
+  exit 1
+fi
+tcp6_fixture_dir=$(mktemp -d)
+python3 -m http.server "$tcp6_port" --bind "$host_v6_scoped" \
+  --directory "$tcp6_fixture_dir"
+```
+
+In **host terminal B**:
+
+```bash
+tcp6_port=48183
+host_v6_url=${host_v6_scoped/\%/%25}
+curl --noproxy '*' --fail --max-time 3 \
+  "http://[$host_v6_url]:$tcp6_port/"
+sudo nft -a list table inet budget_agent_host_input
+```
+
+In a **guest terminal**:
+
+```bash
+read -r -p 'Selected host IPv6 literal without scope: ' host_v6_literal
+read -r -p 'Guest IPv6 interface: ' guest_v6_interface
+tcp6_port=48183
+nc -6 -vz -w 3 \
+  "${host_v6_literal}%${guest_v6_interface}" "$tcp6_port"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+The host request must pass. The guest attempt must fail with an attributable
+early final-drop increment. If it reaches the listener, or if only the tap sees
+it while the bridge rule does not, stop, shut down the VM and design the
+runbook-required fail-closed dynamic tap binding before proceeding. Stop host
+terminal A with `Ctrl-C`, then run:
+
+```bash
+rmdir -- "$tcp6_fixture_dir"
+```
+
+For IPv6 unicast UDP, in **host terminal A**:
+
+```bash
+udp6_port=48184
+control_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+probe_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+test "$control_nonce" != "$probe_nonce"
+printf 'control_nonce=%s\nprobe_nonce=%s\n' \
+  "$control_nonce" "$probe_nonce"
+python3 scripts/ops/host-isolation-protocol-fixture.py listen \
+  --family ipv6 --bind-address "$host_v6_scoped" --port "$udp6_port" \
+  --interface "$host_v6_interface" \
+  --control-nonce "$control_nonce" --probe-nonce "$probe_nonce" \
+  --control-source-address "$host_v6_scoped" \
+  --probe-source-address "$guest_v6_scoped" --timeout 30
+```
+
+After `LISTENER_READY`, in **host terminal B**:
+
+```bash
+udp6_port=48184
+read -r -p 'Control nonce from host terminal A: ' control_nonce
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$host_v6_scoped" \
+  --destination-address "$host_v6_scoped" \
+  --interface "$host_v6_interface" --port "$udp6_port" \
+  --nonce "$control_nonce"
+sudo nft -a list table inet budget_agent_host_input
+```
+
+In a **guest terminal**:
+
+```bash
+orchestration_root=$(git rev-parse --show-toplevel)
+cd "$orchestration_root"
+read -r -p 'Selected guest IPv6 address with scope when needed: ' \
+  guest_v6_scoped
+read -r -p 'Selected host IPv6 literal without scope: ' host_v6_literal
+read -r -p 'Guest IPv6 interface: ' guest_v6_interface
+read -r -p 'Probe nonce from host terminal A: ' probe_nonce
+udp6_port=48184
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$guest_v6_scoped" \
+  --destination-address "${host_v6_literal}%${guest_v6_interface}" \
+  --interface "$guest_v6_interface" --port "$udp6_port" \
+  --nonce "$probe_nonce"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+Require `CONTROL_RECEIVED`, receiver non-delivery and an attributable early
+drop. `NOT_TESTED`, exit `3` or a route error is not a denial.
+
+For disposable IPv6 multicast, use group `ff02::114` and port `48185`. In
+**host terminal A**:
+
+```bash
+multicast6_group=ff02::114
+multicast6_port=48185
+control_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+probe_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+test "$control_nonce" != "$probe_nonce"
+printf 'control_nonce=%s\nprobe_nonce=%s\n' \
+  "$control_nonce" "$probe_nonce"
+python3 scripts/ops/host-isolation-protocol-fixture.py listen \
+  --family ipv6 --bind-address "$host_v6_scoped" \
+  --port "$multicast6_port" --interface "$host_v6_interface" \
+  --multicast-group "$multicast6_group" \
+  --control-nonce "$control_nonce" --probe-nonce "$probe_nonce" \
+  --control-source-address "$host_v6_scoped" \
+  --probe-source-address "$guest_v6_scoped" --timeout 30
+```
+
+In **host terminal B**:
+
+```bash
+multicast6_group=ff02::114
+multicast6_port=48185
+read -r -p 'Control nonce from host terminal A: ' control_nonce
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$host_v6_scoped" \
+  --destination-address "$multicast6_group" \
+  --interface "$host_v6_interface" --port "$multicast6_port" \
+  --nonce "$control_nonce"
+sudo nft -a list table inet budget_agent_host_input
+```
+
+In a **guest terminal**:
+
+```bash
+orchestration_root=$(git rev-parse --show-toplevel)
+cd "$orchestration_root"
+read -r -p 'Selected guest IPv6 address with scope when needed: ' \
+  guest_v6_scoped
+read -r -p 'Guest IPv6 interface: ' guest_v6_interface
+read -r -p 'Probe nonce from host terminal A: ' probe_nonce
+multicast6_group=ff02::114
+multicast6_port=48185
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$guest_v6_scoped" \
+  --destination-address "$multicast6_group" \
+  --interface "$guest_v6_interface" --port "$multicast6_port" \
+  --nonce "$probe_nonce"
+```
+
+Immediately after that attempt, in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+Require the positive control, receiver non-delivery and exact early-drop or
+scoped-ingress attribution.
+
+For IPv6 mDNS, in **host terminal A**:
+
+```bash
+sudo tcpdump -ni "$vm_bridge" -c 1 \
+  "ether src $vm_mac and ip6 src $guest_v6_literal and ip6 dst ff02::fb and udp dst port 5353"
+```
+
+In a **guest terminal**:
+
+```bash
+orchestration_root=$(git rev-parse --show-toplevel)
+cd "$orchestration_root"
+read -r -p 'Selected guest IPv6 address with scope when needed: ' \
+  guest_v6_scoped
+read -r -p 'Guest IPv6 interface: ' guest_v6_interface
+mdns6_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$guest_v6_scoped" \
+  --destination-address ff02::fb --interface "$guest_v6_interface" \
+  --port 5353 --nonce "$mdns6_nonce"
+```
+
+In **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+Require the exact bridge capture and early mDNS/SSDP drop increment. Repeat for
+IPv6 SSDP. In **host terminal A**:
+
+```bash
+sudo tcpdump -ni "$vm_bridge" -c 1 \
+  "ether src $vm_mac and ip6 src $guest_v6_literal and ip6 dst ff02::f and udp dst port 1900"
+```
+
+In the **guest terminal**:
+
+```bash
+ssdp6_nonce=$(python3 scripts/ops/host-isolation-protocol-fixture.py nonce)
+python3 scripts/ops/host-isolation-protocol-fixture.py send \
+  --family ipv6 --source-address "$guest_v6_scoped" \
+  --destination-address ff02::f --interface "$guest_v6_interface" \
+  --port 1900 --nonce "$ssdp6_nonce"
+```
+
+Then in **host terminal B**:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+If the guest sender reports success but the bridge capture and early counter
+do not see the packet, run this diagnostic capture once on the exact current
+tap while sending a new nonce:
+
+```bash
+sudo tcpdump -ni "$vm_tap" -c 1 \
+  "ether src $vm_mac and ip6 src $guest_v6_literal and udp dst port 5353"
+```
+
+A tap-only result is a failed repair, not an inapplicable row. Shut down the VM
+and return to the separately reviewed dynamic-binding design required by the
+canonical runbook.
+
+Record required IPv6 control behavior from the **guest**:
+
+```bash
+ip -6 -o address show dev "$guest_v6_interface"
+ip -6 route show
+ip -6 neigh show dev "$guest_v6_interface"
+ping -6 -c 3 "${host_v6_literal}%${guest_v6_interface}"
+```
+
+On the **personal host**, read the counters before and after the working flow:
+
+```bash
+sudo nft -a list table inet budget_agent_host_input
+```
+
+Each allowed ICMPv6 numeric type must map to a named observed purpose. Do not
+broaden the set merely to make `ping` pass; echo request/reply is optional
+unless it was explicitly reviewed as required.
+
+### Step 10.8: Required Positive Flows And Guest Runtime
 
 From the **guest orchestration checkout**:
 
 ```bash
+orchestration_root=$(git rev-parse --show-toplevel)
 cd "$orchestration_root"
 getent hosts archive.ubuntu.com
 curl --fail --location --max-time 15 \
@@ -1056,7 +1453,10 @@ From the **personal host**:
 ssh budget-agent-vm 'printf "host-to-guest SSH works\n"'
 curl --fail --show-error \
   https://app.budgetanalyzer.localhost/ >/dev/null
-git ls-remote vm HEAD
+read -r -p 'Personal-host checkout with the reviewed vm remote: ' \
+  vm_remote_checkout
+git -C "$vm_remote_checkout" remote get-url vm
+git -C "$vm_remote_checkout" ls-remote vm HEAD
 ```
 
 Run `git ls-remote vm HEAD` from a personal-host checkout whose reviewed `vm`
@@ -1087,14 +1487,21 @@ command -v ip6tables-legacy-save >/dev/null && \
   sudo ip6tables-legacy-save -c
 ```
 
-Rerun every command in Step 10 with:
+Create the post-reboot matrix directory with these exact commands:
 
 ```bash
 matrix_stage=post-reboot
+matrix_time=$(date -u +%Y%m%dT%H%M%SZ)
+matrix_dir="$HOME/budget-host-phase7-$matrix_stage-$matrix_time"
+install -d -m 0700 "$matrix_dir"
+printf 'matrix evidence directory: %s\n' "$matrix_dir"
 ```
 
-Use new nonce values and new unused high ports. Do not reuse the pre-reboot
-result as post-reboot evidence.
+Then execute Step 10 starting with the topology/address discovery block that
+creates `host-inputs.sh`; do not rerun its `matrix_stage=pre-reboot` or matrix
+directory block. Execute every Step 10.1–10.8 command again. The commands
+generate new nonce values and check/refuse occupied fixture ports. Do not reuse
+the pre-reboot result as post-reboot evidence.
 
 Collect final Docker-retirement absence evidence without invoking Docker:
 

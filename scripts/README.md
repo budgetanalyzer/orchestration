@@ -34,6 +34,14 @@ scripts/
   [host audit runbook](../docs/runbooks/host-isolation-audit.md) before execution
   or sharing. Offline tests: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest
   discover -s tests/host-isolation-audit -v` from the repository root.
+- `ops/host-isolation-protocol-fixture.py` - Human-coordinated, selected-address
+  UDP listener/sender for the post-repair host-isolation matrix. It uses
+  nonce-bearing non-protocol payloads, refuses wildcard and occupied listeners,
+  and distinguishes delivered probes, missing controls and receiver
+  non-delivery. It never changes policy, routes or services, and receiver
+  non-delivery requires separate early-rule counter or scoped-capture evidence.
+  Read the host audit runbook before use; its offline fixtures run with the
+  collector tests above.
 - `../setup.sh` - Standard local platform bootstrap from the repository root.
 - `../setup.sh --guest-local` - Explicit first bootstrap for the development
   VM's local Docker daemon using imported host-created ingress TLS. Both setup
@@ -47,13 +55,21 @@ scripts/
   validator and strict local-`kind-kind` Secret installer; use
   `--validate-only` for static file checks. Tilt uses its default install mode
   to reconcile the existing files into the Secret in both local runtime modes.
+  The retired `--install-system-trust` interface fails with the canonical
+  workspace human command; this script never changes guest trust.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
   Pass `--guest-local` in the development VM to skip mkcert and require the
   local guest Docker endpoint plus the Ready loopback `kind-kind` target.
 - `../tests/native-guest-preflight/test-native-guest-preflight.sh` - Tracked
   fail-closed fixtures for native/container execution, forwarded credentials,
   remote Docker selection, wrong Kubernetes context/referenced cluster,
-  nonloopback API and missing control-plane node.
+  nonloopback, malformed or deceptive API authorities, kubeconfig proxy
+  redirection and missing control-plane node. Invalid authority/proxy fixtures
+  use command stubs and assert rejection before cluster access.
+- `../tests/imported-ingress-tls/test-install-imported-ingress-tls.sh` -
+  Offline command fixtures that reproduce the zero-exit `x509 -checkhost`
+  mismatch, require hostname-aware chain verification, accept the matching
+  hostname and prove wrong-host rejection precedes mutation.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
@@ -200,13 +216,14 @@ Choose scripts by runtime boundary:
   require Docker Compose merely to launch the retired guest agent container;
   Compose remains workspace-owned for other supported tooling.
 - `bootstrap/install-imported-ingress-tls.sh` validates the three approved
-  host-created ingress files without invoking mkcert. Install mode optionally
-  adds the public root to the guest OS trust store and applies the TLS Secret
-  only after exact context, referenced-cluster, loopback-API, Kind-cluster and
-  control-plane-node checks pass. The `ingress-tls-secret` Tilt resource uses
-  install mode without `--install-system-trust`, so daily startup reconciles
-  only the existing files and Secret; it never generates certificates or
-  changes host/guest trust.
+  host-created ingress files without invoking mkcert, including one
+  hostname-aware chain verification for `app.budgetanalyzer.localhost`.
+  Install mode applies the TLS Secret only after exact context,
+  referenced-cluster, strict loopback HTTPS authority, absent kubeconfig proxy
+  override, Kind-cluster and control-plane-node checks pass. The workspace
+  human installer is the only native guest OS/NSS trust writer. The
+  `ingress-tls-secret` Tilt resource reconciles only the existing files and
+  Secret; it never generates certificates or changes host/guest trust.
 - `bootstrap/renew-host-ingress-tls.sh` is the human-operated personal-host
   renewal path. It creates and validates a replacement leaf/key using the
   existing host mkcert CA, republishes only the public root and never contacts
@@ -235,7 +252,8 @@ Choose scripts by runtime boundary:
 Use `../setup.sh` when you want the standard local bootstrap to converge
 repo-managed prerequisites and recreate the local Kind cluster. Use the
 explicit `../setup.sh --guest-local` path only after the development VM has the
-approved imported TLS files and its guest-local prerequisites pass. Use
+approved imported TLS files, workspace-owned guest trust and passing
+guest-local prerequisites. Use
 `bootstrap/install-verified-tool.sh` for a single pinned binary, and use
 `bootstrap/check-tilt-prerequisites.sh` as a diagnostic before or after setup;
 its live security proof creates and cleans named disposable probe resources.

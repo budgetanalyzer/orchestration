@@ -24,7 +24,8 @@ Usage: scripts/guardrails/check-tilt-resource-roots.sh [--context <kubectl-conte
 
 Evaluates the Tiltfile and compares resources with empty resource_deps to the
 checked-in intentional-root allowlist. Also verifies that Tilt reconciles
-existing ingress TLS files without invoking the host-only certificate generator.
+existing ingress TLS files without invoking certificate generation or trust
+installation.
 EOF
 }
 
@@ -163,9 +164,14 @@ fi
 if jq -e '
     .Manifests[]
     | .DeployTarget.UpdateCmdSpec.args[]?
-    | select(contains("setup-k8s-tls.sh"))
+    | select(
+        contains("setup-k8s-tls.sh")
+        or contains("renew-host-ingress-tls.sh")
+        or contains("install-agent-vm-local-ca-trust.sh")
+        or contains("--install-system-trust")
+      )
 ' "${tilt_result_file}" >/dev/null; then
-    printf 'ERROR: Tilt must not invoke the host-only setup-k8s-tls.sh generator.\n' >&2
+    printf 'ERROR: Tilt must not generate browser TLS or install guest trust.\n' >&2
     exit 1
 fi
 

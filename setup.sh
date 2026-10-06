@@ -21,9 +21,10 @@ Usage: ./setup.sh [--guest-local]
   no option      Recreate the standard local Kind environment and generate
                  browser-facing TLS from this host's mkcert CA.
   --guest-local  Recreate Kind on the development VM's local Docker daemon and
-                 install the three previously imported ingress TLS files.
+                 reconcile the three imported ingress TLS files into its Secret.
 
-This is a destructive Kind bootstrap, not a daily start command.
+Guest OS/NSS trust must be installed first by the workspace-owned human
+workflow. This is a destructive Kind bootstrap, not a daily start command.
 EOF
 }
 
@@ -97,7 +98,8 @@ version_lt() {
 assert_host_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
         print_error "Run ./setup.sh from the host terminal, not from the devcontainer."
-        echo "This setup writes browser-trusted and infrastructure TLS material, which must use the host trust store."
+        echo "Standard setup writes browser-facing TLS; guest setup requires the reviewed workspace trust workflow."
+        echo "Both modes generate infrastructure TLS and must be run by the human on the selected machine."
         echo "Open a host terminal in this repository and run:"
         echo "  ./setup.sh"
         exit 1
@@ -438,11 +440,11 @@ else
 fi
 
 # =============================================================================
-# Step 7: Generate TLS certificates
+# Step 7: Reconcile browser-facing TLS
 # =============================================================================
 if [[ "$SETUP_MODE" == "guest-local" ]]; then
-    print_step "Validating imported ingress TLS and installing guest trust..."
-    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --install-system-trust
+    print_step "Validating imported ingress TLS and installing its Kubernetes Secret..."
+    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh"
 else
     print_step "Setting up TLS certificates..."
     "$SCRIPT_DIR/scripts/bootstrap/setup-k8s-tls.sh"

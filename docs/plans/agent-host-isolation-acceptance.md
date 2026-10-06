@@ -287,10 +287,10 @@ against local `main`. The operator requested a new remediation plan after review
 | Finding / improvement | Evidence and next action | Status |
 | --- | --- | --- |
 | Required native npm lock missing from committed source | Local lock exists but is ignored; `git ls-tree HEAD native/npm/` lists only package.json. Include the reviewed lock and prove source-only input closure. | OPEN |
-| TLS hostname rejection ineffective | Real `openssl x509 -checkhost unrelated.invalid` reported mismatch with exit 0. Use hostname-aware chain verification and negative coverage. | OPEN |
-| Kubernetes loopback authority check too broad | Mocked target guard accepted `https://127.0.0.1:6443@outside.invalid:443`; URL authority is remote. Require strict actual authority validation. | OPEN |
+| TLS hostname rejection ineffective | Real `openssl x509 -checkhost unrelated.invalid` reported mismatch with exit 0. Phase 2 replaced it with hostname-aware chain verification and added matching/wrong-host command fixtures that prove rejection precedes mutation. | RESOLVED IN REPOSITORY — PHASE 2 |
+| Kubernetes loopback authority check too broad | Mocked target guard accepted `https://127.0.0.1:6443@outside.invalid:443`; URL authority is remote. Phase 2 added strict authority/port parsing, kubeconfig proxy rejection and pre-access fixtures. | RESOLVED IN REPOSITORY — PHASE 2 |
 | Full host firewall order/protocol coverage | Supplied host report confirms early UFW multicast acceptance and broader libvirt DNS/DHCP acceptance before the bridge deny. See dated review below; repair and paired protocol/reboot evidence remain required. | CONFIRMED POLICY DEFECTS |
-| Duplicate managed guest CA roots | Both orchestration/workspace destinations exist with the same certificate. Consolidate ownership and safely converge the exact legacy duplicate. | OPEN |
+| Duplicate managed guest CA roots | Workspace Phase 3 owns the sole OS/NSS installer and identity-checked legacy convergence. Orchestration Phase 4 removed its writer, rejects the retired flag with the canonical command, and limits setup/Tilt to validation plus Secret reconciliation. | REPOSITORY REMEDIATED — HUMAN CONVERGENCE PENDING |
 | Transitional source/workflow/helper duplication | Mint retirement is operator-confirmed; remove obsolete active guidance and duplicate implementations with their consumers accounted for. | OPEN |
 | Final host Docker retirement discrepancy | Supplied report shows inactive/disabled Docker units but retained bridge, rules in both backends and helper/drop-in files. Complete and independently verify the intended D.3 state without restarting Docker. | OPEN |
 
@@ -298,6 +298,29 @@ Review checks passed: 12 workspace native unit tests, 11 orchestration preflight
 fixtures, manifest/environment checks, changed-shell Bash/ShellCheck, diff
 checks and read-only live native preflight. These results do not negate the
 reproduced defects or constitute the new host audit.
+
+Phase 2 re-ran the original TLS reproduction against the approved leaf: OpenSSL
+reported that `unrelated.invalid` did not match while `x509 -checkhost` still
+exited zero. The original mocked Kubernetes value
+`https://127.0.0.1:6443@outside.invalid:443` is now rejected before `kind` or
+`kubectl get node`, as are deceptive localhost prefixes, malformed authorities,
+unwanted URL components/schemes and a configured kubeconfig proxy. Focused
+results were 22 native guest preflight fixtures and 3 imported-TLS fixtures;
+Bash syntax, ShellCheck, the existing imported-TLS `--validate-only` check and
+the read-only native runtime preflight also passed. No certificate, trust store
+or cluster mutation occurred. The target gate prevents accidental remote
+operations; it is not hostile guest-root containment.
+
+Phases 3 and 4 now define one trust owner. Before live convergence, the human
+must end affected workers and review/install both repository changes. From a
+fresh guest shell, run the workspace trust installer, confirm the canonical
+`budget-analyzer-local-mkcert.crt` is the only managed source and the legacy
+`budget-analyzer-local-ingress-ca.crt` is absent, then run the workspace
+read-only trust check and its verified curl/Python/Node/Playwright matrix
+against exactly `https://app.budgetanalyzer.localhost`. An unknown legacy root
+requires private human review and remains untouched. No worker may perform this
+handoff or infer acceptance from offline fixtures. The exact procedure lives in
+the [local environment guide](../development/local-environment.md#phase-34-human-trust-handoff).
 
 Implementation is owned by the
 [security review remediation plan](agent-vm-security-review-remediation-plan.md).

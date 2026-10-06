@@ -93,6 +93,10 @@ human-operated guest OS shell:
 ```bash
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh
 ./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+. "$HOME/.config/budget-analyzer-native/env.sh"
+../workspace/scripts/install-agent-vm-local-ca-trust.sh \
+  --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
+  --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
 ./setup.sh --guest-local
 cd ../budget-analyzer-web
 npm install
@@ -105,10 +109,12 @@ The guest preflight rejects a remote Docker environment or context and requires
 the guest's default `/var/run/docker.sock`, normal `/var/lib/docker` data root,
 JDK 25, Node.js 20+ and npm 10+. The imported-TLS validation checks the public
 CA, validity period, hostname, chain and leaf/key match without changing trust
-or Kubernetes. `./setup.sh --guest-local` repeats the Docker check, recreates a
-fresh guest `kind` cluster, installs the public root in the guest trust store,
-and applies the ingress TLS Secret only after the strict loopback `kind-kind`
-checks pass.
+or Kubernetes. The reviewed workspace command is the only guest OS/NSS trust
+writer and fails closed when its native identity, repository or trust
+prerequisites are not satisfied. `./setup.sh --guest-local` repeats the Docker
+check, recreates a fresh guest `kind` cluster, and applies the ingress TLS
+Secret only after the strict loopback `kind-kind` checks pass; it does not
+change guest trust.
 
 `./setup.sh` in either mode recreates Kind. It is a first-bootstrap or explicit
 clean-rebuild command, never a daily VM-start command. Use the daily native
@@ -116,8 +122,9 @@ startup below for ordinary guest work.
 
 The `ingress-tls-secret` Tilt resource validates the already transferred files
 and reconciles the local Kind Secret on startup. It does not run mkcert or alter
-guest trust. Missing, expired, or replaced files return to the host renewal and
-guest import workflow; they are not repaired by `tilt up`.
+guest trust. Missing, expired, or replaced files return to the host renewal,
+three-file transfer, workspace trust and orchestration Secret-reconciliation
+workflow; they are not repaired by `tilt up`.
 
 Follow the [native manual plan](../plans/agent-vm-native-manual-plan.md) for the
 remaining human checkpoints. Do not import Mint Docker state or run the

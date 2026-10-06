@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Validate host-created ingress TLS files and, when requested, install their
-# public root plus the Kubernetes ingress Secret. This script never invokes
-# mkcert or generates key material.
+# Validate host-created ingress TLS files and reconcile their Kubernetes
+# ingress Secret. This script never invokes mkcert, generates key material or
+# changes a trust store.
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ Usage: scripts/bootstrap/install-imported-ingress-tls.sh [options]
 
 Options:
   --validate-only         Validate files without changing trust or Kubernetes.
-  --install-system-trust  Install the public root in the local OS trust store.
+  --install-system-trust  Rejected legacy option; workspace owns guest trust.
   --cert-dir DIR          Validate/install the three required files from DIR.
   --help                  Show this help.
 EOF
@@ -32,6 +32,18 @@ EOF
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
+    exit 1
+}
+
+reject_legacy_trust_writer() {
+    cat >&2 <<'EOF'
+ERROR: --install-system-trust is retired; orchestration does not change guest trust.
+After reviewing workspace changes and ending affected workers, the human must run:
+  . "$HOME/.config/budget-analyzer-native/env.sh"
+  ../workspace/scripts/install-agent-vm-local-ca-trust.sh \
+    --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
+    --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
+EOF
     exit 1
 }
 
@@ -61,8 +73,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "$VALIDATE_ONLY" == true && "$INSTALL_SYSTEM_TRUST" == true ]]; then
-    fail "--validate-only and --install-system-trust cannot be combined"
+if [[ "$INSTALL_SYSTEM_TRUST" == true ]]; then
+    reject_legacy_trust_writer
 fi
 
 CERT_FILE="$CERT_DIR/_wildcard.budgetanalyzer.localhost.pem"
@@ -99,10 +111,9 @@ openssl x509 -in "$CERT_FILE" -checkend 0 -noout >/dev/null 2>&1 \
     || fail "the imported ingress leaf is expired or not yet valid"
 openssl x509 -in "$CA_FILE" -noout -text 2>/dev/null | grep -q 'CA:TRUE' \
     || fail "the imported public root is not marked as a CA"
-openssl x509 -in "$CERT_FILE" -noout -checkhost "$EXPECTED_HOSTNAME" >/dev/null 2>&1 \
-    || fail "the imported ingress leaf does not cover $EXPECTED_HOSTNAME"
-openssl verify -CAfile "$CA_FILE" "$CERT_FILE" >/dev/null 2>&1 \
-    || fail "the imported public root does not verify the ingress leaf"
+openssl verify -CAfile "$CA_FILE" -verify_hostname "$EXPECTED_HOSTNAME" \
+    "$CERT_FILE" >/dev/null 2>&1 \
+    || fail "the imported public root does not verify the ingress leaf for $EXPECTED_HOSTNAME"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -122,15 +133,6 @@ if [[ -f /.dockerenv || -f /run/.containerenv ]]; then
 fi
 
 assert_local_kind_target || exit 1
-
-if [[ "$INSTALL_SYSTEM_TRUST" == true ]]; then
-    command -v update-ca-certificates >/dev/null 2>&1 \
-        || fail "update-ca-certificates is required for guest OS trust installation"
-    sudo install -m 0644 "$CA_FILE" \
-        /usr/local/share/ca-certificates/budget-analyzer-local-ingress-ca.crt
-    sudo update-ca-certificates >/dev/null
-    printf 'Installed the imported public root in the development VM trust store.\n'
-fi
 
 kubectl create secret tls "$SECRET_NAME" \
     --cert="$CERT_FILE" \

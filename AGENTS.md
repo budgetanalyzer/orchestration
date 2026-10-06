@@ -79,8 +79,8 @@ Migration and Mint runtime retirement are operator-confirmed complete in
 `docs/plans/agent-host-isolation-acceptance.md`. Preserve the original execution
 plan and runner state; do not rerun destructive migration steps or reconstruct
 retired agent containers. Before review follow-up work, read
-`docs/plans/agent-vm-security-review-remediation-plan.md`. Before collecting or
-reviewing host firewall/confinement evidence, read
+`docs/plans/agent-vm-security-review-remediation-plan.md`. Before preparing the
+human-owned host repair or collecting/reviewing firewall/confinement evidence, read
 `docs/runbooks/host-isolation-audit.md`. The human runs the read-only collector
 on the personal host; agents may test it offline and review explicitly supplied
 redacted evidence, but must not acquire host access or change host policy.
@@ -93,10 +93,11 @@ production kubeconfigs, cloud or deployment credentials, user credentials, or
 session cookies to the guest, and never use an agent session to deploy or
 administer staging or production. Before an agent-authorized cluster mutation,
 require the current context and referenced cluster to equal `kind-kind`,
-require a loopback Kubernetes API endpoint, require the local `kind` cluster
-and require the `kind-control-plane` node to be Ready. A VM marker, cluster
-name or process name alone does not prove personal-host isolation. For the full
-boundary and API-test target checks, read
+require an exact loopback HTTPS Kubernetes API authority with no kubeconfig
+proxy override, require the local `kind` cluster and require the
+`kind-control-plane` node to be Ready. A VM marker, cluster name or process
+name alone does not prove personal-host isolation. For the full boundary and
+API-test target checks, read
 `docs/architecture/autonomous-ai-execution.md` before changing agent sandbox,
 credential, Kubernetes-access, or autonomous execution behavior.
 
@@ -419,13 +420,21 @@ workspace devcontainer retains its separate lazy container-local trust path.
 Read `../workspace/docs/local-budget-analyzer-tls.md` before changing or
 debugging either flow.
 
+Keep native guest trust ownership singular. The workspace human installer is
+the only OS/NSS trust writer; orchestration validates the three transferred
+files and reconciles the Kubernetes ingress Secret. The retired orchestration
+`--install-system-trust` interface must fail with the canonical workspace
+command, and Tilt must never invoke either trust installation or certificate
+generation. Read `docs/development/local-environment.md#development-vm-import-and-renewal`
+before changing guest bootstrap, renewal or imported-TLS behavior.
+
 If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
 follow the environment-specific human workflow in
 `docs/development/local-environment.md#development-vm-import-and-renewal`.
 The standard local path may require host `./setup.sh`; the development VM path
 requires host-only renewal when necessary, explicit transfer of the three
-approved files, and the guest imported-TLS installer. It must not recreate a
-host cluster.
+approved files, the workspace human trust installer and orchestration Secret
+reconciliation. It must not recreate a host cluster.
 Do not generate or rotate certificates from an agent process, and do not bypass
 verification with HTTP, `--insecure`, `verify=False`, or
 `ignore_https_errors`.

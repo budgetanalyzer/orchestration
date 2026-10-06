@@ -53,8 +53,13 @@ def require_host(confirmed):
 
 class Redactor:
     """Best-effort candidate redaction. Human review is still mandatory."""
-    def __init__(self):
+    def __init__(self, *, domain=None, network=None):
         self.identities = {}
+        self.named_identifiers = {}
+        if domain:
+            self.remember_identifier('DOMAIN', domain)
+        if network:
+            self.remember_identifier('NETWORK', network)
 
     def alias(self, kind, value):
         key = (kind, value)
@@ -62,10 +67,39 @@ class Redactor:
             self.identities[key] = f'{kind}_{1 + sum(k[0] == kind for k in self.identities)}'
         return self.identities[key]
 
+    def remember_identifier(self, kind, value):
+        if value:
+            self.named_identifiers[value] = self.alias(kind, value)
+
+    def learn_xml(self, value):
+        """Learn relationship-bearing names before rendering a shared report."""
+        root = ET.fromstring(value)
+        name = root.findtext('name')
+        if root.tag == 'domain':
+            self.remember_identifier('DOMAIN', name)
+            for source in root.findall("./devices/interface/source[@network]"):
+                self.remember_identifier('NETWORK', source.get('network'))
+            for target in root.findall("./devices/interface/target[@dev]"):
+                self.remember_identifier('TAP', target.get('dev'))
+        elif root.tag == 'network':
+            self.remember_identifier('NETWORK', name)
+            for bridge in root.findall('./bridge[@name]'):
+                self.remember_identifier('BRIDGE', bridge.get('name'))
+
+    def named(self, value):
+        for identifier in sorted(self.named_identifiers, key=len, reverse=True):
+            value = re.sub(
+                rf'(?<![A-Za-z0-9_]){re.escape(identifier)}(?![A-Za-z0-9_])',
+                self.named_identifiers[identifier],
+                value,
+            )
+        return value
+
     def address(self, match):
         value = match.group()
+        literal, separator, prefix = value.partition('/')
         try:
-            address = ipaddress.ip_address(value)
+            address = ipaddress.ip_address(literal)
         except ValueError:
             return value
         # Keep operational local/multicast ranges useful for rule review.
@@ -74,21 +108,73 @@ class Redactor:
         private6 = address.version == 6 and address in ipaddress.ip_network('fc00::/7')
         if private4 or private6 or address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified:
             return value
-        return self.alias(f'IP{address.version}', address.compressed)
+        suffix = separator + prefix if separator else ''
+        return self.alias(f'IP{address.version}', address.compressed) + suffix
 
     def text(self, value):
         value = re.sub(r'(?m)^\s*#.*$', '', value)
-        value = re.sub(r'((?:--comment|\bcomment)\s+)("(?:\\.|[^"\\])*"|\S+)',
+        shell_word = (
+            r'(?:(?:"(?:\\.|[^"\\])*")|(?:\'(?:\\.|[^\'\\])*\')|(?:\\.|[^\s])+)'
+        )
+        value = re.sub(r'(--comment(?:=|\s+))' + shell_word,
                        r'\1"REDACTED_COMMENT"', value)
+        value = re.sub(r'(?<![\w-])(comment\s+)("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\')',
+                       r'\1"REDACTED_COMMENT"', value)
+        value = self.named(value)
         value = re.sub(r'(?i)\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b',
                        lambda m: self.alias('MAC', m.group().lower()), value)
+        value = re.sub(
+            r'(?i)((?:ether\s+(?:saddr|daddr)|link/ether|mac(?:\s+address)?[= :]+)\s*)'
+            r'((?:[0-9a-f]{2}:){2,4}[0-9a-f]{2})(?![0-9a-f:])',
+            lambda m: m.group(1) + self.alias('MAC_PREFIX', m.group(2).lower()),
+            value,
+        )
         value = re.sub(r'(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b',
                        lambda m: self.alias('UUID', m.group().lower()), value)
-        value = re.sub(r'(?<![\w:])(?:[0-9a-fA-F]{0,4}:){2,}[0-9a-fA-F:.]*', self.address, value)
-        value = re.sub(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])', self.address, value)
+        value = re.sub(r'(?<![\w:])(?:[0-9a-fA-F]{0,4}:){2,}[0-9a-fA-F:.]*(?:/\d{1,3})?',
+                       self.address, value)
+        value = re.sub(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\w.])',
+                       self.address, value)
         value = re.sub(r'/(?:home|root|data|mnt|media|srv)/[^\s\"\'<>]*',
                        lambda m: self.alias('PATH', m.group()), value)
         return value
+
+
+DOCKER_PACKAGE_NAMES = frozenset({
+    'containerd',
+    'containerd.io',
+    'docker-buildx',
+    'docker-buildx-plugin',
+    'docker-ce',
+    'docker-ce-cli',
+    'docker-ce-rootless-extras',
+    'docker-cli',
+    'docker-compose',
+    'docker-compose-plugin',
+    'docker-compose-v2',
+    'docker.io',
+    'moby-buildx',
+    'moby-cli',
+    'moby-compose',
+    'moby-engine',
+    'runc',
+})
+
+
+def docker_package_summary(value):
+    """Return only installed Docker-engine/CLI and direct runtime families."""
+    installed = []
+    for line in value.splitlines():
+        fields = line.split('\t')
+        if len(fields) != 3:
+            raise ValueError('Unexpected dpkg-query package record')
+        package, status, version = fields
+        package = package.rsplit(':', 1)[0]
+        if package in DOCKER_PACKAGE_NAMES and len(status) > 1 and status[1] == 'i':
+            installed.append(f'{package}\t{status}\t{version}')
+    if not installed:
+        return 'No installed Docker engine/CLI, containerd or runc package records.'
+    return 'Installed Docker engine/CLI, containerd and runc package records:\n' + '\n'.join(sorted(installed))
 
 
 def xml_summary(value):
@@ -135,28 +221,40 @@ def xml_summary(value):
 
 
 def collect(args, directory):
-    redactor = Redactor()
+    redactor = Redactor(domain=args.domain, network=args.network)
     errors = []
     report = ['# Host isolation audit candidate',
               'Collection time UTC: ' + datetime.now(timezone.utc).isoformat(),
               'NOT A SECURITY PASS. Review privately before sharing. Local addresses,',
-              'interface names, chain/set names and process names are retained.',
+              'unselected interface names, chain/set names and process names are retained.',
               'Raw evidence and XML remain on the personal host. No active probes ran.']
     index = []
 
-    def capture(label, argv, *, optional=False, xml=False, share=True):
+    def capture(label, argv, *, optional=False, xml=False, share=True, transform=None):
         code, output, error = run(argv)
+        transform_failed = False
+        if transform and not code:
+            try:
+                output = transform(output)
+            except ValueError:
+                transform_failed = True
+                output = 'Output parsing failed; unfiltered output withheld.'
+        elif transform and code:
+            output = 'Command failed; unfiltered partial output withheld.'
         raw = directory / (label + '.txt')
         raw.write_text(f'exit={code}\nSTDOUT\n{output}\nSTDERR\n{error}')
         index.append({'name': raw.name, 'sha256': hashlib.sha256(raw.read_bytes()).hexdigest(), 'exit': code})
         if code and not optional:
             errors.append(label)
+        if transform_failed:
+            errors.append(label + '-parse')
         report.extend(['', '## ' + label, f'exit={code}; optional={optional}'])
         if code:
             report.append('Unavailable or failed; inspect private raw output. Never count this as a denial.')
         elif share:
             if xml:
                 try:
+                    redactor.learn_xml(output)
                     output = xml_summary(output)
                 except (ET.ParseError, ValueError):
                     errors.append(label + '-xml')
@@ -167,6 +265,11 @@ def collect(args, directory):
 
     sudo = ['sudo', '-n', '--']
     virsh = sudo + ['virsh', '--connect', 'qemu:///system']
+    # Learn live and persistent relationship names before rendering any rules.
+    capture('domain-live', virsh + ['dumpxml', args.domain], xml=True)
+    capture('domain-persistent', virsh + ['dumpxml', args.domain, '--inactive'], xml=True)
+    capture('network-live', virsh + ['net-dumpxml', args.network], xml=True)
+    capture('network-persistent', virsh + ['net-dumpxml', args.network, '--inactive'], xml=True)
     capture('ufw-status', sudo + ['ufw', 'status', 'verbose'])
     capture('ufw-numbered', sudo + ['ufw', 'status', 'numbered'])
     capture('ufw-effective', sudo + ['ufw', 'show', 'raw'])
@@ -196,11 +299,7 @@ def collect(args, directory):
     capture('listeners', sudo + ['ss', '-H', '-lntup'])
     capture('forwarding', ['sysctl', 'net.ipv4.ip_forward', 'net.ipv6.conf.all.forwarding'])
     capture('domain-state', virsh + ['domstate', args.domain])
-    capture('domain-live', virsh + ['dumpxml', args.domain], xml=True)
-    capture('domain-persistent', virsh + ['dumpxml', args.domain, '--inactive'], xml=True)
     capture('domain-info', virsh + ['dominfo', args.domain])
-    capture('network-live', virsh + ['net-dumpxml', args.network], xml=True)
-    capture('network-persistent', virsh + ['net-dumpxml', args.network, '--inactive'], xml=True)
     capture('network-info', virsh + ['net-info', args.network])
     capture('apparmor-status', sudo + ['aa-status'])
     # Label/process evidence helps distinguish configured from live confinement.
@@ -210,8 +309,9 @@ def collect(args, directory):
     capture('docker-policy-files', sudo + ['stat', '-c', '%U:%G %a %N',
             '/usr/local/sbin/agent-vm-docker-isolation',
             '/etc/systemd/system/docker.service.d/agent-vm-isolation.conf'], optional=True)
-    capture('docker-packages', ['dpkg-query', '-W', '-f=${binary:Package} ${db:Status-Abbrev}\n',
-                               'docker.io', 'docker-ce', 'docker-ce-cli', 'docker-compose-v2'], optional=True)
+    capture('docker-packages',
+            ['dpkg-query', '-W', '-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n'],
+            transform=docker_package_summary)
     report.extend(['', '## Collection result',
                    'INCOMPLETE: ' + ', '.join(errors) if errors else 'COLLECTED: requires human and agent review; not a security verdict.',
                    'Review rule ordering, every input/forward path, protocol exceptions, live confinement,',

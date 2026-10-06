@@ -3,8 +3,23 @@
 # Shared fail-closed checks for native commands that inspect or mutate the
 # guest-local Kind cluster. Source this file; do not execute it directly.
 
+is_supported_local_kubernetes_api_server() {
+    local api_server="$1"
+    local port
+
+    if [[ "$api_server" =~ ^https://(127\.0\.0\.1|localhost):([0-9]{1,5})$ ]]; then
+        port="${BASH_REMATCH[2]}"
+    elif [[ "$api_server" =~ ^https://\[::1\]:([0-9]{1,5})$ ]]; then
+        port="${BASH_REMATCH[1]}"
+    else
+        return 1
+    fi
+
+    (( 10#$port >= 1 && 10#$port <= 65535 ))
+}
+
 assert_local_kind_target() {
-    local active_context referenced_cluster api_server node_ready command_name
+    local active_context referenced_cluster api_server proxy_url node_ready command_name
     local expected_context="kind-kind"
     local expected_cluster="kind-kind"
     local expected_kind_cluster="kind"
@@ -37,14 +52,23 @@ assert_local_kind_target() {
         kubectl config view --minify \
             -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true
     )"
-    case "$api_server" in
-        https://127.0.0.1:*|https://localhost:*|https://\[::1\]:*) ;;
-        *)
-            printf 'ERROR: Kubernetes API is not loopback-bound: %s\n' \
-                "${api_server:-unknown}" >&2
-            return 1
-            ;;
-    esac
+    if ! is_supported_local_kubernetes_api_server "$api_server"; then
+        printf 'ERROR: Kubernetes API is not an exact supported loopback HTTPS authority: %s\n' \
+            "${api_server:-unknown}" >&2
+        return 1
+    fi
+
+    if ! proxy_url="$(
+        kubectl config view --minify \
+            -o jsonpath='{.clusters[0].cluster.proxy-url}' 2>/dev/null
+    )"; then
+        printf 'ERROR: unable to inspect the Kubernetes API proxy configuration.\n' >&2
+        return 1
+    fi
+    if [[ -n "$proxy_url" ]]; then
+        printf 'ERROR: Kubernetes API proxy redirection is not allowed for the local target.\n' >&2
+        return 1
+    fi
 
     if ! kind get clusters 2>/dev/null | grep -Fxq "$expected_kind_cluster"; then
         printf "ERROR: local Kind cluster '%s' is absent.\n" \

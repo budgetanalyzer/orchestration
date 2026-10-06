@@ -50,9 +50,11 @@ Run `./setup.sh` on the host. In addition to configuring browser TLS, it
 publishes the public local ingress CA consumed by the workspace's lazy
 devcontainer trust command. The development VM instead uses the explicit
 `./setup.sh --guest-local` first-bootstrap path after the human transfers the
-three approved ingress TLS files. Both modes recreate Kind; neither is a daily
-start command. Native guest daily work uses the read-only runtime preflight and
-`tilt up`; see Getting Started.
+three approved ingress TLS files and runs the workspace-owned guest trust
+installer. Guest setup validates those files and reconciles only the ingress
+Secret. Both modes recreate Kind; neither is a daily start command. Native guest
+daily work uses the read-only runtime preflight and `tilt up`; see Getting
+Started.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 

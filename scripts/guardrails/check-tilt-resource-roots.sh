@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies Tilt root resources and the non-generating ingress TLS dependency.
+# Verifies Tilt root resources and critical startup dependencies.
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ Usage: scripts/guardrails/check-tilt-resource-roots.sh [--context <kubectl-conte
 Evaluates the Tiltfile and compares resources with empty resource_deps to the
 checked-in intentional-root allowlist. Also verifies that Tilt reconciles
 existing ingress TLS files without invoking certificate generation or trust
-installation.
+installation, and that infrastructure startup waits for Kyverno readiness.
 EOF
 }
 
@@ -161,6 +161,28 @@ if ! jq -e '
     exit 1
 fi
 
+if ! jq -e '
+    .Manifests[]
+    | select(.Name == "infra-tls-prerequisites")
+    | (.ResourceDependencies | sort)
+        == ["infrastructure-namespace", "kyverno-ready"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: infrastructure setup must wait for both its namespace and Kyverno readiness.\n' >&2
+    exit 1
+fi
+
+for infrastructure_resource in postgresql redis rabbitmq; do
+    if ! jq -e --arg name "${infrastructure_resource}" '
+        .Manifests[]
+        | select(.Name == $name)
+        | .ResourceDependencies == ["infra-tls-prerequisites"]
+    ' "${tilt_result_file}" >/dev/null; then
+        printf 'ERROR: %s must inherit the Kyverno readiness gate through infra-tls-prerequisites.\n' \
+            "${infrastructure_resource}" >&2
+        exit 1
+    fi
+done
+
 if jq -e '
     .Manifests[]
     | .DeployTarget.UpdateCmdSpec.args[]?
@@ -177,3 +199,4 @@ fi
 
 printf 'Tilt resource root allowlist passed (%s roots checked)\n' "$(wc -l < "${actual_file}" | tr -d ' ')"
 printf 'Tilt ingress TLS reconciliation guard passed\n'
+printf 'Tilt infrastructure Kyverno readiness guard passed\n'

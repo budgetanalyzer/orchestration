@@ -147,6 +147,25 @@ configure your IDE with a standard `Remote JVM Debug` connection to
 
 ## Common Issues Decision Tree
 
+### Issue: Infrastructure Resources Fail After a Kind Node Resume
+
+If PostgreSQL, Redis, and RabbitMQ all fail in Tilt with errors that mention
+`validate.kyverno.svc-fail`, inspect Kyverno before debugging the individual
+StatefulSets:
+
+```bash
+tilt get uiresources postgresql redis rabbitmq kyverno kyverno-ready
+kubectl get pods,endpoints -n kyverno
+kubectl get pods,endpoints -n infrastructure
+```
+
+A retained fail-closed Kyverno webhook can reject Kubernetes applies while its
+admission controller is restarting after the Kind node resumes. Tilt gates
+`infra-tls-prerequisites`, and therefore PostgreSQL, Redis, and RabbitMQ, on
+`kyverno-ready`. If the infrastructure resources started before that gate,
+verify the active Tiltfile includes this dependency and inspect the resource
+timestamps rather than weakening or deleting the webhook configuration.
+
 ### Issue: Service Pod Not Starting
 
 ```

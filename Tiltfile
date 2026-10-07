@@ -66,7 +66,11 @@ k8s_resource(
 local_resource(
     'infra-tls-prerequisites',
     cmd='./scripts/bootstrap/setup-infra-tls.sh && ./scripts/bootstrap/check-infra-tls-secrets.sh',
-    resource_deps=['infrastructure-namespace'],
+    # A resumed Kind node can retain Kyverno's fail-closed webhook
+    # configurations while the admission controller is still restarting.
+    # Gate all infrastructure setup behind admission readiness so the first
+    # StatefulSet apply cannot race an unavailable webhook.
+    resource_deps=['infrastructure-namespace', 'kyverno-ready'],
     labels=['infrastructure'],
 )
 

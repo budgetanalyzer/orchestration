@@ -264,6 +264,20 @@ instead.
 
 ## Access
 
+For local development, **guest publication** is the orchestration-owned
+Kubernetes-to-VM-loopback access layer. This document is the canonical source
+for observability resource selection, VM-loopback publication ports, lifecycle,
+health checks, authentication and operator URLs. The repo-owned helper creates
+the four foreground, loopback-only VM listeners and removes them when it exits;
+`tilt up` installs the workloads but does not create or supervise those
+listeners.
+
+VM-loopback publication does not make an endpoint available on the personal
+host. For a personal-host browser, keep the helper running in the VM and then
+follow workspace's separate
+[optional observability host tunnel](../../../workspace/docs/host-isolation.md#optional-observability-host-tunnel).
+That SSH transport remains optional and does not create a public ingress route.
+
 ### Grafana
 
 Local Tilt and production OCI/k3s use the same internal-only access contract
@@ -296,22 +310,22 @@ listener, the verifier reuses it instead of failing. Use explicit port
 overrides only when some other intentional listener owns one of the canonical
 ports.
 
-For persistent operator access to all four observability UIs, use the repo-
-owned helper:
+For foreground local guest publication of all four observability UIs, use the
+repo-owned helper:
 
 ```bash
 ./scripts/ops/start-observability-port-forwards.sh
 ```
 
-That helper keeps the canonical Grafana, Prometheus, Jaeger, and Kiali
-forwards bound to `127.0.0.1` in one foreground process, prints the local
-URLs plus the Grafana password and Kiali token commands, and tears down all
-child forwards on `Ctrl+C`. Raw `kubectl port-forward --address 127.0.0.1 ...`
-commands remain the underlying supported access model in both local Tilt and
-production OCI/k3s.
+That helper keeps the canonical Grafana, Prometheus, Jaeger, and Kiali guest
+publications bound to VM `127.0.0.1` in one foreground process, prints the
+local URLs plus the Grafana password and Kiali token commands, and tears down
+all child forwards on `Ctrl+C`. Raw
+`kubectl port-forward --address 127.0.0.1 ...` commands remain the underlying
+supported access model in both local Tilt and production OCI/k3s.
 
-For workstation access to production OCI/k3s, keep the Kubernetes
-port-forwards running on the OCI host first, then open the matching
+Production OCI/k3s retains a distinct workstation-access workflow. Keep the
+Kubernetes port-forwards running on the OCI host first, then open the matching
 workstation-side SSH tunnels:
 
 ```bash

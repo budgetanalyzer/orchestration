@@ -58,7 +58,8 @@ native macOS or Windows setup support.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 
-Once the stack is running:
+Once the stack is running, orchestration publishes these entry points on VM
+loopback:
 
 | | |
 |---|---|
@@ -66,9 +67,17 @@ Once the stack is running:
 | Tilt UI | `http://localhost:10350` |
 | API docs | `https://app.budgetanalyzer.localhost/api-docs` |
 
+VM-loopback availability does not make these URLs available on the personal
+host. Follow the [end-to-end local workflow](docs/development/getting-started.md#operator-entry-points)
+and workspace's [personal-host access contract](../workspace/docs/host-isolation.md#personal-host-access)
+for the default combined application/Tilt host tunnel. Observability requires
+the separate orchestration guest publication helper and remains an optional
+second host tunnel.
+
 ## Documentation
 
 - [Getting Started](docs/development/getting-started.md) — native VM application setup walkthrough
+- [Personal-Host Access](../workspace/docs/host-isolation.md#personal-host-access) — workspace-owned host tunnel and host-loopback transport
 - [Local Environment Mechanics](docs/development/local-environment.md) — live update pipeline, mixed workflows
 - [Host Isolation Audit](../workspace/docs/host-isolation-audit.md) — workspace-owned human-only host evidence collection and security review
 - [Service-Common Artifact Resolution](docs/development/service-common-artifact-resolution.md) — local vs. GitHub Packages

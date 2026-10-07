@@ -24,7 +24,7 @@ side-by-side by the workspace-owned repository workflow. That includes
 `../ext-authz`, which owns the Go external authorization service source that
 Tilt builds into the local `ext-authz` image.
 
-## Native VM Application Workflow
+## Development VM Native Workflow
 
 Do not install native tools ad hoc from orchestration or create a second
 agent-specific home. Edit `.env` before `tilt up`; Auth0 values and
@@ -53,8 +53,8 @@ this order:
    application bootstrap sequence in the next section. `./setup.sh` runs only
    here: it recreates VM-local Kind and installs the transferred leaf/key into
    the Kubernetes TLS Secret. It never runs mkcert.
-4. For an interactive personal-host browser, the human uses workspace's
-   [reviewed loopback forwarding and hostname boundary](../../../workspace/docs/host-isolation.md#application-startup-and-rebuild).
+4. For an interactive personal-host browser, the human starts workspace's
+   [default application and Tilt host tunnel](../../../workspace/docs/host-isolation.md#default-application-and-tilt-host-tunnel).
 
 Do not run `./setup.sh` on the personal host, run mkcert in the VM, or copy the
 mkcert CA signing key into the VM. Orchestration's
@@ -207,15 +207,31 @@ The app requires both Auth0 and FRED credentials for local startup.
 
 ## Operator Entry Points
 
+Orchestration starts the application and Tilt in the VM and owns their guest
+publication on VM loopback:
+
 - Application: `https://app.budgetanalyzer.localhost`
 - Tilt UI: `http://localhost:10350`
 - Unified API docs surface: `https://app.budgetanalyzer.localhost/api-docs`
-- Observability helper:
-  `./scripts/ops/start-observability-port-forwards.sh`
+
+These guest-local entry points are not automatically available on the personal
+host. After `tilt up` is healthy, use workspace's
+[default combined host tunnel](../../../workspace/docs/host-isolation.md#default-application-and-tilt-host-tunnel)
+to carry application HTTPS and the Tilt UI from VM loopback to personal-host
+loopback in one foreground process.
+
+Observability is optional and is not part of that default host tunnel. When it
+is needed, first run the orchestration
+[foreground guest publication helper](../architecture/observability.md#access)
+in a separate VM shell. While it remains running, start workspace's
+[optional observability host tunnel](../../../workspace/docs/host-isolation.md#optional-observability-host-tunnel)
+in a separate personal-host shell. Stopping either foreground process removes
+its corresponding layer of access.
 
 Exact `/api-docs` behavior lives in
 [docs-aggregator/README.md](../../docs-aggregator/README.md). Exact
-observability access commands and operator posture live in
+observability resources, ports, URLs, health checks, authentication and guest
+publication lifecycle live in
 [../architecture/observability.md](../architecture/observability.md).
 
 ## Deeper References

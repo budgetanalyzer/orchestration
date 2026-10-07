@@ -70,6 +70,16 @@ repository owns development-VM provisioning, native users and tools,
 guest-local repositories and Docker, Remote SSH, exact OS/NSS trust and the
 personal-host isolation audit.
 
+Orchestration owns **guest publication**: selection and lifecycle of
+application and operator endpoints made available on VM loopback, including
+their health, authentication and URLs. Workspace owns the explicit
+personal-host-to-VM **host tunnel**, host-loopback exposure, SSH profile,
+`authbind` policy and host transport guardrails. Read `docs/OWNERSHIP.md`, the
+nearest orchestration publication owner and
+`../workspace/docs/host-isolation.md#personal-host-access` before changing
+either side of this interface, and coordinate both owner documents when a
+canonical guest publication changes.
+
 The `ext-authz` Go service implementation lives in the sibling `../ext-authz`
 repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
@@ -164,7 +174,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Supported local happy path: `docs/development/getting-started.md`
 - Local environment mechanics and live development pipeline: `docs/development/local-environment.md`
 - Agent application authority, exact local targets and production exclusions: `docs/architecture/autonomous-ai-execution.md`
-- Development VM, native tools, repository/Docker boundary, trust and host isolation: sibling `../workspace/docs/host-isolation.md`
+- Development VM, native tools, repository/Docker boundary, trust, host isolation and personal-host tunnel: sibling `../workspace/docs/host-isolation.md`
 - Personal-host isolation audit, private evidence handling and repair handoff: sibling `../workspace/docs/host-isolation-audit.md`
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
@@ -222,11 +232,11 @@ Operational guardrails:
 
 Observability rules:
 - Grafana, Prometheus, Jaeger, and Kiali are internal-only in both local Tilt and OCI/k3s
-- Use loopback-only access for operators: raw `kubectl port-forward --address 127.0.0.1 ...` or `./scripts/ops/start-observability-port-forwards.sh`
+- Treat raw `kubectl port-forward --address 127.0.0.1 ...` and `./scripts/ops/start-observability-port-forwards.sh` as orchestration-owned guest publication; keep every listener on VM loopback
 - `./scripts/smoketest/verify-observability-port-forward-access.sh` is the focused access proof
 - Do not introduce public observability hostnames
 - Do not use `--address 0.0.0.0` for observability access
-- Exact observability access commands, local ports, and Kiali auth flow live in `docs/architecture/observability.md`
+- Exact observability resources, VM-loopback ports, lifecycle, health, URLs and authentication live in `docs/architecture/observability.md`; workspace's personal-host access section owns the optional host tunnel
 
 ## Development Workflow
 
@@ -249,11 +259,11 @@ Supported local startup path:
 - `scripts/README.md` owns the full verifier catalog and targeted capability checks
 - Preserve the local frontend production-smoke path as one atomic Tilt image target mapped into `nginx-gateway`; read `docs/development/local-environment.md#frontend-reactvite` before changing that build or rollout wiring
 
-Primary operator entry points:
-- App: `https://app.budgetanalyzer.localhost`
-- Tilt UI: `http://localhost:10350`
-- Unified API docs surface: `https://app.budgetanalyzer.localhost/api-docs`
-- Observability helper: `./scripts/ops/start-observability-port-forwards.sh`
+Guest publication and personal-host access:
+- `docs/development/getting-started.md#operator-entry-points` owns the supported application/Tilt sequence and guest-local URLs
+- `docs/architecture/observability.md#access` owns the optional observability guest publication procedure and operator contract
+- `../workspace/docs/host-isolation.md#personal-host-access` owns the default combined application/Tilt host tunnel and the separate optional observability host tunnel
+- Do not imply that a VM-loopback listener is automatically available on personal-host loopback or that `tilt up` owns observability forwards
 
 Use targeted verifiers from `scripts/README.md` when working on one capability such as monitoring, tracing, shared session contracts, rate limiting, or browser hardening.
 

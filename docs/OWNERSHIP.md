@@ -50,13 +50,15 @@ shape of the topic and link outward.
 | Imported local ingress TLS validation, host-only renewal and Secret reconciliation | [docs/development/local-environment.md](development/local-environment.md) | Keep the approved transfer inputs, non-generating validation, personal-host renewal, exact local Kubernetes guard and Secret/Tilt behavior there. Link to workspace for OS/NSS trust. |
 | Native guest local-ingress trust installation and verification | [../workspace/docs/native-user-tools.md](../../workspace/docs/native-user-tools.md#establish-exact-ingress-trust) | Orchestration validates transferred TLS inputs and reconciles the Kubernetes Secret; link to workspace for the single OS/NSS trust installer, convergence rules and verified-client matrix. |
 | Personal-host isolation audit, repair handoff and evidence collection | [../workspace/docs/host-isolation-audit.md](../../workspace/docs/host-isolation-audit.md) | Workspace owns human-only collection, report privacy, effective firewall ordering, the repair contract, retired host-Docker reconciliation, and protocol/persistence proof. Orchestration keeps only boundary summaries and links. |
+| Application guest publication and supported local workflow | [docs/development/getting-started.md](development/getting-started.md#operator-entry-points) | Orchestration owns the application and Tilt endpoints on VM loopback. Link to workspace for personal-host transport instead of copying its tunnel procedure. |
 | Manual Tilt/Kind bootstrap internals | [docs/tilt-kind-setup-guide.md](tilt-kind-setup-guide.md) | Treat it as a manual/deep-dive reference, not a competing default path. |
 | High-level system orientation | [docs/architecture/system-overview.md](architecture/system-overview.md) | Keep this high level and defer exact contracts to the topic owners below. |
 | Browser request flow and shared session contract | [docs/architecture/session-edge-authorization-pattern.md](architecture/session-edge-authorization-pattern.md) | Other docs may summarize the flow, but detailed route ownership and session contract behavior belong there. |
 | `ext-authz` service implementation and release workflow | [../ext-authz/README.md](../../ext-authz/README.md) | Orchestration docs own deployment, Istio wiring, Redis ACLs, production policy, and cross-cutting session-edge behavior. |
 | Security controls and layered posture | [docs/architecture/security-architecture.md](architecture/security-architecture.md) | Link there for detailed control rationale and layered defenses. |
 | Ports and service exposure | [docs/architecture/port-reference.md](architecture/port-reference.md) | Do not maintain competing port tables elsewhere. |
-| Observability access model and operator entry points | [docs/architecture/observability.md](architecture/observability.md) | Keep exact access posture and port-forward commands there. |
+| Observability guest publication, access model and operator entry points | [docs/architecture/observability.md](architecture/observability.md#access) | Keep exact Kubernetes resource selection, VM-loopback publication ports, lifecycle, health checks, authentication, URLs and port-forward commands there. Link to workspace for personal-host transport. |
+| Personal-host transport for guest publications | [../workspace/docs/host-isolation.md](../../workspace/docs/host-isolation.md#personal-host-access) | Workspace owns the personal-host-to-VM host tunnel, host-loopback exposure, SSH profile, narrow `authbind` authorization and host transport guardrails. Orchestration must not duplicate the exact host procedure. |
 | Resource-routing authoring and NGINX route work | [nginx/README.md](../nginx/README.md) | Architecture docs may reference the pattern, but NGINX route authoring detail belongs there. |
 | Local script catalog and verifier entry points | [scripts/README.md](../scripts/README.md) | Other docs may call out specific scripts, but the `scripts/` tree map and canonical verifier entry points belong there. |
 | OCI deployment operator surface and deploy script map | [deploy/README.md](../deploy/README.md) | Other docs may summarize OCI bootstrap, render, reconcile, release, and verification commands, but detailed deploy run order and `deploy/scripts/` lifecycle mapping belong there. |
@@ -72,6 +74,25 @@ It is not the canonical owner for every exact operational detail it mentions.
 When `AGENTS.md` references setup flows, ports, observability access, routing,
 or `/api-docs` behavior, prefer a stable summary plus a pointer to the owner
 doc above instead of maintaining a second full inventory there.
+
+## Guest Publication And Host Tunnel Interface
+
+Orchestration owns **guest publication**: adapting selected Kubernetes Services
+and application processes to VM-loopback listeners. That ownership includes
+resource and endpoint selection, canonical VM-loopback publication ports,
+publication lifecycle and health, authentication, and operator URLs. The
+getting-started and observability owner documents above divide the application
+and observability details.
+
+Workspace owns the explicit loopback-only SSH **host tunnel** from personal-host
+loopback to those VM-loopback listeners. Its owner document controls the SSH
+profile, host-loopback bindings, narrow `authbind` authorization and transport
+guardrails.
+
+When a canonical guest publication changes, update the nearest orchestration
+owner document first and coordinate the corresponding workspace host tunnel
+owner update. Do not leave resource selection, ports, lifecycle, health,
+authentication or URLs inconsistent across that interface.
 
 ## Maintenance Workflow
 

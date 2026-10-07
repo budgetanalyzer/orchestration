@@ -2,8 +2,8 @@
 # scripts/loadtest/seed-loadtest-transactions.sh
 #
 # Bulk-creates per-user transaction fixtures on top of the synthetic users
-# that `seed-loadtest-users.sh` already seeded. This is Track 1 item 2 from
-# docs/plans/load-testing-synthetic-users-2026-04-09.md.
+# that `seed-loadtest-users.sh` already seeded. The shared fixture contract is
+# documented in `scripts/README.md`.
 #
 # Usage:
 #   ./scripts/loadtest/seed-loadtest-transactions.sh [options]

@@ -7,7 +7,7 @@ This is not the supported default onboarding path.
 
 Use [docs/development/getting-started.md](development/getting-started.md) for
 the supported `./setup.sh` and `tilt up` workflow. Use this guide only when you
-need to understand or reproduce the underlying host-side bootstrap steps one by
+need to understand or reproduce the underlying development-VM bootstrap steps one by
 one.
 
 ## When To Use This Guide
@@ -15,13 +15,13 @@ one.
 - debugging `./setup.sh`
 - reproducing a specific bootstrap step manually
 - learning how the Kind, Calico, DNS, and TLS pieces fit together
-- validating a host environment without relying on the full happy-path wrapper
+- validating the VM application environment without the full happy-path wrapper
 
 For the live-update pipeline, mixed local-and-cluster workflows, and
 troubleshooting after the stack is already up, use
 [docs/development/local-environment.md](development/local-environment.md).
 
-## Host Prerequisites
+## Development VM Prerequisites
 
 Run the repo preflight first:
 
@@ -29,10 +29,10 @@ Run the repo preflight first:
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-For host-side binary installs, prefer the verified installer:
+For VM-local binary installs, prefer the verified installer:
 
 ```bash
-./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno>
+./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|kind|kubeconform|kube-linter|kyverno>
 ```
 
 Current baseline:
@@ -46,8 +46,6 @@ Current baseline:
 - Tilt `0.37.3` (`./setup.sh` auto-installs this pinned version if Tilt is
   missing or mismatched)
 - OpenSSL `3.x+`
-- `mkcert` `1.4.4` (`./setup.sh` auto-installs this pinned binary if missing
-  or mismatched)
 
 Manual equivalents for repo-managed binaries:
 
@@ -56,8 +54,6 @@ Manual equivalents for repo-managed binaries:
 ./scripts/bootstrap/install-verified-tool.sh kind
 ./scripts/bootstrap/install-verified-tool.sh helm
 ./scripts/bootstrap/install-verified-tool.sh tilt
-sudo apt-get install -y libnss3-tools
-./scripts/bootstrap/install-verified-tool.sh mkcert
 ```
 
 Keep the repos side by side under a common parent directory if you are working
@@ -146,28 +142,34 @@ That script raises low Kind node values for both
 live command such as `docker exec kind-control-plane sysctl ...` is diagnostic
 recovery only; do not treat it as a persistent setup step.
 
-### 4. Configure DNS
+### 4. Configure Browser Access
 
-Add the local app host on the machine that runs the browser:
+The personal host owns the interactive browser, its loopback hostname mapping,
+and the reviewed SSH forwarding path into VM port 443. Workspace owns those
+host-boundary details; do not expose the VM ingress on a broad interface.
+
+### 5. Transfer And Reconcile Browser TLS Material
+
+The human runs the browser-facing certificate preparation in the personal-host
+orchestration checkout, then transfers only the wildcard leaf, leaf key and
+public CA into the VM checkout. There is no personal-host Kind cluster:
 
 ```bash
-echo '127.0.0.1 app.budgetanalyzer.localhost' | sudo tee -a /etc/hosts
-```
-
-### 5. Generate Browser TLS Material
-
-Run the browser-facing certificate bootstrap on the host:
-
-```bash
+# Personal host only
 ./scripts/bootstrap/setup-k8s-tls.sh
+
+# Development VM only, after the workspace-owned transfer and trust procedure
+./scripts/bootstrap/install-imported-ingress-tls.sh
 ```
 
-Do not run host-trust certificate generation from an AI container.
+Agents must not run host-trust certificate generation; use the documented
+human-operated personal-host workflow. Existing migrated files may be reused
+when `install-imported-ingress-tls.sh --validate-only` accepts them.
 
 ### 6. Generate Internal Transport TLS Material
 
 `./setup.sh` normally handles this for you. When reproducing the steps
-manually, generate the internal TLS secrets on the host:
+manually, generate the internal TLS secrets in the development VM:
 
 ```bash
 ./scripts/bootstrap/setup-infra-tls.sh
@@ -249,10 +251,13 @@ kind create cluster --config kind-cluster-config.yaml
 
 ### TLS Failures
 
-Regenerate only the affected TLS material on the host:
+Repair only the affected TLS material in its owning environment:
 
 ```bash
+# Personal host: browser-facing files; then repeat transfer and reconciliation
 ./scripts/bootstrap/setup-k8s-tls.sh
+
+# Development VM: internal application transport
 ./scripts/bootstrap/setup-infra-tls.sh
 ```
 

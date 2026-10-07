@@ -142,7 +142,7 @@ contract: `runAsUser`/`runAsGroup` `70` plus the explicit writable mounts for
 
 ## Connecting from Your Application
 
-### From Host Machine
+### From The Development VM OS
 
 Service-owned connection:
 

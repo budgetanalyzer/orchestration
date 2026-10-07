@@ -1,4 +1,5 @@
 # Tilt resources that intentionally have no resource_deps.
 #
-# Keep this list aligned with docs/plans/tiltfile-dependency-organization-plan.md.
+# Keep this list aligned with the root-resource contract enforced by
+# scripts/guardrails/check-tilt-resource-roots.sh.
 kind-node-inotify-budget

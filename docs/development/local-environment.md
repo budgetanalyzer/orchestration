@@ -8,30 +8,13 @@ environment works after startup
 
 ### Required Software
 
-**Minimum versions:**
-- Docker 24.0+
-- Kind 0.31.0 (`setup.sh` auto-installs this pinned version if missing or
-  mismatched)
-- kubectl 1.35.4 (`setup.sh` auto-installs this pinned version if missing or
-  mismatched; it stays on the same Kubernetes minor as `kindest/node:v1.35.0`)
-- OpenSSL 3.x+
-- Helm 3.20.x (tested; Helm 4 unsupported; `setup.sh` auto-installs `v3.20.1` if missing or unsupported)
-- Tilt 0.37.3 (`setup.sh` auto-installs this pinned version if Tilt is missing
-  or mismatched)
-- Git 2.40+
-- mkcert 1.4.4 (`setup.sh` auto-installs this pinned binary if missing or
-  mismatched; Linux still needs host `libnss3-tools` for browser trust stores)
-- JDK 25 (required by host-side Gradle local resources before service images are built)
-- Node.js 20+ and npm 10+ (required by the local frontend prod-smoke image build)
-
-Gradle does not need to be installed globally for the normal Tilt path; use the
-checked-in `./gradlew` wrappers.
-
-Repo-managed pinned prerequisites are `kubectl`, Kind, Tilt, `mkcert`, Calico,
-and Gateway API CRDs. Helm is repo-installed when missing or outside the
-supported Helm 3 range. Host-managed prerequisites remain Docker, Git, OpenSSL,
-JDK, Node.js, npm, sibling repository checkouts including `../ext-authz`, and
-frontend `node_modules`.
+Workspace owns the development VM's complete software, user, repository,
+credential, guest Docker and trust contract. Follow its
+[native runtime owner document](../../../workspace/docs/host-isolation.md)
+for installation and version requirements instead of reproducing that
+inventory here. Orchestration's application preflight delegates to workspace
+and adds only the exact local Kind target in daily mode. Repo-managed cluster
+inputs and their pinned versions remain in the setup scripts and manifests.
 
 The sibling `budget-analyzer-web` repo must also have local npm dependencies
 installed because the `budget-analyzer-web-prod-smoke` image build runs on the
@@ -48,18 +31,9 @@ npm install
 # Run the check script
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 
-# Or check manually:
-docker --version
-kind --version
-kubectl version --client
-openssl version
-helm version
-tilt version
-git --version
-mkcert --version
-java -version
-node --version
-npm --version
+# In the development VM, verify the complete native runtime and exact target
+./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
 ```
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
@@ -76,34 +50,15 @@ egress gateway uses
 now flow through Gateway `spec.infrastructure.parametersRef` via
 `kubernetes/istio/ingress-gateway-config.yaml`.
 
-For host-side binary installs, prefer the checked-in verified installer:
-`./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno>`.
-It uses pinned release artifacts with checked-in SHA-256 values instead of
-floating installer endpoints.
-
 ## Workspace Shape
 
 The supported onboarding path lives in
 [getting-started.md](getting-started.md). This document assumes that path is
 already in place and explains the local environment mechanics behind it.
 
-If you clone repositories manually instead of using the sibling `workspace`
-repo, keep them side by side under a common parent directory:
-
-```text
-parent-directory/
-├── orchestration/
-├── service-common/
-├── transaction-service/
-├── currency-service/
-├── session-gateway/
-├── permission-service/
-├── ext-authz/
-└── budget-analyzer-web/
-```
-
-That side-by-side layout is required for the repo's relative-path workflow,
-cross-repo scripts, and documentation links.
+Workspace owns repository creation and transport. Orchestration requires the
+resulting sibling layout for relative-path builds and documentation links; do
+not maintain a separate manual clone procedure here.
 
 ## Supported Startup Path
 
@@ -117,7 +72,7 @@ checklist for:
 
 This document owns the mechanics behind that workflow instead:
 
-- what `setup.sh` assembles locally
+- what `setup.sh` assembles in the development VM
 - how Tilt renders local config and secrets
 - how live update works for Java services, the frontend, and `service-common`
 - how to debug mixed local-and-cluster development workflows
@@ -127,14 +82,23 @@ The current local platform baseline still works like this:
 1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
    scratch, which is the clean-state contract for PVC-backed local
    infrastructure such as Redis.
-2. It rejects older `kindnet`-based clusters that cannot enforce
-   `NetworkPolicy`.
-3. It installs or version-corrects repo-managed pinned binaries before cluster
-   creation, and ensures a supported Helm `3.20.x` binary is present before
-   Helm-backed setup continues.
-4. It installs or reconciles pinned Calico and waits for CoreDNS readiness.
-5. It applies pinned Gateway API CRDs, configures local DNS plus
-   browser-facing and internal transport TLS, and prepares `.env`.
+2. Before deletion it invokes workspace's complete native runtime verifier and
+   validates the three human-transferred ingress files.
+3. It installs or reconciles pinned Calico and Gateway API inputs, waits for
+   cluster readiness, configures local DNS and infrastructure TLS, reconciles
+   the imported ingress Secret, and prepares `.env`.
+
+Workspace trust must already be established by the human-owned workflow below.
+Bootstrap recreates Kind and is inappropriate for daily startup.
+
+On every `tilt up`, the `ingress-tls-secret` resource runs the non-generating
+`scripts/bootstrap/install-imported-ingress-tls.sh` path. That resource
+validates the three existing ingress files and reconciles only
+the Kubernetes TLS Secret after the strict local Kind target checks pass. Tilt
+never invokes mkcert, generates browser-facing key material, or changes a trust
+store. Personal-host publication and renewal own certificate generation;
+orchestration owns transfer validation and Secret reconciliation; workspace
+alone owns native guest OS/NSS trust installation and verification.
 
 Tilt runs `./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on every
 `tilt up` before workload resources start. The Calico reconciliation script
@@ -148,11 +112,11 @@ fs.inotify.max_user_instances >= 8192
 fs.inotify.max_user_watches >= 524288
 ```
 
-Run `./scripts/bootstrap/check-tilt-prerequisites.sh` for read-only visibility
-into the host/container values and any reachable Kind node values. If a Kind
-node is below baseline in a running Tilt session, trigger the
+Run `./scripts/bootstrap/check-tilt-prerequisites.sh` to report local-machine
+and reachable Kind-node values and exercise the disposable runtime-security
+probes. If a Kind node is below baseline in a running Tilt session, trigger the
 `kind-node-inotify-budget` Tilt resource or run
-`./scripts/bootstrap/reconcile-kind-inotify-budget.sh` on the host. A one-off
+`./scripts/bootstrap/reconcile-kind-inotify-budget.sh` in the guest OS. A one-off
 `docker exec kind-control-plane sysctl ...` can recover a live cluster during
 diagnosis, but the repo-owned fix is the Tilt preflight helper.
 
@@ -169,7 +133,7 @@ For the script directory map and verifier inventory, see
 
 ## Host-Published Local Ingress CA
 
-Host `./setup.sh` owns browser-facing certificate generation and publishes an
+The personal host owns browser-facing certificate generation and publishes an
 exact public copy of the mkcert root that signs the local wildcard ingress
 certificate at:
 
@@ -183,22 +147,72 @@ metadata and must stay out of logs and uploaded artifacts. The corresponding
 mkcert CA private key remains in the host mkcert store and is never copied into
 the workspace.
 
-`scripts/bootstrap/setup-k8s-tls.sh` publishes the PEM atomically only after it
-confirms that the active context is `kind-kind`, the host Kind cluster is named
-`kind`, the source is a CA certificate, and the CA verifies the wildcard
-certificate. `scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing,
-invalid, or stale publication without printing certificate subject or issuer
-metadata.
+The human runs `scripts/bootstrap/setup-k8s-tls.sh` on the personal host for
+initial preparation, or `scripts/bootstrap/renew-host-ingress-tls.sh` for an
+explicit replacement. Both commands establish host browser trust, generate and
+validate the transferable files, and never access or create Kubernetes. The
+historical script name does not imply that Kind still runs on the host.
+`scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing, invalid, or
+stale VM publication without printing certificate subject or issuer metadata.
 
-The sibling workspace devcontainer can install this public root lazily into
-its container-local system, Python, and Chromium trust stores. For live agent
-work against exactly `https://app.budgetanalyzer.localhost`, run
-`ensure-budget-analyzer-local-ca-trust`; use
-`check-budget-analyzer-local-ca-trust` for read-only diagnosis. Detailed
-container behavior lives in `../workspace/docs/local-budget-analyzer-tls.md`.
-If the publication is missing or stale, stop and ask the user to run
-orchestration `./setup.sh` on the host. Never run mkcert or either certificate
-setup script from the agent container.
+Workspace alone owns native development-VM OS/NSS trust installation and
+read-only trust verification. Follow its
+[local TLS owner document](../../../workspace/docs/local-budget-analyzer-tls.md)
+for the human procedure and diagnostics. Orchestration does not reproduce or
+write that trust. If the publication is missing or stale, stop and use the
+owner workflow; never run mkcert or another browser-certificate generator from
+an agent process.
+
+### Development VM Import And Renewal
+
+Git transport does not carry the ignored TLS files. The human must copy exactly
+the wildcard leaf, its key and `_mkcert-rootCA.pem` from the personal host to
+the guest orchestration checkout using workspace's dedicated SSH transfer
+procedure. The host mkcert signing key is never copied. Existing users may
+reuse the three files from the pre-migration host checkout if the validation
+below succeeds; they do not need to create a new CA merely because Kind moved
+into the VM.
+
+Before bootstrap, this non-generating check is safe to run against those files:
+
+```bash
+./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
+```
+
+The human must establish trust through workspace's owner workflow before
+running guest bootstrap. The one end-to-end invocation is retained in
+[Getting Started](getting-started.md#development-vm-first-bootstrap);
+orchestration has no fallback trust implementation. The retired
+`--install-system-trust` option fails with the workspace-owned remediation
+instead of silently ignoring the requested import.
+
+Guest `./setup.sh` then runs the orchestration installer only to
+validate the public CA, current validity, the
+`app.budgetanalyzer.localhost` hostname and chain in one hostname-aware
+verification, and the leaf/key match. Before applying the ingress Secret it
+enforces the exact `kind-kind` context/referenced cluster, an HTTPS API
+authority exactly on `127.0.0.1`, `localhost` or `[::1]` with a valid port, no
+kubeconfig `proxy-url`, and a Ready `kind-control-plane` node. Userinfo,
+hostname suffixes, alternative schemes, paths, queries, fragments and malformed
+ports are rejected before cluster access. Daily native checks never modify a
+trust store.
+
+If the leaf expires or needs replacement, renew it only from a human-operated
+personal-host shell in the host orchestration checkout:
+
+```bash
+./scripts/bootstrap/renew-host-ingress-tls.sh
+```
+
+That command uses the existing host mkcert CA, validates the new files before
+replacement, and does not access or recreate Kubernetes. Recopy exactly the
+three approved files. After affected workers have ended, the human reviews the
+workspace and orchestration changes, repeats the workspace-owned trust flow,
+then runs `./scripts/bootstrap/install-imported-ingress-tls.sh` in the guest to
+reconcile the existing Kind Secret. Do not run `setup.sh`, create a
+guest-controlled browser CA, or bypass certificate verification for renewal.
+Guest-owned infrastructure TLS is separate and may be regenerated by the human
+guest bootstrap. Agents must not perform the trust handoff or write live trust.
 
 ## Observability Access
 
@@ -341,7 +355,7 @@ NGINX serves that bundle at
 `https://app.budgetanalyzer.localhost/_prod-smoke/` for strict-CSP and other
 browser-security checks while `/` and `/login` stay on the live Vite route.
 
-That local smoke-build path depends on host/devcontainer npm state in the
+That local smoke-build path depends on the current local user's npm state in the
 sibling `budget-analyzer-web` repo. Before expecting `/_prod-smoke/` to build
 or refresh, make sure `npm install` has been run there so
 `npm run build:prod-smoke` can execute locally. This is intentionally separate
@@ -375,9 +389,9 @@ The frontend strict-CSP audit is now repeatable from this repo with:
 ```
 
 That audit rebuilds the sibling smoke bundle and proves the repo-owned
-strict-CSP prerequisites before and after Session 4 tightens the NGINX headers.
-It does not replace the manual browser-console validation required by the
-edge and browser security plan.
+strict-CSP prerequisites used by the NGINX headers. It does not replace the
+manual browser-console validation required by the edge and browser security
+proof.
 
 The API rate-limit identity runtime proof is also repeatable from this repo:
 
@@ -402,8 +416,8 @@ paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api-docs`
 visibility plus fail-closed checks, the checked-in production-route syntax validation inside the live
 `nginx-gateway` runtime, the fail-closed `/api-docs/*` behavior for unknown
 docs paths, the remaining auth-edge throttling
-paths, reruns the Session 3 frontend CSP audit and the Session 7 API identity
-proof, and then reruns the full runtime-hardening cascade. Manual
+paths, reruns the frontend CSP audit and API identity proof, and then reruns
+the full runtime-hardening cascade. Manual
 browser-console validation on `/_prod-smoke/` is still required before relying
 on the edge and browser security proof.
 
@@ -672,7 +686,8 @@ code    151299 devex   93u  IPv4 584246      0t0  TCP localhost:10350 (LISTEN)
 }
 ```
 
-Then restart VS Code. See the [Sandboxed Container Configuration](#sandboxed-container-configuration) section for more details.
+Then restart VS Code. See the [Remote SSH Configuration](#remote-ssh-configuration)
+section for more details.
 
 ### Pod Not Starting
 
@@ -771,13 +786,20 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ### SSL Certificate Errors
 
 ```bash
-# Re-run browser-facing wildcard certificate setup on HOST
+# Reconcile the existing ingress files into the local Kind Secret
+./scripts/bootstrap/install-imported-ingress-tls.sh
+tilt trigger ingress-tls-secret
+
+# On the personal host only, prepare or repair browser trust and transfer files
 ./scripts/bootstrap/setup-k8s-tls.sh
+
+# On the personal host only, renew files without changing a cluster
+./scripts/bootstrap/renew-host-ingress-tls.sh
 
 # Verify wildcard secret exists
 kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 
-# Re-run internal transport-TLS setup on HOST
+# Human-only: regenerate internal transport TLS in the guest OS
 ./scripts/bootstrap/setup-infra-tls.sh
 
 # Verify infra secrets exist
@@ -790,9 +812,16 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 # Restart browser to clear certificate cache
 ```
 
-## IDE Setup
+## Optional Editor Setup
 
-> **Note:** IntelliJ IDEA is not supported. It cannot run containerized AI agents, making it unsuitable for AI-assisted development workflows.
+Orchestration does not require a specific editor. Agents and development
+commands must run as the normal user inside the development VM, and every
+client must preserve the workspace-owned credential, forwarding, and
+host-isolation controls.
+
+The VS Code Remote SSH guidance below is retained as a tested option. In that
+configuration, terminals, extensions, language servers, and file writes execute
+in the guest.
 
 ### VS Code
 
@@ -818,23 +847,12 @@ kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-
 }
 ```
 
-**Sandboxed Container Configuration:**
+**Remote SSH Configuration:**
 
-When running VS Code in a sandboxed container (e.g., for AI agent development), disable automatic port forwarding to ensure complete isolation:
-
-```json
-// VS Code User Settings (not workspace settings)
-{
-  "remote.autoForwardPorts": false
-}
-```
-
-**Why disable port forwarding?**
-- **True isolation**: No accidental leakage between container and host
-- **No port conflicts**: VS Code won't claim ports needed by Tilt or other services
-- **Cleaner workflow**: No need to manage or kill processes on the host
-
-**Note:** This setting goes in your VS Code user settings (`Ctrl/Cmd + ,`), not in the workspace `.vscode/settings.json` file.
+Use the workspace-owned Remote SSH profile documented in the
+[development VM guide](../../../workspace/docs/host-isolation.md). Workspace
+owns forwarding, credential and extension-host controls; do not restate or
+override them in orchestration settings.
 
 ## Next Steps
 

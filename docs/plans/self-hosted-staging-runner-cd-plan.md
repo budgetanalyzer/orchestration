@@ -195,7 +195,8 @@ Human operator on the home box:
 - Install `git`.
 - Install `jq`, `curl`, `bash`, and `ca-certificates`.
 - Install `mkcert` only if browser-trusted local TLS is needed on that host.
-- Run any certificate generation from the host, not from an AI container.
+- Run any certificate generation as a human-owned host operation, never from an
+  agent session.
 
 AI assistant:
 

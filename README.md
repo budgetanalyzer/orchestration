@@ -14,7 +14,15 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 
 **Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full production stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
-**AI agents can debug the full stack.** The development environment runs inside a sandboxed Docker container ([workspace](https://github.com/budgetanalyzer/workspace)) that has kubectl, helm, tilt, and host-network access to the Kind cluster. An AI coding agent operating in this container can inspect pods, read logs, restart deployments, run tests, and trace requests through the mesh — the same workflow a human operator would use, with no special tooling or adapters.
+**AI agents can debug the full stack.** The selected target runs agents directly
+in a dedicated development VM, with repeatable tooling owned by
+[workspace](https://github.com/budgetanalyzer/workspace). Repositories, the
+normal guest home, Docker and Kind stay guest-local while GitHub publication
+remains on the personal host. Former guest-specific and personal-host agent
+runtimes are retired and must not be reconstructed. The
+[boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
+target, and workspace's [host-isolation audit](../workspace/docs/host-isolation-audit.md)
+owns the human-only firewall and confinement evidence workflow.
 
 **Production deployment is documented and scripted.** The `deploy/` directory contains the complete, numbered script sequence to bootstrap a k3s cluster on OCI from scratch — Istio mesh, cert-manager with ACME HTTP-01, OCI Vault secret synchronization via External Secrets Operator, Kyverno admission policies, Prometheus/Grafana monitoring, Jaeger tracing, and public TLS. Every step produces reviewable rendered YAML under `tmp/` before anything touches the cluster.
 
@@ -30,13 +38,23 @@ This repo is the control plane for Budget Analyzer. It contains every Kubernetes
 ## Quick Start
 
 ```bash
-./setup.sh    # bootstrap Kind cluster, install dependencies
-tilt up       # start everything
+# After the workspace-owned VM, repositories, native tools and trust are ready:
+./scripts/bootstrap/check-agent-vm-prerequisites.sh
+./setup.sh
+tilt up
 ```
 
-Run `./setup.sh` on the host. In addition to configuring browser TLS, it
-publishes the public local ingress CA consumed by the workspace's lazy
-agent-container trust command.
+The native development VM is the supported agent environment. Workspace owns
+its human provisioning, repository transport, native tools, guest Docker and
+OS/NSS trust. Orchestration's first-bootstrap path validates the approved
+host-created ingress files, recreates the local Kind cluster and reconciles the
+ingress Secret. It is not a daily start command; ordinary work uses the
+read-only `--native-runtime` preflight and `tilt up`.
+
+The application development runtime is Ubuntu Linux. A personal host may use a
+different OS only if the workspace-owned VM, SSH, browser-forwarding and
+certificate-transfer contract supports it; orchestration's CI does not claim
+native macOS or Windows setup support.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 
@@ -50,8 +68,9 @@ Once the stack is running:
 
 ## Documentation
 
-- [Getting Started](docs/development/getting-started.md) — setup walkthrough
+- [Getting Started](docs/development/getting-started.md) — native VM application setup walkthrough
 - [Local Environment Mechanics](docs/development/local-environment.md) — live update pipeline, mixed workflows
+- [Host Isolation Audit](../workspace/docs/host-isolation-audit.md) — workspace-owned human-only host evidence collection and security review
 - [Service-Common Artifact Resolution](docs/development/service-common-artifact-resolution.md) — local vs. GitHub Packages
 - [Architecture Overview](docs/architecture/system-overview.md)
 - [Observability Architecture](docs/architecture/observability.md)

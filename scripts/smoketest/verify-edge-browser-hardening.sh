@@ -201,7 +201,11 @@ warn_file_not_contains() {
 location_block() {
     local file="$1" start_regex="$2"
 
-    awk -v start="${start_regex}" '
+    # GNU awk processes backslash escapes in -v assignments before compiling a
+    # dynamic regex. Read the pattern from the environment so literal NGINX
+    # regex and location modifiers retain their escaping across awk variants.
+    LOCATION_BLOCK_START_REGEX="${start_regex}" awk '
+        BEGIN { start = ENVIRON["LOCATION_BLOCK_START_REGEX"] }
         $0 ~ start {capture=1}
         capture {print}
         capture && /^[[:space:]]*}[[:space:]]*$/ {exit}

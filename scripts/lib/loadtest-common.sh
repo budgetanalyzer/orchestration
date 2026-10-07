@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Shared helpers for Budget Analyzer load-test fixture scripts.
 #
-# Implements the Track 1 common pieces from
-# docs/plans/load-testing-synthetic-users-2026-04-09.md:
+# Implements the common synthetic-fixture contracts documented in
+# scripts/README.md:
 #   - kind-only context guard
 #   - psql bulk pipe against the in-cluster PostgreSQL pod
 #   - redis-cli bulk pipe against the in-cluster Redis pod

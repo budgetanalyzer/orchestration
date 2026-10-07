@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies that Tilt resources without resource_deps are intentional roots.
+# Verifies Tilt root resources and the non-generating ingress TLS dependency.
 
 set -euo pipefail
 
@@ -23,7 +23,9 @@ usage() {
 Usage: scripts/guardrails/check-tilt-resource-roots.sh [--context <kubectl-context>]
 
 Evaluates the Tiltfile and compares resources with empty resource_deps to the
-checked-in intentional-root allowlist.
+checked-in intentional-root allowlist. Also verifies that Tilt reconciles
+existing ingress TLS files without invoking certificate generation or trust
+installation.
 EOF
 }
 
@@ -141,4 +143,37 @@ if [[ -s "${unexpected_file}" || -s "${missing_file}" ]]; then
     exit 1
 fi
 
+if ! jq -e '
+    [.Manifests[] | select(.Name == "ingress-tls-secret")] | length == 1
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: expected exactly one ingress-tls-secret Tilt resource.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    .Manifests[]
+    | select(.Name == "ingress-tls-secret")
+    | .DeployTarget.UpdateCmdSpec.args
+        == ["sh", "-c", "./scripts/bootstrap/install-imported-ingress-tls.sh"]
+      and .ResourceDependencies == ["kind-node-inotify-budget"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: ingress-tls-secret must use the guarded non-generating installer after the Kind prerequisite.\n' >&2
+    exit 1
+fi
+
+if jq -e '
+    .Manifests[]
+    | .DeployTarget.UpdateCmdSpec.args[]?
+    | select(
+        contains("setup-k8s-tls.sh")
+        or contains("renew-host-ingress-tls.sh")
+        or contains("install-agent-vm-local-ca-trust.sh")
+        or contains("--install-system-trust")
+      )
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: Tilt must not generate browser TLS or install guest trust.\n' >&2
+    exit 1
+fi
+
 printf 'Tilt resource root allowlist passed (%s roots checked)\n' "$(wc -l < "${actual_file}" | tr -d ' ')"
+printf 'Tilt ingress TLS reconciliation guard passed\n'

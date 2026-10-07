@@ -1,15 +1,15 @@
-# Repo-specific kube-linter baseline for the Phase 7 static gate.
+# Repo-specific kube-linter baseline for the static security guardrails.
 #
 # These excludes are intentional:
-# - `latest-tag` conflicts with the narrower Session 1/2 contract implemented
-#   in scripts/guardrails/check-phase-7-image-pinning.sh, which allows only the seven
-#   documented local Tilt-built `:latest` images.
-# - `no-read-only-root-fs` is not yet a universal repo baseline; Phase 5 proves
-#   the workloads that are intentionally hardened there.
+# - `latest-tag` conflicts with the narrower contract implemented in
+#   scripts/guardrails/check-image-pinning.sh, which allows only the local
+#   Tilt-built images in the executable allowlist.
+# - `no-read-only-root-fs` is not a universal repo baseline; workload-specific
+#   hardening remains explicit in the checked-in manifests.
 # - `unset-cpu-requirements` and `unset-memory-requirements` stay noisy for
-#   short-lived init containers and local-only helper containers. The Phase 7
-#   static gate is meant to catch actual security regressions, not force a new
-#   resource-governance policy in the same session.
+#   short-lived init containers and local-only helper containers. This static
+#   gate is meant to catch actual security regressions, not force a new
+#   resource-governance policy in the same change.
 checks:
   exclude:
     - latest-tag

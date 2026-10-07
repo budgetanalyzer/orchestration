@@ -47,7 +47,7 @@ if (( ${#MISSING[@]} > 0 )); then
     printf 'Missing resources:\n' >&2
     printf '  - %s\n' "${MISSING[@]}" >&2
     printf '\n' >&2
-    printf 'Run this from your host terminal, not from the devcontainer or Tilt:\n' >&2
+    printf 'Run this from a human-operated OS shell, not from a container or Tilt:\n' >&2
     printf '  ./scripts/bootstrap/setup-infra-tls.sh\n' >&2
     printf '\n' >&2
     printf 'Then rerun this check or trigger the Tilt resource again:\n' >&2

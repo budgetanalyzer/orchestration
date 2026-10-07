@@ -2,8 +2,8 @@
 
 # setup.sh - One-command setup for Budget Analyzer development environment
 #
-# This script sets up everything you need to run Budget Analyzer locally.
-# Run it once after cloning the orchestration repository.
+# This script bootstraps Budget Analyzer in the native development VM.
+# Run it after workspace preparation, TLS transfer and guest trust setup.
 
 set -e
 
@@ -12,16 +12,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/scripts/lib/pinned-tool-versions.sh"
 
-SETUP_MODE="standard"
-
 usage() {
     cat <<'EOF'
-Usage: ./setup.sh [--guest-local]
+Usage: ./setup.sh
 
-  no option      Recreate the standard local Kind environment and generate
-                 browser-facing TLS from this host's mkcert CA.
-  --guest-local  Recreate Kind on the development VM's local Docker daemon and
-                 reconcile the three imported ingress TLS files into its Secret.
+Recreate Kind on the development VM's local Docker daemon and reconcile the
+three imported ingress TLS files into its Secret.
 
 Guest OS/NSS trust must be installed first by the workspace-owned human
 workflow. This is a destructive Kind bootstrap, not a daily start command.
@@ -30,9 +26,6 @@ EOF
 
 case "${1:-}" in
     "") ;;
-    --guest-local)
-        SETUP_MODE="guest-local"
-        ;;
     --help|-h)
         usage
         exit 0
@@ -95,12 +88,12 @@ version_lt() {
     [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
 }
 
-assert_host_execution() {
+assert_vm_os_execution() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        print_error "Run ./setup.sh from a human-operated OS shell, not from a container."
-        echo "Standard setup writes browser-facing TLS; guest setup requires the reviewed workspace trust workflow."
-        echo "Both modes generate infrastructure TLS and must be run by the human on the selected machine."
-        echo "Open a human-operated OS terminal in this repository and run:"
+        print_error "Run ./setup.sh from a human-operated development-VM OS shell, not from a container."
+        echo "VM setup requires the reviewed workspace trust and TLS-transfer workflow."
+        echo "It recreates Kind and generates infrastructure TLS in the VM."
+        echo "Open a human-operated VM terminal in this repository and run:"
         echo "  ./setup.sh"
         exit 1
     fi
@@ -268,17 +261,15 @@ check_kind_cluster_network_model() {
     fi
 }
 
-print_header "Budget Analyzer - Development Setup (${SETUP_MODE})"
-assert_host_execution
+print_header "Budget Analyzer - Development VM Setup"
+assert_vm_os_execution
 
-if [[ "$SETUP_MODE" == "guest-local" ]]; then
-    print_step "Checking the complete workspace-owned native runtime..."
-    "$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh"
-    print_success "Workspace-owned native runtime verified"
-    print_step "Validating imported ingress TLS before recreating Kind..."
-    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
-    print_success "Imported ingress TLS files verified"
-fi
+print_step "Checking the complete workspace-owned native runtime..."
+"$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh"
+print_success "Workspace-owned native runtime verified"
+print_step "Validating imported ingress TLS before recreating Kind..."
+"$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
+print_success "Imported ingress TLS files verified"
 
 # =============================================================================
 # Step 1: Check required tools
@@ -301,8 +292,8 @@ check_tool "git" || true
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
     print_error "Missing required tools: ${MISSING_TOOLS[*]}"
     echo ""
-    echo "Please install missing tools first. See docs/development/prerequisites.md"
-    echo "Or run: ./scripts/bootstrap/check-tilt-prerequisites.sh for installation hints"
+    echo "Complete the workspace-owned native preparation, then rerun:"
+    echo "  ./scripts/bootstrap/check-agent-vm-prerequisites.sh"
     exit 1
 fi
 
@@ -321,9 +312,6 @@ ensure_pinned_tool "kubectl"
 ensure_pinned_tool "kind"
 ensure_supported_helm
 ensure_pinned_tool "tilt"
-if [[ "$SETUP_MODE" == "standard" ]]; then
-    ensure_pinned_tool "mkcert"
-fi
 
 # =============================================================================
 # Step 2: Create Kind cluster
@@ -440,15 +428,10 @@ else
 fi
 
 # =============================================================================
-# Step 7: Reconcile browser-facing TLS
+# Step 7: Reconcile imported browser-facing TLS
 # =============================================================================
-if [[ "$SETUP_MODE" == "guest-local" ]]; then
-    print_step "Validating imported ingress TLS and installing its Kubernetes Secret..."
-    "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh"
-else
-    print_step "Setting up TLS certificates..."
-    "$SCRIPT_DIR/scripts/bootstrap/setup-k8s-tls.sh"
-fi
+print_step "Validating imported ingress TLS and installing its Kubernetes Secret..."
+"$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh"
 
 # =============================================================================
 # Step 8: Generate infrastructure TLS certificates
@@ -475,9 +458,7 @@ fi
 # =============================================================================
 print_header "Setup Complete!"
 
-if [[ "$SETUP_MODE" == "guest-local" ]]; then
-    print_warning "Guest bootstrap recreated Kind. Do not use ./setup.sh as a daily VM-start command."
-fi
+print_warning "VM bootstrap recreated Kind. Do not use ./setup.sh as a daily start command."
 
 echo -e "${GREEN}Almost ready!${NC} Just configure your external services:"
 echo ""

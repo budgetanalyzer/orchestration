@@ -29,10 +29,9 @@ scripts/
   for the human-only personal-host isolation audit, private evidence handling,
   collector, protocol fixture and binary verifier. Orchestration does not keep
   fallback copies of those tools.
-- `../setup.sh` - Standard local platform bootstrap from the repository root.
-- `../setup.sh --guest-local` - Explicit first bootstrap for the development
-  VM's local Docker daemon using imported host-created ingress TLS. Both setup
-  modes recreate Kind and are not daily-start commands.
+- `../setup.sh` - First bootstrap for the development VM's local Docker daemon
+  using imported host-created ingress TLS. Setup recreates Kind and is not a
+  daily-start command.
 - `bootstrap/check-agent-vm-prerequisites.sh` - Thin read-only application
   preflight that invokes workspace's complete native verifier. Pass
   `--native-runtime` to add orchestration's exact live loopback `kind-kind`
@@ -210,12 +209,13 @@ Choose scripts by runtime boundary:
   human installer is the only native guest OS/NSS trust writer. The
   `ingress-tls-secret` Tilt resource reconciles only the existing files and
   Secret; it never generates certificates or changes host/guest trust.
-- `bootstrap/renew-host-ingress-tls.sh` is the human-operated personal-host
-  renewal path. It creates and validates a replacement leaf/key using the
-  existing host mkcert CA, republishes only the public root and never contacts
-  or recreates Kubernetes.
+- `bootstrap/setup-k8s-tls.sh` and
+  `bootstrap/renew-host-ingress-tls.sh` are human-operated personal-host
+  preparation paths. They create or retain the host mkcert CA, establish host
+  browser trust, create and validate a leaf/key, publish only the public root,
+  and never contact or recreate Kubernetes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
-  used by `setup.sh` and Tilt. Tilt reruns the host-only
+  used by `setup.sh` and Tilt. Tilt reruns the guest-local
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
   so namespace recreation cannot leave the infrastructure TLS secrets missing.
 - `bootstrap/reconcile-kind-inotify-budget.sh` raises low Kind node inotify
@@ -227,20 +227,15 @@ Choose scripts by runtime boundary:
   reconciliation helper. A live `docker exec kind-control-plane sysctl ...`
   recovery command is diagnostic only; use the helper or Tilt resource for the
   durable local fix.
-- `bootstrap/setup-k8s-tls.sh` and `bootstrap/setup-infra-tls.sh` are
-  human-operated certificate bootstrap scripts. Agents must not run them
-  because the browser must trust the personal-host mkcert CA and certificate
-  writes remain human-only. `setup-k8s-tls.sh` fails closed
-  unless the target is the host `kind-kind` context backed by the `kind`
-  cluster, then atomically publishes only the public mkcert root at
-  `nginx/certs/k8s/_mkcert-rootCA.pem`. The publication remains ignored by Git;
-  no CA private key is published.
+- `bootstrap/setup-infra-tls.sh` is the guest-local internal infrastructure
+  certificate producer used by setup and its Tilt resource. It is separate
+  from browser trust; agents must not invoke certificate writers directly.
+  Browser-facing certificate preparation remains a personal-host human action;
+  it publishes the three ignored transfer files under `nginx/certs/k8s/` and
+  never requires a host Kind cluster. No CA private key is published.
 
-Use `../setup.sh` when you want the standard local bootstrap to converge
-repo-managed prerequisites and recreate the local Kind cluster. Use the
-explicit `../setup.sh --guest-local` path only after the development VM has the
-approved imported TLS files, workspace-owned guest trust and passing
-guest-local prerequisites. Use
+Use `../setup.sh` in the development VM only after it has the approved imported
+TLS files, workspace-owned guest trust and passing native prerequisites. Use
 `bootstrap/install-verified-tool.sh` for a single pinned binary, and use
 `bootstrap/check-tilt-prerequisites.sh` as a diagnostic before or after setup;
 its live security proof creates and cleans named disposable probe resources.

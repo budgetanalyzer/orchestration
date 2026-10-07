@@ -74,7 +74,7 @@ Secret-install paths repeat the applicable guard before mutation.
 The explicit first application bootstrap is:
 
 ```bash
-./setup.sh --guest-local
+./setup.sh
 ```
 
 It is a destructive local rebuild. It verifies workspace-owned native

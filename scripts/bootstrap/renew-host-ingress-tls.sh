@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Human-operated personal-host renewal. Generates only a new ingress leaf/key
-# from the existing host mkcert CA and republishes that CA's public root. It
+# Human-operated personal-host preparation or renewal. Generates only a new
+# ingress leaf/key from the host mkcert CA and publishes that CA's public root. It
 # never contacts Kubernetes and must never run in the development VM or by an
 # agent process.
 
@@ -26,16 +26,16 @@ for command_name in mkcert openssl; do
     fi
 done
 
+# Create the host-owned CA on first use or retain the existing CA on renewal,
+# and establish trust for the personal-host browser.
+mkcert -install
+
 CA_ROOT="$(mkcert -CAROOT)"
 SOURCE_CA="$CA_ROOT/rootCA.pem"
 if [[ ! -r "$SOURCE_CA" ]]; then
     printf 'ERROR: the personal host mkcert public root is unreadable.\n' >&2
     exit 1
 fi
-
-# Keep the personal browser trust tied to this existing host-owned CA. This is
-# deliberately a human-operated personal-host action.
-mkcert -install
 
 install -d -m 0750 "$CERT_DIR"
 TMP_DIR="$(mktemp -d "$CERT_DIR/.renew-ingress-tls.XXXXXX")"
@@ -55,5 +55,5 @@ install -m 0644 "$TMP_DIR/_wildcard.budgetanalyzer.localhost.pem" "$CERT_FILE"
 install -m 0600 "$TMP_DIR/_wildcard.budgetanalyzer.localhost-key.pem" "$KEY_FILE"
 install -m 0644 "$TMP_DIR/_mkcert-rootCA.pem" "$CA_FILE"
 
-printf 'Renewed the host-owned ingress files without changing any Kind cluster.\n'
+printf 'Prepared the host-owned ingress files without changing any Kind cluster.\n'
 printf 'Copy the three approved files to the development VM and rerun its imported-TLS installer.\n'

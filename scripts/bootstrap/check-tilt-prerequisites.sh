@@ -695,7 +695,7 @@ LOCAL_INGRESS_CERT="$ORCHESTRATION_DIR/nginx/certs/k8s/_wildcard.budgetanalyzer.
 if [ ! -r "$PUBLISHED_LOCAL_CA" ]; then
     echo -e "${RED}✗${NC} Published public local CA is missing: $PUBLISHED_LOCAL_CA"
     if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
     else
         echo "  Run ./setup.sh from the host orchestration checkout to publish it."
     fi
@@ -706,7 +706,7 @@ elif ! command -v openssl >/dev/null 2>&1; then
 elif ! openssl x509 -in "$PUBLISHED_LOCAL_CA" -noout >/dev/null 2>&1; then
     echo -e "${RED}✗${NC} Published public local CA is invalid: $PUBLISHED_LOCAL_CA"
     if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
     else
         echo "  Run ./setup.sh from the host orchestration checkout to replace it."
     fi
@@ -715,7 +715,7 @@ elif [ ! -r "$LOCAL_INGRESS_CERT" ] \
     || ! openssl verify -CAfile "$PUBLISHED_LOCAL_CA" "$LOCAL_INGRESS_CERT" >/dev/null 2>&1; then
     echo -e "${RED}✗${NC} Published public local CA is stale for the wildcard ingress certificate: $PUBLISHED_LOCAL_CA"
     if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh --guest-local."
+        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
     else
         echo "  Run ./setup.sh from the host orchestration checkout to reconcile local TLS."
     fi

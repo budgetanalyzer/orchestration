@@ -125,9 +125,9 @@ grep -Fq 'workspace native verifier is missing or not executable' \
 mv "$FIXTURE_PARENT/workspace-away" "$FIXTURE_WORKSPACE"
 pass "missing workspace checkout fails before application bootstrap"
 
-setup_preflight_line="$(grep -nF "    \"\$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh\"" \
+setup_preflight_line="$(grep -nF "\"\$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh\"" \
     "$REPO_DIR/setup.sh" | cut -d: -f1)"
-setup_tls_line="$(grep -nF "    \"\$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh\" --validate-only" \
+setup_tls_line="$(grep -nF "\"\$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh\" --validate-only" \
     "$REPO_DIR/setup.sh" | cut -d: -f1)"
 setup_delete_line="$(grep -nE '^[[:space:]]*kind delete cluster --name kind$' \
     "$REPO_DIR/setup.sh" | cut -d: -f1)"
@@ -138,6 +138,38 @@ setup_delete_line="$(grep -nE '^[[:space:]]*kind delete cluster --name kind$' \
 grep -Fxq 'set -e' "$REPO_DIR/setup.sh" \
     || fail "setup no longer fails closed on prerequisite errors"
 pass "guest setup runs workspace and imported-TLS checks before Kind deletion"
+
+if "$REPO_DIR/setup.sh" --guest-local >"$FIXTURE_DIR/retired-setup-flag.out" 2>&1; then
+    fail "retired setup --guest-local flag unexpectedly passed"
+fi
+grep -Fq 'Usage: ./setup.sh' "$FIXTURE_DIR/retired-setup-flag.out" \
+    || fail "retired setup flag did not fail through the canonical usage path"
+if grep -Fq -- '--guest-local' "$REPO_DIR/setup.sh"; then
+    fail "setup still advertises or accepts the retired --guest-local flag"
+fi
+pass "setup rejects the retired --guest-local compatibility flag"
+
+if grep -Fq 'setup-k8s-tls.sh' "$REPO_DIR/setup.sh"; then
+    fail "VM setup still invokes personal-host certificate generation"
+fi
+if grep -Eq '^[[:space:]]*(kubectl|kind)([[:space:]]|$)' \
+    "$REPO_DIR/scripts/bootstrap/setup-k8s-tls.sh"; then
+    fail "personal-host certificate preparation still accesses Kubernetes"
+fi
+expected_host_tls_exec="exec \"\$SCRIPT_DIR/renew-host-ingress-tls.sh\""
+grep -Fq "$expected_host_tls_exec" \
+    "$REPO_DIR/scripts/bootstrap/setup-k8s-tls.sh" \
+    || fail "initial host certificate preparation does not use the non-Kubernetes path"
+mkcert_install_line="$(grep -nF 'mkcert -install' \
+    "$REPO_DIR/scripts/bootstrap/renew-host-ingress-tls.sh" | cut -d: -f1)"
+expected_source_ca="SOURCE_CA=\"\$CA_ROOT/rootCA.pem\""
+source_ca_line="$(grep -nF "$expected_source_ca" \
+    "$REPO_DIR/scripts/bootstrap/renew-host-ingress-tls.sh" | cut -d: -f1)"
+[[ -n "$mkcert_install_line" && -n "$source_ca_line" ]] \
+    || fail "could not locate fresh-host CA preparation sequence"
+(( mkcert_install_line < source_ca_line )) \
+    || fail "fresh host checks for a CA before mkcert can create it"
+pass "personal-host certificate preparation is Kubernetes-free and works on first use"
 
 grep -Fq "if \"\$NATIVE_PREFLIGHT\"; then" \
     "$REPO_DIR/scripts/bootstrap/check-tilt-prerequisites.sh" \

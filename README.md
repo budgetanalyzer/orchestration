@@ -40,7 +40,7 @@ owns the human-only firewall and confinement evidence workflow.
 ```bash
 # After the workspace-owned VM, repositories, native tools and trust are ready:
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh
-./setup.sh --guest-local
+./setup.sh
 tilt up
 ```
 
@@ -50,6 +50,11 @@ OS/NSS trust. Orchestration's first-bootstrap path validates the approved
 host-created ingress files, recreates the local Kind cluster and reconciles the
 ingress Secret. It is not a daily start command; ordinary work uses the
 read-only `--native-runtime` preflight and `tilt up`.
+
+The application development runtime is Ubuntu Linux. A personal host may use a
+different OS only if the workspace-owned VM, SSH, browser-forwarding and
+certificate-transfer contract supports it; orchestration's CI does not claim
+native macOS or Windows setup support.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 

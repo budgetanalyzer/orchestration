@@ -30,6 +30,38 @@ Do not install native tools ad hoc from orchestration or create a second
 agent-specific home. Edit `.env` before `tilt up`; Auth0 values and
 `FRED_API_KEY` are required for local startup.
 
+### Browser TLS Preparation And VM Handoff
+
+The complete first-bootstrap flow crosses the personal-host/VM boundary in
+this order:
+
+1. From the personal-host orchestration checkout, the human prepares browser
+   trust and the three transferable ingress files without creating or
+   contacting Kind:
+
+   ```bash
+   ./scripts/bootstrap/setup-k8s-tls.sh
+   ```
+
+   For a migrated environment, skip this command and reuse the existing
+   wildcard leaf, leaf key and public CA when the VM validation in the next
+   section accepts them.
+2. The human follows workspace's
+   [exact three-file SSH transfer procedure](../../../workspace/docs/local-budget-analyzer-tls.md#transfer-the-three-published-files).
+   The mkcert CA signing key remains on the personal host.
+3. From the normal-user VM shell, the human runs the trust installation and
+   application bootstrap sequence in the next section. `./setup.sh` runs only
+   here: it recreates VM-local Kind and installs the transferred leaf/key into
+   the Kubernetes TLS Secret. It never runs mkcert.
+4. For an interactive personal-host browser, the human uses workspace's
+   [reviewed loopback forwarding and hostname boundary](../../../workspace/docs/host-isolation.md#application-startup-and-rebuild).
+
+Do not run `./setup.sh` on the personal host, run mkcert in the VM, or copy the
+mkcert CA signing key into the VM. Orchestration's
+[local ingress CA contract](local-environment.md#host-published-local-ingress-ca)
+owns certificate preparation and Kubernetes behavior; workspace owns transfer,
+host forwarding and guest OS/NSS trust.
+
 ### Development VM First Bootstrap
 
 Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
@@ -45,7 +77,7 @@ guest OS shell:
   --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
   --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
 ./scripts/bootstrap/check-agent-vm-prerequisites.sh
-./setup.sh --guest-local
+./setup.sh
 cd ../budget-analyzer-web
 npm install
 cd ../orchestration
@@ -58,12 +90,12 @@ runtime verifier, including VM/user identity, repository topology, forwarded
 authority, guest Docker, manifest-owned tools and established trust. The
 imported-TLS validation checks the public CA, validity period, hostname, chain
 and leaf/key match without changing trust or Kubernetes. The reviewed workspace
-command is the only guest OS/NSS trust writer. `./setup.sh --guest-local`
+command is the only guest OS/NSS trust writer. `./setup.sh`
 repeats the full workspace verifier before any Kind deletion, recreates a fresh
 guest `kind` cluster, and applies the ingress TLS Secret only after the strict
 loopback `kind-kind` checks pass; it does not change guest trust.
 
-`./setup.sh --guest-local` recreates Kind. It is a first-bootstrap or explicit
+`./setup.sh` recreates Kind. It is a first-bootstrap or explicit
 clean-rebuild command, never a daily VM-start command. Use the daily native
 startup below for ordinary guest work.
 
@@ -73,9 +105,15 @@ guest trust. Missing, expired, or replaced files return to the host renewal,
 three-file transfer, workspace trust and orchestration Secret-reconciliation
 workflow; they are not repaired by `tilt up`.
 
-Do not import personal-host Docker state or run the standard host certificate
-generator in the guest. Imported TLS ownership and renewal remain in the
-local-environment guide.
+There is no personal-host Kind cluster or host application container in this
+flow. The personal host owns browser trust and the mkcert signing key; the VM
+receives only the wildcard leaf, leaf key and public CA. For a migrated setup,
+reuse those three ignored files from the old host checkout when they still
+validate. For a fresh or stale setup, the human runs the non-Kubernetes host
+certificate preparation command and transfers the same three files. The exact
+artifact flow and renewal procedure live in the
+[local-environment guide](local-environment.md#host-published-local-ingress-ca),
+while workspace owns the SSH transfer and guest OS/NSS trust procedure.
 
 ### Daily Native Startup
 

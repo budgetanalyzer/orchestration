@@ -65,21 +65,21 @@ not maintain a separate manual clone procedure here.
 [getting-started.md](getting-started.md) owns the supported happy-path
 checklist for:
 
-- `./setup.sh --guest-local`
+- `./setup.sh`
 - `.env` review
 - `tilt up`
 - the optional validation flow after startup
 
 This document owns the mechanics behind that workflow instead:
 
-- what `setup.sh --guest-local` assembles locally
+- what `setup.sh` assembles in the development VM
 - how Tilt renders local config and secrets
 - how live update works for Java services, the frontend, and `service-common`
 - how to debug mixed local-and-cluster development workflows
 
 The current local platform baseline still works like this:
 
-1. `./setup.sh --guest-local` deletes any existing `kind` cluster and recreates it from
+1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
    scratch, which is the clean-state contract for PVC-backed local
    infrastructure such as Redis.
 2. Before deletion it invokes workspace's complete native runtime verifier and
@@ -133,8 +133,7 @@ For the script directory map and verifier inventory, see
 
 ## Host-Published Local Ingress CA
 
-Standard host `./setup.sh` owns browser-facing certificate generation and
-publishes an
+The personal host owns browser-facing certificate generation and publishes an
 exact public copy of the mkcert root that signs the local wildcard ingress
 certificate at:
 
@@ -148,12 +147,13 @@ metadata and must stay out of logs and uploaded artifacts. The corresponding
 mkcert CA private key remains in the host mkcert store and is never copied into
 the workspace.
 
-`scripts/bootstrap/setup-k8s-tls.sh` publishes the PEM atomically only after it
-confirms that the active context is `kind-kind`, the host Kind cluster is named
-`kind`, the source is a CA certificate, and the CA verifies the wildcard
-certificate. `scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing,
-invalid, or stale publication without printing certificate subject or issuer
-metadata.
+The human runs `scripts/bootstrap/setup-k8s-tls.sh` on the personal host for
+initial preparation, or `scripts/bootstrap/renew-host-ingress-tls.sh` for an
+explicit replacement. Both commands establish host browser trust, generate and
+validate the transferable files, and never access or create Kubernetes. The
+historical script name does not imply that Kind still runs on the host.
+`scripts/bootstrap/check-tilt-prerequisites.sh` reports a missing, invalid, or
+stale VM publication without printing certificate subject or issuer metadata.
 
 Workspace alone owns native development-VM OS/NSS trust installation and
 read-only trust verification. Follow its
@@ -167,8 +167,11 @@ an agent process.
 
 Git transport does not carry the ignored TLS files. The human must copy exactly
 the wildcard leaf, its key and `_mkcert-rootCA.pem` from the personal host to
-the guest orchestration checkout using the dedicated SSH path in the manual
-plan. The host mkcert signing key is never copied.
+the guest orchestration checkout using workspace's dedicated SSH transfer
+procedure. The host mkcert signing key is never copied. Existing users may
+reuse the three files from the pre-migration host checkout if the validation
+below succeeds; they do not need to create a new CA merely because Kind moved
+into the VM.
 
 Before bootstrap, this non-generating check is safe to run against those files:
 
@@ -183,7 +186,7 @@ orchestration has no fallback trust implementation. The retired
 `--install-system-trust` option fails with the workspace-owned remediation
 instead of silently ignoring the requested import.
 
-Guest `./setup.sh --guest-local` then runs the orchestration installer only to
+Guest `./setup.sh` then runs the orchestration installer only to
 validate the public CA, current validity, the
 `app.budgetanalyzer.localhost` hostname and chain in one hostname-aware
 verification, and the leaf/key match. Before applying the ingress Secret it
@@ -787,7 +790,7 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 ./scripts/bootstrap/install-imported-ingress-tls.sh
 tilt trigger ingress-tls-secret
 
-# On the personal host only, repair initial browser-certificate setup
+# On the personal host only, prepare or repair browser trust and transfer files
 ./scripts/bootstrap/setup-k8s-tls.sh
 
 # On the personal host only, renew files without changing a cluster

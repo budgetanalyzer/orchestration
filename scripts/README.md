@@ -256,9 +256,10 @@ For normal native guest startup, run
   side-by-side workspace checkout because Tiltfile evaluation references
   sibling service repositories. It also requires the ingress TLS resource to
   use the non-generating installer and rejects any Tilt command that invokes
-  the host-only certificate generator. Infrastructure setup must also inherit
-  the `kyverno-ready` admission-readiness gate before applying PostgreSQL,
-  Redis, or RabbitMQ resources.
+  the host-only certificate generator. The startup graph must reconcile
+  Kyverno immediately after the Kind preflight and hold every Kubernetes
+  platform branch behind the `kyverno-ready` admission-readiness gate;
+  non-Kubernetes `service-common` publication may run in parallel.
 - `guardrails/verify-static-security-manifests.sh` runs kubeconform,
   kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
   rendered production Kyverno Helm check that rejects mutable controller/hook

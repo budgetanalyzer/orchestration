@@ -53,6 +53,39 @@ local_resource(
     labels=['infrastructure'],
 )
 
+# Reconcile Kyverno before any other Kubernetes resources. On a resumed Kind
+# node, the retained fail-closed webhooks exclude the kyverno namespace, so the
+# controller can recover without admitting its own workloads. All Kubernetes
+# platform branches wait for admission readiness below.
+local_resource(
+    'kyverno',
+    cmd='''
+        helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
+        helm repo update kyverno >/dev/null
+        # renovate: datasource=helm depName=kyverno registryUrl=https://kyverno.github.io/kyverno/
+        helm upgrade --install kyverno kyverno/kyverno \
+            --namespace kyverno \
+            --create-namespace \
+            --version 3.8.0 \
+            --set admissionController.replicas=1 \
+            --set backgroundController.replicas=1 \
+            --set cleanupController.replicas=1 \
+            --set reportsController.replicas=1 \
+            --wait
+    ''',
+    resource_deps=['kind-node-inotify-budget'],
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'kyverno-ready',
+    cmd='''
+        kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=5m
+    ''',
+    resource_deps=['kyverno'],
+    labels=['infrastructure'],
+)
+
 # PostgreSQL, Redis, RabbitMQ, and generated Redis ACL bootstrap ConfigMap
 k8s_yaml(kustomize('kubernetes/infrastructure'))
 
@@ -60,17 +93,13 @@ k8s_resource(
     objects=['infrastructure:namespace'],
     new_name='infrastructure-namespace',
     labels=['infrastructure'],
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
 )
 
 local_resource(
     'infra-tls-prerequisites',
     cmd='./scripts/bootstrap/setup-infra-tls.sh && ./scripts/bootstrap/check-infra-tls-secrets.sh',
-    # A resumed Kind node can retain Kyverno's fail-closed webhook
-    # configurations while the admission controller is still restarting.
-    # Gate all infrastructure setup behind admission readiness so the first
-    # StatefulSet apply cannot race an unavailable webhook.
-    resource_deps=['infrastructure-namespace', 'kyverno-ready'],
+    resource_deps=['infrastructure-namespace'],
     labels=['infrastructure'],
 )
 
@@ -924,7 +953,7 @@ local_resource(
 local_resource(
     'gateway-api-crds',
     cmd='. scripts/lib/pinned-tool-versions.sh && kubectl apply -f "$(phase7_gateway_api_manifest_url)"',
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
     labels=['infrastructure'],
 )
 
@@ -943,7 +972,7 @@ local_resource(
             --version 1.29.2 \
             --wait
     ''',
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
     labels=['infrastructure'],
 )
 
@@ -1041,36 +1070,7 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Kyverno admission controller and security guardrail policy suite
-local_resource(
-    'kyverno',
-    cmd='''
-        helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
-        helm repo update kyverno >/dev/null
-        # renovate: datasource=helm depName=kyverno registryUrl=https://kyverno.github.io/kyverno/
-        helm upgrade --install kyverno kyverno/kyverno \
-            --namespace kyverno \
-            --create-namespace \
-            --version 3.8.0 \
-            --set admissionController.replicas=1 \
-            --set backgroundController.replicas=1 \
-            --set cleanupController.replicas=1 \
-            --set reportsController.replicas=1 \
-            --wait
-    ''',
-    resource_deps=['istio-security-policies'],
-    labels=['infrastructure'],
-)
-
-local_resource(
-    'kyverno-ready',
-    cmd='''
-        kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=5m
-    ''',
-    resource_deps=['kyverno'],
-    labels=['infrastructure'],
-)
-
+# Kyverno security guardrail policy suite
 local_resource(
     'kyverno-policies',
     cmd='kubectl apply -f kubernetes/kyverno/policies',
@@ -1082,7 +1082,7 @@ local_resource(
         'kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml',
         'kubernetes/kyverno/policies/50-require-third-party-image-digests.yaml',
     ],
-    resource_deps=['kyverno-ready'],
+    resource_deps=['istio-security-policies'],
     labels=['infrastructure'],
 )
 
@@ -1094,7 +1094,7 @@ local_resource(
     'monitoring-namespace',
     cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
     deps=['kubernetes/monitoring/namespace.yaml'],
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
     labels=['monitoring'],
 )
 
@@ -1231,7 +1231,7 @@ local_resource(
     'ingress-tls-secret',
     cmd='./scripts/bootstrap/install-imported-ingress-tls.sh',
     deps=['scripts/bootstrap/install-imported-ingress-tls.sh'],
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
     labels=['infrastructure'],
 )
 
@@ -1247,7 +1247,7 @@ local_resource(
         kubectl delete gatewayclass envoy-proxy --ignore-not-found || true
         kubectl delete envoyproxy kind-proxy-config -n envoy-gateway-system --ignore-not-found || true
     ''',
-    resource_deps=['kind-node-inotify-budget'],
+    resource_deps=['kyverno-ready'],
     labels=['infrastructure'],
 )
 

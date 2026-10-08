@@ -5,9 +5,9 @@
 This document owns the dependency-automation operating policy for the Budget
 Analyzer repositories. The shared Renovate policy lives in
 [`renovate-presets/default.json`](../renovate-presets/default.json), while each
-repository owns its extraction rules and workflows. The preserved
-[September 6 dependency review](research/dependency-update-review-2026-09-06.md)
-is a point-in-time benchmark; its observed versions are not update targets.
+repository owns its extraction rules and workflows. The archived
+[Dependency Notification Guide](archive/dependency-notifications.md) is
+historical context; its observed versions are not update targets.
 
 ## Ownership and update policy
 
@@ -97,13 +97,29 @@ package managers and any repository-specific extraction:
 | Java library and services | Gradle/version catalogs, wrapper, Actions, Dockerfiles, complete resolved dependency submission |
 | Frontend | npm manifest and lockfile, Dockerfiles, Actions, full and production-only npm audit |
 | `ext-authz` | Go modules, Go/runtime declarations, Dockerfiles, Actions, reachable `govulncheck` |
-| `workspace` | Dockerfile bases and arguments, downloaded tools, Actions, checksum-coupled tools, built-image scanning |
+| `workspace` | Native npm manifest and lock, downloaded-tool declarations with standard datasources, Actions, and version/URL/checksum/architecture-coupled inputs |
 
 The four Java consumers must continue to exclude `org.budgetanalyzer` from
 Maven Central while preserving Maven Local for local development and the
 authenticated `service-common` GitHub Packages repository for hosted builds.
-The workspace must retain its public `git-tags` fallback for
-`aquasecurity/setup-trivy` and its digest-only Ubuntu extraction rule.
+Workspace uses Renovate's npm manager for `native/npm/package.json` and its
+lockfile. It uses declarative custom extraction only for pinned native tools
+that Renovate can identify through a sound standard datasource. A proposal for
+one of those tools is discovery, not approval to change one field in isolation:
+review the version, release URLs, SHA-256 values for every supported
+architecture, validation patterns, and any linked native npm inputs together.
+These coupled proposals remain Dependency Dashboard approval-gated. Inputs
+without a sound standard datasource remain explicit manual lifecycle review
+items; do not add a custom crawler or pretend they are covered.
+
+The workspace manifest describes a native Ubuntu VM, not a container image.
+Ubuntu VM lifecycle and installed apt patching remain human/distribution owned;
+the provisioner retains installed packages rather than upgrading them.
+NodeSource and Azul signed apt repositories select the available Node and JDK
+patches when installation is required. VIA remains manual because its required
+archive and standalone-asset checksum records do not have a suitable standard
+release feed. Repository validation cannot attest to the mutable packages or
+other installed state of the dedicated development VM.
 
 ## Production workflow matrix
 
@@ -119,29 +135,35 @@ and evidence shape:
 | Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
 | `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
 | `ext-authz` | Go Vulnerability Check | Pushes to `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
-| `workspace` | Workspace Image Security Evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | No-start/no-push image build, package inventory, and vulnerability scan |
+| `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
 
 Build workflows continue to validate Renovate pull requests through their
 normal `main` pull-request events. Keep scheduled workflows least-privileged.
 Java dependency submission alone receives job-scoped `contents: write`; package
 reads use the existing package credential pair rather than the submission job
-token. Scanner and validation workflows remain read-only.
+token. Scanner and validation workflows remain read-only. Workspace's native
+evidence workflow must declare read-only token permissions; it must not run the
+provisioner, install packages, mutate a VM, or use private release credentials.
+It may read repository inputs and download only the public release assets
+needed to verify the checked-in declarations.
 
 Vulnerability findings are visible but non-gating unless an owning repository
 defines a stricter policy. Malformed output, failed dependency resolution,
-failed graph submission, failed database download, incomplete inventory,
-platform mismatch, and incomplete scans remain workflow failures.
+failed graph submission, failed database download, malformed native manifests,
+incomplete npm lock closure, missing or mismatched release checksums, incomplete
+inventory, platform mismatch, and incomplete scans remain workflow failures.
 
 ## Evidence artifact contract
 
-Each scanner workflow uploads its declared evidence paths directly as exactly
-one GitHub Actions artifact with normal upload-action compression and seven-day
-retention. Keep the upload step under `if: always()` so a failed scan retains
-the diagnostics produced before failure, and keep `if-no-files-found: error` so
-a run cannot silently omit all evidence.
+Each scanner or native dependency-evidence workflow uploads its declared
+evidence paths directly as exactly one bounded GitHub Actions artifact with
+normal upload-action compression and seven-day retention. Keep the upload step
+under `if: always()` so a failed check retains the diagnostics produced before
+failure, and keep `if-no-files-found: error` so a run cannot silently omit all
+evidence.
 
 The allowlist is the successful-run contract. Every declared path and required
-output must be present when scanning succeeds; incomplete successful-run
+output must be present when its workflow succeeds; incomplete successful-run
 evidence is a workflow failure. A failed run may upload only the diagnostic
 paths created before the original failure, and that upload must not turn the
 failed run into a success.
@@ -156,14 +178,23 @@ workflow's upload step:
   production-only audit reports;
 - `ext-authz` includes scanner metadata and both human-readable and JSON
   reachable-vulnerability reports; and
-- workspace includes build metadata/logs, the exact built-image identity,
-  scanner/database metadata, package inventory, vulnerability report, and
-  required-tool inventory.
+- workspace includes native manifest and npm lock validation status, the full
+  and production-only npm dependency-audit reports, per-platform public-release
+  checksum results, the explicit manual-lifecycle inventory, diagnostics, and
+  overall completion status.
 
 Do not add caches, image layers, unrelated workspace files, or credentials to
 an evidence artifact. When changing an allowlist, update the workflow's upload
 paths, verify the complete successful-run artifact, and preserve all outputs
 needed to distinguish findings from operational failure.
+
+Workspace's hosted evidence proves only that checked-in native declarations
+are structurally consistent, the npm lock is closed, declared public assets
+match reviewed checksums, and dependency audits completed. It is not a scan of
+the live development VM, does not report its installed apt package versions,
+and does not upgrade them. Update discovery, checksum verification, dependency
+vulnerability evidence, and human OS/tool lifecycle review are separate
+controls; none substitutes for another.
 
 ## Exact-image security evidence
 
@@ -221,8 +252,9 @@ Every week:
 2. Review Dependabot alerts separately from update proposals. Map an alert to
    the resolved package and configuration or image; a pull request does not
    prove advisory detection.
-3. Check the latest dependency-submission and scanner runs. Treat missing or
-   partial reports as operational failures, not clean results.
+3. Check the latest dependency-submission, scanner, and native dependency-
+   evidence runs. Treat missing or partial reports as operational failures,
+   not clean results.
 4. Review bot-branch checks and package or registry access without moving
    secrets into untrusted pull-request execution.
 5. Confirm Renovate is still the sole update-PR owner, automerge is off, the
@@ -233,6 +265,11 @@ Every quarter, compare Spring, Node, Go, Java, Ubuntu, Kubernetes/K3s, Istio,
 RabbitMQ, NGINX, and other runtime lines with upstream support policies.
 Renovate discovery, abandonment heuristics, and vulnerability databases are
 not comprehensive end-of-life authorities.
+
+For workspace, include every manual-lifecycle manifest input in that review,
+including VIA, and separately review Ubuntu VM lifecycle and available apt
+maintenance. Hosted repository evidence does not establish the patch or
+support state of the installed guest.
 
 ## Failure triage
 
@@ -252,6 +289,10 @@ not comprehensive end-of-life authorities.
   service; advisory detection and update discovery are separate outcomes.
 - **Bot-branch CI failure:** review checksums, chart rendering, ARM64 support,
   state migration, and cross-repository companions. Do not relax a guardrail.
+- **Native workspace evidence failure:** distinguish malformed manifest data,
+  incomplete npm lock closure, audit findings, unavailable public release
+  assets, checksum or architecture mismatch, and incomplete manual-lifecycle
+  inventory. Do not run the provisioner or treat the installed VM as evidence.
 - **Scanner or graph failure:** distinguish findings from failed download,
   resolution, generation, submission, inventory, or report production. Never
   turn unavailable evidence into a clean result.

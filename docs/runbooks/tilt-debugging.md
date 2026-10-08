@@ -147,24 +147,26 @@ configure your IDE with a standard `Remote JVM Debug` connection to
 
 ## Common Issues Decision Tree
 
-### Issue: Infrastructure Resources Fail After a Kind Node Resume
+### Issue: Tilt Resources Fail Behind Kyverno After a Kind Node Resume
 
-If PostgreSQL, Redis, and RabbitMQ all fail in Tilt with errors that mention
-`validate.kyverno.svc-fail`, inspect Kyverno before debugging the individual
-StatefulSets:
+If an early Tilt resource such as `istiod` fails with an error that mentions
+`validate.kyverno.svc-fail`, inspect Kyverno before debugging that resource:
 
 ```bash
-tilt get uiresources postgresql redis rabbitmq kyverno kyverno-ready
+tilt get uiresources kyverno kyverno-ready istiod postgresql redis rabbitmq
 kubectl get pods,endpoints -n kyverno
-kubectl get pods,endpoints -n infrastructure
 ```
 
 A retained fail-closed Kyverno webhook can reject Kubernetes applies while its
-admission controller is restarting after the Kind node resumes. Tilt gates
-`infra-tls-prerequisites`, and therefore PostgreSQL, Redis, and RabbitMQ, on
-`kyverno-ready`. If the infrastructure resources started before that gate,
-verify the active Tiltfile includes this dependency and inspect the resource
-timestamps rather than weakening or deleting the webhook configuration.
+admission controller is restarting after the Kind node resumes. The Tilt graph
+reconciles Kyverno immediately after the Kind node preflight, waits for the
+admission controller to become Available, and only then starts the Kubernetes
+platform branches. `service-common` publication may run in parallel because it
+does not mutate Kubernetes.
+
+After updating an older checkout that lacks this startup ordering, restart Tilt
+with `tilt down` followed by `tilt up` so the corrected graph runs from its root.
+Do not weaken or delete the webhook configuration.
 
 ### Issue: Service Pod Not Starting
 

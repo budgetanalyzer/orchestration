@@ -25,7 +25,7 @@ Usage: scripts/guardrails/check-tilt-resource-roots.sh [--context <kubectl-conte
 Evaluates the Tiltfile and compares resources with empty resource_deps to the
 checked-in intentional-root allowlist. Also verifies that Tilt reconciles
 existing ingress TLS files without invoking certificate generation or trust
-installation, and that infrastructure startup waits for Kyverno readiness.
+installation, and that Kubernetes startup waits for Kyverno readiness.
 EOF
 }
 
@@ -155,19 +155,72 @@ if ! jq -e '
     | select(.Name == "ingress-tls-secret")
     | .DeployTarget.UpdateCmdSpec.args
         == ["sh", "-c", "./scripts/bootstrap/install-imported-ingress-tls.sh"]
-      and .ResourceDependencies == ["kind-node-inotify-budget"]
+      and .ResourceDependencies == ["kyverno-ready"]
 ' "${tilt_result_file}" >/dev/null; then
-    printf 'ERROR: ingress-tls-secret must use the guarded non-generating installer after the Kind prerequisite.\n' >&2
+    printf 'ERROR: ingress-tls-secret must use the guarded non-generating installer after Kyverno readiness.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    [.Manifests[]
+     | select(((.ResourceDependencies // []) | index("kind-node-inotify-budget")) != null)
+     | .Name]
+    | sort == ["kyverno", "service-common-publish"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: only Kyverno and non-Kubernetes service-common publication may start directly after the Kind preflight.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    [.Manifests[] | select(.Name == "kyverno")]
+    | length == 1
+      and .[0].ResourceDependencies == ["kind-node-inotify-budget"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: Kyverno must run immediately after the Kind preflight.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    [.Manifests[] | select(.Name == "kyverno-ready")]
+    | length == 1
+      and .[0].ResourceDependencies == ["kyverno"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: kyverno-ready must wait directly for Kyverno reconciliation.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    [.Manifests[]
+     | select(((.ResourceDependencies // []) | index("kyverno-ready")) != null)
+     | .Name]
+    | sort == [
+        "envoy-gateway-cleanup",
+        "gateway-api-crds",
+        "infrastructure-namespace",
+        "ingress-tls-secret",
+        "istio-base",
+        "monitoring-namespace"
+      ]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: Kubernetes platform branches must start behind kyverno-ready.\n' >&2
+    exit 1
+fi
+
+if ! jq -e '
+    .Manifests[]
+    | select(.Name == "kyverno-policies")
+    | .ResourceDependencies == ["istio-security-policies"]
+' "${tilt_result_file}" >/dev/null; then
+    printf 'ERROR: Kyverno policies must wait for Istio security and namespace setup.\n' >&2
     exit 1
 fi
 
 if ! jq -e '
     .Manifests[]
     | select(.Name == "infra-tls-prerequisites")
-    | (.ResourceDependencies | sort)
-        == ["infrastructure-namespace", "kyverno-ready"]
+    | .ResourceDependencies == ["infrastructure-namespace"]
 ' "${tilt_result_file}" >/dev/null; then
-    printf 'ERROR: infrastructure setup must wait for both its namespace and Kyverno readiness.\n' >&2
+    printf 'ERROR: infrastructure TLS prerequisites must wait for the admission-gated infrastructure namespace.\n' >&2
     exit 1
 fi
 
@@ -177,7 +230,7 @@ for infrastructure_resource in postgresql redis rabbitmq; do
         | select(.Name == $name)
         | .ResourceDependencies == ["infra-tls-prerequisites"]
     ' "${tilt_result_file}" >/dev/null; then
-        printf 'ERROR: %s must inherit the Kyverno readiness gate through infra-tls-prerequisites.\n' \
+        printf 'ERROR: %s must wait for infra-tls-prerequisites.\n' \
             "${infrastructure_resource}" >&2
         exit 1
     fi
@@ -199,4 +252,4 @@ fi
 
 printf 'Tilt resource root allowlist passed (%s roots checked)\n' "$(wc -l < "${actual_file}" | tr -d ' ')"
 printf 'Tilt ingress TLS reconciliation guard passed\n'
-printf 'Tilt infrastructure Kyverno readiness guard passed\n'
+printf 'Tilt Kyverno-first startup ordering guard passed\n'

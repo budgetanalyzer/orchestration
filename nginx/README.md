@@ -82,6 +82,13 @@ The browser edge intentionally does not route any `/internal/**` path. Internal
 service endpoints stay east-west only unless a specific public `/api/...` route
 is added here.
 
+The `/api` namespace fails closed. After all owned resource routes, each NGINX
+variant defines an exact `/api` location and an `/api/` prefix fallback that
+return an explicit `404 text/plain` response. This keeps unknown API paths out
+of the frontend SPA while allowing longer, owned resource locations to
+continue routing to their services. Keep the explicit response body: a bare
+`return 404;` makes NGINX generate an HTML error page.
+
 ## Usage with Tilt
 
 ### 1. Start all services
@@ -255,7 +262,7 @@ The edge and browser hardening verifier is:
 It verifies the dev/strict CSP split on the real app paths, warning-only docs visibility,
 the checked-in production route cutover, a real `nginx -t` syntax check of
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod, the
-fail-closed docs-path behavior,
+fail-closed API namespace and docs-path behavior,
 the remaining auth-edge throttling
 coverage, reruns the frontend CSP audit, reruns the API identity verifier, and
 then reruns the runtime-hardening cascade.
@@ -302,8 +309,9 @@ apiClient.get('/accounts')
 ```
 
 Public `/api/...` work is incomplete if only one NGINX variant changes or if
-verification stops at status codes. Unclaimed API paths can still return `200`
-with frontend HTML.
+verification stops at status codes. Keep new resource locations above the
+fail-closed API fallback and verify that unknown API paths still return the
+explicit non-HTML `404` rather than frontend HTML.
 
 ### Adding a New Microservice
 

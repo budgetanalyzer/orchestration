@@ -236,6 +236,23 @@ assert_location_block_not_contains() {
     fi
 }
 
+assert_api_fallback_contract() {
+    local file="$1" label="$2"
+
+    assert_location_block_contains "${file}" "^[[:space:]]*location = /api \\{$" \
+        "default_type text/plain;" \
+        "${label} bare /api fallback uses a non-HTML content type"
+    assert_location_block_contains "${file}" "^[[:space:]]*location = /api \\{$" \
+        'return 404 "Not Found";' \
+        "${label} bare /api fallback returns an explicit 404 body"
+    assert_location_block_contains "${file}" "^[[:space:]]*location /api/ \\{$" \
+        "default_type text/plain;" \
+        "${label} unknown API fallback uses a non-HTML content type"
+    assert_location_block_contains "${file}" "^[[:space:]]*location /api/ \\{$" \
+        'return 404 "Not Found";' \
+        "${label} unknown API fallback returns an explicit 404 body"
+}
+
 warn_location_block_contains() {
     local file="$1" start_regex="$2" expected="$3" description="$4"
     local block
@@ -627,6 +644,7 @@ verify_static_contracts() {
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location \\^~ /_prod-smoke/ \\{$" \
         "include includes/security-headers-strict-csp.conf;" \
         "Dev smoke route re-includes the strict CSP"
+    assert_api_fallback_contract "${REPO_DIR}/nginx/nginx.k8s.conf" "Dev NGINX config"
 
     # Keep docs assertions limited to the retained route graph.
     warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
@@ -648,6 +666,8 @@ verify_static_contracts() {
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /@vite/client \\{$" \
         "return 404;" \
         "Production config removes /@vite/client"
+    assert_api_fallback_contract "${REPO_DIR}/nginx/nginx.production.k8s.conf" "Production NGINX config"
+    assert_api_fallback_contract "${REPO_DIR}/kubernetes/production/nginx/nginx.production.k8s.conf" "OCI production NGINX config"
     warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
         "include includes/security-headers-docs-csp.conf;" \
         "Production /api-docs route re-includes the docs-only CSP"
@@ -832,10 +852,43 @@ verify_public_api_route_ownership() {
         "Public transactions search count route"
 }
 
-verify_docs_headers() {
-    section "Docs Visibility (Warning-Only)"
+verify_local_nginx_api_fallback() {
+    section "Direct NGINX API Fallback"
 
     start_nginx_port_forward
+
+    local path response status content_type body_response body
+    for path in "/api" "/api/v1/__openapi_black_box_missing__"; do
+        response="$(local_nginx_headers_and_status "${path}")"
+        status="$(extract_http_status "${response}")"
+        content_type="$(extract_header_value "Content-Type" "${response}")"
+
+        if [[ "${status}" == "404" ]]; then
+            pass "Direct NGINX ${path} returns 404"
+        else
+            fail "Direct NGINX ${path} returned ${status:-000} (expected 404)"
+        fi
+
+        if [[ "${content_type}" == text/plain* ]]; then
+            pass "Direct NGINX ${path} returns text/plain"
+        else
+            fail "Direct NGINX ${path} returned content type ${content_type:-<missing>} (expected text/plain)"
+        fi
+
+        body_response="$(local_nginx_body_and_status "${path}")"
+        body="$(extract_body "${body_response}")"
+        if [[ "${body}" == "Not Found" ]]; then
+            pass "Direct NGINX ${path} returns the explicit non-HTML body"
+        else
+            fail "Direct NGINX ${path} returned an unexpected body"
+        fi
+        assert_text_excludes "${body}" "Direct NGINX ${path} does not fall through to the frontend SPA" \
+            "/@vite/client" "/src/main.tsx" '<div id="root"></div>'
+    done
+}
+
+verify_docs_headers() {
+    section "Docs Visibility (Warning-Only)"
 
     local response status csp cors
 
@@ -958,6 +1011,7 @@ main() {
     verify_static_contracts
     verify_public_headers
     verify_public_api_route_ownership
+    verify_local_nginx_api_fallback
     verify_docs_headers
     verify_auth_edge_runtime
     verify_nested_verifiers

@@ -90,23 +90,40 @@ publishes the reviewed changes and performs these host/administrator-owned
 actions before Phase 6:
 
 1. Add `budgetanalyzer/budget-analyzer-api-tests` to the free Mend Renovate
-   Community App scope with `main` as the default base, Scan and Alert behavior,
-   and automerge disabled.
+   Community App scope. The current Developer Portal has no repository-level
+   "Scan and Alert" or automerge controls; installation enables execution,
+   while GitHub and the checked-in Renovate configuration own default-branch,
+   dashboard, scheduling, and automerge behavior.
 2. Enable GitHub's dependency graph and Dependabot alerts. Keep Dependabot
    version updates and automatic security-update pull requests disabled so
    Renovate remains the only update-PR owner.
 3. Run the normal CI and dependency-evidence workflows from trusted `main` and
-   retain their run URLs and complete seven-day artifact long enough for review.
-4. Retain a sanitized hosted Renovate run showing effective shared-preset
-   resolution, native PEP 621/uv extraction, runtime/tool/Action extraction,
-   lock maintenance, no fatal errors, and no unexpected package source.
-5. Inspect GitHub's dependency graph and alerts against the checked-in lock and
-   evidence artifact. Supply redacted evidence of the result to Phase 6; never
-   copy tokens, cookies, or administrator credentials into the guest.
+   confirm both succeed.
+4. Run Renovate successfully in Mend Renovate Community Cloud and confirm that
+   it creates or updates the Dependency Dashboard.
+5. Confirm that GitHub's dependency graph is populated and Dependabot alerts
+   are enabled. Explicit human administrator confirmation plus public workflow,
+   dashboard, and revision references is sufficient activation evidence; do
+   not transfer private logs, tokens, cookies, or administrator credentials
+   into the guest.
+
+The supervising human administrator explicitly confirmed during activation
+that revision `45aa5835fb5acda29d51f252a116fe2d33b693ce` was published to
+`main`, the repository was added to Mend Renovate Community Cloud, the hosted
+Mend job succeeded, the GitHub dependency graph and Dependabot-alert settings
+were saved with automatic Dependabot updates disabled, the graph is populated,
+and the alerts page is enabled. Public corroboration includes the successful
+[CI run](https://github.com/budgetanalyzer/budget-analyzer-api-tests/actions/runs/38258164820),
+[Python Dependency Evidence run](https://github.com/budgetanalyzer/budget-analyzer-api-tests/actions/runs/38258164896),
+native uv graph-update run, and open
+[Dependency Dashboard](https://github.com/budgetanalyzer/budget-analyzer-api-tests/issues/4).
+This explicit confirmation is the Phase 6 human input; no private or detailed
+evidence bundle is required.
 
 Run the first invocation with a phase cap that stops before Phase 6. Resume the
-same plan only after the human explicitly supplies the hosted evidence. Phase 6
-must stop rather than infer that activation succeeded when evidence is absent.
+same plan only after the human explicitly confirms the hosted activation
+results. Phase 6 must stop rather than infer that activation succeeded when
+confirmation or public results are absent.
 
 ## Phase 1: Define And Lock The Python Dependency Contract
 
@@ -621,68 +638,64 @@ returned success.
 ### Required context
 
 - All prior phase outcomes
-- the human activation-gate evidence: published revision, CI and dependency
-  workflow URLs/outcomes, complete artifact inventory, sanitized Renovate logs,
-  Dependency Dashboard behavior, repository settings confirmation, and GitHub
-  graph/alert reconciliation
+- the human activation-gate confirmation: published revision, successful CI
+  and dependency workflow outcomes, successful hosted Mend run, Dependency
+  Dashboard behavior, GitHub settings confirmation, and a populated dependency
+  graph
 - `AGENTS.md`
 - repository dependency-automation documentation
 - `../orchestration/docs/dependency-automation.md`
 
 ### Execution steps
 
-1. Stop immediately if the required redacted evidence is absent or if it would
-   require personal-host credentials or live administration to obtain. Report
-   the missing item precisely; do not infer activation from local files.
+1. Stop immediately if explicit human administrator confirmation or the public
+   hosted results are absent. Do not request credentials, private logs, or a
+   downloaded evidence bundle, and do not infer activation from local files.
 2. Verify that hosted CI performed a frozen install and all deterministic
-   checks on the published revision. Verify that the scheduled/manual evidence
-   run uploaded exactly one complete seven-day artifact and remained failed for
-   any operational evidence error.
-3. Reconcile lock export, installed inventory, dependency tree, SBOM, and
-   `pip-audit` records by normalized name and exact version. Confirm runtime,
-   bootstrap, scanner, and Playwright-derived metadata are present and
-   distinguishable.
-4. Review sanitized Renovate output for shared-preset resolution, `main` base,
-   automerge off, expected managers, public package identities, bounded direct
-   updates, uv lock maintenance, runtime/tool/Action updates, and absence of
-   fatal errors or unexplained duplicate extraction.
-5. Compare GitHub's dependency graph and alerts with the complete evidence.
-   Document any native `uv.lock` ingestion limitation explicitly. Do not claim
-   complete hosted graph coverage when transitive packages are absent; route a
-   repository-owned dependency-submission design as a new prerequisite rather
-   than hiding the gap.
-6. Fix only repository-owned configuration, workflow, documentation, or
+   checks on the published revision and that the dependency-evidence workflow
+   succeeded under its checked-in fail-closed artifact and parity contract.
+3. Confirm the hosted Mend job succeeded. Verify from checked-in configuration
+   that the shared preset is selected, `main` is the GitHub default branch,
+   automerge is off, expected native and regex managers are configured, and
+   weekly uv lock maintenance is enabled.
+4. Confirm that Renovate created or updated the Dependency Dashboard, GitHub's
+   native dependency graph is populated, and Dependabot alerts are enabled.
+   Record any observed native `uv.lock` ingestion limitation without claiming
+   broader coverage than GitHub displays.
+5. Fix only repository-owned configuration, workflow, documentation, or
    evidence defects revealed by hosted execution, then rerun the proportionate
    local gates. If a fix needs another hosted run, leave status pending until
    the human supplies its evidence.
-7. Once every acceptance condition passes, change the repository-local
+6. Once every acceptance condition passes, change the repository-local
    dependency-automation status from prepared/pending to active and record
    durable, non-secret acceptance references and the recurring operator
    routine.
 
 ### Implementation notes
 
-Vulnerability findings are not activation failures when complete evidence and
-expected scanner status prove the scan succeeded. Missing packages, malformed
-output, failed resolution, incomplete uploads, unexpected mutable sources, or
-Renovate lookup/configuration failures are activation failures.
+Vulnerability findings are not activation failures when the hosted evidence
+workflow succeeds. A failed workflow, empty dependency graph, failed Mend job,
+or Renovate configuration failure is an activation failure.
 
 ### Validation
 
-- Repeat strict Renovate validation, workflow `actionlint`, frozen lock sync,
-  graph parity/evidence generation, deterministic Python quality gates, shell
-  validation, and `git diff --check` after any correction.
+- Run strict Renovate validation, workflow `actionlint`, and `git diff --check`
+  after documentation-only activation changes. Repeat frozen lock sync, graph
+  parity/evidence generation, deterministic Python quality gates, and shell
+  validation if repository code, dependency, or workflow configuration is
+  corrected; otherwise the successful hosted workflows validate the published
+  revision with the pinned runtime.
 - Verify documentation says active only after the final hosted evidence passes.
 - Confirm no redacted evidence file containing private operational data was
   added to the repository.
 
 ### Completion criteria
 
-Human-supplied hosted evidence proves the published repository uses the shared
-preset, Renovate is the sole non-automerge update-PR owner, CI consumes the
-frozen lock, the complete selected graph is auditable, findings are distinct
-from operational failures, and repository-local documentation is truthfully
-active.
+Human administrator confirmation and public hosted results prove that the
+published repository uses its checked-in shared preset, Renovate is the sole
+non-automerge update-PR owner, CI consumes the frozen lock, the dependency
+evidence workflow succeeds, GitHub's graph is populated, alerts are enabled,
+and repository-local documentation is truthfully active.
 
 ## Phase 7: Promote API Tests Into Active Ecosystem Policy
 

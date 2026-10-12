@@ -83,9 +83,12 @@ operation, not authority to buy capacity, remove evidence, or weaken a scan.
 
 ## Configuration and repository ownership
 
-The production scope is `orchestration`, `service-common`, `currency-service`,
-`permission-service`, `transaction-service`, `session-gateway`,
-`budget-analyzer-web`, `ext-authz`, and `workspace`.
+The active production scope contains nine repositories: `orchestration`,
+`service-common`, `currency-service`, `permission-service`,
+`transaction-service`, `session-gateway`, `budget-analyzer-web`, `ext-authz`,
+and `workspace`. `budget-analyzer-api-tests` is a prepared pending consumer;
+it is not part of this count or Mend's production scope until the activation
+gate below is complete and its hosted evidence is accepted.
 
 Orchestration owns the shared preset and its own extraction for Kubernetes,
 Helm values, Tilt, Kind, shell version contracts, pinned tools, chart image
@@ -121,11 +124,75 @@ archive and standalone-asset checksum records do not have a suitable standard
 release feed. Repository validation cannot attest to the mutable packages or
 other installed state of the dedicated development VM.
 
+## Pending consumer: `budget-analyzer-api-tests`
+
+**Activation status:** Prepared, not active. The repository-local
+`docs/dependency-contract.md` owns exact versions, commands, workflow paths,
+and artifact filenames. This section owns the shared policy and the conditions
+for moving the repository into production scope.
+
+The pending Python contract has these layers:
+
+- `pyproject.toml` remains authoritative for direct runtime, build,
+  development, and test compatibility. Every direct registry requirement has
+  an intentional PEP 440 lower bound and breaking-change upper boundary, or an
+  exact pin when no credible compatibility interval exists.
+- `.python-version` selects the supported Python patch release, while the PEP
+  621 `requires-python` interval describes the matching supported minor line.
+  Changes to either declaration must keep those contracts consistent.
+- The machine-generated `uv.lock` is the exact direct and transitive graph,
+  including versions, sources, markers, artifacts, and integrity hashes for
+  the supported runtime. Never edit it manually or accept an unexpected VCS,
+  URL, path, editable, or nonstandard-index source.
+- Normal local and hosted installs synchronize all selected groups from the
+  checked-in graph in frozen mode. A stale manifest/lock pair must fail rather
+  than refresh as an incidental side effect. The editable first-party package,
+  isolated `uv` bootstrap, and isolated `pip-audit` scanner remain explicitly
+  separate from the selected third-party graph.
+- Successful evidence proves normalized package-name and exact-version parity
+  among the current-platform lock selection, frozen installed inventory,
+  `pip-audit` dependency records, and CycloneDX SBOM components. Missing,
+  extra, duplicate, malformed, or version-mismatched records are operational
+  failures, not clean evidence.
+- Playwright's Python distribution owns its coupled browser revision. Evidence
+  records derived browser metadata and that no browser was installed; it does
+  not introduce an independently updated browser version.
+
+The repository's deterministic CI owns frozen synchronization, dependency
+contract and parity validation, unit tests, credential-free test collection,
+formatting, linting, and type checking. Its dependency-evidence workflow owns
+the locked inventory, dependency tree, SBOM, audit, parity, diagnostics, and
+completion evidence. Neither workflow may install Chromium, contact a Budget
+Analyzer deployment, provision browser identities, or consume application
+credentials. The live `./run-tests` suite remains a separate regression gate
+with its documented local prerequisites.
+
+After activation, Renovate is the sole update-pull-request owner for:
+
+- bounded PEP 621 requirements and repository-owned build, development, and
+  test groups in `pyproject.toml`;
+- the exact Python runtime declaration and isolated `uv` and `pip-audit` tool
+  pins;
+- GitHub Actions references; and
+- manifest-driven `uv.lock` refreshes plus explicit lock-file maintenance for
+  selected transitive versions.
+
+Use Renovate's native PEP 621, uv, Python-version, and GitHub Actions support
+where it models the declaration. Keep any narrow extraction needed for the
+repository's tool-pin representation, all manager enablement, grouping, and
+Python-specific pull-request notes in the consumer configuration. Every bot
+branch that changes a manifest or performs lock-file maintenance must
+regenerate the complete lock with the repository's pinned `uv` contract and
+pass frozen parity checks. A partial lock refresh or failed bot lock update is
+a failed proposal. The shared weekly schedule, automerge prohibition,
+major-update approval, and pull-request limits apply without a Python-specific
+shared-preset rule.
+
 ## Production workflow matrix
 
 The workflow files are the executable source of truth for exact paths,
 schedules, permissions, and concurrency. This matrix records the durable event
-and evidence shape:
+and evidence shape for the nine active production repositories:
 
 | Owner | Workflow | Production events | Durable result |
 | --- | --- | --- | --- |
@@ -136,6 +203,15 @@ and evidence shape:
 | `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
 | `ext-authz` | Go Vulnerability Check | Pushes to `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
 | `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
+
+The following prepared rows are pending. They become production rows only
+after the activation gate is complete and the policy is updated to move the
+repository into active scope:
+
+| Owner | Workflow | Prepared events | Durable result | Status |
+| --- | --- | --- | --- | --- |
+| `budget-analyzer-api-tests` | CI | Pushes to `main`; pull requests targeting `main`; manual dispatch | Frozen all-groups synchronization and deterministic dependency, test-collection, formatting, lint, and type checks without browser installation or application access | Pending hosted activation evidence |
+| `budget-analyzer-api-tests` | Python Dependency Evidence | Relevant trusted pushes to `main`; weekly schedule; manual dispatch | Exact locked-graph inventory, dependency tree, CycloneDX SBOM, `pip-audit`, Playwright-derived metadata, and cross-representation parity evidence | Pending hosted activation evidence |
 
 Build workflows continue to validate Renovate pull requests through their
 normal `main` pull-request events. Keep scheduled workflows least-privileged.
@@ -182,6 +258,20 @@ workflow's upload step:
   and production-only npm dependency-audit reports, per-platform public-release
   checksum results, the explicit manual-lifecycle inventory, diagnostics, and
   overall completion status.
+
+The prepared Python artifact row is also pending:
+
+| Owner | Artifact | Successful-run contract | Status |
+| --- | --- | --- | --- |
+| `budget-analyzer-api-tests` | One seven-day Python dependency-evidence artifact | Bootstrap and scanner diagnostics; metadata; hashed frozen lock export and platform selection; installed inventory and dependency tree; Playwright-derived browser metadata; JSON and text `pip-audit` records and status; CycloneDX SBOM; exact parity and completion records | Pending hosted activation evidence |
+
+The Python workflow must enforce its repository-owned exact file allowlist,
+reject undeclared or incomplete successful output, upload bounded diagnostics
+under `always()`, and fail when no evidence files exist. Vulnerability findings
+remain non-gating only when scanner output is complete and valid. Malformed or
+incomplete resolution, inventory, SBOM, audit, parity, or completion evidence
+remains gating. The artifact must not contain browser binaries, caches,
+credentials, cookies, application secrets, or unrelated workspace files.
 
 Do not add caches, image layers, unrelated workspace files, or credentials to
 an evidence artifact. When changing an allowlist, update the workflow's upload
@@ -243,6 +333,38 @@ package-read identity and token in Mend's encrypted settings only if the App's
 platform token cannot read that package. Do not document credential values or
 broaden the rule to all GitHub Packages hosts.
 
+### Pending API-tests activation gate
+
+A human repository or organization administrator must complete and retain
+reviewable evidence for every item below before
+`budget-analyzer-api-tests` becomes the tenth active production consumer:
+
+1. Publish the reviewed repository preparation to trusted `main`, then add
+   `budgetanalyzer/budget-analyzer-api-tests` to the free Mend Renovate
+   Community App scope. Keep `main` as the default base, use Scan and Alert
+   behavior, and keep automerge disabled.
+2. Enable GitHub's dependency graph and Dependabot alerts. Keep Dependabot
+   version updates and automatic security-update pull requests disabled so
+   Renovate remains the only update-PR owner.
+3. Run deterministic CI and Python dependency evidence from trusted `main`.
+   Retain their run URLs and the complete seven-day evidence artifact long
+   enough to review frozen installation, exact parity, audit, SBOM, and
+   completion status.
+4. Retain a sanitized hosted Renovate run proving effective shared-preset
+   resolution, native PEP 621 and uv extraction, runtime/tool/Action
+   extraction, lock maintenance, no fatal errors, and no unexpected package
+   source. Never copy tokens, cookies, administrator credentials, or private
+   package-index values into repository or review evidence.
+5. Compare GitHub's dependency graph and alerts with the checked-in lock and
+   repository-owned evidence by normalized package name and exact version.
+   Record omissions explicitly. If GitHub does not ingest the complete
+   `uv.lock` graph, the inventory, SBOM, and audit remain mandatory, and a
+   separate reviewed dependency-submission design is required before claiming
+   complete hosted graph coverage.
+6. Update this policy to move the pending repository and workflow/artifact rows
+   into active production scope only after the hosted evidence above is
+   accepted.
+
 ## Operator routine
 
 Every week:
@@ -293,6 +415,29 @@ support state of the installed guest.
   incomplete npm lock closure, audit findings, unavailable public release
   assets, checksum or architecture mismatch, and incomplete manual-lifecycle
   inventory. Do not run the provisioner or treat the installed VM as evidence.
+- **Stale Python lock or incomplete resolution:** distinguish an intentional
+  manifest change from a missing lock refresh, unsatisfied bound, absent group,
+  incomplete transitive closure, or failed artifact/hash selection. Regenerate
+  only through the pinned repository workflow; never make a frozen install
+  update the lock or edit the lock manually.
+- **Python marker or platform mismatch:** compare the pinned runtime, PEP 621
+  Python interval, lock markers, current-platform selection, and hosted runner.
+  Do not drop a marked dependency merely because it is absent on one platform,
+  and do not claim universal coverage from one installed selection.
+- **Python index or source drift:** fail on inherited index overrides and
+  unexpected registry, VCS, URL, path, or editable sources. Preserve source
+  diagnostics without persisting package credentials; do not normalize an
+  alternate source into an accepted PyPI record.
+- **Python graph or evidence mismatch:** compare normalized names and exact
+  versions across the selected lock graph, installed inventory, audit records,
+  and SBOM. Treat missing Playwright metadata, audit/SBOM components, scanner
+  completion, or parity records as incomplete evidence rather than zero
+  findings.
+- **Python bot lock-update failure:** inspect Renovate extraction, bounded
+  requirements, the pinned Python and `uv` versions, package availability,
+  source policy, and lock-maintenance logs. Do not merge a manifest-only
+  update, hand-edit the lock, relax frozen checks, or disable a dependency to
+  make the branch green.
 - **Scanner or graph failure:** distinguish findings from failed download,
   resolution, generation, submission, inventory, or report production. Never
   turn unavailable evidence into a clean result.

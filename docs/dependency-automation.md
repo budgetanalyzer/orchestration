@@ -59,6 +59,8 @@ self-hosted Renovate service, or separate bot infrastructure without a new
 explicit architecture and cost decision. The selected supporting tools remain
 GitHub dependency graph and Dependabot alerts, Gradle's open-source basic
 dependency-submission path, Trivy, `npm audit`, and `govulncheck`.
+The API-tests repository additionally owns `pip-audit`, CycloneDX SBOM, and
+exact locked-graph parity evidence for its selected Python environment.
 
 GitHub Actions usage and the shared Actions-artifact/GitHub-Packages storage
 allowance are separate from Mend hosting. Keep production evidence bounded and
@@ -83,12 +85,10 @@ operation, not authority to buy capacity, remove evidence, or weaken a scan.
 
 ## Configuration and repository ownership
 
-The active production scope contains nine repositories: `orchestration`,
+The active production scope contains ten repositories: `orchestration`,
 `service-common`, `currency-service`, `permission-service`,
 `transaction-service`, `session-gateway`, `budget-analyzer-web`, `ext-authz`,
-and `workspace`. `budget-analyzer-api-tests` is a prepared pending consumer;
-it is not part of this count or Mend's production scope until the activation
-gate below is complete and its hosted evidence is accepted.
+`workspace`, and `budget-analyzer-api-tests`.
 
 Orchestration owns the shared preset and its own extraction for Kubernetes,
 Helm values, Tilt, Kind, shell version contracts, pinned tools, chart image
@@ -101,6 +101,7 @@ package managers and any repository-specific extraction:
 | Frontend | npm manifest and lockfile, Dockerfiles, Actions, full and production-only npm audit |
 | `ext-authz` | Go modules, Go/runtime declarations, Dockerfiles, Actions, reachable `govulncheck` |
 | `workspace` | Native npm manifest and lock, downloaded-tool declarations with standard datasources, Actions, and version/URL/checksum/architecture-coupled inputs |
+| `budget-analyzer-api-tests` | Bounded PEP 621 requirements, Python/runtime and tool pins, exact uv lock, Actions, frozen CI, lock maintenance, and complete parity/SBOM/audit evidence |
 
 The four Java consumers must continue to exclude `org.budgetanalyzer` from
 Maven Central while preserving Maven Local for local development and the
@@ -124,14 +125,15 @@ archive and standalone-asset checksum records do not have a suitable standard
 release feed. Repository validation cannot attest to the mutable packages or
 other installed state of the dedicated development VM.
 
-## Pending consumer: `budget-analyzer-api-tests`
+## Active Python consumer: `budget-analyzer-api-tests`
 
-**Activation status:** Prepared, not active. The repository-local
-`docs/dependency-contract.md` owns exact versions, commands, workflow paths,
-and artifact filenames. This section owns the shared policy and the conditions
-for moving the repository into production scope.
+**Activation status:** Active. The repository-local
+[dependency-automation guide](https://github.com/budgetanalyzer/budget-analyzer-api-tests/blob/main/docs/dependency-automation.md)
+and [dependency contract](https://github.com/budgetanalyzer/budget-analyzer-api-tests/blob/main/docs/dependency-contract.md)
+own exact versions, commands, workflow paths, and artifact filenames. This
+section owns the shared ecosystem policy.
 
-The pending Python contract has these layers:
+The Python contract has these layers:
 
 - `pyproject.toml` remains authoritative for direct runtime, build,
   development, and test compatibility. Every direct registry requirement has
@@ -167,7 +169,7 @@ Analyzer deployment, provision browser identities, or consume application
 credentials. The live `./run-tests` suite remains a separate regression gate
 with its documented local prerequisites.
 
-After activation, Renovate is the sole update-pull-request owner for:
+Renovate is the sole update-pull-request owner for:
 
 - bounded PEP 621 requirements and repository-owned build, development, and
   test groups in `pyproject.toml`;
@@ -192,7 +194,7 @@ shared-preset rule.
 
 The workflow files are the executable source of truth for exact paths,
 schedules, permissions, and concurrency. This matrix records the durable event
-and evidence shape for the nine active production repositories:
+and evidence shape for the ten active production repositories:
 
 | Owner | Workflow | Production events | Durable result |
 | --- | --- | --- | --- |
@@ -203,15 +205,8 @@ and evidence shape for the nine active production repositories:
 | `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
 | `ext-authz` | Go Vulnerability Check | Pushes to `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
 | `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
-
-The following prepared rows are pending. They become production rows only
-after the activation gate is complete and the policy is updated to move the
-repository into active scope:
-
-| Owner | Workflow | Prepared events | Durable result | Status |
-| --- | --- | --- | --- | --- |
-| `budget-analyzer-api-tests` | CI | Pushes to `main`; pull requests targeting `main`; manual dispatch | Frozen all-groups synchronization and deterministic dependency, test-collection, formatting, lint, and type checks without browser installation or application access | Pending hosted activation evidence |
-| `budget-analyzer-api-tests` | Python Dependency Evidence | Relevant trusted pushes to `main`; weekly schedule; manual dispatch | Exact locked-graph inventory, dependency tree, CycloneDX SBOM, `pip-audit`, Playwright-derived metadata, and cross-representation parity evidence | Pending hosted activation evidence |
+| `budget-analyzer-api-tests` | CI | Pushes to `main`; pull requests targeting `main`; manual dispatch | Frozen all-groups synchronization and deterministic dependency, test-collection, formatting, lint, and type checks without browser installation or application access |
+| `budget-analyzer-api-tests` | Python Dependency Evidence | Relevant trusted pushes to `main`; weekly schedule; manual dispatch | Exact locked-graph inventory, dependency tree, CycloneDX SBOM, `pip-audit`, Playwright-derived metadata, and cross-representation parity evidence |
 
 Build workflows continue to validate Renovate pull requests through their
 normal `main` pull-request events. Keep scheduled workflows least-privileged.
@@ -257,13 +252,12 @@ workflow's upload step:
 - workspace includes native manifest and npm lock validation status, the full
   and production-only npm dependency-audit reports, per-platform public-release
   checksum results, the explicit manual-lifecycle inventory, diagnostics, and
-  overall completion status.
-
-The prepared Python artifact row is also pending:
-
-| Owner | Artifact | Successful-run contract | Status |
-| --- | --- | --- | --- |
-| `budget-analyzer-api-tests` | One seven-day Python dependency-evidence artifact | Bootstrap and scanner diagnostics; metadata; hashed frozen lock export and platform selection; installed inventory and dependency tree; Playwright-derived browser metadata; JSON and text `pip-audit` records and status; CycloneDX SBOM; exact parity and completion records | Pending hosted activation evidence |
+  overall completion status; and
+- `budget-analyzer-api-tests` includes bootstrap and scanner diagnostics,
+  metadata, the hashed frozen lock export and platform selection, installed
+  inventory and dependency tree, Playwright-derived browser metadata, JSON and
+  text `pip-audit` records and status, a CycloneDX SBOM, and exact parity and
+  completion records.
 
 The Python workflow must enforce its repository-owned exact file allowlist,
 reject undeclared or incomplete successful output, upload bounded diagnostics
@@ -313,7 +307,7 @@ exact primary application patch.
 ## GitHub and Mend settings
 
 Keep `main` as every repository's default branch and normal protected merge
-target. Scope Mend to the nine repositories above, let it follow each default
+target. Scope Mend to the ten repositories above, let it follow each default
 branch, and do not configure a separate base branch. Use Scan and Alert behavior
 with automerge disabled.
 
@@ -333,37 +327,27 @@ package-read identity and token in Mend's encrypted settings only if the App's
 platform token cannot read that package. Do not document credential values or
 broaden the rule to all GitHub Packages hosts.
 
-### Pending API-tests activation gate
+### API-tests activation record and hosted graph boundary
 
-A human repository or organization administrator must complete and retain
-reviewable evidence for every item below before
-`budget-analyzer-api-tests` becomes the tenth active production consumer:
+Activation was accepted for published revision
+[`45aa5835fb5acda29d51f252a116fe2d33b693ce`](https://github.com/budgetanalyzer/budget-analyzer-api-tests/commit/45aa5835fb5acda29d51f252a116fe2d33b693ce).
+Public corroboration includes the successful
+[CI run](https://github.com/budgetanalyzer/budget-analyzer-api-tests/actions/runs/38258164820),
+[Python Dependency Evidence run](https://github.com/budgetanalyzer/budget-analyzer-api-tests/actions/runs/38258164896),
+native uv graph-update run, and open
+[Dependency Dashboard](https://github.com/budgetanalyzer/budget-analyzer-api-tests/issues/4).
+The supervising administrator also confirmed that the hosted Mend job
+succeeded, the GitHub dependency graph is populated, Dependabot alerts are
+enabled, and Dependabot version updates and automatic security-update pull
+requests remain disabled.
 
-1. Publish the reviewed repository preparation to trusted `main`, then add
-   `budgetanalyzer/budget-analyzer-api-tests` to the free Mend Renovate
-   Community App scope. Keep `main` as the default base, use Scan and Alert
-   behavior, and keep automerge disabled.
-2. Enable GitHub's dependency graph and Dependabot alerts. Keep Dependabot
-   version updates and automatic security-update pull requests disabled so
-   Renovate remains the only update-PR owner.
-3. Run deterministic CI and Python dependency evidence from trusted `main`.
-   Retain their run URLs and the complete seven-day evidence artifact long
-   enough to review frozen installation, exact parity, audit, SBOM, and
-   completion status.
-4. Retain a sanitized hosted Renovate run proving effective shared-preset
-   resolution, native PEP 621 and uv extraction, runtime/tool/Action
-   extraction, lock maintenance, no fatal errors, and no unexpected package
-   source. Never copy tokens, cookies, administrator credentials, or private
-   package-index values into repository or review evidence.
-5. Compare GitHub's dependency graph and alerts with the checked-in lock and
-   repository-owned evidence by normalized package name and exact version.
-   Record omissions explicitly. If GitHub does not ingest the complete
-   `uv.lock` graph, the inventory, SBOM, and audit remain mandatory, and a
-   separate reviewed dependency-submission design is required before claiming
-   complete hosted graph coverage.
-6. Update this policy to move the pending repository and workflow/artifact rows
-   into active production scope only after the hosted evidence above is
-   accepted.
+A populated GitHub dependency graph does not by itself prove complete native
+ingestion of every universal `uv.lock` marker and platform selection. Do not
+claim complete hosted graph coverage from that view. The repository-owned
+frozen inventory, CycloneDX SBOM, `pip-audit` records, and exact parity checks
+remain the complete selected-environment evidence. A separate reviewed
+dependency-submission design is required before claiming broader hosted graph
+coverage.
 
 ## Operator routine
 
@@ -374,17 +358,19 @@ Every week:
 2. Review Dependabot alerts separately from update proposals. Map an alert to
    the resolved package and configuration or image; a pull request does not
    prove advisory detection.
-3. Check the latest dependency-submission, scanner, and native dependency-
-   evidence runs. Treat missing or partial reports as operational failures,
-   not clean results.
+3. Check the latest dependency-submission, scanner, native dependency-evidence,
+   Python frozen-CI, and Python dependency-evidence runs. For API tests, require
+   the selected lock graph, installed inventory, audit records, and SBOM to
+   retain exact name/version parity. Treat missing or partial reports as
+   operational failures, not clean results.
 4. Review bot-branch checks and package or registry access without moving
    secrets into untrusted pull-request execution.
 5. Confirm Renovate is still the sole update-PR owner, automerge is off, the
    first-party release path is untouched, and Actions/storage usage remains
    within the approved free boundary.
 
-Every quarter, compare Spring, Node, Go, Java, Ubuntu, Kubernetes/K3s, Istio,
-RabbitMQ, NGINX, and other runtime lines with upstream support policies.
+Every quarter, compare Spring, Node, Go, Java, Python, Ubuntu, Kubernetes/K3s,
+Istio, RabbitMQ, NGINX, and other runtime lines with upstream support policies.
 Renovate discovery, abandonment heuristics, and vulnerability databases are
 not comprehensive end-of-life authorities.
 

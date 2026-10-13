@@ -1683,12 +1683,6 @@ paths:
       responses:
         '204':
           description: No Content
-        '404':
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -1707,6 +1701,15 @@ paths:
               example:
                 type: FORBIDDEN
                 message: You do not have permission to perform this action
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -1887,18 +1890,6 @@ paths:
       responses:
         '204':
           description: No Content
-        '400':
-          description: Bad Request
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '404':
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
         '422':
           description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable additions or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED
             when the membership limit is exceeded
@@ -1924,6 +1915,24 @@ paths:
               example:
                 type: FORBIDDEN
                 message: You do not have permission to perform this action
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:

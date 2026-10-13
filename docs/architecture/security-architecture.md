@@ -467,6 +467,44 @@ surface; alerting rules are a future follow-up.
 - Explicit session invalidation on logout (session hash deleted, entry removed from user session index)
 - Bulk session revocation via `DELETE /internal/v1/sessions/users/{userId}` — uses the user session index to delete all sessions without scanning, and the mesh only allows this route from the `permission-service` workload identity
 
+### Emergency Admin Containment
+
+For a compromised application admin, use human operator access to Redis for
+emergency session invalidation. This does not require a new application
+super-admin role or a dedicated session-management UI. Infrastructure operator
+access is a separate authority from application roles; use the existing
+`redis-ops` maintenance identity over the internal, TLS-verified connection.
+Production access remains human-owned and outside agent sessions, as described
+in [autonomous-ai-execution.md](autonomous-ai-execution.md).
+
+The containment procedure is:
+
+1. Identify the account by its internal `userId` and confirm its IdP subject;
+   email alone is not a unique identity key.
+2. Persist account deactivation in permission-service to prevent subsequent
+   logins. Use an uncompromised admin when available; if none is available,
+   operator recovery of the account state must not depend on the compromised
+   application's admin session. Deletion of Redis sessions alone only logs the
+   user out. An IdP block alone does not invalidate existing Redis sessions.
+3. Delete **all** of the user's session hashes and their `user_sessions:{userId}`
+   index through operator Redis access. Reuse the atomic deletion semantics in
+   Session Gateway's [delete-user-sessions.lua](../../../session-gateway/src/main/resources/redis/delete-user-sessions.lua).
+   Deleting only the index does not revoke any session. Avoid `FLUSHALL` for
+   targeted containment because it removes unrelated users' sessions and data.
+4. Verify the account is deactivated and the user's sessions are absent. Check
+   for surviving session hashes by `user_id` if index completeness is uncertain.
+   Record the operator, target user ID, time, and result without recording
+   credentials or session tokens; review the compromised account's recent actions.
+
+Deletion rejects subsequent authorization checks for those sessions; it cannot
+undo requests already authorized. A login that fetched permissions before
+deactivation can still create a session after deletion. If immediate containment
+cannot tolerate that race, temporarily interrupt application access and stop
+session issuance, including in-flight login processing, before the final deletion
+and verification. This is an incident-recovery interruption, not a permanent
+deployment change. Do not rely on heartbeat to contain an emergency: the current
+implementation does not revalidate account status or permissions on heartbeat.
+
 ---
 
 ## Migration and Rollout Plan

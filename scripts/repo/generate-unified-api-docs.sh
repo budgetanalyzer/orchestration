@@ -91,7 +91,8 @@ EOF
 
 # Convert JSON on stdin to YAML at the given output path.
 # Usage: echo "$JSON" | convert_json_to_yaml "/path/to/output.yaml" "description"
-# Returns 1 if no YAML converter is available.
+# Returns 1 if no YAML converter is available or conversion fails. The
+# destination is replaced only after a converter exits successfully.
 convert_json_to_yaml() {
     local output_path="$1"
     local description="$2"
@@ -100,9 +101,17 @@ convert_json_to_yaml() {
 
     if command -v yq &>/dev/null; then
         if yq --version 2>&1 | grep -q "mikefarah"; then
-            cat | yq -P '.' > "$tmp_yaml"
+            if ! yq -P '.' > "$tmp_yaml"; then
+                rm -f "$tmp_yaml"
+                print_error_stderr "Failed to convert ${description} with yq"
+                return 1
+            fi
         else
-            cat | yq -y '.' > "$tmp_yaml"
+            if ! yq -y '.' > "$tmp_yaml"; then
+                rm -f "$tmp_yaml"
+                print_error_stderr "Failed to convert ${description} with yq"
+                return 1
+            fi
         fi
         mv "$tmp_yaml" "$output_path"
         print_success "✓ Generated ${description} (YAML): $output_path"

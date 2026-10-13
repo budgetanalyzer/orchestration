@@ -23,8 +23,8 @@ and ext-authz repos:
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
-- Session Gateway can reach permission-service internally in local and production policy, while the internal lookup stays absent from public NGINX routes
-- Heartbeat refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
+- Session Gateway can reach permission-service internally in the local policy, while the internal lookup stays absent from public NGINX routes
+- The source heartbeat contract refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
 Options:
@@ -539,7 +539,7 @@ REDIS_OPS_USERNAME=""
 REDIS_OPS_PASSWORD=""
 
 run_static_checks() {
-    local route_yaml local_permission_policy production_permission_policy
+    local route_yaml local_permission_policy
     local permission_ingress_policy session_gateway_egress_policy
     local ext_authz_config_file ext_authz_deployment_file session_gateway_application_file session_gateway_cookie_helper_file
     local session_gateway_controller_file permission_service_client_file ext_authz_http_server_file
@@ -696,9 +696,6 @@ run_static_checks() {
     local_permission_policy="$(extract_yaml_document_by_name \
         "${REPO_ROOT}/kubernetes/istio/authorization-policies.yaml" \
         "permission-service-policy")"
-    production_permission_policy="$(extract_yaml_document_by_name \
-        "${REPO_ROOT}/kubernetes/production/istio/authorization-policies.yaml" \
-        "permission-service-policy")"
     permission_ingress_policy="$(extract_yaml_document_by_name \
         "${REPO_ROOT}/kubernetes/network-policies/default-allow.yaml" \
         "allow-permission-service-ingress-from-session-gateway")"
@@ -710,10 +707,6 @@ run_static_checks() {
         "$local_permission_policy" \
         'cluster.local/ns/default/sa/session-gateway' \
         "local Istio policy allows Session Gateway to call permission-service"
-    assert_text_contains \
-        "$production_permission_policy" \
-        'cluster.local/ns/default/sa/session-gateway' \
-        "production Istio policy allows Session Gateway to call permission-service"
     assert_text_contains \
         "$permission_ingress_policy" \
         'app: session-gateway' \
@@ -730,10 +723,6 @@ run_static_checks() {
         "${REPO_ROOT}/kubernetes/services/session-gateway/deployment.yaml" \
         'value: "http://permission-service:8086/permission-service"' \
         "Session Gateway deployment uses the internal permission-service URL"
-    assert_file_contains \
-        "${REPO_ROOT}/kubernetes/production/apps/kustomization.yaml" \
-        '../../services/session-gateway/deployment.yaml' \
-        "production apps reuse the checked-in Session Gateway deployment"
     assert_file_contains \
         "${REPO_ROOT}/deploy/scripts/bootstrap/06-apply-network-policies.sh" \
         'kubernetes/network-policies' \

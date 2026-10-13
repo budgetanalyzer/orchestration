@@ -2712,12 +2712,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
-        '404':
-          description: Currency series not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CurrencySeriesResponse'
         '401':
           description: Unauthorized
           content:
@@ -2736,6 +2730,15 @@ paths:
               example:
                 type: FORBIDDEN
                 message: You do not have permission to perform this action
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -2781,18 +2784,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CurrencySeriesResponse'
-        '404':
-          description: Currency series not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CurrencySeriesResponse'
         '401':
           description: Unauthorized
           content:
@@ -2811,6 +2802,24 @@ paths:
               example:
                 type: FORBIDDEN
                 message: You do not have permission to perform this action
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: NOT_FOUND
+                message: Not Found
         '500':
           description: Internal Server Error
           content:
@@ -2972,12 +2981,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CurrencySeriesResponse'
         '422':
           description: Business validation failed
           content:
@@ -3025,6 +3028,15 @@ paths:
               example:
                 type: FORBIDDEN
                 message: You do not have permission to perform this action
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: INVALID_REQUEST
+                message: Bad Request
         '500':
           description: Internal Server Error
           content:
@@ -3088,9 +3100,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ExchangeRateResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '422':
           description: Business validation failed
           content:

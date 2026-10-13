@@ -23,6 +23,8 @@ and ext-authz repos:
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
+- Session Gateway can reach permission-service internally in local and production policy, while the internal lookup stays absent from public NGINX routes
+- Heartbeat refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
 Options:
@@ -100,6 +102,48 @@ assert_file_exists() {
         fail "$label"
         return 1
     fi
+}
+
+assert_text_contains() {
+    local text="$1"
+    local pattern="$2"
+    local label="$3"
+
+    if grep -Fq -- "$pattern" <<<"$text"; then
+        pass "$label"
+    else
+        fail "$label"
+    fi
+}
+
+extract_yaml_document_by_name() {
+    local file="$1"
+    local resource_name="$2"
+
+    awk -v target="  name: ${resource_name}" '
+        /^---[[:space:]]*$/ {
+            if (found) {
+                found = 0
+                printf "%s", document
+                exit
+            }
+            document = ""
+            next
+        }
+
+        {
+            document = document $0 ORS
+            if ($0 == target) {
+                found = 1
+            }
+        }
+
+        END {
+            if (found) {
+                printf "%s", document
+            }
+        }
+    ' "$file"
 }
 
 assert_value_equals() {
@@ -495,8 +539,10 @@ REDIS_OPS_USERNAME=""
 REDIS_OPS_PASSWORD=""
 
 run_static_checks() {
-    local route_yaml
+    local route_yaml local_permission_policy production_permission_policy
+    local permission_ingress_policy session_gateway_egress_policy
     local ext_authz_config_file ext_authz_deployment_file session_gateway_application_file session_gateway_cookie_helper_file
+    local session_gateway_controller_file permission_service_client_file ext_authz_http_server_file
     local session_gateway_key_prefix_default ext_authz_key_prefix_default
     local session_gateway_cookie_name_yaml_default ext_authz_deployment_cookie_name
     local ext_authz_cookie_name_default ext_authz_repo_dir static_prereq_failed
@@ -508,6 +554,9 @@ run_static_checks() {
     ext_authz_deployment_file="${REPO_ROOT}/kubernetes/services/ext-authz/deployment.yaml"
     session_gateway_application_file="${PARENT_DIR}/session-gateway/src/main/resources/application.yml"
     session_gateway_cookie_helper_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session/SessionCookieHelper.java"
+    session_gateway_controller_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/api/SessionController.java"
+    permission_service_client_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/service/PermissionServiceClient.java"
+    ext_authz_http_server_file="${ext_authz_repo_dir}/http_server.go"
     static_prereq_failed=false
 
     # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
@@ -543,6 +592,20 @@ run_static_checks() {
     else
         static_prereq_failed=true
     fi
+    if assert_file_exists \
+        "$session_gateway_controller_file" \
+        "Session Gateway SessionController is available for the heartbeat refresh contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
+    if assert_file_exists \
+        "$permission_service_client_file" \
+        "Session Gateway PermissionServiceClient is available for the heartbeat refresh contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
     if [[ -d "${ext_authz_repo_dir}/.git" ]]; then
         pass "ext-authz sibling repository is cloned at ../ext-authz"
     else
@@ -552,6 +615,13 @@ run_static_checks() {
     if assert_file_exists \
         "$ext_authz_config_file" \
         "ext-authz config.go is available for the shared session contract check"; then
+        :
+    else
+        static_prereq_failed=true
+    fi
+    if assert_file_exists \
+        "$ext_authz_http_server_file" \
+        "ext-authz HTTP handler is available for the Redis-only API contract check"; then
         :
     else
         static_prereq_failed=true
@@ -606,6 +676,78 @@ run_static_checks() {
         "- name: SESSION_KEY_PREFIX" \
         "ext-authz deployment does not override SESSION_KEY_PREFIX"
 
+    assert_file_contains \
+        "$session_gateway_controller_file" \
+        "fetchAuthorization(sessionData.userId())" \
+        "Session Gateway heartbeat refreshes authorization before extending a session"
+    assert_file_contains \
+        "$permission_service_client_file" \
+        '"/internal/v1/users/{userId}/authorization"' \
+        "Session Gateway uses the internal authorization lookup"
+    assert_file_contains \
+        "$ext_authz_http_server_file" \
+        "store.LookupSession(r.Context(), cookie.Value)" \
+        "ext-authz API checks use the Redis-backed session store"
+    assert_file_not_contains \
+        "$ext_authz_http_server_file" \
+        "permission-service" \
+        "ext-authz API checks do not call permission-service"
+
+    local_permission_policy="$(extract_yaml_document_by_name \
+        "${REPO_ROOT}/kubernetes/istio/authorization-policies.yaml" \
+        "permission-service-policy")"
+    production_permission_policy="$(extract_yaml_document_by_name \
+        "${REPO_ROOT}/kubernetes/production/istio/authorization-policies.yaml" \
+        "permission-service-policy")"
+    permission_ingress_policy="$(extract_yaml_document_by_name \
+        "${REPO_ROOT}/kubernetes/network-policies/default-allow.yaml" \
+        "allow-permission-service-ingress-from-session-gateway")"
+    session_gateway_egress_policy="$(extract_yaml_document_by_name \
+        "${REPO_ROOT}/kubernetes/network-policies/default-allow.yaml" \
+        "allow-session-gateway-egress")"
+
+    assert_text_contains \
+        "$local_permission_policy" \
+        'cluster.local/ns/default/sa/session-gateway' \
+        "local Istio policy allows Session Gateway to call permission-service"
+    assert_text_contains \
+        "$production_permission_policy" \
+        'cluster.local/ns/default/sa/session-gateway' \
+        "production Istio policy allows Session Gateway to call permission-service"
+    assert_text_contains \
+        "$permission_ingress_policy" \
+        'app: session-gateway' \
+        "NetworkPolicy allows permission-service ingress from Session Gateway"
+    assert_text_contains \
+        "$permission_ingress_policy" \
+        'port: 8086' \
+        "permission-service ingress allowlist targets port 8086"
+    assert_text_contains \
+        "$session_gateway_egress_policy" \
+        'app: permission-service' \
+        "NetworkPolicy allows Session Gateway egress to permission-service"
+    assert_file_contains \
+        "${REPO_ROOT}/kubernetes/services/session-gateway/deployment.yaml" \
+        'value: "http://permission-service:8086/permission-service"' \
+        "Session Gateway deployment uses the internal permission-service URL"
+    assert_file_contains \
+        "${REPO_ROOT}/kubernetes/production/apps/kustomization.yaml" \
+        '../../services/session-gateway/deployment.yaml' \
+        "production apps reuse the checked-in Session Gateway deployment"
+    assert_file_contains \
+        "${REPO_ROOT}/deploy/scripts/bootstrap/06-apply-network-policies.sh" \
+        'kubernetes/network-policies' \
+        "production bootstrap applies the shared NetworkPolicy directory"
+
+    assert_file_not_contains \
+        "${REPO_ROOT}/nginx/nginx.k8s.conf" \
+        "/internal/v1/users" \
+        "local public NGINX config does not expose the internal authorization lookup"
+    assert_file_not_contains \
+        "${REPO_ROOT}/nginx/nginx.production.k8s.conf" \
+        "/internal/v1/users" \
+        "production public NGINX config does not expose the internal authorization lookup"
+
     route_yaml="$(<"${REPO_ROOT}/kubernetes/gateway/auth-httproute.yaml")"
     assert_auth_route_contract_yaml \
         "$route_yaml" \
@@ -626,7 +768,9 @@ prepare_live_redis_context() {
 }
 
 run_live_checks() {
-    local route_yaml ext_authz_yaml ext_authz_deployment_cookie_name session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl
+    local route_yaml ext_authz_yaml session_gateway_yaml live_permission_policy
+    local ext_authz_deployment_cookie_name session_gateway_permission_service_url
+    local session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl
 
     section "Live Cluster Contract"
 
@@ -657,9 +801,31 @@ run_live_checks() {
     fi
 
     if require_kubectl_resource deployment session-gateway default; then
+        session_gateway_yaml="$(kubectl get deployment session-gateway -n default -o yaml)"
+        session_gateway_permission_service_url="$(extract_named_env_value_from_yaml "PERMISSION_SERVICE_URL" <<<"$session_gateway_yaml")"
+        assert_value_equals \
+            "$session_gateway_permission_service_url" \
+            "http://permission-service:8086/permission-service" \
+            "live Session Gateway deployment uses the internal permission-service URL"
         assert_ready_deployment default session-gateway
     else
         fail "deployment/session-gateway is missing from the live cluster"
+    fi
+
+    if require_kubectl_resource authorizationpolicy permission-service-policy default; then
+        live_permission_policy="$(kubectl get authorizationpolicy permission-service-policy -n default -o yaml)"
+        assert_text_contains \
+            "$live_permission_policy" \
+            'cluster.local/ns/default/sa/session-gateway' \
+            "live Istio policy allows Session Gateway to call permission-service"
+    else
+        fail "authorizationpolicy/permission-service-policy is missing from the live cluster"
+    fi
+
+    if require_kubectl_resource networkpolicy allow-permission-service-ingress-from-session-gateway default; then
+        pass "live NetworkPolicy allows permission-service ingress from Session Gateway"
+    else
+        fail "networkpolicy/allow-permission-service-ingress-from-session-gateway is missing"
     fi
 
     if require_kubectl_resource statefulset redis infrastructure; then

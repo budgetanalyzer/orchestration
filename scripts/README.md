@@ -167,7 +167,9 @@ scripts/
   then rerun without `--plan-only` to tag only the missing repos and skip tags
   already pointing at current HEAD.
 - `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
-  OpenAPI artifacts used by `/api-docs`.
+  OpenAPI artifacts used by `/api-docs`; its opt-in
+  `--session-gateway-only OUTPUT_YAML` mode writes one filtered Session Gateway
+  YAML snapshot without changing unified or frontend outputs.
 - `repo/compare-test-coverage.py` - Compares committed coverage on every
   non-main core sibling repository with its local `origin/main` ref without
   switching branches or changing a working tree.
@@ -532,7 +534,10 @@ directory without writing outside the repository.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`
-  when that sibling repo is present.
+  when that sibling repo is present. Pass
+  `--session-gateway-only OUTPUT_YAML` to fetch only Session Gateway, apply the
+  same `/internal/*` path filter, and write exactly that YAML path without
+  writing unified or sibling-repository files.
 
 The repo-management scripts source `repo/repo-config.sh`, which derives the
 orchestration root from `scripts/repo/` and then resolves sibling repos from

@@ -625,7 +625,7 @@ Redis local access:
 - `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
 - `default` is probe-only and should not be used by application code
 - `session-gateway` owns the long-lived `session:{id}` hashes plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
-- active browser sessions are extended through same-origin `GET /auth/v1/session` heartbeats from the frontend; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
+- active browser sessions use same-origin `GET /auth/v1/session` heartbeats from the frontend; each successful heartbeat refreshes account status and grants from permission-service before atomically extending the Redis session, while a temporary lookup failure returns `503` without extending it; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
 - The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting `redis-0` or relying on `tilt down`.
 
 RabbitMQ local access:

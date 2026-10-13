@@ -11,7 +11,7 @@
 | 8090 | ext_authz | HTTP | Health endpoint | Internal (probes only) |
 | 8080 | NGINX Gateway | HTTP | Routing, backend/API rate limiting | Internal (Istio ingress only) |
 | 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Istio ingress only) |
-| 8086 | Permission Service | HTTP | Internal roles/permissions resolution | Internal (Session Gateway only) |
+| 8086 | Permission Service | HTTP | Internal login and heartbeat authorization resolution | Internal (Session Gateway only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
 | 8084 | Currency Service | HTTP | Currency and exchange rate API | Internal (NGINX only) |
 | 3000 | React Dev Server | HTTP | Frontend development (dev only) | Internal (NGINX only) |

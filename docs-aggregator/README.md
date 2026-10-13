@@ -57,6 +57,20 @@ That generator lives under `scripts/repo/` because it coordinates live-cluster
 OpenAPI fetches with optional sibling-repo docs updates rather than acting as a
 service-local verifier.
 
+The default mode regenerates the unified JSON/YAML files and copies both the
+unified and filtered Session Gateway specs into the sibling frontend docs
+directory. When only the Session Gateway snapshot is owned by the caller, use
+the explicit single-output mode:
+
+```bash
+./scripts/repo/generate-unified-api-docs.sh \
+  --session-gateway-only /path/to/session-gateway-api.yaml
+```
+
+That mode accepts exactly one `.yaml` or `.yml` output path, applies the same
+`/internal/*` filter as default mode, and writes no unified or frontend output
+implicitly. The output directory must already exist.
+
 ## Public Outputs
 
 - `/api-docs` is the human docs page backed by self-hosted Swagger UI.
@@ -112,4 +126,5 @@ main app or `/api/*` posture.
 - stock Swagger UI `5.11.0` assets, staged from pinned `swaggerapi/swagger-ui:v5.11.0`
 - split ConfigMaps for wrapper assets, `openapi.json`, and `openapi.yaml`
 - NGINX serving the checked-in wrapper files and generated OpenAPI downloads
-- `kubectl` access to the running local cluster when regenerating the unified spec
+- `kubectl` access to the running local cluster for either generator mode
+- `jq` plus a YAML converter (`yq` or Python with PyYAML)

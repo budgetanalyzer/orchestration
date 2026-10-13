@@ -43,7 +43,7 @@ spec:
             principals: ["cluster.local/ns/default/sa/nginx-gateway"]
 ---
 # permission-service: accepts from nginx-gateway and session-gateway
-# (session-gateway calls permission-service during session creation)
+# (session-gateway calls permission-service during session creation and heartbeat refresh)
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:

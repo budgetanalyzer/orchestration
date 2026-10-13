@@ -15,46 +15,46 @@ info:
     name: MIT
     url: https://opensource.org/licenses/MIT
 servers:
-  - url: https://app.budgetanalyzer.localhost/api
-    description: Local environment (via gateway)
-  - url: https://api.budgetanalyzer.org
-    description: Production environment
+- url: https://app.budgetanalyzer.localhost/api
+  description: Local environment (via gateway)
+- url: https://api.budgetanalyzer.org
+  description: Production environment
 tags:
-  - name: Saved Views
-    description: Create and manage static transaction collections
-    x-service: transaction-service
-  - name: Statement Formats
-    description: Manage statement format configurations for imports
-    x-service: transaction-service
-  - name: Transactions
-    description: Import and manipulate transactions
-    x-service: transaction-service
-  - name: Currency Series
-    description: Endpoints for querying, creating, and updating currency series
-    x-service: currency-service
-  - name: Exchange Rates
-    description: Endpoints for querying and importing exchange rates
-    x-service: currency-service
-  - name: User Administration
-    description: User administration operations
-    x-service: permission-service
+- name: Saved Views
+  description: Create and manage static transaction collections
+  x-service: transaction-service
+- name: Statement Formats
+  description: Manage statement format configurations for imports
+  x-service: transaction-service
+- name: Transactions
+  description: Import and manipulate transactions
+  x-service: transaction-service
+- name: Currency Series
+  description: Endpoints for querying, creating, and updating currency series
+  x-service: currency-service
+- name: Exchange Rates
+  description: Endpoints for querying and importing exchange rates
+  x-service: currency-service
+- name: User Administration
+  description: User administration operations
+  x-service: permission-service
 paths:
   /v1/statement-formats/{id}:
     get:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Get statement format details
       description: Returns details of a specific statement format by ID.
       operationId: getFormat
       parameters:
-        - name: id
-          in: path
-          description: Statement format ID
-          required: true
-          schema:
-            type: integer
-            format: int64
-          example: 123
+      - name: id
+        in: path
+        description: Statement format ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 123
       responses:
         '200':
           description: OK
@@ -68,9 +68,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                Format Not Found:
+                  summary: Statement format does not exist
+                  description: Format Not Found
+                  value:
+                    type: NOT_FOUND
+                    message: 'Statement format not found with id: 999'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -91,21 +113,21 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Update a statement format
       description: Updates an existing statement format. Only provided fields will
         be updated. The ID, scope, owner, and format type cannot be changed after
         creation.
       operationId: updateFormat
       parameters:
-        - name: id
-          in: path
-          description: Statement format ID
-          required: true
-          schema:
-            type: integer
-            format: int64
-          example: 123
+      - name: id
+        in: path
+        description: Statement format ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 123
       requestBody:
         content:
           application/json:
@@ -120,14 +142,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatementFormatResponse'
         '404':
-          description: Not Found
+          description: Statement format not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -158,7 +195,7 @@ paths:
   /v1/views:
     get:
       tags:
-        - Saved Views
+      - Saved Views
       summary: List static saved views
       operationId: listViews
       responses:
@@ -170,6 +207,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SavedViewResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -190,7 +245,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Create a static saved view
       operationId: createView
       requestBody:
@@ -219,9 +274,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '422':
           description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable membership or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED
             when the membership limit is exceeded or SAVED_VIEW_NAME_ALREADY_EXISTS
@@ -230,6 +282,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -251,18 +321,18 @@ paths:
   /v1/views/{sourceViewId}/clone:
     post:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Clone a static saved view
       description: Creates an independent copy of an owner-scoped saved view under
         a new name
       operationId: cloneView
       parameters:
-        - name: sourceViewId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: sourceViewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         content:
           application/json:
@@ -289,9 +359,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '404':
           description: Source saved view not found for the authenticated owner
           content:
@@ -305,6 +372,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -326,7 +411,7 @@ paths:
   /v1/transactions:
     get:
       tags:
-        - Transactions
+      - Transactions
       summary: Get transactions
       description: Returns the complete active transaction collection for the authenticated
         owner as a plain array. This intentionally unpaged snapshot supports browser-owned
@@ -342,6 +427,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TransactionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -362,7 +465,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-        - Transactions
+      - Transactions
       summary: Create a manual transaction
       description: Creates one active transaction owned by the authenticated user
         without file import provenance or duplicate suppression.
@@ -388,14 +491,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionResponse'
         '400':
-          description: Bad Request
+          description: Request validation failed
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '422':
           description: TRANSACTION_CURRENCY_INVALID, TRANSACTION_DATE_TOO_OLD, or
             TRANSACTION_DATE_TOO_FAR_IN_FUTURE
@@ -403,6 +503,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -424,7 +542,7 @@ paths:
   /v1/transactions/preview:
     post:
       tags:
-        - Transactions
+      - Transactions
       summary: Preview transactions from ordered files before import
       description: Parses one or more ordered CSV or PDF files using one shared statement
         format and returns one result and preview token per file for review before
@@ -436,22 +554,22 @@ paths:
         user. Repeated rows within one file are not compared with each other.
       operationId: previewTransactions
       parameters:
-        - name: statementFormatId
-          in: query
-          description: Statement format ID selected from GET /v1/statement-formats.
-            Use GET /v1/statement-formats to list available formats.
-          required: true
-          schema:
-            type: integer
-            format: int64
-          example: 123
-        - name: accountId
-          in: query
-          description: Account ID to pre-fill for transactions from every file
-          required: false
-          schema:
-            type: string
-          example: checking-12345
+      - name: statementFormatId
+        in: query
+        description: Statement format ID selected from GET /v1/statement-formats.
+          Use GET /v1/statement-formats to list available formats.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 123
+      - name: accountId
+        in: query
+        description: Account ID to pre-fill for transactions from every file
+        required: false
+        schema:
+          type: string
+        example: checking-12345
       requestBody:
         content:
           multipart/form-data:
@@ -467,7 +585,7 @@ paths:
                     format: binary
                   minItems: 1
               required:
-                - files
+              - files
         required: true
       responses:
         '200':
@@ -506,6 +624,24 @@ paths:
                     message: Uploaded file part at index 0 must include an original
                       filename.
                     code: MISSING_ORIGINAL_FILENAME
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -536,7 +672,7 @@ paths:
   /v1/transactions/bulk-delete:
     post:
       tags:
-        - Transactions
+      - Transactions
       summary: Bulk delete transactions
       description: Soft-deletes multiple transactions in a single operation. Returns
         the count of successfully deleted transactions and any IDs that were not found
@@ -562,17 +698,32 @@ paths:
                   value:
                     deletedCount: 2
                     notFoundIds:
-                      - 999
-                      - 1000
+                    - 999
+                    - 1000
         '400':
-          description: Bad Request
+          description: Invalid request (empty ID list)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: INVALID_REQUEST
-                message: Bad Request
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -594,7 +745,7 @@ paths:
   /v1/transactions/batch:
     post:
       tags:
-        - Transactions
+      - Transactions
       summary: Import a batch of transactions
       description: Imports one ordered group of reviewed source files from the preview
         endpoint. Every previewImportToken is verified for the authenticated owner
@@ -630,9 +781,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
+              examples:
+                Validation Failed:
+                  summary: One or more transactions failed validation
+                  description: Validation Failed
+                  value:
+                    type: VALIDATION_ERROR
+                    message: Validation failed for 2 field(s)
+                    fieldErrors:
+                    - field: files[0].transactions[44].amount
+                      message: must not be null
+                    - field: files[1].transactions[89].date
+                      message: must not be null
         '422':
           description: Unprocessable Entity
           content:
@@ -654,6 +814,24 @@ paths:
                     type: APPLICATION_ERROR
                     message: Preview import token sources do not match.
                     code: BATCH_IMPORT_SOURCE_MISMATCH
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -675,21 +853,21 @@ paths:
   /v1/statement-formats:
     get:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: List all statement formats
       description: Returns statement formats visible to the caller. Formats hidden
         by the current user are excluded by default; pass includeHidden=true for management
         screens.
       operationId: listFormats
       parameters:
-        - name: includeHidden
-          in: query
-          description: Include formats hidden by the current user
-          required: false
-          schema:
-            type: boolean
-            default: false
-          example: true
+      - name: includeHidden
+        in: query
+        description: Include formats hidden by the current user
+        required: false
+        schema:
+          type: boolean
+          default: false
+        example: true
       responses:
         '200':
           description: OK
@@ -699,6 +877,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/StatementFormatResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -719,7 +915,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Create a new statement format
       description: Creates a new statement format configuration. For CSV formats,
         the column header fields (dateHeader, descriptionHeader, creditHeader) are
@@ -739,20 +935,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatementFormatResponse'
         '400':
-          description: Bad Request
+          description: Validation error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '422':
           description: Business rule violation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -774,20 +985,20 @@ paths:
   /v1/statement-formats/{id}/unhide:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Unhide a statement format
       description: Restores a statement format to the current user's normal import
         selection lists. The operation is idempotent.
       operationId: unhideFormat
       parameters:
-        - name: id
-          in: path
-          description: Statement format ID
-          required: true
-          schema:
-            type: integer
-            format: int64
-          example: 123
+      - name: id
+        in: path
+        description: Statement format ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 123
       responses:
         '204':
           description: Statement format unhidden
@@ -797,6 +1008,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -827,21 +1056,21 @@ paths:
   /v1/statement-formats/{id}/hide:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Hide a statement format
       description: Hides a statement format from the current user's normal import
         selection lists. The operation is idempotent and does not disable the format
         for other users.
       operationId: hideFormat
       parameters:
-        - name: id
-          in: path
-          description: Statement format ID
-          required: true
-          schema:
-            type: integer
-            format: int64
-          example: 123
+      - name: id
+        in: path
+        description: Statement format ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 123
       responses:
         '204':
           description: Statement format hidden
@@ -851,6 +1080,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -881,7 +1128,7 @@ paths:
   /v1/statement-formats/pdf-wizard/save:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Save a PDF wizard statement format
       description: Validates the confirmed text-PDF table mapping against the sample
         PDF and creates a user-scoped PDF statement format with one enabled PDF_TEXT_TABLE_CONFIG
@@ -899,8 +1146,8 @@ paths:
                 request:
                   $ref: '#/components/schemas/PdfWizardSaveRequest'
               required:
-                - file
-                - request
+              - file
+              - request
       responses:
         '201':
           description: Created
@@ -914,6 +1161,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -944,7 +1209,7 @@ paths:
   /v1/statement-formats/pdf-wizard/preview:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Preview a PDF wizard mapping
       description: Parses read-only transaction preview rows from a multipart text-PDF
         sample and confirmed table mapping. This does not create a statement format,
@@ -962,8 +1227,8 @@ paths:
                 request:
                   $ref: '#/components/schemas/PdfWizardMappingPreviewRequest'
               required:
-                - file
-                - request
+              - file
+              - request
       responses:
         '200':
           description: OK
@@ -977,6 +1242,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1007,7 +1290,7 @@ paths:
   /v1/statement-formats/pdf-wizard/analyze:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Analyze a PDF sample for statement format creation
       description: Extracts text from a multipart PDF sample and returns ranked transaction-table
         candidates with inferred mappings, confidence, sample rows, and unsupported-file
@@ -1024,7 +1307,7 @@ paths:
                   type: string
                   format: binary
               required:
-                - file
+              - file
       responses:
         '200':
           description: OK
@@ -1038,6 +1321,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1068,7 +1369,7 @@ paths:
   /v1/statement-formats/csv-wizard/save:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Save a CSV wizard statement format
       description: Validates the confirmed mapping against the sample CSV and creates
         a user-scoped CSV statement format with one enabled CSV_COLUMN_CONFIG parser
@@ -1086,8 +1387,8 @@ paths:
                 request:
                   $ref: '#/components/schemas/CsvWizardSaveRequest'
               required:
-                - file
-                - request
+              - file
+              - request
       responses:
         '201':
           description: Created
@@ -1101,6 +1402,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1131,7 +1450,7 @@ paths:
   /v1/statement-formats/csv-wizard/preview:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Preview a CSV wizard mapping
       description: Parses read-only transaction preview rows from a multipart CSV
         sample and confirmed mapping. This does not create a statement format, preview
@@ -1149,8 +1468,8 @@ paths:
                 request:
                   $ref: '#/components/schemas/CsvWizardMappingPreviewRequest'
               required:
-                - file
-                - request
+              - file
+              - request
       responses:
         '200':
           description: OK
@@ -1164,6 +1483,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1194,7 +1531,7 @@ paths:
   /v1/statement-formats/csv-wizard/analyze:
     post:
       tags:
-        - Statement Formats
+      - Statement Formats
       summary: Analyze a CSV sample for statement format creation
       description: Parses a multipart CSV sample, returns headers and sample rows,
         and infers an initial CSV column mapping without persisting the uploaded file
@@ -1210,7 +1547,7 @@ paths:
                   type: string
                   format: binary
               required:
-                - file
+              - file
       responses:
         '200':
           description: OK
@@ -1224,6 +1561,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1254,16 +1609,16 @@ paths:
   /v1/views/{id}:
     get:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Get static saved-view metadata
       operationId: getView
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: OK
@@ -1277,9 +1632,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1300,28 +1670,43 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Delete a static saved view
       operationId: deleteView
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '204':
           description: No Content
         '404':
           description: Not Found
           content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1342,16 +1727,16 @@ paths:
                 message: Service Unavailable
     patch:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Rename a static saved view
       operationId: updateView
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         content:
           application/json:
@@ -1371,24 +1756,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '404':
           description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
         '422':
           description: SAVED_VIEW_NAME_ALREADY_EXISTS for a same-owner name conflict
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1410,16 +1807,16 @@ paths:
   /v1/views/{id}/transactions:
     get:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Get complete static saved-view membership
       operationId: getViewTransactions
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: OK
@@ -1433,9 +1830,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1456,16 +1868,16 @@ paths:
                 message: Service Unavailable
     patch:
       tags:
-        - Saved Views
+      - Saved Views
       summary: Apply a static saved-view membership delta
       operationId: updateViewTransactions
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         content:
           application/json:
@@ -1478,21 +1890,15 @@ paths:
         '400':
           description: Bad Request
           content:
-            application/json:
+            '*/*':
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
         '404':
           description: Not Found
           content:
-            application/json:
+            '*/*':
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: NOT_FOUND
-                message: Not Found
         '422':
           description: SAVED_VIEW_MEMBERSHIP_STALE for unavailable additions or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED
             when the membership limit is exceeded
@@ -1500,6 +1906,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1521,17 +1945,17 @@ paths:
   /v1/transactions/{id}:
     get:
       tags:
-        - Transactions
+      - Transactions
       summary: Get transaction
       description: Get transaction by id
       operationId: getTransaction
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       responses:
         '200':
           description: OK
@@ -1539,6 +1963,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '404':
           description: Not Found
           content:
@@ -1568,20 +2010,38 @@ paths:
                 message: Service Unavailable
     delete:
       tags:
-        - Transactions
+      - Transactions
       summary: Delete transaction
       description: Delete transaction by id
       operationId: deleteTransaction
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       responses:
         '204':
           description: No Content
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '404':
           description: Not Found
           content:
@@ -1611,18 +2071,18 @@ paths:
                 message: Service Unavailable
     patch:
       tags:
-        - Transactions
+      - Transactions
       summary: Update transaction
       description: Updates mutable fields (description and accountId) of a transaction.
         All other fields are immutable to preserve financial data integrity.
       operationId: updateTransaction
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       requestBody:
         content:
           application/json:
@@ -1642,9 +2102,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                Transaction Not Found:
+                  summary: Transaction does not exist or is deleted
+                  description: Transaction Not Found
+                  value:
+                    type: APPLICATION_ERROR
+                    message: 'Transaction not found with id: 999'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -1675,7 +2157,7 @@ paths:
   /v1/transactions/search:
     get:
       tags:
-        - Transactions
+      - Transactions
       summary: Search transactions across users
       description: Returns a paged administrative search across active transactions.
         minAmount and maxAmount compare each row's stored numeric amount without currency
@@ -1684,198 +2166,198 @@ paths:
         numeric comparison. Sorting by amount likewise uses the stored numeric amount.
       operationId: searchTransactions
       parameters:
-        - name: sort
-          in: query
-          description: Sorting criteria as property,(asc|desc). Multiple values are
-            supported. sort=amount compares stored numeric amounts without currency
-            normalization.
-          required: false
-          schema:
-            type: array
-            default:
-              - date,DESC
-              - id,DESC
-            items:
-              type: string
-        - name: id
-          in: query
+      - name: sort
+        in: query
+        description: Sorting criteria as property,(asc|desc). Multiple values are
+          supported. sort=amount compares stored numeric amounts without currency
+          normalization.
+        required: false
+        schema:
+          type: array
+          default:
+          - date,DESC
+          - id,DESC
+          items:
+            type: string
+      - name: id
+        in: query
+        description: Unique identifier for the transaction
+        required: false
+        schema:
+          type: integer
+          format: int64
           description: Unique identifier for the transaction
-          required: false
-          schema:
-            type: integer
-            format: int64
-            description: Unique identifier for the transaction
-            example: 1
           example: 1
-        - name: ownerId
-          in: query
+        example: 1
+      - name: ownerId
+        in: query
+        description: ID of the user who owns the transaction. Only effective on admin
+          endpoints; ignored on user-scoped endpoints where the authenticated user
+          is always applied.
+        required: false
+        schema:
+          type: string
           description: ID of the user who owns the transaction. Only effective on
             admin endpoints; ignored on user-scoped endpoints where the authenticated
             user is always applied.
-          required: false
-          schema:
-            type: string
-            description: ID of the user who owns the transaction. Only effective on
-              admin endpoints; ignored on user-scoped endpoints where the authenticated
-              user is always applied.
-            example: usr_test123
           example: usr_test123
-        - name: accountId
-          in: query
+        example: usr_test123
+      - name: accountId
+        in: query
+        description: Identifier for the account associated with the transaction
+        required: false
+        schema:
+          type: string
           description: Identifier for the account associated with the transaction
-          required: false
-          schema:
-            type: string
-            description: Identifier for the account associated with the transaction
-            example: checking-3223
           example: checking-3223
-        - name: bankName
-          in: query
+        example: checking-3223
+      - name: bankName
+        in: query
+        description: Name of the bank where the transaction occurred
+        required: false
+        schema:
+          type: string
           description: Name of the bank where the transaction occurred
-          required: false
-          schema:
-            type: string
-            description: Name of the bank where the transaction occurred
-            example: Capital One
           example: Capital One
-        - name: dateFrom
-          in: query
+        example: Capital One
+      - name: dateFrom
+        in: query
+        description: Start date for transaction date range
+        required: false
+        schema:
+          type: string
+          format: date
           description: Start date for transaction date range
-          required: false
-          schema:
-            type: string
-            format: date
-            description: Start date for transaction date range
-            example: '2025-10-01'
           example: '2025-10-01'
-        - name: dateTo
-          in: query
+        example: '2025-10-01'
+      - name: dateTo
+        in: query
+        description: End date for transaction date range
+        required: false
+        schema:
+          type: string
+          format: date
           description: End date for transaction date range
-          required: false
-          schema:
-            type: string
-            format: date
-            description: End date for transaction date range
-            example: '2025-10-14'
           example: '2025-10-14'
-        - name: currencyIsoCode
-          in: query
+        example: '2025-10-14'
+      - name: currencyIsoCode
+        in: query
+        description: Exact ISO currency code criterion. On administrative endpoints
+          this is independent of minAmount and maxAmount; combine them to make an
+          amount comparison currency-specific.
+        required: false
+        schema:
+          type: string
           description: Exact ISO currency code criterion. On administrative endpoints
             this is independent of minAmount and maxAmount; combine them to make an
             amount comparison currency-specific.
-          required: false
-          schema:
-            type: string
-            description: Exact ISO currency code criterion. On administrative endpoints
-              this is independent of minAmount and maxAmount; combine them to make
-              an amount comparison currency-specific.
-            example: USD
           example: USD
-        - name: minAmount
-          in: query
+        example: USD
+      - name: minAmount
+        in: query
+        description: Inclusive minimum stored numeric amount. Administrative search
+          and count do not normalize currencies, so this criterion is valid across
+          currencies.
+        required: false
+        schema:
+          type: number
           description: Inclusive minimum stored numeric amount. Administrative search
             and count do not normalize currencies, so this criterion is valid across
             currencies.
-          required: false
-          schema:
-            type: number
-            description: Inclusive minimum stored numeric amount. Administrative search
-              and count do not normalize currencies, so this criterion is valid across
-              currencies.
-            example: 10.0
           example: 10.0
-        - name: maxAmount
-          in: query
+        example: 10.0
+      - name: maxAmount
+        in: query
+        description: Inclusive maximum stored numeric amount. Administrative search
+          and count do not normalize currencies, so this criterion is valid across
+          currencies.
+        required: false
+        schema:
+          type: number
           description: Inclusive maximum stored numeric amount. Administrative search
             and count do not normalize currencies, so this criterion is valid across
             currencies.
-          required: false
-          schema:
-            type: number
-            description: Inclusive maximum stored numeric amount. Administrative search
-              and count do not normalize currencies, so this criterion is valid across
-              currencies.
-            example: 500.0
           example: 500.0
-        - name: type
-          in: query
+        example: 500.0
+      - name: type
+        in: query
+        description: Type of the transaction
+        required: false
+        schema:
+          type: string
           description: Type of the transaction
-          required: false
-          schema:
-            type: string
-            description: Type of the transaction
-            enum:
-              - CREDIT
-              - DEBIT
-              - CREDIT
-              - DEBIT
-            example: DEBIT
+          enum:
+          - CREDIT
+          - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
-        - name: description
-          in: query
+        example: DEBIT
+      - name: description
+        in: query
+        description: Text to match in the transaction description
+        required: false
+        schema:
+          type: string
           description: Text to match in the transaction description
-          required: false
-          schema:
-            type: string
-            description: Text to match in the transaction description
-            example: Grocery
           example: Grocery
-        - name: createdAfter
-          in: query
+        example: Grocery
+      - name: createdAfter
+        in: query
+        description: Start of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of creation timestamp range
-            example: '2025-10-14T00:00:00Z'
           example: '2025-10-14T00:00:00Z'
-        - name: createdBefore
-          in: query
+        example: '2025-10-14T00:00:00Z'
+      - name: createdBefore
+        in: query
+        description: End of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of creation timestamp range
-            example: '2025-10-15T00:00:00Z'
           example: '2025-10-15T00:00:00Z'
-        - name: updatedAfter
-          in: query
+        example: '2025-10-15T00:00:00Z'
+      - name: updatedAfter
+        in: query
+        description: Start of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of last update timestamp range
-            example: '2025-10-14T00:00:00Z'
           example: '2025-10-14T00:00:00Z'
-        - name: updatedBefore
-          in: query
+        example: '2025-10-14T00:00:00Z'
+      - name: updatedBefore
+        in: query
+        description: End of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of last update timestamp range
-            example: '2025-10-15T00:00:00Z'
           example: '2025-10-15T00:00:00Z'
-        - name: page
-          in: query
-          description: Zero-based page index (0..N)
-          required: false
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
-        - name: size
-          in: query
-          description: The size of the page to be returned
-          required: false
-          schema:
-            type: integer
-            default: 50
-            minimum: 1
+        example: '2025-10-15T00:00:00Z'
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          type: integer
+          default: 0
+          minimum: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          type: integer
+          default: 50
+          minimum: 1
       responses:
         '200':
           description: Transactions retrieved successfully
@@ -1898,6 +2380,24 @@ paths:
                     message: 'Unsupported sort field: invalid. Allowed sort fields:
                       id, ownerId, accountId, bankName, date, currencyIsoCode, amount,
                       type, description, createdAt, updatedAt'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -1919,176 +2419,176 @@ paths:
   /v1/transactions/search/count:
     get:
       tags:
-        - Transactions
+      - Transactions
       summary: Count transactions across users
       description: Counts active transactions matching the administrative criteria.
         minAmount and maxAmount compare stored numeric amounts without currency normalization;
         currencyIsoCode is an independent exact criterion.
       operationId: countTransactionsAcrossUsers
       parameters:
-        - name: id
-          in: query
+      - name: id
+        in: query
+        description: Unique identifier for the transaction
+        required: false
+        schema:
+          type: integer
+          format: int64
           description: Unique identifier for the transaction
-          required: false
-          schema:
-            type: integer
-            format: int64
-            description: Unique identifier for the transaction
-            example: 1
           example: 1
-        - name: ownerId
-          in: query
+        example: 1
+      - name: ownerId
+        in: query
+        description: ID of the user who owns the transaction. Only effective on admin
+          endpoints; ignored on user-scoped endpoints where the authenticated user
+          is always applied.
+        required: false
+        schema:
+          type: string
           description: ID of the user who owns the transaction. Only effective on
             admin endpoints; ignored on user-scoped endpoints where the authenticated
             user is always applied.
-          required: false
-          schema:
-            type: string
-            description: ID of the user who owns the transaction. Only effective on
-              admin endpoints; ignored on user-scoped endpoints where the authenticated
-              user is always applied.
-            example: usr_test123
           example: usr_test123
-        - name: accountId
-          in: query
+        example: usr_test123
+      - name: accountId
+        in: query
+        description: Identifier for the account associated with the transaction
+        required: false
+        schema:
+          type: string
           description: Identifier for the account associated with the transaction
-          required: false
-          schema:
-            type: string
-            description: Identifier for the account associated with the transaction
-            example: checking-3223
           example: checking-3223
-        - name: bankName
-          in: query
+        example: checking-3223
+      - name: bankName
+        in: query
+        description: Name of the bank where the transaction occurred
+        required: false
+        schema:
+          type: string
           description: Name of the bank where the transaction occurred
-          required: false
-          schema:
-            type: string
-            description: Name of the bank where the transaction occurred
-            example: Capital One
           example: Capital One
-        - name: dateFrom
-          in: query
+        example: Capital One
+      - name: dateFrom
+        in: query
+        description: Start date for transaction date range
+        required: false
+        schema:
+          type: string
+          format: date
           description: Start date for transaction date range
-          required: false
-          schema:
-            type: string
-            format: date
-            description: Start date for transaction date range
-            example: '2025-10-01'
           example: '2025-10-01'
-        - name: dateTo
-          in: query
+        example: '2025-10-01'
+      - name: dateTo
+        in: query
+        description: End date for transaction date range
+        required: false
+        schema:
+          type: string
+          format: date
           description: End date for transaction date range
-          required: false
-          schema:
-            type: string
-            format: date
-            description: End date for transaction date range
-            example: '2025-10-14'
           example: '2025-10-14'
-        - name: currencyIsoCode
-          in: query
+        example: '2025-10-14'
+      - name: currencyIsoCode
+        in: query
+        description: Exact ISO currency code criterion. On administrative endpoints
+          this is independent of minAmount and maxAmount; combine them to make an
+          amount comparison currency-specific.
+        required: false
+        schema:
+          type: string
           description: Exact ISO currency code criterion. On administrative endpoints
             this is independent of minAmount and maxAmount; combine them to make an
             amount comparison currency-specific.
-          required: false
-          schema:
-            type: string
-            description: Exact ISO currency code criterion. On administrative endpoints
-              this is independent of minAmount and maxAmount; combine them to make
-              an amount comparison currency-specific.
-            example: USD
           example: USD
-        - name: minAmount
-          in: query
+        example: USD
+      - name: minAmount
+        in: query
+        description: Inclusive minimum stored numeric amount. Administrative search
+          and count do not normalize currencies, so this criterion is valid across
+          currencies.
+        required: false
+        schema:
+          type: number
           description: Inclusive minimum stored numeric amount. Administrative search
             and count do not normalize currencies, so this criterion is valid across
             currencies.
-          required: false
-          schema:
-            type: number
-            description: Inclusive minimum stored numeric amount. Administrative search
-              and count do not normalize currencies, so this criterion is valid across
-              currencies.
-            example: 10.0
           example: 10.0
-        - name: maxAmount
-          in: query
+        example: 10.0
+      - name: maxAmount
+        in: query
+        description: Inclusive maximum stored numeric amount. Administrative search
+          and count do not normalize currencies, so this criterion is valid across
+          currencies.
+        required: false
+        schema:
+          type: number
           description: Inclusive maximum stored numeric amount. Administrative search
             and count do not normalize currencies, so this criterion is valid across
             currencies.
-          required: false
-          schema:
-            type: number
-            description: Inclusive maximum stored numeric amount. Administrative search
-              and count do not normalize currencies, so this criterion is valid across
-              currencies.
-            example: 500.0
           example: 500.0
-        - name: type
-          in: query
+        example: 500.0
+      - name: type
+        in: query
+        description: Type of the transaction
+        required: false
+        schema:
+          type: string
           description: Type of the transaction
-          required: false
-          schema:
-            type: string
-            description: Type of the transaction
-            enum:
-              - CREDIT
-              - DEBIT
-              - CREDIT
-              - DEBIT
-            example: DEBIT
+          enum:
+          - CREDIT
+          - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
-        - name: description
-          in: query
+        example: DEBIT
+      - name: description
+        in: query
+        description: Text to match in the transaction description
+        required: false
+        schema:
+          type: string
           description: Text to match in the transaction description
-          required: false
-          schema:
-            type: string
-            description: Text to match in the transaction description
-            example: Grocery
           example: Grocery
-        - name: createdAfter
-          in: query
+        example: Grocery
+      - name: createdAfter
+        in: query
+        description: Start of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of creation timestamp range
-            example: '2025-10-14T00:00:00Z'
           example: '2025-10-14T00:00:00Z'
-        - name: createdBefore
-          in: query
+        example: '2025-10-14T00:00:00Z'
+      - name: createdBefore
+        in: query
+        description: End of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of creation timestamp range
-            example: '2025-10-15T00:00:00Z'
           example: '2025-10-15T00:00:00Z'
-        - name: updatedAfter
-          in: query
+        example: '2025-10-15T00:00:00Z'
+      - name: updatedAfter
+        in: query
+        description: Start of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of last update timestamp range
-            example: '2025-10-14T00:00:00Z'
           example: '2025-10-14T00:00:00Z'
-        - name: updatedBefore
-          in: query
+        example: '2025-10-14T00:00:00Z'
+      - name: updatedBefore
+        in: query
+        description: End of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of last update timestamp range
-            example: '2025-10-15T00:00:00Z'
           example: '2025-10-15T00:00:00Z'
+        example: '2025-10-15T00:00:00Z'
       responses:
         '200':
           description: OK
@@ -2097,6 +2597,24 @@ paths:
               schema:
                 type: integer
                 format: int64
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2118,17 +2636,17 @@ paths:
   /v1/transactions/count:
     get:
       tags:
-        - Transactions
+      - Transactions
       summary: Count transactions
       description: Returns the count of active transactions owned by the requesting
         user and matching the given filter criteria.
       operationId: countTransactions
       parameters:
-        - name: filter
-          in: query
-          required: true
-          schema:
-            $ref: '#/components/schemas/TransactionFilter'
+      - name: filter
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/TransactionFilter'
       responses:
         '200':
           description: OK
@@ -2137,6 +2655,24 @@ paths:
               schema:
                 type: integer
                 format: int64
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2158,17 +2694,17 @@ paths:
   /v1/currencies/{id}:
     get:
       tags:
-        - Currency Series
+      - Currency Series
       summary: Get currency series by ID
       description: Retrieve a currency series by its unique identifier
       operationId: getById
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       responses:
         '200':
           description: Currency series retrieved successfully
@@ -2177,14 +2713,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
         '404':
-          description: Not Found
+          description: Currency series not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrencySeriesResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2205,18 +2756,18 @@ paths:
                 message: Service Unavailable
     put:
       tags:
-        - Currency Series
+      - Currency Series
       summary: Update currency series
       description: Update an existing currency series (currency code and provider
         series ID are immutable, only enabled status can be changed)
       operationId: update
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       requestBody:
         content:
           application/json:
@@ -2231,23 +2782,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
         '400':
-          description: Bad Request
+          description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
+                $ref: '#/components/schemas/CurrencySeriesResponse'
         '404':
-          description: Not Found
+          description: Currency series not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrencySeriesResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2269,7 +2832,7 @@ paths:
   /v1/exchange-rates/import:
     post:
       tags:
-        - Exchange Rates
+      - Exchange Rates
       summary: Import latest available rates from FRED
       description: Retrieve latest un-imported exchange rates from FRED for all enabled
         currencies - manually triggers daily cron job
@@ -2283,6 +2846,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ExchangeRateImportResultResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -2313,18 +2894,18 @@ paths:
   /v1/currencies:
     get:
       tags:
-        - Currency Series
+      - Currency Series
       summary: Get all currency series
       description: Retrieve all currency series, optionally filtered by enabled status
       operationId: getAll
       parameters:
-        - name: enabledOnly
-          in: query
-          description: Filter by enabled status (true = enabled only, false = all)
-          required: false
-          schema:
-            type: boolean
-            default: false
+      - name: enabledOnly
+        in: query
+        description: Filter by enabled status (true = enabled only, false = all)
+        required: false
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: OK
@@ -2334,6 +2915,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CurrencySeriesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2354,7 +2953,7 @@ paths:
                 message: Service Unavailable
     post:
       tags:
-        - Currency Series
+      - Currency Series
       summary: Create a new currency series
       description: Create a new currency series. This endpoint is typically used when
         FRED adds support for new currency pairs. The 23 commonly-used currencies
@@ -2374,14 +2973,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/CurrencySeriesResponse'
         '400':
-          description: Bad Request
+          description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-              example:
-                type: INVALID_REQUEST
-                message: Bad Request
+                $ref: '#/components/schemas/CurrencySeriesResponse'
         '422':
           description: Business validation failed
           content:
@@ -2411,6 +3007,24 @@ paths:
                     message: Provider series ID 'INVALID_SERIES' does not exist in
                       the external provider
                     code: INVALID_PROVIDER_SERIES_ID
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2432,34 +3046,34 @@ paths:
   /v1/exchange-rates:
     get:
       tags:
-        - Exchange Rates
+      - Exchange Rates
       summary: Get exchange rates
       description: Get exchange rates for converting USD to the target currency
       operationId: getExchangeRates
       parameters:
-        - name: startDate
-          in: query
-          description: Start date for exchange rates in ISO format
-          required: false
-          schema:
-            type: string
-            format: date
-          example: '2024-01-01'
-        - name: endDate
-          in: query
-          description: End date for exchange rates in ISO format
-          required: false
-          schema:
-            type: string
-            format: date
-          example: '2024-12-31'
-        - name: targetCurrency
-          in: query
-          description: Target currency of exchange rate
-          required: true
-          schema:
-            type: string
-          example: THB
+      - name: startDate
+        in: query
+        description: Start date for exchange rates in ISO format
+        required: false
+        schema:
+          type: string
+          format: date
+        example: '2024-01-01'
+      - name: endDate
+        in: query
+        description: End date for exchange rates in ISO format
+        required: false
+        schema:
+          type: string
+          format: date
+        example: '2024-12-31'
+      - name: targetCurrency
+        in: query
+        description: Target currency of exchange rate
+        required: true
+        schema:
+          type: string
+        example: THB
       responses:
         '200':
           description: OK
@@ -2505,6 +3119,24 @@ paths:
                     type: APPLICATION_ERROR
                     message: 'Currency is not enabled: EUR'
                     code: CURRENCY_NOT_ENABLED
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2526,20 +3158,20 @@ paths:
   /v1/users/{id}/deactivate:
     post:
       tags:
-        - User Administration
+      - User Administration
       summary: Deactivate a user
-      description: Marks a user as deactivated, removes all role assignments, and
-        revokes active sessions. Idempotent — deactivating an already-deactivated
-        user returns 200.
+      description: "Marks a user as deactivated, removes all role assignments, and\
+        \ revokes active sessions. Idempotent \u2014 deactivating an already-deactivated\
+        \ user returns 200."
       operationId: deactivateUser
       parameters:
-        - name: id
-          in: path
-          description: User ID
-          required: true
-          schema:
-            type: string
-          example: usr_abc123
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: string
+        example: usr_abc123
       responses:
         '200':
           description: User deactivated successfully
@@ -2547,12 +3179,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDeactivationResponse'
-        '403':
-          description: Insufficient permissions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: User not found
           content:
@@ -2560,14 +3186,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
         '503':
-          description: Service Unavailable
+          description: Session revocation failed after retry; user was deactivated,
+            retry is safe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: SERVICE_UNAVAILABLE
-                message: Service Unavailable
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '400':
           description: Bad Request
           content:
@@ -2589,129 +3231,129 @@ paths:
   /v1/users:
     get:
       tags:
-        - User Administration
+      - User Administration
       summary: Search users
       description: Lists users with filtering, sorting, and pagination.
       operationId: getUsers
       parameters:
-        - name: id
-          in: query
+      - name: id
+        in: query
+        description: Unique identifier for the user
+        required: false
+        schema:
+          type: string
           description: Unique identifier for the user
-          required: false
-          schema:
-            type: string
-            description: Unique identifier for the user
-            example: usr_abc123
           example: usr_abc123
-        - name: email
-          in: query
+        example: usr_abc123
+      - name: email
+        in: query
+        description: Email address (case-insensitive LIKE, multi-word OR)
+        required: false
+        schema:
+          type: string
           description: Email address (case-insensitive LIKE, multi-word OR)
-          required: false
-          schema:
-            type: string
-            description: Email address (case-insensitive LIKE, multi-word OR)
-            example: admin@example.com
           example: admin@example.com
-        - name: displayName
-          in: query
+        example: admin@example.com
+      - name: displayName
+        in: query
+        description: Display name (case-insensitive LIKE, multi-word OR)
+        required: false
+        schema:
+          type: string
           description: Display name (case-insensitive LIKE, multi-word OR)
-          required: false
-          schema:
-            type: string
-            description: Display name (case-insensitive LIKE, multi-word OR)
-            example: Admin User
           example: Admin User
-        - name: idpSub
-          in: query
+        example: Admin User
+      - name: idpSub
+        in: query
+        description: Identity provider subject identifier (exact match)
+        required: false
+        schema:
+          type: string
           description: Identity provider subject identifier (exact match)
-          required: false
-          schema:
-            type: string
-            description: Identity provider subject identifier (exact match)
-            example: auth0|67fd70c38eb9d43f1c93ea44
           example: auth0|67fd70c38eb9d43f1c93ea44
-        - name: status
-          in: query
+        example: auth0|67fd70c38eb9d43f1c93ea44
+      - name: status
+        in: query
+        description: Current user status
+        required: false
+        schema:
+          type: string
           description: Current user status
-          required: false
-          schema:
-            type: string
-            description: Current user status
-            enum:
-              - ACTIVE
-              - DEACTIVATED
-              - ACTIVE
-              - DEACTIVATED
-            example: ACTIVE
+          enum:
+          - ACTIVE
+          - DEACTIVATED
+          - ACTIVE
+          - DEACTIVATED
           example: ACTIVE
-        - name: createdAfter
-          in: query
+        example: ACTIVE
+      - name: createdAfter
+        in: query
+        description: Start of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of creation timestamp range
-            example: '2026-04-01T00:00:00Z'
           example: '2026-04-01T00:00:00Z'
-        - name: createdBefore
-          in: query
+        example: '2026-04-01T00:00:00Z'
+      - name: createdBefore
+        in: query
+        description: End of creation timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of creation timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of creation timestamp range
-            example: '2026-04-08T00:00:00Z'
           example: '2026-04-08T00:00:00Z'
-        - name: updatedAfter
-          in: query
+        example: '2026-04-08T00:00:00Z'
+      - name: updatedAfter
+        in: query
+        description: Start of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: Start of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: Start of last update timestamp range
-            example: '2026-04-01T00:00:00Z'
           example: '2026-04-01T00:00:00Z'
-        - name: updatedBefore
-          in: query
+        example: '2026-04-01T00:00:00Z'
+      - name: updatedBefore
+        in: query
+        description: End of last update timestamp range
+        required: false
+        schema:
+          type: string
+          format: date-time
           description: End of last update timestamp range
-          required: false
-          schema:
-            type: string
-            format: date-time
-            description: End of last update timestamp range
-            example: '2026-04-08T00:00:00Z'
           example: '2026-04-08T00:00:00Z'
-        - name: page
-          in: query
-          description: Zero-based page index (0..N)
-          required: false
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
-        - name: size
-          in: query
-          description: The size of the page to be returned
-          required: false
-          schema:
-            type: integer
-            default: 50
-            minimum: 1
-        - name: sort
-          in: query
-          description: 'Sorting criteria in the format: property,(asc|desc). Default
-            sort order is ascending. Multiple sort criteria are supported.'
-          required: false
-          schema:
-            type: array
-            default:
-              - createdAt,DESC
-              - id,DESC
-            items:
-              type: string
+        example: '2026-04-08T00:00:00Z'
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          type: integer
+          default: 0
+          minimum: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          type: integer
+          default: 50
+          minimum: 1
+      - name: sort
+        in: query
+        description: 'Sorting criteria in the format: property,(asc|desc). Default
+          sort order is ascending. Multiple sort criteria are supported.'
+        required: false
+        schema:
+          type: array
+          default:
+          - createdAt,DESC
+          - id,DESC
+          items:
+            type: string
       responses:
         '200':
           description: Users retrieved successfully
@@ -2725,12 +3367,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-        '403':
-          description: Insufficient permissions
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2752,18 +3406,18 @@ paths:
   /v1/users/{id}:
     get:
       tags:
-        - User Administration
+      - User Administration
       summary: Get user
       description: Returns a single user's details and assigned roles.
       operationId: getUser
       parameters:
-        - name: id
-          in: path
-          description: User ID
-          required: true
-          schema:
-            type: string
-          example: usr_abc123
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: string
+        example: usr_abc123
       responses:
         '200':
           description: User retrieved successfully
@@ -2771,21 +3425,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDetailResponse'
-        '403':
-          description: Insufficient permissions
+        '404':
+          description: User not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-        '404':
-          description: Not Found
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
               example:
-                type: NOT_FOUND
-                message: Not Found
+                type: UNAUTHORIZED
+                message: Authentication required
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+              example:
+                type: FORBIDDEN
+                message: You do not have permission to perform this action
         '500':
           description: Internal Server Error
           content:
@@ -2834,9 +3497,9 @@ components:
         formatType:
           type: string
           enum:
-            - CSV
-            - PDF
-            - XLSX
+          - CSV
+          - PDF
+          - XLSX
         bankName:
           type: string
         defaultCurrencyIsoCode:
@@ -2844,8 +3507,8 @@ components:
         scope:
           type: string
           enum:
-            - SYSTEM
-            - USER
+          - SYSTEM
+          - USER
         ownerId:
           type: string
         enabled:
@@ -2874,7 +3537,7 @@ components:
           description: User ID that last updated this statement format
           example: usr_admin456
       required:
-        - createdAt
+      - createdAt
     ApiErrorResponse:
       description: Standard API error response format
       properties:
@@ -2882,14 +3545,14 @@ components:
           type: string
           description: Error type categorization for API responses
           enum:
-            - INVALID_REQUEST
-            - VALIDATION_ERROR
-            - NOT_FOUND
-            - APPLICATION_ERROR
-            - SERVICE_UNAVAILABLE
-            - INTERNAL_ERROR
-            - UNAUTHORIZED
-            - FORBIDDEN
+          - INVALID_REQUEST
+          - VALIDATION_ERROR
+          - NOT_FOUND
+          - APPLICATION_ERROR
+          - SERVICE_UNAVAILABLE
+          - INTERNAL_ERROR
+          - UNAUTHORIZED
+          - FORBIDDEN
           example: APPLICATION_ERROR
         message:
           type: string
@@ -2907,8 +3570,8 @@ components:
           items:
             $ref: '#/components/schemas/FieldError'
       required:
-        - message
-        - type
+      - message
+      - type
     FieldError:
       description: Field-level validation error details
       properties:
@@ -2931,8 +3594,8 @@ components:
           description: Value that caused the error
           example: invalid@email
       required:
-        - field
-        - message
+      - field
+      - message
     CreateSavedViewRequest:
       type: object
       description: Request to create a new saved view
@@ -2952,8 +3615,8 @@ components:
             minimum: 1
           maxItems: 10000
       required:
-        - name
-        - transactionIds
+      - name
+      - transactionIds
     SavedViewResponse:
       type: object
       description: Static saved-view metadata
@@ -2980,11 +3643,11 @@ components:
           format: date-time
           description: Last explicit update timestamp
       required:
-        - createdAt
-        - id
-        - name
-        - transactionCount
-        - updatedAt
+      - createdAt
+      - id
+      - name
+      - transactionCount
+      - updatedAt
     CloneSavedViewRequest:
       type: object
       description: Request to clone a saved view
@@ -2996,7 +3659,7 @@ components:
           maxLength: 255
           minLength: 0
       required:
-        - name
+      - name
     CreateTransactionRequest:
       type: object
       description: Manual transaction data
@@ -3016,6 +3679,7 @@ components:
           type: number
           description: Positive transaction amount; direction is specified by type
           example: 100.5
+          exclusiveMinimum: 0
         currencyIsoCode:
           type: string
           description: Three-character ISO 4217 currency code
@@ -3026,8 +3690,8 @@ components:
           type: string
           description: Direction of the positive transaction amount
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
         bankName:
           type: string
@@ -3043,11 +3707,11 @@ components:
           maxLength: 100
           minLength: 0
       required:
-        - amount
-        - currencyIsoCode
-        - date
-        - description
-        - type
+      - amount
+      - currencyIsoCode
+      - date
+      - description
+      - type
     TransactionResponse:
       type: object
       description: Transaction response representing a financial transaction
@@ -3086,8 +3750,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
         description:
           type: string
@@ -3104,15 +3768,15 @@ components:
           description: Timestamp when the transaction was last updated
           example: '2025-10-14T10:30:00Z'
       required:
-        - amount
-        - createdAt
-        - currencyIsoCode
-        - date
-        - description
-        - id
-        - ownerId
-        - type
-        - updatedAt
+      - amount
+      - createdAt
+      - currencyIsoCode
+      - date
+      - description
+      - id
+      - ownerId
+      - type
+      - updatedAt
     PreviewFileImportStatusResponse:
       type: object
       description: File import history status for the previewed upload
@@ -3127,14 +3791,14 @@ components:
           description: Stable warning code for file-level preview status. Omitted
             when there is no warning.
           enum:
-            - FILE_ALREADY_IMPORTED
+          - FILE_ALREADY_IMPORTED
           example: FILE_ALREADY_IMPORTED
         previousImport:
           $ref: '#/components/schemas/PreviousFileImportResponse'
           description: Previous matching import metadata. Omitted when alreadyImported
             is false.
       required:
-        - alreadyImported
+      - alreadyImported
     PreviewFileResponse:
       type: object
       description: Preview result for one uploaded source file
@@ -3164,11 +3828,11 @@ components:
           items:
             $ref: '#/components/schemas/PreviewTransactionResponse'
       required:
-        - fileImport
-        - previewImportToken
-        - sourceFile
-        - statementFormatId
-        - transactions
+      - fileImport
+      - previewImportToken
+      - sourceFile
+      - statementFormatId
+      - transactions
     PreviewResponse:
       type: object
       description: Grouped response from an ordered multi-file transaction preview
@@ -3179,7 +3843,7 @@ components:
           items:
             $ref: '#/components/schemas/PreviewFileResponse'
       required:
-        - files
+      - files
     PreviewTransactionResponse:
       type: object
       description: Previewed transaction data before import
@@ -3201,8 +3865,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
         category:
           type: string
@@ -3233,17 +3897,17 @@ components:
           description: Reason this row was marked as a duplicate. Omitted when duplicate
             is false.
           enum:
-            - EXISTING_TRANSACTION
-            - IN_BATCH
+          - EXISTING_TRANSACTION
+          - IN_BATCH
           example: EXISTING_TRANSACTION
       required:
-        - amount
-        - bankName
-        - currencyIsoCode
-        - date
-        - description
-        - duplicate
-        - type
+      - amount
+      - bankName
+      - currencyIsoCode
+      - date
+      - description
+      - duplicate
+      - type
     PreviousFileImportResponse:
       type: object
       description: Metadata for a previous matching file import
@@ -3272,10 +3936,10 @@ components:
           description: Number of transactions recorded for the previous import
           example: 42
       required:
-        - importedAt
-        - originalFilename
-        - statementFormatId
-        - transactionCount
+      - importedAt
+      - originalFilename
+      - statementFormatId
+      - transactionCount
     BulkDeleteRequest:
       type: object
       description: Request to bulk delete multiple transactions
@@ -3284,15 +3948,15 @@ components:
           type: array
           description: List of transaction IDs to delete
           example:
-            - 1
-            - 2
-            - 3
+          - 1
+          - 2
+          - 3
           items:
             type: integer
             format: int64
           minItems: 1
       required:
-        - ids
+      - ids
     BulkDeleteResponse:
       type: object
       description: Response from bulk delete operation
@@ -3306,8 +3970,8 @@ components:
           type: array
           description: List of transaction IDs that were not found or already deleted
           example:
-            - 999
-            - 1000
+          - 999
+          - 1000
           items:
             type: integer
             format: int64
@@ -3327,8 +3991,8 @@ components:
           items:
             $ref: '#/components/schemas/BatchImportTransactionRequest'
       required:
-        - previewImportToken
-        - transactions
+      - previewImportToken
+      - transactions
     BatchImportRequest:
       type: object
       description: Request for batch importing transactions
@@ -3340,7 +4004,7 @@ components:
             $ref: '#/components/schemas/BatchImportFileRequest'
           minItems: 1
       required:
-        - files
+      - files
     BatchImportTransactionRequest:
       type: object
       description: Transaction data submitted for batch import
@@ -3363,8 +4027,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
         category:
           type: string
@@ -3393,12 +4057,12 @@ components:
             identity plus normalized description equality rule
           example: false
       required:
-        - amount
-        - bankName
-        - currencyIsoCode
-        - date
-        - description
-        - type
+      - amount
+      - bankName
+      - currencyIsoCode
+      - date
+      - description
+      - type
     BatchImportFileResponse:
       type: object
       description: Batch import result for one verified source file
@@ -3426,11 +4090,11 @@ components:
           items:
             $ref: '#/components/schemas/TransactionResponse'
       required:
-        - created
-        - duplicatesImported
-        - duplicatesSkipped
-        - sourceFile
-        - transactions
+      - created
+      - duplicatesImported
+      - duplicatesSkipped
+      - sourceFile
+      - transactions
     BatchImportResponse:
       type: object
       description: Response from batch transaction import
@@ -3457,10 +4121,10 @@ components:
           items:
             $ref: '#/components/schemas/BatchImportFileResponse'
       required:
-        - created
-        - duplicatesImported
-        - duplicatesSkipped
-        - files
+      - created
+      - duplicatesImported
+      - duplicatesSkipped
+      - files
     CreateStatementFormatRequest:
       type: object
       properties:
@@ -3471,9 +4135,9 @@ components:
         formatType:
           type: string
           enum:
-            - CSV
-            - PDF
-            - XLSX
+          - CSV
+          - PDF
+          - XLSX
         bankName:
           type: string
           maxLength: 100
@@ -3485,8 +4149,8 @@ components:
         scope:
           type: string
           enum:
-            - SYSTEM
-            - USER
+          - SYSTEM
+          - USER
         dateHeader:
           type: string
           maxLength: 50
@@ -3516,10 +4180,10 @@ components:
           maxLength: 50
           minLength: 0
       required:
-        - bankName
-        - defaultCurrencyIsoCode
-        - displayName
-        - formatType
+      - bankName
+      - defaultCurrencyIsoCode
+      - displayName
+      - formatType
     PdfWizardColumnMappingRequest:
       type: object
       description: User-confirmed PDF table column mapping for statement format creation
@@ -3546,8 +4210,8 @@ components:
           type: string
           description: Amount mapping mode
           enum:
-            - SIGNED_AMOUNT
-            - DEBIT_CREDIT_COLUMNS
+          - SIGNED_AMOUNT
+          - DEBIT_CREDIT_COLUMNS
           example: SIGNED_AMOUNT
         amountHeader:
           type: string
@@ -3577,11 +4241,11 @@ components:
           type: string
           description: Direction represented by negative signed amounts
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: CREDIT
       required:
-        - amountMode
+      - amountMode
     PdfWizardSaveRequest:
       type: object
       description: PDF wizard save request
@@ -3622,18 +4286,18 @@ components:
           type: string
           description: How yearless date values should be completed
           enum:
-            - EXPLICIT_DATE
-            - STATEMENT_PERIOD
+          - EXPLICIT_DATE
+          - STATEMENT_PERIOD
           example: EXPLICIT_DATE
         mapping:
           $ref: '#/components/schemas/PdfWizardColumnMappingRequest'
           description: Confirmed PDF column mapping
       required:
-        - bankName
-        - defaultCurrencyIsoCode
-        - displayName
-        - mapping
-        - yearSource
+      - bankName
+      - defaultCurrencyIsoCode
+      - displayName
+      - mapping
+      - yearSource
     PdfWizardMappingPreviewRequest:
       type: object
       description: PDF wizard parser preview request
@@ -3674,17 +4338,17 @@ components:
           type: string
           description: How yearless date values should be completed
           enum:
-            - EXPLICIT_DATE
-            - STATEMENT_PERIOD
+          - EXPLICIT_DATE
+          - STATEMENT_PERIOD
           example: EXPLICIT_DATE
         mapping:
           $ref: '#/components/schemas/PdfWizardColumnMappingRequest'
           description: Confirmed PDF column mapping
       required:
-        - bankName
-        - defaultCurrencyIsoCode
-        - mapping
-        - yearSource
+      - bankName
+      - defaultCurrencyIsoCode
+      - mapping
+      - yearSource
     PdfWizardPreviewResponse:
       type: object
       description: PDF wizard read-only parser preview response
@@ -3725,8 +4389,8 @@ components:
         amountMode:
           type: string
           enum:
-            - SIGNED_AMOUNT
-            - DEBIT_CREDIT_COLUMNS
+          - SIGNED_AMOUNT
+          - DEBIT_CREDIT_COLUMNS
         amountHeader:
           type: string
         debitHeader:
@@ -3738,8 +4402,8 @@ components:
         negativeMeans:
           type: string
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
     PdfWizardTableCandidateResponse:
       type: object
       description: Ranked PDF wizard table candidate
@@ -3811,8 +4475,8 @@ components:
           type: string
           description: Amount mapping mode
           enum:
-            - SINGLE_AMOUNT_WITH_TYPE
-            - DEBIT_CREDIT_COLUMNS
+          - SINGLE_AMOUNT_WITH_TYPE
+          - DEBIT_CREDIT_COLUMNS
           example: SINGLE_AMOUNT_WITH_TYPE
         amountColumn:
           type: string
@@ -3845,7 +4509,7 @@ components:
           maxLength: 100
           minLength: 0
       required:
-        - amountMode
+      - amountMode
     CsvWizardSaveRequest:
       type: object
       description: CSV wizard save request
@@ -3872,10 +4536,10 @@ components:
           $ref: '#/components/schemas/CsvWizardColumnMappingRequest'
           description: Confirmed CSV column mapping
       required:
-        - bankName
-        - defaultCurrencyIsoCode
-        - displayName
-        - mapping
+      - bankName
+      - defaultCurrencyIsoCode
+      - displayName
+      - mapping
     CsvWizardMappingPreviewRequest:
       type: object
       description: CSV wizard parser preview request
@@ -3902,9 +4566,9 @@ components:
           $ref: '#/components/schemas/CsvWizardColumnMappingRequest'
           description: Confirmed CSV column mapping
       required:
-        - bankName
-        - defaultCurrencyIsoCode
-        - mapping
+      - bankName
+      - defaultCurrencyIsoCode
+      - mapping
     CsvWizardPreviewResponse:
       type: object
       description: CSV wizard read-only parser preview response
@@ -3966,8 +4630,8 @@ components:
         amountMode:
           type: string
           enum:
-            - SINGLE_AMOUNT_WITH_TYPE
-            - DEBIT_CREDIT_COLUMNS
+          - SINGLE_AMOUNT_WITH_TYPE
+          - DEBIT_CREDIT_COLUMNS
         amountColumn:
           type: string
         debitColumn:
@@ -3989,7 +4653,7 @@ components:
           maxLength: 255
           minLength: 0
       required:
-        - name
+      - name
     UpdateSavedViewTransactionsRequest:
       type: object
       description: Static saved-view membership additions and removals
@@ -4011,8 +4675,8 @@ components:
             minimum: 1
           maxItems: 10000
       required:
-        - addTransactionIds
-        - removeTransactionIds
+      - addTransactionIds
+      - removeTransactionIds
     TransactionUpdateRequest:
       type: object
       description: Request to update a transaction's mutable fields
@@ -4037,14 +4701,14 @@ components:
           type: array
           description: Deterministically ordered transaction IDs
           example:
-            - 123
-            - 456
-            - 789
+          - 123
+          - 456
+          - 789
           items:
             type: integer
             format: int64
       required:
-        - transactionIds
+      - transactionIds
     PageMetadataResponse:
       type: object
       description: Pagination metadata for a paged API response
@@ -4083,13 +4747,13 @@ components:
           description: Whether this is the last page
           example: false
       required:
-        - first
-        - last
-        - numberOfElements
-        - page
-        - size
-        - totalElements
-        - totalPages
+      - first
+      - last
+      - numberOfElements
+      - page
+      - size
+      - totalElements
+      - totalPages
     PagedResponseTransactionResponse:
       type: object
       description: Stable paged API response wrapper
@@ -4103,8 +4767,8 @@ components:
           $ref: '#/components/schemas/PageMetadataResponse'
           description: Pagination metadata for the current result set
       required:
-        - content
-        - metadata
+      - content
+      - metadata
     TransactionFilter:
       type: object
       description: Filter for querying transactions by various fields
@@ -4160,8 +4824,8 @@ components:
           type: string
           description: Type of the transaction
           enum:
-            - CREDIT
-            - DEBIT
+          - CREDIT
+          - DEBIT
           example: DEBIT
         description:
           type: string
@@ -4197,7 +4861,7 @@ components:
           description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-        - enabled
+      - enabled
     CurrencySeriesResponse:
       type: object
       description: Currency series response with mapping details
@@ -4230,12 +4894,12 @@ components:
           description: Timestamp when this currency series was last updated
           example: '2025-01-15T14:45:00Z'
       required:
-        - createdAt
-        - currencyCode
-        - enabled
-        - id
-        - providerSeriesId
-        - updatedAt
+      - createdAt
+      - currencyCode
+      - enabled
+      - id
+      - providerSeriesId
+      - updatedAt
     ExchangeRateImportResultResponse:
       type: object
       description: Exchange rate import result response for a specific currency
@@ -4282,12 +4946,12 @@ components:
           description: Timestamp of the import execution
           example: '2025-10-31T15:30:00Z'
       required:
-        - currencyCode
-        - newRecords
-        - providerSeriesId
-        - skippedRecords
-        - timestamp
-        - updatedRecords
+      - currencyCode
+      - newRecords
+      - providerSeriesId
+      - skippedRecords
+      - timestamp
+      - updatedRecords
     CurrencySeriesCreateRequest:
       type: object
       description: Request to create a new currency series
@@ -4312,8 +4976,8 @@ components:
           description: Whether this currency is enabled for exchange rate access
           example: true
       required:
-        - currencyCode
-        - providerSeriesId
+      - currencyCode
+      - providerSeriesId
     ExchangeRateResponse:
       type: object
       description: Exchange rate response
@@ -4344,11 +5008,11 @@ components:
             rate
           example: '2025-10-31'
       required:
-        - baseCurrency
-        - date
-        - publishedDate
-        - rate
-        - targetCurrency
+      - baseCurrency
+      - date
+      - publishedDate
+      - rate
+      - targetCurrency
     UserDeactivationResponse:
       type: object
       properties:
@@ -4357,8 +5021,8 @@ components:
         status:
           type: string
           enum:
-            - ACTIVE
-            - DEACTIVATED
+          - ACTIVE
+          - DEACTIVATED
         rolesRemoved:
           type: integer
           format: int32
@@ -4377,8 +5041,8 @@ components:
           $ref: '#/components/schemas/PageMetadataResponse'
           description: Pagination metadata for the current result set
       required:
-        - content
-        - metadata
+      - content
+      - metadata
     UserSummaryResponse:
       type: object
       description: Summary representation of a user for list views
@@ -4403,14 +5067,14 @@ components:
           type: string
           description: Current user status
           enum:
-            - ACTIVE
-            - DEACTIVATED
+          - ACTIVE
+          - DEACTIVATED
           example: ACTIVE
         roleIds:
           type: array
           description: Assigned role IDs
           example:
-            - ADMIN
+          - ADMIN
           items:
             type: string
         createdAt:
@@ -4452,14 +5116,14 @@ components:
           type: string
           description: Current user status
           enum:
-            - ACTIVE
-            - DEACTIVATED
+          - ACTIVE
+          - DEACTIVATED
           example: ACTIVE
         roleIds:
           type: array
           description: Assigned role IDs
           example:
-            - ADMIN
+          - ADMIN
           items:
             type: string
         createdAt:

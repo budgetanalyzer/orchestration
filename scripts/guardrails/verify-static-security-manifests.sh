@@ -1062,6 +1062,48 @@ scan_istio_tracing_contract() {
     printf 'Istio tracing contract scan passed\n'
 }
 
+scan_istio_ext_authz_denial_contract() {
+    local policy_count
+    local -a deny_headers=()
+    local -a failures=()
+
+    if [[ ! -f "${ISTIOD_VALUES_FILE}" ]]; then
+        failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    else
+        policy_count=$(grep -Ec '^[[:space:]]*headersToDownstreamOnDeny:[[:space:]]*$' "${ISTIOD_VALUES_FILE}" || true)
+        if [[ "${policy_count}" -ne 1 ]]; then
+            failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: expected exactly one headersToDownstreamOnDeny policy, found ${policy_count}")
+        fi
+
+        mapfile -t deny_headers < <(
+            awk '
+                /^        headersToDownstreamOnDeny:[[:space:]]*$/ {
+                    in_deny_list = 1
+                    next
+                }
+                in_deny_list && /^          -[[:space:]]+/ {
+                    sub(/^          -[[:space:]]+/, "")
+                    print
+                    next
+                }
+                in_deny_list { exit }
+            ' "${ISTIOD_VALUES_FILE}"
+        )
+
+        if (( ${#deny_headers[@]} != 1 )) || [[ "${deny_headers[0]:-}" != "content-type" ]]; then
+            failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: ext-authz deny responses must forward only content-type")
+        fi
+    fi
+
+    if (( ${#failures[@]} > 0 )); then
+        printf 'Istio ext-authz denial contract scan failed:\n' >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf 'Istio ext-authz denial contract scan passed\n'
+}
+
 extract_image_refs_from_files() {
     local -a files=("$@")
     local match file remainder line text ref
@@ -1167,6 +1209,7 @@ run_repo_pattern_scans() {
     scan_kiali_values_contract
     scan_jaeger_manifest_contract
     scan_istio_ingress_observability_allowances
+    scan_istio_ext_authz_denial_contract
     scan_istio_tracing_contract
 }
 

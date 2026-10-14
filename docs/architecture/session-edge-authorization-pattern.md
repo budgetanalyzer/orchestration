@@ -221,6 +221,41 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 
 `./scripts/smoketest/verify-session-architecture.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in sibling `../ext-authz` and `../session-gateway` before any live-cluster checks run.
 
+## Versioned Machine Error Contract
+
+Every versioned machine endpoint uses the shared `ApiErrorResponse` wire shape
+regardless of which edge or application layer rejects the request. The required
+fields are `type` and `message`; `code` and `fieldErrors` are optional. This is
+a wire-level contract rather than a shared runtime implementation: Java
+producers use `service-common`, while the Go `ext-authz` service keeps the
+minimal representation locally. Changes to `ApiErrorResponse` must be
+coordinated with both edge producers as described in
+[service-common error handling](../../../service-common/docs/error-handling.md).
+
+Producer ownership remains split by route:
+
+| Request outcome | Producer | Public response |
+| --- | --- | --- |
+| Missing, blank, unknown, or expired session on `/api/*` | `ext-authz`, forwarded by Istio ingress | `401 application/json` with `{"type":"UNAUTHORIZED","message":"Authentication required"}` |
+| Session-store or unexpected lookup failure on `/api/*` | `ext-authz`, forwarded by Istio ingress | Fail-closed `503 application/json` with `type` `SERVICE_UNAVAILABLE`; never report infrastructure failure as invalid credentials |
+| Missing, invalid, expired, or invalidated session on `/auth/v1/*` | Session Gateway | `401 application/json` with `type` `UNAUTHORIZED` and message `Authentication required`; clear the cookie when required by session lifecycle rules |
+| Authorization refresh, Redis, or other temporary dependency failure on `/auth/v1/*` | Session Gateway | Existing temporary-failure status with schema-valid `ApiErrorResponse` JSON |
+| Missing or malformed trusted claims after edge admission | Backend service | Existing service-common JSON `401` defense-in-depth response |
+| Insufficient authenticated grants | Backend service | Existing service-common JSON `403` response |
+
+Security failures use generic messages and do not reveal whether a cookie was
+unknown, expired, malformed, or associated with a particular account. Browser
+navigation endpoints are outside this JSON rule: `/login`, `/oauth2/*`,
+`/login/oauth2/*`, and `/logout` retain their browser-oriented redirect and
+navigation behavior.
+
+Orchestration allows only `content-type` from an `ext_authz` denial response to
+reach the downstream client. The body comes from `ext-authz`; Istio does not
+rewrite it. `./scripts/smoketest/verify-istio-ingress.sh` checks the rendered
+Envoy filter and proves the generic JSON denial through the real local ingress
+for `/api/*`, `/auth/v1/user`, and `/auth/v1/session` with normal TLS
+verification.
+
 ## Why This Pattern?
 
 ### No CORS Needed

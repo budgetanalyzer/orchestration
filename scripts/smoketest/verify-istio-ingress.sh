@@ -237,7 +237,7 @@ external_status() {
     local path="$1"
     shift
     local status
-    status=$(curl -sk -o /dev/null -w '%{http_code}' --max-time "$CURL_TIMEOUT" --max-redirs 0 \
+    status=$(curl --silent --show-error -o /dev/null -w '%{http_code}' --max-time "$CURL_TIMEOUT" --max-redirs 0 \
         "$@" "https://app.budgetanalyzer.localhost${path}" 2>/dev/null || true)
     printf '%s\n' "${status:-000}"
 }
@@ -245,9 +245,98 @@ external_status() {
 external_headers_and_status() {
     local path="$1"
     shift
-    curl -sk -D - -o /dev/null --max-time "$CURL_TIMEOUT" --max-redirs 0 \
+    curl --silent --show-error -D - -o /dev/null --max-time "$CURL_TIMEOUT" --max-redirs 0 \
         -w 'HTTP_STATUS:%{http_code}\n' \
         "$@" "https://app.budgetanalyzer.localhost${path}" 2>/dev/null || true
+}
+
+require_json_denial() {
+    local path="$1" path_label="$2"
+    local response_dir status content_type
+
+    response_dir=$(mktemp -d)
+    if ! status=$(curl --silent --show-error \
+        -D "${response_dir}/headers" \
+        -o "${response_dir}/body" \
+        -w '%{http_code}' \
+        --max-time "$CURL_TIMEOUT" \
+        --max-redirs 0 \
+        "https://app.budgetanalyzer.localhost${path}"); then
+        fail "${path_label} request failed under normal TLS verification"
+        rm -rf "$response_dir"
+        return
+    fi
+
+    if [[ "$status" == "401" ]]; then
+        pass "${path_label} returns exactly HTTP 401 for an unauthenticated client"
+    else
+        fail "${path_label} returns ${status:-000} (expected 401)"
+    fi
+
+    content_type=$(extract_header_value "content-type" "$(<"${response_dir}/headers")")
+    if [[ "${content_type,,}" == "application/json" || "${content_type,,}" == application/json\;* ]]; then
+        pass "${path_label} returns an application/json content type"
+    else
+        fail "${path_label} returns content type ${content_type:-missing} (expected application/json)"
+    fi
+
+    if jq -e \
+        'type == "object" and .type == "UNAUTHORIZED" and .message == "Authentication required"' \
+        "${response_dir}/body" >/dev/null 2>&1; then
+        pass "${path_label} returns the generic ApiErrorResponse authentication fields"
+    else
+        fail "${path_label} response is not the required generic ApiErrorResponse JSON"
+    fi
+
+    rm -rf "$response_dir"
+}
+
+verify_rendered_ext_authz_denial_config() {
+    local config_dump
+    local -a deny_headers=()
+
+    config_dump=$(mktemp)
+    if ! kubectl exec -n istio-ingress "deployment/${INGRESS_GATEWAY_WORKLOAD_NAME}" \
+        -c istio-proxy -- curl -sS http://127.0.0.1:15000/config_dump >"$config_dump"; then
+        fail "Could not read the rendered ingress Envoy configuration"
+        rm -f "$config_dump"
+        return
+    fi
+
+    mapfile -t deny_headers < <(
+        jq -r '
+            [
+                .. | objects
+                | select(.name? == "envoy.filters.http.ext_authz")
+                | .typed_config?
+                | select(type == "object" and .http_service? != null)
+                | .http_service.authorization_response.allowed_client_headers.patterns[]?.exact
+            ]
+            | unique[]
+        ' "$config_dump" 2>/dev/null
+    )
+
+    if (( ${#deny_headers[@]} == 1 )) && [[ "${deny_headers[0]}" == "content-type" ]]; then
+        pass "Rendered ingress Envoy ext_authz filter forwards only content-type on denial"
+    else
+        fail "Rendered ingress Envoy ext_authz deny-header allowlist is not exactly content-type"
+    fi
+
+    if jq -e '
+        [
+            .. | objects
+            | select(.name? == "envoy.filters.http.ext_authz")
+            | .typed_config?
+            | select(type == "object" and .http_service? != null)
+        ]
+        | length > 0
+    ' "$config_dump" >/dev/null 2>&1; then
+        pass "Rendered ingress Envoy filter uses the HTTP ext_authz provider"
+    else
+        fail "Rendered ingress Envoy filter does not contain the HTTP ext_authz provider"
+    fi
+
+    rm -f "$config_dump"
 }
 
 retry_external_status() {
@@ -781,6 +870,7 @@ main() {
 
     require_host_command kubectl
     require_host_command curl
+    require_host_command jq
     require_cluster_access
 
     section "Envoy Gateway Removal"
@@ -877,7 +967,7 @@ main() {
 
     section "Ingress Path"
 
-    local app_status api_status login_headers login_status oauth2_headers oauth2_status oauth2_location
+    local app_status api_denial_probe_id login_headers login_status oauth2_headers oauth2_status oauth2_location
     local auth_route_matches auth_route_backends health_status
     app_status=$(external_status "/")
     if [[ "$app_status" == "200" ]]; then
@@ -886,12 +976,21 @@ main() {
         fail "GET / returns $app_status (expected 200)"
     fi
 
-    api_status=$(external_status "/api/v1/transactions")
-    if [[ "$api_status" == "401" || "$api_status" == "403" ]]; then
-        pass "GET /api/v1/transactions returns $api_status for an unauthenticated client"
+    api_denial_probe_id="phase3-machine-denial-$(date +%s)"
+    require_json_denial \
+        "/api/v1/transactions?phase3_machine_denial=${api_denial_probe_id}" \
+        "GET /api/v1/transactions"
+    require_json_denial "/auth/v1/user" "GET /auth/v1/user"
+    require_json_denial "/auth/v1/session" "GET /auth/v1/session"
+
+    sleep 2
+    if find_nginx_log_line "$api_denial_probe_id" >/dev/null 2>&1; then
+        fail "Unauthenticated API denial reached NGINX instead of stopping at ingress"
     else
-        fail "GET /api/v1/transactions returns $api_status (expected 401 or 403)"
+        pass "Unauthenticated API denial stopped at ingress before NGINX routing"
     fi
+
+    verify_rendered_ext_authz_denial_config
 
     login_headers=$(external_headers_and_status "/login")
     login_status=$(printf '%s\n' "$login_headers" | sed -n 's/^HTTP_STATUS://p' | tail -n 1)
@@ -973,7 +1072,7 @@ main() {
     session_id="phase3-echo-$(date +%s)"
     "${SCRIPT_DIR}/../ops/seed-ext-authz-session.sh" "$session_id" >/dev/null
 
-    echo_response=$(curl -sk --max-time "$CURL_TIMEOUT" \
+    echo_response=$(curl --silent --show-error --max-time "$CURL_TIMEOUT" \
         -H 'X-User-Id: forged-user-999' \
         -H 'X-Roles: ROLE_FORGED' \
         -H 'X-Permissions: forged:all' \

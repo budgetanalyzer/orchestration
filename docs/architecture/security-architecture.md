@@ -213,6 +213,12 @@ From a security perspective, the important boundaries are:
   user activity.
 - Every browser `/api/*` request remains Redis-only at the edge. It does not
   trigger a heartbeat or a permission-service lookup.
+- Versioned `/api/*` and `/auth/v1/*` authentication and temporary-dependency
+  failures use one `ApiErrorResponse` wire contract across `ext-authz`, Session
+  Gateway, and backend defense-in-depth responses. Producer ownership, exact
+  generic `401` fields, the operational `503` distinction, and browser-route
+  exclusions are defined in
+  [Versioned Machine Error Contract](session-edge-authorization-pattern.md#versioned-machine-error-contract).
 - Immediate bulk revocation remains a separate deactivation action through
   `DELETE /internal/v1/sessions/users/{userId}` against the user-session index
   in Redis. Heartbeat refresh is the bounded fallback when an indexed session

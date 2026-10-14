@@ -60,6 +60,13 @@ scripts/
   hostname and prove wrong-host rejection precedes mutation.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
+- `smoketest/verify-istio-ingress.sh` - Focused live Istio ingress/egress
+  verifier. In addition to gateway identity, mTLS, routing, rate limiting,
+  header sanitization, and egress controls, it inspects the rendered Envoy
+  `ext_authz` filter and proves unauthenticated JSON denials for `/api/*`,
+  `/auth/v1/user`, and `/auth/v1/session` through the real local HTTPS ingress.
+  It requires normal TLS verification and confirms the `/api/*` denial stops
+  before NGINX routing.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
   loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
   It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local

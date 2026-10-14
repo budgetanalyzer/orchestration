@@ -2,7 +2,9 @@
 
 # generate-unified-api-docs.sh - Generate unified OpenAPI spec for all microservices
 #
-# Usage: ./scripts/repo/generate-unified-api-docs.sh
+# Usage:
+#   ./scripts/repo/generate-unified-api-docs.sh
+#   ./scripts/repo/generate-unified-api-docs.sh --session-gateway-only OUTPUT_YAML
 #
 # This script will:
 # 1. Fetch OpenAPI specs from running services through the Kubernetes service proxy,
@@ -11,6 +13,10 @@
 # 3. Save to docs-aggregator/openapi.yaml and openapi.json
 # 4. Fetch the Session Gateway spec separately (not merged) and save alongside
 # 5. Copy both specs to budget-analyzer-web/docs/api/ (only the api/ subdirectory)
+#
+# The opt-in --session-gateway-only mode fetches and filters only the Session
+# Gateway spec, writes exactly the requested YAML path, and does not write the
+# unified outputs or any sibling-repository file.
 #
 # The unified spec can be used by clients to generate client libraries
 #
@@ -51,12 +57,14 @@ handle_unexpected_error() {
     local exit_code="$1"
     local line_number="$2"
 
-    print_error_stderr "Unified OpenAPI generation failed at line ${line_number} (exit ${exit_code})."
+    print_error_stderr "OpenAPI generation failed at line ${line_number} (exit ${exit_code})."
     exit "$exit_code"
 }
 
 cleanup() {
-    rm -rf "$TMP_DIR"
+    if [[ -n "${TMP_DIR:-}" ]]; then
+        rm -rf "$TMP_DIR"
+    fi
 }
 
 require_command() {
@@ -66,9 +74,25 @@ require_command() {
     fi
 }
 
+usage() {
+    cat <<'EOF'
+Usage:
+  ./scripts/repo/generate-unified-api-docs.sh
+  ./scripts/repo/generate-unified-api-docs.sh --session-gateway-only OUTPUT_YAML
+
+Default mode regenerates the unified JSON/YAML outputs and copies the unified
+and filtered Session Gateway YAML specs to ../budget-analyzer-web/docs/api/.
+
+--session-gateway-only fetches only the Session Gateway spec, applies the same
+/internal/* path filter as default mode, and writes one explicit YAML output.
+It does not write docs-aggregator outputs or frontend files.
+EOF
+}
+
 # Convert JSON on stdin to YAML at the given output path.
 # Usage: echo "$JSON" | convert_json_to_yaml "/path/to/output.yaml" "description"
-# Returns 1 if no YAML converter is available.
+# Returns 1 if no YAML converter is available or conversion fails. The
+# destination is replaced only after a converter exits successfully.
 convert_json_to_yaml() {
     local output_path="$1"
     local description="$2"
@@ -77,9 +101,17 @@ convert_json_to_yaml() {
 
     if command -v yq &>/dev/null; then
         if yq --version 2>&1 | grep -q "mikefarah"; then
-            cat | yq -P '.' > "$tmp_yaml"
+            if ! yq -P '.' > "$tmp_yaml"; then
+                rm -f "$tmp_yaml"
+                print_error_stderr "Failed to convert ${description} with yq"
+                return 1
+            fi
         else
-            cat | yq -y '.' > "$tmp_yaml"
+            if ! yq -y '.' > "$tmp_yaml"; then
+                rm -f "$tmp_yaml"
+                print_error_stderr "Failed to convert ${description} with yq"
+                return 1
+            fi
         fi
         mv "$tmp_yaml" "$output_path"
         print_success "✓ Generated ${description} (YAML): $output_path"
@@ -138,18 +170,98 @@ fetch_service_spec() {
     printf '%s' "$service_spec"
 }
 
+filter_session_gateway_spec() {
+    jq '.paths |= with_entries(select(.key | startswith("/internal") | not))'
+}
+
+generate_session_gateway_yaml() {
+    local output_path="$1"
+    local session_gateway_spec
+
+    print_info "Fetching Session Gateway spec..."
+    if ! session_gateway_spec="$(fetch_service_spec "session-gateway" "8081" "/v3/api-docs" "Session Gateway")"; then
+        return 1
+    fi
+    print_success "✓ Fetched Session Gateway spec"
+
+    if ! printf '%s' "$session_gateway_spec" \
+        | filter_session_gateway_spec \
+        | convert_json_to_yaml "$output_path" "Session Gateway spec"; then
+        print_error "Failed to convert Session Gateway spec to YAML"
+        return 1
+    fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/docs-aggregator"
-TMP_DIR="$(mktemp -d)"
+TMP_DIR=""
+MODE="unified"
+SESSION_GATEWAY_OUTPUT=""
+
+case "$#" in
+    0)
+        ;;
+    1)
+        if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+            usage
+            exit 0
+        fi
+        print_error_stderr "Expected an explicit YAML output path after $1."
+        usage >&2
+        exit 1
+        ;;
+    2)
+        if [[ "$1" != "--session-gateway-only" ]]; then
+            print_error_stderr "Unknown option: $1"
+            usage >&2
+            exit 1
+        fi
+        if [[ -z "$2" || "$2" == -* || "$2" == */ ]]; then
+            print_error_stderr "Session Gateway output must be an explicit YAML file path."
+            exit 1
+        fi
+        case "$2" in
+            *.yaml|*.yml)
+                ;;
+            *)
+                print_error_stderr "Session Gateway output must end in .yaml or .yml: $2"
+                exit 1
+                ;;
+        esac
+        if [[ ! -d "$(dirname "$2")" ]]; then
+            print_error_stderr "Session Gateway output directory does not exist: $(dirname "$2")"
+            exit 1
+        fi
+        if [[ -d "$2" ]]; then
+            print_error_stderr "Session Gateway output path is a directory: $2"
+            exit 1
+        fi
+        MODE="session-gateway-only"
+        SESSION_GATEWAY_OUTPUT="$2"
+        ;;
+    *)
+        print_error_stderr "Ambiguous arguments."
+        usage >&2
+        exit 1
+        ;;
+esac
 
 trap 'handle_unexpected_error "$?" "$LINENO"' ERR
 trap cleanup EXIT
-
-print_info "Generating unified OpenAPI specification..."
+TMP_DIR="$(mktemp -d)"
 
 require_command jq
 require_command kubectl
+
+if [[ "$MODE" == "session-gateway-only" ]]; then
+    print_info "Generating filtered Session Gateway OpenAPI specification..."
+    generate_session_gateway_yaml "$SESSION_GATEWAY_OUTPUT"
+    print_success "=== Session Gateway OpenAPI specification generated successfully ==="
+    exit 0
+fi
+
+print_info "Generating unified OpenAPI specification..."
 
 print_info "Fetching specs for merging..."
 
@@ -242,23 +354,10 @@ convert_json_to_yaml "$OUTPUT_YAML" "unified OpenAPI spec" < "$OUTPUT_JSON" || t
 
 # --- Session Gateway spec (separate from unified spec) ---
 
-print_info "Fetching Session Gateway spec..."
-
-if ! SESSION_GW_SPEC="$(fetch_service_spec "session-gateway" "8081" "/v3/api-docs" "Session Gateway")"; then
-    exit 1
-fi
-print_success "✓ Fetched Session Gateway spec"
-
-# Filter out /internal/* routes — those are service-to-service only
-SESSION_GW_SPEC=$(echo "$SESSION_GW_SPEC" | jq '.paths |= with_entries(select(.key | startswith("/internal") | not))')
-
-# Convert to YAML via temp file (not saved to docs-aggregator — that's NGINX-served)
-SESSION_GW_YAML="$(mktemp "${OUTPUT_DIR}/session-gateway-api.yaml.tmp.XXXXXX")"
-if ! echo "$SESSION_GW_SPEC" | convert_json_to_yaml "$SESSION_GW_YAML" "Session Gateway spec"; then
-    rm -f "$SESSION_GW_YAML"
-    print_error "Failed to convert Session Gateway spec to YAML"
-    exit 1
-fi
+# Generate through the same filter used by --session-gateway-only. The
+# Session Gateway spec remains separate from the NGINX-served unified output.
+SESSION_GW_YAML="${TMP_DIR}/session-gateway-api.yaml"
+generate_session_gateway_yaml "$SESSION_GW_YAML"
 
 # Copy to budget-analyzer-web for frontend consumption
 WEB_DOCS_DIR="$REPO_ROOT/../budget-analyzer-web/docs"
@@ -272,8 +371,6 @@ if [ -d "$WEB_DOCS_DIR" ]; then
 else
     print_warning "budget-analyzer-web/docs directory not found - skipping copy"
 fi
-
-rm -f "$SESSION_GW_YAML"
 
 echo
 print_success "=== Unified OpenAPI specification generated successfully ==="

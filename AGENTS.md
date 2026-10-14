@@ -219,7 +219,7 @@ Entry-point ownership:
 - Exact route ownership and `/api-docs` behavior live in `docs/architecture/session-edge-authorization-pattern.md` and `docs-aggregator/README.md`
 
 Session and identity rules:
-- Session Gateway resolves roles and permissions from `permission-service` during session creation and owns browser session lifecycle on the direct auth lane
+- Session Gateway resolves roles and permissions from `permission-service` during session creation, refreshes account status and grants before each successful heartbeat extension, and owns browser session lifecycle on the direct auth lane
 - Keep browser session logic on the direct `/auth/*` lane rather than pushing it through the general API path
 - Exact browser endpoints and the shared Session Gateway/`ext_authz` contract live in `docs/architecture/session-edge-authorization-pattern.md`
 

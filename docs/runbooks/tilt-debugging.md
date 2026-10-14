@@ -48,9 +48,10 @@ baseline. `./scripts/smoketest/verify-session-architecture.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
-deployment, and the full Session Gateway auth-route ownership contract for
-`/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout`, with no standalone
-`/user` match.
+deployment, the internal Session Gateway-to-permission-service heartbeat path
+in local and production policy, its absence from public NGINX routes, and the
+full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
+`/login/oauth2/*`, and `/logout`, with no standalone `/user` match.
 `./scripts/smoketest/verify-istio-ingress.sh` verifies Istio ingress and
 egress hardening. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
@@ -210,7 +211,7 @@ Auth failures after login?
 │   │       └── kubectl logs -f deployment/session-gateway
 │   └── Request has BA_SESSION cookie but still 401/403?
 │       ├── Probe the heartbeat directly with that cookie
-│       │   └── curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+│       │   └── curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 │       ├── /auth/v1/session returns 401?
 │       │   └── Session missing/expired or IDP grant revoked
 │       │       └── kubectl logs -f deployment/session-gateway
@@ -269,7 +270,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
-curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
 # Inspect one specific session hash if you have the cookie value
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
@@ -284,7 +285,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `Session heartbeat for sessionId=` - frontend keep-alive requests are reaching Session Gateway; the heartbeat is local Redis only and never calls Auth0
+- `Session heartbeat for sessionId=` / `Refreshing authorization for userId=` - frontend keep-alive requests are reaching Session Gateway and refreshing permission-service authorization before extension; heartbeat never calls Auth0
 - `Session revocation requested for userId=` / `Session revocation completed for userId=, deletedSessions=` / `Session revocation failed for userId=` - bulk revocation through `DELETE /internal/v1/sessions/users/{userId}` is being driven east-west by permission-service
 
 ### RabbitMQ
@@ -452,10 +453,10 @@ curl http://localhost:8080/health
 
 # 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
-curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
+curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 
 # 4. Probe the heartbeat path with the same cookie
-curl -k -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 ```
 
 ---

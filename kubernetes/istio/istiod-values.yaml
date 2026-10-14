@@ -20,6 +20,8 @@ meshConfig:
           - x-user-id
           - x-roles
           - x-permissions
+        headersToDownstreamOnDeny:
+          - content-type
         includeRequestHeadersInCheck:
           - cookie
         failOpen: false

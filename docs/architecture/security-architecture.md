@@ -16,7 +16,7 @@ Repository security posture:
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
-- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, with one documented exception: `permission-service` may call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
+- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules. The narrow Session Gateway/permission-service relationship allows Session Gateway to resolve login and heartbeat authorization and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
 - Istio CNI runtime hardening: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods do not require `istio-init`.
 - Non-root application workload hardening: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
 - `ext-authz` service source lives in sibling `../ext-authz`; this repository
@@ -96,7 +96,7 @@ Security-critical implications:
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
 - Session lifecycle management (login/logout)
-- Call permission-service to resolve roles/permissions, passing `email` and `displayName` extracted from the OAuth2 principal
+- Call permission-service during login to establish initial authorization and on every heartbeat to refresh account status, roles, and permissions by internal user ID
 
 **Technology:** Spring WebFlux with Spring Security OAuth2 Client
 
@@ -104,7 +104,7 @@ Security-critical implications:
 - Minimal custom code (primarily configuration)
 - Native OAuth 2.0/OIDC support
 - Custom Redis hash session management (single hash per session)
-- Permission enrichment on login and token refresh
+- Permission enrichment on login and heartbeat refresh
 - Team expertise in Spring ecosystem
 - Production-grade for financial applications
 
@@ -205,19 +205,32 @@ From a security perspective, the important boundaries are:
 - Every browser `/api/*` request is revalidated by `ext_authz`, which rebuilds
   the trusted identity headers from Redis before NGINX forwards the request.
 - Active-session renewal happens on `GET /auth/v1/session`. Session Gateway
-  extends the Redis-backed session, while the frontend decides when to call the
-  heartbeat based on user activity.
-- IDP revocation does not depend on the heartbeat path. Bulk revocation
-  propagates explicitly through
+  first refreshes account status and grants from permission-service, then
+  atomically replaces the Redis snapshot and extends the still-existing
+  session. Lookup failures return `503` without extending cached authorization;
+  deactivated, deleted, or missing accounts invalidate the current session and
+  return `401`. The frontend still decides when to call the heartbeat based on
+  user activity.
+- Every browser `/api/*` request remains Redis-only at the edge. It does not
+  trigger a heartbeat or a permission-service lookup.
+- Versioned `/api/*` and `/auth/v1/*` authentication and temporary-dependency
+  failures use one `ApiErrorResponse` wire contract across `ext-authz`, Session
+  Gateway, and backend defense-in-depth responses. Producer ownership, exact
+  generic `401` fields, the operational `503` distinction, and browser-route
+  exclusions are defined in
+  [Versioned Machine Error Contract](session-edge-authorization-pattern.md#versioned-machine-error-contract).
+- Immediate bulk revocation remains a separate deactivation action through
   `DELETE /internal/v1/sessions/users/{userId}` against the user-session index
-  in Redis.
+  in Redis. Heartbeat refresh is the bounded fallback when an indexed session
+  survives that attempt.
 
 Internal services rely on Istio mTLS, ingress-scoped `AuthorizationPolicy`
 rules, and Kubernetes `NetworkPolicy` allowlists. Browser session cookies are
-not reused for east-west service calls. The one explicit cross-service session
-exception is `permission-service` calling Session Gateway for bulk session
-revocation. Kubelet probes and Tilt port-forwards remain host-to-pod exceptions
-under Calico's default host endpoint handling.
+not reused for east-west service calls. Session Gateway calls
+permission-service for login and heartbeat authorization, while
+permission-service calls Session Gateway only for bulk session revocation.
+Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under
+Calico's default host endpoint handling.
 
 ---
 
@@ -279,7 +292,7 @@ the versioned Session Gateway JSON endpoints.
 ### Token Configuration
 
 **Opaque Session Token** (browser cookie value):
-- Lifetime: 15 minutes (sliding expiration via `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users get no heartbeat and session expires naturally)
+- Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally)
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
 - Validated by: ext_authz service via Redis lookup
@@ -287,7 +300,7 @@ the versioned Session Gateway JSON endpoints.
 **Session Redis Hash** (`session:{id}`):
 - Fields: user_id, idp_sub, email, display_name, picture, roles (comma-joined), permissions (comma-joined), created_at, expires_at
 - TTL: 15 minutes (configurable via `session.ttl-seconds`)
-- Written by: Session Gateway on login and session heartbeat
+- Written by: Session Gateway on login and, after a successful permission-service refresh, session heartbeat
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
 - Companion index: `user_sessions:{userId}` — a Redis set of session IDs for that user, used by `DELETE /internal/v1/sessions/users/{userId}` for bulk revocation
 
@@ -466,6 +479,50 @@ surface; alerting rules are a future follow-up.
 - Expired sessions automatically removed by Redis TTL
 - Explicit session invalidation on logout (session hash deleted, entry removed from user session index)
 - Bulk session revocation via `DELETE /internal/v1/sessions/users/{userId}` — uses the user session index to delete all sessions without scanning, and the mesh only allows this route from the `permission-service` workload identity
+- Heartbeat invalidation when permission-service reports the account deactivated, deleted, or missing; permission-service failure preserves the finite existing expiry and returns `503` instead of extending cached grants
+
+### Emergency Admin Containment
+
+For a compromised application admin, use human operator access to Redis for
+emergency session invalidation. This does not require a new application
+super-admin role or a dedicated session-management UI. Infrastructure operator
+access is a separate authority from application roles; use the existing
+`redis-ops` maintenance identity over the internal, TLS-verified connection.
+Production access remains human-owned and outside agent sessions, as described
+in [autonomous-ai-execution.md](autonomous-ai-execution.md).
+
+The containment procedure is:
+
+1. Identify the account by its internal `userId` and confirm its IdP subject;
+   email alone is not a unique identity key.
+2. Persist account deactivation in permission-service to prevent subsequent
+   logins. Use an uncompromised admin when available; if none is available,
+   operator recovery of the account state must not depend on the compromised
+   application's admin session. Deletion of Redis sessions alone only logs the
+   user out. An IdP block alone does not invalidate existing Redis sessions.
+3. Delete **all** of the user's session hashes and their `user_sessions:{userId}`
+   index through operator Redis access. Reuse the atomic deletion semantics in
+   Session Gateway's [delete-user-sessions.lua](../../../session-gateway/src/main/resources/redis/delete-user-sessions.lua).
+   Deleting only the index does not revoke any session. Avoid `FLUSHALL` for
+   targeted containment because it removes unrelated users' sessions and data.
+4. Verify the account is deactivated and the user's sessions are absent. Check
+   for surviving session hashes by `user_id` if index completeness is uncertain.
+   Record the operator, target user ID, time, and result without recording
+   credentials or session tokens; review the compromised account's recent actions.
+
+Deletion rejects subsequent authorization checks for those sessions; it cannot
+undo requests already authorized. A login or heartbeat that fetched
+authorization before deactivation can still create or extend a session after
+the deletion attempt. Active browsers normally revalidate at their next
+heartbeat, currently about every two minutes, and a session without a
+successful refresh retains only its remaining TTL, currently 15 minutes by
+default. Neither is a strict deadline from the deactivation commit because an
+in-flight lookup may finish afterward. If immediate containment cannot tolerate
+that race, temporarily interrupt application access and stop session issuance,
+including in-flight login and heartbeat processing, before the final deletion
+and verification. This is an incident-recovery interruption, not a permanent
+deployment change. Do not rely on the ordinary heartbeat bound for emergency
+containment.
 
 ---
 

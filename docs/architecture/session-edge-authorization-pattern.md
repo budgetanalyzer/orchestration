@@ -132,7 +132,7 @@ kubectl logs deployment/nginx-gateway
 - Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) using the dedicated `session-gateway` ACL user — no Auth0 tokens are stored
 - Issues HttpOnly, Secure session cookies to browsers
 - Provides browser session endpoints `GET /auth/v1/session` and `GET /auth/v1/user`
-- Calls permission-service to enrich session with roles/permissions (email and displayName passed as query params)
+- Calls permission-service during login to establish the account and initial grants, then by internal user ID on every heartbeat to refresh account status, roles, and permissions
 
 **Key Benefit**: Maximum security for browser-based financial application (tokens never exposed to XSS)
 
@@ -160,9 +160,51 @@ service-specific Redis ACL users, not a shared password.
 
 Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
-Active browser sessions also call `GET /auth/v1/session` under the `/auth/*` route family. That heartbeat keeps the sliding session window alive and gives Session Gateway a place to extend the session TTL without putting Session Gateway on the API hot path. The heartbeat is Redis-local and does not call Auth0. Browser session inspection lives alongside it at `GET /auth/v1/user`.
+Active browser sessions call `GET /auth/v1/session` under the `/auth/*` route
+family. Each heartbeat first reads the current Redis session, then performs one
+bounded permission-service lookup by internal `userId`. For an active account,
+Session Gateway atomically replaces the roles and permissions snapshot and
+extends `expires_at`, the session TTL, and its user-session index TTL only if
+the session still exists. The response retains its existing shape and reports
+the expiration actually stored. This keeps permission-service off the
+`/api/*` hot path: `ext_authz` continues to authorize every API request from
+Redis alone. The heartbeat does not call Auth0. Browser session inspection
+lives alongside it at `GET /auth/v1/user` and reflects the refreshed Redis
+snapshot on its next fetch.
 
-**Heartbeat responsibility split**: Session Gateway extends the session unconditionally on every heartbeat call — it has no concept of user activity or idle state. The frontend is responsible for tracking user activity (mouse, keyboard, tab focus) and only calling the heartbeat while the user is active. The current frontend default cadence is every 2 minutes (`VITE_HEARTBEAT_INTERVAL_MS=120000` in `budget-analyzer-web`). When the user is idle, the frontend stops calling, and the session TTL (default 15 min) lapses naturally via Redis key expiration.
+The internal lookup is
+`GET /permission-service/internal/v1/users/{userId}/authorization` from
+Session Gateway to permission-service. Istio identity and NetworkPolicy permit
+that east-west call in both supported deployments. It is not an NGINX route or
+a public browser API.
+
+| Heartbeat result | Session behavior | Browser result |
+| --- | --- | --- |
+| Active account and successful lookup | Replace roles and permissions and extend the existing session atomically | `200` with refreshed roles and stored expiration |
+| Deactivated, deleted, or missing account | Delete this session and clear its cookie | `401` after invalidation |
+| Lookup unavailable, timed out, or invalid | Preserve the existing snapshot and expiration; do not extend from cached grants | `503`; keep the cookie so a later heartbeat can retry |
+| Session missing or expired before the final write | Do not recreate or resurrect it; clear the cookie | `401` |
+| Redis mutation failure | Do not report success; finite existing expiry remains the fallback | Temporary service failure |
+
+**Heartbeat responsibility split**: Session Gateway has no concept of browser
+activity or idle state. The frontend tracks activity (mouse, keyboard, tab
+focus) and only calls the heartbeat while the user is active. Its current
+default cadence is every two minutes
+(`VITE_HEARTBEAT_INTERVAL_MS=120000` in `budget-analyzer-web`), so an active
+browser normally observes account deactivation or changed grants at its next
+heartbeat. Idle sessions receive no heartbeat and the configured session TTL
+(currently 15 minutes by default) lapses naturally. Failed refreshes also
+leave the existing finite expiration unchanged, so they cannot keep a session
+alive.
+
+This is a bounded ordinary-deactivation fallback, not an immediate containment
+guarantee. A login or heartbeat that obtained authorization just before a
+concurrent account or grant change may finish with that earlier result. The
+next successful heartbeat refreshes it, or the session expires at its remaining
+TTL if refresh never succeeds. Do not describe this as a strict deadline
+measured from the deactivation commit. Use the separate
+[emergency admin containment](security-architecture.md#emergency-admin-containment)
+procedure when that race is unacceptable.
 
 ## Shared Session Contract
 
@@ -171,9 +213,48 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 - `SESSION_KEY_PREFIX` defaults to `session:` in both repos. Session Gateway writes browser sessions under `session:{id}`, and `ext_authz` reads the same Redis namespace.
 - The browser session cookie name defaults to `BA_SESSION` in both repos. Session Gateway writes that cookie, and `ext_authz` reads it on `/api/*` requests.
 - Orchestration also sets `SESSION_COOKIE_NAME=BA_SESSION` explicitly on the checked-in `ext-authz` deployment so the live cluster does not depend on the compiled default.
-- Session Gateway owns the session hash contents and expiry behavior. `ext_authz` only assumes the hash exists, that it contains a parseable `expires_at` field, and that the current time is still before that timestamp.
+- Session Gateway owns the session hash contents and expiry behavior, including
+  atomic role/permission replacement on a successful heartbeat. `ext_authz`
+  only assumes the hash exists, that it contains a parseable `expires_at`
+  field, and that the current time is still before that timestamp; it never
+  calls permission-service.
 
 `./scripts/smoketest/verify-session-architecture.sh --static-only` is the repo-level proof for that shared contract. It compares the checked-in defaults in sibling `../ext-authz` and `../session-gateway` before any live-cluster checks run.
+
+## Versioned Machine Error Contract
+
+Every versioned machine endpoint uses the shared `ApiErrorResponse` wire shape
+regardless of which edge or application layer rejects the request. The required
+fields are `type` and `message`; `code` and `fieldErrors` are optional. This is
+a wire-level contract rather than a shared runtime implementation: Java
+producers use `service-common`, while the Go `ext-authz` service keeps the
+minimal representation locally. Changes to `ApiErrorResponse` must be
+coordinated with both edge producers as described in
+[service-common error handling](../../../service-common/docs/error-handling.md).
+
+Producer ownership remains split by route:
+
+| Request outcome | Producer | Public response |
+| --- | --- | --- |
+| Missing, blank, unknown, or expired session on `/api/*` | `ext-authz`, forwarded by Istio ingress | `401 application/json` with `{"type":"UNAUTHORIZED","message":"Authentication required"}` |
+| Session-store or unexpected lookup failure on `/api/*` | `ext-authz`, forwarded by Istio ingress | Fail-closed `503 application/json` with `type` `SERVICE_UNAVAILABLE`; never report infrastructure failure as invalid credentials |
+| Missing, invalid, expired, or invalidated session on `/auth/v1/*` | Session Gateway | `401 application/json` with `type` `UNAUTHORIZED` and message `Authentication required`; clear the cookie when required by session lifecycle rules |
+| Authorization refresh, Redis, or other temporary dependency failure on `/auth/v1/*` | Session Gateway | Existing temporary-failure status with schema-valid `ApiErrorResponse` JSON |
+| Missing or malformed trusted claims after edge admission | Backend service | Existing service-common JSON `401` defense-in-depth response |
+| Insufficient authenticated grants | Backend service | Existing service-common JSON `403` response |
+
+Security failures use generic messages and do not reveal whether a cookie was
+unknown, expired, malformed, or associated with a particular account. Browser
+navigation endpoints are outside this JSON rule: `/login`, `/oauth2/*`,
+`/login/oauth2/*`, and `/logout` retain their browser-oriented redirect and
+navigation behavior.
+
+Orchestration allows only `content-type` from an `ext_authz` denial response to
+reach the downstream client. The body comes from `ext-authz`; Istio does not
+rewrite it. `./scripts/smoketest/verify-istio-ingress.sh` checks the rendered
+Envoy filter and proves the generic JSON denial through the real local ingress
+for `/api/*`, `/auth/v1/user`, and `/auth/v1/session` with normal TLS
+verification.
 
 ## Why This Pattern?
 

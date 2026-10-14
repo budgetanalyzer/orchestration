@@ -2528,16 +2528,6 @@
           "204": {
             "description": "No Content"
           },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
           "401": {
             "description": "Unauthorized",
             "content": {
@@ -2562,6 +2552,20 @@
                 "example": {
                   "type": "FORBIDDEN",
                   "message": "You do not have permission to perform this action"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
                 }
               }
             }
@@ -2851,26 +2855,6 @@
           "204": {
             "description": "No Content"
           },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          },
           "422": {
             "description": "SAVED_VIEW_MEMBERSHIP_STALE for unavailable additions or SAVED_VIEW_MEMBERSHIP_LIMIT_EXCEEDED when the membership limit is exceeded",
             "content": {
@@ -2905,6 +2889,34 @@
                 "example": {
                   "type": "FORBIDDEN",
                   "message": "You do not have permission to perform this action"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "INVALID_REQUEST",
+                  "message": "Bad Request"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                },
+                "example": {
+                  "type": "NOT_FOUND",
+                  "message": "Not Found"
                 }
               }
             }
@@ -4687,7 +4699,7 @@
           "User Administration"
         ],
         "summary": "Deactivate a user",
-        "description": "Marks a user as deactivated, removes all role assignments, and revokes active sessions. Idempotent — deactivating an already-deactivated user returns 200.",
+        "description": "Marks a user as deactivated, removes all role assignments, and revokes active sessions. For an already-deactivated user, preserves the original audit fields and role state but still attempts session revocation. Returns 200 only when revocation succeeds; failed revocation returns 503 and can be retried safely.",
         "operationId": "deactivateUser",
         "parameters": [
           {

@@ -292,7 +292,7 @@ the in-cluster `SESSION_GATEWAY_BASE_URL` plus the bounded session-revocation
 retry defaults. Those values stay in checked-in config instead of drifting into
 ad hoc deployment env entries or secret-only paths.
 
-The Istio ingress and egress verifier is the runtime proof for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend login page at normal request rates while `/oauth2/authorization/idp` still redirects into the Session Gateway OAuth2 flow, requires ingress auth throttling to return HTTP `429` plus the `x-local-rate-limit: auth-sensitive` marker on `/login`, `/oauth2/authorization/idp`, and `/auth/v1/user`, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain that NGINX logs for both frontend and API traffic in development.
+The Istio ingress and egress verifier is the runtime proof for ingress/egress hardening. It proves STRICT mTLS with paired sidecar and no-sidecar probes against a temporary in-mesh echo service, verifies ingress-identity denial with a wrong-identity probe, checks end-to-end identity-header sanitization through a temporary echo route, verifies that `/login` still loads as the frontend page while `/oauth2/authorization/idp` enters the Session Gateway flow, confirms the `/login/oauth2/*` callback prefix stays attached to Session Gateway, proves that the Auth0 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` all match the configured `session-gateway-idp-config` `AUTH0_ISSUER_URI` hostname, and inspects the forwarded-header chain in development. It invokes the focused live ingress rate-limit verifier; the four-policy configuration also has a separate offline proof at `./scripts/smoketest/verify-ingress-rate-limit-config.sh`. Exact policy values live in [the security architecture](../architecture/security-architecture.md#ingress-per-client-rate-limiting).
 
 The current ingress-facing policy attachment facts are also part of that runtime story: the rendered ingress gateway pods are selected with `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway`, and the ingress-facing `AuthorizationPolicy` principals target `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. Re-verify both after Istio upgrades before assuming ingress-facing policies still attach.
 
@@ -393,17 +393,19 @@ strict-CSP prerequisites used by the NGINX headers. It does not replace the
 manual browser-console validation required by the edge and browser security
 proof.
 
-The API rate-limit identity runtime proof is also repeatable from this repo:
+The focused ingress rate-limit runtime proof is also repeatable from this repo:
 
 ```bash
-./scripts/smoketest/verify-api-rate-limit-identity.sh
+./scripts/smoketest/verify-ingress-rate-limits.sh
 ```
 
-That verifier creates two temporary no-sidecar probe pods, sends authenticated
-API traffic through the live ingress gateway, confirms NGINX derives the client
-identity from the ingress-appended downstream hop instead of a forged external
-`X-Forwarded-For` value, and proves different downstream clients do not share
-the same NGINX API rate-limit bucket.
+That verifier creates two temporary no-sidecar clients with normal TLS
+verification and proves the four live ingress policies, client and policy
+isolation, forged-header resistance, filter order, markers, counters, refill,
+unauthenticated API protection, and exact `ext_authz` invocation behavior. It
+also completes a real browser callback after same-client initiation exhaustion,
+checks deterministic two-instance semantics, retains NGINX forwarded-identity
+coverage, and restores all temporary state.
 
 The full edge and browser security verifier is:
 
@@ -415,8 +417,8 @@ That verifier checks the checked-in dev/strict CSP split on the real app
 paths, the live headers on `/` and `/_prod-smoke/`, warning-only `/api-docs`
 visibility plus fail-closed checks, the checked-in production-route syntax validation inside the live
 `nginx-gateway` runtime, the fail-closed `/api-docs/*` behavior for unknown
-docs paths, the remaining auth-edge throttling
-paths, reruns the frontend CSP audit and API identity proof, and then reruns
+docs paths, the focused ingress per-client rate-limit proof,
+reruns the frontend CSP audit, and then reruns
 the full runtime-hardening cascade. Manual
 browser-console validation on `/_prod-smoke/` is still required before relying
 on the edge and browser security proof.

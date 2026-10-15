@@ -11,8 +11,7 @@ PROBE_IMAGE="postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b
 # renovate: datasource=docker depName=mendhak/http-https-echo
 HEADER_ECHO_IMAGE="mendhak/http-https-echo:38@sha256:c73e039e883944a38e37eaba829eb9a67641cd03eff868827683951feceef96e"
 CURL_TIMEOUT=10
-AUTH_RATE_LIMIT_BURST=15
-AUTH_RATE_LIMIT_MATCH_HEADER="x-local-rate-limit: auth-sensitive"
+RUN_INGRESS_RATE_LIMITS=true
 FORGED_XFF_SENTINEL="198.51.100.77"
 INGRESS_GATEWAY_LABEL_KEY="gateway.networking.k8s.io/gateway-name"
 INGRESS_GATEWAY_LABEL_VALUE="istio-ingress-gateway"
@@ -30,12 +29,18 @@ usage() {
 Usage: ./scripts/smoketest/verify-istio-ingress.sh
 
 Options:
-  -h, --help    Show this help text.
+  --skip-ingress-rate-limits  Skip the focused rate-limit verifier when a
+                              parent verifier already ran it.
+  -h, --help                  Show this help text.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --skip-ingress-rate-limits)
+            RUN_INGRESS_RATE_LIMITS=false
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -354,57 +359,6 @@ retry_external_status() {
     done
 
     printf '%s\n' "${status:-000}"
-}
-
-count_status() {
-    local status="$1"
-    grep -c "^${status}$" || true
-}
-
-require_ingress_rate_limit() {
-    local path="$1" path_label="$2"
-    shift 2
-
-    local tmpdir i num_429s proof_response
-    tmpdir=$(mktemp -d)
-
-    for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-        (
-            external_headers_and_status "$path" "$@" >"${tmpdir}/${i}"
-        ) &
-    done
-
-    wait
-
-    num_429s=$(
-        for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-            sed -n 's/^HTTP_STATUS://p' "${tmpdir}/${i}"
-        done | count_status 429
-    )
-    if [[ "$num_429s" -ge 1 ]]; then
-        pass "${path_label} is rate limited at ingress (saw $num_429s HTTP 429 responses)"
-    else
-        fail "${path_label} never returned HTTP 429 during a $AUTH_RATE_LIMIT_BURST-request burst"
-        rm -rf "$tmpdir"
-        return
-    fi
-
-    proof_response=$(
-        for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-            if [[ "$(sed -n 's/^HTTP_STATUS://p' "${tmpdir}/${i}" | tail -n 1)" == "429" ]]; then
-                cat "${tmpdir}/${i}"
-                break
-            fi
-        done
-    )
-
-    if printf '%s\n' "$proof_response" | tr -d '\r' | grep -Fqi "${AUTH_RATE_LIMIT_MATCH_HEADER}"; then
-        pass "Rate-limited ${path_label} response includes the local rate-limit marker header"
-    else
-        fail "Rate-limited ${path_label} response did not include ${AUTH_RATE_LIMIT_MATCH_HEADER}"
-    fi
-
-    rm -rf "$tmpdir"
 }
 
 require_named_resources() {
@@ -1051,17 +1005,21 @@ main() {
         fail "GET /health returns $health_status (expected 200)"
     fi
 
-    section "Auth Endpoint Rate Limiting"
+    section "Ingress Per-Client Rate Limiting"
 
-    if resource_exists envoyfilter ingress-auth-local-rate-limit istio-ingress; then
-        pass "EnvoyFilter istio-ingress/ingress-auth-local-rate-limit exists"
+    if resource_exists envoyfilter ingress-local-rate-limits istio-ingress; then
+        pass "EnvoyFilter istio-ingress/ingress-local-rate-limits exists"
     else
-        fail "Missing EnvoyFilter istio-ingress/ingress-auth-local-rate-limit"
+        fail "Missing EnvoyFilter istio-ingress/ingress-local-rate-limits"
     fi
 
-    require_ingress_rate_limit "/login?phase3-ingress-rate-limit=1" "/login"
-    require_ingress_rate_limit "/oauth2/authorization/idp" "/oauth2/authorization/idp"
-    require_ingress_rate_limit "/auth/v1/user" "/auth/v1/user"
+    if [[ "${RUN_INGRESS_RATE_LIMITS}" != "true" ]]; then
+        pass "Focused ingress per-client rate-limit verifier was already run by the parent"
+    elif "${SCRIPT_DIR}/verify-ingress-rate-limits.sh"; then
+        pass "Focused ingress per-client rate-limit verifier passed"
+    else
+        fail "Focused ingress per-client rate-limit verifier failed"
+    fi
 
     section "Header Sanitization"
 

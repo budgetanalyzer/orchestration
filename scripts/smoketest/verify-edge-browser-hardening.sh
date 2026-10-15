@@ -22,8 +22,6 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 APP_BASE_URL="https://app.budgetanalyzer.localhost"
 CURL_TIMEOUT=10
-AUTH_RATE_LIMIT_BURST=15
-AUTH_RATE_LIMIT_MATCH_HEADER="x-local-rate-limit: auth-sensitive"
 SUBVERIFIER_TIMEOUT="20m"
 PHASE5_REGRESSION_TIMEOUT="10m"
 
@@ -34,19 +32,6 @@ PRODUCTION_NGINX_CONFIG_PATH="nginx/nginx.production.k8s.conf"
 PORT_FORWARD_PID=""
 PORT_FORWARD_PORT=""
 PORT_FORWARD_LOG=""
-
-PROBE_NAMESPACE="default"
-PROBE_LABEL_KEY="verify-edge-browser-temp"
-PROBE_LABEL_VALUE="true"
-PROBE_POD_NAME="edge-browser-probe"
-PROBE_POLICY_NAME="allow-edge-browser-egress-to-istio-ingress"
-# renovate: datasource=docker depName=curlimages/curl
-PROBE_IMAGE="curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6"
-INGRESS_NAMESPACE="istio-ingress"
-INGRESS_SERVICE_NAME="istio-ingress-gateway-istio"
-INGRESS_POD_LABEL_KEY="gateway.networking.k8s.io/gateway-name"
-INGRESS_POD_LABEL_VALUE="istio-ingress-gateway"
-INGRESS_CLUSTER_IP=""
 
 PASSED=0
 FAILED=0
@@ -126,10 +111,6 @@ cleanup() {
         rm -f "${PORT_FORWARD_LOG}" >/dev/null 2>&1 || true
     fi
 
-    kubectl delete pod "${PROBE_POD_NAME}" -n "${PROBE_NAMESPACE}" \
-        --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
-    kubectl delete networkpolicy "${PROBE_POLICY_NAME}" -n "${PROBE_NAMESPACE}" \
-        --ignore-not-found >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT
@@ -155,11 +136,6 @@ extract_http_status() {
 extract_header_value() {
     local header_name="$1" response="$2"
     printf '%s\n' "$response" | sed -n "s/^[[:space:]]*${header_name}:[[:space:]]*//Ip" | tail -n 1 | tr -d '\r'
-}
-
-count_status() {
-    local status="$1"
-    grep -c "^${status}$" || true
 }
 
 assert_file_contains() {
@@ -393,129 +369,6 @@ warn_text_excludes() {
     pass "${description}"
 }
 
-create_probe_policy() {
-    kubectl apply -n "${PROBE_NAMESPACE}" -f - >/dev/null <<MANIFEST
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: ${PROBE_POLICY_NAME}
-  labels:
-    ${PROBE_LABEL_KEY}: "${PROBE_LABEL_VALUE}"
-spec:
-  podSelector:
-    matchLabels:
-      ${PROBE_LABEL_KEY}: "${PROBE_LABEL_VALUE}"
-  policyTypes:
-    - Egress
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ${INGRESS_NAMESPACE}
-          podSelector:
-            matchLabels:
-              ${INGRESS_POD_LABEL_KEY}: ${INGRESS_POD_LABEL_VALUE}
-      ports:
-        - protocol: TCP
-          port: 443
-MANIFEST
-}
-
-create_probe_pod() {
-    kubectl delete pod "${PROBE_POD_NAME}" -n "${PROBE_NAMESPACE}" \
-        --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
-
-    kubectl apply -n "${PROBE_NAMESPACE}" -f - >/dev/null <<MANIFEST
-apiVersion: v1
-kind: Pod
-metadata:
-  name: ${PROBE_POD_NAME}
-  annotations:
-    sidecar.istio.io/inject: "false"
-  labels:
-    ${PROBE_LABEL_KEY}: "${PROBE_LABEL_VALUE}"
-spec:
-  automountServiceAccountToken: false
-  securityContext:
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-    - name: curl
-      image: ${PROBE_IMAGE}
-      command: ["sh", "-c", "sleep 3600"]
-      securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: ["ALL"]
-        runAsNonRoot: true
-        runAsUser: 1000
-        seccompProfile:
-          type: RuntimeDefault
-  terminationGracePeriodSeconds: 0
-MANIFEST
-}
-
-wait_for_probe_ready() {
-    kubectl wait --for=condition=Ready "pod/${PROBE_POD_NAME}" -n "${PROBE_NAMESPACE}" --timeout=120s >/dev/null
-}
-
-probe_headers_and_status() {
-    local path="$1"
-    shift
-    local curl_args=""
-    local arg
-
-    for arg in "$@"; do
-        curl_args="${curl_args} $(printf '%q' "${arg}")"
-    done
-
-    kubectl exec -n "${PROBE_NAMESPACE}" "${PROBE_POD_NAME}" -- sh -lc \
-        "curl -sk -D - -o /dev/null --max-time ${CURL_TIMEOUT} --max-redirs 0 -w 'HTTP_STATUS:%{http_code}\n' --resolve app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP}${curl_args} 'https://app.budgetanalyzer.localhost${path}'" 2>/dev/null || true
-}
-
-require_ingress_rate_limit_from_probe() {
-    local path="$1" path_label="$2"
-    shift 2
-
-    local tmpdir i num_429s proof_response
-    tmpdir="$(mktemp -d)"
-
-    for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-        probe_headers_and_status "${path}" "$@" >"${tmpdir}/${i}"
-    done
-
-    num_429s=$(
-        for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-            sed -n 's/^HTTP_STATUS://p' "${tmpdir}/${i}"
-        done | count_status 429
-    )
-
-    if [[ "${num_429s}" -ge 1 ]]; then
-        pass "${path_label} is rate limited at ingress for in-cluster callers (saw ${num_429s} HTTP 429 responses)"
-    else
-        fail "${path_label} never returned HTTP 429 during a ${AUTH_RATE_LIMIT_BURST}-request probe burst"
-        rm -rf "${tmpdir}"
-        return
-    fi
-
-    proof_response="$(
-        for ((i = 1; i <= AUTH_RATE_LIMIT_BURST; i++)); do
-            if [[ "$(sed -n 's/^HTTP_STATUS://p' "${tmpdir}/${i}" | tail -n 1)" == "429" ]]; then
-                cat "${tmpdir}/${i}"
-                break
-            fi
-        done
-    )"
-
-    if printf '%s\n' "${proof_response}" | tr -d '\r' | grep -Fqi "${AUTH_RATE_LIMIT_MATCH_HEADER}"; then
-        pass "Rate-limited ${path_label} response includes the local rate-limit marker header"
-    else
-        fail "Rate-limited ${path_label} response did not include ${AUTH_RATE_LIMIT_MATCH_HEADER}"
-    fi
-
-    rm -rf "${tmpdir}"
-}
-
 run_subverifier() {
     local label="$1"
     shift
@@ -714,18 +567,11 @@ verify_static_contracts() {
         "try_files \$uri =404;" \
         "Production config resolves frontend assets without proxying to Vite"
 
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'auth-sensitive' \
-        "Ingress rate-limit config still marks auth-sensitive paths explicitly"
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'login/oauth2' \
-        "Ingress rate-limit config still covers /login/oauth2/*"
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'oauth2' \
-        "Ingress rate-limit config still covers /oauth2/*"
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'auth\(\?:/\.\*\)\?' \
-        "Ingress rate-limit config still covers /auth/*"
-    assert_file_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'logout' \
-        "Ingress rate-limit config still covers /logout"
-    assert_file_not_contains "${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml" 'logout\(\?:/\.\*\)\?\|user\|auth\(\?:/\.\*\)\?' \
-        "Ingress rate-limit config no longer carries a standalone /user matcher"
+    if "${SCRIPT_DIR}/verify-ingress-rate-limit-config.sh"; then
+        pass "Ingress rate-limit configuration passes the focused structural and matcher proof"
+    else
+        fail "Ingress rate-limit configuration failed the focused structural and matcher proof"
+    fi
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /auth' \
         "Auth HTTPRoute still routes /auth/* to Session Gateway"
     assert_file_contains "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml" 'value: /oauth2' \
@@ -959,21 +805,9 @@ verify_docs_headers() {
 
 verify_auth_edge_runtime() {
     section "Auth Edge Runtime Coverage"
-
-    INGRESS_CLUSTER_IP="$(kubectl get svc "${INGRESS_SERVICE_NAME}" -n "${INGRESS_NAMESPACE}" -o jsonpath='{.spec.clusterIP}')"
-    if [[ -z "${INGRESS_CLUSTER_IP}" ]]; then
-        printf 'ERROR: could not determine ClusterIP for %s/%s\n' "${INGRESS_NAMESPACE}" "${INGRESS_SERVICE_NAME}" >&2
-        exit 1
-    fi
-
-    create_probe_policy
-    create_probe_pod
-    wait_for_probe_ready
-
-    require_ingress_rate_limit_from_probe "/login" "/login"
-    require_ingress_rate_limit_from_probe "/auth/v1/user" "/auth/v1/user"
-    require_ingress_rate_limit_from_probe "/logout" "/logout"
-    require_ingress_rate_limit_from_probe "/login/oauth2/code/idp?code=phase6&state=phase6" "/login/oauth2/code/idp"
+    run_subverifier \
+        "Ingress per-client rate-limit verifier" \
+        "${SCRIPT_DIR}/verify-ingress-rate-limits.sh"
 }
 
 verify_nested_verifiers() {
@@ -986,12 +820,9 @@ verify_nested_verifiers() {
         "${SCRIPT_DIR}/audit-frontend-csp.sh"
 
     run_subverifier \
-        "API rate-limit identity verifier" \
-        "${SCRIPT_DIR}/verify-api-rate-limit-identity.sh"
-
-    run_subverifier \
         "Runtime-hardening regression cascade" \
         "${SCRIPT_DIR}/verify-runtime-hardening.sh" \
+        --ingress-rate-limits-already-verified \
         --regression-timeout "${PHASE5_REGRESSION_TIMEOUT}"
 }
 

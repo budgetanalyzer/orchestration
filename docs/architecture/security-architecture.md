@@ -16,7 +16,7 @@ Repository security posture:
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
-- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules. The narrow Session Gateway/permission-service relationship allows Session Gateway to resolve login and heartbeat authorization and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Auth-sensitive paths are throttled at Istio ingress; backend API throttling remains at NGINX.
+- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules. The narrow Session Gateway/permission-service relationship allows Session Gateway to resolve login and heartbeat authorization and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
 - Istio CNI runtime hardening: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods do not require `istio-init`.
 - Non-root application workload hardening: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
 - `ext-authz` service source lives in sibling `../ext-authz`; this repository
@@ -33,10 +33,10 @@ Repository security posture:
 - Production-smoke frontend bundle path: Tilt runs the sibling frontend `build:prod-smoke` target, packages the resulting `dist/` bundle into a local static-asset image, and `nginx-gateway` serves that bundle at `/_prod-smoke/` through a non-root init-container copy step while `/` and `/login` remain on the Vite/HMR dev route.
 - `/api-docs` security posture: the docs surface stays same-origin, read-only, and isolated behind its own docs-only CSP carve-out instead of weakening the main app or `/api/*` routes. Exact docs-surface behavior and generated outputs live in [../../docs-aggregator/README.md](../../docs-aggregator/README.md).
 - Frontend strict-CSP audit: `./scripts/smoketest/audit-frontend-csp.sh` rebuilds the sibling production-smoke bundle and checks the repo-owned strict-CSP prerequisites. The static audit passes after the sibling frontend removed the inline-style and `sonner` blockers. Manual browser-console validation is still required.
-- Frontend-owned `/login` auth-path throttle: the ingress auth-path local rate limit explicitly covers the entry point, including query-string variants, while keeping `/login` routed through NGINX and leaving `/login/oauth2/*` on Session Gateway. The Istio ingress verifier proves both the low-rate frontend response and the ingress `429` marker on `/login`.
-- API rate-limit identity proof: before enabling `real_ip_*`, the live NGINX capture showed `remote_addr=127.0.0.6`, `xff="<caller>,<downstream-hop>"`, and `xrealip="-"`, which proved the trust anchor is the pod-local Envoy sidecar hop rather than a guessed cluster CIDR. `nginx-gateway` trusts only `127.0.0.0/8` for `real_ip_header X-Forwarded-For`, keeps `real_ip_recursive on`, logs both the derived client identity and the trusted proxy hop, and therefore keys API `limit_req` buckets on the ingress-appended downstream client hop instead of the proxy sidecar address. `./scripts/smoketest/verify-api-rate-limit-identity.sh` proves forged external `X-Forwarded-For` values cannot pick a new bucket and that different downstream clients do not share one bucket.
+- Frontend-owned `/login` boundary: bare `/login`, including query variants, remains a frontend page outside the OAuth-initiation budget. The browser begins the protected protocol flow at `/oauth2/authorization/idp`; `/login/oauth2/*` remains on the Session Gateway callback lane.
+- Ingress rate-limit identity: each policy combines its stable policy name with Envoy's trusted downstream `remote_address`. Local in-cluster probes preserve their pod source addresses, while VM-browser traffic may share the address established by the host-to-Kind NodePort boundary. The production NLB path preserves public source addresses through `externalTrafficPolicy: Local`; caller-supplied forwarding headers are not keys. The focused verifier also retains the independent proof that NGINX derives the ingress-appended downstream hop rather than a forged caller header.
 - Production frontend route cutover: `nginx/nginx.production.k8s.conf` makes the production cutover explicit by serving the built frontend bundle on `/` and `/login` under the strict CSP, returning `404` for `/_prod-smoke/`, and removing the Vite-only public paths from the production route set instead of relying on a header-only toggle over the dev graph.
-- Edge and browser security verifier: `./scripts/smoketest/verify-edge-browser-hardening.sh` combines checked-in dev/strict CSP checks for the real app paths, live header verification for `/` and `/_prod-smoke/`, warning-only `/api-docs` visibility and fail-closed probes, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, the frontend CSP audit, the API rate-limit identity verifier, and the full runtime-hardening regression cascade. Manual browser-console validation on `/_prod-smoke/` remains required before relying on the edge and browser security proof.
+- Edge and browser security verifier: `./scripts/smoketest/verify-edge-browser-hardening.sh` combines checked-in dev/strict CSP checks for the real app paths, live header verification for `/` and `/_prod-smoke/`, warning-only `/api-docs` visibility, the focused ingress rate-limit verifier, the frontend CSP audit, and the full runtime-hardening regression cascade. Manual browser-console validation on `/_prod-smoke/` remains required before relying on the edge and browser security proof.
 - Local security guardrail umbrella: `./scripts/smoketest/verify-security-guardrails.sh` runs the static manifest/admission suite first and the live-cluster runtime proof second. The dedicated `security-guardrails.yml` workflow remains intentionally static-only, and the narrower `./scripts/smoketest/verify-runtime-security-guardrails.sh` entrypoint remains available for targeted runtime-only reruns.
 
 Operationally, those ingress-facing policies depend on the rendered gateway label `gateway.networking.k8s.io/gateway-name=istio-ingress-gateway` and the rendered principal `cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio`. The egress `DestinationRule` uses `tls.mode: DISABLE` on the workload-to-egress hop so the original external TLS/SNI reaches the egress gateway's `PASSTHROUGH` listener; external TLS remains end-to-end, but that intra-cluster hop is not additionally wrapped in mesh mTLS. `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security prerequisites. Treat Istio ingress and egress hardening as verified only after `./scripts/smoketest/verify-istio-ingress.sh` and the live validation checklist pass. Treat edge and browser security as verified only after `./scripts/smoketest/verify-edge-browser-hardening.sh` passes and the manual browser-console validation on `/_prod-smoke/` is done; `/api-docs` warnings remain visible but non-blocking.
@@ -137,16 +137,15 @@ The Session Gateway implements session-based edge authorization specifically for
 
 ### 3. NGINX API Gateway
 
-**Purpose:** Internal API gateway for routing and backend/API rate limiting
+**Purpose:** Internal API gateway for resource routing and load balancing
 
 **Responsibilities:**
 - Route requests to appropriate microservices
-- Rate limit backend-facing API paths after ingress validation
 - Load balancing across service instances
 - WAF integration points
 - Circuit breaking and retry logic
 
-**Note:** SSL/TLS termination is handled by the Istio ingress gateway, not NGINX. Session validation is handled by ext_authz at the Istio ingress layer — NGINX receives pre-validated requests with identity headers already injected.
+**Note:** SSL/TLS termination and per-client auth/API rate limiting are handled by the Istio ingress gateway, not NGINX. Session validation is handled by ext_authz at the Istio ingress layer — NGINX receives admitted, pre-validated API requests with identity headers already injected.
 
 **Technology:** NGINX (industry standard)
 
@@ -234,6 +233,142 @@ Calico's default host endpoint handling.
 
 ---
 
+## Ingress Per-Client Rate Limiting
+
+`kubernetes/istio/ingress-rate-limit.yaml` is the executable policy. Istio
+`1.29.2` pins an Envoy `1.37.2-dev` source revision whose local-rate-limit API
+supports in-filter rate-limit actions, wildcard dynamic descriptors,
+`max_dynamic_descriptors`, `always_consume_default_token_bucket`, and draft-03
+rate-limit headers and `ExtensionWithMatcher`. Four independently named filter
+instances are inserted immediately before `envoy.filters.http.ext_authz`.
+Each wrapper skips its filter unless the policy authority and bounded path
+match, keeping `ok` and `enforced` metrics policy-specific. Insertion before
+the router alone is not sufficient because API limiting must protect the
+authorization call itself.
+
+### Policy Boundaries And Capacity
+
+| Stable policy | Paths and bounded family fallback | Sustained rate | Burst capacity | Rejection marker |
+| --- | --- | ---: | ---: | --- |
+| `login-initiation` | Intended `/oauth2/authorization/idp`; bare `/oauth2` and any other `/oauth2/*` path use this same bounded fallback | 1 request/second | 25 tokens | `x-local-rate-limit-policy: login-initiation` |
+| `login-completion` | Intended `/login/oauth2/code/idp`; bare `/login/oauth2` and any other `/login/oauth2/*` path use this same bounded fallback | 2 requests/second | 50 tokens | `x-local-rate-limit-policy: login-completion` |
+| `session-operations` | Intended `/auth/v1/user`, `/auth/v1/session`, and `/logout`; bare `/auth` plus unknown `/auth/*` and `/logout/*` paths share this fallback | 5 requests/second | 250 tokens | `x-local-rate-limit-policy: session-operations` |
+| `api-requests` | `/api`, `/api/`, and all `/api/*` paths, including unknown API paths | 10 requests/second | 60 tokens | `x-local-rate-limit-policy: api-requests` |
+
+Every bucket refills incrementally once per second; no policy replenishes a
+whole minute at once. Classification is authority- and path-based but not
+method-based, so unsupported methods still consume the applicable family
+budget before the existing route or service returns its normal response.
+Query strings are included in path matching but never in the descriptor, so
+changing a query does not create a fresh bucket. Segment boundaries prevent
+lookalikes such as `/oauth2ish`, `/login/oauth2ish`, `/authentication`,
+`/logoutish`, `/apiv1`, and `/api-docs` from matching.
+
+Bare `/login` and its query variants remain frontend pages and do not consume
+the initiation budget. The family roots `/oauth2`, `/login/oauth2`, `/auth`,
+and `/api` do consume their corresponding fallback budget. This handling
+limits malformed or unknown traffic without adding policy classes or changing
+the Session Gateway and API response contracts.
+
+The capacity model assumes up to 25 active people behind one shared public IP,
+with as many as four active tabs each. Each authenticated tab can make an
+initial `/auth/v1/user` request and an immediate `/auth/v1/session` request,
+then the current frontend sends an activity-dependent session heartbeat every
+two minutes. That is up to 200 startup operations and roughly 0.83 steady
+heartbeats per second before retries, user reads, and logout. The
+`session-operations` bucket therefore allows a 250-request startup burst but
+refills at only 5 requests per second because a successful heartbeat also
+refreshes permissions through `permission-service`. Login initiation allows
+one simultaneous attempt per assumed person. Login completion has a separate
+50-token burst and 2-per-second refill so an initiation burst cannot consume
+callback capacity; it remains bounded because callback processing can include
+identity-provider and permission lookups.
+
+These limits protect capacity; they do not authenticate the OAuth callback or
+replace OAuth state validation. Independent initiation and completion buckets
+prevent one class from spending the other's allowance, but an attacker can
+still target the completion allowance itself. Session endpoints intentionally
+share one budget, so exhaustion does not promise independent logout
+availability.
+
+The API rate preserves the former NGINX 10 requests/second capacity baseline.
+The retired NGINX `burst=50 nodelay` setting measured excess requests around a
+leaky-bucket rate, while Envoy's `max_tokens` is total immediately available
+token capacity. The ingress bucket therefore uses 60 tokens—one second of the
+10 requests/second rate plus 50 requests of burst headroom—then refills 10
+tokens each second.
+
+### Identity, State, And Diagnostics
+
+Each generated descriptor is `(rate_limit_policy, remote_address)`. The
+`remote_address` action uses the downstream address established as trusted by
+the ingress HTTP connection manager, not a raw incoming `X-Forwarded-For`
+value, cookie, query parameter, user claim, OAuth state, or authorization code.
+Local in-cluster probes sent directly to the ingress Service preserve their
+pod source addresses. Browser processes entering through VM loopback and the
+Kind NodePort can share the address established by that host/container
+boundary. The production OCI NLB path uses `externalTrafficPolicy: Local`
+specifically to preserve the original public source address. Clients behind
+one NAT intentionally share an allowance; this is the unavoidable fairness
+boundary of IP-based limiting.
+
+There is no default token bucket and
+`always_consume_default_token_bucket: false`, so unmatched traffic cannot
+consume an incidental aggregate quota. Each policy keeps at most 4096 dynamic
+client descriptors in its own least-recently-used cache. This bounds memory,
+but eviction can give a returning client a fresh bucket, and all buckets reset
+when that Envoy process restarts. Rotating source addresses can therefore
+weaken fairness; the policies are capacity controls, not authentication or a
+denial-of-service guarantee.
+
+The four `stat_prefix` values are `ingress_login_initiation`,
+`ingress_login_completion`, `ingress_session_operations`, and
+`ingress_api_requests`. Envoy exposes each prefix's
+`http_local_rate_limit.ok` accepted counter and `enforced` rejected counter
+(with `enabled` and `rate_limited` decision counters for diagnosis). These
+metrics deliberately have no client-address label. Rejected responses carry
+the non-secret policy marker from the table and Envoy's supported draft-03
+`X-RateLimit-*` headers. `X-RateLimit-Reset` describes the active token
+bucket's remaining refill interval; there is no invented fixed reset time or
+static `Retry-After` value. Logs and metrics must not record cookies,
+credentials, OAuth state, or authorization codes.
+
+`kubernetes/istio/ingress-gateway-config.yaml` includes only these four custom
+prefixes in the proxy stats matcher. This keeps the `ok`, `enforced`,
+`enabled`, and `rate_limited` counters available from the normal Envoy metrics
+endpoints without enabling every optional Envoy statistic.
+
+### Replica Semantics And Evolution
+
+Enforcement is local to each ingress Envoy process. Replica additions and
+proxy restarts create independent allowances; the configuration does not
+promise one cluster-wide budget. NGINX has no blanket `limit_req` zone or API
+directives after the verified cutover, so ingress is the sole owner of this
+general auth/API capacity control.
+
+If consistent enforcement across replicas becomes a requirement, the planned
+evolution is Envoy's global rate-limit filter backed by a shared rate-limit
+service and shared storage. That design adds a network hop, a new availability
+dependency, and an explicit fail-open versus fail-closed decision. It is a
+future option, not missing work in this local per-instance contract. This
+policy does not add Redis rate-limit state, per-user quotas, or an aggregate
+overload bucket.
+
+### Local Verification Record
+
+On October 15, 2026, the focused local verifier passed against the final
+Tilt/Kind configuration. It proved exact filter order before `ext_authz`, two
+controlled client identities, forged-forwarding-header resistance, independent
+policy buckets, policy markers and counters, unauthenticated API protection,
+exact admitted-request-to-`ext_authz` accounting, one-second refill, a real
+OAuth callback completion after same-client initiation exhaustion, and
+deterministic independence across two ingress instances. It restored the
+single repo-defined replica and removed all temporary clients, policy, CA,
+session, and port-forward resources. The record contains no credentials,
+cookies, OAuth state, or authorization codes.
+
+---
+
 ## Identity Provider Abstraction Strategy
 
 ### Design Goal
@@ -245,12 +380,13 @@ All browser authentication protocol endpoints stay on the Session Gateway auth
 lane documented in
 [session-edge-authorization-pattern.md](session-edge-authorization-pattern.md).
 The browser-facing `/login` page remains frontend-owned. It starts the OAuth2
-flow, is rate-limited as an auth-sensitive entry point, and stays separate from
+flow through the separately limited `/oauth2/authorization/idp` endpoint and
+stays outside the OAuth-initiation budget itself. It also stays separate from
 the versioned Session Gateway JSON endpoints.
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes
-2. **Centralized Control:** Auth-path throttling at ingress, API throttling at NGINX, and audit logging at your boundary
+2. **Centralized Control:** Per-client auth/API throttling at ingress, resource routing at NGINX, and audit logging at your boundary
 3. **Versioning:** Evolve authentication APIs independently
 4. **Security:** Additional validation layer before external provider
 5. **Compliance:** Keep authentication flows within your infrastructure boundary
@@ -326,7 +462,7 @@ the versioned Session Gateway JSON endpoints.
 | Token replay | Short session expiration; server-side session validation |
 | CSRF | SameSite cookies; CSRF tokens on state changes |
 | Unauthorized data access | Service-layer authorization by user ID |
-| Credential stuffing | Auth-path rate limiting at Istio ingress; API throttling at NGINX; Auth0 anomaly detection |
+| Credential stuffing and abusive API bursts | Per-client auth/API rate limiting before `ext_authz` at Istio ingress; Auth0 anomaly detection |
 | Session hijacking | Opaque session IDs; Redis-backed validation |
 | Man-in-the-middle | HTTPS/TLS everywhere; HSTS headers |
 | Instant revocation | Delete Redis session — next request fails immediately |
@@ -437,8 +573,9 @@ observability hostnames.
 - Kubernetes resource metrics via kube-state-metrics
 
 **Security-relevant metrics to watch:**
-- `http_server_requests_seconds_count{status="401"}` — authorization failures
-- `http_server_requests_seconds_count{status="429"}` — rate limiting triggers
+- `http_server_requests_seconds_count{status="401"}` — application authorization failures
+- `ingress_*.http_local_rate_limit.enforced` — ingress policy rejections
+- `ingress_*.http_local_rate_limit.ok` — requests admitted by each ingress policy
 - `up{namespace="default", application!=""}` — Spring service availability
 
 **Alerting**: Not yet configured. Dashboards are the current observability

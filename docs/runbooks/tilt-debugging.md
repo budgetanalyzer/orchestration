@@ -354,7 +354,7 @@ kubectl exec -it statefulset/rabbitmq -n infrastructure -- rabbitmqctl delete_ex
 
 ### NGINX Gateway
 
-**Role**: HTTP routing, API-path rate limiting, load balancing
+**Role**: HTTP routing and load balancing for ingress-admitted requests
 
 **Common Issues**:
 - Upstream connection refused
@@ -405,11 +405,11 @@ curl http://localhost:8084/actuator/health
 ```
 Browser (https://app.budgetanalyzer.localhost/api/v1/transactions)
     ↓
-Istio Ingress Gateway (30443) - TLS termination, auth-path rate limiting
+Istio Ingress Gateway (30443) - TLS termination, auth/API rate limiting
     ↓
 ext-authz (9002) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
     ↓ (if valid)
-NGINX Gateway (8080) - API-path rate limiting, route to backend
+NGINX Gateway (8080) - route and load balance to backend
     ↓
 Transaction Service (8082) - Business logic
 ```

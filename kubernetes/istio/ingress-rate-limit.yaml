@@ -70,26 +70,16 @@ spec:
                   matchers:
                     - predicate:
                         not_matcher:
-                          and_matcher:
-                            predicate:
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":authority"
-                                  value_match:
-                                    exact: app.budgetanalyzer.localhost
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":path"
-                                  value_match:
-                                    safe_regex:
-                                      google_re2: {}
-                                      regex: "^/oauth2(?:/.*)?(?:\\?.*)?$"
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/oauth2(?:/.*)?(?:\\?.*)?$"
                       on_match:
                         action:
                           name: skip
@@ -157,26 +147,16 @@ spec:
                   matchers:
                     - predicate:
                         not_matcher:
-                          and_matcher:
-                            predicate:
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":authority"
-                                  value_match:
-                                    exact: app.budgetanalyzer.localhost
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":path"
-                                  value_match:
-                                    safe_regex:
-                                      google_re2: {}
-                                      regex: "^/login/oauth2(?:/.*)?(?:\\?.*)?$"
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/login/oauth2(?:/.*)?(?:\\?.*)?$"
                       on_match:
                         action:
                           name: skip
@@ -244,26 +224,16 @@ spec:
                   matchers:
                     - predicate:
                         not_matcher:
-                          and_matcher:
-                            predicate:
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":authority"
-                                  value_match:
-                                    exact: app.budgetanalyzer.localhost
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":path"
-                                  value_match:
-                                    safe_regex:
-                                      google_re2: {}
-                                      regex: "^/(?:auth(?:/.*)?|logout(?:/.*)?)(?:\\?.*)?$"
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/(?:auth(?:/.*)?|logout(?:/.*)?)(?:\\?.*)?$"
                       on_match:
                         action:
                           name: skip
@@ -331,26 +301,16 @@ spec:
                   matchers:
                     - predicate:
                         not_matcher:
-                          and_matcher:
-                            predicate:
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":authority"
-                                  value_match:
-                                    exact: app.budgetanalyzer.localhost
-                              - single_predicate:
-                                  input:
-                                    name: request-headers
-                                    typed_config:
-                                      "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
-                                      header_name: ":path"
-                                  value_match:
-                                    safe_regex:
-                                      google_re2: {}
-                                      regex: "^/api(?:/.*)?(?:\\?.*)?$"
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/api(?:/.*)?(?:\\?.*)?$"
                       on_match:
                         action:
                           name: skip

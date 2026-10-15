@@ -7,6 +7,12 @@ data:
   deployment: |
     spec:
       template:
+        metadata:
+          annotations:
+            proxy.istio.io/config: |-
+              proxyStatsMatcher:
+                inclusionRegexps:
+                  - ".*ingress_(login_initiation|login_completion|session_operations|api_requests).*"
         spec:
           securityContext:
             seccompProfile:

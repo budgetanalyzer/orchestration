@@ -183,9 +183,9 @@ artifacts:
   untouched for Tilt
 - `istio-ingress-policies/` renders the production `/api/*`
   `AuthorizationPolicy` and the ingress local-rate-limit object. Host ownership
-  stays on the production `HTTPRoute` overlay, while the rate-limit filter still
-  matches `demo.budgetanalyzer.org`. Ingress is the sole owner of general
-  auth/API rate limiting; the production NGINX input has no blanket
+  stays on the production `HTTPRoute` overlay, while production renders the
+  exact shared path-only rate-limit filter. Ingress is the sole owner of
+  general auth/API rate limiting; the production NGINX input has no blanket
   `limit_req` zone or route directives.
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
   server domain and root URL for loopback port-forward access while preserving

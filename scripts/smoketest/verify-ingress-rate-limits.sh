@@ -35,6 +35,12 @@ REPLICAS_CHANGED=false
 INGRESS_CLUSTER_IP=""
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
+AUTHORITY_VARIANTS=(
+    "app.budgetanalyzer.localhost"
+    "APP.BUDGETANALYZER.LOCALHOST"
+    "app.budgetanalyzer.localhost:443"
+    "ApP.BuDgEtAnAlYzEr.LoCaLhOsT:443"
+)
 PASSED=0
 
 usage() {
@@ -102,8 +108,6 @@ stop_port_forwards() {
         [[ -n "${log_file}" ]] || continue
         rm -f "${log_file}" >/dev/null 2>&1 || true
     done
-    PORT_FORWARD_PIDS=()
-    PORT_FORWARD_LOGS=()
 }
 
 cleanup() {
@@ -243,10 +247,12 @@ MANIFEST
 
 probe_response() {
     local pod_name="$1" path="$2" forged_xff="${3:-}" session_id="${4:-}" probe_id="${5:-rate-limit-probe}"
+    local authority="${6:-app.budgetanalyzer.localhost}"
     local -a curl_args=(
         curl --silent --show-error --max-time 10 --max-redirs 0
         --cacert "${PROBE_CA_MOUNT}"
         --resolve "app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP}"
+        -H "Host: ${authority}"
         -A "${probe_id}"
         -D - -o /dev/null -w 'HTTP_STATUS:%{http_code}\n'
     )
@@ -254,6 +260,56 @@ probe_response() {
     [[ -z "${session_id}" ]] || curl_args+=(--cookie "BA_SESSION=${session_id}")
     curl_args+=("https://app.budgetanalyzer.localhost${path}")
     kubectl exec -n "${PROBE_NAMESPACE}" "${pod_name}" -- "${curl_args[@]}" 2>/dev/null
+}
+
+probe_authority_variants_after_exhaustion() {
+    local pod_name="$1" path="$2"
+    kubectl exec -i -n "${PROBE_NAMESPACE}" "${pod_name}" -- sh -s -- \
+        "${INGRESS_CLUSTER_IP}" "${PROBE_CA_MOUNT}" "${path}" \
+        "${AUTHORITY_VARIANTS[@]}" <<'POD_AUTHORITY_PROBE'
+set -u
+ingress_ip="$1"
+ca_file="$2"
+path="$3"
+shift 3
+canonical_authority="app.budgetanalyzer.localhost"
+round=0
+
+for authority in "$@"; do
+    round=$((round + 1))
+    i=1
+    while [ "$i" -le 80 ]; do
+        (
+            curl --silent --show-error --max-time 10 --max-redirs 0 \
+                --cacert "$ca_file" \
+                --resolve "${canonical_authority}:443:${ingress_ip}" \
+                -H "Host: ${canonical_authority}" \
+                -o /dev/null \
+                "https://${canonical_authority}${path}?authority_drain=${round}-${i}" \
+                >/dev/null 2>&1 || true
+        ) &
+        i=$((i + 1))
+    done
+    wait
+
+    i=1
+    while [ "$i" -le 12 ]; do
+        (
+            result=$(curl --silent --show-error --max-time 10 --max-redirs 0 \
+                --cacert "$ca_file" \
+                --resolve "${canonical_authority}:443:${ingress_ip}" \
+                -H "Host: ${authority}" \
+                -o /dev/null \
+                -w '%{http_code}|%header{x-local-rate-limit-policy}' \
+                "https://${canonical_authority}${path}?authority_probe=${round}-${i}" \
+                2>/dev/null || true)
+            printf '%s|%s\n' "$authority" "${result:-000|}"
+        ) &
+        i=$((i + 1))
+    done
+    wait
+done
+POD_AUTHORITY_PROBE
 }
 
 response_status() {
@@ -337,6 +393,21 @@ assert_burst_rejected() {
     [[ "${rejected}" -gt 0 ]] || die "${label} did not produce an ingress rejection"
     [[ "${wrong_marker}" -eq 0 ]] || die "${label} had ${wrong_marker} HTTP 429 responses without the ${policy} marker"
     pass "${label} exhausted only the policy-marked ${policy} allowance (${rejected} rejected)"
+}
+
+assert_authority_variants_rejected() {
+    local output="$1" policy="$2" authority total rejected wrong_marker failed_transport
+    for authority in "${AUTHORITY_VARIANTS[@]}"; do
+        total=$(printf '%s\n' "${output}" | awk -F'|' -v authority="${authority}" '$1 == authority {count++} END {print count + 0}')
+        rejected=$(printf '%s\n' "${output}" | awk -F'|' -v authority="${authority}" '$1 == authority && $2 == 429 {count++} END {print count + 0}')
+        wrong_marker=$(printf '%s\n' "${output}" | awk -F'|' -v authority="${authority}" -v policy="${policy}" '$1 == authority && $2 == 429 && $3 != policy {count++} END {print count + 0}')
+        failed_transport=$(printf '%s\n' "${output}" | awk -F'|' -v authority="${authority}" '$1 == authority && $2 == 000 {count++} END {print count + 0}')
+        [[ "${total}" -eq 12 ]] || die "authority ${authority} returned ${total} probe results instead of 12"
+        [[ "${failed_transport}" -eq 0 ]] || die "authority ${authority} had ${failed_transport} transport failures"
+        [[ "${rejected}" -gt 0 ]] || die "authority ${authority} obtained a fresh or unbounded ${policy} allowance"
+        [[ "${wrong_marker}" -eq 0 ]] || die "authority ${authority} had a 429 without the ${policy} marker"
+    done
+    pass "canonical, uppercase, :443, and mixed-case :443 authorities shared the exhausted ${policy} allowance"
 }
 
 assert_response_not_limited() {
@@ -428,15 +499,21 @@ verify_nginx_forwarded_identity() {
 }
 
 start_pod_port_forward() {
-    local pod_name="$1" log_file port
+    local pod_name="$1" output_variable="$2" log_file pid port
+    if [[ ! "${output_variable}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        printf 'Invalid port-forward output variable: %s\n' "${output_variable}" >&2
+        return 1
+    fi
+
     log_file=$(mktemp)
     kubectl port-forward -n "${INGRESS_NAMESPACE}" "pod/${pod_name}" :443 >"${log_file}" 2>&1 &
-    PORT_FORWARD_PIDS+=("$!")
+    pid=$!
+    PORT_FORWARD_PIDS+=("${pid}")
     PORT_FORWARD_LOGS+=("${log_file}")
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         port=$(sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' "${log_file}" | tail -n 1)
         if [[ -n "${port}" ]]; then
-            printf '%s\n' "${port}"
+            printf -v "${output_variable}" '%s' "${port}"
             return 0
         fi
         sleep 1
@@ -456,8 +533,8 @@ port_forward_burst() {
 }
 
 verify_replica_semantics() {
-    local -a pods
-    local port_a port_b output status_b
+    local -a pods stopped_pids stopped_logs
+    local pid log_file port port_a port_b output status_b
 
     assert_local_kind_target
     REPLICAS_CHANGED=true
@@ -468,8 +545,8 @@ verify_replica_semantics() {
 
     verify_live_filter_order "${pods[0]}"
     verify_live_filter_order "${pods[1]}"
-    port_a=$(start_pod_port_forward "${pods[0]}") || die "could not port-forward the first ingress pod"
-    port_b=$(start_pod_port_forward "${pods[1]}") || die "could not port-forward the second ingress pod"
+    start_pod_port_forward "${pods[0]}" port_a || die "could not port-forward the first ingress pod"
+    start_pod_port_forward "${pods[1]}" port_b || die "could not port-forward the second ingress pod"
 
     output=$(port_forward_burst "${port_a}" 35 "replica-a")
     assert_burst_rejected "${output}" "login-initiation" "first ingress instance"
@@ -481,7 +558,26 @@ verify_replica_semantics() {
     [[ "${status_b}" == "302" ]] || die "second ingress instance returned HTTP ${status_b} after first-instance exhaustion"
     pass "same client identity retained an independent allowance on the second ingress instance"
 
+    stopped_pids=("${PORT_FORWARD_PIDS[@]}")
+    stopped_logs=("${PORT_FORWARD_LOGS[@]}")
     stop_port_forwards
+    for pid in "${stopped_pids[@]}"; do
+        if kill -0 "${pid}" >/dev/null 2>&1; then
+            die "port-forward child process ${pid} remained after cleanup"
+        fi
+    done
+    for log_file in "${stopped_logs[@]}"; do
+        [[ ! -e "${log_file}" ]] || die "temporary port-forward log remained after cleanup: ${log_file}"
+    done
+    for port in "${port_a}" "${port_b}"; do
+        if { exec 3<>"/dev/tcp/127.0.0.1/${port}"; } 2>/dev/null; then
+            exec 3>&-
+            exec 3<&-
+            die "port-forward listener on 127.0.0.1:${port} remained after cleanup"
+        fi
+    done
+    pass "port-forward child processes, loopback listeners, and temporary logs were removed"
+
     assert_local_kind_target
     kubectl scale deployment "${INGRESS_DEPLOYMENT}" -n "${INGRESS_NAMESPACE}" \
         --replicas="${ORIGINAL_INGRESS_REPLICAS}" >/dev/null
@@ -491,7 +587,7 @@ verify_replica_semantics() {
 }
 
 main() {
-    local command_name ingress_pod pod_ip_a pod_ip_b response output
+    local command_name ingress_pod pod_ip_a pod_ip_b response output authority_output
     local ext_before ext_after accepted rejected controlled_before controlled_after
     local controlled_accepted controlled_rejected
     local stat_value
@@ -593,6 +689,10 @@ main() {
     [[ $((controlled_after - controlled_before)) -eq "${controlled_accepted}" ]] ||
         die "controlled ext_authz delta $((controlled_after - controlled_before)) did not match ${controlled_accepted} admitted requests"
     pass "controlled follow-up proved ${controlled_rejected} ingress rejections did not invoke ext_authz while refill-admitted requests did"
+
+    authority_output=$(probe_authority_variants_after_exhaustion \
+        "${PROBE_POD_A}" "/api/v1/transactions")
+    assert_authority_variants_rejected "${authority_output}" "api-requests"
 
     response=$(probe_response "${PROBE_POD_B}" "/api/v1/transactions?client=b" "${FORGED_XFF_PRIMARY}")
     assert_response_not_limited "${response}" "client B API allowance through the same Envoy instance" 401

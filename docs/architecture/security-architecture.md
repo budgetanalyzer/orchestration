@@ -241,10 +241,12 @@ supports in-filter rate-limit actions, wildcard dynamic descriptors,
 `max_dynamic_descriptors`, `always_consume_default_token_bucket`, and draft-03
 rate-limit headers and `ExtensionWithMatcher`. Four independently named filter
 instances are inserted immediately before `envoy.filters.http.ext_authz`.
-Each wrapper skips its filter unless the policy authority and bounded path
-match, keeping `ok` and `enforced` metrics policy-specific. Insertion before
-the router alone is not sufficient because API limiting must protect the
-authorization call itself.
+Each wrapper skips its filter unless its bounded path matches, keeping `ok` and
+`enforced` metrics policy-specific. Hostname admission remains the Gateway API
+`HTTPRoute` responsibility; the selected ingress workload applies the path
+policy consistently to canonical, case-varied, and explicit-default-port
+authorities before routing. Insertion before the router alone is not sufficient
+because API limiting must protect the authorization call itself.
 
 ### Policy Boundaries And Capacity
 
@@ -256,13 +258,14 @@ authorization call itself.
 | `api-requests` | `/api`, `/api/`, and all `/api/*` paths, including unknown API paths | 10 requests/second | 60 tokens | `x-local-rate-limit-policy: api-requests` |
 
 Every bucket refills incrementally once per second; no policy replenishes a
-whole minute at once. Classification is authority- and path-based but not
-method-based, so unsupported methods still consume the applicable family
-budget before the existing route or service returns its normal response.
-Query strings are included in path matching but never in the descriptor, so
-changing a query does not create a fresh bucket. Segment boundaries prevent
-lookalikes such as `/oauth2ish`, `/login/oauth2ish`, `/authentication`,
-`/logoutish`, `/apiv1`, and `/api-docs` from matching.
+whole minute at once. Classification is path-based but not authority- or
+method-based, so equivalent authority spellings and unsupported methods still
+consume the applicable family budget before the existing route or service
+returns its normal response. Query strings are included in path matching but
+never in the descriptor, so changing a query does not create a fresh bucket.
+Segment boundaries prevent lookalikes such as `/oauth2ish`,
+`/login/oauth2ish`, `/authentication`, `/logoutish`, `/apiv1`, and `/api-docs`
+from matching.
 
 Bare `/login` and its query variants remain frontend pages and do not consume
 the initiation budget. The family roots `/oauth2`, `/login/oauth2`, `/auth`,
@@ -321,6 +324,11 @@ when that Envoy process restarts. Rotating source addresses can therefore
 weaken fairness; the policies are capacity controls, not authentication or a
 denial-of-service guarantee.
 
+Because hostname ownership stays on `HTTPRoute`, a path-policy match can spend
+the caller's per-address allowance before routing rejects an unowned authority.
+It cannot spend another client's allowance, and changing authority spelling
+does not select a new descriptor.
+
 The four `stat_prefix` values are `ingress_login_initiation`,
 `ingress_login_completion`, `ingress_session_operations`, and
 `ingress_api_requests`. Envoy exposes each prefix's
@@ -333,10 +341,13 @@ bucket's remaining refill interval; there is no invented fixed reset time or
 static `Retry-After` value. Logs and metrics must not record cookies,
 credentials, OAuth state, or authorization codes.
 
-`kubernetes/istio/ingress-gateway-config.yaml` includes only these four custom
-prefixes in the proxy stats matcher. This keeps the `ok`, `enforced`,
-`enabled`, and `rate_limited` counters available from the normal Envoy metrics
-endpoints without enabling every optional Envoy statistic.
+The local gateway ConfigMap and both existing production gateway renders
+(ingress bootstrap and public TLS) include only these four custom prefixes in
+the proxy stats matcher. This keeps the `ok`, `enforced`, `enabled`, and
+`rate_limited` counters available from the normal Envoy metrics endpoints
+without enabling every optional Envoy statistic. The focused offline verifier
+renders both production entry points and compares their parsed matcher
+structures with the local ConfigMap.
 
 ### Replica Semantics And Evolution
 
@@ -361,11 +372,16 @@ Tilt/Kind configuration. It proved exact filter order before `ext_authz`, two
 controlled client identities, forged-forwarding-header resistance, independent
 policy buckets, policy markers and counters, unauthenticated API protection,
 exact admitted-request-to-`ext_authz` accounting, one-second refill, a real
-OAuth callback completion after same-client initiation exhaustion, and
-deterministic independence across two ingress instances. It restored the
-single repo-defined replica and removed all temporary clients, policy, CA,
-session, and port-forward resources. The record contains no credentials,
-cookies, OAuth state, or authorization codes.
+OAuth callback completion after same-client initiation exhaustion, shared API
+enforcement across canonical, uppercase, explicit `:443`, and mixed-case
+explicit-`:443` authorities, and deterministic independence across two ingress
+instances. It restored the single repo-defined replica and removed all
+temporary clients, policy, CA, and session resources. The replica proof kept
+both direct port-forward child PIDs and temporary log paths in the parent shell,
+then confirmed both processes, every captured loopback listener, and both logs
+were gone before restoring the replica count; its EXIT trap retains the same
+precise cleanup for failures. The record contains no credentials, cookies,
+OAuth state, or authorization codes.
 
 ---
 

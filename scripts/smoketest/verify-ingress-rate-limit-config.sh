@@ -11,6 +11,11 @@ INGRESS_GATEWAY_CONFIG="${REPO_DIR}/kubernetes/istio/ingress-gateway-config.yaml
 PRODUCTION_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
 TEMP_DIR="$(mktemp -d)"
 PRODUCTION_RENDER="${TEMP_DIR}/istio-ingress-policies.yaml"
+INSTANCE_ENV_FILE_TMP="${TEMP_DIR}/instance.env"
+INGRESS_BOOTSTRAP_RENDER_DIR="${TEMP_DIR}/ingress-bootstrap"
+PUBLIC_TLS_RENDER_DIR="${TEMP_DIR}/public-tls"
+INGRESS_BOOTSTRAP_GATEWAY_CONFIG="${INGRESS_BOOTSTRAP_RENDER_DIR}/ingress-gateway-config.yaml"
+PUBLIC_TLS_GATEWAY_CONFIG="${PUBLIC_TLS_RENDER_DIR}/ingress-gateway-config.yaml"
 NGINX_CONFIGS=(
     "${REPO_DIR}/nginx/nginx.k8s.conf"
     "${REPO_DIR}/nginx/nginx.production.k8s.conf"
@@ -45,7 +50,25 @@ fi
 kubectl kustomize "${PRODUCTION_OVERLAY}" \
     --load-restrictor=LoadRestrictionsNone > "${PRODUCTION_RENDER}"
 
-python3 - "${LOCAL_MANIFEST}" "${PRODUCTION_RENDER}" "${INGRESS_GATEWAY_CONFIG}" <<'PY'
+cat > "${INSTANCE_ENV_FILE_TMP}" <<'EOF'
+DEMO_DOMAIN=demo.budgetanalyzer.org
+LETSENCRYPT_EMAIL=rate-limit-render-check@example.invalid
+EOF
+
+INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
+    "${REPO_DIR}/deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh" \
+    --output-dir "${INGRESS_BOOTSTRAP_RENDER_DIR}" >/dev/null
+
+INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
+    "${REPO_DIR}/deploy/scripts/render/public-tls.sh" \
+    --output-dir "${PUBLIC_TLS_RENDER_DIR}" >/dev/null
+
+python3 - \
+    "${LOCAL_MANIFEST}" \
+    "${PRODUCTION_RENDER}" \
+    "${INGRESS_GATEWAY_CONFIG}" \
+    "${INGRESS_BOOTSTRAP_GATEWAY_CONFIG}" \
+    "${PUBLIC_TLS_GATEWAY_CONFIG}" <<'PY'
 import copy
 import re
 import sys
@@ -54,8 +77,6 @@ from pathlib import Path
 import yaml
 
 
-LOCAL_AUTHORITY = "app.budgetanalyzer.localhost"
-PRODUCTION_AUTHORITY = "demo.budgetanalyzer.org"
 FILTER_TYPE = (
     "type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3."
     "LocalRateLimit"
@@ -64,6 +85,9 @@ MATCHER_TYPE = "type.googleapis.com/envoy.extensions.common.matching.v3.Extensio
 HEADER_INPUT_TYPE = "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput"
 SKIP_FILTER_TYPE = (
     "type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter"
+)
+EXPECTED_STATS_REGEX = (
+    ".*ingress_(login_initiation|login_completion|session_operations|api_requests).*"
 )
 
 EXPECTED = {
@@ -119,7 +143,7 @@ def load_envoy_filter(path):
     return matches[0]
 
 
-def inspect_manifest(path, expected_authority):
+def inspect_manifest(path):
     resource = load_envoy_filter(path)
     expect(resource["apiVersion"] == "networking.istio.io/v1alpha3", f"{path}: API version")
     expect(resource["metadata"]["namespace"] == "istio-ingress", f"{path}: namespace")
@@ -192,29 +216,12 @@ def inspect_manifest(path, expected_authority):
         )
         expect(len(matcher_entries) == 1, f"{path}: one skip matcher")
         matcher_entry = matcher_entries[0]
-        match_predicates = (
-            matcher_entry.get("predicate", {})
-            .get("not_matcher", {})
-            .get("and_matcher", {})
-            .get("predicate", [])
-        )
-        expect(len(match_predicates) == 2, f"{path}: authority and path match predicates")
-        authority_predicate = match_predicates[0].get("single_predicate", {})
-        path_predicate = match_predicates[1].get("single_predicate", {})
+        not_matcher = matcher_entry.get("predicate", {}).get("not_matcher", {})
         expect(
-            authority_predicate.get("input", {}).get("typed_config", {}).get("@type")
-            == HEADER_INPUT_TYPE,
-            f"{path}: authority HTTP header input type",
+            set(not_matcher) == {"single_predicate"},
+            f"{path}: path-only skip predicate for {policy}",
         )
-        expect(
-            authority_predicate.get("input", {}).get("typed_config", {}).get("header_name")
-            == ":authority",
-            f"{path}: authority matcher",
-        )
-        expect(
-            authority_predicate.get("value_match", {}).get("exact") == expected_authority,
-            f"{path}: authority for {policy}",
-        )
+        path_predicate = not_matcher.get("single_predicate", {})
         expect(
             path_predicate.get("input", {}).get("typed_config", {}).get("@type")
             == HEADER_INPUT_TYPE,
@@ -225,14 +232,11 @@ def inspect_manifest(path, expected_authority):
             f"{path}: path matcher",
         )
         expect(
-            all(
-                predicate.get("single_predicate", {})
-                .get("input", {})
-                .get("typed_config", {})
-                .get("header_name")
-                != ":method"
-                for predicate in match_predicates
-            ),
+            ":authority" not in yaml.safe_dump(wrapper),
+            f"{path}: authority must not affect policy selection",
+        )
+        expect(
+            ":method" not in yaml.safe_dump(wrapper),
             f"{path}: unsupported methods must remain bounded by the path policy",
         )
         path_regex = path_predicate.get("value_match", {}).get("safe_regex", {}).get("regex")
@@ -270,7 +274,6 @@ def inspect_manifest(path, expected_authority):
         )
         expect(descriptor.get("token_bucket") == expected["bucket"], f"{path}: bucket for {policy}")
         observed[policy] = {
-            "authority": expected_authority,
             "regex": path_regex,
             "bucket": copy.deepcopy(descriptor["token_bucket"]),
             "stat": config["stat_prefix"],
@@ -293,25 +296,36 @@ def inspect_gateway_stats(path):
         .get("proxy.istio.io/config", "")
     )
     proxy_config = yaml.safe_load(annotation)
-    regexps = (
-        proxy_config.get("proxyStatsMatcher", {}).get("inclusionRegexps", [])
-        if isinstance(proxy_config, dict)
-        else []
+    expected_proxy_config = {
+        "proxyStatsMatcher": {"inclusionRegexps": [EXPECTED_STATS_REGEX]}
+    }
+    expect(
+        proxy_config == expected_proxy_config,
+        f"{path}: expected only the four narrow ingress policy stats families",
     )
-    expect(len(regexps) == 1, f"{path}: expected one custom stats inclusion regexp")
-    pattern = re.compile(regexps[0])
+    pattern = re.compile(EXPECTED_STATS_REGEX)
     for details in EXPECTED.values():
         expect(
             pattern.fullmatch(f"http.{details['stat']}.http_local_rate_limit.enforced"),
             f"{path}: custom stats matcher must include {details['stat']}",
         )
+    for optional_stat in (
+        "http.downstream_cx_total",
+        "cluster.nginx-gateway.upstream_cx_total",
+        "listener.0.0.0.0_443.downstream_cx_total",
+    ):
+        expect(
+            pattern.fullmatch(optional_stat) is None,
+            f"{path}: custom stats matcher must not enable unrelated optional stats",
+        )
+    return proxy_config
 
 
 def classify(path, authority, policies):
     return sorted(
         policy
         for policy, details in policies.items()
-        if authority == details["authority"] and re.fullmatch(details["regex"], path)
+        if re.fullmatch(details["regex"], path)
     )
 
 
@@ -323,16 +337,29 @@ def descriptor_identity(path, authority, trusted_remote_address, policies):
     return (matches[0], trusted_remote_address)
 
 
-local = inspect_manifest(sys.argv[1], LOCAL_AUTHORITY)
-production = inspect_manifest(sys.argv[2], PRODUCTION_AUTHORITY)
-inspect_gateway_stats(sys.argv[3])
+local_resource = load_envoy_filter(sys.argv[1])
+production_resource = load_envoy_filter(sys.argv[2])
+expect(
+    local_resource == production_resource,
+    "production must render the exact shared ingress-local-rate-limits EnvoyFilter",
+)
+local = inspect_manifest(sys.argv[1])
+production = inspect_manifest(sys.argv[2])
+gateway_stats = [inspect_gateway_stats(path) for path in sys.argv[3:]]
+expect(
+    all(stats == gateway_stats[0] for stats in gateway_stats[1:]),
+    "local and production gateway stats matcher structures must be equivalent",
+)
 
 for policy in EXPECTED:
-    local_semantics = {key: value for key, value in local[policy].items() if key != "authority"}
-    production_semantics = {
-        key: value for key, value in production[policy].items() if key != "authority"
-    }
-    expect(local_semantics == production_semantics, f"production drift for {policy}")
+    expect(local[policy] == production[policy], f"production drift for {policy}")
+
+AUTHORITY_VARIANTS = (
+    "app.budgetanalyzer.localhost",
+    "APP.BUDGETANALYZER.LOCALHOST",
+    "app.budgetanalyzer.localhost:443",
+    "ApP.BuDgEtAnAlYzEr.LoCaLhOsT:443",
+)
 
 matcher_cases = [
     ("GET", "/oauth2/authorization/idp", "login-initiation"),
@@ -366,32 +393,44 @@ matcher_cases = [
     ("GET", "/logoutish", None),
 ]
 
-for method, path, expected_policy in matcher_cases:
-    matches = classify(path, LOCAL_AUTHORITY, local)
-    expected_matches = [] if expected_policy is None else [expected_policy]
-    expect(matches == expected_matches, f"matcher case {method} {path}: {matches}")
+for authority in AUTHORITY_VARIANTS:
+    for method, path, expected_policy in matcher_cases:
+        matches = classify(path, authority, local)
+        expected_matches = [] if expected_policy is None else [expected_policy]
+        expect(
+            matches == expected_matches,
+            f"matcher case {method} https://{authority}{path}: {matches}",
+        )
 
 expect(
-    classify("/api/v1/transactions", "attacker.invalid", local) == [],
-    "an unowned authority must not consume a policy bucket",
+    classify("/api/v1/transactions", "unowned.invalid", local) == ["api-requests"],
+    "path policy must run before Gateway routing rejects an unowned authority",
 )
-for path in (
-    "/oauth2/authorization/idp",
-    "/login/oauth2/code/idp",
-    "/auth/v1/session",
-    "/api/v1/transactions",
-):
-    client_a = descriptor_identity(path, LOCAL_AUTHORITY, "192.0.2.10", local)
-    client_b = descriptor_identity(path, LOCAL_AUTHORITY, "192.0.2.11", local)
-    queried = descriptor_identity(f"{path}?probe=1", LOCAL_AUTHORITY, "192.0.2.10", local)
+for _, path, expected_policy in matcher_cases:
+    if expected_policy is None:
+        continue
+    client_a = descriptor_identity(path, AUTHORITY_VARIANTS[0], "192.0.2.10", local)
+    client_b = descriptor_identity(path, AUTHORITY_VARIANTS[0], "192.0.2.11", local)
+    queried = descriptor_identity(
+        f"{path}?probe=1", AUTHORITY_VARIANTS[0], "192.0.2.10", local
+    )
     expect(client_a != client_b, f"{path}: trusted client addresses must select different buckets")
     expect(client_a == queried, f"{path}: query variants must select the same client bucket")
+    for authority in AUTHORITY_VARIANTS[1:]:
+        variant = descriptor_identity(path, authority, "192.0.2.10", local)
+        expect(
+            variant == client_a,
+            f"{path}: equivalent authority {authority} must select the same client bucket",
+        )
 
 print("Ingress rate-limit configuration verification succeeded.")
-print("  local and production: four equivalent per-client policies")
-print(f"  matcher table: {len(matcher_cases)} boundary and fallback cases")
+print("  local and production: exact shared four-policy EnvoyFilter")
+print(
+    f"  matcher table: {len(matcher_cases)} boundary and fallback cases "
+    f"across {len(AUTHORITY_VARIANTS)} equivalent authorities"
+)
 print("  insertion: before envoy.filters.http.ext_authz")
 print("  default bucket: absent; dynamic descriptor cache: 4096 per policy")
-print("  diagnostics: custom policy counters included by the gateway stats matcher")
+print("  diagnostics: local and both production renders include only the four policy stats families")
 print("  NGINX cutover: local and production inputs contain no blanket limiter")
 PY

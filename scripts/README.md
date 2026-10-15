@@ -71,16 +71,22 @@ scripts/
   its bounded bursts and refill waits.
 - `smoketest/verify-ingress-rate-limit-config.sh` - Offline structural proof for
   the four per-client Istio ingress policies. It renders the production overlay,
-  compares local and production semantics, checks insertion before `ext_authz`,
+  requires the exact shared EnvoyFilter, checks insertion before `ext_authz`,
   token buckets, markers, metrics prefixes, bounded dynamic descriptors and the
-  absence of a default bucket, then exercises path/query/method boundary cases.
+  absence of a default bucket, exercises path/query/method boundaries and
+  equivalent authority spellings, and renders both production gateway stages
+  with disposable fixture values to prove their narrow stats matchers are
+  structurally equivalent to the local ConfigMap.
 - `smoketest/verify-ingress-rate-limits.sh` - Focused live proof for the final
   ingress-only rate-limit architecture. It uses two controlled clients and a
   real browser login to prove client/policy isolation, forged-header resistance,
-  refill, callback completion, filter order, policy markers and counters,
-  unauthenticated API protection, `ext_authz` short-circuiting, deterministic
-  per-instance replica semantics, NGINX forwarded identity, and cleanup. Public
-  requests use normal TLS verification.
+  authority-variant resistance, refill, callback completion, filter order,
+  policy markers and counters, unauthenticated API protection, `ext_authz`
+  short-circuiting, deterministic per-instance replica semantics, NGINX
+  forwarded identity, and cleanup. Its replica proof retains direct child
+  port-forward PIDs and logs in the parent shell, removes them through the EXIT
+  trap on failure, and explicitly proves their processes, listeners, and logs
+  are gone on success. Public requests use normal TLS verification.
 - `smoketest/verify-observability-port-forward-access.sh` - Focused
   loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
   It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local

@@ -12,6 +12,7 @@ KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
+INGRESS_RATE_LIMIT_CONFIG_VERIFIER="${REPO_DIR}/scripts/smoketest/verify-ingress-rate-limit-config.sh"
 KUSTOMIZE_RENDER_DIR=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
@@ -104,6 +105,7 @@ Runs the static security guardrail suite:
 - Kyverno CLI tests for the admission fixtures
 - generated Kyverno replay for representative approved local Tilt deploy refs
 - production Kyverno Helm render check for digest-pinned controller/hook images
+- ingress rate-limit policy and production gateway diagnostics render checks
 - Tilt secret/config boundary inventory validation
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
 
@@ -1302,6 +1304,9 @@ main() {
 
     log_step "Production Kyverno Helm render immutability"
     run_kyverno_production_helm_render_check
+
+    log_step "Ingress rate-limit policy and gateway diagnostics renders"
+    PATH="${STATIC_TOOLS_BIN}:${PATH}" "${INGRESS_RATE_LIMIT_CONFIG_VERIFIER}"
 
     log_step "Tilt secret/config boundary inventory"
     "${SECRETS_ONLY_SCRIPT}"

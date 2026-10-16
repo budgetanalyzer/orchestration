@@ -6,9 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-# shellcheck source=scripts/lib/local-kubernetes-target.sh
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 source "${SCRIPT_DIR}/../lib/local-kubernetes-target.sh"
-# shellcheck source=scripts/lib/redis-cli.sh
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
 PROBE_NAMESPACE="default"
@@ -629,12 +629,7 @@ main() {
     [[ "$(printf '%s\n' "${ingress_pod}" | sed '/^$/d' | wc -l)" -eq 1 ]] || die "main isolation proof requires one Running ingress pod"
 
     section "Static And Live Configuration"
-    "${SCRIPT_DIR}/verify-ingress-rate-limit-config.sh"
-    ! rg -n 'limit_req(_zone|_status)?[[:space:]]' \
-        "${REPO_DIR}/nginx/nginx.k8s.conf" \
-        "${REPO_DIR}/nginx/nginx.production.k8s.conf" \
-        "${REPO_DIR}/kubernetes/production/nginx/nginx.production.k8s.conf" >/dev/null ||
-        die "blanket NGINX limit_req configuration remains after ingress cutover"
+    "${SCRIPT_DIR}/../guardrails/verify-ingress-rate-limit-config.sh"
     pass "all local and production NGINX inputs have relinquished blanket API limiting"
     ! kubectl get envoyfilter ingress-auth-local-rate-limit -n "${INGRESS_NAMESPACE}" >/dev/null 2>&1 ||
         die "retired ingress-auth-local-rate-limit EnvoyFilter still exists"

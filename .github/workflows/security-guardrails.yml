@@ -7,8 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  PYTHONNOUSERSITE: '1'
 
 jobs:
   static-security-guardrails:
@@ -18,6 +22,50 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Create isolated PyYAML environment
+        shell: bash
+        run: |
+          python_env="${PWD}/.cache/phase7-static-tools/pyyaml-venv"
+          python3 - <<'PY'
+          import platform
+          import sys
+
+
+          expected = ((3, 12), "x86_64")
+          observed = (sys.version_info[:2], platform.machine())
+          if observed != expected:
+              raise SystemExit(
+                  "Unsupported static-guardrail Python/platform: "
+                  f"expected {expected}, observed {observed}"
+              )
+          print(f"Static-guardrail Python/platform: {observed}")
+          PY
+          python3 -m venv "${python_env}"
+          "${python_env}/bin/python" -I -m pip install \
+            --disable-pip-version-check \
+            --require-hashes \
+            --no-deps \
+            --only-binary=:all: \
+            -r scripts/guardrails/requirements-ingress-rate-limit.txt
+          PYYAML_ENV="${python_env}" "${python_env}/bin/python" -I - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+
+          environment = Path(os.environ["PYYAML_ENV"]).resolve()
+          module = Path(yaml.__file__).resolve()
+          if environment not in module.parents:
+              raise SystemExit(
+                  f"PyYAML resolved outside the private environment: {module}"
+              )
+          print(f"Private PyYAML module: {module}")
+          print(f"Private Python interpreter: {Path(sys.executable)}")
+          PY
+          printf 'INGRESS_RATE_LIMIT_PYTHON=%s/bin/python\n' "${python_env}" >> "${GITHUB_ENV}"
+
       - name: Validate changed shell syntax
         run: |
           bash -n scripts/guardrails/check-image-pinning.sh
@@ -26,6 +74,7 @@ jobs:
           bash -n scripts/lib/pinned-tool-versions.sh
           bash -n scripts/ops/render-istio-egress-config.sh
           bash -n scripts/guardrails/verify-static-security-manifests.sh
+          bash -n scripts/guardrails/verify-ingress-rate-limit-config.sh
 
       - name: Run static security guardrails
         run: ./scripts/guardrails/verify-static-security-manifests.sh

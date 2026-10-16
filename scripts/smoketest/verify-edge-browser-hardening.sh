@@ -567,7 +567,7 @@ verify_static_contracts() {
         "try_files \$uri =404;" \
         "Production config resolves frontend assets without proxying to Vite"
 
-    if "${SCRIPT_DIR}/verify-ingress-rate-limit-config.sh"; then
+    if "${SCRIPT_DIR}/../guardrails/verify-ingress-rate-limit-config.sh"; then
         pass "Ingress rate-limit configuration passes the focused structural and matcher proof"
     else
         fail "Ingress rate-limit configuration failed the focused structural and matcher proof"

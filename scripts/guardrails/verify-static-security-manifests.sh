@@ -12,7 +12,7 @@ KUBELINTER_CONFIG="${REPO_DIR}/.kube-linter.yaml"
 IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
-INGRESS_RATE_LIMIT_CONFIG_VERIFIER="${REPO_DIR}/scripts/smoketest/verify-ingress-rate-limit-config.sh"
+INGRESS_RATE_LIMIT_CONFIG_VERIFIER="${REPO_DIR}/scripts/guardrails/verify-ingress-rate-limit-config.sh"
 KUSTOMIZE_RENDER_DIR=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.

@@ -14,6 +14,11 @@
       "/^kubernetes\\/(?:istio|monitoring)\\/.*-values\\.ya?ml$/"
     ]
   },
+  "pip_requirements": {
+    "managerFilePatterns": [
+      "/^scripts\\/guardrails\\/requirements-ingress-rate-limit\\.txt$/"
+    ]
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -84,6 +89,25 @@
       ],
       "datasourceTemplate": "npm",
       "depNameTemplate": "renovate"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Require reviewed wheel hashes for the bounded static PyYAML tool dependency",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchFileNames": [
+        "scripts/guardrails/requirements-ingress-rate-limit.txt"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "checksum-required"
+      ],
+      "prBodyNotes": [
+        "Update the exact PyYAML pin and every accepted upstream wheel hash together. Confirm the wheel matches the declared hosted-CI Python and platform, then run the static guardrail validations; do not admit an sdist implicitly."
+      ]
     }
   ]
 }

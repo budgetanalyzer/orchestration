@@ -151,7 +151,7 @@ security policy semantics, or maintaining retired OCI templates.
 - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
 - `kubernetes/production/istio/authorization-policies.yaml`
 - `Tiltfile`
-- `scripts/smoketest/verify-ingress-rate-limit-config.sh`
+- `scripts/guardrails/verify-ingress-rate-limit-config.sh`
 - `scripts/guardrails/verify-static-security-manifests.sh`
 - parity matrix from Phase 1
 

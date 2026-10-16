@@ -196,7 +196,8 @@ it does not reuse the stale DinD suites as current security guardrails.
 
 It now runs on every push to `main` and every pull request targeting `main`.
 The narrower path filter was removed so guarded security surfaces cannot bypass
-the workflow when a new file path is added to the static scope.
+the workflow when a new file path is added to the static scope. Its token has
+read-only repository-content permission.
 
 What it runs:
 
@@ -205,7 +206,17 @@ What it runs:
 
 The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
 `kube-linter`, and `kyverno` binaries through
-`scripts/bootstrap/install-verified-tool.sh`, then runs:
+`scripts/bootstrap/install-verified-tool.sh`. It does not require ripgrep; the
+static scans retain a `grep` fallback. Separately, it uses the runner's
+CPython 3.12 x86_64 `python3` only to create a disposable private virtual
+environment under `.cache/phase7-static-tools`, installs the exact PyYAML wheel
+declared in
+`scripts/guardrails/requirements-ingress-rate-limit.txt` with required hash
+verification, and exports that environment's interpreter to the static gate.
+The gate verifies the exact version and reports the resolved interpreter and
+module path. The Python package is not installed globally and is not modeled
+as a standalone release binary. The private environment is not cached. The
+workflow then runs:
 
 - schema validation for checked-in manifests, with explicit missing-schema
   allowances for checked-in CRD resources such as Istio, Gateway API, Kyverno,
@@ -221,6 +232,9 @@ The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
   `:tilt-<hash>` deploy refs derived from the checked-in contract inventory
 - a rendered Kyverno production-chart check that rejects mutable controller and
   hook image refs from `deploy/helm-values/kyverno.values.yaml`
+- the offline ingress rate-limit configuration proof, including the local and
+  production EnvoyFilter render contract, gateway diagnostics stats matchers,
+  and a fail-closed scan proving blanket NGINX rate limiting remains absent
 - pattern scans for image pinning, namespace PSA labels, and lingering
   pipe-to-shell guidance in active setup docs/scripts
 
@@ -233,7 +247,12 @@ static-only substitute for the local runtime gate.
 Use the same command locally to reproduce workflow failures without a cluster:
 
 ```bash
-./scripts/guardrails/verify-static-security-manifests.sh
+python3 -m venv .cache/phase7-static-tools/pyyaml-venv
+.cache/phase7-static-tools/pyyaml-venv/bin/python -I -m pip install \
+  --require-hashes --no-deps --only-binary=:all: \
+  -r scripts/guardrails/requirements-ingress-rate-limit.txt
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/guardrails/verify-static-security-manifests.sh
 ```
 
 For full local security guardrail proof on a live cluster, use the separate
@@ -245,7 +264,8 @@ final gate:
 
 That wrapper intentionally stays out of GitHub Actions because the runtime
 proof depends on a live local cluster. CI for the security guardrails remains
-static-only.
+static-only. After publishing changes to this workflow or its guardrail inputs,
+the branch owner must rerun and confirm the GitHub-hosted pull-request workflow.
 
 ## Running Locally
 

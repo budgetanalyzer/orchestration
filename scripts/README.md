@@ -69,15 +69,26 @@ scripts/
   before NGINX routing. Parent verifiers that already completed the focused
   rate-limit proof may pass `--skip-ingress-rate-limits` to avoid repeating
   its bounded bursts and refill waits.
-- `smoketest/verify-ingress-rate-limit-config.sh` - Offline structural proof for
-  the four per-client Istio ingress policies. It renders the production overlay,
-  requires the exact shared EnvoyFilter, checks insertion before `ext_authz`,
-  token buckets, markers, metrics prefixes, bounded dynamic descriptors and the
-  absence of a default bucket, requires path normalization plus encoded-slash
-  rejection before filter selection, exercises path/query/method boundaries and
-  equivalent authority spellings, and renders both production gateway stages
-  with disposable fixture values to prove their narrow stats matchers are
-  structurally equivalent to the local ConfigMap.
+- `guardrails/verify-ingress-rate-limit-config.sh` - Offline, non-mutating
+  structural guardrail for the four per-client Istio ingress policies. It
+  renders the production overlay, requires the exact shared EnvoyFilter, checks
+  insertion before `ext_authz`, token buckets, markers, metrics prefixes,
+  bounded dynamic descriptors and the absence of a default bucket, requires
+  path normalization plus encoded-slash rejection before filter selection,
+  exercises path/query/method boundaries and equivalent authority spellings,
+  and renders both production gateway stages with disposable fixture values to
+  prove their narrow stats matchers are structurally equivalent to the local
+  ConfigMap. Its NGINX cutover scan fails closed for missing or unreadable
+  inputs and distinguishes a clean negative search from a search error;
+  `--self-test-nginx-search` proves the clean, forbidden-directive, and missing
+  input cases with disposable fixtures. The verifier defaults to managed-VM
+  `python3`, honors only `INGRESS_RATE_LIMIT_PYTHON` as its selected interpreter,
+  verifies the exact PyYAML version declared in
+  `guardrails/requirements-ingress-rate-limit.txt`, and reports the resolved
+  interpreter and module path. This static render and matcher proof complements
+  the live exhaustion, refill, and client-isolation proof in
+  `smoketest/verify-ingress-rate-limits.sh`; it does not replace that runtime
+  gate.
 - `smoketest/verify-ingress-rate-limits.sh` - Focused live proof for the final
   ingress-only rate-limit architecture. It uses two controlled clients and a
   real browser login to prove client/policy isolation, forged-header resistance,
@@ -151,7 +162,12 @@ scripts/
   the required positive and negative `kubectl auth can-i` matrix, reruns the
   monitoring runtime proof, and captures Kiali triage artifacts under `tmp/`.
 - `guardrails/verify-static-security-manifests.sh` - Static manifest and
-  security guardrail gate used by CI and local preflight.
+  security guardrail gate used by CI and local preflight. Its ingress
+  rate-limit proof requires the exact PyYAML wheel declared in
+  `guardrails/requirements-ingress-rate-limit.txt`; create the disposable
+  `.cache/phase7-static-tools/pyyaml-venv` environment with the hash-verified
+  install documented in `docs/ci-cd.md#security-guardrailsyml`, then set
+  `INGRESS_RATE_LIMIT_PYTHON` to that environment's interpreter.
 - `guardrails/verify-production-image-overlay.sh` - Static verifier for the
   full Oracle production baseline: app overlay, production
   infrastructure overlay, production render output, and the production image

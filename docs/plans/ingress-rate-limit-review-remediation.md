@@ -53,7 +53,7 @@ architecture.
 - `kubernetes/gateway/auth-httproute.yaml`
 - `kubernetes/istio/ingress-rate-limit.yaml`
 - `kubernetes/production/istio-ingress-policies/kustomization.yaml`
-- `scripts/smoketest/verify-ingress-rate-limit-config.sh`
+- `scripts/guardrails/verify-ingress-rate-limit-config.sh`
 - `scripts/smoketest/verify-ingress-rate-limits.sh`
 - `scripts/guardrails/verify-production-image-overlay.sh`
 
@@ -95,7 +95,7 @@ before routing rejects it; it cannot consume another client's allowance.
 
 - Render `kubernetes/production/istio-ingress-policies` with Kustomize and
   compare the resulting EnvoyFilter structurally with the local source.
-- Run `./scripts/smoketest/verify-ingress-rate-limit-config.sh`.
+- Run `./scripts/guardrails/verify-ingress-rate-limit-config.sh`.
 - After guarded local reconciliation, run the authority-variant section of
   `./scripts/smoketest/verify-ingress-rate-limits.sh` with normal TLS
   verification.
@@ -140,7 +140,7 @@ plan.
 - `deploy/manifests/public-tls/ingress-gateway-config.yaml.template`
 - `deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh`
 - `deploy/scripts/render/public-tls.sh`
-- `scripts/smoketest/verify-ingress-rate-limit-config.sh`
+- `scripts/guardrails/verify-ingress-rate-limit-config.sh`
 - `scripts/guardrails/verify-static-security-manifests.sh`
 
 ### Execution steps
@@ -175,7 +175,7 @@ Do not begin that refactor in this PR.
   output directories; do not apply their output.
 - Parse the local, ingress-bootstrap, and public-TLS ConfigMaps as YAML and
   prove the stats matcher structures are equivalent.
-- Run `./scripts/smoketest/verify-ingress-rate-limit-config.sh` and the
+- Run `./scripts/guardrails/verify-ingress-rate-limit-config.sh` and the
   applicable static manifest guardrail.
 - Run `bash -n` and `shellcheck` for every changed shell script.
 
@@ -249,7 +249,7 @@ before polling its log so the EXIT trap can clean up every partial startup.
 - Run `./scripts/smoketest/verify-ingress-rate-limits.sh` with normal TLS
   verification. Confirm replicas are restored and no registered PID, listener,
   or temporary log remains.
-- Rerun `./scripts/smoketest/verify-ingress-rate-limit-config.sh`, production
+- Rerun `./scripts/guardrails/verify-ingress-rate-limit-config.sh`, production
   render checks from Phase 2, and affected static guardrails.
 - Run `bash -n` and `shellcheck` on every changed shell script, then run
   `git diff --check`.

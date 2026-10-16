@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Offline structural and matcher verification for ingress local rate limiting.
 
@@ -9,6 +9,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LOCAL_MANIFEST="${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml"
 INGRESS_GATEWAY_CONFIG="${REPO_DIR}/kubernetes/istio/ingress-gateway-config.yaml"
 PRODUCTION_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
+PYTHON_REQUIREMENTS="${SCRIPT_DIR}/requirements-ingress-rate-limit.txt"
+PYTHON_INTERPRETER="${INGRESS_RATE_LIMIT_PYTHON:-python3}"
 TEMP_DIR="$(mktemp -d)"
 PRODUCTION_RENDER="${TEMP_DIR}/istio-ingress-policies.yaml"
 INSTANCE_ENV_FILE_TMP="${TEMP_DIR}/instance.env"
@@ -21,6 +23,7 @@ NGINX_CONFIGS=(
     "${REPO_DIR}/nginx/nginx.production.k8s.conf"
     "${REPO_DIR}/kubernetes/production/nginx/nginx.production.k8s.conf"
 )
+NGINX_LIMIT_PATTERN='limit_req(_zone|_status)?[[:space:]]'
 
 cleanup() {
     rm -rf "${TEMP_DIR}"
@@ -28,24 +31,165 @@ cleanup() {
 
 trap cleanup EXIT
 
-for command_name in kubectl python3 rg; do
+verify_nginx_inputs() {
+    local nginx_config search_output search_status
+
+    for nginx_config in "$@"; do
+        if [[ ! -f "${nginx_config}" ]]; then
+            printf 'ERROR: expected NGINX input is not a regular file: %s\n' "${nginx_config}" >&2
+            return 1
+        fi
+        if [[ ! -r "${nginx_config}" ]]; then
+            printf 'ERROR: expected NGINX input is not readable: %s\n' "${nginx_config}" >&2
+            return 1
+        fi
+
+        search_output=""
+        if search_output="$(grep -nE "${NGINX_LIMIT_PATTERN}" "${nginx_config}" 2>&1)"; then
+            search_status=0
+        else
+            search_status=$?
+        fi
+
+        case "${search_status}" in
+            0)
+                printf 'ERROR: blanket NGINX rate limiting remains in %s:\n' "${nginx_config}" >&2
+                printf '%s\n' "${search_output}" >&2
+                return 1
+                ;;
+            1)
+                ;;
+            *)
+                printf 'ERROR: failed to inspect NGINX input %s (grep status %d)\n' \
+                    "${nginx_config}" "${search_status}" >&2
+                if [[ -n "${search_output}" ]]; then
+                    printf '%s\n' "${search_output}" >&2
+                fi
+                return 1
+                ;;
+        esac
+    done
+}
+
+run_nginx_search_self_test() {
+    local fixture_dir clean_config forbidden_config missing_config
+
+    fixture_dir="${TEMP_DIR}/nginx-search-fixtures"
+    clean_config="${fixture_dir}/clean.conf"
+    forbidden_config="${fixture_dir}/forbidden.conf"
+    missing_config="${fixture_dir}/missing.conf"
+    mkdir -p "${fixture_dir}"
+
+    cat > "${clean_config}" <<'EOF'
+events {}
+http {
+    server { listen 8080; }
+}
+EOF
+    cat > "${forbidden_config}" <<'EOF'
+events {}
+http {
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+}
+EOF
+
+    if ! verify_nginx_inputs "${clean_config}" >/dev/null 2>&1; then
+        printf 'ERROR: clean NGINX search fixture was rejected\n' >&2
+        return 1
+    fi
+    if verify_nginx_inputs "${forbidden_config}" >/dev/null 2>&1; then
+        printf 'ERROR: forbidden NGINX limiter fixture was accepted\n' >&2
+        return 1
+    fi
+    if verify_nginx_inputs "${missing_config}" >/dev/null 2>&1; then
+        printf 'ERROR: missing NGINX input fixture was accepted\n' >&2
+        return 1
+    fi
+
+    printf 'NGINX cutover search self-test succeeded.\n'
+    printf '  clean input: accepted\n'
+    printf '  forbidden directive: rejected\n'
+    printf '  missing input: rejected\n'
+}
+
+case "${1:-}" in
+    "")
+        ;;
+    --self-test-nginx-search)
+        if (( $# != 1 )); then
+            printf 'ERROR: --self-test-nginx-search accepts no additional arguments\n' >&2
+            exit 2
+        fi
+        run_nginx_search_self_test
+        exit 0
+        ;;
+    *)
+        printf 'Usage: %s [--self-test-nginx-search]\n' "${0}" >&2
+        exit 2
+        ;;
+esac
+
+for command_name in grep kubectl "${PYTHON_INTERPRETER}"; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
         printf 'ERROR: required command not found: %s\n' "${command_name}" >&2
         exit 1
     fi
 done
 
-for nginx_config in "${NGINX_CONFIGS[@]}"; do
-    if rg -n 'limit_req(_zone|_status)?[[:space:]]' "${nginx_config}"; then
-        printf 'ERROR: blanket NGINX rate limiting remains in %s\n' "${nginx_config}" >&2
-        exit 1
-    fi
-done
+if ! "${PYTHON_INTERPRETER}" - "${PYTHON_REQUIREMENTS}" <<'PY'
+import importlib.metadata
+import re
+import sys
+from pathlib import Path
 
-if ! python3 -c 'import yaml' >/dev/null 2>&1; then
-    printf 'ERROR: Python module PyYAML is required for structural manifest checks\n' >&2
+
+requirements_path = Path(sys.argv[1])
+try:
+    requirements = requirements_path.read_text(encoding="utf-8")
+except OSError as error:
+    print(f"ERROR: cannot read PyYAML requirement {requirements_path}: {error}", file=sys.stderr)
+    raise SystemExit(1) from error
+
+match = re.search(r"(?m)^PyYAML==([^\s\\]+)\s*\\$", requirements)
+if match is None:
+    print(
+        f"ERROR: {requirements_path} must contain one exact continued PyYAML requirement",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+expected_version = match.group(1)
+try:
+    import yaml
+    installed_version = importlib.metadata.version("PyYAML")
+except (ModuleNotFoundError, importlib.metadata.PackageNotFoundError) as error:
+    print(f"ERROR: PyYAML {expected_version} is not installed: {error}", file=sys.stderr)
+    raise SystemExit(1) from error
+
+if installed_version != expected_version or yaml.__version__ != expected_version:
+    print(
+        "ERROR: PyYAML version mismatch: "
+        f"required {expected_version}, metadata reported {installed_version}, "
+        f"module reported {yaml.__version__}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+print(f"PyYAML interpreter: {Path(sys.executable)}")
+print(f"PyYAML version: {installed_version}")
+print(f"PyYAML module: {Path(yaml.__file__).resolve()}")
+PY
+then
+    printf 'ERROR: ingress rate-limit structural checks require the hash-verified PyYAML environment.\n' >&2
+    printf 'Selected interpreter: %s\n' "${PYTHON_INTERPRETER}" >&2
+    printf '%s\n' \
+        'Setup: python3 -m venv .cache/phase7-static-tools/pyyaml-venv && .cache/phase7-static-tools/pyyaml-venv/bin/python -I -m pip install --require-hashes --no-deps --only-binary=:all: -r scripts/guardrails/requirements-ingress-rate-limit.txt' >&2
+    printf '%s\n' \
+        'Then set INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python when running the verifier.' >&2
     exit 1
 fi
+
+verify_nginx_inputs "${NGINX_CONFIGS[@]}"
 
 kubectl kustomize "${PRODUCTION_OVERLAY}" \
     --load-restrictor=LoadRestrictionsNone > "${PRODUCTION_RENDER}"
@@ -63,7 +207,7 @@ INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
     "${REPO_DIR}/deploy/scripts/render/public-tls.sh" \
     --output-dir "${PUBLIC_TLS_RENDER_DIR}" >/dev/null
 
-python3 - \
+"${PYTHON_INTERPRETER}" - \
     "${LOCAL_MANIFEST}" \
     "${PRODUCTION_RENDER}" \
     "${INGRESS_GATEWAY_CONFIG}" \

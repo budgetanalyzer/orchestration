@@ -44,7 +44,8 @@ The important split is:
 - Session Gateway owns browser authentication and session lifecycle.
 - `ext_authz` validates every browser `/api/*` request before NGINX forwards
   it to a backend.
-- NGINX owns resource-based routing and backend/API rate limiting.
+- Istio ingress owns per-client auth/API rate limiting before authorization;
+  NGINX owns resource-based routing and load balancing.
 - Backend services own business logic and data-level authorization.
 
 This gives the repo a same-origin browser surface, keeps tokens out of the
@@ -66,7 +67,7 @@ the live validation checklist pass.
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Istio Ingress Gateway                    │
-│      (TLS termination, auth throttling, routing, ext_authz)│
+│ (TLS termination, auth/API limiting, routing, ext_authz)   │
 └─────────┬──────────────────────────┬────────────────────────┘
           │ auth lane                │ app/API lane
           ▼                          ▼
@@ -78,7 +79,7 @@ the live validation checklist pass.
         ▼                             ▼
 ┌──────────────────────┐   ┌──────────────────────────────────┐
 │  Permission Service  │   │         NGINX API Gateway        │
-│ roles/permissions +  │   │   routing and backend throttling │
+│ roles/permissions +  │   │     routing and load balancing   │
 │ bulk session revoke  │   └─────────┬────────────────────────┘
 └──────────────────────┘             │
                                      ▼
@@ -105,14 +106,14 @@ the built frontend assets.
 Istio ingress, Session Gateway, `ext_authz`, NGINX, and Istio egress form the
 control plane at the application edge:
 
-- Istio ingress terminates TLS, applies auth-path throttling, and enforces
+- Istio ingress terminates TLS, applies per-client auth/API limiting, and enforces
   `ext_authz` on browser API traffic.
 - Session Gateway owns OAuth2 login, logout, and browser session renewal.
 - `ext_authz` converts the Redis-backed browser session into trusted identity
   headers on every API request. Its Go implementation lives in sibling
   `../ext-authz`; orchestration owns the deployment and mesh wiring.
-- NGINX maps resource routes to backend services and applies backend/API rate
-  limiting.
+- NGINX maps resource routes to backend services and load balances the
+  admitted requests.
 - Istio egress owns the approved outbound paths to external providers such as
   Auth0 and FRED.
 

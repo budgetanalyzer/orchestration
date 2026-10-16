@@ -27,6 +27,7 @@ The frontend should never call service-specific paths such as `/transaction-serv
 Browser
   -> https://app.budgetanalyzer.localhost/api/v1/transactions
   -> Istio Ingress Gateway
+  -> per-client API rate limit
   -> ext_authz
   -> NGINX
   -> transaction-service /transaction-service/v1/transactions
@@ -51,7 +52,7 @@ location /api/v1/transactions {
 
 ```bash
 # List current resource routes
-grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
+rg -n "location /api" nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
 
 # Test a route through the public entry point
 curl -v https://app.budgetanalyzer.localhost/api/v1/transactions
@@ -60,7 +61,8 @@ curl -v https://app.budgetanalyzer.localhost/api/v1/transactions
 ## Adding a Route
 
 1. Choose a resource path.
-2. Add a location block to `nginx/nginx.k8s.conf`.
+2. Add matching location blocks to `nginx/nginx.k8s.conf` and
+   `nginx/nginx.production.k8s.conf`.
 3. Point it at the correct in-cluster service.
 4. Keep the frontend path resource-based.
 
@@ -69,8 +71,6 @@ Example:
 ```nginx
 location /api/v1/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=50 nodelay;
-    limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;
     include includes/backend-headers.conf;
@@ -92,4 +92,6 @@ If a resource moves between services, the frontend can keep calling the same ext
 - Use resource names, not service names, in browser-facing URLs.
 - Keep API versioning in the path.
 - Use in-cluster service DNS names in NGINX upstreams.
-- Treat `nginx/nginx.k8s.conf` as the current routing source of truth.
+- Keep the local and production NGINX route variants aligned.
+- Leave general per-client API rate limiting at Istio ingress; do not add a
+  backend-specific NGINX limit without a demonstrated requirement.

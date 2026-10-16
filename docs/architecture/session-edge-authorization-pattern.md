@@ -21,7 +21,7 @@ Auth paths: Browser → Istio Ingress → Session Gateway
 ```
 
 **Key stages**:
-1. **Istio Ingress**: SSL termination, ext_authz enforcement on `/api/*` paths, and auth-path throttling
+1. **Istio Ingress**: SSL termination, per-client auth/API throttling, and ext_authz enforcement on `/api/*` paths
 2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
 4. **Session Gateway**: Auth lifecycle plus the versioned browser JSON endpoints (`/auth/v1/session`, `/auth/v1/user`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
@@ -41,7 +41,7 @@ Auth paths: Browser → Istio Ingress → Session Gateway
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
 - Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
-- Applies local rate limiting to auth-sensitive browser entry points (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
+- Applies four per-client local rate-limit policies to login initiation, login completion, session operations, and `/api/*` before `ext_authz`; the canonical boundaries and capacity model live in [Ingress Per-Client Rate Limiting](security-architecture.md#ingress-per-client-rate-limiting)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
 - Provides Gateway API-compliant ingress
@@ -92,12 +92,11 @@ kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 
 ### NGINX - API Gateway Layer
 
-**Purpose**: Routing and backend/API rate limiting for backend services
+**Purpose**: Resource routing and load balancing for backend services
 
 **Responsibilities**:
 - Routes requests to appropriate microservices
 - Resource-based routing with path transformation
-- Rate limits backend-facing API paths after ingress validation
 - Serves the production-smoke frontend bundle statically at `/_prod-smoke/` while the live dev route continues to proxy to Vite
 - Uses the checked-in `nginx/nginx.production.k8s.conf` variant for the production cutover, where `/` and `/login` serve the built frontend bundle directly, `/_prod-smoke/` is absent, and Vite-only public routes return `404`
 - Load balancing and circuit breaking
@@ -121,7 +120,7 @@ kubectl logs deployment/nginx-gateway
 
 **Configuration**: See [nginx/README.md](../../nginx/README.md) for detailed routing configuration and how to add new routes.
 
-**Runtime proof**: [`./scripts/smoketest/verify-edge-browser-hardening.sh`](../../scripts/smoketest/verify-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, direct auth-edge throttling coverage for `/login`, `/auth/*`, `/logout`, and `/login/oauth2/*`, reruns the frontend CSP audit, API rate-limit identity verifier, and runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
+**Runtime proof**: [`./scripts/smoketest/verify-edge-browser-hardening.sh`](../../scripts/smoketest/verify-edge-browser-hardening.sh) verifies the edge and browser security contract. It checks the dev/strict CSP split on the real app paths, the production route cutover, the focused ingress per-client rate-limit contract, the frontend CSP audit, and the runtime-hardening verifier, and keeps `/api-docs` probes visible as warnings. The exact rate-limit contract and the non-secret cutover verification record stay in the canonical security section linked above. Manual browser-console validation on `/_prod-smoke/` is still required before relying on the edge and browser security proof.
 
 ### Session Gateway - Auth Layer
 

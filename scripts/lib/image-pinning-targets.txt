@@ -26,5 +26,5 @@ scripts/smoketest/verify-istio-ingress.sh
 scripts/smoketest/verify-transport-encryption.sh
 scripts/smoketest/verify-runtime-hardening.sh
 scripts/smoketest/verify-edge-browser-hardening.sh
-scripts/smoketest/verify-api-rate-limit-identity.sh
+scripts/smoketest/verify-ingress-rate-limits.sh
 scripts/smoketest/verify-runtime-security-guardrails.sh

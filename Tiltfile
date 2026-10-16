@@ -1280,6 +1280,7 @@ local_resource(
 local_resource(
     'istio-ingress-routes',
     cmd='''
+        kubectl delete envoyfilter ingress-auth-local-rate-limit -n istio-ingress --ignore-not-found
         kubectl apply -f kubernetes/gateway/auth-httproute.yaml
         kubectl apply -f kubernetes/gateway/api-httproute.yaml
         kubectl apply -f kubernetes/gateway/app-httproute.yaml

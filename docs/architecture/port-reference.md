@@ -6,10 +6,10 @@
 
 | Port | Service | Protocol | Purpose | Access Level |
 |------|---------|----------|---------|--------------|
-| 443 | Istio Ingress Gateway | HTTPS | SSL termination, ext_authz enforcement, auth-path rate limiting, ingress | Public (browsers) |
+| 443 | Istio Ingress Gateway | HTTPS | SSL termination, ext_authz enforcement, per-client auth/API rate limiting, ingress | Public (browsers) |
 | 9002 | ext_authz | HTTP | Per-request session validation | Internal (Istio ingress only) |
 | 8090 | ext_authz | HTTP | Health endpoint | Internal (probes only) |
-| 8080 | NGINX Gateway | HTTP | Routing, backend/API rate limiting | Internal (Istio ingress only) |
+| 8080 | NGINX Gateway | HTTP | Resource routing and load balancing | Internal (Istio ingress only) |
 | 8081 | Session Gateway | HTTP | Browser authentication, session management | Internal (Istio ingress only) |
 | 8086 | Permission Service | HTTP | Internal login and heartbeat authorization resolution | Internal (Session Gateway only) |
 | 8082 | Transaction Service | HTTP | Transaction management API | Internal (NGINX only) |
@@ -36,12 +36,12 @@
 - **443** - Istio Ingress Gateway (HTTPS, `istio-ingress` namespace)
   - `app.budgetanalyzer.localhost` → routes OAuth2/auth protocol paths to Session Gateway and frontend/API paths to NGINX
   - ext_authz enforced on `/api/*` paths via meshConfig extensionProvider
-  - auth-sensitive paths throttled locally at ingress (`/login`, `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
+  - four per-client auth/API policies enforced locally before `ext_authz`; exact boundaries and capacity are owned by [security-architecture.md](security-architecture.md#ingress-per-client-rate-limiting)
 
 ### Gateway Layer (Internal)
 - **9002** - ext_authz HTTP (session validation, header injection)
 - **8090** - ext_authz health (HTTP health probes)
-- **8080** - NGINX Gateway (API routing, backend/API rate limiting)
+- **8080** - NGINX Gateway (resource-based API routing and load balancing)
 - **8081** - Session Gateway (auth, session management)
 
 ### Business Services Layer (Internal)

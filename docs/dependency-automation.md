@@ -92,7 +92,8 @@ The active production scope contains ten repositories: `orchestration`,
 
 Orchestration owns the shared preset and its own extraction for Kubernetes,
 Helm values, Tilt, Kind, shell version contracts, pinned tools, chart image
-overrides, and the exact-image scanner. Consumer repositories own their native
+overrides, the exact-image scanner, and the bounded PyYAML input used only by
+the ingress rate-limit static proof. Consumer repositories own their native
 package managers and any repository-specific extraction:
 
 | Repository family | Repository-owned coverage |
@@ -115,6 +116,27 @@ architecture, validation patterns, and any linked native npm inputs together.
 These coupled proposals remain Dependency Dashboard approval-gated. Inputs
 without a sound standard datasource remain explicit manual lifecycle review
 items; do not add a custom crawler or pretend they are covered.
+
+### Bounded orchestration PyYAML tool dependency
+
+`scripts/guardrails/requirements-ingress-rate-limit.txt` is a one-package
+static-tool contract, not a Python application environment. It pins the exact
+PyYAML version and only the reviewed upstream Linux x86_64 CPython 3.12 wheel
+hash used by `security-guardrails.yml`; source distributions and implicit
+source builds are outside the contract. The workflow creates a disposable
+private virtual environment under `.cache/phase7-static-tools`, installs with
+pip hash enforcement and no dependencies, proves the imported module is inside
+that environment, and does not upload the environment as evidence.
+
+Renovate's native `pip_requirements` manager owns version discovery for this
+input. Every proposal remains non-automerge and requires Dependency Dashboard
+approval. Reviewers must update the exact version and all accepted wheel hashes
+together, verify each hash against the upstream PyPI release metadata, confirm
+the wheel still matches the hosted runner's declared Python/platform contract,
+and rerun the static guardrails. Do not add an sdist merely to make a new
+runtime installable, and do not move this package into the standalone-binary
+installer. This bounded input is intentionally distinct from the
+`budget-analyzer-api-tests` PEP 621, uv lock, SBOM, audit, and parity contract.
 
 The workspace manifest describes a native Ubuntu VM, not a container image.
 Ubuntu VM lifecycle and installed apt patching remain human/distribution owned;

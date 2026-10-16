@@ -488,8 +488,9 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${gateway_file}" 'value: /logout' "rendered auth route is missing the /logout path prefix"
 
     assert_contains_literal "${ingress_file}" 'name: ext-authz-at-ingress' "rendered ingress policies are missing ext-authz-at-ingress"
-    assert_contains_literal "${ingress_file}" 'name: ingress-auth-local-rate-limit' "rendered ingress policies are missing ingress-auth-local-rate-limit"
-    assert_contains_literal "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" "rendered ingress policies are missing the production demo hostname"
+    assert_contains_literal "${ingress_file}" 'name: ingress-local-rate-limits' "rendered ingress policies are missing ingress-local-rate-limits"
+    assert_not_contains "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" \
+        "rendered ingress policies redundantly own the production demo hostname"
 
     assert_contains_literal "${monitoring_file}" 'domain: localhost' "rendered monitoring override is missing the loopback Grafana domain"
     assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3300' "rendered monitoring override is missing the loopback Grafana root_url"

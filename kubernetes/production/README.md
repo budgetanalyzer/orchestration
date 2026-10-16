@@ -183,8 +183,10 @@ artifacts:
   untouched for Tilt
 - `istio-ingress-policies/` renders the production `/api/*`
   `AuthorizationPolicy` and the ingress local-rate-limit object. Host ownership
-  stays on the production `HTTPRoute` overlay, while the rate-limit filter still
-  matches `demo.budgetanalyzer.org`.
+  stays on the production `HTTPRoute` overlay, while production renders the
+  exact shared path-only rate-limit filter. Ingress is the sole owner of
+  general auth/API rate limiting; the production NGINX input has no blanket
+  `limit_req` zone or route directives.
 - `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
   server domain and root URL for loopback port-forward access while preserving
   the checked-in `prometheus-stack` Helm release name contract that yields the
@@ -259,6 +261,18 @@ principle also applies to Istio authz. If an older OCI cluster still has
 reconciling with `./deploy/scripts/bootstrap/04-install-istio.sh`; that script now
 reapplies the production-specific authz baseline that excludes the
 frontend-only policy.
+
+The ingress policy resource changed names during the per-client cutover. After
+applying the current production ingress policy render, an operator upgrading an
+older OCI cluster must delete the retired aggregate filter so it cannot remain
+after the four new policies:
+
+```bash
+kubectl delete envoyfilter -n istio-ingress ingress-auth-local-rate-limit --ignore-not-found
+```
+
+This is a one-time migration cleanup. Do not run the local live verifier or its
+disposable browser/client probes against production.
 
 ## Production Infrastructure Input
 

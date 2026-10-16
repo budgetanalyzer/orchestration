@@ -29,7 +29,7 @@ owns the human-only firewall and confinement evidence workflow.
 ## Architecture
 
 - **Frontend**: React/Vite (budget-analyzer-web), served through NGINX in production, Vite dev server locally
-- **API Gateway**: NGINX handles routing and API-path rate limiting; Istio ingress handles TLS termination and auth-path rate limiting
+- **API Gateway**: NGINX handles resource routing; Istio ingress handles TLS termination and per-client auth/API rate limiting
 - **Auth**: OAuth2/OIDC with Auth0 via session-gateway, edge session validation via ext-authz (Go), Redis-backed sessions
 - **Backend**: Spring Boot microservices (transaction-service, currency-service, permission-service) with PostgreSQL, RabbitMQ
 - **Service mesh**: Istio with strict mTLS, network policies, egress gateway for external API calls

@@ -130,7 +130,7 @@ Architecture principles:
 - Production parity between local Tilt/Kind and OCI/k3s
 - Microservices with clear service boundaries and independent deployability
 - Session-based edge authorization for browser security and session management
-- Istio ingress handles ext_authz and auth-path throttling; NGINX handles API routing, backend/API rate limiting, and load balancing
+- Istio ingress handles `ext_authz` and per-client auth/API rate limiting; NGINX handles resource routing and load balancing
 - Resource-based routing keeps the frontend decoupled from service topology
 - Defense in depth across Istio ingress, Session Gateway or NGINX, and downstream services
 - Kubernetes-native development uses Tilt live update so code changes reach running pods quickly while the full security stack stays active; see `docs/development/local-environment.md#live-development-pipeline`
@@ -149,7 +149,7 @@ Service topology summary:
 - Backend workloads: Spring Boot microservices behind NGINX, plus Session Gateway and `ext-authz` on the auth and authorization path
 - Infrastructure: PostgreSQL, Redis, and RabbitMQ in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template
 - Monitoring: Prometheus, Grafana, kube-state-metrics, the repo-managed Jaeger v2 backend, and standalone Kiali in `monitoring`; Jaeger and Kiali stay `ClusterIP`-only
-- Ingress and egress: Istio ingress handles browser entry, `ext_authz`, and auth-path throttling; Istio egress stays `ClusterIP` with `REGISTRY_ONLY`
+- Ingress and egress: Istio ingress handles browser entry, `ext_authz`, and per-client auth/API rate limiting; Istio egress stays `ClusterIP` with `REGISTRY_ONLY`
 - Exact service ports and exposure rules live in `docs/architecture/port-reference.md`
 
 Adding a new service:

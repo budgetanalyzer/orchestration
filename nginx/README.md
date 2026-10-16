@@ -1,6 +1,6 @@
 # NGINX API Gateway for Kubernetes
 
-NGINX handles backend routing and API-path rate limiting for backend microservices. Authentication and auth-sensitive path throttling are handled at the Istio ingress gateway before requests reach NGINX.
+NGINX handles resource-based routing and load balancing for backend microservices. Istio ingress is the sole owner of general per-client auth/API rate limiting.
 
 ## Request Flow
 
@@ -28,7 +28,7 @@ Istio Ingress Gateway (:443) ─── SSL termination + ext_authz session valid
     ├─→ /_prod-smoke/* → NGINX (:8080) → Built React bundle (static files)
     │
     ▼ (K8s internal: nginx-gateway:8080)
-NGINX (:8080) ─── API-path rate limiting, route to service
+NGINX (:8080) ─── route and load balance to service
     │
     ├─→ /                 → React App (:3000)
     ├─→ /api-docs*        → Swagger UI page + unified contract downloads
@@ -45,13 +45,13 @@ NGINX (:8080) ─── API-path rate limiting, route to service
 - Resource-based routing = frontend decoupled from services
 - ext_authz at Istio ingress layer validates sessions before reaching NGINX
 
-## Rate-Limiting Split
+## Rate-Limiting Ownership
 
-- Istio ingress rate limits auth-sensitive browser entry points: `/login`, `/auth/*` (including `/auth/v1/session` and `/auth/v1/user`), `/oauth2/*`, `/login/oauth2/*`, and `/logout`
-- NGINX rate limits backend-facing API paths after ingress validation and routing
-- NGINX now derives the API limiter identity from the rightmost ingress-appended `X-Forwarded-For` hop while trusting only the pod-local Envoy sidecar loopback source (`set_real_ip_from 127.0.0.0/8` with `real_ip_recursive on`)
+- Istio ingress has four per-client policies for login initiation, login completion, session operations, and API requests; exact boundaries and capacities are owned by [the security architecture](../docs/architecture/security-architecture.md#ingress-per-client-rate-limiting)
+- NGINX has no blanket `limit_req` zone or API directives; add no backend-specific replacement without a demonstrated requirement
+- NGINX still derives the downstream client identity from the rightmost ingress-appended `X-Forwarded-For` hop while trusting only the pod-local Envoy sidecar loopback source (`set_real_ip_from 127.0.0.0/8` with `real_ip_recursive on`) so logs and forwarded backend headers remain trustworthy
 
-Bare `/login` is still a frontend route. It is served through NGINX and initiates OAuth2 with `/oauth2/authorization/idp`; ingress now rate limits that entry point too, but it is not a direct Session Gateway route.
+Bare `/login` is still a frontend route outside the OAuth-initiation budget. It is served through NGINX and starts the separately limited OAuth flow at `/oauth2/authorization/idp`; it is not a direct Session Gateway route.
 
 ## Service Configuration
 
@@ -243,15 +243,15 @@ kubectl exec deployment/nginx-gateway -- nginx -s reload
 tilt trigger nginx-gateway-config
 ```
 
-The Kubernetes access log now includes the derived `remote_addr`, the trusted proxy hop as `proxy_addr`, `X-Forwarded-For`, and `X-Real-IP` so the ingress and browser hardening verifiers can prove forwarded-header preservation and the API rate-limit trust model through Istio ingress.
+The Kubernetes access log includes the derived `remote_addr`, the trusted proxy hop as `proxy_addr`, `X-Forwarded-For`, and `X-Real-IP` so the ingress and browser hardening verifiers can prove forwarded-header preservation through Istio ingress.
 
-The API rate-limit identity runtime proof is:
+The focused ingress rate-limit and downstream identity proof is:
 
 ```bash
-./scripts/smoketest/verify-api-rate-limit-identity.sh
+./scripts/smoketest/verify-ingress-rate-limits.sh
 ```
 
-That verifier creates two temporary no-sidecar probe pods, sends authenticated API traffic through the live ingress gateway, confirms NGINX derives distinct client identities from the ingress-appended downstream hop, proves a forged external `X-Forwarded-For` value cannot pick a new bucket, and checks that separate real clients do not share one API limiter bucket.
+That verifier creates two temporary no-sidecar clients, proves ingress client and policy isolation, and retains the independent check that NGINX derives distinct client identities from the ingress-appended downstream hop rather than a forged external `X-Forwarded-For` value.
 
 The edge and browser hardening verifier is:
 
@@ -263,8 +263,7 @@ It verifies the dev/strict CSP split on the real app paths, warning-only docs vi
 the checked-in production route cutover, a real `nginx -t` syntax check of
 `nginx/nginx.production.k8s.conf` inside the running `nginx-gateway` pod, the
 fail-closed API namespace and docs-path behavior,
-the remaining auth-edge throttling
-coverage, reruns the frontend CSP audit, reruns the API identity verifier, and
+the focused ingress per-client rate-limit proof, reruns the frontend CSP audit, and
 then reruns the runtime-hardening cascade.
 Manual browser-console validation on `/_prod-smoke/` is still required before
 the browser proof is complete; `/api-docs` warnings remain visible but do not
@@ -280,8 +279,6 @@ block the verifier.
 ```nginx
 location /api/v1/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=50 nodelay;
-    limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;
     include includes/backend-headers.conf;
@@ -300,7 +297,7 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 
 4. Probe the public route and make sure it does not leak the frontend SPA:
 ```bash
-curl -kisS https://app.budgetanalyzer.localhost/api/v1/accounts
+curl -isS https://app.budgetanalyzer.localhost/api/v1/accounts
 ```
 
 5. Frontend code (no changes needed if using consistent API client):
@@ -321,8 +318,6 @@ explicit non-HTML `404` rather than frontend HTML.
 ```nginx
 location /api/reports {
     set $reports_backend "http://reports-service.default.svc.cluster.local:8086";
-    limit_req zone=per_ip burst=50 nodelay;
-    limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /reports-service/v1/$1 break;
     proxy_pass $reports_backend;
     include /etc/nginx/includes/backend-headers.conf;
@@ -342,8 +337,6 @@ location /api/reports {
 ```nginx
 location /api/v1/transactions {
     set $transaction_backend "http://new-transaction-service.default.svc.cluster.local:8082";
-    limit_req zone=per_ip burst=50 nodelay;
-    limit_req_status 429;
     rewrite ^/api/v1/(.*)$ /new-transaction-service/v1/$1 break;
     proxy_pass $transaction_backend;
     include /etc/nginx/includes/backend-headers.conf;
@@ -424,7 +417,7 @@ If you see CORS errors:
 ### nginx.k8s.conf
 
 Main NGINX configuration for Kubernetes deployment. Uses Kubernetes DNS names for service discovery.
-It also trusts only the pod-local loopback proxy hop for `real_ip_*` handling so API `limit_req` keys on the derived client address instead of the sidecar hop.
+It also trusts only the pod-local loopback proxy hop for `real_ip_*` handling so logs and backend forwarding use the ingress-appended client address instead of the sidecar hop.
 
 ### includes/
 

@@ -1,13 +1,28 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: ingress-auth-local-rate-limit
+  name: ingress-local-rate-limits
   namespace: istio-ingress
 spec:
   workloadSelector:
     labels:
       gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
   configPatches:
+    - applyTo: NETWORK_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: MERGE
+        value:
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            normalize_path: true
+            merge_slashes: true
+            path_with_escaped_slashes_action: REJECT_REQUEST
     - applyTo: HTTP_FILTER
       match:
         context: GATEWAY
@@ -16,70 +31,303 @@ spec:
             filter:
               name: envoy.filters.network.http_connection_manager
               subFilter:
-                name: envoy.filters.http.router
+                name: envoy.filters.http.ext_authz
       patch:
         operation: INSERT_BEFORE
         value:
-          name: envoy.filters.http.local_ratelimit
+          name: envoy.filters.http.local_ratelimit.login_initiation
           typed_config:
             "@type": type.googleapis.com/udpa.type.v1.TypedStruct
-            type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+            type_url: type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher
             value:
-              stat_prefix: auth_sensitive_local_rate_limiter
-    - applyTo: VIRTUAL_HOST
+              extension_config:
+                name: envoy.filters.http.local_ratelimit
+                typed_config:
+                  "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+                  type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                  value:
+                    stat_prefix: ingress_login_initiation
+                    filter_enabled:
+                      runtime_key: ingress_login_initiation_enabled
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    filter_enforced:
+                      runtime_key: ingress_login_initiation_enforced
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    response_headers_to_add:
+                      - append: false
+                        header:
+                          key: x-local-rate-limit-policy
+                          value: login-initiation
+                    enable_x_ratelimit_headers: DRAFT_VERSION_03
+                    always_consume_default_token_bucket: false
+                    max_dynamic_descriptors: 4096
+                    descriptors:
+                      - entries:
+                          - key: rate_limit_policy
+                            value: login-initiation
+                          - key: remote_address
+                        token_bucket:
+                          max_tokens: 25
+                          tokens_per_fill: 1
+                          fill_interval: 1s
+                    rate_limits:
+                      - actions:
+                          - generic_key:
+                              descriptor_key: rate_limit_policy
+                              descriptor_value: login-initiation
+                          - remote_address: {}
+              xds_matcher:
+                matcher_list:
+                  matchers:
+                    - predicate:
+                        not_matcher:
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/oauth2(?:/.*)?(?:\\?.*)?$"
+                      on_match:
+                        action:
+                          name: skip
+                          typed_config:
+                            "@type": type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter
+    - applyTo: HTTP_FILTER
       match:
         context: GATEWAY
-        routeConfiguration:
-          vhost:
-            name: ""
-            route:
-              action: ANY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.ext_authz
       patch:
-        operation: MERGE
+        operation: INSERT_BEFORE
         value:
-          rate_limits:
-            - actions:
-                - header_value_match:
-                    descriptor_key: auth_path
-                    descriptor_value: auth-sensitive
-                    headers:
-                      - name: ":authority"
-                        string_match:
-                          exact: app.budgetanalyzer.localhost
-                      - name: ":path"
-                        safe_regex_match:
-                          google_re2: {}
-                          regex: "^/(login|logout(?:/.*)?|auth(?:/.*)?|oauth2(?:/.*)?|login/oauth2(?:/.*)?)(?:\\?.*)?$"
-          typed_per_filter_config:
-            envoy.filters.http.local_ratelimit:
-              "@type": type.googleapis.com/udpa.type.v1.TypedStruct
-              type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
-              value:
-                stat_prefix: auth_sensitive_local_rate_limiter
-                token_bucket:
-                  max_tokens: 10000
-                  tokens_per_fill: 10000
-                  fill_interval: 60s
-                filter_enabled:
-                  runtime_key: auth_sensitive_local_rate_limit_enabled
-                  default_value:
-                    numerator: 100
-                    denominator: HUNDRED
-                filter_enforced:
-                  runtime_key: auth_sensitive_local_rate_limit_enforced
-                  default_value:
-                    numerator: 100
-                    denominator: HUNDRED
-                response_headers_to_add:
-                  - append: false
-                    header:
-                      key: x-local-rate-limit
-                      value: auth-sensitive
-                descriptors:
-                  - entries:
-                      - key: auth_path
-                        value: auth-sensitive
-                    token_bucket:
-                      max_tokens: 10
-                      tokens_per_fill: 10
-                      fill_interval: 60s
+          name: envoy.filters.http.local_ratelimit.login_completion
+          typed_config:
+            "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+            type_url: type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher
+            value:
+              extension_config:
+                name: envoy.filters.http.local_ratelimit
+                typed_config:
+                  "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+                  type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                  value:
+                    stat_prefix: ingress_login_completion
+                    filter_enabled:
+                      runtime_key: ingress_login_completion_enabled
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    filter_enforced:
+                      runtime_key: ingress_login_completion_enforced
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    response_headers_to_add:
+                      - append: false
+                        header:
+                          key: x-local-rate-limit-policy
+                          value: login-completion
+                    enable_x_ratelimit_headers: DRAFT_VERSION_03
+                    always_consume_default_token_bucket: false
+                    max_dynamic_descriptors: 4096
+                    descriptors:
+                      - entries:
+                          - key: rate_limit_policy
+                            value: login-completion
+                          - key: remote_address
+                        token_bucket:
+                          max_tokens: 50
+                          tokens_per_fill: 2
+                          fill_interval: 1s
+                    rate_limits:
+                      - actions:
+                          - generic_key:
+                              descriptor_key: rate_limit_policy
+                              descriptor_value: login-completion
+                          - remote_address: {}
+              xds_matcher:
+                matcher_list:
+                  matchers:
+                    - predicate:
+                        not_matcher:
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/login/oauth2(?:/.*)?(?:\\?.*)?$"
+                      on_match:
+                        action:
+                          name: skip
+                          typed_config:
+                            "@type": type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.ext_authz
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.local_ratelimit.session_operations
+          typed_config:
+            "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+            type_url: type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher
+            value:
+              extension_config:
+                name: envoy.filters.http.local_ratelimit
+                typed_config:
+                  "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+                  type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                  value:
+                    stat_prefix: ingress_session_operations
+                    filter_enabled:
+                      runtime_key: ingress_session_operations_enabled
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    filter_enforced:
+                      runtime_key: ingress_session_operations_enforced
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    response_headers_to_add:
+                      - append: false
+                        header:
+                          key: x-local-rate-limit-policy
+                          value: session-operations
+                    enable_x_ratelimit_headers: DRAFT_VERSION_03
+                    always_consume_default_token_bucket: false
+                    max_dynamic_descriptors: 4096
+                    descriptors:
+                      - entries:
+                          - key: rate_limit_policy
+                            value: session-operations
+                          - key: remote_address
+                        token_bucket:
+                          max_tokens: 250
+                          tokens_per_fill: 5
+                          fill_interval: 1s
+                    rate_limits:
+                      - actions:
+                          - generic_key:
+                              descriptor_key: rate_limit_policy
+                              descriptor_value: session-operations
+                          - remote_address: {}
+              xds_matcher:
+                matcher_list:
+                  matchers:
+                    - predicate:
+                        not_matcher:
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/(?:auth(?:/.*)?|logout(?:/.*)?)(?:\\?.*)?$"
+                      on_match:
+                        action:
+                          name: skip
+                          typed_config:
+                            "@type": type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.ext_authz
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.local_ratelimit.api_requests
+          typed_config:
+            "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+            type_url: type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher
+            value:
+              extension_config:
+                name: envoy.filters.http.local_ratelimit
+                typed_config:
+                  "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+                  type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                  value:
+                    stat_prefix: ingress_api_requests
+                    filter_enabled:
+                      runtime_key: ingress_api_requests_enabled
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    filter_enforced:
+                      runtime_key: ingress_api_requests_enforced
+                      default_value:
+                        numerator: 100
+                        denominator: HUNDRED
+                    response_headers_to_add:
+                      - append: false
+                        header:
+                          key: x-local-rate-limit-policy
+                          value: api-requests
+                    enable_x_ratelimit_headers: DRAFT_VERSION_03
+                    always_consume_default_token_bucket: false
+                    max_dynamic_descriptors: 4096
+                    descriptors:
+                      - entries:
+                          - key: rate_limit_policy
+                            value: api-requests
+                          - key: remote_address
+                        token_bucket:
+                          max_tokens: 60
+                          tokens_per_fill: 10
+                          fill_interval: 1s
+                    rate_limits:
+                      - actions:
+                          - generic_key:
+                              descriptor_key: rate_limit_policy
+                              descriptor_value: api-requests
+                          - remote_address: {}
+              xds_matcher:
+                matcher_list:
+                  matchers:
+                    - predicate:
+                        not_matcher:
+                          single_predicate:
+                            input:
+                              name: request-headers
+                              typed_config:
+                                "@type": type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput
+                                header_name: ":path"
+                            value_match:
+                              safe_regex:
+                                google_re2: {}
+                                regex: "^/api(?:/.*)?(?:\\?.*)?$"
+                      on_match:
+                        action:
+                          name: skip
+                          typed_config:
+                            "@type": type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter

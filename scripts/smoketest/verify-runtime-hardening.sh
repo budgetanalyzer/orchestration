@@ -21,6 +21,7 @@ PROBE_IMAGE="postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b
 WAIT_TIMEOUT="120s"
 REGRESSION_TIMEOUT="10m"
 RUN_REGRESSIONS=true
+INGRESS_RATE_LIMITS_ALREADY_VERIFIED=false
 TEMP_NAMESPACE=""
 
 PASSED=0
@@ -33,6 +34,9 @@ Usage: ./scripts/smoketest/verify-runtime-hardening.sh
 Options:
   --skip-regressions          Skip credential, NetworkPolicy, ingress, and
                               transport-TLS regression verifiers.
+  --ingress-rate-limits-already-verified
+                              Keep the Istio ingress regression but skip its
+                              focused rate-limit subverifier.
   --regression-timeout <dur>  Per-script timeout for those regression
                               regression verifiers (default: 10m).
   -h, --help                  Show this help text.
@@ -43,6 +47,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-regressions)
             RUN_REGRESSIONS=false
+            shift
+            ;;
+        --ingress-rate-limits-already-verified)
+            INGRESS_RATE_LIMITS_ALREADY_VERIFIED=true
             shift
             ;;
         --regression-timeout)
@@ -871,8 +879,9 @@ run_regressions() {
         local label="$1"
         local script_path="$2"
         local exit_code=0
+        shift 2
 
-        if timeout --foreground --kill-after=10s "$REGRESSION_TIMEOUT" "$script_path"; then
+        if timeout --foreground --kill-after=10s "$REGRESSION_TIMEOUT" "$script_path" "$@"; then
             pass "${label} still passes after runtime hardening"
             return
         fi
@@ -887,7 +896,12 @@ run_regressions() {
 
     run_regression_verifier "Credential isolation verification" "${SCRIPT_DIR}/verify-credential-isolation.sh"
     run_regression_verifier "NetworkPolicy verification" "${SCRIPT_DIR}/verify-network-policies.sh"
-    run_regression_verifier "Istio ingress verification" "${SCRIPT_DIR}/verify-istio-ingress.sh"
+    if [[ "${INGRESS_RATE_LIMITS_ALREADY_VERIFIED}" == "true" ]]; then
+        run_regression_verifier "Istio ingress verification" \
+            "${SCRIPT_DIR}/verify-istio-ingress.sh" --skip-ingress-rate-limits
+    else
+        run_regression_verifier "Istio ingress verification" "${SCRIPT_DIR}/verify-istio-ingress.sh"
+    fi
     run_regression_verifier "Transport-encryption verification" "${SCRIPT_DIR}/verify-transport-encryption.sh"
 }
 

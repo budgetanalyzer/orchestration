@@ -13,7 +13,6 @@ PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-r
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
-LOCKED_AUTH0_ISSUER_URI="https://auth.budgetanalyzer.org/"
 TEMP_DIR=""
 RENDERED_APPS_FILE=""
 RENDERED_INFRASTRUCTURE_FILE=""
@@ -47,7 +46,6 @@ LOCAL_IMAGE_REPOS=(
 FORBIDDEN_OBSERVABILITY_HOST_PATTERN='(grafana|prometheus|kiali|jaeger)\.budgetanalyzer\.(localhost|org)'
 FORBIDDEN_OBSERVABILITY_ROUTE_PATTERN='name:[[:space:]]*(grafana|prometheus|kiali|jaeger)-route'
 FORBIDDEN_OBSERVABILITY_SERVICE_PATTERN='prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus|kiali|jaeger'
-FORBIDDEN_OBSERVABILITY_INPUT_PATTERN='(GRAFANA_DOMAIN|KIALI_DOMAIN|JAEGER_DOMAIN)'
 FORBIDDEN_OBSERVABILITY_INGRESS_PATTERN='kubernetes\.io/metadata\.name:[[:space:]]*monitoring|app\.kubernetes\.io/name:[[:space:]]*(grafana|prometheus|kiali|jaeger)|prometheus-stack-grafana|prometheus-stack-kube-prom-prometheus'
 
 fail() {
@@ -163,6 +161,83 @@ assert_contains_literal() {
 
     if ! grep -Fq "${needle}" "${file}"; then
         fail "${description}"
+    fi
+}
+
+assert_kiali_namespace_rbac_coverage() {
+    local file="$1"
+    local actual_resources
+    local expected_resources
+    local kind
+    local namespace
+    local -a expected_namespaces=(
+        default
+        monitoring
+        istio-system
+        istio-ingress
+        istio-egress
+    )
+
+    actual_resources="$(
+        awk '
+            function finish_document() {
+                if ((kind == "Role" || kind == "RoleBinding") && name == "kiali-viewer") {
+                    print kind "|" namespace
+                }
+                kind = ""
+                name = ""
+                namespace = ""
+                in_metadata = 0
+            }
+
+            /^---[[:space:]]*$/ {
+                finish_document()
+                next
+            }
+
+            /^kind:[[:space:]]*/ {
+                kind = $0
+                sub(/^kind:[[:space:]]*/, "", kind)
+                next
+            }
+
+            /^metadata:[[:space:]]*$/ {
+                in_metadata = 1
+                next
+            }
+
+            in_metadata && /^[^[:space:]]/ {
+                in_metadata = 0
+            }
+
+            in_metadata && /^  name:[[:space:]]*/ {
+                name = $0
+                sub(/^  name:[[:space:]]*/, "", name)
+                next
+            }
+
+            in_metadata && /^  namespace:[[:space:]]*/ {
+                namespace = $0
+                sub(/^  namespace:[[:space:]]*/, "", namespace)
+                gsub(/^"|"$/, "", namespace)
+            }
+
+            END {
+                finish_document()
+            }
+        ' "${file}" | sort
+    )"
+
+    expected_resources="$(
+        for kind in Role RoleBinding; do
+            for namespace in "${expected_namespaces[@]}"; do
+                printf '%s|%s\n' "${kind}" "${namespace}"
+            done
+        done | sort
+    )"
+
+    if [[ "${actual_resources}" != "${expected_resources}" ]]; then
+        fail "rendered production Kiali namespace RBAC coverage drifted; expected Role/RoleBinding in: ${expected_namespaces[*]}"
     fi
 }
 
@@ -637,6 +712,7 @@ verify_phase7_observability_render_outputs() {
     if grep -Eq 'kind:[[:space:]]*Cluster(Role|RoleBinding)' "${kiali_file}"; then
         fail "rendered production Kiali output requests cluster-wide RBAC"
     fi
+    assert_kiali_namespace_rbac_coverage "${kiali_file}"
     if ! grep -Eq 'automountServiceAccountToken:[[:space:]]*false' "${kiali_file}"; then
         fail "rendered production Kiali Deployment does not explicitly disable service account token automount"
     fi

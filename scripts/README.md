@@ -332,9 +332,9 @@ For normal native guest startup, run
   the digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
   `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
-  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, uses a live
-  Helm server-side dry run for the production Kiali render so namespace-scoped
-  RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
+  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, asserts that the
+  offline Kiali render contains namespace-scoped RBAC for every approved
+  discovery namespace, verifies the Redis StatefulSet uses a `5Gi`
   `redis-data` claim template, and applies the production image Kyverno policy
   to the rendered app overlay.
 

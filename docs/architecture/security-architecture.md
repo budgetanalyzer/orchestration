@@ -248,6 +248,14 @@ policy consistently to canonical, case-varied, and explicit-default-port
 authorities before routing. Insertion before the router alone is not sufficient
 because API limiting must protect the authorization call itself.
 
+The ingress HTTP connection manager canonicalizes RFC 3986 paths and merges
+repeated slashes before the limiter and `ext_authz` filters run. It rejects
+paths containing percent-encoded slash or backslash characters with HTTP 400
+instead of forwarding a path that NGINX could interpret differently. Thus
+`//api/v1/transactions` is classified as `/api/v1/transactions`, while
+`/api%2fv1/transactions` never reaches policy selection, authorization, or
+NGINX. This parser alignment is part of ingress ownership of API limiting.
+
 ### Policy Boundaries And Capacity
 
 | Stable policy | Paths and bounded family fallback | Sustained rate | Burst capacity | Rejection marker |

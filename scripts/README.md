@@ -73,7 +73,8 @@ scripts/
   the four per-client Istio ingress policies. It renders the production overlay,
   requires the exact shared EnvoyFilter, checks insertion before `ext_authz`,
   token buckets, markers, metrics prefixes, bounded dynamic descriptors and the
-  absence of a default bucket, exercises path/query/method boundaries and
+  absence of a default bucket, requires path normalization plus encoded-slash
+  rejection before filter selection, exercises path/query/method boundaries and
   equivalent authority spellings, and renders both production gateway stages
   with disposable fixture values to prove their narrow stats matchers are
   structurally equivalent to the local ConfigMap.
@@ -82,8 +83,9 @@ scripts/
   real browser login to prove client/policy isolation, forged-header resistance,
   authority-variant resistance, refill, callback completion, filter order,
   policy markers and counters, unauthenticated API protection, `ext_authz`
-  short-circuiting, deterministic per-instance replica semantics, NGINX
-  forwarded identity, and cleanup. Its replica proof retains direct child
+  short-circuiting, canonicalized double-slash limiting, encoded-slash ingress
+  rejection, deterministic per-instance replica semantics, NGINX forwarded
+  identity, and cleanup. Its replica proof retains direct child
   port-forward PIDs and logs in the parent shell, removes them through the EXIT
   trap on failure, and explicitly proves their processes, listeners, and logs
   are gone on success. Public requests use normal TLS verification.

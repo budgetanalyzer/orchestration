@@ -249,7 +249,7 @@ probe_response() {
     local pod_name="$1" path="$2" forged_xff="${3:-}" session_id="${4:-}" probe_id="${5:-rate-limit-probe}"
     local authority="${6:-app.budgetanalyzer.localhost}"
     local -a curl_args=(
-        curl --silent --show-error --max-time 10 --max-redirs 0
+        curl --silent --show-error --max-time 10 --max-redirs 0 --path-as-is
         --cacert "${PROBE_CA_MOUNT}"
         --resolve "app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP}"
         -H "Host: ${authority}"
@@ -296,6 +296,7 @@ for authority in "$@"; do
     while [ "$i" -le 12 ]; do
         (
             result=$(curl --silent --show-error --max-time 10 --max-redirs 0 \
+                --path-as-is \
                 --cacert "$ca_file" \
                 --resolve "${canonical_authority}:443:${ingress_ip}" \
                 -H "Host: ${authority}" \
@@ -349,6 +350,7 @@ while [ "$i" -le "$count" ]; do
         esac
         if [ -n "$forged_header" ]; then
             result=$(curl --silent --show-error --max-time 10 --max-redirs 0 \
+                --path-as-is \
                 --cacert "$ca_file" \
                 --resolve "app.budgetanalyzer.localhost:443:${ingress_ip}" \
                 -A "${prefix}-${i}" \
@@ -358,6 +360,7 @@ while [ "$i" -le "$count" ]; do
                 "https://app.budgetanalyzer.localhost${path}${separator}probe=${prefix}-${i}" 2>/dev/null || true)
         else
             result=$(curl --silent --show-error --max-time 10 --max-redirs 0 \
+                --path-as-is \
                 --cacert "$ca_file" \
                 --resolve "app.budgetanalyzer.localhost:443:${ingress_ip}" \
                 -A "${prefix}-${i}" \
@@ -421,6 +424,16 @@ assert_response_not_limited() {
     pass "${label} remained available (HTTP ${status})"
 }
 
+assert_ingress_path_rejected() {
+    local response="$1" label="$2"
+    local status marker
+    status=$(printf '%s\n' "${response}" | response_status)
+    marker=$(printf '%s\n' "${response}" | response_marker)
+    [[ "${status}" == "400" ]] || die "${label} returned HTTP ${status:-000}, expected ingress HTTP 400"
+    [[ -z "${marker}" ]] || die "${label} unexpectedly reached rate-limit rejection policy ${marker}"
+    pass "${label} was rejected by ingress path handling before policy selection"
+}
+
 gateway_pods() {
     kubectl get pod -n "${INGRESS_NAMESPACE}" -l "${INGRESS_LABEL_SELECTOR}" \
         --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort
@@ -441,9 +454,10 @@ ext_authz_request_count() {
 }
 
 verify_live_filter_order() {
-    local pod_name="$1" chain
-    chain=$(kubectl exec -n "${INGRESS_NAMESPACE}" "${pod_name}" -c istio-proxy -- \
-        pilot-agent request GET config_dump 2>/dev/null |
+    local pod_name="$1" config_dump chain
+    config_dump=$(kubectl exec -n "${INGRESS_NAMESPACE}" "${pod_name}" -c istio-proxy -- \
+        pilot-agent request GET config_dump 2>/dev/null)
+    chain=$(printf '%s\n' "${config_dump}" |
         jq -r '[.. | objects | select(.name? == "envoy.filters.network.http_connection_manager") | .typed_config.http_filters? // empty | map(.name)] | .[] | select(index("envoy.filters.http.ext_authz")) | @tsv' |
         head -n 1)
     [[ -n "${chain}" ]] || die "could not locate the live ingress HTTP filter chain"
@@ -466,7 +480,10 @@ ext_authz = chain.index("envoy.filters.http.ext_authz")
 if any(chain.index(name) >= ext_authz for name in expected):
     raise SystemExit("a named limiter is not before ext_authz")
 PY
-    pass "live listener has exactly four named limiters before ext_authz and no legacy generic limiter"
+    printf '%s\n' "${config_dump}" |
+        jq -e '[.. | objects | select(.name? == "envoy.filters.network.http_connection_manager") | .typed_config | select((.http_filters? // []) | map(.name) | index("envoy.filters.http.ext_authz")) | select(.normalize_path == true and .merge_slashes == true and .path_with_escaped_slashes_action == "REJECT_REQUEST")] | length > 0' >/dev/null ||
+        die "live ingress HTTP connection manager does not enforce canonical path handling"
+    pass "live listener canonicalizes paths and has exactly four named limiters before ext_authz"
 }
 
 find_nginx_log_line() {
@@ -640,6 +657,15 @@ main() {
         "${SESSION_ID}-identity-b" "${pod_ip_b}"
     pass "NGINX preserves ingress-appended client identity and ignores forged forwarding identity"
 
+    section "Ingress Path Canonicalization"
+    ext_before=$(ext_authz_request_count "${ingress_pod}")
+    response=$(probe_response "${PROBE_POD_A}" "/api%2fv1/transactions" "${FORGED_XFF_PRIMARY}")
+    assert_ingress_path_rejected "${response}" "percent-encoded API slash"
+    ext_after=$(ext_authz_request_count "${ingress_pod}")
+    [[ "${ext_after}" -eq "${ext_before}" ]] ||
+        die "percent-encoded API slash invoked ext_authz before ingress rejection"
+    pass "percent-encoded API slash did not invoke ext_authz or reach NGINX"
+
     section "Login Initiation Isolation"
     response=$(probe_response "${PROBE_POD_A}" "/oauth2/authorization/idp" "${FORGED_XFF_PRIMARY}")
     assert_response_not_limited "${response}" "client A login initiation baseline" 302
@@ -689,6 +715,9 @@ main() {
     [[ $((controlled_after - controlled_before)) -eq "${controlled_accepted}" ]] ||
         die "controlled ext_authz delta $((controlled_after - controlled_before)) did not match ${controlled_accepted} admitted requests"
     pass "controlled follow-up proved ${controlled_rejected} ingress rejections did not invoke ext_authz while refill-admitted requests did"
+
+    output=$(probe_burst "${PROBE_POD_A}" "//api/v1/transactions" 20 20 rotate "api-double-slash-a")
+    assert_burst_rejected "${output}" "api-requests" "normalized double-slash API path"
 
     authority_output=$(probe_authority_variants_after_exhaustion \
         "${PROBE_POD_A}" "/api/v1/transactions")

@@ -83,6 +83,10 @@ FILTER_TYPE = (
 )
 MATCHER_TYPE = "type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher"
 HEADER_INPUT_TYPE = "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput"
+HCM_TYPE = (
+    "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3."
+    "HttpConnectionManager"
+)
 SKIP_FILTER_TYPE = (
     "type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter"
 )
@@ -154,10 +158,40 @@ def inspect_manifest(path):
     )
 
     patches = resource["spec"].get("configPatches", [])
-    expect(len(patches) == 4, f"{path}: expected four independent filter patches")
+    expect(
+        len(patches) == 5,
+        f"{path}: expected path canonicalization plus four independent filter patches",
+    )
+    hcm_patches = [patch for patch in patches if patch.get("applyTo") == "NETWORK_FILTER"]
+    expect(len(hcm_patches) == 1, f"{path}: one HTTP connection manager patch")
+    hcm_patch = hcm_patches[0]
+    expect(
+        hcm_patch.get("match", {}).get("context") == "GATEWAY",
+        f"{path}: path canonicalization must use GATEWAY context",
+    )
+    expect(
+        hcm_patch["match"]["listener"]["filterChain"]["filter"].get("name")
+        == "envoy.filters.network.http_connection_manager",
+        f"{path}: path canonicalization HTTP connection manager target",
+    )
+    expect(
+        hcm_patch.get("patch", {}).get("operation") == "MERGE",
+        f"{path}: path canonicalization merge operation",
+    )
+    hcm_config = hcm_patch["patch"]["value"].get("typed_config", {})
+    expect(hcm_config.get("@type") == HCM_TYPE, f"{path}: HTTP connection manager type")
+    expect(hcm_config.get("normalize_path") is True, f"{path}: RFC 3986 path normalization")
+    expect(hcm_config.get("merge_slashes") is True, f"{path}: repeated-slash normalization")
+    expect(
+        hcm_config.get("path_with_escaped_slashes_action") == "REJECT_REQUEST",
+        f"{path}: escaped slash and backslash rejection",
+    )
+
     observed = {}
 
     for patch in patches:
+        if patch.get("applyTo") == "NETWORK_FILTER":
+            continue
         expect(patch.get("applyTo") == "HTTP_FILTER", f"{path}: patch must target HTTP_FILTER")
         match = patch.get("match", {})
         expect(match.get("context") == "GATEWAY", f"{path}: patch must use GATEWAY context")
@@ -393,6 +427,19 @@ matcher_cases = [
     ("GET", "/logoutish", None),
 ]
 
+normalized_matcher_cases = [
+    ("GET", "//api/v1/transactions", "/api/v1/transactions", "api-requests"),
+    ("GET", "/unowned/../api/v1/transactions", "/api/v1/transactions", "api-requests"),
+    ("GET", "//auth/v1/user", "/auth/v1/user", "session-operations"),
+]
+
+rejected_matcher_cases = [
+    "/api%2fv1/transactions",
+    "/api%2Fv1/transactions",
+    "/api%5cv1/transactions",
+    "/api%5Cv1/transactions",
+]
+
 for authority in AUTHORITY_VARIANTS:
     for method, path, expected_policy in matcher_cases:
         matches = classify(path, authority, local)
@@ -401,6 +448,22 @@ for authority in AUTHORITY_VARIANTS:
             matches == expected_matches,
             f"matcher case {method} https://{authority}{path}: {matches}",
         )
+    for method, raw_path, normalized_path, expected_policy in normalized_matcher_cases:
+        expect(
+            classify(raw_path, authority, local) == [],
+            f"raw path fixture unexpectedly matched before normalization: {raw_path}",
+        )
+        matches = classify(normalized_path, authority, local)
+        expect(
+            matches == [expected_policy],
+            f"normalized matcher case {method} https://{authority}{raw_path}: {matches}",
+        )
+
+for path in rejected_matcher_cases:
+    expect(
+        re.search(r"%(?:2f|5c)", path, re.IGNORECASE) is not None,
+        f"escaped path fixture must be rejected before policy selection: {path}",
+    )
 
 expect(
     classify("/api/v1/transactions", "unowned.invalid", local) == ["api-requests"],
@@ -428,6 +491,10 @@ print("  local and production: exact shared four-policy EnvoyFilter")
 print(
     f"  matcher table: {len(matcher_cases)} boundary and fallback cases "
     f"across {len(AUTHORITY_VARIANTS)} equivalent authorities"
+)
+print(
+    "  path handling: RFC 3986 and repeated-slash normalization before filters; "
+    "escaped slash/backslash rejection"
 )
 print("  insertion: before envoy.filters.http.ext_authz")
 print("  default bucket: absent; dynamic descriptor cache: 4096 per policy")

@@ -6,13 +6,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# shellcheck source=deploy/scripts/lib/version-contract.sh
-source "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
+# shellcheck source=scripts/lib/production-version-contract.sh
+source "${REPO_DIR}/scripts/lib/production-version-contract.sh"
 
 CHART="prometheus-community/kube-prometheus-stack"
-CHART_VERSION="${PHASE7_PROMETHEUS_STACK_CHART_VERSION}"
+CHART_VERSION="${PRODUCTION_PROMETHEUS_STACK_CHART_VERSION}"
 KIALI_CHART="kiali/kiali-server"
-KIALI_CHART_VERSION="${PHASE7_KIALI_CHART_VERSION}"
+KIALI_CHART_VERSION="${PRODUCTION_KIALI_CHART_VERSION}"
 NAMESPACE="monitoring"
 RELEASE_NAME="prometheus-stack"
 KIALI_RELEASE_NAME="kiali"

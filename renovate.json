@@ -24,7 +24,7 @@
       "customType": "regex",
       "description": "Extract annotated shell chart, release, and tool versions",
       "managerFilePatterns": [
-        "/^deploy\\/scripts\\/lib\\/version-contract\\.sh$/",
+        "/^scripts\\/lib\\/production-version-contract\\.sh$/",
         "/^scripts\\/lib\\/pinned-tool-versions\\.sh$/"
       ],
       "matchStrings": [

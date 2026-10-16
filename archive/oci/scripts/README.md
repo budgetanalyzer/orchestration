@@ -1,0 +1,605 @@
+# Scripts Directory
+
+This directory contains automation for the Budget Analyzer orchestration
+repository. Scripts are grouped by purpose so setup, validation, operational,
+loadtest, and repository-management tasks have stable entry points.
+
+This README is the canonical catalog for the `scripts/` tree and for
+cross-cutting verifier entry points. The detailed OCI deployment operator
+surface under `../deploy/scripts/` is owned by
+[../deploy/README.md](../deploy/README.md); this file calls out only the deploy
+commands that are part of the normal release or verification boundary.
+
+## Layout
+
+```
+scripts/
+├── bootstrap/   # Host and cluster bootstrap helpers
+├── guardrails/  # CI-safe static security and manifest checks
+├── lib/         # Shared shell helpers and maintained inventories
+├── loadtest/    # Synthetic local fixture data helpers
+├── ops/         # Day-to-day local cluster operations
+├── repo/        # Cross-repository management helpers
+└── smoketest/   # Local live-cluster validation gates
+```
+
+## Canonical Entry Points
+
+- [Workspace host-isolation audit](../../workspace/docs/host-isolation-audit.md) - Workspace-owned entry point
+  for the human-only personal-host isolation audit, private evidence handling,
+  collector, protocol fixture and binary verifier. Orchestration does not keep
+  fallback copies of those tools.
+- `../setup.sh` - First bootstrap for the development VM's local Docker daemon
+  using imported host-created ingress TLS. Setup recreates Kind and is not a
+  daily-start command.
+- `bootstrap/check-agent-vm-prerequisites.sh` - Thin read-only application
+  preflight that invokes workspace's complete native verifier. Pass
+  `--native-runtime` to add orchestration's exact live loopback `kind-kind`
+  target for daily work.
+- `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
+  validator and strict local-`kind-kind` Secret installer; use
+  `--validate-only` for static file checks. Tilt uses its default install mode
+  to reconcile the existing files into the Secret in both local runtime modes.
+  The retired `--install-system-trust` interface fails with the canonical
+  workspace human command; this script never changes guest trust.
+- `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
+  Pass `--guest-local` in the development VM to delegate the complete native
+  boundary to workspace and retain orchestration repository, tool compatibility,
+  Ready loopback `kind-kind`, Tilt and runtime-security diagnostics.
+- `../tests/local-kubernetes-target/test-local-kubernetes-target.sh` - Tracked
+  fail-closed fixtures for wrong Kubernetes context/referenced cluster,
+  nonloopback, malformed or deceptive API authorities, kubeconfig proxy
+  redirection and missing control-plane node. Invalid authority/proxy fixtures
+  use command stubs and assert rejection before cluster access.
+- `../tests/native-preflight-wrapper/test-native-preflight-wrapper.sh` - Offline
+  wrapper fixtures proving exact workspace argument forwarding, bootstrap versus
+  daily Kind behavior, fail-closed setup ordering and Tilt delegation.
+- `../tests/imported-ingress-tls/test-install-imported-ingress-tls.sh` -
+  Offline command fixtures that reproduce the zero-exit `x509 -checkhost`
+  mismatch, require hostname-aware chain verification, accept the matching
+  hostname and prove wrong-host rejection precedes mutation.
+- `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
+  Tilt cluster.
+- `smoketest/verify-istio-ingress.sh` - Focused live Istio ingress/egress
+  verifier. In addition to gateway identity, mTLS, routing, rate limiting,
+  header sanitization, and egress controls, it inspects the rendered Envoy
+  `ext_authz` filter and proves unauthenticated JSON denials for `/api/*`,
+  `/auth/v1/user`, and `/auth/v1/session` through the real local HTTPS ingress.
+  It requires normal TLS verification and confirms the `/api/*` denial stops
+  before NGINX routing. Parent verifiers that already completed the focused
+  rate-limit proof may pass `--skip-ingress-rate-limits` to avoid repeating
+  its bounded bursts and refill waits.
+- `guardrails/verify-ingress-rate-limit-config.sh` - Offline, non-mutating
+  structural guardrail for the four per-client Istio ingress policies. It
+  renders the production overlay, requires the exact shared EnvoyFilter, checks
+  insertion before `ext_authz`, token buckets, markers, metrics prefixes,
+  bounded dynamic descriptors and the absence of a default bucket, requires
+  path normalization plus encoded-slash rejection before filter selection,
+  exercises path/query/method boundaries and equivalent authority spellings,
+  and renders both production gateway stages with disposable fixture values to
+  prove their narrow stats matchers are structurally equivalent to the local
+  ConfigMap. Its NGINX cutover scan fails closed for missing or unreadable
+  inputs and distinguishes a clean negative search from a search error;
+  `--self-test-nginx-search` proves the clean, forbidden-directive, and missing
+  input cases with disposable fixtures. The verifier defaults to managed-VM
+  `python3`, honors only `INGRESS_RATE_LIMIT_PYTHON` as its selected interpreter,
+  verifies the exact PyYAML version declared in
+  `guardrails/requirements-ingress-rate-limit.txt`, and reports the resolved
+  interpreter and module path. This static render and matcher proof complements
+  the live exhaustion, refill, and client-isolation proof in
+  `smoketest/verify-ingress-rate-limits.sh`; it does not replace that runtime
+  gate.
+- `smoketest/verify-ingress-rate-limits.sh` - Focused live proof for the final
+  ingress-only rate-limit architecture. It uses two controlled clients and a
+  real browser login to prove client/policy isolation, forged-header resistance,
+  authority-variant resistance, refill, callback completion, filter order,
+  policy markers and counters, unauthenticated API protection, `ext_authz`
+  short-circuiting, canonicalized double-slash limiting, encoded-slash ingress
+  rejection, deterministic per-instance replica semantics, NGINX forwarded
+  identity, and cleanup. Its replica proof retains direct child
+  port-forward PIDs and logs in the parent shell, removes them through the EXIT
+  trap on failure, and explicitly proves their processes, listeners, and logs
+  are gone on success. Public requests use normal TLS verification.
+- `smoketest/verify-observability-port-forward-access.sh` - Focused
+  loopback-only Grafana, Prometheus, Jaeger, and Kiali port-forward verifier.
+  It defaults to the canonical `3300`, `9090`, `16686`, and `20001` local
+  ports, starts any missing temporary forwards itself, reuses the expected
+  existing loopback `kubectl port-forward` listeners on those canonical ports,
+  and accepts flag overrides when some other intentional listener already
+  owns one of them. It verifies Grafana health,
+  Prometheus readiness, Jaeger query API access, Kiali UI shell access, and
+  that unauthenticated Grafana and Kiali API access is rejected. Use the same
+  loopback-only access model in local Tilt and production OCI/k3s for the
+  observability components installed there, and do not use `--address 0.0.0.0`
+  for observability access.
+- `ops/start-observability-port-forwards.sh` - Foreground supervisor for the
+  canonical loopback-only Grafana, Prometheus, Jaeger, and Kiali
+  `kubectl port-forward` processes. It starts all four forwards by default,
+  supports repeated `--component` selection plus per-component port overrides,
+  prints the local URLs plus the Grafana password and Kiali token commands,
+  and cleans up all child forwards on exit.
+- `ops/triage-kiali-findings.sh` - Authenticates to Kiali, snapshots the
+  current Kiali API findings plus recent Kiali warnings, compares them to live
+  Kubernetes namespace object counts, and classifies the obvious buckets such
+  as runtime-absent workloads, missing backend services, tracing dependency
+  gaps, and likely low-signal waypoint warnings. Use
+  `--runtime-shape production` on OCI so the helper expects the production
+  frontend topology (`nginx-gateway` serves the bundle; no standalone
+  `budget-analyzer-web` Deployment).
+- `ops/show-pod-version-labels.sh` - Lists pod deployment metadata for the
+  current Kubernetes context and warns when Budget Analyzer runtime pods do not
+  match a schema v2 deployment manifest or the checked-in production image
+  inventory. Use `--allow-mixed-deployment-id` for selective OCI rollouts where
+  unchanged pods are allowed to retain an earlier deployment id. Use `--strict`
+  when the warning check should fail the command.
+- `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
+  tunnel helper for production OCI/k3s observability access. It takes the OCI
+  host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
+  plus `~/.ssh/oci-budgetanalyzer`, opens loopback-only tunnels for the
+  canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
+  matching `ops/start-observability-port-forwards.sh` process to already be
+  running on the OCI host.
+- `ops/capture-prometheus-operator-baseline.sh` - Renders the upstream
+  Prometheus stack without the repo post-renderer, extracts the operator RBAC
+  objects, builds a representative `kubectl auth can-i` matrix for the
+  operator service account, and refreshes the checked-in RBAC baseline note
+  under `docs/research/`.
+- `ops/post-render-prometheus-stack.sh` - Helm post-renderer for the
+  Prometheus stack that replaces the upstream broad Prometheus Operator
+  ClusterRole/ClusterRoleBinding with the repo-owned least-privilege split:
+  one narrow cluster-read binding plus namespaced monitoring/default roles.
+- `smoketest/verify-istio-tracing-config.sh` - Focused live-cluster verifier
+  for the Jaeger OpenTelemetry extension provider and mesh-default Istio
+  Telemetry resource.
+- `smoketest/verify-monitoring-rendered-manifests.sh` - Renders the
+  Prometheus stack and Kiali chart, then checks image pinning, service exposure,
+  Kiali auth/RBAC posture, the exact approved Prometheus Operator
+  namespace-scope args and effective RBAC model, and server dry-run compliance
+  for rendered workload objects.
+- `smoketest/verify-prometheus-operator-least-privilege.sh` - Full live
+  verifier for the Prometheus Operator least-privilege posture. It reruns the
+  rendered-manifest proof, checks the live operator RBAC object set, enforces
+  the required positive and negative `kubectl auth can-i` matrix, reruns the
+  monitoring runtime proof, and captures Kiali triage artifacts under `tmp/`.
+- `guardrails/verify-static-security-manifests.sh` - Static manifest and
+  security guardrail gate used by CI and local preflight. Its ingress
+  rate-limit proof requires the exact PyYAML wheel declared in
+  `guardrails/requirements-ingress-rate-limit.txt`; create the disposable
+  `.cache/phase7-static-tools/pyyaml-venv` environment with the hash-verified
+  install documented in `docs/ci-cd.md#security-guardrailsyml`, then set
+  `INGRESS_RATE_LIMIT_PYTHON` to that environment's interpreter.
+- `guardrails/verify-production-image-overlay.sh` - Static verifier for the
+  full Oracle production baseline: app overlay, production
+  infrastructure overlay, production render output, and the production image
+  Kyverno policy. It is non-mutating, but it requires a live
+  `kubectl` context so the Kiali production render can use a Helm server-side
+  dry run and capture the full namespace-scoped RBAC footprint.
+- `../deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` - Normal
+  local OCI desired-state preparation entry point. It validates clean source
+  workspaces, compares current artifact source state with the production image
+  inventory, previews tag actions for changed artifacts, creates and pushes
+  missing source tags in `--push-tags` mode, then stops. After GitHub Actions
+  publishes the expected GHCR tags, `--resolve-images` reads changed-artifact
+  tags once, resolves digest-pinned refs, preserves unchanged artifact images,
+  updates the checked-in production desired state, and stops for review.
+- `../deploy/scripts/release/deploy-current-oci-manifest.sh` - Normal OCI-host apply
+  entry point. It applies the checked-in production manifest, waits only for
+  changed managed rollouts, and verifies live runtime metadata against that
+  manifest.
+- `../deploy/scripts/verify/oci-upgrade-lockstep.sh` - Non-mutating static
+  verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
+  OCI version contracts; production deployment manifest, image inventory, app
+  kustomization, runtime metadata patch, and release metadata agreement;
+  production `/api-docs` render wiring; and digest-pin inputs for production
+  infrastructure and Helm values.
+- `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
+  lockstep source release. It validates the sibling repository set, prints the
+  commit SHAs for the coordinated source state, verifies the
+  `service-common` version contract, checks remote tag availability, and can
+  prompt before delegating to `repo/tag-lockstep-release.sh`.
+- `repo/prepare-service-release.sh` - Release-manager preflight for one
+  runtime artifact. It validates only the selected artifact's source
+  repository, prints the source commit, expected image tag, workflow page, and
+  Java `serviceCommon` version when applicable, and can prompt before
+  delegating to `repo/tag-release.sh --repo <repo>`.
+- `repo/tag-release.sh` - Normal single-repository release tag helper. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  such as `checkstyle-config` for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
+  all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set. Use
+  `--repo-set runtime-images --current-state --plan-only` to preview which
+  runtime image repos need the requested tag based on the current local HEADs,
+  then rerun without `--plan-only` to tag only the missing repos and skip tags
+  already pointing at current HEAD.
+- `repo/generate-unified-api-docs.sh` - Regenerates the checked-in unified
+  OpenAPI artifacts used by `/api-docs`; its opt-in
+  `--session-gateway-only OUTPUT_YAML` mode writes one filtered Session Gateway
+  YAML snapshot without changing unified or frontend outputs.
+- `repo/compare-test-coverage.py` - Compares committed coverage on every
+  non-main core sibling repository with its local `origin/main` ref without
+  switching branches or changing a working tree.
+Choose scripts by runtime boundary:
+
+- `bootstrap/` changes or checks the host and cluster prerequisites.
+- `guardrails/` stays non-mutating; most scripts are CI-safe, while
+  `verify-production-image-overlay.sh` also expects a live `kubectl` context.
+- `smoketest/` assumes a live `kubectl` context and a running local stack.
+- `ops/` is for interactive local maintenance.
+- `loadtest/` manages synthetic local fixtures.
+- `repo/` coordinates cross-repo maintenance tasks.
+- `security/` prepares repeatable scanner inputs without applying resources or
+  contacting a Kubernetes API.
+
+## Bootstrap
+
+- `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
+  Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, `kyverno`, and `yq`
+  releases from checked-in upstream URLs after verifying each downloaded
+  artifact against its checked-in SHA-256 value.
+- `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
+  versions, the host-published public ingress CA, DNS, Docker/Kind
+  prerequisites, inotify budgets, pinned Gateway API and Calico state, and
+  optional runtime security state. It reports drift and install commands
+  without performing interactive cluster changes.
+- `bootstrap/check-agent-vm-prerequisites.sh` resolves the sibling workspace,
+  requires the managed worktree/bare-parent inputs and invokes workspace's
+  complete native runtime verifier for both guest bootstrap and daily work.
+  The optional `--native-runtime` mode then adds the exact Ready local Kind
+  target. VM identity, user/home, repository, credential, Docker, tool and
+  trust checks have no orchestration fallback implementation.
+- `bootstrap/install-imported-ingress-tls.sh` validates the three approved
+  host-created ingress files without invoking mkcert, including one
+  hostname-aware chain verification for `app.budgetanalyzer.localhost`.
+  Install mode applies the TLS Secret only after exact context,
+  referenced-cluster, strict loopback HTTPS authority, absent kubeconfig proxy
+  override, Kind-cluster and control-plane-node checks pass. The workspace
+  human installer is the only native guest OS/NSS trust writer. The
+  `ingress-tls-secret` Tilt resource reconciles only the existing files and
+  Secret; it never generates certificates or changes host/guest trust.
+- `bootstrap/setup-k8s-tls.sh` and
+  `bootstrap/renew-host-ingress-tls.sh` are human-operated personal-host
+  preparation paths. They create or retain the host mkcert CA, establish host
+  browser trust, create and validate a leaf/key, publish only the public root,
+  and never contact or recreate Kubernetes.
+- `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
+  used by `setup.sh` and Tilt. Tilt reruns the guest-local
+  `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
+  so namespace recreation cannot leave the infrastructure TLS secrets missing.
+- `bootstrap/reconcile-kind-inotify-budget.sh` raises low Kind node inotify
+  values used by Kubernetes log-follow streams. Tilt runs it as
+  `kind-node-inotify-budget` on every `tilt up` before workload resources
+  start.
+- `bootstrap/install-calico.sh` installs or reconciles pinned Calico CNI for
+  Kind clusters created with `disableDefaultCNI`. It also uses the inotify
+  reconciliation helper. A live `docker exec kind-control-plane sysctl ...`
+  recovery command is diagnostic only; use the helper or Tilt resource for the
+  durable local fix.
+- `bootstrap/setup-infra-tls.sh` is the guest-local internal infrastructure
+  certificate producer used by setup and its Tilt resource. It is separate
+  from browser trust; agents must not invoke certificate writers directly.
+  Browser-facing certificate preparation remains a personal-host human action;
+  it publishes the three ignored transfer files under `nginx/certs/k8s/` and
+  never requires a host Kind cluster. No CA private key is published.
+
+Use `../setup.sh` in the development VM only after it has the approved imported
+TLS files, workspace-owned guest trust and passing native prerequisites. Use
+`bootstrap/install-verified-tool.sh` for a single pinned binary, and use
+`bootstrap/check-tilt-prerequisites.sh` as a diagnostic before or after setup;
+its live security proof creates and cleans named disposable probe resources.
+For normal native guest startup, run
+`bootstrap/check-agent-vm-prerequisites.sh --native-runtime` and then
+`tilt up`; never rerun `setup.sh` as a daily start command.
+
+## Guardrails
+
+- `guardrails/check-image-pinning.sh` verifies the image-pinning
+  contract using `lib/image-pinning-targets.txt` and
+  `lib/allowed-latest-image-refs.txt`.
+- `guardrails/check-secrets-only-handling.sh` verifies the local Tilt-generated
+  secret payload inventory in `lib/secrets-only-expected-keys.txt`.
+- `guardrails/check-tilt-resource-roots.sh` evaluates the Tiltfile and verifies
+  that resources without `resource_deps` match
+  `lib/tilt-intentional-root-resources.txt`. It requires the standard
+  side-by-side workspace checkout because Tiltfile evaluation references
+  sibling service repositories. It also requires the ingress TLS resource to
+  use the non-generating installer and rejects any Tilt command that invokes
+  the host-only certificate generator. The startup graph must reconcile
+  Kyverno immediately after the Kind preflight and hold every Kubernetes
+  platform branch behind the `kyverno-ready` admission-readiness gate;
+  non-Kubernetes `service-common` publication may run in parallel.
+- `guardrails/verify-static-security-manifests.sh` runs kubeconform,
+  kube-linter, Kyverno fixtures, generated local Tilt-tag admission replay, a
+  rendered production Kyverno Helm check that rejects mutable controller/hook
+  image refs, image pinning, secrets-only checks, namespace PSA checks, and
+  active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
+  in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
+  internal-only storage/service contract pinned in static review. Its
+  kubeconform pass validates checked-in Kubernetes resource manifests, skips
+  Kustomize patch fragments under `patches/` directories and the schema-v2
+  production desired-state manifest as a standalone Kubernetes resource, and
+  validates the rendered production app and infrastructure overlays that
+  consume the Kubernetes inputs.
+- `guardrails/verify-production-image-overlay.sh` renders
+  `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
+  reviewed production route/ingress/monitoring/egress output, verifies
+  the digest-pinned GHCR image inventory, rejects local `:latest` /
+  `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
+  `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
+  Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, uses a live
+  Helm server-side dry run for the production Kiali render so namespace-scoped
+  RBAC is fully reviewed, verifies the Redis StatefulSet uses a `5Gi`
+  `redis-data` claim template, and applies the production image Kyverno policy
+  to the rendered app overlay.
+
+## Security evidence
+
+- `security/render-image-scan-inputs.sh` renders the production app and
+  infrastructure Kustomize overlays plus the selected Istio, External Secrets,
+  cert-manager, Kyverno, kube-prometheus-stack, and Kiali charts. It uses the
+  checked-in values and observability post-renderers, copies the standalone
+  Jaeger and Kind inputs, and extracts the Tilt Temurin and frontend smoke base
+  refs. The helper is offline with respect to Kubernetes: Helm repository and
+  container-registry network access are still required. The main-push,
+  weekly, and manual exact-image evidence workflow owns YAML extraction,
+  immutable platform resolution, Trivy scanning, summaries, and short-lived
+  artifacts. The workflow uploads its declared evidence paths as one seven-day
+  artifact; the shared evidence policy lives in
+  `../docs/dependency-automation.md`.
+
+Run the static OCI lockstep verifier before changing or deploying a production
+deployment baseline:
+
+```bash
+./deploy/scripts/verify/oci-upgrade-lockstep.sh
+```
+
+Use the live-cluster production verifier when a cluster is available:
+
+```bash
+./scripts/guardrails/verify-production-image-overlay.sh
+```
+
+CI should keep calling the fully static guardrail directly:
+
+```bash
+./scripts/guardrails/verify-static-security-manifests.sh
+./scripts/guardrails/verify-static-security-manifests.sh --self-test
+```
+
+## Smoketest
+
+`smoketest/smoketest.sh` is a thin dispatcher for live local validation. It runs:
+
+1. `guardrails/verify-static-security-manifests.sh`
+2. `smoketest/verify-security-prereqs.sh`
+3. `smoketest/verify-clean-tilt-deployment-admission.sh`
+4. `smoketest/verify-monitoring-rendered-manifests.sh`
+5. `smoketest/verify-istio-tracing-config.sh`
+6. `smoketest/verify-monitoring-runtime.sh`
+7. `smoketest/verify-observability-port-forward-access.sh`
+8. `smoketest/verify-session-architecture.sh`
+9. `smoketest/verify-security-guardrails.sh`
+
+Use targeted verifiers when debugging one capability, and the umbrella when
+proving the current cluster:
+
+```bash
+./scripts/smoketest/smoketest.sh
+./scripts/smoketest/verify-istio-tracing-config.sh
+./scripts/smoketest/verify-observability-port-forward-access.sh
+./scripts/smoketest/verify-edge-browser-hardening.sh
+./scripts/smoketest/verify-security-guardrails.sh
+```
+
+`smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for
+the current cluster. It keeps the existing Spring Boot dashboard-input checks
+and now also verifies the service-DNS-backed `istiod`, Grafana, Prometheus
+Operator, and kube-state-metrics scrapes plus the Kiali
+`monitoring/prometheus` health regression and the live Jaeger integration
+contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
+version-check failures in the current Kiali pod logs).
+`smoketest/verify-prometheus-operator-least-privilege.sh` is the focused
+least-privilege proof for the Prometheus Operator. It keeps a checked
+permission matrix under `tmp/prometheus-operator-least-privilege/`, requires
+the representative denials in `default`, `infrastructure`, and `istio-system`,
+and persists `triage-kiali-findings.sh --output-dir` artifacts under
+`tmp/kiali-triage/`. Its render-time dependency,
+`smoketest/verify-monitoring-rendered-manifests.sh`, fails fast on
+namespace-scope drift and RBAC broadening.
+
+All live verifiers execute against the current `kubectl` context. If a verifier
+reports missing pods, secrets, or policies while Tilt appears healthy, confirm
+the active context and Tilt resource state from the same host shell first.
+
+## Ops
+
+- `ops/render-istio-egress-config.sh` renders or applies the Auth0/FRED Istio
+  egress manifests from `.env`.
+- `ops/start-observability-port-forwards.sh` is the repo-owned convenience
+  entry point for persistent local Grafana, Prometheus, Jaeger, and Kiali
+  access. It keeps the forwards bound to `127.0.0.1` and tears them down on
+  `Ctrl+C`. The focused smoke verifier remains the clean-shell proof path and
+  coexists with that helper by reusing the expected canonical listeners
+  when they are already running. Use explicit `--grafana-port`,
+  `--prometheus-port`, `--jaeger-port`, and `--kiali-port` overrides only
+  when some other intentional listener already owns one of those ports. If the
+  helper reports a conflicting `code` listener on a canonical observability
+  port, that is host-side VS Code port forwarding, not a repo-owned Tilt
+  forward.
+- `ops/triage-kiali-findings.sh` is the first-pass Kiali investigation helper.
+  It reuses an existing loopback Kiali listener when one is already up, starts
+  a temporary loopback-only Kiali port-forward when needed, authenticates with
+  a short-lived `kubectl create token kiali` token, and prints a human-readable
+  triage summary. It also compares the current Kiali findings against the
+  expected app deployments in `default`, so it can say explicitly when cluster
+  startup is the blocker and Kiali is just reporting missing runtime. Local
+  Tilt defaults to the seven-workload topology; OCI production should use
+  `--runtime-shape production` so the helper expects the six-workload topology
+  where `nginx-gateway` serves the frontend bundle.
+  It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
+  for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
+  when you want the raw JSON and log artifacts for later review.
+- `ops/show-pod-version-labels.sh` prints all pods by default and marks
+  Budget Analyzer runtime pods with `WARN` when deployment id, artifact
+  version, source ref, source commit, service-common version, or image
+  annotation differs from the expected schema v2 manifest/inventory metadata.
+  Use `--deployment-manifest <path>` for an explicit reviewed manifest,
+  `--tracked-only` to hide third-party and infrastructure pods, and `--strict`
+  to return non-zero on warnings. Use `--allow-mixed-deployment-id` when a
+  selective OCI rollout should accept already-current pods from an earlier
+  deployment id.
+- `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
+  for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
+  host, then from the workstation run
+  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` or set
+  `OCI_INSTANCE_IP` and run `./scripts/ops/start-observability-ssh-tunnels.sh`.
+  The helper keeps one SSH session open with local loopback tunnels for
+  `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
+  endpoints are not reachable.
+- `ops/capture-prometheus-operator-baseline.sh` is the repo-owned upstream
+  comparison capture for the Prometheus Operator. It refreshes the chart
+  render without the repo post-renderer, records the rendered operator RBAC
+  plus a representative `kubectl auth can-i` matrix for
+  `system:serviceaccount:monitoring:prometheus-stack-kube-prom-operator`, and
+  rewrites `docs/research/prometheus-operator-rbac-baseline.md`. Run
+  `smoketest/verify-monitoring-runtime.sh` separately after Tilt is up when
+  you want the live runtime proof.
+- `ops/post-render-prometheus-stack.sh` is the repo-owned RBAC reduction layer
+  for `kube-prometheus-stack`. Local Tilt and production Helm installs both run
+  through it so the Prometheus Operator loses cluster-wide `secrets`,
+  `configmaps`, service mutation, and pod-delete authority outside
+  `monitoring` while retaining the documented cluster-read exceptions for
+  `namespaces`, `nodes`, `ingresses`, and `storageclasses`.
+- `deploy/scripts/verify/network-policy-enforcement.sh` can run before
+  production Auth0 config exists, but in that pre-Auth0 state the two positive
+  `istio-egress-gateway:443` checks are deferred until the real egress routing
+  is rendered and applied later in the production plan.
+- `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
+  runner under `tmp/grafana-ui-debug/`, expects an already-running Grafana
+  port-forward at `http://127.0.0.1:3300` by default, logs into that
+  port-forwarded Grafana URL, opens the provisioned dashboards, and captures
+  browser-side debugging artifacts without committing Node dependency files.
+- `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
+  the TLS-only in-cluster listener.
+- `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.
+- `ops/reset-databases.sh` resets local PostgreSQL databases.
+
+## Loadtest Fixtures
+
+Track 1 loadtest support is synthetic fixture data only. It creates local users,
+sessions, and transactions for workflows like user deactivation and session
+revocation without driving traffic.
+
+```bash
+./scripts/loadtest/seed-loadtest-users.sh --count 500 --admin-count 20 --session-ttl 86400
+./scripts/loadtest/seed-loadtest-transactions.sh --per-user 200 --shape heavy-tail
+
+# Later, when finished with the fixture set
+./scripts/loadtest/teardown-loadtest.sh
+```
+
+`seed-loadtest-users.sh` writes `.loadtest/session-pool.txt`, which is
+gitignored and reserved for future traffic-replay tooling. The shared
+`lib/loadtest-common.sh` helper resolves that pool path from the orchestration
+repo root, so callers can run the loadtest scripts from any current working
+directory without writing outside the repository.
+
+## Repo Management
+
+- `repo/compare-test-coverage.py` discovers core sibling repositories that are
+  currently on a branch other than `main` or `master`, requires their working
+  trees to be clean, and builds temporary exports of `origin/main` and `HEAD`.
+  It runs the repository-native JaCoCo, Vitest, or Go coverage command and
+  prints line/statement and branch coverage comparisons. The script uses the
+  existing local `origin/main` refs and never fetches or changes Git state.
+  Run it without arguments:
+
+  ```bash
+  ./scripts/repo/compare-test-coverage.py
+  ```
+
+- `repo/validate-repos.sh` validates the sibling repository layout and branch
+  state without changing branches or pulling.
+- `repo/prepare-lockstep-release.sh` is the release-manager source preflight
+  for lockstep releases. Run it with `--release-version X.Y.Z` after
+  `service-common` and Java consumers are pinned to the released
+  `serviceCommon` version. It checks that configured sibling repos are on clean
+  up-to-date `main`, verifies the requested remote tag is absent everywhere
+  except the documented `service-common` skip case, prints the commit SHA map,
+  and prints the GitHub Actions workflow pages to monitor. Pass `--tag` only
+  when you want it to prompt before calling `repo/tag-lockstep-release.sh`.
+  Pass `--tag-current-state` when the current local HEADs are the intended
+  deployable state and the tagger should decide which repos still need the
+  requested tag.
+- `repo/tag-release.sh` creates a normal single-repository release tag. It
+  requires `--repo`, validates only that repository, and refuses tooling repos
+  for OCI runtime release tagging.
+- `repo/tag-lockstep-release.sh` creates coordinated lockstep tags across the
+  explicit `LOCKSTEP_RELEASE_REPOS` set by default. `--repo-set runtime-images`
+  narrows the operation to the deployable image source repos, while
+  `--repo-set oci-release` uses the source repo set recorded in OCI release
+  manifests. In the default strict mode, any existing non-`service-common` tag
+  is a hard failure. With `--current-state`, the helper compares the requested
+  tag to each selected repo's current local HEAD, creates and pushes only
+  absent tags, pushes local-only tags that already point at current HEAD, skips
+  tags already present at current HEAD, and fails if an existing tag points
+  somewhere else. Use `--current-state --plan-only` for a non-mutating preview.
+- `repo/release-service-common-snapshot.sh` coordinates the tag-driven
+  `service-common` snapshot-to-release flow. Run `prepare` while
+  `service-common` and all Java consumers are pinned to the same
+  `MAJOR.MINOR.PATCH-SNAPSHOT`; it reads that version from
+  `../service-common/build.gradle.kts`, verifies the Java consumers match
+  exactly, strips `-SNAPSHOT` in
+  `../service-common/build.gradle.kts` and runs the required Gradle validation.
+  After that release-prep change is merged to `service-common` main, run
+  `tag --push` to fast-forward main, assert local `main` matches `origin/main`,
+  and push the derived `vMAJOR.MINOR.PATCH` from `service-common` only. The
+  explicit `--push` flag is required for the release-triggering network write.
+  This phase intentionally does not call `repo/tag-release.sh`, because the
+  Java consumer repos also publish on tag pushes and still point at the
+  snapshot dependency until `post` has run and those changes have been merged.
+  Once `publish-release.yml` has completed for the service-common tag, run
+  `post` to pin Java consumers to the released version. `post` leaves
+  `service-common` on the released version; bump it back to the next snapshot
+  manually when ready.
+- `repo/update-service-common-version.sh` bumps the checked-in
+  `service-common` version literal in `../service-common/build.gradle.kts` and
+  the matching `serviceCommon` catalog entry in each Java consumer repo
+  (`transaction-service`, `currency-service`, `permission-service`, and
+  `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
+  edits or before release tagging.
+- `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` is the normal
+  local desired-state preparation entry point for OCI app changes; use
+  `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
+  steps. Add `--lockstep` only when every managed artifact should move to the
+  requested tag instead of preserving unchanged artifacts.
+- `deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host apply
+  entry point for the checked-in production manifest and waits only for changed
+  managed rollouts.
+- `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
+  writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
+  copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`
+  when that sibling repo is present. Pass
+  `--session-gateway-only OUTPUT_YAML` to fetch only Session Gateway, apply the
+  same `/internal/*` path filter, and write exactly that YAML path without
+  writing unified or sibling-repository files.
+
+The repo-management scripts source `repo/repo-config.sh`, which derives the
+orchestration root from `scripts/repo/` and then resolves sibling repos from
+the common parent directory.
+
+## Shared Lib
+
+Shared shell helpers and inventories live in `lib/`. Scripts should source them
+with a path relative to their own directory, for example:
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
+```
+
+## Adding Scripts
+
+When adding a script, place it in the purpose-specific directory, include a
+usage comment or `--help`, make it executable, and update this README in the
+same change.

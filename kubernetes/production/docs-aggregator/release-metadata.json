@@ -2,7 +2,9 @@
   "schemaVersion": 2,
   "deployment": {
     "id": "oci-20260524T050351Z",
-    "environment": "oci-production",
+    "environment": "retired-oci-reference",
+    "referenceOnly": true,
+    "historicalEnvironment": "oci-production",
     "orchestrationRepository": {
       "commit": "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f",
       "sourceRef": "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"

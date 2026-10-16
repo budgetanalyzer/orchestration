@@ -1,0 +1,178 @@
+# ============================================================================
+# Production Authorization Policies for service-to-service traffic
+# ============================================================================
+#
+# Keep the shared workload policies in this file aligned with
+# kubernetes/istio/authorization-policies.yaml.
+#
+# OCI production intentionally omits budget-analyzer-web-policy because the
+# frontend bundle is served from nginx-gateway there instead of a standalone
+# budget-analyzer-web Deployment.
+# ============================================================================
+
+# Backend services: only accept traffic from nginx-gateway
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: transaction-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: transaction-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: currency-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: currency-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+---
+# permission-service: accepts from nginx-gateway and session-gateway
+# (session-gateway calls permission-service during session creation and heartbeat refresh)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: permission-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: permission-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/default/sa/nginx-gateway"
+              - "cluster.local/ns/default/sa/session-gateway"
+---
+# Prometheus: allow the meshed Prometheus pod in monitoring to scrape
+# Envoy sidecar metrics from default-namespace workloads.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: spring-boot-metrics-prometheus-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus"
+      to:
+        - operation:
+            methods: ["GET"]
+            ports: ["8081"]
+            paths: ["/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8082"]
+            paths: ["/transaction-service/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8084"]
+            paths: ["/currency-service/actuator/prometheus"]
+        - operation:
+            methods: ["GET"]
+            ports: ["8086"]
+            paths: ["/permission-service/actuator/prometheus"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: envoy-metrics-prometheus-policy
+  namespace: default
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus"
+      to:
+        - operation:
+            ports: ["15090"]
+---
+# ============================================================================
+# Ingress-facing services: accept from Istio ingress gateway only
+# ============================================================================
+# The Istio ingress gateway runs in istio-ingress namespace as
+# ServiceAccount istio-ingress-gateway-istio, giving it the SPIFFE identity
+# below. These policies close the security seam that existed when Envoy
+# Gateway was outside the mesh.
+# ============================================================================
+
+# nginx-gateway: accepts from istio ingress gateway only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: nginx-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+---
+# ext-authz: accepts from istio ingress gateway only
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ext-authz-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ext-authz
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+---
+# session-gateway: accepts from istio ingress gateway, plus the narrow
+# permission-service revocation path used for bulk session invalidation
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: session-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: session-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/permission-service"]
+      to:
+        - operation:
+            ports: ["8081"]
+            methods: ["DELETE"]
+            paths: ["/internal/v1/sessions/users/{*}"]

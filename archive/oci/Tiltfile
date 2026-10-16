@@ -1,0 +1,1391 @@
+# ============================================================================
+# Budget Analyzer - Tiltfile
+# Complete local development environment with live reload
+# ============================================================================
+
+# Load extensions
+load('ext://restart_process', 'docker_build_with_restart')
+load('ext://uibutton', 'cmd_button', 'location')
+load('ext://configmap', 'configmap_create')
+load('ext://dotenv', 'dotenv')
+
+# Load environment variables from .env file
+# Copy .env.example to .env and fill in your values
+dotenv()
+
+# Load common configuration
+load('./tilt/common.star',
+     'WORKSPACE',
+     'DEFAULT_NAMESPACE',
+     'INFRA_NAMESPACE',
+     'SERVICE_PORTS',
+     'DEBUG_PORTS',
+     'get_repo_path')
+
+# ============================================================================
+# GLOBAL SETTINGS
+# ============================================================================
+
+# Restrict to our Kind cluster for safety
+allow_k8s_contexts('kind-kind')
+
+# Performance tuning
+update_settings(
+    max_parallel_updates=5,
+    k8s_upsert_timeout_secs=120,
+)
+
+# Docker image pruning
+docker_prune_settings(
+    max_age_mins=360,
+    num_builds=10,
+    keep_recent=3,
+)
+
+# ============================================================================
+# INFRASTRUCTURE SERVICES (Shared Kubernetes Baseline)
+# ============================================================================
+
+local_resource(
+    'kind-node-inotify-budget',
+    cmd='./scripts/bootstrap/reconcile-kind-inotify-budget.sh',
+    deps=['scripts/bootstrap/reconcile-kind-inotify-budget.sh'],
+    labels=['infrastructure'],
+)
+
+# Reconcile Kyverno before any other Kubernetes resources. On a resumed Kind
+# node, the retained fail-closed webhooks exclude the kyverno namespace, so the
+# controller can recover without admitting its own workloads. All Kubernetes
+# platform branches wait for admission readiness below.
+local_resource(
+    'kyverno',
+    cmd='''
+        helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update >/dev/null 2>&1
+        helm repo update kyverno >/dev/null
+        # renovate: datasource=helm depName=kyverno registryUrl=https://kyverno.github.io/kyverno/
+        helm upgrade --install kyverno kyverno/kyverno \
+            --namespace kyverno \
+            --create-namespace \
+            --version 3.8.0 \
+            --set admissionController.replicas=1 \
+            --set backgroundController.replicas=1 \
+            --set cleanupController.replicas=1 \
+            --set reportsController.replicas=1 \
+            --wait
+    ''',
+    resource_deps=['kind-node-inotify-budget'],
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'kyverno-ready',
+    cmd='''
+        kubectl wait --for=condition=Available deployment/kyverno-admission-controller -n kyverno --timeout=5m
+    ''',
+    resource_deps=['kyverno'],
+    labels=['infrastructure'],
+)
+
+# PostgreSQL, Redis, RabbitMQ, and generated Redis ACL bootstrap ConfigMap
+k8s_yaml(kustomize('kubernetes/infrastructure'))
+
+k8s_resource(
+    objects=['infrastructure:namespace'],
+    new_name='infrastructure-namespace',
+    labels=['infrastructure'],
+    resource_deps=['kyverno-ready'],
+)
+
+local_resource(
+    'infra-tls-prerequisites',
+    cmd='./scripts/bootstrap/setup-infra-tls.sh && ./scripts/bootstrap/check-infra-tls-secrets.sh',
+    resource_deps=['infrastructure-namespace'],
+    labels=['infrastructure'],
+)
+
+k8s_resource(
+    'postgresql',
+    objects=[
+        'postgresql-init:configmap',
+        'postgresql-bootstrap-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(5432, 5432, name='PostgreSQL'),
+    ],
+    labels=['infrastructure', 'database'],
+    resource_deps=['infra-tls-prerequisites'],
+)
+
+k8s_resource(
+    'redis',
+    objects=[
+        'redis-acl-bootstrap:configmap',
+        'redis-bootstrap-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(6379, 6379, name='Redis'),
+    ],
+    labels=['infrastructure', 'cache'],
+    resource_deps=['infra-tls-prerequisites'],
+)
+
+k8s_resource(
+    'rabbitmq',
+    objects=[
+        'rabbitmq-config:configmap',
+        'rabbitmq-bootstrap-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(5671, 5671, name='AMQPS'),
+        port_forward(15672, 15672, name='Management UI'),
+    ],
+    labels=['infrastructure'],
+    resource_deps=['infra-tls-prerequisites'],
+)
+
+# ============================================================================
+# SECRETS AND CONFIG
+# ============================================================================
+
+# Helper function to encode values to base64
+def shell_single_quote(value):
+    """Quote a string for safe single-quoted shell usage."""
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def encode_secret_data(data):
+    """Encode dictionary values to base64 for Kubernetes secrets."""
+    encoded = {}
+    for k, v in data.items():
+        encoded[k] = str(local("printf %s " + shell_single_quote(v) + " | base64 | tr -d '\\n'", quiet=True)).strip()
+    return encoded
+
+def json_escape(value):
+    """Escape a string for safe JSON interpolation."""
+    escaped = value.replace('\\', '\\\\')
+    escaped = escaped.replace('"', '\\"')
+    escaped = escaped.replace('\b', '\\b')
+    escaped = escaped.replace('\f', '\\f')
+    escaped = escaped.replace('\n', '\\n')
+    escaped = escaped.replace('\r', '\\r')
+    escaped = escaped.replace('\t', '\\t')
+    return escaped
+
+def json_string(value):
+    """Render a JSON string literal."""
+    return '"' + json_escape(value) + '"'
+
+def build_rabbitmq_definitions(admin_user, admin_password, service_user, service_password, vhost):
+    """Build RabbitMQ definitions JSON for local boot-time import."""
+    return """{
+  "users": [
+    {
+      "name": %s,
+      "password": %s,
+      "tags": ["administrator"]
+    },
+    {
+      "name": %s,
+      "password": %s,
+      "tags": []
+    }
+  ],
+  "vhosts": [
+    {
+      "name": %s
+    }
+  ],
+  "permissions": [
+    {
+      "user": %s,
+      "vhost": %s,
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": %s,
+      "vhost": %s,
+      "configure": "^(amq\\\\.gen.*|exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$",
+      "write": "^(amq\\\\.default|exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$",
+      "read": "^(exchange-rate\\\\.import\\\\.requested|exchange-rate\\\\.import\\\\.requested\\\\.exchange-rate-import-service(\\\\.dlq)?|DLX)$"
+    }
+  ]
+}""" % (
+        json_string(admin_user),
+        json_string(admin_password),
+        json_string(service_user),
+        json_string(service_password),
+        json_string(vhost),
+        json_string(admin_user),
+        json_string(vhost),
+        json_string(service_user),
+        json_string(vhost),
+    )
+
+def secret_blob(name, namespace, data):
+    """Render a Kubernetes Secret as a blob."""
+    encoded = encode_secret_data(data)
+    lines = [
+        'apiVersion: v1',
+        'kind: Secret',
+        'metadata:',
+        '  name: ' + name,
+        '  namespace: ' + namespace,
+        'type: Opaque',
+        'data:',
+    ]
+    for key in encoded:
+        lines.append('  ' + key + ': ' + encoded[key])
+    return blob('\n'.join(lines) + '\n')
+
+def create_secret(name, namespace, data):
+    """Apply a Kubernetes Secret generated by Tilt."""
+    k8s_yaml(secret_blob(name, namespace, data))
+
+def configmap_blob(name, namespace, data):
+    """Render a Kubernetes ConfigMap as a blob."""
+    lines = [
+        'apiVersion: v1',
+        'kind: ConfigMap',
+        'metadata:',
+        '  name: ' + name,
+        '  namespace: ' + namespace,
+        'data:',
+    ]
+    for key, value in data.items():
+        lines.append('  ' + key + ': ' + json_string(str(value)))
+    return blob('\n'.join(lines) + '\n')
+
+def create_configmap(name, namespace, data):
+    """Apply a Kubernetes ConfigMap generated by Tilt."""
+    k8s_yaml(configmap_blob(name, namespace, data))
+
+LOCAL_API_DOCS_RELEASE_METADATA = '.tilt/api-docs/release-metadata.json'
+
+local("""
+set -eu
+mkdir -p .tilt/api-docs
+python3 - <<'PY'
+import json
+import subprocess
+from pathlib import Path
+
+root = Path.cwd()
+parent = root.parent
+source_path = root / "kubernetes/production/docs-aggregator/release-metadata.json"
+output_path = root / ".tilt/api-docs/release-metadata.json"
+
+
+def git(repo, *args):
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def local_source_state(artifact):
+    source_repo = artifact.get("sourceRepository", "")
+    repo = parent / source_repo
+    manifest_ref = artifact.get("sourceRef", "")
+    manifest_commit = artifact.get("sourceCommit", "")
+    manifest_tag = manifest_ref.removeprefix("refs/tags/")
+
+    if not repo.is_dir():
+        return {
+            "status": "missing-repo",
+            "label": "missing repo",
+            "dirty": False,
+            "manifestTag": manifest_tag,
+            "matchesManifestTag": False,
+        }
+
+    head_commit = git(repo, "rev-parse", "HEAD")
+    dirty = bool(git(repo, "status", "--porcelain", "--untracked-files=normal"))
+    head_tags = git(repo, "tag", "--points-at", "HEAD").splitlines()
+    head_tag = head_tags[0] if head_tags else ""
+    manifest_tag_commit = ""
+
+    if manifest_tag:
+        manifest_tag_commit = git(repo, "rev-parse", "--verify", f"refs/tags/{manifest_tag}^{{}}")
+
+    matches_manifest_tag = bool(
+        head_commit
+        and manifest_tag_commit
+        and head_commit == manifest_tag_commit
+        and (not manifest_commit or head_commit == manifest_commit)
+    )
+
+    if dirty and matches_manifest_tag:
+        status = "modified"
+        label = "modified from manifest tag"
+    elif dirty:
+        status = "modified"
+        label = "modified local head"
+    elif matches_manifest_tag:
+        status = "matches-manifest-tag"
+        label = "matches manifest tag"
+    elif head_commit and manifest_commit and head_commit == manifest_commit:
+        status = "matches-manifest-commit"
+        label = "matches manifest commit"
+    elif head_tag:
+        status = "different-tag"
+        label = f"different tag {head_tag}"
+    elif head_commit:
+        status = "untagged"
+        label = "untagged local head"
+    else:
+        status = "unknown"
+        label = "unknown"
+
+    return {
+        "status": status,
+        "label": label,
+        "dirty": dirty,
+        "headCommit": head_commit,
+        "headTag": head_tag,
+        "manifestTag": manifest_tag,
+        "matchesManifestTag": matches_manifest_tag,
+    }
+
+
+with source_path.open(encoding="utf-8") as source:
+    metadata = json.load(source)
+
+deployment = metadata.setdefault("deployment", {})
+deployment["productionBaselineId"] = deployment.get("id", "")
+deployment["id"] = "tilt-local-development"
+deployment["environment"] = "local-development"
+deployment["runtime"] = "tilt"
+
+for artifact in metadata.get("artifacts", {}).values():
+    artifact["localSource"] = local_source_state(artifact)
+
+rendered = json.dumps(metadata, indent=2) + "\\n"
+if not output_path.exists() or output_path.read_text(encoding="utf-8") != rendered:
+    output_path.write_text(rendered, encoding="utf-8")
+PY
+""", quiet=True)
+
+postgresql_host = 'postgresql.' + INFRA_NAMESPACE
+rabbitmq_host = 'rabbitmq.' + INFRA_NAMESPACE
+redis_host = 'redis.' + INFRA_NAMESPACE
+
+# PostgreSQL Step 2: keep the bootstrap/admin path separate from the
+# service-owned database identities.
+postgresql_bootstrap_password = os.getenv('POSTGRES_BOOTSTRAP_PASSWORD', 'budget-analyzer-postgres-admin')
+transaction_service_pg_password = os.getenv('POSTGRES_TRANSACTION_SERVICE_PASSWORD', 'budget-analyzer-transaction-service')
+currency_service_pg_password = os.getenv('POSTGRES_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service')
+permission_service_pg_password = os.getenv('POSTGRES_PERMISSION_SERVICE_PASSWORD', 'budget-analyzer-permission-service')
+transaction_preview_import_token_encryption_secret = os.getenv(
+    'PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET',
+    'budget-analyzer-transaction-preview-import-token-encryption-secret',
+)
+
+create_secret('postgresql-bootstrap-credentials', INFRA_NAMESPACE, {
+    'password': postgresql_bootstrap_password,
+    'transaction-service-password': transaction_service_pg_password,
+    'currency-service-password': currency_service_pg_password,
+    'permission-service-password': permission_service_pg_password,
+})
+
+create_secret('transaction-service-postgresql-credentials', DEFAULT_NAMESPACE, {
+    'password': transaction_service_pg_password,
+})
+
+create_secret('transaction-service-preview-import-token-credentials', DEFAULT_NAMESPACE, {
+    'encryption-secret': transaction_preview_import_token_encryption_secret,
+})
+
+create_secret('currency-service-postgresql-credentials', DEFAULT_NAMESPACE, {
+    'password': currency_service_pg_password,
+})
+
+create_secret('permission-service-postgresql-credentials', DEFAULT_NAMESPACE, {
+    'password': permission_service_pg_password,
+})
+
+rabbitmq_admin_username = 'rabbitmq-admin'
+rabbitmq_admin_password = os.getenv('RABBITMQ_BOOTSTRAP_PASSWORD', 'budget-analyzer-rabbitmq-admin')
+rabbitmq_currency_service_username = 'currency-service'
+rabbitmq_currency_service_password = os.getenv('RABBITMQ_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service-rabbitmq')
+rabbitmq_virtual_host = '/'
+rabbitmq_definitions = build_rabbitmq_definitions(
+    rabbitmq_admin_username,
+    rabbitmq_admin_password,
+    rabbitmq_currency_service_username,
+    rabbitmq_currency_service_password,
+    rabbitmq_virtual_host,
+)
+
+create_secret('rabbitmq-bootstrap-credentials', INFRA_NAMESPACE, {
+    'password': rabbitmq_admin_password,
+    'definitions.json': rabbitmq_definitions,
+})
+
+create_secret('currency-service-rabbitmq-credentials', DEFAULT_NAMESPACE, {
+    'password': rabbitmq_currency_service_password,
+})
+
+redis_default_password = os.getenv('REDIS_DEFAULT_PASSWORD', 'budget-analyzer-redis-default')
+redis_ops_password = os.getenv('REDIS_OPS_PASSWORD', 'budget-analyzer-redis-ops')
+redis_session_gateway_password = os.getenv('REDIS_SESSION_GATEWAY_PASSWORD', 'budget-analyzer-session-gateway-redis')
+redis_ext_authz_password = os.getenv('REDIS_EXT_AUTHZ_PASSWORD', 'budget-analyzer-ext-authz-redis')
+redis_currency_service_password = os.getenv('REDIS_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service-redis')
+
+create_secret('redis-bootstrap-credentials', INFRA_NAMESPACE, {
+    'default-password': redis_default_password,
+    'ops-password': redis_ops_password,
+    'session-gateway-password': redis_session_gateway_password,
+    'ext-authz-password': redis_ext_authz_password,
+    'currency-service-password': redis_currency_service_password,
+})
+
+create_secret('session-gateway-redis-credentials', DEFAULT_NAMESPACE, {
+    'password': redis_session_gateway_password,
+})
+
+create_secret('ext-authz-redis-credentials', DEFAULT_NAMESPACE, {
+    'password': redis_ext_authz_password,
+})
+
+create_secret('currency-service-redis-credentials', DEFAULT_NAMESPACE, {
+    'password': redis_currency_service_password,
+})
+
+# Session Gateway IDP config: non-secret tenant settings stay on the config path
+# even when local Tilt sources them from .env.
+create_configmap('session-gateway-idp-config', DEFAULT_NAMESPACE, {
+    'AUTH0_CLIENT_ID': os.getenv('AUTH0_CLIENT_ID', ''),
+    'AUTH0_ISSUER_URI': os.getenv('AUTH0_ISSUER_URI', ''),
+    'IDP_AUDIENCE': os.getenv('IDP_AUDIENCE', 'https://api.budgetanalyzer.org'),
+    'IDP_LOGOUT_RETURN_TO': os.getenv('IDP_LOGOUT_RETURN_TO', 'https://app.budgetanalyzer.localhost/peace'),
+})
+
+# Session Gateway config: override checked-in configmap so local dev
+# gets Springdoc/Swagger UI enabled.
+create_configmap('session-gateway-config', DEFAULT_NAMESPACE, {
+    'SESSION_TTL_SECONDS': '900',
+    'SPRINGDOC_ENABLED': 'true',
+})
+
+create_secret('auth0-credentials', DEFAULT_NAMESPACE, {
+    'AUTH0_CLIENT_SECRET': os.getenv('AUTH0_CLIENT_SECRET', ''),
+})
+
+# FRED API credentials for Currency Service
+create_secret('fred-api-credentials', DEFAULT_NAMESPACE, {
+    'api-key': os.getenv('FRED_API_KEY', ''),
+})
+
+def spring_gradle_deps(repo_path):
+    """Tracked Gradle inputs that can affect dependency resolution or build output."""
+    return [
+        repo_path + '/src',
+        repo_path + '/build.gradle.kts',
+        repo_path + '/settings.gradle.kts',
+        repo_path + '/gradle/libs.versions.toml',
+        repo_path + '/gradle/wrapper/gradle-wrapper.properties',
+    ]
+
+def service_common_publish_deps(repo_path):
+    """Tracked service-common inputs that can affect published Maven Local artifacts."""
+    return [
+        repo_path + '/build.gradle.kts',
+        repo_path + '/settings.gradle.kts',
+        repo_path + '/gradle/libs.versions.toml',
+        repo_path + '/gradle/wrapper/gradle-wrapper.properties',
+        repo_path + '/service-core/src',
+        repo_path + '/service-core/build.gradle.kts',
+        repo_path + '/service-web/src',
+        repo_path + '/service-web/build.gradle.kts',
+        repo_path + '/spring-platform/build.gradle.kts',
+        repo_path + '/spring-cloud-platform/build.gradle.kts',
+    ]
+
+def spring_boot_dockerfile(port):
+    """Inline dev Dockerfile that selects the executable Spring Boot Jar."""
+    return '''
+# renovate: datasource=docker depName=eclipse-temurin
+FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
+WORKDIR /app
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+COPY build/libs/*.jar /tmp/libs/
+RUN set -eu; \\
+    jar="$(find /tmp/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' | sort | head -n 1)"; \\
+    test -n "$jar"; \\
+    cp "$jar" /app/app.jar; \\
+    rm -rf /tmp/libs; \\
+    chown -R appuser:appgroup /app
+USER appuser
+EXPOSE ''' + str(port) + '''
+'''
+
+def spring_boot_live_update(repo_path):
+    """Live update the executable Jar after Gradle rebuilds it locally."""
+    return [
+        sync(repo_path + '/build/libs', '/tmp/libs'),
+        run(
+            'set -eu; jar="$(find /tmp/libs -maxdepth 1 -type f -name \'*.jar\' ! -name \'*-plain.jar\' | sort | head -n 1)"; test -n "$jar"; cp "$jar" /app/app.jar',
+            trigger=[repo_path + '/build/libs'],
+        ),
+    ]
+
+# ============================================================================
+# SERVICE-COMMON SHARED LIBRARY
+# ============================================================================
+
+# Publish service-common to Maven Local when it changes
+# All backend services depend on this
+local_resource(
+    'service-common-publish',
+    cmd='cd ' + get_repo_path('service-common') + ' && ./gradlew publishToMavenLocal --parallel --build-cache && ' +
+        'tilt trigger transaction-service-compile && ' +
+        'tilt trigger currency-service-compile && ' +
+        'tilt trigger permission-service-compile && ' +
+        'tilt trigger session-gateway-compile',
+    deps=service_common_publish_deps(get_repo_path('service-common')),
+    resource_deps=['kind-node-inotify-budget'],
+    labels=['compile'],
+    allow_parallel=True,
+    auto_init=True
+)
+
+# ============================================================================
+# SPRING BOOT SERVICE BUILD PATTERN
+# ============================================================================
+
+def spring_boot_service(name, deps=[]):
+    """
+    Build pattern for Spring Boot services with live reload.
+
+    Args:
+        name: Service name (must match repository name)
+        deps: Additional resource dependencies
+    """
+    repo_path = get_repo_path(name)
+    port = SERVICE_PORTS[name]
+    debug_port = DEBUG_PORTS.get(name)
+
+    # Step 1: Local Gradle compilation
+    local_resource(
+        name + '-compile',
+        cmd='cd ' + repo_path + ' && ./gradlew bootJar --parallel --build-cache -x test',
+        deps=spring_gradle_deps(repo_path),
+        resource_deps=['service-common-publish'],
+        labels=['compile'],
+        allow_parallel=True,
+        auto_init=True
+    )
+
+    # Step 2: Docker build with restart capability
+    # Use inline dev Dockerfile that copies pre-built JAR (avoids Maven dependency issues)
+    docker_build_with_restart(
+        name,
+        context=repo_path,
+        dockerfile_contents=spring_boot_dockerfile(port),
+        entrypoint=[
+            'java',
+            '-jar',
+            '/app/app.jar'
+        ],
+        live_update=spring_boot_live_update(repo_path)
+    )
+
+    # Step 3: Load Kubernetes manifests
+    service_manifests = [
+        'kubernetes/services/' + name + '/serviceaccount.yaml',
+        'kubernetes/services/' + name + '/deployment.yaml',
+        'kubernetes/services/' + name + '/service.yaml',
+    ]
+    optional_configmap = 'kubernetes/services/' + name + '/configmap.yaml'
+    resource_objects = [
+        name + ':serviceaccount',
+        name + '-postgresql-credentials:secret',
+    ]
+    if os.path.exists(optional_configmap):
+        service_manifests.append(optional_configmap)
+        resource_objects.append(name + '-config:configmap')
+    if name == 'currency-service':
+        resource_objects.extend([
+            'currency-service-rabbitmq-credentials:secret',
+            'currency-service-redis-credentials:secret',
+            'fred-api-credentials:secret',
+        ])
+    if name == 'transaction-service':
+        resource_objects.append('transaction-service-preview-import-token-credentials:secret')
+    k8s_yaml(service_manifests)
+
+    # Step 4: Configure resource with port forwards and dependencies
+    port_forwards_list = [
+        port_forward(port, port, name='HTTP'),
+    ]
+    if debug_port:
+        port_forwards_list.append(port_forward(debug_port, 5005, name='Debug'))
+
+    base_deps = ['postgresql', 'rabbitmq', 'istio-injection'] if name == 'currency-service' else ['postgresql', 'istio-injection'] if name in ['transaction-service', 'permission-service'] else ['istio-injection']
+
+    k8s_resource(
+        name,
+        objects=resource_objects,
+        port_forwards=port_forwards_list,
+        labels=['backend'] if name in ['transaction-service', 'currency-service', 'permission-service'] else ['gateway'],
+        resource_deps=[name + '-compile'] + base_deps + deps,
+    )
+
+# ============================================================================
+# BACKEND MICROSERVICES
+# ============================================================================
+
+# Transaction Service
+spring_boot_service('transaction-service')
+
+# Currency Service
+spring_boot_service('currency-service')
+
+# Permission Service
+spring_boot_service('permission-service')
+
+# ============================================================================
+# GATEWAY SERVICES
+# ============================================================================
+
+# Session Gateway
+repo_path = get_repo_path('session-gateway')
+
+local_resource(
+    'session-gateway-compile',
+    cmd='cd ' + repo_path + ' && ./gradlew bootJar --parallel --build-cache -x test',
+    deps=spring_gradle_deps(repo_path),
+    resource_deps=['service-common-publish'],
+    labels=['compile'],
+    allow_parallel=True
+)
+
+# Use inline dev Dockerfile that copies pre-built JAR (avoids Maven dependency issues)
+docker_build_with_restart(
+    'session-gateway',
+    context=repo_path,
+    dockerfile_contents=spring_boot_dockerfile(8081),
+    entrypoint=[
+        'java',
+        '-jar',
+        '/app/app.jar'
+    ],
+    live_update=spring_boot_live_update(repo_path)
+)
+
+k8s_yaml([
+    'kubernetes/services/session-gateway/serviceaccount.yaml',
+    'kubernetes/services/session-gateway/deployment.yaml',
+    'kubernetes/services/session-gateway/service.yaml',
+])
+
+k8s_resource(
+    'session-gateway',
+    objects=[
+        'session-gateway:serviceaccount',
+        'session-gateway-config:configmap',
+        'session-gateway-idp-config:configmap',
+        'session-gateway-redis-credentials:secret',
+        'auth0-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(8081, 8081, name='HTTP'),
+        port_forward(5009, 5005, name='Debug'),
+    ],
+    labels=['gateway'],
+    resource_deps=['session-gateway-compile', 'redis', 'permission-service', 'istio-injection']
+)
+
+# ============================================================================
+# EXT-AUTHZ SERVICE (Go, HTTP external authorization)
+# ============================================================================
+
+ext_authz_repo = get_repo_path('ext-authz')
+
+docker_build(
+    'ext-authz',
+    context=ext_authz_repo,
+    dockerfile=ext_authz_repo + '/Dockerfile',
+)
+
+k8s_yaml([
+    'kubernetes/services/ext-authz/serviceaccount.yaml',
+    'kubernetes/services/ext-authz/deployment.yaml',
+    'kubernetes/services/ext-authz/service.yaml',
+])
+
+k8s_resource(
+    'ext-authz',
+    objects=[
+        'ext-authz:serviceaccount',
+        'ext-authz-redis-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(9002, 9002, name='HTTP'),
+        port_forward(8090, 8090, name='Health'),
+    ],
+    labels=['gateway'],
+    resource_deps=['redis', 'istio-injection'],
+)
+
+# ============================================================================
+# NGINX GATEWAY
+# ============================================================================
+
+frontend_repo = get_repo_path('budget-analyzer-web')
+frontend_smoke_dockerfile = config.main_dir + '/nginx/Dockerfile.prod-smoke-assets'
+
+def frontend_smoke_image_build_command(repo_path, dockerfile):
+    """Build the local production-smoke bundle and its image as one operation."""
+    return (
+        'cd ' + shell_single_quote(repo_path) + ' && '
+        + 'if [ ! -d node_modules ]; then '
+        + "printf '%s\\n' " + shell_single_quote(
+            'The budget-analyzer-web-prod-smoke image build requires local npm dependencies in the sibling budget-analyzer-web repo. Run "npm install" there before re-running Tilt. This preflight only applies to the local /_prod-smoke/ build path; the normal frontend pod still installs its dependencies inside its image.'
+        ) + ' >&2; '
+        + 'exit 1; '
+        + 'fi && '
+        + 'npm run build:prod-smoke && '
+        + 'docker build --file ' + shell_single_quote(dockerfile)
+        + ' --tag "$EXPECTED_REF" dist'
+    )
+
+def frontend_smoke_build_deps(repo_path):
+    """Tracked sibling inputs for the local /_prod-smoke/ bundle."""
+    return [
+        repo_path + '/src',
+        repo_path + '/public',
+        repo_path + '/index.html',
+        repo_path + '/package.json',
+        repo_path + '/package-lock.json',
+        repo_path + '/postcss.config.js',
+        repo_path + '/tailwind.config.js',
+        repo_path + '/tsconfig.json',
+        repo_path + '/tsconfig.node.json',
+        repo_path + '/vite.config.ts',
+        repo_path + '/.env',
+        repo_path + '/.env.local',
+        repo_path + '/.env.production',
+        repo_path + '/.env.production.local',
+    ]
+
+# Build the production-smoke bundle and its asset image atomically so Tilt only
+# updates NGINX after both steps succeed.
+custom_build(
+    'budget-analyzer-web-prod-smoke',
+    command=frontend_smoke_image_build_command(frontend_repo, frontend_smoke_dockerfile),
+    deps=frontend_smoke_build_deps(frontend_repo) + [frontend_smoke_dockerfile],
+)
+
+# Create ConfigMap from NGINX configuration with auto-reload
+configmap_create(
+    'nginx-gateway-config',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=['nginx.conf=nginx/nginx.k8s.conf'],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-includes',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'backend-headers.conf=nginx/includes/backend-headers.conf',
+        'security-headers-dev-csp.conf=nginx/includes/security-headers-dev-csp.conf',
+        'security-headers-docs-csp.conf=nginx/includes/security-headers-docs-csp.conf',
+        'security-headers-strict-csp.conf=nginx/includes/security-headers-strict-csp.conf',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-docs',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'index.html=docs-aggregator/index.html',
+        'release-metadata.json=' + LOCAL_API_DOCS_RELEASE_METADATA,
+        'swagger-initializer.js=docs-aggregator/swagger-initializer.js',
+        'swagger-ui-overrides.css=docs-aggregator/swagger-ui-overrides.css',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-openapi-json',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'openapi.json=docs-aggregator/openapi.json',
+    ],
+    watch=True
+)
+
+configmap_create(
+    'nginx-gateway-openapi-yaml',
+    namespace=DEFAULT_NAMESPACE,
+    from_file=[
+        'openapi.yaml=docs-aggregator/openapi.yaml',
+    ],
+    watch=True
+)
+
+k8s_yaml([
+    'kubernetes/services/nginx-gateway/serviceaccount.yaml',
+    'kubernetes/services/nginx-gateway/deployment.yaml',
+    'kubernetes/services/nginx-gateway/service.yaml',
+])
+
+k8s_resource(
+    'nginx-gateway',
+    objects=[
+        'nginx-gateway:serviceaccount',
+        'nginx-gateway-config:configmap',
+        'nginx-gateway-includes:configmap',
+        'nginx-gateway-docs:configmap',
+        'nginx-gateway-openapi-json:configmap',
+        'nginx-gateway-openapi-yaml:configmap',
+    ],
+    port_forwards=[
+        port_forward(8080, 8080, name='HTTP'),
+    ],
+    labels=['gateway'],
+    resource_deps=['istio-injection']
+)
+
+# ============================================================================
+# FRONTEND (React/Vite with HMR)
+# ============================================================================
+
+# Use standard Dockerfile for frontend
+# If you need live HMR with Vite dev server, create a Dockerfile.dev that runs 'npm run dev'
+# instead of building for production
+docker_build(
+    'budget-analyzer-web',
+    context=frontend_repo,
+    dockerfile=frontend_repo + '/Dockerfile',
+    live_update=[
+        # Sync source files for instant HMR
+        sync(frontend_repo + '/src', '/app/src'),
+        sync(frontend_repo + '/public', '/app/public'),
+        sync(frontend_repo + '/index.html', '/app/index.html'),
+        # Reinstall dependencies if package.json changes
+        run(
+            'cd /app && npm install',
+            trigger=[frontend_repo + '/package.json', frontend_repo + '/package-lock.json']
+        ),
+    ]
+)
+
+k8s_yaml([
+    'kubernetes/services/budget-analyzer-web/serviceaccount.yaml',
+    'kubernetes/services/budget-analyzer-web/deployment.yaml',
+    'kubernetes/services/budget-analyzer-web/service.yaml',
+])
+
+k8s_resource(
+    'budget-analyzer-web',
+    objects=[
+        'budget-analyzer-web:serviceaccount',
+    ],
+    port_forwards=[
+        port_forward(3000, 3000, name='Vite Dev Server'),
+    ],
+    labels=['frontend'],
+    resource_deps=['nginx-gateway', 'istio-injection'],
+    links=[
+        link('https://app.budgetanalyzer.localhost', 'Application'),
+    ]
+)
+
+# Existing default namespace pods need one reinjection after the Istio CNI cutover.
+# New pods created after the cutover should already land without istio-init.
+local_resource(
+    'istio-reinject-default-workloads',
+    cmd='''
+        restart_required=false
+        for deployment in budget-analyzer-web currency-service ext-authz nginx-gateway permission-service session-gateway transaction-service; do
+            if ! kubectl get deployment "$deployment" -n default >/dev/null 2>&1; then
+                continue
+            fi
+
+            init_containers=$(kubectl get pods -n default -l "app=${deployment}" \
+                -o jsonpath='{range .items[*]}{.spec.initContainers[*].name}{"\n"}{end}' 2>/dev/null || true)
+
+            if printf '%s\n' "$init_containers" | grep -qw 'istio-init'; then
+                kubectl rollout restart "deployment/${deployment}" -n default
+                restart_required=true
+            fi
+        done
+
+        if [ "$restart_required" = true ]; then
+            for deployment in budget-analyzer-web currency-service ext-authz nginx-gateway permission-service session-gateway transaction-service; do
+                if kubectl get deployment "$deployment" -n default >/dev/null 2>&1; then
+                    kubectl rollout status "deployment/${deployment}" -n default --timeout=180s
+                fi
+            done
+        else
+            echo "Default namespace deployments are already running without istio-init"
+        fi
+    ''',
+    resource_deps=[
+        'budget-analyzer-web',
+        'currency-service',
+        'ext-authz',
+        'nginx-gateway',
+        'permission-service',
+        'session-gateway',
+        'transaction-service',
+        'istio-cni',
+    ],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
+# GATEWAY API PREREQUISITES
+# ============================================================================
+
+# Gateway API CRDs (must be installed before Istio ingress gateway)
+local_resource(
+    'gateway-api-crds',
+    cmd='. scripts/lib/pinned-tool-versions.sh && kubectl apply -f "$(phase7_gateway_api_manifest_url)"',
+    resource_deps=['kyverno-ready'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
+# ISTIO SERVICE MESH
+# ============================================================================
+
+# Istio Base CRDs
+local_resource(
+    'istio-base',
+    cmd='''
+        # renovate: datasource=helm depName=base registryUrl=https://istio-release.storage.googleapis.com/charts
+        helm upgrade --install istio-base istio/base \
+            --namespace istio-system \
+            --create-namespace \
+            --version 1.29.2 \
+            --wait
+    ''',
+    resource_deps=['kyverno-ready'],
+    labels=['infrastructure'],
+)
+
+# Istio CNI (required before meshed namespaces can enforce Pod Security).
+# Local Kind uses the common CNI baseline plus a Kind overlay that keeps the
+# chart's standard CNI paths for Calico.
+local_resource(
+    'istio-cni',
+    cmd='''
+        # renovate: datasource=helm depName=cni registryUrl=https://istio-release.storage.googleapis.com/charts
+        helm upgrade --install istio-cni istio/cni \
+            --namespace istio-system \
+            --version 1.29.2 \
+            --values kubernetes/istio/cni-common-values.yaml \
+            --values kubernetes/istio/cni-kind-values.yaml \
+            --wait
+        kubectl rollout status daemonset/istio-cni-node -n istio-system --timeout=120s
+    ''',
+    deps=[
+        'kubernetes/istio/cni-common-values.yaml',
+        'kubernetes/istio/cni-kind-values.yaml',
+    ],
+    resource_deps=['istio-base'],
+    labels=['infrastructure'],
+)
+
+# Istio Control Plane
+local_resource(
+    'istiod',
+    cmd='''
+        # renovate: datasource=helm depName=istiod registryUrl=https://istio-release.storage.googleapis.com/charts
+        helm upgrade --install istiod istio/istiod \
+            --namespace istio-system \
+            --version 1.29.2 \
+            --values kubernetes/istio/istiod-values.yaml \
+            --wait
+    ''',
+    deps=['kubernetes/istio/istiod-values.yaml'],
+    resource_deps=['istio-cni'],
+    labels=['infrastructure'],
+)
+
+local_resource(
+    'istio-tracing-telemetry',
+    cmd='kubectl apply -f kubernetes/istio/tracing-telemetry.yaml',
+    deps=['kubernetes/istio/tracing-telemetry.yaml'],
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
+# Namespace labeling for sidecar injection and Pod Security Admission
+local_resource(
+    'istio-injection',
+    cmd='''
+        kubectl label namespace default istio-injection=enabled --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/enforce=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/warn=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/audit=restricted --overwrite
+        kubectl label namespace default pod-security.kubernetes.io/audit-version=v1.32 --overwrite
+        kubectl label namespace infrastructure istio-injection=disabled --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/enforce=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/warn=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/audit=baseline --overwrite
+        kubectl label namespace infrastructure pod-security.kubernetes.io/audit-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/enforce=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/enforce-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/warn=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/warn-version=v1.32 --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/audit=privileged --overwrite
+        kubectl label namespace istio-system pod-security.kubernetes.io/audit-version=v1.32 --overwrite
+    ''',
+    resource_deps=['istio-tracing-telemetry', 'infrastructure-namespace'],
+    labels=['infrastructure'],
+)
+
+# Istio security policies (PeerAuthentication + AuthorizationPolicy)
+# Explicitly delete PERMISSIVE PeerAuthentication resources removed during the Istio ingress migration.
+# kubectl apply does not delete resources removed from a multi-document YAML file.
+local_resource(
+    'istio-security-policies',
+    cmd='''
+        kubectl delete peerauthentication nginx-gateway-permissive ext-authz-permissive session-gateway-permissive -n default --ignore-not-found
+        kubectl apply -f kubernetes/istio/peer-authentication.yaml
+        kubectl apply -f kubernetes/istio/authorization-policies.yaml
+    ''',
+    deps=[
+        'kubernetes/istio/peer-authentication.yaml',
+        'kubernetes/istio/authorization-policies.yaml',
+    ],
+    resource_deps=['istiod', 'istio-injection'],
+    labels=['infrastructure'],
+)
+
+# Kyverno security guardrail policy suite
+local_resource(
+    'kyverno-policies',
+    cmd='kubectl apply -f kubernetes/kyverno/policies',
+    deps=[
+        'kubernetes/kyverno/policies/00-smoke-disallow-privileged.yaml',
+        'kubernetes/kyverno/policies/10-require-namespace-pod-security-labels.yaml',
+        'kubernetes/kyverno/policies/20-require-workload-automount-disabled.yaml',
+        'kubernetes/kyverno/policies/30-require-workload-security-context.yaml',
+        'kubernetes/kyverno/policies/40-disallow-obvious-default-credentials.yaml',
+        'kubernetes/kyverno/policies/50-require-third-party-image-digests.yaml',
+    ],
+    resource_deps=['istio-security-policies'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
+# MONITORING (Prometheus + Grafana)
+# ============================================================================
+
+local_resource(
+    'monitoring-namespace',
+    cmd='kubectl apply -f kubernetes/monitoring/namespace.yaml',
+    deps=['kubernetes/monitoring/namespace.yaml'],
+    resource_deps=['kyverno-ready'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'prometheus-stack',
+    cmd='''
+        ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
+        kubectl apply -f kubernetes/monitoring/grafana-dashboards-configmap.yaml
+        # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
+        helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --version 83.4.0 \
+            --values kubernetes/monitoring/prometheus-stack-values.yaml \
+            --post-renderer scripts/ops/post-render-prometheus-stack.sh \
+            --wait --timeout 5m
+    ''',
+    deps=[
+        'kubernetes/monitoring/prometheus-stack-values.yaml',
+        'kubernetes/monitoring/kiali-values.yaml',
+        'kubernetes/monitoring/grafana-dashboards-configmap.yaml',
+        'scripts/ops/post-render-prometheus-stack.sh',
+        'scripts/smoketest/verify-monitoring-rendered-manifests.sh',
+        'scripts/ops/post-render-kiali-server.sh',
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+k8s_yaml('kubernetes/monitoring/servicemonitor-spring-boot.yaml')
+
+k8s_resource(
+    objects=['spring-boot-services:servicemonitor'],
+    new_name='servicemonitor-spring-boot',
+    resource_deps=['prometheus-stack'],
+    labels=['monitoring'],
+)
+
+k8s_yaml([
+    'kubernetes/monitoring/jaeger/configmap.yaml',
+    'kubernetes/monitoring/jaeger/pvc.yaml',
+    'kubernetes/monitoring/jaeger/deployment.yaml',
+    'kubernetes/monitoring/jaeger/services.yaml',
+])
+
+# ============================================================================
+# NETWORK POLICIES
+# ============================================================================
+
+# Apply deny and allow manifests together — never apply deny without matching allows.
+local_resource(
+    'network-policies-core',
+    cmd='''
+        kubectl delete networkpolicy \
+            allow-nginx-gateway-ingress-from-envoy \
+            allow-ext-authz-ingress-from-envoy \
+            allow-session-gateway-ingress-from-envoy \
+            -n default --ignore-not-found
+        kubectl apply -f kubernetes/network-policies/default-deny.yaml
+        kubectl apply -f kubernetes/network-policies/default-allow.yaml
+        kubectl apply -f kubernetes/network-policies/infrastructure-deny.yaml
+        kubectl apply -f kubernetes/network-policies/infrastructure-allow.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-deny.yaml
+        kubectl apply -f kubernetes/network-policies/monitoring-allow.yaml
+    ''',
+    deps=[
+        'kubernetes/network-policies/default-deny.yaml',
+        'kubernetes/network-policies/default-allow.yaml',
+        'kubernetes/network-policies/infrastructure-deny.yaml',
+        'kubernetes/network-policies/infrastructure-allow.yaml',
+        'kubernetes/network-policies/monitoring-deny.yaml',
+        'kubernetes/network-policies/monitoring-allow.yaml',
+    ],
+    resource_deps=['istio-injection', 'infrastructure-namespace', 'monitoring-namespace'],
+    labels=['infrastructure'],
+)
+
+k8s_resource(
+    'jaeger',
+    objects=[
+        'jaeger-config:configmap',
+        'jaeger-badger:persistentvolumeclaim',
+    ],
+    resource_deps=['monitoring-namespace', 'istiod', 'network-policies-core', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'kiali',
+    cmd='''
+        kubectl apply -f kubernetes/istio/ingress-namespace.yaml
+        kubectl apply -f kubernetes/istio/egress-namespace.yaml
+        helm repo add kiali https://kiali.org/helm-charts --force-update >/dev/null
+        helm repo update kiali >/dev/null
+        # renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
+        helm upgrade --install kiali kiali/kiali-server \
+            --namespace monitoring \
+            --version 2.24.0 \
+            --values kubernetes/monitoring/kiali-values.yaml \
+            --post-renderer scripts/ops/post-render-kiali-server.sh \
+            --wait --timeout 5m
+        kubectl rollout status deployment/kiali -n monitoring --timeout=120s
+    ''',
+    deps=[
+        'kubernetes/monitoring/kiali-values.yaml',
+        'kubernetes/istio/ingress-namespace.yaml',
+        'kubernetes/istio/egress-namespace.yaml',
+        'scripts/ops/post-render-kiali-server.sh',
+    ],
+    resource_deps=['prometheus-stack', 'jaeger', 'istiod', 'kyverno-policies'],
+    labels=['monitoring'],
+)
+
+local_resource(
+    'istio-ingress-network-policies',
+    cmd='''
+        kubectl apply -f kubernetes/network-policies/istio-ingress-deny.yaml
+        kubectl apply -f kubernetes/network-policies/istio-ingress-allow.yaml
+    ''',
+    deps=[
+        'kubernetes/network-policies/istio-ingress-deny.yaml',
+        'kubernetes/network-policies/istio-ingress-allow.yaml',
+    ],
+    resource_deps=['istio-ingress-config'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
+# ISTIO INGRESS GATEWAY
+# ============================================================================
+
+# Validate the existing host-owned ingress files and reconcile the Kubernetes
+# Secret. Certificate generation and trust-store installation stay outside Tilt.
+local_resource(
+    'ingress-tls-secret',
+    cmd='./scripts/bootstrap/install-imported-ingress-tls.sh',
+    deps=['scripts/bootstrap/install-imported-ingress-tls.sh'],
+    resource_deps=['kyverno-ready'],
+    labels=['infrastructure'],
+)
+
+# One-time cleanup of Envoy Gateway resources from existing clusters.
+# No-op on fresh clusters. Uses explicit resource names since the Envoy manifest files are deleted.
+local_resource(
+    'envoy-gateway-cleanup',
+    cmd='''
+        helm uninstall envoy-gateway -n envoy-gateway-system --ignore-not-found || true
+        kubectl delete gateway ingress-gateway -n default --ignore-not-found || true
+        kubectl delete clienttrafficpolicy xff-config -n default --ignore-not-found || true
+        kubectl delete securitypolicy ext-authz-policy -n default --ignore-not-found || true
+        kubectl delete gatewayclass envoy-proxy --ignore-not-found || true
+        kubectl delete envoyproxy kind-proxy-config -n envoy-gateway-system --ignore-not-found || true
+    ''',
+    resource_deps=['kyverno-ready'],
+    labels=['infrastructure'],
+)
+
+# Istio ingress gateway — auto-provisioned from the Gateway API resource.
+# Istio 1.29.2 supports declarative deployment/service customization through
+# Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
+# Gateway and then waits for the generated workload to settle.
+local_resource(
+    'istio-ingress-config',
+    cmd='''
+        kubectl label namespace default budgetanalyzer.io/ingress-routes=true --overwrite
+        kubectl apply -f kubernetes/istio/ingress-namespace.yaml
+        kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
+        kubectl apply -f kubernetes/istio/ingress-gateway-config.yaml
+        kubectl apply -f kubernetes/istio/istio-gateway.yaml
+        kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=120s
+        kubectl rollout status deployment/istio-ingress-gateway-istio -n istio-ingress --timeout=120s
+    ''',
+    deps=[
+        'kubernetes/istio/ingress-namespace.yaml',
+        'kubernetes/istio/tls-reference-grant.yaml',
+        'kubernetes/istio/ingress-gateway-config.yaml',
+        'kubernetes/istio/istio-gateway.yaml',
+    ],
+    resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'ingress-tls-secret'],
+    labels=['gateway'],
+)
+
+# HTTPRoutes and ext-authz AuthorizationPolicy
+local_resource(
+    'istio-ingress-routes',
+    cmd='''
+        kubectl delete envoyfilter ingress-auth-local-rate-limit -n istio-ingress --ignore-not-found
+        kubectl apply -f kubernetes/gateway/auth-httproute.yaml
+        kubectl apply -f kubernetes/gateway/api-httproute.yaml
+        kubectl apply -f kubernetes/gateway/app-httproute.yaml
+        kubectl apply -f kubernetes/istio/ext-authz-policy.yaml
+        kubectl apply -f kubernetes/istio/ingress-rate-limit.yaml
+    ''',
+    deps=[
+        'kubernetes/gateway/auth-httproute.yaml',
+        'kubernetes/gateway/api-httproute.yaml',
+        'kubernetes/gateway/app-httproute.yaml',
+        'kubernetes/istio/ext-authz-policy.yaml',
+        'kubernetes/istio/ingress-rate-limit.yaml',
+    ],
+    resource_deps=['istio-ingress-config', 'istio-ingress-network-policies', 'ext-authz', 'nginx-gateway'],
+    labels=['gateway'],
+)
+
+# ============================================================================
+# ISTIO EGRESS GATEWAY
+# ============================================================================
+
+# Egress namespace (source of truth for labels — not managed by istio-injection)
+local_resource(
+    'istio-egress-namespace',
+    cmd='kubectl apply -f kubernetes/istio/egress-namespace.yaml',
+    deps=['kubernetes/istio/egress-namespace.yaml'],
+    resource_deps=['istiod'],
+    labels=['infrastructure'],
+)
+
+# Egress gateway installed directly from istio/gateway 1.29.2.
+# The 1.29.2 chart accepts the required service.type=ClusterIP input under
+# the repo's Helm v3.20.1 toolchain, so the vendored manifest path is removed.
+local_resource(
+    'istio-egress-gateway',
+    cmd='''
+        existing_release=$(kubectl get deployment istio-egress-gateway -n istio-egress \
+            -o jsonpath="{.metadata.annotations['meta.helm.sh/release-name']}" 2>/dev/null || true)
+        if [ -n "$existing_release" ] && [ "$existing_release" != "istio-egress-gateway" ]; then
+            echo "Unexpected Helm ownership on istio-egress-gateway: $existing_release" >&2
+            exit 1
+        fi
+        if kubectl get deployment istio-egress-gateway -n istio-egress >/dev/null 2>&1 && [ -z "$existing_release" ]; then
+            kubectl delete deployment,serviceaccount,role,rolebinding,service,hpa istio-egress-gateway \
+                -n istio-egress --ignore-not-found
+        fi
+        # renovate: datasource=helm depName=gateway registryUrl=https://istio-release.storage.googleapis.com/charts
+        helm upgrade --install istio-egress-gateway istio/gateway \
+            --namespace istio-egress \
+            --version 1.29.2 \
+            --values kubernetes/istio/egress-gateway-values.yaml \
+            --wait
+        kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s
+    ''',
+    deps=['kubernetes/istio/egress-gateway-values.yaml'],
+    resource_deps=['istio-egress-namespace'],
+    labels=['infrastructure'],
+)
+
+# ServiceEntries and egress routing (Gateway, DestinationRule, VirtualServices)
+local_resource(
+    'istio-egress-config',
+    cmd='./scripts/ops/render-istio-egress-config.sh --apply --auth0-issuer-uri "' + os.getenv('AUTH0_ISSUER_URI', '') + '"',
+    deps=[
+        'scripts/ops/render-istio-egress-config.sh',
+        'kubernetes/istio/egress-service-entries.yaml',
+        'kubernetes/istio/egress-routing.yaml',
+    ],
+    resource_deps=['istio-egress-gateway', 'istiod'],
+    labels=['infrastructure'],
+)
+
+# Egress network policies
+local_resource(
+    'istio-egress-network-policies',
+    cmd='''
+        kubectl apply -f kubernetes/network-policies/istio-egress-deny.yaml
+        kubectl apply -f kubernetes/network-policies/istio-egress-allow.yaml
+    ''',
+    deps=[
+        'kubernetes/network-policies/istio-egress-deny.yaml',
+        'kubernetes/network-policies/istio-egress-allow.yaml',
+    ],
+    resource_deps=['istio-egress-config'],
+    labels=['infrastructure'],
+)
+
+# ============================================================================
+# UI ENHANCEMENTS
+# ============================================================================
+
+# Custom buttons for common operations
+cmd_button(
+    'rebuild-all-backend',
+    argv=['bash', '-c', 'cd ' + WORKSPACE + ' && for d in transaction-service currency-service permission-service session-gateway; do (cd $d && ./gradlew bootJar --parallel) & done; wait'],
+    resource='transaction-service',
+    icon_name='build',
+    text='Rebuild All Backend'
+)
+
+cmd_button(
+    'run-tests',
+    argv=['./gradlew', 'test'],
+    resource='transaction-service-compile',
+    icon_name='science',
+    text='Run Tests',
+    location=location.RESOURCE
+)

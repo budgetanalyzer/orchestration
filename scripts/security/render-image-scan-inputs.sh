@@ -6,9 +6,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# shellcheck source=deploy/scripts/lib/version-contract.sh
+# shellcheck source=scripts/lib/production-version-contract.sh
 # shellcheck disable=SC1091 # The repository root is resolved above.
-. "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
+. "${REPO_DIR}/scripts/lib/production-version-contract.sh"
 
 OUTPUT_DIR=""
 LOCAL_PLATFORM=""
@@ -103,69 +103,67 @@ ARM64_DIR="${OUTPUT_DIR}/linux-arm64"
 LOCAL_DIR="${OUTPUT_DIR}/${LOCAL_PLATFORM//\//-}"
 mkdir -p "${ARM64_DIR}" "${LOCAL_DIR}"
 
-KUBE_VERSION="${PHASE4_K3S_VERSION#v}"
-KUBE_VERSION="${KUBE_VERSION%%+*}"
+KUBE_VERSION="${PRODUCTION_KUBERNETES_VERSION}"
 
 helm template istio-base base \
-    --repo "${PHASE4_ISTIO_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_ISTIO_HELM_REPO_URL}" \
     --namespace istio-system \
-    --version "${PHASE4_ISTIO_CHART_VERSION}" \
+    --version "${PRODUCTION_ISTIO_CHART_VERSION}" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/istio-base.yaml"
 
 helm template istio-cni cni \
-    --repo "${PHASE4_ISTIO_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_ISTIO_HELM_REPO_URL}" \
     --namespace istio-system \
-    --version "${PHASE4_ISTIO_CHART_VERSION}" \
+    --version "${PRODUCTION_ISTIO_CHART_VERSION}" \
     --values "${REPO_DIR}/kubernetes/istio/cni-common-values.yaml" \
-    --values "${REPO_DIR}/kubernetes/istio/cni-k3s-values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/istio-cni.yaml"
 
 helm template istiod istiod \
-    --repo "${PHASE4_ISTIO_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_ISTIO_HELM_REPO_URL}" \
     --namespace istio-system \
-    --version "${PHASE4_ISTIO_CHART_VERSION}" \
+    --version "${PRODUCTION_ISTIO_CHART_VERSION}" \
     --values "${REPO_DIR}/kubernetes/istio/istiod-values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/istiod.yaml"
 
 helm template istio-egress-gateway gateway \
-    --repo "${PHASE4_ISTIO_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_ISTIO_HELM_REPO_URL}" \
     --namespace istio-egress \
-    --version "${PHASE4_ISTIO_CHART_VERSION}" \
+    --version "${PRODUCTION_ISTIO_CHART_VERSION}" \
     --values "${REPO_DIR}/kubernetes/istio/egress-gateway-values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/istio-egress-gateway.yaml"
 
 helm template external-secrets external-secrets \
-    --repo "${PHASE4_EXTERNAL_SECRETS_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_EXTERNAL_SECRETS_HELM_REPO_URL}" \
     --namespace external-secrets \
-    --version "${PHASE4_EXTERNAL_SECRETS_CHART_VERSION}" \
+    --version "${PRODUCTION_EXTERNAL_SECRETS_CHART_VERSION}" \
     --values "${REPO_DIR}/deploy/helm-values/external-secrets.values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/external-secrets.yaml"
 
 helm template cert-manager cert-manager \
-    --repo "${PHASE4_CERT_MANAGER_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_CERT_MANAGER_HELM_REPO_URL}" \
     --namespace cert-manager \
-    --version "${PHASE4_CERT_MANAGER_CHART_VERSION}" \
+    --version "${PRODUCTION_CERT_MANAGER_CHART_VERSION}" \
     --values "${REPO_DIR}/deploy/helm-values/cert-manager.values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/cert-manager.yaml"
 
 helm template kyverno kyverno \
-    --repo "${PHASE7_KYVERNO_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_KYVERNO_HELM_REPO_URL}" \
     --namespace kyverno \
-    --version "${PHASE7_KYVERNO_CHART_VERSION}" \
+    --version "${PRODUCTION_KYVERNO_CHART_VERSION}" \
     --values "${REPO_DIR}/deploy/helm-values/kyverno.values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     > "${ARM64_DIR}/kyverno.yaml"
 
 helm template prometheus-stack kube-prometheus-stack \
-    --repo "${PHASE7_PROMETHEUS_STACK_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_PROMETHEUS_STACK_HELM_REPO_URL}" \
     --namespace monitoring \
-    --version "${PHASE7_PROMETHEUS_STACK_CHART_VERSION}" \
+    --version "${PRODUCTION_PROMETHEUS_STACK_CHART_VERSION}" \
     --values "${REPO_DIR}/kubernetes/monitoring/prometheus-stack-values.yaml" \
     --values "${REPO_DIR}/kubernetes/production/monitoring/prometheus-stack-values.override.yaml" \
     --kube-version "${KUBE_VERSION}" \
@@ -173,9 +171,9 @@ helm template prometheus-stack kube-prometheus-stack \
     > "${ARM64_DIR}/prometheus-stack.yaml"
 
 helm template kiali kiali-server \
-    --repo "${PHASE7_KIALI_HELM_REPO_URL}" \
+    --repo "${PRODUCTION_KIALI_HELM_REPO_URL}" \
     --namespace monitoring \
-    --version "${PHASE7_KIALI_CHART_VERSION}" \
+    --version "${PRODUCTION_KIALI_CHART_VERSION}" \
     --values "${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml" \
     --kube-version "${KUBE_VERSION}" \
     --post-renderer "${REPO_DIR}/scripts/ops/post-render-kiali-server.sh" \

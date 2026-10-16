@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: session-gateway-idp-config
+  namespace: default
+  labels:
+    app: session-gateway
+data:
+  # Checked-in fallback for non-Tilt applies. Local Tilt overwrites this object
+  # from .env so the deployed IDP config still comes from the developer's
+  # environment.
+  AUTH0_CLIENT_ID: "your-auth0-client-id"
+  AUTH0_ISSUER_URI: "https://your-tenant.us.auth0.com/"
+  IDP_AUDIENCE: "https://api.budgetanalyzer.org"
+  IDP_LOGOUT_RETURN_TO: "https://app.budgetanalyzer.localhost/peace"

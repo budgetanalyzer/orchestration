@@ -8,8 +8,9 @@ metadata:
     app.kubernetes.io/component: production-image-inventory
 data:
   schema-version: "2"
-  deployment-id: "oci-20260524T050351Z"
-  deployment-environment: "oci-production"
+  reference-id: "oci-20260524T050351Z"
+  reference-only: "true"
+  historical-environment: "oci-production"
   orchestration-commit: "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"
   orchestration-source-ref: "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"
   transaction-service: "ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:ee1bacc5a97ed04d4bd7edcf0b2335e0ce8eb2f78f6e4d4f1c6fb356de30c5b1"

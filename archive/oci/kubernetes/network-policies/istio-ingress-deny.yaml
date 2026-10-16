@@ -1,0 +1,10 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: istio-ingress-deny-all
+  namespace: istio-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

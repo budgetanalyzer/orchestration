@@ -1,0 +1,50 @@
+schema_version: 2
+deployment:
+  id: "oci-20260524T050351Z"
+  environment: "oci-production"
+  created_at: "2026-05-24T05:03:56Z"
+  production_baseline_input: "kubernetes/production/apps/deployment-manifest.yaml"
+  orchestration_repository:
+    commit: "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"
+    source_ref: "bfe1947da3f0dd28452e1f256f971c3fc2c51f2f"
+artifacts:
+  transaction-service:
+    source_repository: "transaction-service"
+    source_ref: "refs/tags/v0.0.15"
+    source_commit: "80870699a7093e511f9e5d90476fc2afe79d5965"
+    artifact_version: "0.0.15"
+    image: "ghcr.io/budgetanalyzer/transaction-service:0.0.15@sha256:ee1bacc5a97ed04d4bd7edcf0b2335e0ce8eb2f78f6e4d4f1c6fb356de30c5b1"
+    service_common_version: "0.0.14"
+  currency-service:
+    source_repository: "currency-service"
+    source_ref: "refs/tags/v0.0.15"
+    source_commit: "dd3e5faa57ad275eb547bae2daa5118b175c6eb5"
+    artifact_version: "0.0.15"
+    image: "ghcr.io/budgetanalyzer/currency-service:0.0.15@sha256:8352eb2d6898ee74a20d46f20e5cf6e8f9aa8694abc943e38f962af4397bfa69"
+    service_common_version: "0.0.14"
+  permission-service:
+    source_repository: "permission-service"
+    source_ref: "refs/tags/v0.0.15"
+    source_commit: "0327e74ec89a6ad223b04741b1bd6dfbfc82d05b"
+    artifact_version: "0.0.15"
+    image: "ghcr.io/budgetanalyzer/permission-service:0.0.15@sha256:8cd82bed5cd381080c346640eacabb058b23ccd2b3a2ff68a503159c0493f5cc"
+    service_common_version: "0.0.14"
+  session-gateway:
+    source_repository: "session-gateway"
+    source_ref: "refs/tags/v0.0.15"
+    source_commit: "b67afb503c7aeb43370d7efbd401d1cca5fed925"
+    artifact_version: "0.0.15"
+    image: "ghcr.io/budgetanalyzer/session-gateway:0.0.15@sha256:aeef64ec48521fbc14c87ae032c0b94d0e8a90735c83e3fea7a8ff5d22abd86e"
+    service_common_version: "0.0.14"
+  budget-analyzer-web:
+    source_repository: "budget-analyzer-web"
+    source_ref: "refs/tags/v0.0.15"
+    source_commit: "1043e7b587299963e50a69d6422cae78171fd2ec"
+    artifact_version: "0.0.15"
+    image: "ghcr.io/budgetanalyzer/budget-analyzer-web:0.0.15@sha256:6c1030872b4c68d5b442d2f979116fe5a272dd42b1c5da8fb943292bcd9ab40f"
+  ext-authz:
+    source_repository: "ext-authz"
+    source_ref: "refs/tags/v0.0.16"
+    source_commit: "4007e771e68895a2e3fbe1fba698aa776aa801e2"
+    artifact_version: "0.0.16"
+    image: "ghcr.io/budgetanalyzer/ext-authz:0.0.16@sha256:bdd853111aca0ee47ec1d4fcdf45f38d4bc7507e701d8d3041ba20e346008447"

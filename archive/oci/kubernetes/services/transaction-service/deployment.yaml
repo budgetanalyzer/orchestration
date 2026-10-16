@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  namespace: default
+  labels:
+    app: transaction-service
+    version: v1
+    app.kubernetes.io/framework: spring-boot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transaction-service
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+        version: v1
+        app.kubernetes.io/framework: spring-boot
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: transaction-service
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: init-tmp
+        image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+        command: ["sh", "-c", "touch /tmp/.restart-proc && chmod 0666 /tmp/.restart-proc"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      containers:
+      - name: transaction-service
+        image: transaction-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8082
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        # Database connection
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://postgresql.infrastructure:5432/budget_analyzer?sslmode=verify-full&sslrootcert=/etc/ssl/infra/ca.crt"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "transaction_service"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: transaction-service-postgresql-credentials
+              key: password
+        - name: PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: transaction-service-preview-import-token-credentials
+              key: encryption-secret
+        volumeMounts:
+        - name: infra-ca
+          mountPath: /etc/ssl/infra
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsNonRoot: true
+          runAsUser: 1001
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /transaction-service/actuator/health
+            port: 8082
+          periodSeconds: 5
+          failureThreshold: 24  # 5s * 24 = 120s max startup time
+        readinessProbe:
+          httpGet:
+            path: /transaction-service/actuator/health
+            port: 8082
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /transaction-service/actuator/health
+            port: 8082
+          periodSeconds: 20
+      volumes:
+      - name: infra-ca
+        secret:
+          secretName: infra-ca
+      - name: tmp
+        emptyDir: {}

@@ -1,0 +1,31 @@
+pilot:
+  cni:
+    enabled: true
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+meshConfig:
+  enableTracing: true
+  defaultConfig:
+    tracing: {}
+  outboundTrafficPolicy:
+    mode: REGISTRY_ONLY
+  extensionProviders:
+    - name: ext-authz-http
+      envoyExtAuthzHttp:
+        service: ext-authz.default.svc.cluster.local
+        port: 9002
+        headersToUpstreamOnAllow:
+          - x-user-id
+          - x-roles
+          - x-permissions
+        headersToDownstreamOnDeny:
+          - content-type
+        includeRequestHeadersInCheck:
+          - cookie
+        failOpen: false
+    - name: jaeger
+      opentelemetry:
+        service: jaeger-collector.monitoring.svc.cluster.local
+        port: 4317

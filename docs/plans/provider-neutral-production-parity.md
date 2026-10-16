@@ -1,45 +1,42 @@
-# Provider-Neutral Production Parity and OCI Retirement
+# OCI Retirement and Provider-Neutral Kubernetes Parity
 
-Separate provider-neutral production desired state from the retired OCI/k3s
-deployment implementation, and make local development plus production overlays
-compose shared Kubernetes sources wherever their runtime behavior is meant to
-match.
+OCI is retired. The project's available OCI free-tier capacity is no longer
+sufficient for the full stack, and there is currently no production environment.
+Preserve the deployment implementation as a frozen reference for a possible
+return to OCI, while removing its ongoing maintenance burden from active work.
 
-This is a follow-up architecture and cleanup plan, not part of the ingress
-rate-limit review PR. It does not migrate, inspect, reconcile, or delete an
-existing OCI cluster. The legacy `ingress-auth-local-rate-limit` object needs
-no OCI upgrade cleanup because there is no supported OCI upgrade target.
-Historical ADRs and archived plans remain unchanged. Retired OCI scripts may be
-isolated or clearly labeled, but must not be generalized speculatively for an
-unknown replacement provider.
+The repository's purpose remains demonstrating near-identical local and
+production Kubernetes architecture. Keep provider-independent Kubernetes
+configuration and production overlays in the maintained repository. Preserve
+shared workload, routing, security, persistence, and observability behavior;
+document the small, intentional environment differences. Local Kind/Tilt is the
+live validation target. Production overlays are an offline-validated reference,
+not evidence of a running or currently tested production deployment.
 
-The target layering is:
+Use `archive/oci/` for the frozen snapshot, retaining original repository-relative
+paths beneath it. Copy scripts and supporting inputs unchanged before modifying
+or removing active originals. A new archive README owns the retirement notice,
+snapshot provenance, inventory, and restoration caveats. Historical ADRs and
+existing `docs/archive/` files keep their original text; active entry points must
+identify OCI material as retired. These are the drafting defaults for archive
+location and historical-document treatment.
 
-```text
-shared Kubernetes bases
-├── local Kind/Tilt overlays
-├── provider-neutral production overlays
-└── future provider adapter
-    ├── cluster/runtime installation
-    ├── public ingress publication
-    ├── persistent storage class
-    ├── secret store integration
-    └── certificate/DNS automation
-```
+Keep this work bounded: retirement, documentation cleanup, separation of existing
+provider coupling, and narrow parity fixes. Do not build a provider-adapter
+framework, choose another host, create a generic deployment lifecycle, reorganize
+all Kubernetes manifests, or require broad NGINX consolidation. Restoring OCI
+would be a separate, explicitly authorized project using the snapshot as input.
 
-Production parity means common behavior has one source, not that development
-and production are byte-identical. Hostnames, immutable image refs, built
-frontend delivery, storage sizing, and publication are valid overlay concerns.
-Authorization boundaries, service routing, gateway pod security/diagnostics,
-and shared workload configuration should not be copied manually.
+All implementation work stays in this repository. Do not access, reconcile, or
+delete OCI infrastructure, perform TLS writes, change sibling service code, or
+run Git write operations. Live checks require the exact guarded local
+`kind-kind` target and prerequisites in
+`docs/architecture/autonomous-ai-execution.md`. Follow
+`docs/agents-md-checkstyle.md` when editing agent instructions. Validate every
+changed active shell script with `bash -n` and ShellCheck; frozen copies are
+preservation artifacts and must not be repaired to satisfy current checks.
 
-All validation is offline or against guarded local `kind-kind`. Do not access
-OCI or another production environment, perform TLS writes, choose a replacement
-provider without user direction, modify ADRs/archives, or run Git write
-operations. Follow `docs/agents-md-checkstyle.md` for every `AGENTS.md` edit and
-run `bash -n` plus ShellCheck on every changed shell script.
-
-## Phase 1: Establish production and provider-adapter ownership
+## Phase 1: Preserve the OCI deployment as an unchanged archive
 
 ### Workspace
 
@@ -47,80 +44,84 @@ run `bash -n` plus ShellCheck on every changed shell script.
 
 ### Goal
 
-Make the repository describe OCI as retired and define which production
-contracts are provider-neutral versus provider-specific.
+Capture the checked-in OCI implementation and supporting inputs before active
+cleanup, with a clear retirement boundary and verifiable fidelity.
 
 ### Scope
 
-Active repository guidance, documentation ownership, a discovery-backed
-manifest/deployment inventory, and explicit future provider-adapter boundaries.
+Discovery, the new snapshot and README, documentation ownership, and exclusions
+needed to keep the snapshot outside active maintenance.
 
 ### Non-goals
 
-Changing live infrastructure, deleting historical records, selecting a cloud,
-or rewriting manifests before ownership and intended differences are recorded.
+Executing archived scripts, collecting live cloud state or secrets, changing
+historical file contents, or making scripts executable from their new location.
 
 ### Required context
 
 - `AGENTS.md`, `docs/agents-md-checkstyle.md`, `docs/OWNERSHIP.md`
-- `README.md`, `deploy/README.md`, `kubernetes/production/README.md`
-- `docs/architecture/system-overview.md`
-- `docs/architecture/security-architecture.md`
-- `docs/architecture/port-reference.md`
-- `docs/development/local-environment.md`
-- active files under `deploy/`, `kubernetes/`, and `kubernetes/production/`
-- OCI ADRs only as historical context; do not edit them
+- `deploy/README.md`, `deploy/scripts/`, `deploy/instance.env.template`
+- `deploy/helm-values/`, `deploy/manifests/`, `kubernetes/production/`
+- `docs/runbooks/oci-release-deployment-checklist.md`, `docs/ci-cd.md`
+- `docs/dependency-automation.md`, `renovate.json`, `renovate-presets/default.json`
+- `scripts/README.md`, affected workflows and image-pinning inventories
 
 ### Execution steps
 
-1. Inventory production inputs by behavior and source relationship. At minimum
-   classify workloads/images, application routing, authorization, rate limits,
-   ingress gateway configuration, NGINX, stateful storage, monitoring, secrets,
-   certificates, cluster installation, public publication, and release
-   metadata.
-2. Record which current assets already compose shared local sources and which
-   are copied or provider-bound. Treat `kubernetes/production/` as the intended
-   provider-neutral desired-state layer; do not claim it is complete until the
-   later phases pass.
-3. Update `AGENTS.md` and active owner docs to retire OCI as the production
-   target. State that the k3s installer, fixed NodePorts/NLB assumptions, OCI
-   Vault instance principal, OCI release wrappers, SSH defaults, and
-   `oci-production` metadata are legacy provider implementation details.
-4. Define the future provider-adapter contract: cluster/CNI installation,
-   ingress Service publication, storage class, secret provider, DNS and
-   certificate integration, and provider credentials. Keep those inputs out of
-   shared workload/security bases.
-5. Mark active OCI deployment instructions as retired or unsupported without
-   changing historical ADRs. Remove them from current happy paths and acceptance
-   gates. Preserve files needed for historical reference until a separately
-   reviewed deletion decision is made.
-6. Add a parity matrix identifying intentional local/production differences
-   and shared invariants. Link detailed owners instead of copying configuration
-   inventories into `AGENTS.md`.
+1. Inventory OCI deployment entry points and follow their sourced libraries,
+   templates, Helm values, Kubernetes inputs, and documentation references.
+   Search beyond filenames containing OCI: k3s CNI values, public TLS templates,
+   release helpers, and the observability SSH tunnel helper also contain
+   deployment assumptions. Classify OCI-only, reusable, and mixed assets.
+2. Create `archive/oci/README.md` and update `docs/OWNERSHIP.md` to identify it
+   as the retirement/snapshot owner. Record the capacity reason, absence of
+   production, snapshot date, source commit, and original path inventory. Record
+   pre-existing working-tree differences in copied files so the commit is not
+   misrepresented as identifying uncommitted content.
+3. Preserve direct, byte-for-byte copies of all checked-in scripts used for OCI:
+   bootstrap, secrets, render, reconcile, release, verification, and libraries.
+   Snapshot the whole existing `deploy/` tree and supporting checked-in inputs
+   outside it needed to understand and reconstruct that implementation. Preserve
+   original relative paths and executable modes. Include original production
+   metadata, overlays, and OCI operating docs. Reusable originals remain active;
+   their snapshot copies are historical.
+4. Record a simple checksum inventory and compare it with originals before
+   cleanup. Preserve non-secret templates, but do not collect ignored instance
+   configuration, credentials, certificates, kubeconfigs, or runtime output.
+   Identify external prerequisites and sibling repositories without copying
+   them. Do not substitute links into the active tree for snapshot files.
+5. Explain in the README that the snapshot is unmaintained, untested against
+   current OCI, and not an executable entry point at its new path. Its original
+   instructions and relative paths deliberately remain unchanged. Restoration
+   requires a new review of dependencies, assumptions, and available capacity.
+6. Exclude `archive/oci/**` from dependency-update discovery, maintained image
+   inventories, deployment acceptance checks, and active build/update discovery
+   as applicable. Keep general secret detection intact. Use existing automation
+   configuration, not a new archive-maintenance framework. Update the relevant
+   owner docs with this boundary.
 
 ### Implementation notes
 
-Provider-neutral does not mean lowest-common-denominator Kubernetes. It means
-the reusable layer names its prerequisites and leaves cloud/runtime decisions
-to adapters. A default storage class or `LoadBalancer` implementation is still
-a provider contract and must not be silently assumed.
+Snapshot copies of reusable inputs intentionally preserve the old deployment
+context as active sources evolve. They are not a second maintained production
+tree. Put retirement notices in the new README and active links, without changing
+preserved files. Existing ADRs and historical archives remain unchanged.
 
 ### Validation
 
-- Run the repository's `AGENTS.md` checkstyle workflow.
-- Search active docs and scripts for statements that still call OCI the
-  canonical production target; each remaining occurrence must be historical,
-  explicitly retired, or provider-specific by design.
-- Confirm no historical ADR or archived document changed.
-- Run `git diff --check`.
+- Compare snapshot file lists, checksums, and executable modes with originals.
+- Check coverage of scripts and checked-in dependencies; document external
+  prerequisites without claiming a self-contained installer.
+- Verify archive exclusions from active updates and deployment checks.
+- Run affected automation configuration checks and `git diff --check`.
 
 ### Completion criteria
 
-Active guidance identifies a provider-neutral production layer, OCI paths are
-unambiguously retired, provider responsibilities are explicit, and the parity
-matrix gives later phases a reviewable source of truth.
+The original OCI scripts and supporting inputs are recoverable unchanged in one
+explicitly retired directory. Provenance and maintenance exclusions are recorded,
+and active behavior remains intact.
 
-## Phase 2: Derive ingress and authorization overlays from shared bases
+## Phase 2: Remove OCI from active execution and maintenance paths
 
 ### Workspace
 
@@ -128,80 +129,94 @@ matrix gives later phases a reviewable source of truth.
 
 ### Goal
 
-Make gateway pod behavior, ingress security policy, and service authorization
-shared by construction across local and production.
+Retire OCI operations without losing reusable configuration or breaking local
+development and provider-neutral offline checks.
 
 ### Scope
 
-Ingress gateway ConfigMap Kustomize bases/overlays, Istio rate-limit and
-authorization policy composition, Tilt wiring, production render targets, and
-structural parity tests.
+OCI-only active files, mixed helpers, metadata consumers, offline render/check
+paths, CI, and dependency discovery.
 
 ### Non-goals
 
-Public load-balancer selection, DNS/TLS automation, secret providers, changing
-security policy semantics, or maintaining retired OCI templates.
+A replacement deployment system, compatibility wrappers for retired commands,
+changes to the frozen snapshot, or application behavior changes.
 
 ### Required context
 
-- final ingress rate-limit PR changes
-- `kubernetes/istio/ingress-gateway-config.yaml`
-- `kubernetes/istio/ingress-rate-limit.yaml`
-- `kubernetes/istio/authorization-policies.yaml`
-- `kubernetes/production/istio-ingress-policies/kustomization.yaml`
-- `kubernetes/production/istio/authorization-policies.yaml`
-- `Tiltfile`
-- `scripts/guardrails/verify-ingress-rate-limit-config.sh`
+- Archive inventory and checksums from Phase 1
+- `deploy/scripts/lib/common.sh`, `deploy/scripts/lib/version-contract.sh`
+- `deploy/scripts/render/`, `deploy/helm-values/`, `deploy/manifests/`
+- `Tiltfile`, production app/image and docs-aggregator metadata
+- `scripts/guardrails/verify-production-image-overlay.sh`
 - `scripts/guardrails/verify-static-security-manifests.sh`
-- parity matrix from Phase 1
+- `scripts/security/render-image-scan-inputs.sh`, release metadata verifiers
+- Image-pinning inventories, affected workflows and Renovate configuration
+- `docs/dependency-automation.md`, `scripts/README.md`
 
 ### Execution steps
 
-1. Extract the provider-neutral ingress gateway ConfigMap fields into one
-   common source: deployment pod security, narrow proxy stats selection, and
-   service-account behavior. Remove the temporary three-copy stats annotation
-   introduced by the rate-limit PR once all active consumers use the base.
-2. Add a local overlay that preserves the current Kind NodePort contract. Add a
-   generic production overlay that imports the same common source but leaves
-   public Service publication to a future provider adapter.
-3. Change Tilt and offline production render/guardrail paths to consume those
-   overlays. Preserve resource names so the refactor does not create duplicate
-   ConfigMaps.
-4. Keep the rate-limit EnvoyFilter as one shared object with no production-only
-   semantic patches. Deep-compare its production render to the common source.
-5. Replace the copied production authorization-policy file with a Kustomize
-   overlay over the shared policy set. Express the intentional production
-   omission of the standalone frontend policy as a narrow delete patch tied to
-   the production frontend topology.
-6. Add structural tests that compare shared gateway deployment configuration,
-   rate-limit filters, and all authorization policies except explicitly listed
-   overlay operations. Reject unexpected production-only additions or missing
-   shared resources.
+1. Retain provider-independent Kubernetes overlays, policies, Helm values,
+   image contracts, and shared version/tool inputs in active locations.
+   Classify by content and consumers, not the current directory name. Do not
+   archive generic Kubernetes configuration solely because OCI introduced it.
+2. Separate minimal reusable pieces from OCI environment loading, k3s kubeconfig
+   defaults, instance principals, fixed OCI NodePorts/NLB publication, SSH
+   defaults, and cloud mutations. Prefer existing render commands and small
+   helpers. Do not generalize the old OCI lifecycle.
+3. Update active consumers before removing originals. Static security and image
+   scanning currently source deployment version contracts and Helm values;
+   render scripts source `common.sh`; Tilt reads production docs release
+   metadata. None may source or execute the archive afterward. Update nearby
+   owner documentation with changed paths in the same phase.
+4. Remove active OCI-only originals after verifying their snapshot copies and
+   detaching callers. Include OCI bootstrap/apply/upgrade/release operations
+   and OCI-specific remote access helpers with no remaining generic consumer.
+   Remove their commands from active catalogs and acceptance gates. Keep only
+   brief documentation retirement pointers where they help existing links.
+5. Retain immutable image references and useful source provenance in the active
+   production reference. Preserve original OCI deployment identity in the
+   archive. Remove or clearly label historical OCI identity in active metadata
+   without inventing a new deployment, timestamp, or live status. Update Tilt
+   docs metadata generation and consistency checks together. Do not require new
+   application releases as part of retirement.
+6. Make retained production render/check commands work without OCI instance
+   files, credentials, cloud tools, or live cluster access. Replace live Helm
+   dry-run dependencies in offline checks with the existing offline pattern.
+   Identify required local runtime checks separately. Reuse the existing
+   production verifier as the entry point where practical.
+7. Preserve image/security evidence for retained Kubernetes inputs and update
+   paths, inventories, and extraction together. Archive-only resources must not
+   cause update or deployment work. Keep generic production image policies and
+   ARM64 compatibility.
 
 ### Implementation notes
 
-Embedded YAML strings in the gateway ConfigMap should be inherited whole; do
-not rely on manually synchronized edits inside `data.deployment`. Service
-publication is deliberately excluded from the common base because Kind
-NodePorts and a future production load balancer are different adapter choices.
+Retain existing locations where clear; relocate only to remove provider coupling
+or misleading ownership. Offline renders may use documented non-secret reference
+values without implying historical hostnames, images, or identity providers are
+currently deployed. Describe unresolved publication, storage, secret provision,
+and TLS prerequisites in prose, without speculative adapter interfaces.
 
 ### Validation
 
-- Render local and production ingress gateway overlays and compare their common
-  embedded structures.
-- Render production ingress and authorization overlays with Kustomize and run
-  focused structural parity checks.
-- Run local ingress/rate-limit verification after the Tilt wiring change.
-- Run applicable static security manifest guardrails.
-- Run `bash -n` and `shellcheck` for every changed shell script.
+- Run retained production render/image checks without OCI configuration and
+  with no usable cluster context; they must not inspect or contact a cluster.
+- Run static security checks and affected offline image-scan rendering.
+- Verify active executable/configuration references do not consume the archive
+  or removed paths; review documentation links separately.
+- Verify Tilt metadata generation and frontend production-smoke wiring continue
+  to use maintained inputs.
+- Run `bash -n`, `shellcheck` on changed active scripts, affected automation
+  configuration checks, and `git diff --check`.
 
 ### Completion criteria
 
-Gateway pod behavior, rate limiting, and authorization originate from shared
-sources; local/production differences are explicit overlays; copied production
-security manifests and temporary stats duplication are gone.
+OCI operations exist only in the archive. Local tooling, retained Kubernetes
+configuration, offline production renders, and security checks have no dependency
+on that archive or an OCI environment.
 
-## Phase 3: Consolidate application routing and production packaging inputs
+## Phase 3: Preserve Kubernetes parity with narrow shared-source fixes
 
 ### Workspace
 
@@ -209,83 +224,86 @@ security manifests and temporary stats duplication are gone.
 
 ### Goal
 
-Eliminate avoidable production copies while preserving legitimate differences
-in frontend delivery, immutable images, hostnames, and storage sizing.
+Keep local and production reference behavior aligned through shared inputs and
+focused checks without expanding retirement into a broad refactor.
 
 ### Scope
 
-Gateway routes, NGINX configuration ownership, production app/infrastructure
-Kustomize inputs, documentation assets, and parity guardrails.
+Existing overlays, ingress gateway configuration, authorization, rate limits,
+routing, and documented environment differences.
 
 ### Non-goals
 
-Making the Vite development frontend behave like the production static bundle,
-changing public API routes, rebuilding service images, or selecting provider
-storage/publication implementations.
+A universal base/overlay hierarchy, a provider framework, broad NGINX include
+extraction, semantic security changes, or a new production deployment.
 
 ### Required context
 
-- parity matrix from Phase 1
-- `kubernetes/gateway/`
-- `kubernetes/production/gateway-routes/kustomization.yaml`
-- `nginx/nginx.k8s.conf`, `nginx/nginx.production.k8s.conf`
-- `kubernetes/production/nginx/`
-- `kubernetes/production/apps/kustomization.yaml`
-- `kubernetes/infrastructure/`
-- `kubernetes/production/infrastructure/kustomization.yaml`
-- `docs/architecture/resource-routing-pattern.md`
-- `nginx/README.md`, `docs-aggregator/README.md`
-- production image/render guardrails
+- `kubernetes/production/README.md`, retained inputs from Phase 2
+- `kubernetes/istio/ingress-gateway-config.yaml`
+- `kubernetes/istio/ingress-rate-limit.yaml`, shared authorization policies
+- Production ingress-policy, authorization, and gateway-route overlays
+- Shared and production infrastructure manifests
+- `nginx/README.md`, both active NGINX variants, production ConfigMap inputs
+- `Tiltfile`, affected verifiers, `scripts/README.md`
+- `docs/development/local-environment.md#frontend-reactvite`
 
 ### Execution steps
 
-1. Preserve the production route overlay's narrow hostname patches over shared
-   local `HTTPRoute` resources. Add a structural assertion that path matches,
-   backends, filters, and route ownership remain equal except for the declared
-   hostname difference.
-2. Remove the second checked-in copy of `nginx.production.k8s.conf` by making
-   the production ConfigMap generator consume one canonical production NGINX
-   source. Preserve production-only static frontend and strict-CSP behavior.
-3. Identify backend API route blocks and include files that are semantically
-   shared between development and production. Extract only stable common
-   fragments where NGINX can include them without obscuring route ownership;
-   keep environment-specific frontend shells separate.
-4. Retain production app overlays over shared service Deployments/Services,
-   with explicit patches for immutable image digests, release metadata,
-   production frontend packaging, and generated docs. Reject copied workload
-   manifests when a patch or generator input is sufficient.
-5. Retain the infrastructure overlay over the shared StatefulSet baseline.
-   Document storage capacity as a production policy but leave storage-class
-   selection to a provider adapter. Add checks that production does not replace
-   shared persistence/security behavior accidentally.
-6. Update NGINX, routing, and production docs to identify common sources and
-   intentional variants. Extend guardrails to compare route inventories and
-   catch drift in shared API behavior.
+1. Record a compact parity table in `kubernetes/production/README.md`: shared
+   sources, intentional differences, and available validation for workloads,
+   ingress/security, routing, persistence, observability, images, and frontend
+   delivery. Avoid a resource inventory or claims of live production equivalence.
+2. Preserve existing composition of production apps, routes, infrastructure,
+   ingress policies, monitoring, and egress from common inputs. Keep hostname,
+   immutable image, static frontend, and storage sizing differences explicit.
+   Retain provider-independent admission, network/session security, persistence,
+   TLS requirements, and internal-only observability.
+3. Resolve known copies of ingress gateway pod configuration and authorization
+   policies through narrow shared sources or Kustomize composition. Preserve
+   local Kind publication and resource names. Share security and diagnostics;
+   leave production publication unspecified until a target exists. Express the
+   production omission of the standalone frontend authorization policy as a
+   small overlay patch. Archived templates remain unchanged.
+4. Keep the rate-limit EnvoyFilter shared without production-only semantic
+   patches. Check routes differ only in declared environment fields and that
+   infrastructure overlays preserve StatefulSets, persistence, and security.
+   Extend existing verifiers with focused structural comparisons where there is
+   a real drift risk; do not build a general parity-testing framework.
+5. Point the production NGINX ConfigMap generator at the canonical production
+   configuration and existing shared includes where this removes direct copies.
+   Preserve local Vite and production static frontend variants, route ownership,
+   and security behavior. Defer broader NGINX restructuring.
+6. Update affected owner docs alongside each change. Preserve the atomic local
+   frontend production-smoke image target as the existing local proof of built
+   frontend delivery. Do not introduce another full local cluster or claim this
+   proves an unspecified cloud deployment.
 
 ### Implementation notes
 
-Do not force textual equality between development and production NGINX files:
-Vite/HMR and a built static frontend genuinely differ. Share backend routing
-and security includes where practical, and enforce semantic parity for public
-API ownership with focused tests.
+Near-identical environments means shared application behavior and controls with
+explicit differences. Production overlays remain useful without a production
+host. Defer additional cleanup unless necessary to retain parity or remove the
+OCI dependency.
 
 ### Validation
 
-- Render production apps, gateway routes, and infrastructure overlays.
-- Validate local and production NGINX configurations through their supported
-  render/config-test paths.
-- Run route-inventory parity checks and production image/render guardrails.
-- Confirm the production static frontend path and local Vite path both retain
-  their documented behavior.
-- Run `bash -n` and `shellcheck` for every changed shell script.
+- Render retained production Kustomize targets and compare declared shared
+  ingress, authorization, rate-limit, route, and persistence structures.
+- Run affected ingress/static security, routing, image, and metadata checks.
+- Validate NGINX variants through supported configuration checks.
+- Run focused local smoke checks when Tilt wiring or runtime behavior changes,
+  including the frontend production-smoke path when affected. Report missing
+  prerequisites instead of substituting an offline claim.
+- Run `bash -n`, `shellcheck` on changed active scripts, and `git diff --check`.
 
 ### Completion criteria
 
-Production app, route, NGINX, and infrastructure outputs reuse shared sources
-where behavior is common; remaining differences are deliberate, documented,
-and structurally tested rather than maintained as unexplained copies.
+Reusable Kubernetes production configuration remains maintained and checked
+against shared local behavior. Necessary copies are removed, deliberate
+differences are documented, and no new provider/deployment framework exists.
 
-## Phase 4: Isolate legacy OCI assets and gate generic production renders
+## Phase 4: Finish the production documentation cleanup
 
 ### Workspace
 
@@ -293,76 +311,85 @@ and structurally tested rather than maintained as unexplained copies.
 
 ### Goal
 
-Make provider-neutral production renders the maintained acceptance surface and
-prevent retired OCI implementation details from leaking back into it.
+Make repository guidance consistently describe OCI retirement, no current
+production environment, and the continuing purpose and limits of parity.
 
 ### Scope
 
-Generic production render entry points, release metadata vocabulary, static
-guardrails, active script/document maps, and isolation of retired OCI assets.
+All active production/OCI documentation, ownership, catalogs, links, agent
+instructions, and final archive/parity verification.
 
 ### Non-goals
 
-Deleting cloud resources, deploying a replacement environment, inventing
-provider credentials, or guaranteeing old OCI scripts remain executable.
+Rewriting preserved history, calling a replacement provider supported, disabling
+unrelated release/CI workflows, or executing a cloud migration.
 
 ### Required context
 
-- outputs and parity matrix from Phases 1-3
-- `deploy/scripts/render/`
-- `deploy/scripts/reconcile/`
-- OCI-named scripts under `deploy/scripts/{lib,release,verify}/`
-- `kubernetes/production/apps/deployment-manifest.yaml`
-- `kubernetes/production/apps/image-inventory.yaml`
-- production release metadata and guardrails
-- `scripts/README.md`, `deploy/README.md`, `kubernetes/production/README.md`
+- `docs/OWNERSHIP.md`, `docs/agents-md-checkstyle.md`, `AGENTS.md`, `README.md`
+- Archive, retained deployment, and production README files
+- `docs/ci-cd.md`, `docs/dependency-automation.md`, `scripts/README.md`
+- Architecture owners: system, security, session, ports, observability, autonomy
+- `docs/development/`, `docs/runbooks/`, `docs/research/`, `docs/plans/`
+- `nginx/README.md`, `docs-aggregator/README.md`, `kubernetes/kyverno/README.md`
 
 ### Execution steps
 
-1. Provide one offline generic production render/check entry point that
-   composes apps, infrastructure, routes, ingress/security, gateway pod config,
-   monitoring, and egress without requiring an OCI instance env or credentials.
-2. Rename generic deployment metadata fields/values that encode
-   `oci-production` when they describe provider-neutral artifacts. Preserve
-   artifact traceability and immutable image contracts; do not fabricate a new
-   deployed environment.
-3. Remove OCI upgrade/deployment scripts from generic production acceptance
-   gates. Place them behind an explicit legacy boundary or retirement marker so
-   new work does not source their k3s, NLB, Vault, SSH, or host assumptions.
-4. Add forbidden-pattern and structural checks ensuring the generic production
-   render contains no OCI Vault provider, OCI identifiers, k3s CNI paths, fixed
-   OCI NodePorts/NLB assumptions, or legacy environment labels.
-5. Keep future provider adapter placeholders conceptual unless a provider and
-   its requirements have been selected. Do not add empty scripts or speculative
-   manifests merely to complete a directory shape.
-6. Update active documentation and verifier catalogs to make the generic
-   offline render the maintained production proof. Clearly label local live
-   checks versus provider-neutral production render checks.
+1. Finish updating canonical owners before summaries and links. State that OCI
+   was retired because available free-tier capacity no longer supported the
+   full stack; no production environment exists; Kind/Tilt and provider-neutral
+   production reference overlays are maintained. Remove obsolete OCI capacity
+   figures from current prerequisites.
+2. Replace claims that OCI/k3s is supported throughout active guidance. Keep
+   production-grade local security, persistence, immutable image policy, ARM64
+   support, and the parity objective. Distinguish local runtime evidence,
+   offline render validation, and historical deployment evidence.
+3. Archive OCI-only operator guides, runbooks, and provisioning research
+   captured in Phase 1. Replace useful old entry points with short retirement
+   links; rewrite mixed docs to retain generic content. Remove obsolete OCI
+   upgrade/migration instructions, including retired ingress-filter cleanup,
+   from current guidance and gates.
+4. Search all active text for OCI, Oracle Cloud, k3s, historical deployment
+   hostnames, removed paths, and claims of a current production environment.
+   Review every match in context. Remaining OCI docs must describe retirement
+   or link to labeled history. Review other provider design documents so none
+   accidentally appears to describe a replacement deployment.
+5. Keep ADRs and existing `docs/archive/` files unchanged. Label linked OCI
+   records as retired historical context in active indexes and entry points.
+   Preserved snapshot text remains under the new archive retirement notice.
+   Do not globally replace `production`: build modes, architecture standards,
+   and operational dependency automation remain valid.
+6. Retain release/build and dependency/security automation for active artifacts,
+   describing its purpose without implying OCI deployment. Check links and
+   commands against final paths; remove obsolete verifier requirements. Apply
+   the agent-document authoring checklist to `AGENTS.md`.
+7. Verify frozen checksums again, run final affected checks, and report remaining
+   environment prerequisites and verification limits. Completion must not imply
+   live production validation.
 
 ### Implementation notes
 
-Isolation is preferable to preserving a misleading compatibility path. If
-removing an obsolete OCI file would erase useful historical context, retain it
-under an explicit legacy boundary; if it is redundant with version history,
-propose deletion separately rather than mixing destructive cleanup into this
-plan.
+Exact retirement/snapshot detail belongs in `archive/oci/README.md`; maintained
+overlay/parity detail belongs in `kubernetes/production/README.md`. Record
+ownership in `docs/OWNERSHIP.md`; other documents summarize and link. Updating
+this plan alone does not mean retirement has been implemented.
 
 ### Validation
 
-- Run the generic production render/check entry point from a clean environment
-  with no OCI variables or credentials.
-- Run forbidden-provider scans and all structural parity checks from earlier
-  phases.
-- Run affected local Tilt and focused ingress/NGINX checks against guarded
-  `kind-kind` where live behavior changed.
-- Verify active docs contain no canonical OCI deployment instructions and no
-  claim that a replacement provider is already supported.
-- Run `bash -n`, `shellcheck`, the `AGENTS.md` checkstyle workflow, and
-  `git diff --check`.
+- Search active documentation for stale claims/unmarked OCI guidance; inspect
+  remaining matches instead of banning terms.
+- Verify active links resolve and no active command points into the archive.
+  Confirm ADRs and older archives have no modifications.
+- Verify snapshot checksums and absence of active archive consumers.
+- Run retained offline production/static security checks; reuse earlier local
+  smoke evidence unless later changes require rerunning it.
+- Apply the agent-document checklist, validate changed active shell scripts,
+  and run `git diff --check`.
 
 ### Completion criteria
 
-The maintained production acceptance surface is provider-neutral and offline,
-shared behavior remains aligned with local development, legacy OCI assets are
-isolated from active paths, and no live migration or speculative replacement
-deployment has been performed.
+OCI is unmistakably retired across active documentation, its original deployment
+implementation is preserved unchanged, and it creates no ongoing deployment
+maintenance obligations. Maintained shared configuration, explicit differences,
+offline checks, and local runtime evidence continue to demonstrate Kubernetes
+parity without claiming a production host.

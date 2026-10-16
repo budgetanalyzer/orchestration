@@ -1,0 +1,67 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spring-boot-services
+  namespace: default
+  labels:
+    app.kubernetes.io/component: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: session-gateway
+        - targetLabel: __address__
+          replacement: session-gateway.default.svc.cluster.local:8081
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          targetLabel: application
+    - port: http
+      path: /transaction-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: transaction-service
+        - targetLabel: __address__
+          replacement: transaction-service.default.svc.cluster.local:8082
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          targetLabel: application
+    - port: http
+      path: /currency-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: currency-service
+        - targetLabel: __address__
+          replacement: currency-service.default.svc.cluster.local:8084
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          targetLabel: application
+    - port: http
+      path: /permission-service/actuator/prometheus
+      interval: 15s
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          action: keep
+          regex: permission-service
+        - targetLabel: __address__
+          replacement: permission-service.default.svc.cluster.local:8086
+        - sourceLabels:
+            - __meta_kubernetes_service_name
+          targetLabel: application

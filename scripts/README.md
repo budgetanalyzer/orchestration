@@ -10,6 +10,13 @@ surface under `../deploy/scripts/` is owned by
 [../deploy/README.md](../deploy/README.md); this file calls out only the deploy
 commands that are part of the normal release or verification boundary.
 
+Preserved scripts below `../archive/oci/` are frozen historical copies, not
+members of the active `scripts/` or `deploy/scripts/` catalogs. Do not add
+archive paths to maintained image-pinning inventories, deployment acceptance
+checks, shell validation sweeps, build discovery, or update automation. General
+secret detection still applies. See
+[../archive/oci/README.md](../archive/oci/README.md) for the snapshot boundary.
+
 ## Layout
 
 ```

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: infrastructure
+
+resources:
+  - namespace.yaml
+  - postgresql/configmap.yaml
+  - postgresql/service.yaml
+  - postgresql/statefulset.yaml
+  - rabbitmq/configmap.yaml
+  - rabbitmq/service.yaml
+  - rabbitmq/statefulset.yaml
+  - redis/service.yaml
+  - redis/statefulset.yaml
+
+configMapGenerator:
+  - name: redis-acl-bootstrap
+    files:
+      - start-redis.sh=redis/start-redis.sh
+
+generatorOptions:
+  disableNameSuffixHash: true

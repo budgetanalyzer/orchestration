@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: session-gateway-idp-config
+  namespace: default
+  labels:
+    app: session-gateway
+data:
+  AUTH0_CLIENT_ID: "__AUTH0_CLIENT_ID__"
+  AUTH0_ISSUER_URI: "__AUTH0_ISSUER_URI__"
+  IDP_AUDIENCE: "__IDP_AUDIENCE__"
+  IDP_LOGOUT_RETURN_TO: "__IDP_LOGOUT_RETURN_TO__"

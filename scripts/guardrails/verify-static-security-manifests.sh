@@ -19,8 +19,8 @@ KUSTOMIZE_RENDER_DIR=""
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
-# shellcheck source=../../deploy/scripts/lib/version-contract.sh
-. "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
+# shellcheck source=../lib/production-version-contract.sh
+. "${REPO_DIR}/scripts/lib/production-version-contract.sh"
 
 KUBECONFORM_ALLOWED_MISSING_KINDS=(
     AuthorizationPolicy
@@ -73,7 +73,6 @@ OBSERVABILITY_ROUTE_PATHS=(
 )
 
 OBSERVABILITY_PRODUCTION_INPUT_PATHS=(
-    "${REPO_DIR}/deploy/instance.env.template"
     "${REPO_DIR}/deploy/README.md"
     "${REPO_DIR}/deploy/scripts"
 )
@@ -563,7 +562,7 @@ run_kyverno_production_helm_render_check() {
     HELM_DATA_HOME="${temp_dir}/data" \
     HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
     HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
-        "${STATIC_TOOLS_BIN}/helm" repo add kyverno "${PHASE7_KYVERNO_HELM_REPO_URL}" >/dev/null
+        "${STATIC_TOOLS_BIN}/helm" repo add kyverno "${PRODUCTION_KYVERNO_HELM_REPO_URL}" >/dev/null
 
     HELM_CACHE_HOME="${temp_dir}/cache" \
     HELM_CONFIG_HOME="${temp_dir}/config" \
@@ -578,7 +577,7 @@ run_kyverno_production_helm_render_check() {
     HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
     HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
         "${STATIC_TOOLS_BIN}/helm" template kyverno kyverno/kyverno \
-            --version "${PHASE7_KYVERNO_CHART_VERSION}" \
+            --version "${PRODUCTION_KYVERNO_CHART_VERSION}" \
             --namespace kyverno \
             --values "${PRODUCTION_KYVERNO_VALUES}" > "${rendered_file}"
 

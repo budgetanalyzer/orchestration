@@ -358,10 +358,14 @@ with source_path.open(encoding="utf-8") as source:
     metadata = json.load(source)
 
 deployment = metadata.setdefault("deployment", {})
-deployment["productionBaselineId"] = deployment.get("id", "")
-deployment["id"] = "tilt-local-development"
-deployment["environment"] = "local-development"
-deployment["runtime"] = "tilt"
+production_reference_id = deployment.get("id", "")
+deployment.clear()
+deployment.update({
+    "id": "tilt-local-development",
+    "environment": "local-development",
+    "runtime": "tilt",
+    "productionReferenceId": production_reference_id,
+})
 
 for artifact in metadata.get("artifacts", {}).values():
     artifact["localSource"] = local_source_state(artifact)

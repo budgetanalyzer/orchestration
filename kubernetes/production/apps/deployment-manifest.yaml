@@ -1,7 +1,9 @@
 schema_version: 2
 deployment:
   id: "oci-20260524T050351Z"
-  environment: "oci-production"
+  environment: "retired-oci-reference"
+  reference_only: true
+  historical_environment: "oci-production"
   created_at: "2026-05-24T05:03:56Z"
   production_baseline_input: "kubernetes/production/apps/deployment-manifest.yaml"
   orchestration_repository:

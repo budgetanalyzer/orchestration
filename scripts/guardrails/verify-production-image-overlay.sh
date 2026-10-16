@@ -19,7 +19,6 @@ RENDERED_APPS_FILE=""
 RENDERED_INFRASTRUCTURE_FILE=""
 PHASE6_RENDER_DIR=""
 PHASE7_OBSERVABILITY_RENDER_DIR=""
-INSTANCE_ENV_FILE_TMP=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
@@ -383,14 +382,6 @@ assert_no_phase6_forbidden_patterns() {
     assert_not_contains "${file}" 'auth0-issuer\.placeholder\.invalid' "Production artifact contains the placeholder Auth0 issuer host: ${file}"
 }
 
-create_temp_instance_env() {
-    INSTANCE_ENV_FILE_TMP="${TEMP_DIR}/instance.env"
-    cat > "${INSTANCE_ENV_FILE_TMP}" <<EOF
-DEMO_DOMAIN=${LOCKED_DEMO_DOMAIN}
-AUTH0_ISSUER_URI=${LOCKED_AUTH0_ISSUER_URI}
-EOF
-}
-
 verify_apps_overlay() {
     local image repo
 
@@ -428,6 +419,8 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'release-metadata.json: |' "rendered production docs ConfigMap is missing release-metadata.json"
     assert_contains_literal "${RENDERED_APPS_FILE}" '"schemaVersion": 2' "rendered production release metadata is not schema v2"
     assert_contains_literal "${RENDERED_APPS_FILE}" '"deployment": {' "rendered production release metadata is missing deployment identity"
+    assert_contains_literal "${RENDERED_APPS_FILE}" '"environment": "retired-oci-reference"' "rendered production release metadata does not label the retired OCI provenance"
+    assert_contains_literal "${RENDERED_APPS_FILE}" '"referenceOnly": true' "rendered production release metadata is not marked reference-only"
     assert_contains_literal "${RENDERED_APPS_FILE}" '"artifactVersion":' "rendered production release metadata is missing artifact versions"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /login {' "rendered production nginx config is missing the /login route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = / {' "rendered production nginx config is missing the root route"
@@ -459,8 +452,6 @@ verify_phase6_render_outputs() {
     assert_no_phase6_forbidden_patterns "${ingress_file}"
     assert_no_phase6_forbidden_patterns "${monitoring_file}"
     assert_no_phase6_forbidden_patterns "${egress_file}"
-    assert_not_contains "${INSTANCE_ENV_FILE_TMP}" "${FORBIDDEN_OBSERVABILITY_INPUT_PATTERN}" \
-        "temporary production instance env still contains removed observability hostname inputs"
     assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_ROUTE_PATTERN}" \
         "rendered gateway routes still contain an observability HTTPRoute"
     assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_SERVICE_PATTERN}" \
@@ -560,11 +551,9 @@ verify_production_istio_authorization_policies() {
 }
 
 render_phase6_manifests() {
-    create_temp_instance_env
     PHASE6_RENDER_DIR="${TEMP_DIR}/production-routes"
 
-    INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
-        "${REPO_DIR}/deploy/scripts/render/production-routes.sh" \
+    "${REPO_DIR}/deploy/scripts/render/production-routes.sh" \
         --output-dir "${PHASE6_RENDER_DIR}" >/dev/null
 }
 
@@ -674,11 +663,10 @@ verify_phase7_observability_render_outputs() {
 }
 
 main() {
-    require_command helm
-    require_command kubectl
+    ensure_static_tool helm
+    ensure_static_tool kubectl
     ensure_static_tool kyverno
-    kubectl cluster-info >/dev/null 2>&1 || \
-        fail "cannot reach the Kubernetes cluster; the production observability verifier now needs live cluster access to server-dry-run Kiali RBAC"
+    export PATH="${STATIC_TOOLS_BIN}:${PATH}"
 
     [[ -d "${OVERLAY_DIR}" ]] || fail "production overlay directory not found: ${OVERLAY_DIR}"
     [[ -d "${INFRASTRUCTURE_OVERLAY_DIR}" ]] || fail "production infrastructure overlay directory not found: ${INFRASTRUCTURE_OVERLAY_DIR}"

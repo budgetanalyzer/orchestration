@@ -137,7 +137,7 @@ function renderDeploymentMetadata() {
             var release = metadata.release || {};
             var version = deployment.id || release.version || "unknown";
             var environment = deployment.environment || "unknown";
-            var baseline = deployment.productionBaselineId || "";
+            var baseline = deployment.productionReferenceId || deployment.productionBaselineId || "";
             var runtime = deployment.runtime || "";
             var orchestration = deployment.orchestrationRepository || {};
             var summary = "Deployment " + version;
@@ -149,7 +149,7 @@ function renderDeploymentMetadata() {
                 labelText = "Tilt local-development";
                 labelTitle = summary;
                 if (baseline) {
-                    labelTitle = summary + " (baseline " + baseline + ")";
+                    labelTitle = summary + " (production reference " + baseline + ")";
                 }
             }
 

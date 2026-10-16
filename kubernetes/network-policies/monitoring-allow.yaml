@@ -27,10 +27,10 @@ metadata:
   name: allow-monitoring-kubernetes-api-egress
   namespace: monitoring
 spec:
-  # The repo supports Kind locally and k3s on OCI. Their default Kubernetes
-  # service CIDRs are 10.96.0.0/12 and 10.43.0.0/16 respectively. Calico
-  # enforces this path after service DNAT, so the apiserver's private endpoint
-  # on 6443 also has to be allowed.
+  # Local Kind uses the 10.96.0.0/12 service CIDR. Calico enforces this path
+  # after service DNAT, so the apiserver's private endpoint on 6443 also has to
+  # be allowed. A future hosted environment must supply its own reviewed
+  # service/network CIDRs rather than inheriting a retired provider default.
   podSelector:
     matchExpressions:
       - key: app.kubernetes.io/name
@@ -46,8 +46,6 @@ spec:
     - to:
         - ipBlock:
             cidr: 10.96.0.0/12
-        - ipBlock:
-            cidr: 10.43.0.0/16
       ports:
         - protocol: TCP
           port: 443

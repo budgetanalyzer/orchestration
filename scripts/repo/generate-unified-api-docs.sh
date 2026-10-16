@@ -327,7 +327,7 @@ jq -n \
         },
         {
             "url": "https://api.budgetanalyzer.org",
-            "description": "Production environment"
+            "description": "Historical production reference (not live)"
         }
     ],
     "tags": (

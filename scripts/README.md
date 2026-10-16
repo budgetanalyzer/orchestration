@@ -5,10 +5,9 @@ repository. Scripts are grouped by purpose so setup, validation, operational,
 loadtest, and repository-management tasks have stable entry points.
 
 This README is the canonical catalog for the `scripts/` tree and for
-cross-cutting verifier entry points. The detailed OCI deployment operator
-surface under `../deploy/scripts/` is owned by
-[../deploy/README.md](../deploy/README.md); this file calls out only the deploy
-commands that are part of the normal release or verification boundary.
+cross-cutting verifier entry points. The maintained provider-neutral,
+render-only production surface under `../deploy/scripts/` is owned by
+[../deploy/README.md](../deploy/README.md).
 
 Preserved scripts below `../archive/oci/` are frozen historical copies, not
 members of the active `scripts/` or `deploy/scripts/` catalogs. Do not add
@@ -83,9 +82,8 @@ scripts/
   bounded dynamic descriptors and the absence of a default bucket, requires
   path normalization plus encoded-slash rejection before filter selection,
   exercises path/query/method boundaries and equivalent authority spellings,
-  and renders both production gateway stages with disposable fixture values to
-  prove their narrow stats matchers are structurally equivalent to the local
-  ConfigMap. Its NGINX cutover scan fails closed for missing or unreadable
+  and checks the maintained ingress gateway ConfigMap's narrow stats matcher.
+  Its NGINX cutover scan fails closed for missing or unreadable
   inputs and distinguishes a clean negative search from a search error;
   `--self-test-nginx-search` proves the clean, forbidden-directive, and missing
   input cases with disposable fixtures. The verifier defaults to managed-VM
@@ -116,9 +114,8 @@ scripts/
   owns one of them. It verifies Grafana health,
   Prometheus readiness, Jaeger query API access, Kiali UI shell access, and
   that unauthenticated Grafana and Kiali API access is rejected. Use the same
-  loopback-only access model in local Tilt and production OCI/k3s for the
-  observability components installed there, and do not use `--address 0.0.0.0`
-  for observability access.
+  loopback-only access model for local Tilt, and do not use
+  `--address 0.0.0.0` for observability access.
 - `ops/start-observability-port-forwards.sh` - Foreground supervisor for the
   canonical loopback-only Grafana, Prometheus, Jaeger, and Kiali
   `kubectl port-forward` processes. It starts all four forwards by default,
@@ -129,23 +126,16 @@ scripts/
   current Kiali API findings plus recent Kiali warnings, compares them to live
   Kubernetes namespace object counts, and classifies the obvious buckets such
   as runtime-absent workloads, missing backend services, tracing dependency
-  gaps, and likely low-signal waypoint warnings. Use
-  `--runtime-shape production` on OCI so the helper expects the production
-  frontend topology (`nginx-gateway` serves the bundle; no standalone
-  `budget-analyzer-web` Deployment).
-- `ops/show-pod-version-labels.sh` - Lists pod deployment metadata for the
+  gaps, and likely low-signal waypoint warnings. The
+  `--runtime-shape production` option remains useful when inspecting a runtime
+  shaped like the maintained production reference (`nginx-gateway` serves the
+  bundle; no standalone `budget-analyzer-web` Deployment).
+- `ops/show-pod-version-labels.sh` - Lists pod release/reference metadata for the
   current Kubernetes context and warns when Budget Analyzer runtime pods do not
   match a schema v2 deployment manifest or the checked-in production image
-  inventory. Use `--allow-mixed-deployment-id` for selective OCI rollouts where
-  unchanged pods are allowed to retain an earlier deployment id. Use `--strict`
-  when the warning check should fail the command.
-- `ops/start-observability-ssh-tunnels.sh` - Workstation-side foreground SSH
-  tunnel helper for production OCI/k3s observability access. It takes the OCI
-  host as an optional argument or reads `OCI_INSTANCE_IP`, assumes `ubuntu`
-  plus `~/.ssh/oci-budgetanalyzer`, opens loopback-only tunnels for the
-  canonical Grafana, Prometheus, Jaeger, and Kiali ports, and expects the
-  matching `ops/start-observability-port-forwards.sh` process to already be
-  running on the OCI host.
+  inventory. Use `--allow-mixed-deployment-id` when intentionally inspecting a
+  selective historical rollout where unchanged pods retain an earlier
+  runtime id. Use `--strict` when the warning check should fail the command.
 - `ops/capture-prometheus-operator-baseline.sh` - Renders the upstream
   Prometheus stack without the repo post-renderer, extracts the operator RBAC
   objects, builds a representative `kubectl auth can-i` matrix for the
@@ -175,30 +165,14 @@ scripts/
   `.cache/phase7-static-tools/pyyaml-venv` environment with the hash-verified
   install documented in `docs/ci-cd.md#security-guardrailsyml`, then set
   `INGRESS_RATE_LIMIT_PYTHON` to that environment's interpreter.
-- `guardrails/verify-production-image-overlay.sh` - Static verifier for the
-  full Oracle production baseline: app overlay, production
-  infrastructure overlay, production render output, and the production image
-  Kyverno policy. It is non-mutating, but it requires a live
-  `kubectl` context so the Kiali production render can use a Helm server-side
-  dry run and capture the full namespace-scoped RBAC footprint.
-- `../deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` - Normal
-  local OCI desired-state preparation entry point. It validates clean source
-  workspaces, compares current artifact source state with the production image
-  inventory, previews tag actions for changed artifacts, creates and pushes
-  missing source tags in `--push-tags` mode, then stops. After GitHub Actions
-  publishes the expected GHCR tags, `--resolve-images` reads changed-artifact
-  tags once, resolves digest-pinned refs, preserves unchanged artifact images,
-  updates the checked-in production desired state, and stops for review.
-- `../deploy/scripts/release/deploy-current-oci-manifest.sh` - Normal OCI-host apply
-  entry point. It applies the checked-in production manifest, waits only for
-  changed managed rollouts, and verifies live runtime metadata against that
-  manifest.
-- `../deploy/scripts/verify/oci-upgrade-lockstep.sh` - Non-mutating static
-  verifier for OCI upgrade lockstep. It checks local Tilt chart pins against
-  OCI version contracts; production deployment manifest, image inventory, app
-  kustomization, runtime metadata patch, and release metadata agreement;
-  production `/api-docs` render wiring; and digest-pin inputs for production
-  infrastructure and Helm values.
+- `guardrails/verify-production-image-overlay.sh` - Non-mutating,
+  provider-neutral verifier for the production reference: app and
+  infrastructure overlays, route/authorization/ingress/egress/observability
+  renders, immutable image provenance, and the production Kyverno image
+  policy. Focused comparisons allow only the declared route hostname,
+  standalone-frontend authorization omission, local gateway publication, and
+  Redis storage-size differences. It uses client-side rendering only and does
+  not inspect or contact a Kubernetes cluster.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
   commit SHAs for the coordinated source state, verifies the
@@ -211,7 +185,7 @@ scripts/
   delegating to `repo/tag-release.sh --repo <repo>`.
 - `repo/tag-release.sh` - Normal single-repository release tag helper. It
   requires `--repo`, validates only that repository, and refuses tooling repos
-  such as `checkstyle-config` for OCI runtime release tagging.
+  such as `checkstyle-config` for runtime release tagging.
 - `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
   all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set. Use
   `--repo-set runtime-images --current-state --plan-only` to preview which
@@ -228,8 +202,8 @@ scripts/
 Choose scripts by runtime boundary:
 
 - `bootstrap/` changes or checks the host and cluster prerequisites.
-- `guardrails/` stays non-mutating; most scripts are CI-safe, while
-  `verify-production-image-overlay.sh` also expects a live `kubectl` context.
+- `guardrails/` stays non-mutating; the production-reference verifier uses
+  client-side `kubectl kustomize` rendering and does not contact a cluster.
 - `smoketest/` assumes a live `kubectl` context and a running local stack.
 - `ops/` is for interactive local maintenance.
 - `loadtest/` manages synthetic local fixtures.
@@ -328,7 +302,9 @@ For normal native guest startup, run
   consume the Kubernetes inputs.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
-  reviewed production route/ingress/monitoring/egress output, verifies
+  reviewed production route/authorization/ingress/monitoring/egress output,
+  compares shared routes, gateway pod settings, authorization policies, and
+  stateful infrastructure with their narrow declared differences, verifies
   the digest-pinned GHCR image inventory, rejects local `:latest` /
   `:tilt-` image paths, localhost hosts, placeholder Auth0 hosts, and
   `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
@@ -353,14 +329,8 @@ For normal native guest startup, run
   artifact; the shared evidence policy lives in
   `../docs/dependency-automation.md`.
 
-Run the static OCI lockstep verifier before changing or deploying a production
-deployment baseline:
-
-```bash
-./deploy/scripts/verify/oci-upgrade-lockstep.sh
-```
-
-Use the live-cluster production verifier when a cluster is available:
+Run the offline production-reference verifier when changing maintained
+production overlays, render inputs, image metadata, or policies:
 
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
@@ -440,29 +410,21 @@ the active context and Tilt resource state from the same host shell first.
   triage summary. It also compares the current Kiali findings against the
   expected app deployments in `default`, so it can say explicitly when cluster
   startup is the blocker and Kiali is just reporting missing runtime. Local
-  Tilt defaults to the seven-workload topology; OCI production should use
-  `--runtime-shape production` so the helper expects the six-workload topology
-  where `nginx-gateway` serves the frontend bundle.
+  Tilt defaults to the seven-workload topology. Use
+  `--runtime-shape production` only when inspecting the six-workload reference
+  topology where `nginx-gateway` serves the frontend bundle.
   It references [docs/runbooks/kiali-expected-warnings.md](../docs/runbooks/kiali-expected-warnings.md)
   for the warnings this repo intentionally ignores. Use `--output-dir <dir>`
   when you want the raw JSON and log artifacts for later review.
 - `ops/show-pod-version-labels.sh` prints all pods by default and marks
-  Budget Analyzer runtime pods with `WARN` when deployment id, artifact
+  Budget Analyzer runtime pods with `WARN` when runtime id, artifact
   version, source ref, source commit, service-common version, or image
   annotation differs from the expected schema v2 manifest/inventory metadata.
   Use `--deployment-manifest <path>` for an explicit reviewed manifest,
   `--tracked-only` to hide third-party and infrastructure pods, and `--strict`
-  to return non-zero on warnings. Use `--allow-mixed-deployment-id` when a
-  selective OCI rollout should accept already-current pods from an earlier
-  deployment id.
-- `ops/start-observability-ssh-tunnels.sh` is the workstation-side companion
-  for production OCI/k3s. First start the Kubernetes port-forwards on the OCI
-  host, then from the workstation run
-  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>` or set
-  `OCI_INSTANCE_IP` and run `./scripts/ops/start-observability-ssh-tunnels.sh`.
-  The helper keeps one SSH session open with local loopback tunnels for
-  `3300`, `9090`, `16686`, and `20001`, and fails fast if the remote loopback
-  endpoints are not reachable.
+  to return non-zero on warnings. Use `--allow-mixed-deployment-id` only when a
+  deliberately selective historical rollout should accept already-current
+  pods from an earlier runtime id.
 - `ops/capture-prometheus-operator-baseline.sh` is the repo-owned upstream
   comparison capture for the Prometheus Operator. It refreshes the chart
   render without the repo post-renderer, records the rendered operator RBAC
@@ -477,10 +439,6 @@ the active context and Tilt resource state from the same host shell first.
   `configmaps`, service mutation, and pod-delete authority outside
   `monitoring` while retaining the documented cluster-read exceptions for
   `namespaces`, `nodes`, `ingresses`, and `storageclasses`.
-- `deploy/scripts/verify/network-policy-enforcement.sh` can run before
-  production Auth0 config exists, but in that pre-Auth0 state the two positive
-  `istio-egress-gateway:443` checks are deferred until the real egress routing
-  is rendered and applied later in the production plan.
 - `ops/grafana-ui-playwright-debug.sh` creates an ignored temporary Playwright
   runner under `tmp/grafana-ui-debug/`, expects an already-running Grafana
   port-forward at `http://127.0.0.1:3300` by default, logs into that
@@ -540,13 +498,12 @@ directory without writing outside the repository.
   requested tag.
 - `repo/tag-release.sh` creates a normal single-repository release tag. It
   requires `--repo`, validates only that repository, and refuses tooling repos
-  for OCI runtime release tagging.
+  for runtime release tagging.
 - `repo/tag-lockstep-release.sh` creates coordinated lockstep tags across the
   explicit `LOCKSTEP_RELEASE_REPOS` set by default. `--repo-set runtime-images`
-  narrows the operation to the deployable image source repos, while
-  `--repo-set oci-release` uses the source repo set recorded in OCI release
-  manifests. In the default strict mode, any existing non-`service-common` tag
-  is a hard failure. With `--current-state`, the helper compares the requested
+  narrows the operation to the runtime image source repos. In the default
+  strict mode, any existing non-`service-common` tag is a hard failure. With
+  `--current-state`, the helper compares the requested
   tag to each selected repo's current local HEAD, creates and pushes only
   absent tags, pushes local-only tags that already point at current HEAD, skips
   tags already present at current HEAD, and fails if an existing tag points
@@ -575,14 +532,6 @@ directory without writing outside the repository.
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
   edits or before release tagging.
-- `deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh` is the normal
-  local desired-state preparation entry point for OCI app changes; use
-  `--plan-only`, `--push-tags`, and `--resolve-images` as separate operator
-  steps. Add `--lockstep` only when every managed artifact should move to the
-  requested tag instead of preserving unchanged artifacts.
-- `deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host apply
-  entry point for the checked-in production manifest and waits only for changed
-  managed rollouts.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

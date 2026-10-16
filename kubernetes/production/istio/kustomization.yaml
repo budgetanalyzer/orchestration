@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../istio/authorization-policies.yaml
+
+patches:
+  - path: patches/delete-standalone-frontend-policy.yaml

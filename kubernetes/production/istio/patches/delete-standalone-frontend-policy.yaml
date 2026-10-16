@@ -1,0 +1,6 @@
+$patch: delete
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: budget-analyzer-web-policy
+  namespace: default

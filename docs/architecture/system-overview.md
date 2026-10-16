@@ -49,7 +49,8 @@ The important split is:
 - Backend services own business logic and data-level authorization.
 
 This gives the repo a same-origin browser surface, keeps tokens out of the
-browser, and preserves the same gateway layering in local Tilt and OCI/k3s.
+browser, and preserves the same gateway layering in local Tilt and the
+provider-neutral production reference.
 
 Operational note: `./scripts/smoketest/verify-security-prereqs.sh` proves the
 platform security prerequisites. Treat Istio ingress and egress hardening as
@@ -159,12 +160,15 @@ Common patterns documented once in service-common:
 - Code quality standards
 - See: [service-common/docs/](https://github.com/budgetanalyzer/service-common/tree/main/docs)
 
-### 4. Production Parity
-Local development environment mirrors production architecture:
-- Same services
-- Same infrastructure (PostgreSQL, Redis, RabbitMQ)
-- Same gateway routing
-- Different: Resource limits, replication
+### 4. Production-Reference Parity
+
+Local Kind/Tilt is the live architecture proof. The maintained production
+overlays reuse the workload, infrastructure, routing, security, persistence,
+and observability inputs where practical and are validated offline. No hosted
+production environment is currently configured, so offline render evidence is
+not runtime parity evidence. The exact shared inputs, intentional differences,
+and unresolved hosting prerequisites live in
+[kubernetes/production/README.md](../../kubernetes/production/README.md).
 
 ### 5. Event-Driven Communication
 Services communicate asynchronously where possible:

@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/render-common.sh
+# shellcheck disable=SC1091 # Render helper is resolved from SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/../lib/render-common.sh"
 
 DEFAULT_OUTPUT_DIR="${PRODUCTION_REPO_ROOT}/tmp/production-infrastructure"
@@ -58,4 +59,3 @@ main() {
 }
 
 main "$@"
-

@@ -6,13 +6,21 @@
 
 [![Security Guardrails](https://github.com/budgetanalyzer/orchestration/actions/workflows/security-guardrails.yml/badge.svg)](https://github.com/budgetanalyzer/orchestration/actions/workflows/security-guardrails.yml)
 
-This repo is the control plane for Budget Analyzer. It contains every Kubernetes manifest, Tilt workflow, Istio mesh configuration, network policy, monitoring stack, and deployment script needed to run the full platform — locally or in production — from a single `tilt up`.
+This repo is the control plane for Budget Analyzer. It contains the Kubernetes
+manifests, Tilt workflow, Istio mesh configuration, network policy, monitoring
+stack, and offline production reference used to coordinate the platform. Local
+Kind/Tilt is the live validation target; no production environment is currently
+configured.
 
 ## What makes this interesting
 
-**One set of manifests, two environments.** The Kubernetes manifests under `kubernetes/services/` are the same ones that run in production. The production overlay (`kubernetes/production/apps/`) patches in pinned image digests and removes `imagePullPolicy: Never` — that's it. Infrastructure (PostgreSQL, Redis, RabbitMQ) follows the same pattern: production reuses the shared baseline and patches only storage sizing. Everything else — service accounts, deployments, services, network policies, Istio security policies — is identical.
+**One shared manifest base, two deployment shapes.** The production reference
+reuses the Kubernetes manifests under `kubernetes/services/`, patches in pinned
+image digests, and uses the same stateful infrastructure baseline with a narrow
+storage-size override. The overlays are maintained and checked offline while
+Kind/Tilt proves the live local path.
 
-**Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full production stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
+**Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full security stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
 **AI agents can debug the full stack.** The selected target runs agents directly
 in a dedicated development VM, with repeatable tooling owned by
@@ -24,11 +32,15 @@ runtimes are retired and must not be reconstructed. The
 target, and workspace's [host-isolation audit](../workspace/docs/host-isolation-audit.md)
 owns the human-only firewall and confinement evidence workflow.
 
-**Production deployment is documented and scripted.** The `deploy/` directory contains the complete, numbered script sequence to bootstrap a k3s cluster on OCI from scratch — Istio mesh, cert-manager with ACME HTTP-01, OCI Vault secret synchronization via External Secrets Operator, Kyverno admission policies, Prometheus/Grafana monitoring, Jaeger tracing, and public TLS. Every step produces reviewable rendered YAML under `tmp/` before anything touches the cluster.
+**Production architecture remains reviewable offline.** The `deploy/`
+directory renders provider-neutral routing, infrastructure, and observability
+references without cloud configuration or cluster access. The retired OCI
+implementation is preserved unchanged under `archive/oci/`; it is not an
+active deployment path.
 
 ## Architecture
 
-- **Frontend**: React/Vite (budget-analyzer-web), served through NGINX in production, Vite dev server locally
+- **Frontend**: React/Vite (budget-analyzer-web), served through NGINX in the production reference, Vite dev server locally
 - **API Gateway**: NGINX handles resource routing; Istio ingress handles TLS termination and per-client auth/API rate limiting
 - **Auth**: OAuth2/OIDC with Auth0 via session-gateway, edge session validation via ext-authz (Go), Redis-backed sessions
 - **Backend**: Spring Boot microservices (transaction-service, currency-service, permission-service) with PostgreSQL, RabbitMQ
@@ -83,7 +95,8 @@ second host tunnel.
 - [Service-Common Artifact Resolution](docs/development/service-common-artifact-resolution.md) — local vs. GitHub Packages
 - [Architecture Overview](docs/architecture/system-overview.md)
 - [Observability Architecture](docs/architecture/observability.md)
-- [Production Deployment](deploy/README.md) — OCI bootstrap scripts and operator runbook
+- [Production Reference](deploy/README.md) — provider-neutral offline renders and deployment prerequisites
+- [Retired OCI Snapshot](archive/oci/README.md) — frozen implementation and restoration caveats
 - [Dependency Automation](docs/dependency-automation.md) — production Renovate policy, graph and scanner workflows, bounded evidence artifacts, cost constraints, and failure triage
 
 ## Service Repositories

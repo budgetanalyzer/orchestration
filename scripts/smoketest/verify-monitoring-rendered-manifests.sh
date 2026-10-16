@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=scripts/lib/production-version-contract.sh
+# shellcheck disable=SC1091 # Repository root is resolved from SCRIPT_DIR at runtime.
 source "${REPO_DIR}/scripts/lib/production-version-contract.sh"
 
 CHART="prometheus-community/kube-prometheus-stack"

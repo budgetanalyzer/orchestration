@@ -16,7 +16,7 @@
   "servers": [
     {
       "url": "https://demo.budgetanalyzer.org/api",
-      "description": "Production environment"
+      "description": "Historical production reference (not live)"
     }
   ],
   "tags": [

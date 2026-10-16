@@ -21,8 +21,6 @@
 nginx/certs/k8s/_mkcert-rootCA.pem
 nginx/certs/k8s/_mkcert-rootCA.pem.tmp.*
 secrets/
-!deploy/scripts/secrets/
-!deploy/scripts/secrets/*.sh
 credentials/
 config/secrets/
 .secrets

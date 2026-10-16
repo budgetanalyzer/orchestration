@@ -1,4 +1,5 @@
-# Hardened single-node values for the Oracle Cloud production install path.
+# Hardened single-node values retained for provider-neutral chart rendering and
+# image evidence. Certificate issuance remains a future deployment prerequisite.
 # Gateway API support stays enabled here so the HTTP ingress and public TLS paths share the same
 # controller install contract.
 

@@ -9,13 +9,13 @@ the GitHub Packages path used by GitHub Actions and release builds.
 for the whole Budget Analyzer stack. Bump and release it when
 `spring-platform`, `spring-cloud-platform`, `service-core`, or `service-web`
 changes. Do not change it only because a service image, frontend artifact,
-route, production overlay, `/api-docs` metadata file, or OCI deployment
-configuration changed.
+route, production overlay, or `/api-docs` metadata file changed.
 
 Java services can release runtime artifacts while continuing to consume the
 same checked-in `serviceCommon` coordinate from `gradle/libs.versions.toml`.
-The production deployment identity is the digest-pinned image inventory and
-deployment manifest, which may contain mixed service artifact versions.
+The offline production-reference identity is the digest-pinned image inventory
+and reference manifest, which may contain mixed service artifact versions. It
+does not report a live deployment.
 
 ## Local Contributor Flow
 

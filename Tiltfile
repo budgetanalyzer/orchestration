@@ -1262,10 +1262,12 @@ local_resource(
 local_resource(
     'istio-ingress-config',
     cmd='''
+        set -eu
         kubectl label namespace default budgetanalyzer.io/ingress-routes=true --overwrite
         kubectl apply -f kubernetes/istio/ingress-namespace.yaml
         kubectl apply -f kubernetes/istio/tls-reference-grant.yaml
-        kubectl apply -f kubernetes/istio/ingress-gateway-config.yaml
+        kubectl kustomize kubernetes/istio/ingress-gateway-local \
+            --load-restrictor=LoadRestrictionsNone | kubectl apply -f -
         kubectl apply -f kubernetes/istio/istio-gateway.yaml
         kubectl wait --for=condition=Programmed gateway/istio-ingress-gateway -n istio-ingress --timeout=120s
         kubectl rollout status deployment/istio-ingress-gateway-istio -n istio-ingress --timeout=120s
@@ -1274,6 +1276,7 @@ local_resource(
         'kubernetes/istio/ingress-namespace.yaml',
         'kubernetes/istio/tls-reference-grant.yaml',
         'kubernetes/istio/ingress-gateway-config.yaml',
+        'kubernetes/istio/ingress-gateway-local/kustomization.yaml',
         'kubernetes/istio/istio-gateway.yaml',
     ],
     resource_deps=['envoy-gateway-cleanup', 'istiod', 'gateway-api-crds', 'ingress-tls-secret'],

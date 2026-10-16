@@ -723,11 +723,6 @@ run_static_checks() {
         "${REPO_ROOT}/kubernetes/services/session-gateway/deployment.yaml" \
         'value: "http://permission-service:8086/permission-service"' \
         "Session Gateway deployment uses the internal permission-service URL"
-    assert_file_contains \
-        "${REPO_ROOT}/deploy/scripts/bootstrap/06-apply-network-policies.sh" \
-        'kubernetes/network-policies' \
-        "production bootstrap applies the shared NetworkPolicy directory"
-
     assert_file_not_contains \
         "${REPO_ROOT}/nginx/nginx.k8s.conf" \
         "/internal/v1/users" \

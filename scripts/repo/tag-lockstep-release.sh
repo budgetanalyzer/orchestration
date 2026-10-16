@@ -16,7 +16,7 @@ Usage:
 
 Options:
   --repo-set <set>   Repository set to inspect and tag:
-                     lockstep, runtime-images, or oci-release.
+                     lockstep or runtime-images.
                      Defaults to lockstep for the historical coordinated path.
   --current-state  Compare the requested tag with each repo's current local
                    HEAD. Tag repos where the tag is absent, skip repos where
@@ -71,11 +71,8 @@ select_repo_set() {
         runtime-images)
             SELECTED_REPOS=("${RUNTIME_IMAGE_REPOS[@]}")
             ;;
-        oci-release)
-            SELECTED_REPOS=("${OCI_RELEASE_SOURCE_REPOS[@]}")
-            ;;
         *)
-            die "unknown repo set: ${repo_set}. Expected lockstep, runtime-images, or oci-release"
+            die "unknown repo set: ${repo_set}. Expected lockstep or runtime-images"
             ;;
     esac
 }

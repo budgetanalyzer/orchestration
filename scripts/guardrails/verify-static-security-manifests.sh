@@ -69,12 +69,11 @@ ACTIVE_NAMESPACE_MANIFESTS=(
 
 OBSERVABILITY_ROUTE_PATHS=(
     "${REPO_DIR}/kubernetes"
-    "${REPO_DIR}/deploy/manifests"
 )
 
 OBSERVABILITY_PRODUCTION_INPUT_PATHS=(
     "${REPO_DIR}/deploy/README.md"
-    "${REPO_DIR}/deploy/scripts"
+    "${REPO_DIR}/deploy/scripts/render"
 )
 
 OBSERVABILITY_GRAFANA_VALUES_FILES=(

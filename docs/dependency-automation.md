@@ -1,6 +1,6 @@
 # Dependency Automation
 
-**Status:** Active production policy
+**Status:** Active dependency-automation policy
 
 This document owns the dependency-automation operating policy for the Budget
 Analyzer repositories. The shared Renovate policy lives in
@@ -35,8 +35,8 @@ The shared preset provides these controls:
 - patch, minor, and major proposals remain distinguishable;
 - major, Helm, stateful, platform, chart-image override, and
   checksum-coupled updates require Dependency Dashboard approval;
-- digest updates retain digest pinning, and first-party production image
-  promotion remains owned by the existing release process; and
+- digest updates retain digest pinning, while first-party production-reference
+  images remain outside automatic promotion; and
 - generated outputs, historical material, local images, and retained stale
   test suites remain outside update ownership.
 
@@ -93,7 +93,7 @@ operation, not authority to buy capacity, remove evidence, or weaken a scan.
 
 ## Configuration and repository ownership
 
-The active production scope contains ten repositories: `orchestration`,
+The active dependency-automation scope contains ten repositories: `orchestration`,
 `service-common`, `currency-service`, `permission-service`,
 `transaction-service`, `session-gateway`, `budget-analyzer-web`, `ext-authz`,
 `workspace`, and `budget-analyzer-api-tests`.
@@ -399,7 +399,7 @@ Every week:
    first-party release path is untouched, and Actions/storage usage remains
    within the approved free boundary.
 
-Every quarter, compare Spring, Node, Go, Java, Python, Ubuntu, Kubernetes/K3s,
+Every quarter, compare Spring, Node, Go, Java, Python, Ubuntu, Kubernetes,
 Istio, RabbitMQ, NGINX, and other runtime lines with upstream support policies.
 Renovate discovery, abandonment heuristics, and vulnerability databases are
 not comprehensive end-of-life authorities.

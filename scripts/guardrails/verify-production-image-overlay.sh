@@ -8,14 +8,30 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_DIR="${REPO_DIR}/kubernetes/production/apps"
 PRODUCTION_IMAGE_INVENTORY="${OVERLAY_DIR}/image-inventory.yaml"
 INFRASTRUCTURE_OVERLAY_DIR="${REPO_DIR}/kubernetes/production/infrastructure"
-PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/production/istio/authorization-policies.yaml"
+SHARED_INFRASTRUCTURE_DIR="${REPO_DIR}/kubernetes/infrastructure"
+SHARED_GATEWAY_ROUTES_DIR="${REPO_DIR}/kubernetes/gateway"
+LOCAL_INGRESS_GATEWAY_OVERLAY_DIR="${REPO_DIR}/kubernetes/istio/ingress-gateway-local"
+SHARED_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/istio/authorization-policies.yaml"
+PRODUCTION_APPS_KUSTOMIZATION="${OVERLAY_DIR}/kustomization.yaml"
+PRODUCTION_AUTHORIZATION_KUSTOMIZATION="${REPO_DIR}/kubernetes/production/istio/kustomization.yaml"
+PRODUCTION_AUTHORIZATION_DELETE_PATCH="${REPO_DIR}/kubernetes/production/istio/patches/delete-standalone-frontend-policy.yaml"
 PRODUCTION_IMAGE_POLICY="${REPO_DIR}/kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml"
+PRODUCTION_DEPLOYMENT_MANIFEST="${OVERLAY_DIR}/deployment-manifest.yaml"
+PRODUCTION_RUNTIME_METADATA_PATCH="${OVERLAY_DIR}/patches/runtime-release-metadata.yaml"
+DOCS_METADATA_SOURCE="${REPO_DIR}/docs-aggregator/release-metadata.json"
+PRODUCTION_DOCS_METADATA="${REPO_DIR}/kubernetes/production/docs-aggregator/release-metadata.json"
+DOCS_SWAGGER_SOURCE="${REPO_DIR}/docs-aggregator/swagger-initializer.js"
+PRODUCTION_DOCS_SWAGGER="${REPO_DIR}/kubernetes/production/docs-aggregator/swagger-initializer.js"
+TILTFILE="${REPO_DIR}/Tiltfile"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
 TEMP_DIR=""
 RENDERED_APPS_FILE=""
 RENDERED_INFRASTRUCTURE_FILE=""
+RENDERED_SHARED_INFRASTRUCTURE_FILE=""
+RENDERED_SHARED_GATEWAY_ROUTES_FILE=""
+RENDERED_LOCAL_INGRESS_GATEWAY_FILE=""
 PHASE6_RENDER_DIR=""
 PHASE7_OBSERVABILITY_RENDER_DIR=""
 
@@ -162,6 +178,63 @@ assert_contains_literal() {
     if ! grep -Fq "${needle}" "${file}"; then
         fail "${description}"
     fi
+}
+
+assert_render_diff_only_by_literal() {
+    local shared_file production_file production_literal shared_literal description normalized_file
+
+    shared_file="$1"
+    production_file="$2"
+    production_literal="$3"
+    shared_literal="$4"
+    description="$5"
+    normalized_file="$(mktemp "${TEMP_DIR}/normalized.XXXXXX")"
+
+    sed "s|${production_literal}|${shared_literal}|g" "${production_file}" > "${normalized_file}"
+    if ! cmp -s "${shared_file}" "${normalized_file}"; then
+        fail "${description}"
+    fi
+}
+
+yaml_resource_names_by_kind() {
+    local file kind
+
+    file="$1"
+    kind="$2"
+    awk -v expected_kind="${kind}" '
+        function finish_document() {
+            if (resource_kind == expected_kind && resource_name != "") {
+                print resource_name
+            }
+            resource_kind = ""
+            resource_name = ""
+            in_metadata = 0
+        }
+        /^---$/ {
+            finish_document()
+            next
+        }
+        /^kind:[[:space:]]*/ {
+            resource_kind = $0
+            sub(/^kind:[[:space:]]*/, "", resource_kind)
+            next
+        }
+        /^metadata:[[:space:]]*$/ {
+            in_metadata = 1
+            next
+        }
+        /^[^[:space:]]/ && $0 !~ /^metadata:/ {
+            in_metadata = 0
+        }
+        in_metadata && /^[[:space:]]+name:[[:space:]]*/ {
+            resource_name = $0
+            sub(/^[[:space:]]+name:[[:space:]]*/, "", resource_name)
+            next
+        }
+        END {
+            finish_document()
+        }
+    ' "${file}" | sort
 }
 
 assert_kiali_namespace_rbac_coverage() {
@@ -457,6 +530,47 @@ assert_no_phase6_forbidden_patterns() {
     assert_not_contains "${file}" 'auth0-issuer\.placeholder\.invalid' "Production artifact contains the placeholder Auth0 issuer host: ${file}"
 }
 
+verify_reference_metadata_contract() {
+    local manifest_id inventory_id metadata_id patch_ids
+
+    cmp -s "${DOCS_METADATA_SOURCE}" "${PRODUCTION_DOCS_METADATA}" || \
+        fail "top-level and production release metadata sources differ"
+    cmp -s "${DOCS_SWAGGER_SOURCE}" "${PRODUCTION_DOCS_SWAGGER}" || \
+        fail "top-level and production Swagger initializers differ"
+
+    assert_contains_literal "${PRODUCTION_DEPLOYMENT_MANIFEST}" 'reference_only: true' \
+        "production deployment manifest is not marked reference-only"
+    assert_contains_literal "${PRODUCTION_DEPLOYMENT_MANIFEST}" 'historical_environment: "oci-production"' \
+        "production deployment manifest lost its historical environment provenance"
+    assert_contains_literal "${PRODUCTION_IMAGE_INVENTORY}" 'reference-only: "true"' \
+        "production image inventory is not marked reference-only"
+    assert_contains_literal "${PRODUCTION_IMAGE_INVENTORY}" 'historical-environment: "oci-production"' \
+        "production image inventory lost its historical environment provenance"
+    assert_not_contains "${PRODUCTION_RUNTIME_METADATA_PATCH}" 'budgetanalyzer\.org/deployment-id' \
+        "production runtime metadata still labels the historical reference as a deployment"
+    assert_contains_literal "${TILTFILE}" 'source_path = root / "kubernetes/production/docs-aggregator/release-metadata.json"' \
+        "Tilt no longer generates local metadata from the maintained production source"
+    assert_contains_literal "${TILTFILE}" '"productionReferenceId": production_reference_id' \
+        "Tilt local metadata no longer labels the production id as a reference"
+    assert_contains_literal "${TILTFILE}" "'budget-analyzer-web-prod-smoke'" \
+        "Tilt frontend production-smoke image target is missing"
+    assert_contains_literal "${TILTFILE}" "'release-metadata.json=' + LOCAL_API_DOCS_RELEASE_METADATA" \
+        "Tilt nginx-gateway docs ConfigMap no longer consumes generated local metadata"
+
+    manifest_id="$(sed -nE 's/^[[:space:]]+id:[[:space:]]+"([^"]+)"/\1/p' "${PRODUCTION_DEPLOYMENT_MANIFEST}" | head -n 1)"
+    inventory_id="$(sed -nE 's/^[[:space:]]+reference-id:[[:space:]]+"([^"]+)"/\1/p' "${PRODUCTION_IMAGE_INVENTORY}" | head -n 1)"
+    metadata_id="$(sed -nE 's/^[[:space:]]+"id":[[:space:]]+"([^"]+)",/\1/p' "${PRODUCTION_DOCS_METADATA}" | head -n 1)"
+    patch_ids="$(sed -nE 's/^[[:space:]]+budgetanalyzer\.org\/reference-id:[[:space:]]+([^[:space:]]+)/\1/p' "${PRODUCTION_RUNTIME_METADATA_PATCH}" | sort -u)"
+
+    [[ -n "${manifest_id}" ]] || fail "production deployment manifest is missing deployment.id"
+    [[ "${manifest_id}" == "${inventory_id}" ]] || \
+        fail "production manifest and image inventory reference ids differ"
+    [[ "${manifest_id}" == "${metadata_id}" ]] || \
+        fail "production manifest and docs metadata reference ids differ"
+    [[ "${manifest_id}" == "${patch_ids}" ]] || \
+        fail "production runtime metadata patch reference ids differ from the manifest"
+}
+
 verify_apps_overlay() {
     local image repo
 
@@ -479,8 +593,15 @@ verify_apps_overlay() {
             "rendered production overlay contains unqualified local image repo: ${repo}"
     done
 
-    assert_not_contains "${OVERLAY_DIR}/kustomization.yaml" 'nginx/nginx\.k8s\.conf' \
+    assert_not_contains "${PRODUCTION_APPS_KUSTOMIZATION}" 'nginx/nginx\.k8s\.conf' \
         "production overlay references the local NGINX config instead of nginx.production.k8s.conf"
+    assert_contains_literal "${PRODUCTION_APPS_KUSTOMIZATION}" 'nginx.conf=../../../nginx/nginx.production.k8s.conf' \
+        "production overlay does not consume the canonical production NGINX configuration"
+    assert_contains_literal "${PRODUCTION_APPS_KUSTOMIZATION}" 'backend-headers.conf=../../../nginx/includes/backend-headers.conf' \
+        "production overlay does not consume the canonical shared NGINX includes"
+    if find "${REPO_DIR}/kubernetes/production/nginx" -type f -print -quit 2>/dev/null | grep -q .; then
+        fail "production overlay still has copied NGINX configuration files"
+    fi
     assert_not_contains "${PRODUCTION_IMAGE_POLICY}" 'budget-analyzer-web-prod-smoke|tilt-[a-f0-9]|\(latest\|tilt|:latest|approved local' \
         "production image policy contains local Tilt image exception text"
 
@@ -501,7 +622,7 @@ verify_apps_overlay() {
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = / {' "rendered production nginx config is missing the root route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /@vite/client {' "rendered production nginx config is missing the explicit Vite deny route"
     assert_contains_literal "${RENDERED_APPS_FILE}" 'location = /_prod-smoke {' "rendered production nginx config is missing the explicit prod-smoke deny route"
-    assert_contains_literal "${RENDERED_APPS_FILE}" 'https://demo.budgetanalyzer.org/api' "rendered production docs bundle is missing the production API server URL"
+    assert_contains_literal "${RENDERED_APPS_FILE}" 'https://demo.budgetanalyzer.org/api' "rendered production docs bundle is missing the historical reference API server URL"
     assert_no_observability_public_entry_resources "${RENDERED_APPS_FILE}" \
         "rendered production app overlay contains an observability Ingress, HTTPRoute, or Gateway resource"
 
@@ -511,20 +632,26 @@ verify_apps_overlay() {
 }
 
 verify_phase6_render_outputs() {
-    local gateway_file ingress_file monitoring_file egress_file
+    local gateway_file ingress_file authorization_file gateway_config_file monitoring_file egress_file
 
     gateway_file="${PHASE6_RENDER_DIR}/gateway-routes.yaml"
     ingress_file="${PHASE6_RENDER_DIR}/istio-ingress-policies.yaml"
+    authorization_file="${PHASE6_RENDER_DIR}/authorization-policies.yaml"
+    gateway_config_file="${PHASE6_RENDER_DIR}/ingress-gateway-config.yaml"
     monitoring_file="${PHASE6_RENDER_DIR}/prometheus-stack-values.override.yaml"
     egress_file="${PHASE6_RENDER_DIR}/istio-egress.yaml"
 
     [[ -f "${gateway_file}" ]] || fail "Production render output is missing gateway-routes.yaml"
     [[ -f "${ingress_file}" ]] || fail "Production render output is missing istio-ingress-policies.yaml"
+    [[ -f "${authorization_file}" ]] || fail "Production render output is missing authorization-policies.yaml"
+    [[ -f "${gateway_config_file}" ]] || fail "Production render output is missing ingress-gateway-config.yaml"
     [[ -f "${monitoring_file}" ]] || fail "Production render output is missing prometheus-stack-values.override.yaml"
     [[ -f "${egress_file}" ]] || fail "Production render output is missing istio-egress.yaml"
 
     assert_no_phase6_forbidden_patterns "${gateway_file}"
     assert_no_phase6_forbidden_patterns "${ingress_file}"
+    assert_no_phase6_forbidden_patterns "${authorization_file}"
+    assert_no_phase6_forbidden_patterns "${gateway_config_file}"
     assert_no_phase6_forbidden_patterns "${monitoring_file}"
     assert_no_phase6_forbidden_patterns "${egress_file}"
     assert_not_contains "${gateway_file}" "${FORBIDDEN_OBSERVABILITY_ROUTE_PATTERN}" \
@@ -552,11 +679,18 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${gateway_file}" 'value: /oauth2' "rendered auth route is missing the /oauth2 path prefix"
     assert_contains_literal "${gateway_file}" 'value: /login/oauth2' "rendered auth route is missing the /login/oauth2 path prefix"
     assert_contains_literal "${gateway_file}" 'value: /logout' "rendered auth route is missing the /logout path prefix"
+    assert_render_diff_only_by_literal \
+        "${RENDERED_SHARED_GATEWAY_ROUTES_FILE}" "${gateway_file}" \
+        "${LOCKED_DEMO_DOMAIN}" 'app.budgetanalyzer.localhost' \
+        "production gateway routes differ from shared routes beyond the declared hostname"
 
     assert_contains_literal "${ingress_file}" 'name: ext-authz-at-ingress' "rendered ingress policies are missing ext-authz-at-ingress"
     assert_contains_literal "${ingress_file}" 'name: ingress-local-rate-limits' "rendered ingress policies are missing ingress-local-rate-limits"
     assert_not_contains "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" \
         "rendered ingress policies redundantly own the production demo hostname"
+
+    verify_production_istio_authorization_policies "${authorization_file}"
+    verify_ingress_gateway_parity "${gateway_config_file}"
 
     assert_contains_literal "${monitoring_file}" 'domain: localhost' "rendered monitoring override is missing the loopback Grafana domain"
     assert_contains_literal "${monitoring_file}" 'root_url: http://localhost:3300' "rendered monitoring override is missing the loopback Grafana root_url"
@@ -567,7 +701,7 @@ verify_phase6_render_outputs() {
     fi
 
     assert_contains_literal "${egress_file}" 'name: auth0-idp' "rendered Istio egress output is missing the Auth0 ServiceEntry"
-    assert_contains_literal "${egress_file}" 'auth.budgetanalyzer.org' "rendered Istio egress output is missing the production Auth0 host"
+    assert_contains_literal "${egress_file}" 'auth.budgetanalyzer.org' "rendered Istio egress output is missing the historical reference Auth0 host"
     assert_contains_literal "${egress_file}" 'api.stlouisfed.org' "rendered Istio egress output is missing the FRED host"
     assert_contains_literal "${egress_file}" 'name: auth0-via-egress' "rendered Istio egress output is missing the Auth0 VirtualService"
 }
@@ -601,28 +735,69 @@ verify_infrastructure_overlay() {
         "rendered production infrastructure still contains the old standalone Redis PersistentVolumeClaim"
     assert_not_contains "${RENDERED_INFRASTRUCTURE_FILE}" 'claimName:[[:space:]]*redis-data' \
         "rendered production infrastructure still mounts the old standalone redis-data claim"
+    assert_render_diff_only_by_literal \
+        "${RENDERED_SHARED_INFRASTRUCTURE_FILE}" "${RENDERED_INFRASTRUCTURE_FILE}" \
+        'storage: 5Gi' 'storage: 1Gi' \
+        "production infrastructure differs from the shared StatefulSet baseline beyond Redis storage sizing"
 }
 
 verify_production_istio_authorization_policies() {
-    [[ -f "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" ]] || \
-        fail "production Istio AuthorizationPolicy baseline not found: ${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}"
+    local rendered_file actual_names expected_names
 
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: transaction-service-policy' \
+    rendered_file="$1"
+    [[ -f "${rendered_file}" ]] || \
+        fail "rendered production Istio AuthorizationPolicy baseline not found: ${rendered_file}"
+
+    assert_contains_literal "${rendered_file}" 'name: transaction-service-policy' \
         "production Istio AuthorizationPolicy baseline is missing transaction-service-policy"
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: currency-service-policy' \
+    assert_contains_literal "${rendered_file}" 'name: currency-service-policy' \
         "production Istio AuthorizationPolicy baseline is missing currency-service-policy"
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: permission-service-policy' \
+    assert_contains_literal "${rendered_file}" 'name: permission-service-policy' \
         "production Istio AuthorizationPolicy baseline is missing permission-service-policy"
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: nginx-gateway-policy' \
+    assert_contains_literal "${rendered_file}" 'name: nginx-gateway-policy' \
         "production Istio AuthorizationPolicy baseline is missing nginx-gateway-policy"
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: ext-authz-policy' \
+    assert_contains_literal "${rendered_file}" 'name: ext-authz-policy' \
         "production Istio AuthorizationPolicy baseline is missing ext-authz-policy"
-    assert_contains_literal "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name: session-gateway-policy' \
+    assert_contains_literal "${rendered_file}" 'name: session-gateway-policy' \
         "production Istio AuthorizationPolicy baseline is missing session-gateway-policy"
-    assert_not_contains "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'name:[[:space:]]*budget-analyzer-web-policy([[:space:]]|$)' \
+    assert_not_contains "${rendered_file}" 'name:[[:space:]]*budget-analyzer-web-policy([[:space:]]|$)' \
         "production Istio AuthorizationPolicy baseline still includes budget-analyzer-web-policy"
-    assert_not_contains "${PRODUCTION_ISTIO_AUTHORIZATION_POLICIES_FILE}" 'app:[[:space:]]*budget-analyzer-web([[:space:]]|$)' \
+    assert_not_contains "${rendered_file}" 'app:[[:space:]]*budget-analyzer-web([[:space:]]|$)' \
         "production Istio AuthorizationPolicy baseline still targets a standalone budget-analyzer-web workload"
+
+    assert_contains_literal "${PRODUCTION_AUTHORIZATION_KUSTOMIZATION}" '../../istio/authorization-policies.yaml' \
+        "production authorization overlay does not consume the shared policy source"
+    assert_contains_literal "${PRODUCTION_AUTHORIZATION_DELETE_PATCH}" "\$patch: delete" \
+        "production standalone frontend authorization omission is not an explicit delete patch"
+
+    actual_names="$(yaml_resource_names_by_kind "${rendered_file}" AuthorizationPolicy)"
+    expected_names="$(yaml_resource_names_by_kind "${SHARED_AUTHORIZATION_POLICIES_FILE}" AuthorizationPolicy | \
+        grep -v '^budget-analyzer-web-policy$')"
+    [[ "${actual_names}" == "${expected_names}" ]] || \
+        fail "production authorization policy set differs from the shared source beyond the standalone frontend omission"
+}
+
+verify_ingress_gateway_parity() {
+    local production_file
+
+    production_file="$1"
+    assert_yaml_resource "${production_file}" ConfigMap istio-ingress-gateway-config \
+        "rendered production ingress gateway configuration is missing the shared ConfigMap"
+    assert_contains_literal "${production_file}" 'proxyStatsMatcher:' \
+        "rendered production ingress gateway lost shared diagnostics"
+    assert_contains_literal "${production_file}" 'type: RuntimeDefault' \
+        "rendered production ingress gateway lost the shared seccomp profile"
+    assert_contains_literal "${production_file}" 'automountServiceAccountToken: true' \
+        "rendered production ingress gateway lost the shared service-account requirement"
+    assert_not_contains "${production_file}" 'service:[[:space:]]*\|' \
+        "production ingress gateway configuration unexpectedly chooses a publication Service"
+
+    assert_contains_literal "${RENDERED_LOCAL_INGRESS_GATEWAY_FILE}" 'type: NodePort' \
+        "local ingress gateway overlay no longer preserves Kind NodePort publication"
+    assert_contains_literal "${RENDERED_LOCAL_INGRESS_GATEWAY_FILE}" 'nodePort: 30443' \
+        "local ingress gateway overlay no longer preserves port 30443"
+    assert_contains_literal "${TILTFILE}" 'kubectl kustomize kubernetes/istio/ingress-gateway-local' \
+        "Tilt no longer applies the local ingress gateway publication overlay"
 }
 
 render_phase6_manifests() {
@@ -752,18 +927,24 @@ main() {
     TEMP_DIR="$(mktemp -d)"
     RENDERED_APPS_FILE="${TEMP_DIR}/apps.yaml"
     RENDERED_INFRASTRUCTURE_FILE="${TEMP_DIR}/infrastructure.yaml"
+    RENDERED_SHARED_INFRASTRUCTURE_FILE="${TEMP_DIR}/shared-infrastructure.yaml"
+    RENDERED_SHARED_GATEWAY_ROUTES_FILE="${TEMP_DIR}/shared-gateway-routes.yaml"
+    RENDERED_LOCAL_INGRESS_GATEWAY_FILE="${TEMP_DIR}/local-ingress-gateway-config.yaml"
     trap cleanup EXIT
 
     render_kustomize "${OVERLAY_DIR}" "${RENDERED_APPS_FILE}"
     render_kustomize "${INFRASTRUCTURE_OVERLAY_DIR}" "${RENDERED_INFRASTRUCTURE_FILE}"
+    render_kustomize "${SHARED_INFRASTRUCTURE_DIR}" "${RENDERED_SHARED_INFRASTRUCTURE_FILE}"
+    render_kustomize "${SHARED_GATEWAY_ROUTES_DIR}" "${RENDERED_SHARED_GATEWAY_ROUTES_FILE}"
+    render_kustomize "${LOCAL_INGRESS_GATEWAY_OVERLAY_DIR}" "${RENDERED_LOCAL_INGRESS_GATEWAY_FILE}"
     render_phase6_manifests
     render_phase7_observability_manifests
 
+    verify_reference_metadata_contract
     verify_apps_overlay
     verify_phase6_render_outputs
     verify_phase7_observability_render_outputs
     verify_infrastructure_overlay
-    verify_production_istio_authorization_policies
 
     printf 'Production verification passed: %s, %s, %s, %s\n' \
         "${OVERLAY_DIR}" "${PHASE6_RENDER_DIR}" "${PHASE7_OBSERVABILITY_RENDER_DIR}" "${INFRASTRUCTURE_OVERLAY_DIR}"

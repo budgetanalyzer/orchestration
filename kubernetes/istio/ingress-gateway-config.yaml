@@ -17,11 +17,5 @@ data:
           securityContext:
             seccompProfile:
               type: RuntimeDefault
-  service: |
-    spec:
-      type: NodePort
-      ports:
-        - port: 443
-          nodePort: 30443
   serviceAccount: |
     automountServiceAccountToken: true

@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=deploy/scripts/lib/render-common.sh
+# shellcheck disable=SC1091 # Render helper is resolved from SCRIPT_DIR at runtime.
 source "${SCRIPT_DIR}/../lib/render-common.sh"
 
 DEFAULT_OUTPUT_DIR="${PRODUCTION_REPO_ROOT}/tmp/production-routes"
@@ -56,6 +57,12 @@ main() {
     kubectl kustomize "$(production_repo_path "kubernetes/production/istio-ingress-policies")" \
         --load-restrictor=LoadRestrictionsNone > "${output_dir}/istio-ingress-policies.yaml"
 
+    kubectl kustomize "$(production_repo_path "kubernetes/production/istio")" \
+        --load-restrictor=LoadRestrictionsNone > "${output_dir}/authorization-policies.yaml"
+
+    kubectl kustomize "$(production_repo_path "kubernetes/production/istio-ingress-gateway")" \
+        --load-restrictor=LoadRestrictionsNone > "${output_dir}/ingress-gateway-config.yaml"
+
     install -m 0644 \
         "$(production_repo_path "kubernetes/production/monitoring/prometheus-stack-values.override.yaml")" \
         "${output_dir}/prometheus-stack-values.override.yaml"
@@ -71,4 +78,3 @@ main() {
 }
 
 main "$@"
-

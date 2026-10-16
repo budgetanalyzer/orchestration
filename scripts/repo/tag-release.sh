@@ -77,7 +77,7 @@ validate_repo_allowed() {
     fi
 
     if repo_in_set "${repo}" "${TOOLING_REPOS[@]}"; then
-        die "${repo} is a tooling repo, not an OCI runtime release repo"
+        die "${repo} is a tooling repo, not a runtime release repo"
     fi
 
     die "unknown or unsupported release repo: ${repo}"

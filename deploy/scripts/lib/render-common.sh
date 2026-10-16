@@ -10,6 +10,7 @@ readonly PRODUCTION_RENDER_LIB_DIR
 readonly PRODUCTION_REPO_ROOT
 
 # shellcheck source=scripts/lib/production-version-contract.sh
+# shellcheck disable=SC1091 # Repository root is resolved from this library's path at runtime.
 source "${PRODUCTION_REPO_ROOT}/scripts/lib/production-version-contract.sh"
 
 production_render_info() {
@@ -33,4 +34,3 @@ production_render_require_commands() {
 production_repo_path() {
     printf '%s/%s\n' "${PRODUCTION_REPO_ROOT}" "$1"
 }
-

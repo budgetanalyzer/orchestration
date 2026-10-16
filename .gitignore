@@ -21,6 +21,12 @@
 nginx/certs/k8s/_mkcert-rootCA.pem
 nginx/certs/k8s/_mkcert-rootCA.pem.tmp.*
 secrets/
+!archive/oci/deploy/scripts/secrets/
+!archive/oci/deploy/scripts/secrets/apply-secret-sync.sh
+!archive/oci/deploy/scripts/secrets/bootstrap-vault-secrets.sh
+!archive/oci/deploy/scripts/secrets/generate-infra-tls.sh
+!archive/oci/deploy/scripts/secrets/render-secret-sync.sh
+!archive/oci/deploy/scripts/secrets/update-rabbitmq-definitions-secret.sh
 credentials/
 config/secrets/
 .secrets

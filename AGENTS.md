@@ -327,6 +327,18 @@ Before implementing a plan or feature:
 3. Do not hack around a missing prerequisite with orchestration-level compensating changes
 4. Complete prerequisites first, then return to the requested work
 
+Before running the static security verifier, select its repository-local,
+hash-verified PyYAML interpreter explicitly:
+
+```bash
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/guardrails/verify-static-security-manifests.sh
+```
+
+If that interpreter is missing, create it with the setup documented in
+`docs/ci-cd.md#security-guardrailsyml`. Do not fall back to the managed VM's
+PyYAML package because the verifier requires the exact pinned version.
+
 ## Image Pinning And Supply Chain Guardrails
 
 - Treat checked-in third-party image refs and Dockerfile base images as digest-pinning targets unless an exception is explicitly documented in the executable inventories

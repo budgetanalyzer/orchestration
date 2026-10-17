@@ -32,7 +32,10 @@ The shared preset provides these controls:
   and two new routine pull requests per hour in one repository;
 - vulnerability fixes may run at any time, use a separate three-pull-request
   concurrency limit, and remain non-automerge;
-- patch, minor, and major proposals remain distinguishable;
+- only the latest patch, minor, and major targets are shown, and those
+  proposals remain distinguishable;
+- Dashboard categories identify routine, major, Helm/platform, stateful,
+  chart-image, and checksum-coupled review work;
 - major, Helm, stateful, platform, chart-image override, and
   checksum-coupled updates require Dependency Dashboard approval;
 - digest updates retain digest pinning, while first-party production-reference
@@ -381,6 +384,14 @@ dependency-submission design is required before claiming broader hosted graph
 coverage.
 
 ## Operator routine
+
+Treat each Dependency Dashboard as a review-decision queue, not a
+security-severity ranking. Its categories describe the review complexity of an
+update. Checking an approval box only tells Renovate to create a pull request
+for review; it does not mean the update is urgent or approved to merge. Do not
+bulk-approve Dashboard entries. Triage security separately through Dependabot
+alerts, Renovate pull requests labelled `security`, and the repository-owned
+scanner evidence described above.
 
 Every week:
 

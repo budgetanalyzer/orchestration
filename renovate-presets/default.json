@@ -15,8 +15,9 @@
   "prHourlyLimit": 2,
   "separateMajorMinor": true,
   "separateMinorPatch": true,
-  "separateMultipleMajor": true,
-  "separateMultipleMinor": true,
+  "separateMultipleMajor": false,
+  "separateMultipleMinor": false,
+  "dependencyDashboardHeader": "Categories describe review complexity, not security severity. Checking an approval box creates a pull request for review; it does not mean the update is urgent or approved to merge. Do not bulk-approve updates. Triage security separately through Dependabot alerts, Renovate pull requests labelled `security`, and repository scanner evidence. See the [dependency automation operator guidance](https://github.com/budgetanalyzer/orchestration/blob/main/docs/dependency-automation.md#operator-routine).",
   "pinDigests": true,
   "vulnerabilityAlerts": {
     "enabled": true,
@@ -52,11 +53,26 @@
   ],
   "packageRules": [
     {
+      "description": "Keep routine dependency PRs reviewable",
+      "matchUpdateTypes": [
+        "digest",
+        "pin",
+        "pinDigest",
+        "patch",
+        "minor"
+      ],
+      "dependencyDashboardCategory": ":wrench: Routine updates",
+      "labels": [
+        "dependencies"
+      ]
+    },
+    {
       "description": "Keep major migrations visible but require dashboard approval",
       "matchUpdateTypes": [
         "major"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":warning: Major migrations",
       "labels": [
         "dependencies",
         "major-migration"
@@ -68,6 +84,7 @@
         "helm"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":construction: Platform and Helm",
       "labels": [
         "dependencies",
         "platform-migration"
@@ -85,7 +102,8 @@
         "istiod"
       ],
       "groupName": "Istio charts",
-      "dependencyDashboardApproval": true
+      "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":construction: Platform and Helm"
     },
     {
       "description": "Require stateful workload migration and restore review",
@@ -95,6 +113,7 @@
         "rabbitmq"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":floppy_disk: Stateful workloads",
       "labels": [
         "dependencies",
         "stateful-migration"
@@ -111,10 +130,21 @@
         "istio"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":construction: Platform and Helm",
       "labels": [
         "dependencies",
         "platform-migration"
       ]
+    },
+    {
+      "description": "Coordinate Prometheus Operator and config reloader images",
+      "matchPackageNames": [
+        "quay.io/prometheus-operator/prometheus-operator",
+        "quay.io/prometheus-operator/prometheus-config-reloader"
+      ],
+      "groupName": "Prometheus Operator images",
+      "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":construction: Platform and Helm"
     },
     {
       "description": "Keep chart image overrides coupled to rendered chart compatibility",
@@ -126,6 +156,7 @@
         "kubernetes/monitoring/*-values.yaml"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":package: Chart image overrides",
       "labels": [
         "dependencies",
         "chart-image-override"
@@ -135,20 +166,12 @@
       ]
     },
     {
-      "description": "Coordinate Prometheus Operator and config reloader images",
-      "matchPackageNames": [
-        "quay.io/prometheus-operator/prometheus-operator",
-        "quay.io/prometheus-operator/prometheus-config-reloader"
-      ],
-      "groupName": "Prometheus Operator images",
-      "dependencyDashboardApproval": true
-    },
-    {
       "description": "Checksum tables must be regenerated and verified as one reviewed change",
       "matchFileNames": [
         "scripts/lib/pinned-tool-versions.sh"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":lock: Checksum-coupled tools",
       "labels": [
         "dependencies",
         "checksum-required"
@@ -175,19 +198,6 @@
         "ghcr.io/budgetanalyzer/budget-analyzer-web"
       ],
       "enabled": false
-    },
-    {
-      "description": "Keep routine dependency PRs reviewable",
-      "matchUpdateTypes": [
-        "digest",
-        "pin",
-        "pinDigest",
-        "patch",
-        "minor"
-      ],
-      "labels": [
-        "dependencies"
-      ]
     }
   ]
 }

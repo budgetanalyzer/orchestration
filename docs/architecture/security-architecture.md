@@ -131,7 +131,7 @@ The Session Gateway implements session-based edge authorization specifically for
 
 **Why HTTP mode over gRPC:** Istio's `meshConfig.extensionProviders` with `envoyExtAuthzHttp` provides `headersToUpstreamOnAllow` — an infrastructure-level allowlist that controls which response headers from ext_authz are forwarded to upstream services. This is anti-spoofing at the ingress layer: even if a client sends `X-User-Id` in the original request, the Envoy ext_authz filter overwrites it with the value from ext_authz's response. Only headers listed in `headersToUpstreamOnAllow` are forwarded upstream.
 
-**Integration:** Called by the Istio ingress gateway on `/api/*` requests via `AuthorizationPolicy` with `action: CUSTOM`. Host ownership stays on the Gateway API `HTTPRoute` objects (`app.budgetanalyzer.localhost` locally, `demo.budgetanalyzer.org` in production) so Kiali does not misread the external app hostname as a missing service-registry host.
+**Integration:** Called by the Istio ingress gateway on `/api/*` requests via `AuthorizationPolicy` with `action: CUSTOM`. Host ownership stays on the Gateway API `HTTPRoute` objects (`app.budgetanalyzer.localhost` locally, with `demo.budgetanalyzer.org` retained only as a non-live production-reference value) so Kiali does not misread the external app hostname as a missing service-registry host.
 
 ---
 
@@ -318,10 +318,12 @@ value, cookie, query parameter, user claim, OAuth state, or authorization code.
 Local in-cluster probes sent directly to the ingress Service preserve their
 pod source addresses. Browser processes entering through VM loopback and the
 Kind NodePort can share the address established by that host/container
-boundary. The production OCI NLB path uses `externalTrafficPolicy: Local`
-specifically to preserve the original public source address. Clients behind
-one NAT intentionally share an allowance; this is the unavoidable fairness
-boundary of IP-based limiting.
+boundary. A future hosted publication design must preserve a trustworthy
+original client address before this per-client policy can be claimed there;
+the provider-neutral production reference deliberately does not select a load
+balancer or Service publication type. Clients behind one NAT intentionally
+share an allowance; this is the unavoidable fairness boundary of IP-based
+limiting.
 
 There is no default token bucket and
 `always_consume_default_token_bucket: false`, so unmatched traffic cannot
@@ -582,9 +584,10 @@ disable `automountServiceAccountToken`, and workloads that need Kubernetes API
 access use explicit projected service-account token volumes. See
 [Observability Architecture](observability.md) for full details.
 
-Operator access is internal-only in both local Tilt and production OCI/k3s.
-Keep observability access loopback-bound through Kubernetes port-forwards or
-the repo-owned helper scripts documented in
+Operator access is internal-only in local Tilt, and the production reference
+contains no public observability routes. Keep local observability access
+loopback-bound through Kubernetes port-forwards or the repo-owned helper
+scripts documented in
 [observability.md](observability.md). Grafana authentication remains enabled,
 anonymous access stays disabled, and the repo does not expose public
 observability hostnames.

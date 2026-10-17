@@ -371,9 +371,9 @@ classify_finding() {
     case "${code}" in
         KIA0004)
             if [[ "${RUNTIME_SHAPE}" == "production" && "${message}" == *"budget-analyzer-web-policy"* ]]; then
-                printf 'review: stale OCI drift; production should not include budget-analyzer-web-policy'
+                printf 'review: stale production drift; the reference topology should not include budget-analyzer-web-policy'
             elif [[ "${RUNTIME_SHAPE}" == "production" && "${message}" == *"app=budget-analyzer-web"* ]]; then
-                printf 'review: stale OCI drift; production should not target a standalone budget-analyzer-web workload'
+                printf 'review: stale production drift; the reference topology should not target a standalone budget-analyzer-web workload'
             elif [[ "${pods}" == "0" ]]; then
                 printf 'likely runtime-absent: namespace has no running pods'
             else

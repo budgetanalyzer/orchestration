@@ -12,7 +12,7 @@ stack is not up yet, start there first.
 |---------|-------------|-------------|
 | [Tilt Debugging](tilt-debugging.md) | Debug Tilt/Kind local development environment | Services not starting, auth failures, network issues |
 | [Kiali Expected Warnings](kiali-expected-warnings.md) | Reference for Kiali warnings this repo intentionally ignores | Kiali triage shows low-signal warnings and you need the repo policy |
-| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Evidence template for OCI desired-state deployment | Preparing or applying `kubernetes/production/apps/deployment-manifest.yaml` |
+| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Retirement pointer to the checklist in tagged Git history | Researching the retired OCI deployment only |
 
 ## Runbook Philosophy
 
@@ -35,8 +35,10 @@ These runbooks follow a **decision tree approach**:
   local environment works after bring-up
 - [Tilt/Kind Manual Deep Dive](../tilt-kind-setup-guide.md) - Manual bootstrap
   internals only; not the default onboarding path
-- [Oracle Cloud Deployment Path](../../deploy/README.md) - OCI deployment
-  script order, reviewed inputs, and operator-facing release helpers
+- [Production Reference Rendering](../../deploy/README.md) - Maintained
+  provider-neutral offline renders and unresolved deployment prerequisites
+- [Retired OCI Archive](../../archive/oci/README.md) - Lean removed-file
+  inventory, tagged history, and restoration caveats
 - [NGINX Gateway README](../../nginx/README.md) - Routing configuration
 - [AGENTS.md](../../AGENTS.md) - Architecture overview
 

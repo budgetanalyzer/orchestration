@@ -12,7 +12,7 @@
 # Repository lists (relative to parent directory)
 #
 # Keep these sets explicit so release scripts do not accidentally treat tooling
-# repositories as OCI runtime artifacts.
+# repositories as runtime artifacts.
 RUNTIME_IMAGE_REPOS=(
     "transaction-service"
     "currency-service"
@@ -51,17 +51,6 @@ LOCKSTEP_RELEASE_REPOS=(
     "permission-service"
     "ext-authz"
     "checkstyle-config"
-)
-
-OCI_RELEASE_SOURCE_REPOS=(
-    "orchestration"
-    "service-common"
-    "transaction-service"
-    "currency-service"
-    "budget-analyzer-web"
-    "session-gateway"
-    "permission-service"
-    "ext-authz"
 )
 
 # Backward-compatible alias for older repo-wide maintenance helpers. New

@@ -8,8 +8,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck disable=SC1091
 # Repo-relative helper; resolved from REPO_DIR at runtime.
-# shellcheck source=deploy/scripts/lib/version-contract.sh
-source "${REPO_DIR}/deploy/scripts/lib/version-contract.sh"
+# shellcheck source=scripts/lib/production-version-contract.sh
+source "${REPO_DIR}/scripts/lib/production-version-contract.sh"
 
 CHART="prometheus-community/kube-prometheus-stack"
 RELEASE_NAME="prometheus-stack"
@@ -108,10 +108,10 @@ log_step "Refreshing prometheus-community Helm repo metadata"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
 helm repo update prometheus-community >/dev/null
 
-log_step "Rendering ${CHART} ${PHASE7_PROMETHEUS_STACK_CHART_VERSION}"
+log_step "Rendering ${CHART} ${PRODUCTION_PROMETHEUS_STACK_CHART_VERSION}"
 helm template "${RELEASE_NAME}" "${CHART}" \
     --namespace "${NAMESPACE}" \
-    --version "${PHASE7_PROMETHEUS_STACK_CHART_VERSION}" \
+    --version "${PRODUCTION_PROMETHEUS_STACK_CHART_VERSION}" \
     --values "${VALUES_FILE}" \
     > "${RENDER_FILE}"
 
@@ -242,7 +242,7 @@ python3 - <<'PY' \
     "${CAN_I_FILE}" \
     "${OUTPUT_FILE}" \
     "${CAPTURE_DATE}" \
-    "${PHASE7_PROMETHEUS_STACK_CHART_VERSION}"
+    "${PRODUCTION_PROMETHEUS_STACK_CHART_VERSION}"
 import csv
 import json
 import sys

@@ -16,7 +16,7 @@ info:
     url: https://opensource.org/licenses/MIT
 servers:
   - url: https://demo.budgetanalyzer.org/api
-    description: Production environment
+    description: Historical production reference (not live)
 tags:
   - name: Saved Views
     description: Create and manage saved transaction views

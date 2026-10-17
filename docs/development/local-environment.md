@@ -41,14 +41,17 @@ repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
 `1.29.2`. Local Tilt installs `istio/cni` with
 `kubernetes/istio/cni-common-values.yaml` plus
 `kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
-standard `/etc/cni/net.d` and `/opt/cni/bin` paths. Production k3s deploys use
-the same common baseline plus `kubernetes/istio/cni-k3s-values.yaml`, which
-keeps the k3s-specific CNI path override isolated to the production overlay. The
-egress gateway uses
+standard `/etc/cni/net.d` and `/opt/cni/bin` paths. No production Kubernetes
+distribution is currently selected; distribution-specific CNI configuration
+belongs to a future deployment project. The egress gateway uses
 `kubernetes/istio/egress-gateway-values.yaml` to keep
 `service.type=ClusterIP`, and ingress gateway hardening plus the fixed NodePort
 now flow through Gateway `spec.infrastructure.parametersRef` via
-`kubernetes/istio/ingress-gateway-config.yaml`.
+the shared `kubernetes/istio/ingress-gateway-config.yaml` and the local-only
+`kubernetes/istio/ingress-gateway-local/` overlay. The shared source owns pod
+security and rate-limit diagnostics; the local overlay alone selects NodePort
+`30443`. The production reference reuses the shared source without choosing a
+publication Service type.
 
 ## Workspace Shape
 

@@ -106,9 +106,9 @@ Examples that still require investigation:
   that Kiali groups directly, such as Jaeger in `monitoring`, are expected to
   stamp `version: v1` on workload metadata and pod templates for Kiali
   grouping.
-- `KIA0004` for `AuthorizationPolicy/default/budget-analyzer-web-policy` on
-  OCI production. That policy is stale drift there because production serves
-  the frontend from `nginx-gateway` instead of a standalone
+- `KIA0004` for `AuthorizationPolicy/default/budget-analyzer-web-policy` in a
+  runtime shaped like the production reference. That policy is stale drift
+  because the reference serves the frontend from `nginx-gateway` instead of a standalone
   `budget-analyzer-web` workload.
 - validation findings caused by absent pods, services, or service accounts
   after cluster bring-up should have completed

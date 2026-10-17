@@ -46,15 +46,16 @@ declare -A EXPECTED_SOURCE_REFS=()
 declare -A EXPECTED_SOURCE_COMMITS=()
 declare -A EXPECTED_SERVICE_COMMON_VERSIONS=()
 
-expected_deployment_id=""
+expected_runtime_id=""
+expected_id_label="deployment-id"
 
 usage() {
     cat <<'EOF'
 Usage: ./scripts/ops/show-pod-version-labels.sh [options]
 
-Lists Budget Analyzer pod deployment metadata for the current Kubernetes
-context and verifies tracked runtime pods against a schema v2 deployment
-manifest or the checked-in production image inventory.
+Lists Budget Analyzer pod release metadata for the current Kubernetes context
+and verifies tracked runtime pods against a schema v2 deployment manifest or
+the checked-in production image inventory.
 
 Options:
   --deployment-manifest PATH  Schema v2 deployment manifest to verify against.
@@ -62,9 +63,9 @@ Options:
                               Default: kubernetes/production/apps/image-inventory.yaml
   --tracked-only              Print only Budget Analyzer runtime pods.
   --strict                    Exit non-zero when warnings are found.
-  --allow-mixed-deployment-id Allow already-current pods from earlier
-                              deployment ids. Image, source, version, and
-                              service-common metadata are still verified.
+  --allow-mixed-deployment-id Allow already-current pods from earlier runtime
+                              ids. Image, source, version, and service-common
+                              metadata are still verified.
   -h, --help                  Show this help text.
 EOF
 }
@@ -234,8 +235,11 @@ load_expected_from_manifest() {
     schema_version="$(manifest_value "${file}" "schema_version")"
     [[ "${schema_version}" == "2" ]] || die "deployment manifest must use schema_version: 2"
 
-    expected_deployment_id="$(manifest_map_value "${file}" "deployment" "id")"
-    [[ -n "${expected_deployment_id}" ]] || die "deployment manifest is missing deployment.id"
+    expected_runtime_id="$(manifest_map_value "${file}" "deployment" "id")"
+    [[ -n "${expected_runtime_id}" ]] || die "deployment manifest is missing deployment.id"
+    if [[ "$(manifest_map_value "${file}" "deployment" "reference_only")" == "true" ]]; then
+        expected_id_label="reference-id"
+    fi
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(manifest_nested_value "${file}" "artifacts" "${service}" "image")"
@@ -271,8 +275,11 @@ load_expected_from_inventory() {
     schema_version="$(inventory_value "${file}" "schema-version")"
     [[ "${schema_version}" == "2" ]] || die "inventory must use schema-version: \"2\""
 
-    expected_deployment_id="$(inventory_value "${file}" "deployment-id")"
-    [[ -n "${expected_deployment_id}" ]] || die "inventory is missing deployment-id"
+    if [[ "$(inventory_value "${file}" "reference-only")" == "true" ]]; then
+        expected_id_label="reference-id"
+    fi
+    expected_runtime_id="$(inventory_value "${file}" "${expected_id_label}")"
+    [[ -n "${expected_runtime_id}" ]] || die "inventory is missing ${expected_id_label}"
 
     for service in "${SERVICE_ORDER[@]}"; do
         value="$(inventory_value "${file}" "${service}")"
@@ -366,7 +373,7 @@ image_list_contains() {
 
 main() {
     local pod_template pod_rows
-    local namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images all_images
+    local namespace pod app app_name runtime_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images all_images
     local workload artifact expected_service_common
     local status tracked
     local warning_count=0
@@ -383,15 +390,15 @@ main() {
         load_expected_from_inventory "${EXPECTED_PATH}"
     fi
 
-    printf 'Expected deployment id: %s\n' "${expected_deployment_id}"
+    printf 'Expected %s: %s\n' "${expected_id_label}" "${expected_runtime_id}"
     printf '%-10s %-16s %-52s %-24s %-20s %-12s %-18s %s\n' \
-        "STATUS" "NAMESPACE" "POD" "APP" "DEPLOYMENT-ID" "VERSION" "PART-OF" "IMAGES"
+        "STATUS" "NAMESPACE" "POD" "APP" "RUNTIME-ID" "VERSION" "PART-OF" "IMAGES"
 
     # shellcheck disable=SC2016 # Go template variables must remain literal for kubectl.
-    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{with .metadata.labels}}{{index . "app"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/name"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "budgetanalyzer.org/deployment-id"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/version"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/part-of"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/image"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "org.opencontainers.image.revision"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/source-ref"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/service-common-version"}}{{end}}{{"\t"}}{{range $index, $container := .spec.initContainers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
+    pod_template='{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{with .metadata.labels}}{{index . "app"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/name"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{if index . "budgetanalyzer.org/reference-id"}}{{index . "budgetanalyzer.org/reference-id"}}{{else}}{{index . "budgetanalyzer.org/deployment-id"}}{{end}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/version"}}{{end}}{{"\t"}}{{with .metadata.labels}}{{index . "app.kubernetes.io/part-of"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/image"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "org.opencontainers.image.revision"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/source-ref"}}{{end}}{{"\t"}}{{with .metadata.annotations}}{{index . "budgetanalyzer.org/service-common-version"}}{{end}}{{"\t"}}{{range $index, $container := .spec.initContainers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\t"}}{{range $index, $container := .spec.containers}}{{if $index}},{{end}}{{$container.image}}{{end}}{{"\n"}}{{end}}'
     pod_rows="$(kubectl get pods -A -o "go-template=${pod_template}")"
 
-    while IFS=$'\t' read -r namespace pod app app_name deployment_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images; do
+    while IFS=$'\t' read -r namespace pod app app_name runtime_id app_version part_of image_annotation revision_annotation source_ref_annotation service_common_annotation init_images images; do
         [[ -n "${namespace}" ]] || continue
         all_images="${init_images}${init_images:+,}${images}"
 
@@ -439,10 +446,10 @@ main() {
                     status="WARN"
                     warning_count=$((warning_count + 1))
                     warn_mismatch "${namespace}/${pod} has service-common-version=${service_common_annotation:-<none>}; expected ${expected_service_common}"
-                elif [[ "${ALLOW_MIXED_DEPLOYMENT_ID}" != true && "${deployment_id}" != "${expected_deployment_id}" ]]; then
+                elif [[ "${ALLOW_MIXED_DEPLOYMENT_ID}" != true && "${runtime_id}" != "${expected_runtime_id}" ]]; then
                     status="WARN"
                     warning_count=$((warning_count + 1))
-                    warn_mismatch "${namespace}/${pod} has deployment-id=${deployment_id:-<none>}; expected ${expected_deployment_id}"
+                    warn_mismatch "${namespace}/${pod} has ${expected_id_label}=${runtime_id:-<none>}; expected ${expected_runtime_id}"
                 fi
             fi
         elif [[ "${tracked}" != true ]]; then
@@ -450,7 +457,7 @@ main() {
         fi
 
         printf '%-10s %-16s %-52s %-24s %-20s %-12s %-18s %s\n' \
-            "${status}" "${namespace}" "${pod}" "${workload:-<none>}" "${deployment_id:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${all_images:-<none>}"
+            "${status}" "${namespace}" "${pod}" "${workload:-<none>}" "${runtime_id:-<none>}" "${app_version:-<none>}" "${part_of:-<none>}" "${all_images:-<none>}"
         printed_count=$((printed_count + 1))
     done <<< "${pod_rows}"
 

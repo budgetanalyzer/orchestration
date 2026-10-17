@@ -79,13 +79,13 @@ The checked-in `serviceCommon` entry in each consumer repo's
 `gradle/libs.versions.toml` remains the source of truth for the version that CI
 expects to exist remotely.
 
-## Release And Deployment Model
+## Source Release And Production Reference Model
 
 Budget Analyzer separates source tags, runtime artifact versions,
-`service-common` Maven versions, image digests, and OCI deployment identity.
-The production deployment truth is the checked-in, digest-pinned desired state
-under `kubernetes/production/apps`, not a single global version string and not
-live cluster status.
+`service-common` Maven versions, image digests, and historical production
+reference identity. OCI is retired and no production environment is currently
+configured. The checked-in, digest-pinned state under
+`kubernetes/production/apps` is an offline reference, not live cluster status.
 
 Terminology:
 
@@ -96,70 +96,39 @@ Terminology:
   `vX.Y.Z` source tag, the release-image workflows publish Docker label
   `X.Y.Z`.
 - Image digests are the deployable artifact identity.
-- The production manifest and image inventory are desired-state files. They do
-  not record lifecycle status such as `accepted`, `pending`, or `deployed`.
-- Live deployment status is observed from OCI by comparing running pods and
-  runtime metadata with the checked-in desired state.
+- The production manifest and image inventory are reference files. They do not
+  record lifecycle status such as `accepted`, `pending`, or `deployed`.
+- The retained OCI id and artifact rows are historical provenance. Active
+  metadata marks them reference-only.
 
-The normal OCI production flow has explicit local preparation steps, human
-review, and one OCI-host apply command:
-
-```bash
-# Local workstation
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
-
-# After the owning GitHub Actions image workflows publish the expected GHCR tags
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
-
-# OCI host, after the orchestration diff is reviewed, committed, pushed, and pulled
-./deploy/scripts/release/deploy-current-oci-manifest.sh
-```
+There is no active production preparation, apply, upgrade, or rollback command.
+Removed OCI workflow files are in the lean archive documented by
+[archive/oci/README.md](../archive/oci/README.md); the complete pre-retirement
+tree is at public tag `pre-oci-archive`, verified at commit
+`60510f4ce9331968988516947f394152f6aa0da4`. A future hosted environment
+requires a separately authorized deployment design.
 
 The deployable Java services do not consume regular-CI Actions artifacts.
 Their `publish-release.yml` workflows check out the selected source and invoke
 Docker Buildx directly; each Dockerfile runs `./gradlew bootJar` in its build
 stage and the workflow pushes the resulting `linux/arm64` image to GHCR. No
-active deployment workflow downloads an `app-jar` artifact. Production then
-uses the immutable GHCR digest recorded in orchestration's checked-in desired
-state. Removing regular-CI `app-jar` uploads therefore does not change release
-or deployment behavior.
+active workflow downloads an `app-jar` artifact. The production reference keeps
+the last reviewed immutable GHCR digests. Removing regular-CI `app-jar` uploads
+therefore does not change source-release behavior.
 
-The recurring deploy script map and operator run order live in
-[deploy/README.md](../deploy/README.md). This document owns the release and
-deployment terminology.
+The maintained offline render map and unresolved deployment prerequisites live
+in [deploy/README.md](../deploy/README.md). This document owns source-release
+and artifact terminology.
 
-The local preparation command validates the expected sibling repositories,
-requires clean source workspaces, compares current artifact source state with
-the checked-in production image inventory, previews source tag actions only for
-changed artifacts, creates and pushes missing source tags when explicitly
-requested, then stops so the operator can wait for the owning GitHub Actions
-image workflows. Unchanged artifacts keep their existing digest-pinned images
-and source metadata. Use `--lockstep` only for coordinated releases that should
-force every managed artifact onto the requested source tag and Docker label.
-The `--resolve-images` mode reads already-published GHCR tags for changed
-artifacts, resolves immutable digests, updates the production manifest, image
-inventory, app overlay, runtime metadata patch, and `/api-docs` release
-metadata, then stops. Missing GHCR tags are a prerequisite failure in resolve
-mode, not a polling loop. The local
-preparation command does not build Docker images, push GHCR images directly,
-deploy to OCI, require OCI kubeconfig access, or write lifecycle status.
-GHCR image reads use the Docker Registry API bearer-token flow. Public packages
-can resolve anonymously; private packages require `GHCR_USERNAME` and
-`GHCR_TOKEN` with `read:packages` scope. GitHub SSH keys are not used by GHCR
-image reads.
+The active tag helpers prepare source releases and print the owning GitHub
+Actions workflow pages. They do not update production-reference image files or
+deploy a cluster. Any future image-baseline update must keep the deployment
+manifest, image inventory, app overlay, runtime metadata patch, and `/api-docs`
+metadata consistent in one reviewed change.
 
-The final orchestration manifest commit necessarily happens after source tags
-that build deployable images, including the `ext-authz` tag in the sibling
-`budgetanalyzer/ext-authz` repo. Do not try to make the checked-in desired-state
-manifest self-reference the commit that contains itself. Treat per-artifact
-commit fields in the manifest as image build inputs; the orchestration revision
-pulled by the OCI host is deploy evidence captured during apply.
-
-The OCI deployment command applies the checked-in desired state from the
-orchestration repo on the OCI host and verifies that live pods match it. The
-old combined local-build/live-apply path is removed from the active deployment
-surface.
+Do not try to make a checked-in reference manifest self-reference the commit
+that contains itself. Treat per-artifact commit fields as historical image
+build inputs, not proof of a live rollout.
 
 `service-common` is a library release line, not the stack version. Release it
 when `spring-platform`, `spring-cloud-platform`, `service-core`, or
@@ -167,8 +136,7 @@ when `spring-platform`, `spring-cloud-platform`, `service-core`, or
 change, documentation metadata fix, or production overlay update.
 
 Tag helpers remain useful for human source management and rare named releases,
-but tag names are not production correctness. OCI apply and verification use
-the checked-in desired state and immutable image digests.
+but tag names are not production correctness and do not imply deployment.
 
 ## Orchestration Workflows
 
@@ -221,10 +189,10 @@ workflow then runs:
 - schema validation for checked-in manifests, with explicit missing-schema
   allowances for checked-in CRD resources such as Istio, Gateway API, Kyverno,
   and Prometheus Operator `ServiceMonitor` objects
-- rendered Kustomize schema validation for the production app and
+- rendered Kustomize schema validation for the production-reference app and
   infrastructure overlays, so partial patch files stay excluded from
   standalone validation but are still checked after render; the schema-v2
-  production deployment manifest is also excluded because it is desired-state
+  production reference manifest is also excluded because it is artifact
   metadata, not a Kubernetes resource
 - repo-specific kube-linter checks with documented exceptions
 - Kyverno CLI pass/fail fixtures
@@ -385,8 +353,8 @@ Release image publishing is tag-driven and owned by the source repositories:
 - on `workflow_dispatch`, `release_ref` identifies the source ref to build; a
   SemVer tag defaults to Docker label `X.Y.Z`, while non-SemVer source refs
   require an explicit Docker-safe `docker_label`
-- ad hoc Docker labels are registry labels only; deployment correctness still
-  comes from the digest-pinned reference recorded in checked-in desired state
+- ad hoc Docker labels are registry labels only; artifact identity still comes
+  from the digest-pinned reference recorded in the checked-in reference files
 - the Java workflows read `serviceCommon` from the checked-out
   `gradle/libs.versions.toml`, use that value for GitHub Packages preflight and
   Docker dependency resolution, and do not require `release_ref` to equal the
@@ -397,33 +365,27 @@ Release image publishing is tag-driven and owned by the source repositories:
   `kubernetes/production/apps/image-inventory.yaml`, and
   `kubernetes/production/apps` renders the digest-pinned app image overlay
   from that inventory
-- before a changed `service-common` library can be deployed, publish the
-  library version and update the Java consumers' checked-in `serviceCommon`
-  value before preparing OCI desired state
+- before a changed `service-common` library can be used by published Java
+  images, publish the library version and update the consumers' checked-in
+  `serviceCommon` value
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
-  default, and it refuses tooling repos such as `checkstyle-config` for OCI
-  runtime release tagging
+  default, and it refuses tooling repos such as `checkstyle-config` for runtime
+  release tagging
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
-- deployment manifests record deployment id, orchestration revision,
+- production-reference manifests record the historical reference id,
+  orchestration revision,
   per-artifact source refs, source commits, artifact versions,
   `service-common` versions for Java workloads, and digest-pinned GHCR image
   refs
-- `./deploy/scripts/release/deploy-current-oci-manifest.sh` is the normal OCI-host
-  apply command for the checked-in production manifest and waits only for
-  changed managed rollouts
-- `./deploy/scripts/verify/oci-upgrade-lockstep.sh` is the main static
-  agreement gate for the checked-in production desired state: deployment
-  manifest, image inventory, app kustomization, runtime metadata patch, and
-  release metadata must agree before OCI apply
 - `./scripts/guardrails/verify-production-image-overlay.sh` verifies the full
-  checked-in production baseline: the rendered production app overlay,
+  checked-in production reference offline: the rendered production app overlay,
   the production infrastructure overlay, and the reviewed
   route/ingress/monitoring/egress render output. It rejects localhost hosts,
   placeholder Auth0 values, mutable image refs, and `imagePullPolicy: Never`,
-  uses a live Helm server-side dry run for the Kiali production render so the
-  reviewed RBAC matches the namespace-scoped live install footprint, verifies
+  uses a client-side Kiali render with deterministic namespace-scoped RBAC,
+  verifies
   the Redis StatefulSet uses a `5Gi` `redis-data` claim template, then applies
   the production image Kyverno policy from
   `kubernetes/kyverno/policies/production/`

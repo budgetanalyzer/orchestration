@@ -62,11 +62,10 @@ spec:
               - "cluster.local/ns/default/sa/session-gateway"
 ---
 # budget-analyzer-web: accepts from nginx-gateway (proxied by nginx).
-# This policy is local/Tilt-only because OCI production serves the frontend
-# bundle from nginx-gateway instead of running a standalone budget-analyzer-web
-# Deployment. Keep the production authz baseline in
-# kubernetes/production/istio/authorization-policies.yaml aligned for the
-# shared workloads.
+# This policy is local/Tilt-only because the production reference serves the
+# frontend bundle from nginx-gateway instead of running a standalone
+# budget-analyzer-web Deployment. The production Kustomize overlay deletes
+# only this resource from the shared policy source.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:

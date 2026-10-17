@@ -1,4 +1,3 @@
 # Local Kind uses Calico with the chart's standard CNI binary and config
-# directories. Do not set global.platform here; the k3s platform override is
-# production-specific.
+# directories. Do not set a hosted-distribution platform override here.
 {}

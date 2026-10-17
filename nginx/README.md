@@ -208,7 +208,9 @@ NGINX handles routing to the correct backend service.
 ## Checked-In Production Route Variant
 
 `nginx/nginx.production.k8s.conf` is the explicit production cutover
-configuration for `nginx-gateway`.
+configuration for `nginx-gateway`. The production app Kustomization generates
+its ConfigMaps directly from this file and the top-level `nginx/includes/`
+files; there is no second production-reference copy to keep synchronized.
 
 It changes the frontend route shape intentionally:
 - `/` and `/login` serve the built frontend bundle directly from NGINX with the strict CSP.

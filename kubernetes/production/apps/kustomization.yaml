@@ -28,13 +28,13 @@ configMapGenerator:
   - name: nginx-gateway-config
     namespace: default
     files:
-      - nginx.conf=../nginx/nginx.production.k8s.conf
+      - nginx.conf=../../../nginx/nginx.production.k8s.conf
   - name: nginx-gateway-includes
     namespace: default
     files:
-      - backend-headers.conf=../nginx/includes/backend-headers.conf
-      - security-headers-docs-csp.conf=../nginx/includes/security-headers-docs-csp.conf
-      - security-headers-strict-csp.conf=../nginx/includes/security-headers-strict-csp.conf
+      - backend-headers.conf=../../../nginx/includes/backend-headers.conf
+      - security-headers-docs-csp.conf=../../../nginx/includes/security-headers-docs-csp.conf
+      - security-headers-strict-csp.conf=../../../nginx/includes/security-headers-strict-csp.conf
   - name: nginx-gateway-docs
     namespace: default
     files:

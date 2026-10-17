@@ -114,20 +114,24 @@ personal-host credential, mount, Docker/libvirt socket or kubeconfig to the
 guest. Consult workspace before changing guest bootstrap, repository transport,
 Remote SSH, Docker selection or trust.
 
-Production target is Oracle Cloud Infrastructure Free Tier on ARM64:
-- Shape: `VM.Standard.A1.Flex`
-- Capacity: 4 OCPUs, 24 GB RAM
-- OS baseline: Ubuntu 22.04 Minimal
-- Region baseline: Phoenix
-- Deployment model: single-node, production-grade demo environment
+OCI is retired and no production environment is currently configured. Local
+Tilt/Kind is the live validation target. Keep provider-neutral Kubernetes
+overlays and offline production-reference checks maintained; do not describe
+them as a running or currently tested deployment. `archive/oci/` contains only
+the lean set of removed OCI files and must not be sourced or executed by active
+tooling. The complete pre-retirement tree is Git history at public tag
+`pre-oci-archive`, verified at commit
+`60510f4ce9331968988516947f394152f6aa0da4`. Read `deploy/README.md` and
+`archive/oci/README.md` before changing the production reference or retirement
+boundary.
 
 Architecture implications:
-- All container images must support `linux/arm64`
-- Local Tilt/Kind and OCI/k3s are both treated as production-grade deployment paths
-- Observability remains internal-only in both environments
+- All container images must continue to support `linux/arm64`
+- Production reference renders must not require cloud configuration, credentials, a kubeconfig, or cluster access
+- Observability remains internal-only in local runtime and the production reference
 
 Architecture principles:
-- Production parity between local Tilt/Kind and OCI/k3s
+- Near-identical Kubernetes architecture between local Tilt/Kind and the offline production reference, with intentional differences documented
 - Microservices with clear service boundaries and independent deployability
 - Session-based edge authorization for browser security and session management
 - Istio ingress handles `ext_authz` and per-client auth/API rate limiting; NGINX handles resource routing and load balancing
@@ -179,7 +183,8 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
 - NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
-- Production overlays and OCI deployment inputs: `kubernetes/production/README.md`
+- Provider-neutral production overlays and offline render boundary: `kubernetes/production/README.md` and `deploy/README.md`
+- Retired OCI lean archive, tagged history, and restoration caveats: `archive/oci/README.md`
 - Observability topology and operator access model: `docs/architecture/observability.md`
 - Unified `/api-docs` behavior: `docs-aggregator/README.md`
 - Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`
@@ -231,7 +236,7 @@ Operational guardrails:
 - Redis `/data` is PVC-backed. Do not treat pod replacement or `tilt down` as a Redis reset. Use `./scripts/ops/flush-redis.sh` for a logical reset, or recreate the cluster/runtime when a full clean state is required
 
 Observability rules:
-- Grafana, Prometheus, Jaeger, and Kiali are internal-only in both local Tilt and OCI/k3s
+- Grafana, Prometheus, Jaeger, and Kiali are internal-only in local Tilt and the production reference
 - Treat raw `kubectl port-forward --address 127.0.0.1 ...` and `./scripts/ops/start-observability-port-forwards.sh` as orchestration-owned guest publication; keep every listener on VM loopback
 - `./scripts/smoketest/verify-observability-port-forward-access.sh` is the focused access proof
 - Do not introduce public observability hostnames
@@ -325,6 +330,18 @@ Before implementing a plan or feature:
 3. Do not hack around a missing prerequisite with orchestration-level compensating changes
 4. Complete prerequisites first, then return to the requested work
 
+Before running the static security verifier, select its repository-local,
+hash-verified PyYAML interpreter explicitly:
+
+```bash
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/guardrails/verify-static-security-manifests.sh
+```
+
+If that interpreter is missing, create it with the setup documented in
+`docs/ci-cd.md#security-guardrailsyml`. Do not fall back to the managed VM's
+PyYAML package because the verifier requires the exact pinned version.
+
 ## Image Pinning And Supply Chain Guardrails
 
 - Treat checked-in third-party image refs and Dockerfile base images as digest-pinning targets unless an exception is explicitly documented in the executable inventories
@@ -353,9 +370,12 @@ Do not hide sibling-repo contract failures with orchestration workarounds.
 
 Example: if Spring Boot services fail to expose `/actuator/prometheus` and that contract belongs in `service-common`, fix or rebuild `service-common`. Do not patch orchestration manifests with compensating `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus` overrides just to hide the defect.
 
-## Production-Grade Parity
+## Production-Reference Parity
 
-Treat both supported runtime paths, local Tilt/Kind and OCI/k3s, as production-grade microservices deployments.
+Treat local Tilt/Kind as the live production-grade architecture proof and the
+provider-neutral production overlays as an offline-maintained reference. Do not
+claim runtime parity that has not been exercised against a configured hosted
+environment.
 
 Do not present the following as durable fixes:
 - manual live-cluster drift
@@ -365,7 +385,10 @@ Do not present the following as durable fixes:
 - degraded persistence such as replacing StatefulSets with `emptyDir`
 - orchestration-level compensations for service-owned defects
 
-Temporary recovery commands are acceptable only when clearly labeled as diagnostics or incident-recovery steps. Every durable fix must be repo-owned, repeatable from scripts/manifests, documented in the affected runbook or plan, and verified with the relevant smoke or guardrail checks.
+Temporary local recovery commands are acceptable only when clearly labeled as
+diagnostics or incident-recovery steps. Every durable fix must be repo-owned,
+repeatable from scripts/manifests, documented in the affected runbook or plan,
+and verified with the relevant live-local or offline-reference checks.
 
 ## Planning Transparency
 

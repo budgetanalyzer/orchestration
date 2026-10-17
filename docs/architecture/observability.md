@@ -242,13 +242,15 @@ instead.
 **Kiali shows many warnings or errors and it is unclear what is real:**
 1. Confirm the app stack is actually up: `kubectl get deploy -n default` and,
    after `tilt up`, `./scripts/smoketest/verify-clean-tilt-deployment-admission.sh`
-2. Run `./scripts/ops/triage-kiali-findings.sh` locally, or
-   `./scripts/ops/triage-kiali-findings.sh --runtime-shape production` on OCI
+2. Run `./scripts/ops/triage-kiali-findings.sh` locally. Use
+   `--runtime-shape production` only when inspecting a runtime shaped like the
+   maintained production reference.
 3. Treat `default` namespace findings as runtime-state findings first, not as
    Kiali bugs, if the namespace currently has no pods, no app services, or only
    the default service account
-4. On OCI, remember that `nginx-gateway` serves the frontend bundle. A missing
-   standalone `budget-analyzer-web` Deployment is normal there, while
+4. In the production reference, `nginx-gateway` serves the frontend bundle. A
+   missing standalone `budget-analyzer-web` Deployment is normal for that
+   shape, while
    `AuthorizationPolicy/default/budget-analyzer-web-policy` is stale drift and
    should be removed from the production baseline.
 5. Treat unhealthy external integrations from Kiali's `Istio Status` page,
@@ -280,8 +282,8 @@ That SSH transport remains optional and does not create a public ingress route.
 
 ### Grafana
 
-Local Tilt and production OCI/k3s use the same internal-only access contract
-for Grafana. There is no supported observability hostname. Keep Grafana behind
+The local runtime and production reference use the same internal-only exposure
+contract for Grafana. There is no supported observability hostname. Keep Grafana behind
 Kubernetes and use a loopback-bound port-forward instead. `tilt up` installs
 the observability workloads, but it does not own or keep localhost tunnels
 open for Grafana, Prometheus, Jaeger, or Kiali:
@@ -322,21 +324,9 @@ publications bound to VM `127.0.0.1` in one foreground process, prints the
 local URLs plus the Grafana password and Kiali token commands, and tears down
 all child forwards on `Ctrl+C`. Raw
 `kubectl port-forward --address 127.0.0.1 ...` commands remain the underlying
-supported access model in both local Tilt and production OCI/k3s.
-
-Production OCI/k3s retains a distinct workstation-access workflow. Keep the
-Kubernetes port-forwards running on the OCI host first, then open the matching
-workstation-side SSH tunnels:
-
-```bash
-./scripts/ops/start-observability-ssh-tunnels.sh 152.70.145.68
-```
-
-The SSH helper assumes `ubuntu` and `~/.ssh/oci-budgetanalyzer`, binds only to
-workstation loopback, and forwards the same canonical `3300`, `9090`, `16686`,
-and `20001` ports to the OCI host's loopback listeners. Operators can also set
-`OCI_INSTANCE_IP` in their shell profile and run the helper without an
-argument.
+supported access model for local Tilt. There is no active hosted-environment
+access workflow. A future deployment must define operator transport without
+introducing public observability hostnames.
 
 `grafana.budgetanalyzer.localhost` is retired. Do not introduce
 `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
@@ -482,9 +472,10 @@ egress plus explicit allowlists for:
   control-plane version endpoint on `15014`
 - OTLP ingress to `jaeger-collector` only from approved mesh workloads
 
-The Kubernetes API allowance includes the Kind/k3s service CIDRs on `443` and
+The Kubernetes API allowance includes the local Kind service CIDR on `443` and
 private RFC1918 apiserver endpoints on `6443` because Calico evaluates the
-connection after service DNAT in the local runtime.
+connection after service DNAT in the local runtime. A future hosted environment
+must supply and review its own service and API-server network ranges.
 Other monitoring flows stay destination-scoped through namespace/pod selector
 allowlists. The verifier scripts exercise those paths through temporary
 `ClusterIP` Services so the repo does not need destinationless egress rules for
@@ -595,8 +586,8 @@ dynamic provisioning.
 | kube-state-metrics | 64Mi | 128Mi |
 | **Total** | **832Mi** | **~1.6Gi** |
 
-This fits comfortably in the 24GB OCI ARM instance alongside the
-application stack.
+The total is retained as a capacity-planning input for a future hosted
+environment, not as evidence of available production capacity.
 
 ## Discovery Commands
 

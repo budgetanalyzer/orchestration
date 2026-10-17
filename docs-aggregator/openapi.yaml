@@ -18,7 +18,7 @@ servers:
 - url: https://app.budgetanalyzer.localhost/api
   description: Local environment (via gateway)
 - url: https://api.budgetanalyzer.org
-  description: Production environment
+  description: Historical production reference (not live)
 tags:
 - name: Saved Views
   description: Create and manage static transaction collections

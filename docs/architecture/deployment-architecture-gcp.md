@@ -1,9 +1,16 @@
 # Deployment Architecture - Google Cloud Platform (GCP)
 
-**Status:** Draft
+**Status:** Historical design exploration; not an active deployment plan
 **Last Updated:** 2025-11-16
-**Target Environment:** Google Cloud Platform (GCP)
+**Explored Environment:** Google Cloud Platform (GCP)
 **Primary Goal:** Minimize vendor lock-in while leveraging managed services for operational efficiency
+
+Budget Analyzer has no selected replacement provider and no current production
+environment. This document preserves an earlier GCP proposal for historical
+design context only. Its costs, versions, hostnames, commands, implementation
+status, and recommendations are not maintained or approved for execution. Use
+[`deploy/README.md`](../../deploy/README.md) for the maintained provider-neutral
+production reference and its unresolved deployment prerequisites.
 
 ---
 

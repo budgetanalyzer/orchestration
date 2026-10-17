@@ -1,332 +1,149 @@
-# Production Manifests
+# Provider-Neutral Production Reference
 
-This directory contains the checked-in production baseline for the Oracle Cloud
-deployment path. The existing app overlay is paired with the reviewed
-production route, monitoring, storage, and verification inputs.
+**Status:** Maintained offline Kubernetes reference; no production environment
+is currently configured
 
-## Production Baseline
+This directory composes shared Kubernetes inputs into a production-shaped
+reference while keeping local Kind/Tilt manifests unchanged. The overlays are
+maintained and statically validated, but they are not evidence of a running or
+currently tested production deployment.
 
-`apps/` already renders the repo-managed application workloads with GHCR images
-pinned by digest from `kubernetes/production/apps/image-inventory.yaml`. The
-reviewed schema v2 deployment record is
-`kubernetes/production/apps/deployment-manifest.yaml`.
+The former OCI deployment implementation is retired. Its lean removed-file
+archive and complete-tree Git provenance are documented in
+[archive/oci/](../../archive/oci/README.md). Active tooling must not source or
+execute the archive or tagged history.
 
-The production baseline is allowed to contain mixed runtime artifact versions.
-The digest-pinned image inventory is the deployment truth. The normal way to
-change it is the local desired-state preparation command:
+## Maintained Inputs
 
-```bash
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --plan-only
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --push-tags
+- `apps/` composes the repo-managed application workloads with immutable GHCR
+  image refs, the canonical production NGINX configuration, and production
+  API-docs inputs.
+- `gateway-routes/` and `istio-ingress-policies/` retain the reviewed public
+  routing and ingress security shape.
+- `istio/` removes only the local standalone-frontend policy from the shared
+  workload authorization source. `istio-ingress-gateway/` retains shared pod
+  security and diagnostics without selecting a production publication type.
+- `infrastructure/` reuses the shared PostgreSQL, RabbitMQ, and Redis StatefulSet
+  baseline and applies the production Redis storage request.
+- `monitoring/` contains the internal-only Grafana override layered onto the
+  shared monitoring values.
+- `docs-aggregator/` contains production-reference browser documentation
+  inputs.
 
-# After GitHub Actions publishes the expected GHCR tags
-./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag vX.Y.Z --resolve-images
-```
+The retained hostname and identity-provider values are non-secret historical
+reference values. They do not identify live endpoints. A future deployment
+must explicitly choose publication, DNS, identity, storage, secret, and TLS
+inputs before applying any rendered resource.
 
-The local command previews tag actions, creates and pushes missing source tags
-only in `--push-tags` mode, and intentionally stops before reading GHCR. After
-the owning GitHub Actions workflows publish the expected image tags,
-`--resolve-images` reads those tags once, updates the checked-in manifest,
-inventory, app overlay, release metadata, and runtime metadata patch, then
-stops for review. Apply the reviewed desired state on the OCI host with:
+## Parity Contract
 
-```bash
-./deploy/scripts/release/deploy-current-oci-manifest.sh
-```
+Near-identical means that application behavior and controls come from shared
+inputs, with the bounded differences below. It does not mean a hosted
+production environment has been exercised.
 
-The detailed OCI deploy script map, bootstrap order, render/reconcile paths,
-and release operator flow live in [../../deploy/README.md](../../deploy/README.md).
+| Area | Shared source | Intentional reference difference | Available validation |
+| --- | --- | --- | --- |
+| Workloads | `kubernetes/services/` | Digest-pinned release images and metadata; frontend image is copied into NGINX | App Kustomize render and production-reference verifier |
+| Ingress and security | Shared gateway pod hardening, authorization policies, `ext-authz`, and rate-limit filter | Kind NodePort is local-only; production publication is unspecified; standalone frontend authorization is deleted | Exact rate-limit comparison plus gateway and authorization structural checks |
+| Routing | `kubernetes/gateway/` and the canonical NGINX variants/includes | Public hostname and static frontend route variant | Route render comparison permits only the hostname change; NGINX routing checks use the canonical files |
+| Persistence | `kubernetes/infrastructure/` StatefulSets and security contexts | Redis request is `5Gi` instead of `1Gi`; storage class and capacity remain unresolved | Infrastructure render comparison permits only Redis sizing |
+| Observability | Shared Prometheus, Jaeger, and Kiali inputs | Loopback-oriented Grafana values; no public routes | Offline render checks enforce internal-only Services and namespace-scoped Kiali RBAC |
+| Images | Shared workloads and pinned third-party inputs | Historical app release refs are immutable and reference-only | Image overlay, Kyverno, pinning, and scan-input checks |
+| Frontend delivery | Shared `nginx/nginx.production.k8s.conf` and includes | Production serves built static assets; local keeps Vite plus the atomic `/_prod-smoke/` proof | Production app render, edge checks, and the local frontend smoke path when runtime prerequisites exist |
 
-`service-common` versions are library coordinates consumed by Java services.
-Do not bump `service-common` or rebuild every Java runtime just because this
-overlay, `/api-docs` metadata, routing, policy, or other orchestration config
-changed.
+## Application And Image Baseline
 
-That overlay already:
+`apps/deployment-manifest.yaml`, `apps/image-inventory.yaml`,
+`apps/patches/runtime-release-metadata.yaml`, and
+`docs-aggregator/release-metadata.json` describe one immutable historical OCI
+baseline. Active metadata marks it `reference-only` and retains the old OCI id
+only as provenance. It must not be interpreted as current deployment status.
 
-- keeps the production app route on the `nginx/nginx.production.k8s.conf`
-  contract, with the production-owned copy committed at
-  `kubernetes/production/nginx/nginx.production.k8s.conf`
-- generates `nginx-gateway-config`, `nginx-gateway-includes`, and
-  `nginx-gateway-docs` from committed files under `kubernetes/production/`
-- serves `/api-docs/release-metadata.json` from the reviewed deployment
-  metadata generated alongside the production image inventory
-- applies `apps/patches/runtime-release-metadata.yaml` so app Deployments and
-  Pods carry deployment id labels, per-artifact versions, source commits, and
-  digest-pinned image annotations
-- patches `nginx-gateway` to serve the released `budget-analyzer-web` static
-  bundle instead of the local `budget-analyzer-web-prod-smoke` image or the
-  Vite dev server
-- intentionally does **not** manage `ConfigMap/session-gateway-idp-config`;
-  the production non-secret IDP config stays owned by the secret-sync
-  render/apply path so the apps overlay cannot overwrite it with the
-  checked-in fallback localhost values
+There is no active command that updates or applies this baseline. Changing the
+reference requires an explicitly reviewed maintenance decision that updates
+the manifest, inventory, runtime metadata patch, docs metadata, and app
+Kustomization consistently. It does not require publishing new application
+releases merely to retire OCI.
 
-Render it with:
-
-```bash
-kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-```
-
-Apply it with server-side apply:
+Render the app overlay offline with:
 
 ```bash
-kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side -f -
+kubectl kustomize kubernetes/production/apps \
+  --load-restrictor=LoadRestrictionsNone
 ```
 
-The generated `nginx-gateway-docs` ConfigMap is too large for client-side apply
-because `kubectl apply` would try to store the full manifest in the
-`kubectl.kubernetes.io/last-applied-configuration` annotation.
+The overlay intentionally serves the released frontend bundle from
+`nginx-gateway`, keeps browser auth routes on Session Gateway, and keeps API
+traffic on the NGINX lane. It does not manage production secret values or the
+environment-specific `session-gateway-idp-config` ConfigMap.
 
-Verify the current production baseline with:
+## Offline Render Commands
 
-```bash
-kubectl kustomize kubernetes/production/apps --load-restrictor=LoadRestrictionsNone
-./deploy/scripts/verify/oci-upgrade-lockstep.sh
-./scripts/guardrails/check-secrets-only-handling.sh
-./scripts/guardrails/verify-production-image-overlay.sh
-./deploy/scripts/secrets/render-secret-sync.sh
-```
-
-The deployment manifest records deployment id, orchestration revision,
-per-artifact source refs, source commits, artifact versions, `service-common`
-versions for Java workloads, and digest-pinned image refs.
-The local desired-state preparation command copies the reviewed manifest to
-`apps/deployment-manifest.yaml` and regenerates
-`docs-aggregator/release-metadata.json`,
-`kubernetes/production/docs-aggregator/release-metadata.json`, and
-`apps/patches/runtime-release-metadata.yaml` so browser metadata and live pod
-labels cannot drift from the reviewed deployment baseline.
-
-The production image verifier now:
-
-- renders `apps/`, the broad production infrastructure overlay, and the
-  reviewed production route/ingress/monitoring/egress output
-- rejects `:latest`, `:tilt-<hash>`, `imagePullPolicy: Never`,
-  `budgetanalyzer.localhost`, and `auth0-issuer.placeholder.invalid` anywhere
-  in that checked-in production path
-- verifies the production NGINX/public-route contract is coming from
-  `nginx.production.k8s.conf`, not the local `nginx.k8s.conf` path
-- verifies the production docs bundle, application gateway route render, loopback
-  Grafana override, Auth0 egress render, and Redis StatefulSet `5Gi`
-  claim-template path all stay present
-- applies the production image Kyverno policy at
-  `../kyverno/policies/production/50-require-third-party-image-digests.yaml`
-
-Before deploying a transaction-service image that requires
-`PREVIEW_IMPORT_TOKEN_ENCRYPTION_SECRET`, confirm secret sync has produced the
-preview import token credentials Secret:
-
-```bash
-kubectl get externalsecret -n default transaction-service-preview-import-token-credentials
-kubectl get secret -n default transaction-service-preview-import-token-credentials
-```
-
-## Production Admission Path
-
-The repo-owned production admission path lives under `deploy/` and installs the
-checked-in Kyverno controller values and the production-only policy set.
-
-- `deploy/helm-values/kyverno.values.yaml` pins the Kyverno production values
-  instead of relying on mutable chart defaults.
-- `deploy/scripts/reconcile/install-kyverno.sh` creates or relabels the
-  `kyverno` namespace for baseline Pod Security admission, then installs the
-  pinned Kyverno chart version with those checked-in values.
-- `deploy/scripts/reconcile/apply-admission-policies.sh` reruns
-  `./scripts/guardrails/verify-production-image-overlay.sh` and then applies
-  the shared admission policies plus the production-only `50` variant.
-
-That split is intentional: the checked-in production verifier stays the static
-gate for the production image/render baseline, while the policy apply script is
-the operator-owned live-cluster step that activates the same production-only
-image policy on OCI.
-
-## Production NGINX ConfigMap Inputs
-
-The production overlay now owns the NGINX ConfigMap source files directly under
-this directory:
-
-- `nginx-gateway-config` renders from
-  `kubernetes/production/nginx/nginx.production.k8s.conf`
-- `nginx-gateway-includes` renders from
-  `kubernetes/production/nginx/includes/`
-- `nginx-gateway-docs` renders from
-  `kubernetes/production/docs-aggregator/`
-
-That keeps the production cutover reviewable without depending on Tilt-created
-ConfigMaps, the Vite dev server, or the mutable top-level local-dev docs path.
-The production overlay stages those docs assets into the same writable web
-assets volume as the frontend bundle during init-container startup rather than
-mounting a second volume beneath `/usr/share/nginx/html`.
-
-The preserved public route contract is:
-
-- `/api/*`, `/api-docs`, `/login`, and `/` stay on `nginx-gateway`
-- `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` stay direct to
-  `session-gateway` through the Gateway API auth route
-- the docs/download surface stays same-origin and the production docs bundle
-  now advertises `https://demo.budgetanalyzer.org/api`
-
-## Production Routing And Monitoring Inputs
-
-This directory keeps the production hostname cutover in reviewed, committed
-artifacts:
-
-- `istio/authorization-policies.yaml` is the OCI production
-  `AuthorizationPolicy` baseline. It intentionally omits
-  `budget-analyzer-web-policy` because production serves the frontend bundle
-  from `nginx-gateway` instead of a standalone `budget-analyzer-web`
-  Deployment.
-
-- `gateway-routes/` renders the production `HTTPRoute` objects with
-  `demo.budgetanalyzer.org`, while leaving the shared localhost dev manifests
-  untouched for Tilt
-- `istio-ingress-policies/` renders the production `/api/*`
-  `AuthorizationPolicy` and the ingress local-rate-limit object. Host ownership
-  stays on the production `HTTPRoute` overlay, while production renders the
-  exact shared path-only rate-limit filter. Ingress is the sole owner of
-  general auth/API rate limiting; the production NGINX input has no blanket
-  `limit_req` zone or route directives.
-- `monitoring/prometheus-stack-values.override.yaml` overrides the Grafana
-  server domain and root URL for loopback port-forward access while preserving
-  the checked-in `prometheus-stack` Helm release name contract that yields the
-  `prometheus-stack-grafana` Service
-- `deploy/scripts/render/production-routes.sh` renders the
-  production outputs under `tmp/production-routes/`, including the Auth0/FRED Istio
-  egress manifests derived from the production `AUTH0_ISSUER_URI`
-
-The checked-in production monitoring overlay in this directory stays narrow:
-
-- `monitoring/prometheus-stack-values.override.yaml` is still only the Grafana
-  loopback override layered onto the existing `prometheus-stack` Helm release
-- production Grafana is internal-only; access it through the shared local and
-  production operator contract:
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-grafana 3300:80`
-- production Prometheus is also internal-only:
-  `kubectl port-forward --address 127.0.0.1 -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090`
-- keep observability port-forwards loopback-bound; do not use `--address 0.0.0.0`
-- the production Helm install must keep the release name `prometheus-stack`
-  and layer the production override on top of
-  `kubernetes/monitoring/prometheus-stack-values.yaml`
-- the production Helm install must also keep using
-  `scripts/ops/post-render-prometheus-stack.sh` so the Prometheus Operator
-  RBAC stays on the repo-owned least-privilege split instead of the chart's
-  upstream broad cluster role
-- reapply the full internal monitoring stack with
-  `./deploy/scripts/reconcile/production-monitoring.sh`; use
-  `--skip-jaeger-kiali` for a Prometheus/Grafana-only refresh or
-  `--verify-runtime` when the rollout should also prove the dashboard input
-  metrics
-- Jaeger and Kiali have a separate reviewed OCI rollout path through
-  `deploy/scripts/render/observability.sh` and
-  `deploy/scripts/reconcile/observability.sh`; those scripts reuse the
-  shared `kubernetes/monitoring/jaeger/*.yaml`,
-  `kubernetes/monitoring/kiali-values.yaml`, and
-  `scripts/ops/post-render-kiali-server.sh` inputs instead of adding a second
-  production-only observability manifest tree
-- when installed through that path, both stay in `monitoring`, stay
-  `ClusterIP`-only, and use loopback-bound `kubectl port-forward`:
-  `svc/jaeger-query 16686:16686` for Jaeger and `svc/kiali 20001:20001` for
-  Kiali
-- workstation access to production observability uses the same OCI-host
-  loopback port-forwards plus the local SSH tunnel helper:
-  `./scripts/ops/start-observability-ssh-tunnels.sh <oci-host>`. The helper
-  also accepts `OCI_INSTANCE_IP` when the argument is omitted, assumes
-  `ubuntu` and `~/.ssh/oci-budgetanalyzer`, and forwards the canonical `3300`,
-  `9090`, `16686`, and `20001` ports to OCI host loopback.
-- do not introduce `grafana.budgetanalyzer.org`, `kiali.budgetanalyzer.org`, or
-  `jaeger.budgetanalyzer.org`
-
-Render and review the current production hostname/egress slice with:
+Use the maintained render-only entry points:
 
 ```bash
 ./deploy/scripts/render/production-routes.sh
-sed -n '1,260p' tmp/production-routes/gateway-routes.yaml
-sed -n '1,220p' tmp/production-routes/istio-ingress-policies.yaml
-sed -n '1,120p' tmp/production-routes/prometheus-stack-values.override.yaml
-sed -n '1,260p' tmp/production-routes/istio-egress.yaml
-```
-
-If a live OCI cluster was previously applied from an older observability render,
-explicitly delete any stale observability route after applying the current
-application route render:
-
-```bash
-kubectl delete httproute -n monitoring grafana-route prometheus-route kiali-route jaeger-route --ignore-not-found
-```
-
-The same "delete stale drift once, then rely on the repo-owned baseline"
-principle also applies to Istio authz. If an older OCI cluster still has
-`AuthorizationPolicy/default/budget-analyzer-web-policy`, delete it after
-reconciling with `./deploy/scripts/bootstrap/04-install-istio.sh`; that script now
-reapplies the production-specific authz baseline that excludes the
-frontend-only policy.
-
-The ingress policy resource changed names during the per-client cutover. After
-applying the current production ingress policy render, an operator upgrading an
-older OCI cluster must delete the retired aggregate filter so it cannot remain
-after the four new policies:
-
-```bash
-kubectl delete envoyfilter -n istio-ingress ingress-auth-local-rate-limit --ignore-not-found
-```
-
-This is a one-time migration cleanup. Do not run the local live verifier or its
-disposable browser/client probes against production.
-
-## Production Infrastructure Input
-
-Production infrastructure now renders from the broad
-`kubernetes/production/infrastructure` overlay. That target reuses the shared
-`kubernetes/infrastructure` baseline for PostgreSQL, RabbitMQ, and Redis, then
-patches the Redis StatefulSet storage request for the OCI production shape.
-
-That production overlay includes:
-
-- `Namespace/infrastructure`
-- `StatefulSet/postgresql`, `StatefulSet/rabbitmq`, and `StatefulSet/redis`
-- `Service/postgresql`, `Service/rabbitmq`, and `Service/redis`
-- `ConfigMap/postgresql-init`, `ConfigMap/rabbitmq-config`, and
-  `ConfigMap/redis-acl-bootstrap`
-- Redis `volumeClaimTemplates.metadata.name: redis-data`
-- Redis `volumeClaimTemplates` storage request `5Gi`, expected to bind to the
-  k3s `local-path` default storage class on the OCI host
-
-Render it for review with:
-
-```bash
 ./deploy/scripts/render/production-infrastructure.sh
-sed -n '1,260p' tmp/production-infrastructure/infrastructure.yaml
+./deploy/scripts/render/observability.sh
 ```
 
-On a new or already migrated cluster, apply that rendered target with:
+The route renderer includes the production `HTTPRoute` objects, shared ingress
+policies, shared workload authorization with the frontend-only omission,
+shared ingress gateway pod configuration, internal-only monitoring override,
+and Istio egress reference. The
+infrastructure renderer composes the shared stateful services. The
+observability renderer keeps Jaeger and Kiali internal-only and expands Kiali's
+approved namespace RBAC without a live Helm lookup.
+
+These commands do not load cloud or instance configuration and do not inspect
+or contact a Kubernetes cluster. They may fetch pinned Helm chart content.
+Generated review output is ignored below `tmp/` unless another output directory
+is supplied.
+
+## Validation
+
+The main production-reference gate is fully offline with respect to Kubernetes:
 
 ```bash
-./deploy/scripts/reconcile/production-infrastructure.sh
+./scripts/guardrails/verify-production-image-overlay.sh
 ```
 
-Use these repo-owned scripts as the production infrastructure path. They render
-the overlay with Kustomize load restrictions disabled so the production target
-can reuse the shared `kubernetes/infrastructure` baseline without duplicating
-PostgreSQL, RabbitMQ, or Redis manifests.
+It verifies:
 
-The old production-only Redis Deployment/PVC overlay under
-`kubernetes/production/infrastructure/redis/` has been removed, and the
-one-time migration to the shared Redis StatefulSet baseline has been completed.
-New or already migrated OCI clusters should use the normal production
-infrastructure render/apply scripts. If an unexpected host still has the old
-Redis Deployment plus standalone `redis-data` PVC shape, treat replacement as
-incident recovery because Redis session/cache data may be destroyed.
+- digest-pinned app images and source provenance;
+- app, infrastructure, route, authorization, ingress-policy, gateway pod,
+  egress, and observability renders;
+- production NGINX and `/api-docs` wiring;
+- route parity except for the declared hostname, authorization parity except
+  for the standalone frontend, and infrastructure parity except for Redis
+  sizing;
+- absence of local-only image refs and placeholder hosts;
+- internal-only observability exposure and namespace-scoped Kiali RBAC;
+- Redis StatefulSet persistence and its `5Gi` reference request; and
+- the production Kyverno image policy against the rendered app overlay.
 
-## Production Verification
+Also run the static security and image-evidence paths when their inputs change:
 
-Recorded verifier output:
-
-```text
-Production verification passed for the app overlay, rendered production output, and production infrastructure overlay.
+```bash
+./scripts/guardrails/verify-static-security-manifests.sh
+./scripts/security/render-image-scan-inputs.sh --help
 ```
 
-The repo-owned production policy install/apply surface is now checked in under
-`deploy/`. The route, egress, infrastructure, and observability apply paths are
-intentionally kept separate so operators can review each mutation slice before
-touching the OCI cluster.
+Exact verifier and evidence contracts live in
+[scripts/README.md](../../scripts/README.md) and
+[docs/dependency-automation.md](../../docs/dependency-automation.md).
+
+## Unresolved Deployment Prerequisites
+
+The reference deliberately does not provide a generic deployment lifecycle.
+Any future hosted environment must separately define and verify:
+
+- Kubernetes distribution and ARM64 node support;
+- ingress publication, client-address preservation, DNS, and firewall policy;
+- storage classes, capacity, backups, and recovery;
+- secret provisioning and production identity-provider configuration;
+- browser and infrastructure TLS issuance and renewal; and
+- apply, rollout, rollback, runtime verification, and operator access.
+
+Do not encode assumptions for a hypothetical provider or revive retired OCI
+commands to fill these gaps.

@@ -36,8 +36,8 @@ Options:
                                skipped and absent tags are created.
   -h, --help                   Show this help.
 
-This helper is source-release preparation only. It does not deploy to OCI and
-does not update production image refs.
+This helper is source-release preparation only. It does not deploy a production
+environment or update production image refs.
 EOF
 }
 
@@ -214,11 +214,7 @@ print_workflow_urls() {
         printf '  %-24s https://github.com/budgetanalyzer/%s/actions/workflows/%s\n' "${repo}" "${repo}" "${workflow}"
     done
 
-    info "for OCI production, use the desired-state preparation flow instead of the historical release-manifest shape:"
-    printf '  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --plan-only\n' "${tag_name}"
-    printf '  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --push-tags\n' "${tag_name}"
-    printf '  # After GitHub Actions publishes the expected GHCR tags:\n'
-    printf '  ./deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag %s --lockstep --resolve-images\n' "${tag_name}"
+    info "published images are release artifacts; no production deployment environment is currently configured"
 }
 
 maybe_tag_release() {

@@ -9,19 +9,15 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LOCAL_MANIFEST="${REPO_DIR}/kubernetes/istio/ingress-rate-limit.yaml"
 INGRESS_GATEWAY_CONFIG="${REPO_DIR}/kubernetes/istio/ingress-gateway-config.yaml"
 PRODUCTION_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
+PRODUCTION_GATEWAY_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-gateway"
 PYTHON_REQUIREMENTS="${SCRIPT_DIR}/requirements-ingress-rate-limit.txt"
 PYTHON_INTERPRETER="${INGRESS_RATE_LIMIT_PYTHON:-python3}"
 TEMP_DIR="$(mktemp -d)"
 PRODUCTION_RENDER="${TEMP_DIR}/istio-ingress-policies.yaml"
-INSTANCE_ENV_FILE_TMP="${TEMP_DIR}/instance.env"
-INGRESS_BOOTSTRAP_RENDER_DIR="${TEMP_DIR}/ingress-bootstrap"
-PUBLIC_TLS_RENDER_DIR="${TEMP_DIR}/public-tls"
-INGRESS_BOOTSTRAP_GATEWAY_CONFIG="${INGRESS_BOOTSTRAP_RENDER_DIR}/ingress-gateway-config.yaml"
-PUBLIC_TLS_GATEWAY_CONFIG="${PUBLIC_TLS_RENDER_DIR}/ingress-gateway-config.yaml"
+PRODUCTION_GATEWAY_RENDER="${TEMP_DIR}/ingress-gateway-config.yaml"
 NGINX_CONFIGS=(
     "${REPO_DIR}/nginx/nginx.k8s.conf"
     "${REPO_DIR}/nginx/nginx.production.k8s.conf"
-    "${REPO_DIR}/kubernetes/production/nginx/nginx.production.k8s.conf"
 )
 NGINX_LIMIT_PATTERN='limit_req(_zone|_status)?[[:space:]]'
 
@@ -194,25 +190,14 @@ verify_nginx_inputs "${NGINX_CONFIGS[@]}"
 kubectl kustomize "${PRODUCTION_OVERLAY}" \
     --load-restrictor=LoadRestrictionsNone > "${PRODUCTION_RENDER}"
 
-cat > "${INSTANCE_ENV_FILE_TMP}" <<'EOF'
-DEMO_DOMAIN=demo.budgetanalyzer.org
-LETSENCRYPT_EMAIL=rate-limit-render-check@example.invalid
-EOF
-
-INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
-    "${REPO_DIR}/deploy/scripts/bootstrap/03-render-ingress-bootstrap-manifests.sh" \
-    --output-dir "${INGRESS_BOOTSTRAP_RENDER_DIR}" >/dev/null
-
-INSTANCE_ENV_FILE="${INSTANCE_ENV_FILE_TMP}" \
-    "${REPO_DIR}/deploy/scripts/render/public-tls.sh" \
-    --output-dir "${PUBLIC_TLS_RENDER_DIR}" >/dev/null
+kubectl kustomize "${PRODUCTION_GATEWAY_OVERLAY}" \
+    --load-restrictor=LoadRestrictionsNone > "${PRODUCTION_GATEWAY_RENDER}"
 
 "${PYTHON_INTERPRETER}" - \
     "${LOCAL_MANIFEST}" \
     "${PRODUCTION_RENDER}" \
     "${INGRESS_GATEWAY_CONFIG}" \
-    "${INGRESS_BOOTSTRAP_GATEWAY_CONFIG}" \
-    "${PUBLIC_TLS_GATEWAY_CONFIG}" <<'PY'
+    "${PRODUCTION_GATEWAY_RENDER}" <<'PY'
 import copy
 import re
 import sys
@@ -526,7 +511,7 @@ production = inspect_manifest(sys.argv[2])
 gateway_stats = [inspect_gateway_stats(path) for path in sys.argv[3:]]
 expect(
     all(stats == gateway_stats[0] for stats in gateway_stats[1:]),
-    "local and production gateway stats matcher structures must be equivalent",
+    "gateway stats matcher structures must be equivalent",
 )
 
 for policy in EXPECTED:
@@ -642,6 +627,6 @@ print(
 )
 print("  insertion: before envoy.filters.http.ext_authz")
 print("  default bucket: absent; dynamic descriptor cache: 4096 per policy")
-print("  diagnostics: local and both production renders include only the four policy stats families")
+print("  diagnostics: maintained ingress gateway config includes only the four policy stats families")
 print("  NGINX cutover: local and production inputs contain no blanket limiter")
 PY

@@ -208,7 +208,7 @@ print_release_summary() {
         info "checked-in serviceCommon version: ${service_common_version}"
     fi
     info "workflow page: https://github.com/budgetanalyzer/${source_repo}/actions/workflows/${workflow}"
-    info "for OCI production, run deploy/scripts/release/prepare-oci-manifest-from-current-stack.sh --source-tag ${tag_name} --resolve-images from the intended workspace state after the workflow publishes"
+    info "published images are release artifacts; no production deployment environment is currently configured"
 }
 
 maybe_tag_release() {

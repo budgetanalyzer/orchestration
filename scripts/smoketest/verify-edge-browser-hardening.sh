@@ -520,7 +520,6 @@ verify_static_contracts() {
         "return 404;" \
         "Production config removes /@vite/client"
     assert_api_fallback_contract "${REPO_DIR}/nginx/nginx.production.k8s.conf" "Production NGINX config"
-    assert_api_fallback_contract "${REPO_DIR}/kubernetes/production/nginx/nginx.production.k8s.conf" "OCI production NGINX config"
     warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
         "include includes/security-headers-docs-csp.conf;" \
         "Production /api-docs route re-includes the docs-only CSP"

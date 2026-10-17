@@ -6,8 +6,8 @@
 The original research selected OCI Vault, instance principals, and External
 Secrets Operator for the former OCI demo. OCI is retired, no production
 environment is currently configured, and those provider-specific procedures
-must not be used as current operator guidance. The frozen deployment
-implementation and restoration caveats live in
+must not be used as current operator guidance. The lean removed-file archive,
+complete-tree Git provenance, and restoration caveats live in
 [`archive/oci/README.md`](../../archive/oci/README.md).
 
 The durable security boundaries are provider-independent:

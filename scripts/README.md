@@ -9,12 +9,14 @@ cross-cutting verifier entry points. The maintained provider-neutral,
 render-only production surface under `../deploy/scripts/` is owned by
 [../deploy/README.md](../deploy/README.md).
 
-Preserved scripts below `../archive/oci/` are frozen historical copies, not
-members of the active `scripts/` or `deploy/scripts/` catalogs. Do not add
+The removed OCI scripts preserved below `../archive/oci/` are frozen
+historical copies, not members of the active `scripts/` or `deploy/scripts/`
+catalogs. Do not add
 archive paths to maintained image-pinning inventories, deployment acceptance
 checks, shell validation sweeps, build discovery, or update automation. General
 secret detection still applies. See
-[../archive/oci/README.md](../archive/oci/README.md) for the snapshot boundary.
+[../archive/oci/README.md](../archive/oci/README.md) for the lean archive and
+complete-tree history boundary.
 
 ## Layout
 

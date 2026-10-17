@@ -40,13 +40,14 @@ The shared preset provides these controls:
 - generated outputs, historical material, local images, and retained stale
   test suites remain outside update ownership.
 
-The retired OCI snapshot under `archive/oci/` is historical material. The
+The retired OCI lean archive under `archive/oci/` is historical material. The
 shared preset excludes it from dependency discovery in both this repository
 and any repository that reuses the preset. Renovate must not refresh archived
 versions, digests, Helm values, Actions references, or copied scripts. General
 secret detection remains applicable to the archive; retirement is not a
-secret-scanning exception. Snapshot provenance, inventory, and restoration
-caveats live in [archive/oci/README.md](../archive/oci/README.md).
+secret-scanning exception. Archive and complete-tree Git provenance,
+inventory, and restoration caveats live in
+[archive/oci/README.md](../archive/oci/README.md).
 
 Review every image or platform proposal for Linux ARM64 support. A registry tag
 or new digest does not prove platform support, the embedded application

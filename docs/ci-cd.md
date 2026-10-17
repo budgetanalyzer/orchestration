@@ -102,8 +102,10 @@ Terminology:
   metadata marks them reference-only.
 
 There is no active production preparation, apply, upgrade, or rollback command.
-The former workflow is preserved only in the frozen snapshot documented by
-[archive/oci/README.md](../archive/oci/README.md). A future hosted environment
+Removed OCI workflow files are in the lean archive documented by
+[archive/oci/README.md](../archive/oci/README.md); the complete pre-retirement
+tree is at public tag `pre-oci-archive`, verified at commit
+`60510f4ce9331968988516947f394152f6aa0da4`. A future hosted environment
 requires a separately authorized deployment design.
 
 The deployable Java services do not consume regular-CI Actions artifacts.

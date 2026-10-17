@@ -9,10 +9,10 @@ Kubernetes reference without OCI configuration, cloud credentials, a
 kubeconfig, or cluster access.
 
 The former OCI bootstrap, secret provisioning, apply, upgrade, release, and
-remote-access implementation is retired. Its unchanged source layout,
-provenance, inventory, and restoration caveats are preserved in
-[archive/oci/README.md](../archive/oci/README.md). Do not execute or source the
-archive from active tooling.
+remote-access implementation is retired. The lean removed-file inventory,
+complete-tree Git provenance, exclusions, and restoration caveats are
+documented in [archive/oci/README.md](../archive/oci/README.md). Do not execute
+or source the archive or tagged history from active tooling.
 
 ## Maintained Surface
 
@@ -94,7 +94,7 @@ internal-only observability behavior. They do not choose or implement:
 - a deployment, upgrade, rollback, or release-apply workflow.
 
 Those are prerequisites for a future, separately authorized deployment
-project. Do not infer them from the retired OCI snapshot or add compatibility
+project. Do not infer them from the retired OCI history or add compatibility
 wrappers around its commands.
 
 ## Maintainer Rules

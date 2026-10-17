@@ -1,110 +1,118 @@
-# Retired OCI Deployment Snapshot
+# Retired OCI Deployment Archive
 
 **Status:** Frozen historical reference; unmaintained and not an active
 deployment path
 
 Oracle Cloud Infrastructure (OCI) is retired for Budget Analyzer because the
 available OCI Free Tier capacity is no longer sufficient for the full stack.
-There was no production environment when this snapshot was captured. The
-snapshot preserves the former deployment implementation as design and recovery
-input if a separately authorized OCI restoration project is undertaken.
+There was no production environment when this retirement archive was created,
+and none is currently configured. The files here remain unmaintained design
+and recovery input for a separately authorized OCI restoration project.
 
 ## Provenance
 
-- Snapshot time: `2026-10-16T10:09:57Z`
-- Source repository commit: `60510f4ce9331968988516947f394152f6aa0da4`
-- Source commit date: `2026-10-16T16:50:59+07:00`
-- Source commit subject: `delete implemented plans (#83)`
-- Source layout: repository-relative paths are retained below `archive/oci/`
+- Baseline commit: `60510f4ce9331968988516947f394152f6aa0da4`
+- Public discovery tag: `pre-oci-archive`
+- Source layout: original repository-relative paths are retained below this
+  directory
 - Fidelity inventory: [`SHA256SUMS`](SHA256SUMS)
 
-All 182 preserved files were copied directly from their original paths before
-active OCI cleanup. Their bytes and executable mode bits were unchanged by the
-snapshot operation. None of the copied source files had a pre-existing
-working-tree difference from the source commit. The only pre-existing
-working-tree difference was
-`docs/plans/provider-neutral-production-parity.md`; it is not a snapshot input
-and is not copied here. This README, `SHA256SUMS`, and active documentation or
-automation changes that establish the archive boundary are new retirement
-metadata, not source-commit content.
+The commit is the durable, immutable provenance identity. The lightweight tag
+is its convenient public discovery name; its direct resolution was verified as
+`60510f4ce9331968988516947f394152f6aa0da4` when this archive was assembled. A
+tag can be moved or deleted, so recovery must confirm its resolution against
+the recorded commit.
 
-## Inventory and classification
+This directory is intentionally lean. It contains byte-for-byte copies of only
+the 44 OCI retirement files removed from active repository paths. Each file's
+Git executable mode also matches its original path at the baseline commit.
+Files that remained active, including reusable and mixed inputs consumed by the
+former implementation, are not duplicated here. The complete pre-retirement
+repository tree is preserved by Git at the baseline commit, not by this
+directory.
+
+## Inventory
 
 `SHA256SUMS` is the exact file-level inventory. Its entries use paths relative
 to this directory, which are also the files' original repository-relative
 paths.
 
-| Original path | Files | Classification at capture | Reason retained |
-| --- | ---: | --- | --- |
-| `deploy/**` | 44 | OCI-only | Complete bootstrap, secret, render, reconcile, release, verification, library, Helm-value, template, and operator surface. |
-| `kubernetes/production/**` | 21 | Mixed | OCI-coupled production metadata and routing plus reusable production overlays. |
-| `kubernetes/gateway/**` | 3 | Reusable | Shared route bases consumed by the production overlay. |
-| `kubernetes/infrastructure/**` | 11 | Reusable | Shared PostgreSQL, Redis, and RabbitMQ bases consumed by production. |
-| `kubernetes/istio/**` | 17 | Mixed | Shared Istio inputs plus the k3s CNI and egress inputs used by OCI. |
-| `kubernetes/kyverno/**` | 14 | Mixed | Shared admission policy inputs and the production digest policy. |
-| `kubernetes/monitoring/**` | 12 | Reusable | Shared Prometheus, Grafana, Jaeger, and Kiali inputs used by production reconciliation. |
-| `kubernetes/network-policies/**` | 10 | Reusable | Shared network-policy baseline applied by OCI bootstrap. |
-| `kubernetes/services/**` | 24 | Reusable | Shared workload bases referenced by the production app overlay. |
-| `docs-aggregator/**` | 7 | Reusable | API documentation and release-metadata sources used by release preparation. |
-| `docs/ci-cd.md` | 1 | Mixed | Release terminology and the former OCI desired-state workflow. |
-| `docs/architecture/observability.md` | 1 | Mixed | Shared observability design and former OCI operator-access contract. |
-| `docs/decisions/008-oci-public-ingress-via-nlb.md` | 1 | OCI-only | Historical rationale for the OCI public-ingress shape. |
-| `docs/runbooks/oci-release-deployment-checklist.md` | 1 | OCI-only | Former OCI release evidence checklist. |
-| `scripts/**` | 14 | Mixed | Direct tool-install, render, verification, release-inspection, secret-inventory, and observability helpers used by the deployment path. |
-| `Tiltfile` | 1 | Reusable | Former local-to-OCI chart-version parity input. |
-
-Reusable and mixed files are copies of their old deployment context. Their
-active originals may continue to evolve; these copies do not form a second
-maintained production tree.
+| Original path category | Files | Contents |
+| --- | ---: | --- |
+| `deploy/instance.env.template` | 1 | Retired OCI instance configuration template. |
+| `deploy/manifests/ingress-bootstrap/**` | 2 | Ingress bootstrap templates. |
+| `deploy/manifests/public-tls/**` | 5 | Public TLS and ingress templates. |
+| `deploy/manifests/secret-sync/**` | 4 | Secret-store and synchronized-secret templates. |
+| `deploy/scripts/bootstrap/**` | 6 | k3s and cluster bootstrap scripts. |
+| `deploy/scripts/lib/**` | 4 | Retired OCI deployment and release libraries. |
+| `deploy/scripts/reconcile/**` | 5 | Cluster reconciliation scripts. |
+| `deploy/scripts/release/**` | 2 | OCI release preparation and apply scripts. |
+| `deploy/scripts/render/public-tls.sh` | 1 | Public TLS renderer. |
+| `deploy/scripts/secrets/**` | 5 | Secret and infrastructure TLS scripts. |
+| `deploy/scripts/verify/**` | 2 | Network-policy and OCI upgrade verification scripts. |
+| `kubernetes/istio/cni-k3s-values.yaml` | 1 | Retired k3s-specific Istio CNI values. |
+| `kubernetes/production/istio/**` | 1 | Retired production authorization policy. |
+| `kubernetes/production/nginx/**` | 4 | Retired production NGINX configuration and includes. |
+| `scripts/ops/start-observability-ssh-tunnels.sh` | 1 | Retired OCI observability SSH tunnel helper. |
 
 ## Deliberate exclusions
 
-The snapshot includes checked-in, non-secret inputs only. It does not include:
+The archive does not duplicate active or reusable inputs merely because the
+retired OCI implementation consumed them. In particular, it excludes active
+documentation and scripts, shared Kubernetes resources, generated OpenAPI
+outputs, Grafana dashboards, the Tiltfile, and historical versions of files
+that still have active paths. Mixed and reusable dependencies must be inspected
+in the complete tagged tree rather than inferred from their current versions.
 
-- ignored `instance.env` files or generated secret environment files;
-- OCI credentials, Vault values, user credentials, session material, SSH
-  private keys, certificates, certificate private keys, or kubeconfigs;
-- rendered `tmp/` output, release evidence, logs, caches, container state,
-  cluster state, or any other runtime output;
-- live OCI inventory, DNS, network, load balancer, IAM, Vault, or compute
-  state; or
-- sibling repositories, their working trees, or built application artifacts.
+The archive also excludes ignored instance configuration, generated secret
+environment files, OCI credentials, Vault values, user credentials, session
+material, SSH private keys, certificates, certificate private keys,
+kubeconfigs, rendered output, release evidence, logs, caches, container or
+cluster state, live OCI state, sibling repositories, and built application
+artifacts. General repository secret detection still applies to this
+directory.
 
-General repository secret detection still applies to this directory. The
-archive is excluded from dependency updates and active deployment/build
-discovery, not from secret scanning.
+## Read-only historical reconstruction
 
-## External prerequisites represented only by references
+Use Git to inspect material that is not copied into this lean archive. From a
+clone containing the public tag, first verify that the tag still names the
+recorded commit:
 
-The preserved implementation was never a self-contained installer. It assumed
-an adequately sized ARM64 Ubuntu host; OCI tenancy, compartment, region,
-network, load balancer, DNS, IAM, and Vault resources; authenticated OCI and
-GitHub/registry access; SSH access; external Helm/chart and release-download
-availability; and the CLI tools documented by the copied operator guide. It
-also assumed coordinated source and published artifacts from sibling
-`service-common`, service, Session Gateway, `ext-authz`, and frontend
-repositories. Those external systems and repositories are not copied here.
+```bash
+test "$(git rev-parse 'pre-oci-archive^{commit}')" = \
+  60510f4ce9331968988516947f394152f6aa0da4
+```
+
+Then inspect a historical path without restoring or executing it:
+
+```bash
+git show pre-oci-archive:PATH
+git show 60510f4ce9331968988516947f394152f6aa0da4:PATH
+```
+
+Use the commit form when the tag is unavailable or its verified resolution
+does not match. `PATH` is the original repository-relative path, such as
+`docs/runbooks/oci-release-deployment-checklist.md`. These commands are for
+read-only discovery; active tooling must not consume the tag, baseline commit,
+or archive.
 
 ## Maintenance and restoration boundary
 
 Do not execute preserved scripts from `archive/oci/`. Executable mode bits are
-retained only for fidelity. The scripts and documentation deliberately keep
-their original repository-relative paths, root-discovery assumptions, commands,
-and historical wording, so relocating them under this directory does not make
-them a supported entry point. The snapshot is unmaintained and has not been
-tested against current OCI services, current upstream dependencies, or a live
-production environment.
+retained only for fidelity. The files deliberately keep their original paths,
+root-discovery assumptions, commands, and historical wording, so relocating
+them here does not make them a supported entry point.
 
 Renovate ignores `archive/oci/**`. Maintained image-pinning inventories,
 deployment acceptance checks, shell-validation sweeps, build discovery, and
-release/update automation must continue to target active paths only. Do not fix
-or modernize frozen copies when an active check changes.
+release/update automation must continue to target active paths only. Do not
+modernize these frozen copies when an active check changes.
 
-Restoring OCI requires a new, explicitly authorized project. Before reusing
-anything here, reassess available capacity and cost, current OCI APIs and
-resource shapes, operating-system and ARM64 support, Kubernetes/k3s and CNI
-compatibility, chart and image provenance, secret and certificate handling,
-networking and public ingress, persistence and backup, observability access,
-sibling-repository contracts, and every security and deployment verifier.
-Treat the snapshot as recovery input, not as evidence that deployment remains
-safe or functional.
+The old implementation is unmaintained and is not claimed to remain safe,
+complete, or executable. Restoring OCI requires a new, explicitly authorized
+and independently reviewed project. Reassess capacity and cost, current OCI
+APIs, operating-system and ARM64 support, Kubernetes and k3s compatibility,
+chart and image provenance, secret and certificate handling, networking and
+ingress, persistence and backup, observability access, sibling-repository
+contracts, and all security and deployment verifiers before reusing any
+historical material.

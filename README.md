@@ -34,9 +34,9 @@ owns the human-only firewall and confinement evidence workflow.
 
 **Production architecture remains reviewable offline.** The `deploy/`
 directory renders provider-neutral routing, infrastructure, and observability
-references without cloud configuration or cluster access. The retired OCI
-implementation is preserved unchanged under `archive/oci/`; it is not an
-active deployment path.
+references without cloud configuration or cluster access. `archive/oci/`
+contains the lean set of removed OCI files; its owner README points to the
+complete tagged Git history. Neither is an active deployment path.
 
 ## Architecture
 
@@ -96,7 +96,7 @@ second host tunnel.
 - [Architecture Overview](docs/architecture/system-overview.md)
 - [Observability Architecture](docs/architecture/observability.md)
 - [Production Reference](deploy/README.md) — provider-neutral offline renders and deployment prerequisites
-- [Retired OCI Snapshot](archive/oci/README.md) — frozen implementation and restoration caveats
+- [Retired OCI Archive](archive/oci/README.md) — lean removed-file inventory, tagged history, and restoration caveats
 - [Dependency Automation](docs/dependency-automation.md) — production Renovate policy, graph and scanner workflows, bounded evidence artifacts, cost constraints, and failure triage
 
 ## Service Repositories

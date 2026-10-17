@@ -117,10 +117,13 @@ Remote SSH, Docker selection or trust.
 OCI is retired and no production environment is currently configured. Local
 Tilt/Kind is the live validation target. Keep provider-neutral Kubernetes
 overlays and offline production-reference checks maintained; do not describe
-them as a running or currently tested deployment. The former OCI implementation
-is frozen under `archive/oci/` and must not be sourced or executed by active
-tooling. Read `deploy/README.md` and `archive/oci/README.md` before changing the
-production reference or retirement boundary.
+them as a running or currently tested deployment. `archive/oci/` contains only
+the lean set of removed OCI files and must not be sourced or executed by active
+tooling. The complete pre-retirement tree is Git history at public tag
+`pre-oci-archive`, verified at commit
+`60510f4ce9331968988516947f394152f6aa0da4`. Read `deploy/README.md` and
+`archive/oci/README.md` before changing the production reference or retirement
+boundary.
 
 Architecture implications:
 - All container images must continue to support `linux/arm64`
@@ -181,7 +184,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Script directory map and canonical entry points: `scripts/README.md`
 - NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
 - Provider-neutral production overlays and offline render boundary: `kubernetes/production/README.md` and `deploy/README.md`
-- Retired OCI snapshot provenance and restoration caveats: `archive/oci/README.md`
+- Retired OCI lean archive, tagged history, and restoration caveats: `archive/oci/README.md`
 - Observability topology and operator access model: `docs/architecture/observability.md`
 - Unified `/api-docs` behavior: `docs-aggregator/README.md`
 - Tilt debugging workflow: `docs/runbooks/tilt-debugging.md`

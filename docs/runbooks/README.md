@@ -12,7 +12,7 @@ stack is not up yet, start there first.
 |---------|-------------|-------------|
 | [Tilt Debugging](tilt-debugging.md) | Debug Tilt/Kind local development environment | Services not starting, auth failures, network issues |
 | [Kiali Expected Warnings](kiali-expected-warnings.md) | Reference for Kiali warnings this repo intentionally ignores | Kiali triage shows low-signal warnings and you need the repo policy |
-| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Retirement pointer to the frozen historical checklist | Researching the retired OCI deployment only |
+| [OCI Release Deployment Checklist](oci-release-deployment-checklist.md) | Retirement pointer to the checklist in tagged Git history | Researching the retired OCI deployment only |
 
 ## Runbook Philosophy
 
@@ -37,8 +37,8 @@ These runbooks follow a **decision tree approach**:
   internals only; not the default onboarding path
 - [Production Reference Rendering](../../deploy/README.md) - Maintained
   provider-neutral offline renders and unresolved deployment prerequisites
-- [Retired OCI Snapshot](../../archive/oci/README.md) - Frozen historical
-  deployment implementation and restoration caveats
+- [Retired OCI Archive](../../archive/oci/README.md) - Lean removed-file
+  inventory, tagged history, and restoration caveats
 - [NGINX Gateway README](../../nginx/README.md) - Routing configuration
 - [AGENTS.md](../../AGENTS.md) - Architecture overview
 

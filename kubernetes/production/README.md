@@ -8,9 +8,10 @@ reference while keeping local Kind/Tilt manifests unchanged. The overlays are
 maintained and statically validated, but they are not evidence of a running or
 currently tested production deployment.
 
-The former OCI deployment implementation is frozen under
+The former OCI deployment implementation is retired. Its lean removed-file
+archive and complete-tree Git provenance are documented in
 [archive/oci/](../../archive/oci/README.md). Active tooling must not source or
-execute that snapshot.
+execute the archive or tagged history.
 
 ## Maintained Inputs
 

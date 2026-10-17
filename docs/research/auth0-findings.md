@@ -5,8 +5,8 @@
 
 OCI is retired and no production environment or production identity-provider
 tenant is currently configured. Do not use the former demo custom-domain, DNS,
-OCI Vault, or secret-sync steps as deployment guidance. The frozen OCI
-implementation and restoration caveats live in
+OCI Vault, or secret-sync steps as deployment guidance. The lean archive,
+complete-tree Git provenance, and restoration caveats live in
 [`archive/oci/README.md`](../../archive/oci/README.md).
 
 The durable findings are:

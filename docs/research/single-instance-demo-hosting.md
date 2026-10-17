@@ -27,7 +27,8 @@ The durable conclusions are narrower:
 
 The old Oracle deployment plan remains unchanged as labeled historical context
 in [`docs/archive/oracle-cloud-deployment-plan.md`](../archive/oracle-cloud-deployment-plan.md).
-The former implementation is frozen under
+The lean removed-file archive and the complete tagged Git history for the
+former implementation are documented in
 [`archive/oci/`](../../archive/oci/README.md). Use
 [`deploy/README.md`](../../deploy/README.md) for the maintained provider-neutral
 production reference and its unresolved prerequisites; use the local

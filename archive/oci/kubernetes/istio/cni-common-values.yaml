@@ -1,3 +1,0 @@
-# Shared Istio CNI values for local Kind and production k3s installs.
-seccompProfile:
-  type: RuntimeDefault

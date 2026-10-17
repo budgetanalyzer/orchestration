@@ -101,6 +101,7 @@
         "scripts/guardrails/requirements-ingress-rate-limit.txt"
       ],
       "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": ":lock: Checksum-coupled tools",
       "labels": [
         "dependencies",
         "checksum-required"

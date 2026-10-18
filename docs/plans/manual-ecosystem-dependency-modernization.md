@@ -186,9 +186,50 @@ Before implementation begins:
 
 ### Objective
 
-Produce the last stable `service-common` release on Spring Boot 3 after fixing
-every independently remediable finding and proving compatibility with all four
-Java consumers.
+Apply the independently safe `service-common` updates that do not require
+Spring Boot BOM overrides, prove compatibility with all four Java consumers,
+and carry the remaining framework-coupled work into the Spring Boot 4
+migration.
+
+### Cherry-picked execution record
+
+On 2026-10-18, the operator chose not to create temporary Spring Boot 3
+overrides for BOM-managed dependency families because the next Java platform
+step will be Spring Boot 4. The completed work and explicit deferrals below
+replace the original expectation that every listed Boot 3 finding would be
+remediated before that migration.
+
+Completed:
+
+- OpenCSV was upgraded from `3.10` to `5.12.0`. The parser now translates the
+  checked OpenCSV 5 parsing exceptions to its existing public `IOException`
+  contract, with malformed-input coverage.
+- The resolved `service-core` runtime graph now contains BeanUtils `1.11.0`
+  and Commons Lang `3.18.0`; BeanUtils `1.9.3` is no longer present. No explicit
+  Commons Lang platform override was added. Existing Springdoc resolution also
+  causes the published `service-web` metadata to select Commons Lang `3.20.0`.
+- Checkstyle was upgraded from `12.0.1` to `12.3.1`, and JaCoCo was upgraded
+  from `0.8.13` to `0.8.15`. Gradle `9.8.1` and Spotless `8.10.4` were already
+  at the selected targets.
+- The complete `service-common` build passed, the candidate was published to
+  Maven Local, and clean refreshed builds passed in `currency-service`,
+  `permission-service`, `transaction-service`, and `session-gateway` without
+  consumer source or runtime orchestration configuration changes.
+
+Deferred to the Spring Boot 4 migration:
+
+- Do not add temporary Commons Lang `3.21.0`, Tomcat, or Netty constraints to
+  the Spring Boot 3 platform. Re-evaluate their resolved versions and fixed
+  floors after selecting the Boot 4 BOM.
+- Carry the Spring Framework residual advisories into the coordinated Spring
+  Framework 7 upgrade.
+- Upgrade Testcontainers to `2.x` with the Boot 4 test stack rather than
+  introducing broad test-infrastructure churn immediately beforehand.
+- ShedLock `7.10.1` was attempted and reverted. Its published dependency on
+  Spring Context `7.0.9` won Gradle conflict resolution over the Boot 3 BOM's
+  Spring Context `6.2.19`, producing a mixed Spring 6/7 runtime and application
+  startup failures (`ThemeSource` was missing). Retain ShedLock `6.10.0` until
+  the Spring 7 migration.
 
 ### Current audited dependency facts
 
@@ -216,61 +257,59 @@ Spring Boot 4 migration.
 
 ### Required update units
 
-- [ ] Upgrade OpenCSV to the latest reviewed `5.x` release, initially expected
-      to be `5.12.0`.
-- [ ] Prove the resolved graph uses BeanUtils `1.11.0` or newer and no vulnerable
+- [x] Upgrade OpenCSV to the reviewed `5.12.0` release.
+- [x] Prove the resolved graph uses BeanUtils `1.11.0` or newer and no vulnerable
       older BeanUtils remains in any published/runtime configuration.
-- [ ] Add or adjust shared-platform management so every relevant configuration
-      resolves Commons Lang `3.20.0` or another reviewed fixed version.
-- [ ] Override or constrain the Boot 3 Tomcat family to `10.1.58` or a newer
-      compatible fixed patch until the selected Boot BOM manages a fixed version.
-- [ ] Override or constrain the Boot 3 Netty family to `4.1.137.Final` or a newer
-      compatible fixed patch until the selected Boot BOM manages a fixed version.
-- [ ] Keep the Boot plugin and BOM coordinated at the selected final Boot 3.5
+- [x] Prove the resolved graph reaches the Commons Lang fixed floor without an
+      explicit platform override.
+- [ ] **Deferred to Spring Boot 4:** Re-evaluate Commons Lang, Tomcat, and Netty
+      against the selected Boot 4 BOM and add only overrides still required by
+      the reviewed fixed floors.
+- [x] Keep the Boot plugin and BOM coordinated at the selected final Boot 3.5
       patch.
-- [ ] Keep Spring Cloud on the latest compatible `2025.0.x` service release.
-- [ ] Keep Spring Modulith and Springdoc on the latest Boot-3-compatible release
+- [x] Keep Spring Cloud on the selected compatible `2025.0.x` service release.
+- [x] Keep Spring Modulith and Springdoc on the selected Boot-3-compatible release
       lines rather than prematurely selecting their Boot 4 majors.
 
-### Independent majors to attempt before the final release
+### Independent major dispositions
 
-These updates are not part of the Spring Boot 4 train and should be attempted
-as independent changes so that Boot 4 is the only remaining Java platform
-migration:
+The original baseline proposed these as independent pre-Boot-4 changes. Their
+execution dispositions are:
 
-- [ ] Testcontainers latest reviewed `2.x` release.
-- [ ] ShedLock latest reviewed `7.x` release.
-
-If either change is incompatible with the Boot 3 platform or consumers, record
-the exact failure and consciously defer it to a later standalone change. Do not
-hide the incompatibility with an orchestration workaround.
+- [ ] **Deferred to Spring Boot 4:** Testcontainers latest reviewed `2.x`
+      release.
+- [ ] **Deferred to Spring Boot 4:** ShedLock latest reviewed `7.x` release;
+      retain the failed-attempt evidence in the execution record above.
 
 Also align recognized build/test tooling where appropriate:
 
-- [ ] Gradle `9.8.1` or newer selected compatible `9.x` patch.
-- [ ] Spotless `8.10.4` or newer compatible `8.x` release.
-- [ ] Checkstyle `12.3.1` or newer compatible `12.x` release.
-- [ ] JaCoCo `0.8.15` or newer compatible `0.8.x` release.
+- [x] Gradle `9.8.1` or newer selected compatible `9.x` patch.
+- [x] Spotless `8.10.4` or newer compatible `8.x` release.
+- [x] Checkstyle `12.3.1` or newer compatible `12.x` release.
+- [x] JaCoCo `0.8.15` or newer compatible `0.8.x` release.
 
 ### Validation before release
 
-- [ ] Run the complete `service-common` formatting and build sequence.
-- [ ] Inspect dependency insight for BeanUtils, Commons Lang, Spring Framework,
+- [x] Run the complete `service-common` formatting and build sequence.
+- [x] Inspect dependency insight for BeanUtils, Commons Lang, Spring Framework,
       Tomcat, and every Netty artifact named by an alert.
-- [ ] Confirm publication metadata exposes the intended platform constraints.
-- [ ] Publish the candidate locally using the documented workflow.
-- [ ] Build `currency-service`, `permission-service`, `transaction-service`, and
+- [x] Confirm publication metadata exposes the intended platform constraints.
+- [x] Publish the candidate locally using the documented workflow.
+- [x] Build `currency-service`, `permission-service`, `transaction-service`, and
       `session-gateway` against that exact local candidate.
-- [ ] Run the relevant integration suites, including servlet and reactive
+- [x] Run the relevant integration suites, including servlet and reactive
       consumers, CSV import paths, Redis/session behavior, messaging, and
       database-backed tests.
-- [ ] Confirm no consumer needs an undeclared Maven Local substitution or a
+- [x] Confirm no consumer needs an undeclared Maven Local substitution or a
       compensating orchestration change.
-- [ ] Re-run resolved dependency evidence and record remaining findings.
+- [x] Re-run resolved dependency evidence and record remaining findings.
 
 ### Human release checkpoint
 
-Only after consumer validation succeeds:
+No final Spring Boot 3 release, tag, or consumer version update was performed
+as part of this cherry-picked work. If the operator still chooses to create
+that checkpoint before Boot 4, do so only after the completed consumer
+validation above:
 
 - [ ] Select the stable release version under the existing versioning contract.
 - [ ] Have the human publish, commit, tag, and push the final Boot 3
@@ -282,9 +321,9 @@ Only after consumer validation succeeds:
 - [ ] Build and tag each consumer's final Boot 3 baseline under its normal
       human-owned release process.
 
-Do not describe the final Boot 3 release as vulnerability-free. It is the final
-tested baseline with every independently fixable listed finding remediated and
-the Spring Framework residual isolated for Boot 4.
+Do not describe a final Boot 3 release as vulnerability-free. This is the
+validated cherry-picked baseline; the BOM-managed and framework-coupled
+findings recorded above remain explicitly deferred to Boot 4.
 
 ## Stage: Java Consumer Tooling Alignment
 

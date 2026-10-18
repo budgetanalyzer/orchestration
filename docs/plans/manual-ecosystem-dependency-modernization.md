@@ -329,15 +329,15 @@ findings recorded above remain explicitly deferred to Boot 4.
 
 Align all four deployable Java repositories before orchestration work begins:
 
-- [ ] Gradle latest selected compatible `9.x`, using the same version in all
-      four consumers and `service-common`.
-- [ ] Spotless latest selected compatible `8.x`.
-- [ ] Checkstyle latest selected compatible `12.x`.
-- [ ] JaCoCo latest selected compatible `0.8.x`.
-- [ ] JUnit Platform latest selected compatible `1.x`.
-- [ ] `docker/dockerfile` latest reviewed `1.x` frontend.
-- [ ] Current digest for the selected Temurin Java 25 image.
-- [ ] PDFBox latest compatible `3.0.x` in `transaction-service`.
+- [x] Gradle `9.8.1`, using the same version in all four consumers and
+      `service-common`.
+- [x] Spotless `8.10.4`.
+- [x] Checkstyle `12.3.1`.
+- [x] JaCoCo `0.8.15`.
+- [x] JUnit Platform `1.14.4`.
+- [x] `docker/dockerfile` `1.28` frontend at the reviewed pinned digest.
+- [x] Current digest for the selected Temurin Java 25 image.
+- [x] PDFBox `3.0.8` in `transaction-service`.
 
 Do not independently select Spring Boot 4, JUnit 6, or another Spring release
 train in a consumer. Those remain part of the final Spring migration.

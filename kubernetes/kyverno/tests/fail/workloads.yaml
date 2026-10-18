@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
           command: ["sh", "-c", "sleep 3600"]
 ---
 apiVersion: apps/v1
@@ -69,7 +69,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
           command: ["sh", "-c", "sleep 3600"]
           env:
             - name: ADMIN_PASSWORD
@@ -187,5 +187,5 @@ spec:
       type: RuntimeDefault
   containers:
     - name: solver
-      image: quay.io/jetstack/cert-manager-acmesolver:v1.20.2@sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f
+      image: quay.io/jetstack/cert-manager-acmesolver:v1.20.4@sha256:bbec214d3935cbbeb3ab88c57ee36e2b2511a0017e48ffc14a999e48fa30d3a2
       command: ["sh", "-c", "sleep 3600"]

@@ -647,7 +647,7 @@ wait_for_port_forward_health \
     "Jaeger query API" \
     "${JAEGER_RESOURCE}" \
     "${JAEGER_LOCAL_PORT}" \
-    "http://127.0.0.1:${JAEGER_LOCAL_PORT}/jaeger/api/services"
+    "http://127.0.0.1:${JAEGER_LOCAL_PORT}/jaeger/api/v3/services"
 
 wait_for_port_forward_health \
     "kiali" \

@@ -3,12 +3,13 @@
 # This image contains all prerequisites needed by orchestration DinD test suites
 # (currently setup-flow and security-preflight).
 
-FROM ubuntu:22.04@sha256:ce4a593b4e323dcc3dd728e397e0a866a1bf516a1b7c31d6aa06991baec4f2e0
+FROM ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
 
 ARG TARGETARCH
-ARG KUBECTL_VERSION=v1.35.4
-ARG HELM_VERSION=v3.20.1
-ARG TILT_VERSION=0.37.3
+ARG KUBECTL_VERSION=v1.35.9
+ARG HELM_VERSION=v3.22.1
+ARG TILT_VERSION=0.37.8
+ARG KIND_VERSION=v0.33.0
 ARG MKCERT_VERSION=v1.4.4
 
 # Avoid prompts during package installation
@@ -36,8 +37,8 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 # Install kubectl
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) kubectl_sha256='b529430df69a688fd61b64ad2299edb5fd71cb58be2a4779dba624c7d3510efd' ;; \
-        arm64) kubectl_sha256='6a5a4cc4e396d7626a7a693a3044b51c75520f81db30fe6816c2554e53be336f' ;; \
+        amd64) kubectl_sha256='3cfeaf80be482b435b0aa214aff6e0b2c312ee23c0ff20810c75517b6004c6eb' ;; \
+        arm64) kubectl_sha256='39c98bca82875d9a9ddfb6f3c5ab17c3f78ea0801230683e538a67d5c053308d' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl"; \
@@ -47,17 +48,19 @@ RUN set -eux; \
 # Install kind
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64|arm64) : ;; \
+        amd64) kind_sha256='aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d' ;; \
+        arm64) kind_sha256='20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSLo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-${TARGETARCH}"; \
+    curl -fsSLo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-${TARGETARCH}"; \
+    echo "${kind_sha256}  /usr/local/bin/kind" | sha256sum -c -; \
     chmod +x /usr/local/bin/kind
 
 # Install helm
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) helm_sha256='0165ee4a2db012cc657381001e593e981f42aa5707acdd50658326790c9d0dc3' ;; \
-        arm64) helm_sha256='56b9d1b0e0efbb739be6e68a37860ace8ec9c7d3e6424e3b55d4c459bc3a0401' ;; \
+        amd64) helm_sha256='896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea' ;; \
+        arm64) helm_sha256='4c29e286b279d170fa048ddfc3e4e83dcd069ca9c52102766ba672d7149e694d' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-${TARGETARCH}.tar.gz"; \
@@ -70,8 +73,8 @@ RUN set -eux; \
 # Install tilt
 RUN set -eux; \
     case "${TARGETARCH}" in \
-        amd64) tilt_arch='x86_64'; tilt_sha256='e90bc6cf70882bc7579d8174a27cab2de0284612ec7339e4b32f669cd5de4e5c' ;; \
-        arm64) tilt_arch='arm64'; tilt_sha256='826f48198f368ef5edb684e9ae4c87ff76eca84c904f72b2376b29b93bffc019' ;; \
+        amd64) tilt_arch='x86_64'; tilt_sha256='e39513f958705d30524d55f68b1d46fbef2b46a0da568efd00e6383dee6be44f' ;; \
+        arm64) tilt_arch='arm64'; tilt_sha256='7a21281e830930be158202b7f8405ba62445613788b4d9708512ffe51f5cce90' ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSLo /tmp/tilt.tar.gz "https://github.com/tilt-dev/tilt/releases/download/v${TILT_VERSION}/tilt.${TILT_VERSION}.linux.${tilt_arch}.tar.gz"; \

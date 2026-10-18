@@ -144,7 +144,7 @@ component_health_url() {
     case "${component}" in
         grafana) printf 'http://127.0.0.1:%s/api/health' "${port}" ;;
         prometheus) printf 'http://127.0.0.1:%s/-/ready' "${port}" ;;
-        jaeger) printf 'http://127.0.0.1:%s/jaeger/api/services' "${port}" ;;
+        jaeger) printf 'http://127.0.0.1:%s/jaeger/api/v3/services' "${port}" ;;
         kiali) printf 'http://127.0.0.1:%s/kiali/' "${port}" ;;
         *)
             printf 'ERROR: unknown component: %s\n' "${component}" >&2

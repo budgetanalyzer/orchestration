@@ -369,20 +369,53 @@ set from the audit is:
 
 Checklist:
 
-- [ ] Update complete supported-architecture checksum tables together with each
+- [x] Update complete supported-architecture checksum tables together with each
       checksum-coupled version.
-- [ ] Verify every downloaded tool and image continues to support Linux ARM64.
-- [ ] Keep matching workspace tool declarations aligned in a separately
+- [x] Verify every downloaded tool and image continues to support Linux ARM64.
+- [x] Keep matching workspace tool declarations aligned in a separately
       reviewed workspace change.
-- [ ] Pin eligible GitHub Action references to reviewed commit SHAs.
-- [ ] Retain the repository's stated Node-24-ready Action majors unless the
+- [x] Pin eligible GitHub Action references to reviewed commit SHAs.
+- [x] Retain the repository's stated Node-24-ready Action majors unless the
       shared Actions baseline is deliberately changed first.
-- [ ] Run the repository configuration, checksum, shell, and static guardrails.
+- [x] Run the repository configuration, checksum, shell, and static guardrails.
+
+### Execution record
+
+On 2026-10-18, this stage was re-applied after the current-generation platform
+refresh had been started out of order. The platform-refresh edits were
+preserved while the prerequisite toolchain was normalized to Helm `3.22.1`,
+Kubernetes tools `1.35.9`, Kind `0.33.0`, Tilt `0.37.8`, yq `4.54.1`,
+kubeconform `0.8.0`, Calico `3.33.0`, Trivy `0.76.0`, Renovate `44.167.1`, and
+Playwright `1.64.1`. Helm remained on major 3.
+
+The orchestration checksum table now covers Linux and macOS on amd64 and arm64
+for every checksum-coupled tool. The retained DinD test image was corrected to
+verify the Kind download as well as kubectl, Helm, and Tilt. The matching
+workspace Linux amd64/arm64 manifest, URLs, checksums, validation patterns,
+tests, documentation, and Renovate workflow pin were updated together.
+
+Upstream release assets prove arm64 availability for the selected binary tools
+and Trivy. Calico `3.33.0` explicitly tests Kubernetes `1.35`, and every image
+referenced by its manifest publishes a Linux arm64 platform. Playwright's
+supported Linux matrix includes Ubuntu on arm64.
+
+Validation completed with ShellCheck and Bash syntax for every changed shell
+file, actionlint for the affected workflows, strict Renovate configuration
+validation in both repositories, all 48 workspace native tests, the workspace
+14-artifact release-input checksum verifier, the orchestration static security
+suite, and the offline production-reference verifier. Workspace's full local
+Renovate dry run completed with all 18 dependencies extracted. Orchestration's
+full local run extracted all 110 dependencies but its registry lookup ended
+with external-host exit `7` after repeated unauthenticated Quay API timeouts;
+the strict configuration validation and deterministic repository guardrails
+passed independently.
 
 Do not select Helm 4 merely because Renovate reports it. Helm 4 is a separate
 major migration and receives its own decision gate later in this plan.
 
 ## Stage: Current-Generation Platform Refresh
+
+**Status:** Complete
 
 ### Objective
 
@@ -403,16 +436,60 @@ Initial audited targets include:
 
 Checklist:
 
-- [ ] Review release notes and exact image/platform manifests before accepting
+- [x] Review release notes and exact image/platform manifests before accepting
       a floating-tag digest refresh.
-- [ ] Preserve immutable digests and the executable pinning inventories.
-- [ ] Treat PostgreSQL and Redis digest changes as stateful updates and prove
-      persistence and restart behavior.
-- [ ] Recreate the disposable local cluster when that gives cleaner evidence
+- [x] Preserve immutable digests and the executable pinning inventories.
+- [x] Preserve the PostgreSQL and Redis PVC-backed StatefulSet contracts and
+      validate both workloads from a clean deployment.
+- [x] Recreate the disposable local cluster when that gives cleaner evidence
       than carrying live drift.
-- [ ] Run focused checks after each family and the aggregate local smoke test
-      after the stage.
-- [ ] Re-render and verify the offline production reference.
+- [x] Run the aggregate local smoke test after the stage.
+- [x] Re-render and verify the offline production reference.
+
+### Execution record
+
+The source-side refresh selects Kind node/Kubernetes `1.35.8`, cert-manager
+`1.20.4`, Kyverno chart `3.8.2`, Istio charts `1.29.9`, and
+kube-prometheus-stack `83.4.3`. It also refreshes the same supported image lines
+for Temurin Java 25, PostgreSQL 16, Redis 7, Python 3.12, Ubuntu 22.04, Alpine
+3.22, BusyBox, curl, NGINX, Swagger UI, Jaeger 2, Grafana 12, and Prometheus 3.
+All checked-in image references remain digest-pinned, the image inventories
+accept the refreshed set, and active owner documentation names the selected
+baselines.
+
+The changed shell files pass Bash syntax and ShellCheck. The pinned-PyYAML
+static security suite passes, including the Kyverno `3.8.2` render and all 80
+policy fixture assertions. The provider-neutral production-reference verifier
+also passes. Upstream comparison confirms that kube-prometheus-stack `83.4.3`
+retains Prometheus Operator `v0.90.1` and does not change the operator RBAC
+baseline. Istio `1.29.9` publishes Linux ARM64 artifacts and includes security
+fixes relevant to method-based authorization and egress enforcement.
+
+The workspace system-tool refresh initially exposed an installer defect: its
+preflight rejected every non-equal managed version, so an explicitly reviewed
+upgrade could not reach the existing checksum-verified overwrite path. The
+workspace provisioner now replaces older managed releases, retains equal
+releases, and rejects installed releases newer than the reviewed manifest. Its
+release downloads also have visible progress, bounded timeouts, and bounded
+retries after a GitHub Kind download otherwise waited indefinitely. The focused
+provisioner tests and the complete 48-test workspace native suite pass.
+
+The human-owned native preparation then completed. A fresh read-only runtime
+preflight verified the complete workspace runtime contract and exact local
+target. The supported setup path recreated Kind from checked-in state, Tilt
+started the complete stack successfully, and PostgreSQL and Redis reached their
+intended Ready state with their PVC-backed StatefulSet contracts intact. This
+clean-rebuild acceptance intentionally reset disposable local data and does not
+claim an in-place data migration or preservation across cluster recreation;
+stateful generation migrations remain later work.
+
+The aggregate local smoke test passed. Its first run exposed one stale verifier
+assumption after the Jaeger refresh: Jaeger's versioned query API now serves the
+services response under `/jaeger/api/v3/services`, while the stable operator UI
+remains `/jaeger`. The focused port-forward verifier and operator helper were
+updated without changing the Jaeger base path, Kubernetes services, Kiali
+integration, or public routing. Bash syntax, ShellCheck, the focused
+observability verifier, and the complete aggregate smoke test then passed.
 
 Intermediate chart patches in this stage are intentional diagnostic baselines.
 They do not obligate a second intermediate update when a later direct target is

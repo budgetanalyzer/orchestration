@@ -38,12 +38,12 @@ For VM-local binary installs, prefer the verified installer:
 Current baseline:
 
 - Docker `24.0+`
-- Kind `0.31.0` (`./setup.sh` auto-installs this pinned version if missing or
+- Kind `0.33.0` (`./setup.sh` auto-installs this pinned version if missing or
   mismatched)
-- `kubectl` `1.35.4` (`./setup.sh` auto-installs this pinned version if missing
+- `kubectl` `1.35.9` (`./setup.sh` auto-installs this pinned version if missing
   or mismatched)
-- Helm `3.20.x`
-- Tilt `0.37.3` (`./setup.sh` auto-installs this pinned version if Tilt is
+- Helm `3.22.1`
+- Tilt `0.37.8` (`./setup.sh` auto-installs this pinned version if Tilt is
   missing or mismatched)
 - OpenSSL `3.x+`
 

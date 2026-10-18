@@ -846,7 +846,7 @@ verify_phase7_observability_render_outputs() {
         "rendered production observability output is missing Namespace/monitoring"
 
     assert_contains_literal "${jaeger_deployment_file}" \
-        'cr.jaegertracing.io/jaegertracing/jaeger:2.17.0@sha256:6266573208d665ce5c17483bce0a75d0806480d92c84766d288d0aee885ce708' \
+        'cr.jaegertracing.io/jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17' \
         "rendered production observability output is missing the pinned Jaeger image"
     assert_contains_literal "${jaeger_services_file}" 'name: jaeger-collector' \
         "rendered production observability output is missing Service/jaeger-collector"

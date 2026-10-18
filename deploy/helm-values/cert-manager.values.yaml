@@ -14,7 +14,7 @@ acmesolver:
     # The HTTP-01 solver pods run in application namespaces, so they must satisfy
     # the image-digest policy even though the cert-manager controllers themselves
     # live in the excluded cert-manager namespace.
-    digest: sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f
+    digest: sha256:bbec214d3935cbbeb3ab88c57ee36e2b2511a0017e48ffc14a999e48fa30d3a2
 
 prometheus:
   enabled: false

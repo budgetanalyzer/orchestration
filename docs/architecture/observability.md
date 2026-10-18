@@ -49,7 +49,7 @@ remaining cluster-scoped permissions are read-only exceptions:
 | Resource | Verbs | Justification |
 |----------|-------|---------------|
 | `namespaces` | `get`, `list`, `watch` | The operator still needs namespace discovery to reconcile the explicitly approved watch set (`monitoring`, `default`) and reject anything outside it. |
-| `nodes` | `list`, `watch` | The pinned chart still renders the operator with kubelet endpoint discovery flags (`--kubelet-service=...`, `--kubelet-endpoints=true`), so node metadata remains an upstream reconciliation input under chart `83.4.0`. |
+| `nodes` | `list`, `watch` | The pinned chart still renders the operator with kubelet endpoint discovery flags (`--kubelet-service=...`, `--kubelet-endpoints=true`), so node metadata remains an upstream reconciliation input under chart `83.4.3`. |
 | `ingresses.networking.k8s.io` | `get`, `list`, `watch` | The pinned operator binary still keeps ingress objects in its cluster-scoped reconciliation inputs for probe-related discovery paths. |
 | `storageclasses.storage.k8s.io` | `get` | The repo keeps Prometheus on a PVC-backed `StatefulSet`, so the operator retains read-only StorageClass lookup for storage reconciliation. |
 
@@ -385,7 +385,7 @@ lives under `kubernetes/monitoring/jaeger/`. The runtime contract is:
 - namespace: `monitoring`
 - service exposure: `ClusterIP` only
 - storage: single-node PVC-backed Badger
-- image: Jaeger `2.17.0`, pinned by digest
+- image: Jaeger `2.22.0`, pinned by digest
 - collector service: `jaeger-collector` on OTLP `4317` and `4318`, with
   Istio-classified Service port names `grpc-otlp` and `http-otlp`
 - query service: `jaeger-query` on `16685` and `16686`
@@ -497,8 +497,8 @@ post-renderer before apply.
 
 | Image | Tag | Digest |
 |-------|-----|--------|
-| `grafana/grafana` | 12.4.2 | pinned |
-| `prometheus/prometheus` | v3.11.1 | pinned |
+| `grafana/grafana` | 12.4.13 | pinned |
+| `prometheus/prometheus` | v3.11.3 | pinned |
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
 | `kube-state-metrics/kube-state-metrics` | v2.18.0 | pinned |
@@ -563,7 +563,7 @@ namespaces after a chart upgrade.
 ## Helm Chart
 
 - **Chart**: `prometheus-community/kube-prometheus-stack`
-- **Version**: `83.4.0` (pinned)
+- **Version**: `83.4.3` (pinned)
 - **Values**: `kubernetes/monitoring/prometheus-stack-values.yaml`
 - **Post-renderer**: `scripts/ops/post-render-prometheus-stack.sh`
 

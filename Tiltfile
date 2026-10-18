@@ -66,7 +66,7 @@ local_resource(
         helm upgrade --install kyverno kyverno/kyverno \
             --namespace kyverno \
             --create-namespace \
-            --version 3.8.0 \
+            --version 3.8.2 \
             --set admissionController.replicas=1 \
             --set backgroundController.replicas=1 \
             --set cleanupController.replicas=1 \
@@ -516,7 +516,7 @@ def spring_boot_dockerfile(port):
     """Inline dev Dockerfile that selects the executable Spring Boot Jar."""
     return '''
 # renovate: datasource=docker depName=eclipse-temurin
-FROM eclipse-temurin:25-jre-alpine@sha256:c707c0d18cb9e8556380719f80d96a7529d0746fbb42143893949b98ed2f8943
+FROM eclipse-temurin:25-jre-alpine@sha256:3c0a9084927a221ccd1d007fcaf614465672c0af37aaa834c5184483afe56d61
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar /tmp/libs/
@@ -973,7 +973,7 @@ local_resource(
         helm upgrade --install istio-base istio/base \
             --namespace istio-system \
             --create-namespace \
-            --version 1.29.2 \
+            --version 1.29.9 \
             --wait
     ''',
     resource_deps=['kyverno-ready'],
@@ -989,7 +989,7 @@ local_resource(
         # renovate: datasource=helm depName=cni registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
-            --version 1.29.2 \
+            --version 1.29.9 \
             --values kubernetes/istio/cni-common-values.yaml \
             --values kubernetes/istio/cni-kind-values.yaml \
             --wait
@@ -1010,7 +1010,7 @@ local_resource(
         # renovate: datasource=helm depName=istiod registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
-            --version 1.29.2 \
+            --version 1.29.9 \
             --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
@@ -1110,7 +1110,7 @@ local_resource(
         # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
         helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
-            --version 83.4.0 \
+            --version 83.4.3 \
             --values kubernetes/monitoring/prometheus-stack-values.yaml \
             --post-renderer scripts/ops/post-render-prometheus-stack.sh \
             --wait --timeout 5m
@@ -1256,7 +1256,7 @@ local_resource(
 )
 
 # Istio ingress gateway — auto-provisioned from the Gateway API resource.
-# Istio 1.29.2 supports declarative deployment/service customization through
+# Istio 1.29.9 supports declarative deployment/service customization through
 # Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
 # Gateway and then waits for the generated workload to settle.
 local_resource(
@@ -1318,9 +1318,9 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Egress gateway installed directly from istio/gateway 1.29.2.
-# The 1.29.2 chart accepts the required service.type=ClusterIP input under
-# the repo's Helm v3.20.1 toolchain, so the vendored manifest path is removed.
+# Egress gateway installed directly from istio/gateway 1.29.9.
+# The 1.29.9 chart accepts the required service.type=ClusterIP input under
+# the repo's Helm v3.22.1 toolchain, so the vendored manifest path is removed.
 local_resource(
     'istio-egress-gateway',
     cmd='''
@@ -1337,7 +1337,7 @@ local_resource(
         # renovate: datasource=helm depName=gateway registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-egress-gateway istio/gateway \
             --namespace istio-egress \
-            --version 1.29.2 \
+            --version 1.29.9 \
             --values kubernetes/istio/egress-gateway-values.yaml \
             --wait
         kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s

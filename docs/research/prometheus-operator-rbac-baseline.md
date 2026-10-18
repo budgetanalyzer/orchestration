@@ -18,7 +18,7 @@ This note captures the upstream `kube-prometheus-stack` operator RBAC and repres
 
 ## Rendered Operator RBAC
 
-Chart render: `83.4.0` from `prometheus-community/kube-prometheus-stack` with `kubernetes/monitoring/prometheus-stack-values.yaml`.
+Chart render: `83.4.3` from `prometheus-community/kube-prometheus-stack` with `kubernetes/monitoring/prometheus-stack-values.yaml`. The `83.4.0` to `83.4.3` upstream comparison changes no Prometheus Operator RBAC; the live authorization matrix below remains the evidence captured on the date above.
 
 Rendered objects:
 - `ClusterRole/prometheus-stack-kube-prom-operator`
@@ -50,9 +50,9 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/instance: prometheus-stack
-    app.kubernetes.io/version: 83.4.0
+    app.kubernetes.io/version: 83.4.3
     app.kubernetes.io/part-of: kube-prometheus-stack
-    chart: kube-prometheus-stack-83.4.0
+    chart: kube-prometheus-stack-83.4.3
     release: prometheus-stack
     heritage: Helm
     app: kube-prometheus-stack-operator
@@ -174,9 +174,9 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/instance: prometheus-stack
-    app.kubernetes.io/version: 83.4.0
+    app.kubernetes.io/version: 83.4.3
     app.kubernetes.io/part-of: kube-prometheus-stack
-    chart: kube-prometheus-stack-83.4.0
+    chart: kube-prometheus-stack-83.4.3
     release: prometheus-stack
     heritage: Helm
     app: kube-prometheus-stack-operator

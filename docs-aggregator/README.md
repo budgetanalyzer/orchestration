@@ -14,7 +14,7 @@ The machine-readable contract stays first-class on the same public route:
 ## Overview
 
 The docs page serves a checked-in wrapper from this repository, stages stock
-Swagger UI `5.11.0` assets from a pinned `swaggerapi/swagger-ui` init
+Swagger UI `5.11.10` assets from a pinned `swaggerapi/swagger-ui` init
 container, and points the browser at the same-origin checked-in unified spec at
 `/api-docs/openapi.json`.
 
@@ -123,7 +123,7 @@ main app or `/api/*` posture.
 
 ## Dependencies
 
-- stock Swagger UI `5.11.0` assets, staged from pinned `swaggerapi/swagger-ui:v5.11.0`
+- stock Swagger UI `5.11.10` assets, staged from pinned `swaggerapi/swagger-ui:v5.11.10`
 - split ConfigMaps for wrapper assets, `openapi.json`, and `openapi.yaml`
 - NGINX serving the checked-in wrapper files and generated OpenAPI downloads
 - `kubectl` access to the running local cluster for either generator mode

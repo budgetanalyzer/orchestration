@@ -3,7 +3,7 @@
 # Keep this file explicit and reviewable instead of relying on chart defaults for
 # controller replica counts, token automount, and runtime hardening.
 #
-# Chart 3.8.0 does not expose first-class digest fields for the main Kyverno
+# Chart 3.8.2 does not expose first-class digest fields for the main Kyverno
 # images. The helper always renders `repository:tag`, so immutable refs are
 # encoded here as `repository@sha256` plus `tag=<64 hex>` to render the final
 # `repo@sha256:<hex>` form.
@@ -14,7 +14,7 @@ crds:
       defaultRegistry: ""
       registry: ""
       repository: reg.kyverno.io/kyverno/kyverno-cli@sha256
-      tag: "1e99a199adb36cedddf5c3e2fc24a150e26cf2e18b9e8dfe505a3c862647a4eb"
+      tag: "7224ed05508c24419c3df98114c28ba682ad0a940dcdb7b9fdba0a4b6bf943cf"
 
 admissionController:
   replicas: 1
@@ -26,7 +26,7 @@ admissionController:
       defaultRegistry: ""
       registry: ""
       repository: reg.kyverno.io/kyverno/kyvernopre@sha256
-      tag: "60b53ebf646f788e6e5d312f9cbf267d7537ec14afec68bde2e1dad55c552cc7"
+      tag: "cd8cb4a31d25b3992734fb8f24a90ef691c90ce49338c89bea96792160eacb98"
     pullPolicy: IfNotPresent
     resources:
       limits:
@@ -50,7 +50,7 @@ admissionController:
       defaultRegistry: ""
       registry: ""
       repository: reg.kyverno.io/kyverno/kyverno@sha256
-      tag: "cb033c200dc85be0a4d38e1a72894038a0c067d73f1ce6aedd569f9769a3d262"
+      tag: "0a540e2ddf74d0d2d3d45f9ef248d7dbc96576accdbcc6a2dd7eaff9fea56504"
     pullPolicy: IfNotPresent
     resources:
       limits:
@@ -77,7 +77,7 @@ backgroundController:
     defaultRegistry: ""
     registry: ""
     repository: reg.kyverno.io/kyverno/background-controller@sha256
-    tag: "fd6d30964297f1c94c2d741a1c44d055994cd4354e6f7e718cad59e6b5aa6c66"
+    tag: "d62566ce41bd0d4a32bf2cf44b9ebfc02c36374f821f83070890287f62f68671"
     pullPolicy: IfNotPresent
   replicas: 1
   rbac:
@@ -108,7 +108,7 @@ cleanupController:
     defaultRegistry: ""
     registry: ""
     repository: reg.kyverno.io/kyverno/cleanup-controller@sha256
-    tag: "a2a060b731f1ea54de2295b886c600d65af032fec18096a816424acfe8dec7d2"
+    tag: "b0395d29ae332276e6910eb40418be9bc127c068d659f90aa1bcddd6be99ccb4"
     pullPolicy: IfNotPresent
   replicas: 1
   rbac:
@@ -139,7 +139,7 @@ reportsController:
     defaultRegistry: ""
     registry: ""
     repository: reg.kyverno.io/kyverno/reports-controller@sha256
-    tag: "0090bf10eabae091ceb48c38fb894580b63c4e76e40137b7972f5895f0402110"
+    tag: "f09cf305170014e191b94e1c54f5be73163d8824eefad49349675c4efe43159a"
     pullPolicy: IfNotPresent
   replicas: 1
   rbac:
@@ -193,12 +193,12 @@ webhooksCleanup:
   image:
     registry: ""
     repository: ghcr.io/kyverno/readiness-checker@sha256
-    tag: "7aa69cb6f70c3264ab45eef50a401d93687cbaceecad608e074e0776724d6012"
+    tag: "4fb1870b1a4adfed0fa7a32b7c3bcaf736fb889c7e1947ee8b20710bc2f5a5ce"
     pullPolicy: IfNotPresent
 
 test:
   image:
     registry: ""
     repository: ghcr.io/kyverno/readiness-checker@sha256
-    tag: "7aa69cb6f70c3264ab45eef50a401d93687cbaceecad608e074e0776724d6012"
+    tag: "4fb1870b1a4adfed0fa7a32b7c3bcaf736fb889c7e1947ee8b20710bc2f5a5ce"
     pullPolicy: IfNotPresent

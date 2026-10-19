@@ -70,6 +70,7 @@ local_resource(
             --values deploy/helm-values/kyverno.values.yaml \
             --wait
     ''',
+    deps=['deploy/helm-values/kyverno.values.yaml'],
     resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )

@@ -43,9 +43,10 @@ configured.
 
 The maintained static inputs are:
 
-- `deploy/helm-values/kyverno.values.yaml` pins the production controller
-  replica counts, runtime-hardening values, and immutable digests for every
-  rendered Kyverno controller and hook image.
+- `deploy/helm-values/kyverno.values.yaml` is shared by local Tilt and the
+  production reference. It pins controller replica counts, runtime-hardening
+  values, and immutable digests for every rendered Kyverno controller, init,
+  migration, cleanup-hook, and test image.
 - `./scripts/guardrails/verify-production-image-overlay.sh` renders and checks:
   - `policies/00-smoke-disallow-privileged.yaml`
   - `policies/10-require-namespace-pod-security-labels.yaml`

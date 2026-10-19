@@ -198,8 +198,9 @@ workflow then runs:
 - Kyverno CLI pass/fail fixtures
 - a generated Kyverno replay for representative approved local Tilt
   `:tilt-<hash>` deploy refs derived from the checked-in contract inventory
-- a rendered Kyverno production-chart check that rejects mutable controller and
-  hook image refs from `deploy/helm-values/kyverno.values.yaml`
+- a rendered Kyverno production-chart check that requires the reviewed chart
+  and application pairing plus every immutable controller, init, migration,
+  cleanup-hook, and test image from the values shared with local Tilt
 - the offline ingress rate-limit configuration proof, including the local and
   production EnvoyFilter render contract, gateway diagnostics stats matchers,
   and a fail-closed scan proving blanket NGINX rate limiting remains absent

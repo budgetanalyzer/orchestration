@@ -420,11 +420,11 @@ The locked runtime contract is:
 - UI posture: `view_only_mode: true`
 - RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
   `istio-system`, `istio-ingress`, and `istio-egress`
-- image: Kiali `2.24.0`, pinned by digest
+- image: Kiali `2.26.0`, pinned by digest
 - integrations:
   internal Prometheus URL, Jaeger query gRPC URL on `16685`, and Jaeger HTTP
   health URL on `16686`
-- Jaeger version probe: explicitly disabled because Kiali `2.24.0` falls back
+- Jaeger version probe: explicitly disabled because Kiali `2.26.0` falls back
   to `http://<host>/jaeger` on port `80` when `use_grpc: true`, which does not
   match this repo's Jaeger query service contract
 - operator access:
@@ -450,7 +450,7 @@ The repo-owned Jaeger/Kiali wiring is intentionally split by protocol:
   keeps the component-health probe on Jaeger's HTTP query/UI endpoint.
 - `disable_version_check: true`
   suppresses Kiali's broken Jaeger version probe for this topology. Upstream
-  Kiali `2.24.0` strips the gRPC port and retries the version fetch over plain
+  Kiali `2.26.0` strips the gRPC port and retries the version fetch over plain
   HTTP on the default port, which would otherwise generate repeated timeout
   noise against `http://jaeger-query.monitoring/jaeger`.
 
@@ -501,8 +501,19 @@ post-renderer before apply.
 | `prometheus/prometheus` | v3.11.3 | pinned |
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
-| `kube-state-metrics/kube-state-metrics` | v2.18.0 | pinned |
-| `quay.io/kiali/kiali` | v2.24.0 | pinned |
+| `kube-state-metrics/kube-state-metrics` | v2.20.0 | pinned |
+| `quay.io/kiali/kiali` | v2.26.0 | pinned |
+
+kube-prometheus-stack remains on chart `83.4.3`. Its bundled
+kube-state-metrics subchart `7.2.2` still renders
+`app.kubernetes.io/version: 2.18.0` from the subchart's `Chart.appVersion`
+even though the supported values override selects the immutable `v2.20.0`
+runtime image. That generated label is chart metadata, not runtime-version
+evidence; do not rewrite it with a post-render patch. The exact pod image and
+container image ID identify the artifact, and the focused runtime verifier
+checks `kube_state_metrics_build_info` on the pod's loopback-forwarded
+telemetry port to confirm the running binary reports `v2.20.0`. The telemetry
+port remains outside the Service and ServiceMonitor contract.
 
 ### Workload Hardening
 
@@ -551,14 +562,15 @@ watcher is needed.
 ```
 
 This script re-renders the pinned chart, verifies every image is
-digest-pinned, checks that no host-level node-exporter shapes remain, asserts
-the Prometheus Operator namespace-scope args stay exactly on the documented
-`monitoring` and `default` model, asserts that the repo-owned reduced operator
-RBAC still renders to the approved effective permission set, and runs
-`kubectl apply --dry-run=server` against the current cluster. That render-time
-guardrail is what fails fast on any regression back toward cluster-wide secret
-access, namespaced mutation outside `monitoring`, or unexpected watched
-namespaces after a chart upgrade.
+digest-pinned, asserts the exact reviewed kube-state-metrics runtime image
+while treating its chart-owned version label as metadata, checks that no
+host-level node-exporter shapes remain, asserts the Prometheus Operator
+namespace-scope args stay exactly on the documented `monitoring` and `default`
+model, asserts that the repo-owned reduced operator RBAC still renders to the
+approved effective permission set, and runs `kubectl apply --dry-run=server`
+against the current cluster. That render-time guardrail is what fails fast on
+any regression back toward cluster-wide secret access, namespaced mutation
+outside `monitoring`, or unexpected watched namespaces after a chart upgrade.
 
 ## Helm Chart
 

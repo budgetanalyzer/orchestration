@@ -1,10 +1,24 @@
 # Manual Ecosystem Dependency Modernization Plan
 
-**Status:** Proposed  
+**Status:** Partially superseded; do not execute the Helm/platform scope
+
 **Created:** 2026-10-18  
 **Execution model:** Human-led, manual execution with AI assistance  
 **Explicit exclusion:** This is not an AI Session Handler plan and is not
 formatted or authorized for autonomous phase execution.
+
+The Helm/platform modernization scope in this document is superseded by the
+bounded, completed
+[`audit-driven-platform-security-remediation.md`](audit-driven-platform-security-remediation.md)
+and its durable
+[`platform-security-audit-2026-10-18.md`](../research/platform-security-audit-2026-10-18.md).
+Do not use the platform stages below as a remaining-work checklist or freshness
+mandate. Their checked items and old version references are historical execution
+context. The only ordered monitoring follow-up is
+[`kube-state-metrics-security-remediation.md`](kube-state-metrics-security-remediation.md),
+which keeps kube-prometheus-stack chart `83.4.3` and changes only the
+kube-state-metrics image. The cross-repository application and Spring Boot
+sections remain an unexecuted human proposal unless separately authorized.
 
 ## Purpose
 

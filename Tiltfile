@@ -66,13 +66,11 @@ local_resource(
         helm upgrade --install kyverno kyverno/kyverno \
             --namespace kyverno \
             --create-namespace \
-            --version 3.8.2 \
-            --set admissionController.replicas=1 \
-            --set backgroundController.replicas=1 \
-            --set cleanupController.replicas=1 \
-            --set reportsController.replicas=1 \
+            --version 3.9.1 \
+            --values deploy/helm-values/kyverno.values.yaml \
             --wait
     ''',
+    deps=['deploy/helm-values/kyverno.values.yaml'],
     resource_deps=['kind-node-inotify-budget'],
     labels=['infrastructure'],
 )
@@ -973,7 +971,7 @@ local_resource(
         helm upgrade --install istio-base istio/base \
             --namespace istio-system \
             --create-namespace \
-            --version 1.29.9 \
+            --version 1.30.6 \
             --wait
     ''',
     resource_deps=['kyverno-ready'],
@@ -989,7 +987,7 @@ local_resource(
         # renovate: datasource=helm depName=cni registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-cni istio/cni \
             --namespace istio-system \
-            --version 1.29.9 \
+            --version 1.30.6 \
             --values kubernetes/istio/cni-common-values.yaml \
             --values kubernetes/istio/cni-kind-values.yaml \
             --wait
@@ -1010,7 +1008,7 @@ local_resource(
         # renovate: datasource=helm depName=istiod registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istiod istio/istiod \
             --namespace istio-system \
-            --version 1.29.9 \
+            --version 1.30.6 \
             --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
@@ -1195,7 +1193,7 @@ local_resource(
         # renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
         helm upgrade --install kiali kiali/kiali-server \
             --namespace monitoring \
-            --version 2.24.0 \
+            --version 2.26.0 \
             --values kubernetes/monitoring/kiali-values.yaml \
             --post-renderer scripts/ops/post-render-kiali-server.sh \
             --wait --timeout 5m
@@ -1256,7 +1254,7 @@ local_resource(
 )
 
 # Istio ingress gateway — auto-provisioned from the Gateway API resource.
-# Istio 1.29.9 supports declarative deployment/service customization through
+# Istio 1.30.6 supports declarative deployment/service customization through
 # Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
 # Gateway and then waits for the generated workload to settle.
 local_resource(
@@ -1318,8 +1316,8 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Egress gateway installed directly from istio/gateway 1.29.9.
-# The 1.29.9 chart accepts the required service.type=ClusterIP input under
+# Egress gateway installed directly from istio/gateway 1.30.6.
+# The 1.30.6 chart accepts the required service.type=ClusterIP input under
 # the repo's Helm v3.22.1 toolchain, so the vendored manifest path is removed.
 local_resource(
     'istio-egress-gateway',
@@ -1337,7 +1335,7 @@ local_resource(
         # renovate: datasource=helm depName=gateway registryUrl=https://istio-release.storage.googleapis.com/charts
         helm upgrade --install istio-egress-gateway istio/gateway \
             --namespace istio-egress \
-            --version 1.29.9 \
+            --version 1.30.6 \
             --values kubernetes/istio/egress-gateway-values.yaml \
             --wait
         kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s

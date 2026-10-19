@@ -330,12 +330,19 @@ Before implementing a plan or feature:
 3. Do not hack around a missing prerequisite with orchestration-level compensating changes
 4. Complete prerequisites first, then return to the requested work
 
-Before running the static security verifier, select its repository-local,
+Before running any verifier that invokes the static security suite, including
+the live security wrapper and aggregate smoketest, select its repository-local,
 hash-verified PyYAML interpreter explicitly:
 
 ```bash
 INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
   ./scripts/guardrails/verify-static-security-manifests.sh
+
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/smoketest/verify-security-guardrails.sh
+
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/smoketest/smoketest.sh
 ```
 
 If that interpreter is missing, create it with the setup documented in

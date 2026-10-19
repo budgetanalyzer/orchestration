@@ -12,7 +12,7 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 
 rendered_file="${tmp_dir}/all.yaml"
 
-# kiali-server 2.24.0 renders deployment.image_digest as
+# kiali-server 2.26.0 renders deployment.image_digest as
 # image@sha256:<digest>:<tag>. Normalize that to the valid OCI form
 # image:<tag>@sha256:<digest> before applying the manifest.
 sed -E \

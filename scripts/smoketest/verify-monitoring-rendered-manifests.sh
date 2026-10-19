@@ -25,6 +25,8 @@ NAMESPACE_FILE="${REPO_DIR}/kubernetes/monitoring/namespace.yaml"
 JAEGER_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 JAEGER_DEPLOYMENT_FILE="${JAEGER_DIR}/deployment.yaml"
 JAEGER_SERVICES_FILE="${JAEGER_DIR}/services.yaml"
+KUBE_STATE_METRICS_IMAGE="registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b"
+KUBE_STATE_METRICS_CHART_METADATA_VERSION="2.18.0"
 
 log_step() {
     printf '\n==> %s\n' "$1"
@@ -119,6 +121,81 @@ mapfile -t rendered_images < <(
 for image in "${rendered_images[@]}"; do
     [[ "${image}" =~ @sha256:[a-f0-9]{64}$ ]] || fail "Rendered image is not digest-pinned: ${image}"
 done
+
+log_step "Checking the exact kube-state-metrics runtime image"
+python3 - "${render_file}" "${KUBE_STATE_METRICS_IMAGE}" "${KUBE_STATE_METRICS_CHART_METADATA_VERSION}" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+render_path = Path(sys.argv[1])
+expected_image = sys.argv[2]
+expected_metadata_version = sys.argv[3]
+documents = [
+    document
+    for document in yaml.safe_load_all(render_path.read_text(encoding="utf-8"))
+    if isinstance(document, dict)
+]
+
+
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+deployments = [
+    document
+    for document in documents
+    if document.get("kind") == "Deployment"
+    and (document.get("metadata") or {}).get("name")
+    == "prometheus-stack-kube-state-metrics"
+]
+if len(deployments) != 1:
+    fail(
+        "expected one rendered kube-state-metrics Deployment, "
+        f"found {len(deployments)}"
+    )
+
+deployment = deployments[0]
+containers = (
+    deployment.get("spec", {})
+    .get("template", {})
+    .get("spec", {})
+    .get("containers", [])
+)
+runtime_containers = [
+    container
+    for container in containers
+    if container.get("name") == "kube-state-metrics"
+]
+if len(runtime_containers) != 1:
+    fail(
+        "expected one kube-state-metrics runtime container, "
+        f"found {len(runtime_containers)}"
+    )
+
+actual_image = runtime_containers[0].get("image")
+if actual_image != expected_image:
+    fail(
+        "rendered kube-state-metrics runtime image does not match the reviewed "
+        f"immutable image: {actual_image!r}"
+    )
+
+metadata_version = (deployment.get("metadata", {}).get("labels") or {}).get(
+    "app.kubernetes.io/version"
+)
+if metadata_version != expected_metadata_version:
+    fail(
+        "chart-owned kube-state-metrics metadata version changed unexpectedly: "
+        f"{metadata_version!r}"
+    )
+
+print(
+    "Exact kube-state-metrics runtime image passed; chart metadata remains "
+    f"{metadata_version} and is not used as runtime-version evidence."
+)
+PY
 
 log_step "Checking rendered pod hardening markers"
 if search_file 'automountServiceAccountToken:[[:space:]]*true' "${render_file}" >/dev/null; then

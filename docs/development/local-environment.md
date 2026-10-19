@@ -38,7 +38,7 @@ npm install
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
-`1.29.9`. Local Tilt installs `istio/cni` with
+`1.30.6`. Local Tilt installs `istio/cni` with
 `kubernetes/istio/cni-common-values.yaml` plus
 `kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
 standard `/etc/cni/net.d` and `/opt/cni/bin` paths. No production Kubernetes

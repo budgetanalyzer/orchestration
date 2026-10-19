@@ -7,8 +7,8 @@ auth:
 deployment:
   # renovate: datasource=docker depName=quay.io/kiali/kiali
   image_name: quay.io/kiali/kiali
-  image_version: v2.24.0
-  image_digest: sha256:744439cbdbbc23c7a5d70544911abf8fe0b32c88c082e9a41ae6b50748bf736e
+  image_version: v2.26.0
+  image_digest: sha256:59cce98a9811ce53ff3da771225d1df00f0ca4ae0819311291ae7316349a13e9
   image_pull_policy: IfNotPresent
   view_only_mode: true
   cluster_wide_access: false
@@ -40,7 +40,7 @@ external_services:
   tracing:
     enabled: true
     provider: jaeger
-    # Kiali queries traces over the Jaeger gRPC query port, but its v2.24.0
+    # Kiali queries traces over the Jaeger gRPC query port, but its v2.26.0
     # version probe falls back to plain HTTP on the default port if gRPC is
     # enabled. Our Jaeger HTTP query endpoint lives on 16686, so keep the
     # gRPC query URL, pin health checks to the HTTP UI/query path, and disable

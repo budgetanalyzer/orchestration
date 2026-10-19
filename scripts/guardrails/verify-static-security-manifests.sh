@@ -545,8 +545,19 @@ EOF
 }
 
 run_kyverno_production_helm_render_check() {
-    local temp_dir rendered_file image refs_checked=0
+    local temp_dir rendered_file chart_metadata chart_app_version image expected_image
+    local refs_checked=0 image_occurrences=0
     local -a failures=()
+    local -a expected_images=(
+        "reg.kyverno.io/kyverno/kyverno-cli@sha256:ced7b2be0b04250cabfe695f15307f69eb715fe23234816388af4f3812915b2a"
+        "reg.kyverno.io/kyverno/kyvernopre@sha256:c25c47461f06f2845a48c319ae86fbbc1730a7b9ed5b701889c9dc1f9ee94b09"
+        "reg.kyverno.io/kyverno/kyverno@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb"
+        "reg.kyverno.io/kyverno/background-controller@sha256:8f1e9143373a27578cafc2d28d2c66ba0926c63b4c77e63de8d2fdd4a122859f"
+        "reg.kyverno.io/kyverno/cleanup-controller@sha256:67a48e62a8d8f8120c86914ff822b90017c54054c7b64ef8a1555645e9d9761e"
+        "reg.kyverno.io/kyverno/reports-controller@sha256:c0eee97b9b44a0dd35805d56b358fa52548480f79d4944602b9609538eccd64c"
+        "ghcr.io/kyverno/readiness-checker@sha256:31bb42ce7f5b2e27c1cf633aeff4f0cad1f5bb63761e2cb09f0e25cdd26572bf"
+    )
+    local -A rendered_images=()
 
     [[ -f "${PRODUCTION_KYVERNO_VALUES}" ]] || {
         echo "ERROR: production Kyverno values file is missing: ${PRODUCTION_KYVERNO_VALUES}" >&2
@@ -570,6 +581,21 @@ run_kyverno_production_helm_render_check() {
     HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
         "${STATIC_TOOLS_BIN}/helm" repo update kyverno >/dev/null
 
+    chart_metadata="$(
+        HELM_CACHE_HOME="${temp_dir}/cache" \
+        HELM_CONFIG_HOME="${temp_dir}/config" \
+        HELM_DATA_HOME="${temp_dir}/data" \
+        HELM_REPOSITORY_CACHE="${temp_dir}/repository-cache" \
+        HELM_REPOSITORY_CONFIG="${temp_dir}/repositories.yaml" \
+            "${STATIC_TOOLS_BIN}/helm" show chart kyverno/kyverno \
+                --version "${PRODUCTION_KYVERNO_CHART_VERSION}"
+    )"
+    chart_app_version="$(awk '$1 == "appVersion:" { gsub(/"/, "", $2); print $2; exit }' <<< "${chart_metadata}")"
+    if [[ "${chart_app_version}" != "v${PRODUCTION_KYVERNO_APP_VERSION}" ]]; then
+        echo "production Kyverno chart app version mismatch: expected v${PRODUCTION_KYVERNO_APP_VERSION}, got ${chart_app_version:-missing}" >&2
+        exit 1
+    fi
+
     HELM_CACHE_HOME="${temp_dir}/cache" \
     HELM_CONFIG_HOME="${temp_dir}/config" \
     HELM_DATA_HOME="${temp_dir}/data" \
@@ -578,16 +604,33 @@ run_kyverno_production_helm_render_check() {
         "${STATIC_TOOLS_BIN}/helm" template kyverno kyverno/kyverno \
             --version "${PRODUCTION_KYVERNO_CHART_VERSION}" \
             --namespace kyverno \
+            --kube-version "${PRODUCTION_KUBERNETES_VERSION}" \
             --values "${PRODUCTION_KYVERNO_VALUES}" > "${rendered_file}"
 
     while IFS= read -r image; do
         [[ -n "${image}" ]] || continue
         refs_checked=$((refs_checked + 1))
+        rendered_images["${image}"]=1
 
         if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
             failures+=("${image}")
         fi
     done < <(sed -nE 's/^[[:space:]]*image:[[:space:]]*"?([^"[:space:]]+)"?.*$/\1/p' "${rendered_file}" | sort -u)
+
+    image_occurrences="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*"?([^"[:space:]]+)"?.*$/\1/p' "${rendered_file}" | wc -l)"
+    if (( image_occurrences != 13 )); then
+        failures+=("expected 13 controller, init, migration, hook, and test image occurrences, rendered ${image_occurrences}")
+    fi
+
+    for expected_image in "${expected_images[@]}"; do
+        if [[ -z "${rendered_images[${expected_image}]+present}" ]]; then
+            failures+=("missing reviewed image: ${expected_image}")
+        fi
+    done
+
+    if (( ${#rendered_images[@]} != ${#expected_images[@]} )); then
+        failures+=("expected ${#expected_images[@]} unique reviewed images, rendered ${#rendered_images[@]}")
+    fi
 
     rm -rf "${temp_dir}"
 
@@ -598,11 +641,13 @@ run_kyverno_production_helm_render_check() {
 
     if (( ${#failures[@]} > 0 )); then
         printf 'production Kyverno Helm render check failed:\n' >&2
-        printf '  - mutable rendered image ref: %s\n' "${failures[@]}" >&2
+        printf '  - %s\n' "${failures[@]}" >&2
         exit 1
     fi
 
-    printf 'production Kyverno Helm render check passed (%d refs checked)\n' "${refs_checked}"
+    printf 'production Kyverno Helm render check passed (chart %s / app %s; %d occurrences across %d unique refs)\n' \
+        "${PRODUCTION_KYVERNO_CHART_VERSION}" "${PRODUCTION_KYVERNO_APP_VERSION}" \
+        "${image_occurrences}" "${refs_checked}"
 }
 
 scan_namespace_psa_labels_in_files() {

@@ -7,10 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 PROMETHEUS_NAMESPACE="monitoring"
-PROMETHEUS_SELECTOR='app.kubernetes.io/name=prometheus'
+PROMETHEUS_SELECTOR='app.kubernetes.io/name=prometheus,app.kubernetes.io/managed-by=prometheus-operator,operator.prometheus.io/name=prometheus-stack-kube-prom-prometheus'
 PROMETHEUS_CONTAINER="prometheus"
 PROMETHEUS_URL="http://127.0.0.1:9090"
 KIALI_LOCAL_PORT=20001
+KUBE_STATE_METRICS_SELECTOR='app.kubernetes.io/name=kube-state-metrics,app.kubernetes.io/instance=prometheus-stack,app.kubernetes.io/managed-by=Helm'
+KUBE_STATE_METRICS_IMAGE="registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b"
+KUBE_STATE_METRICS_AMD64_DIGEST="sha256:01171220c7c059afc85034ffe687bfe7249e41c0cc46fbe9a5128503ceee3016"
+KUBE_STATE_METRICS_ARM64_DIGEST="sha256:92b46557c71ecac53825772e4827dbcd9fca876b1950060f8fb2f2ef0d7a27af"
+KUBE_STATE_METRICS_VERSION="v2.20.0"
+KUBE_STATE_METRICS_TELEMETRY_LOCAL_PORT=18081
 WAIT_TIMEOUT_SECONDS=120
 POLL_INTERVAL_SECONDS=5
 REQUEST_TIMEOUT_SECONDS=5
@@ -191,6 +197,242 @@ discover_prometheus_pod() {
     fi
 
     PROMETHEUS_POD="${pod}"
+}
+
+verify_kube_state_metrics_image_identity() {
+    local description="kube-state-metrics pod uses the reviewed image and runtime digest"
+    local output tmp_dir
+
+    tmp_dir="$(mktemp -d)"
+    if ! kubectl get pods -n "${PROMETHEUS_NAMESPACE}" \
+        -l "${KUBE_STATE_METRICS_SELECTOR}" -o json \
+        > "${tmp_dir}/pods.json" 2> "${tmp_dir}/kubectl.stderr" \
+        || ! kubectl get nodes -o json \
+        > "${tmp_dir}/nodes.json" 2>> "${tmp_dir}/kubectl.stderr"; then
+        fail_check "${description}"
+        sed -n '1,80p' "${tmp_dir}/kubectl.stderr" | sed 's/^/    /' >&2
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+
+    if output=$(python3 - \
+        "${tmp_dir}/pods.json" \
+        "${tmp_dir}/nodes.json" \
+        "${KUBE_STATE_METRICS_IMAGE}" \
+        "${KUBE_STATE_METRICS_AMD64_DIGEST}" \
+        "${KUBE_STATE_METRICS_ARM64_DIGEST}" 2>&1 <<'PY'
+import json
+import sys
+from pathlib import Path
+
+pods_path, nodes_path, expected_image, amd64_digest, arm64_digest = sys.argv[1:]
+pods = json.loads(Path(pods_path).read_text(encoding="utf-8")).get("items", [])
+nodes = json.loads(Path(nodes_path).read_text(encoding="utf-8")).get("items", [])
+node_architectures = {
+    (node.get("metadata") or {}).get("name"): (node.get("status") or {})
+    .get("nodeInfo", {})
+    .get("architecture")
+    for node in nodes
+}
+expected_platform_digests = {
+    "amd64": amd64_digest,
+    "arm64": arm64_digest,
+}
+expected_source_digest = expected_image.rsplit("@", maxsplit=1)[-1]
+failures = []
+
+if not pods:
+    failures.append("no kube-state-metrics pod matched the expected selector")
+
+for pod in pods:
+    metadata = pod.get("metadata") or {}
+    spec = pod.get("spec") or {}
+    status = pod.get("status") or {}
+    pod_name = metadata.get("name") or "(unnamed)"
+    node_name = spec.get("nodeName")
+    architecture = node_architectures.get(node_name)
+    expected_child = expected_platform_digests.get(architecture)
+    containers = [
+        container
+        for container in spec.get("containers") or []
+        if container.get("name") == "kube-state-metrics"
+    ]
+    statuses = [
+        container
+        for container in status.get("containerStatuses") or []
+        if container.get("name") == "kube-state-metrics"
+    ]
+
+    if len(containers) != 1:
+        failures.append(
+            f"{pod_name}: expected one kube-state-metrics container, found {len(containers)}"
+        )
+        continue
+    if containers[0].get("image") != expected_image:
+        failures.append(
+            f"{pod_name}: pod image is {containers[0].get('image')!r}, expected {expected_image!r}"
+        )
+    if expected_child is None:
+        failures.append(
+            f"{pod_name}: unsupported or unknown node architecture {architecture!r}"
+        )
+        continue
+    if len(statuses) != 1:
+        failures.append(
+            f"{pod_name}: expected one kube-state-metrics container status, found {len(statuses)}"
+        )
+        continue
+
+    image_id = statuses[0].get("imageID") or ""
+    image_id_digest = image_id.rsplit("@", maxsplit=1)[-1]
+    if image_id_digest not in {expected_source_digest, expected_child}:
+        failures.append(
+            f"{pod_name}: runtime imageID {image_id!r} matches neither the reviewed "
+            f"source digest {expected_source_digest} nor the linux/{architecture} "
+            f"child {expected_child}"
+        )
+    digest_kind = (
+        "source index"
+        if image_id_digest == expected_source_digest
+        else f"linux/{architecture} child"
+    )
+    print(
+        f"{pod_name}: image={containers[0].get('image')}, "
+        f"platform=linux/{architecture}, imageID={image_id} ({digest_kind})"
+    )
+
+if failures:
+    for failure in failures:
+        print(failure, file=sys.stderr)
+    raise SystemExit(1)
+PY
+    ); then
+        pass "${description}"
+        printf '%s\n' "${output}" | sed 's/^/    /'
+        rm -rf "${tmp_dir}"
+        return 0
+    fi
+
+    fail_check "${description}"
+    printf '%s\n' "${output}" | sed 's/^/    /' >&2
+    rm -rf "${tmp_dir}"
+    return 1
+}
+
+verify_kube_state_metrics_build_info() {
+    local description="kube-state-metrics build info reports ${KUBE_STATE_METRICS_VERSION} on its node architecture"
+    local architecture deadline metrics_file node output pod port_forward_log port_forward_pid tmp_dir
+
+    pod="$(kubectl get pod -n "${PROMETHEUS_NAMESPACE}" \
+        -l "${KUBE_STATE_METRICS_SELECTOR}" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if [[ -z "${pod}" ]]; then
+        fail_check "${description}"
+        printf '    No kube-state-metrics pod matched the expected selector.\n' >&2
+        return 1
+    fi
+
+    node="$(kubectl get pod -n "${PROMETHEUS_NAMESPACE}" "${pod}" \
+        -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)"
+    architecture="$(kubectl get node "${node}" \
+        -o jsonpath='{.status.nodeInfo.architecture}' 2>/dev/null || true)"
+    if [[ -z "${node}" || -z "${architecture}" ]]; then
+        fail_check "${description}"
+        printf '    Could not resolve the kube-state-metrics node architecture.\n' >&2
+        return 1
+    fi
+
+    tmp_dir="$(mktemp -d)"
+    metrics_file="${tmp_dir}/metrics.txt"
+    port_forward_log="${tmp_dir}/port-forward.log"
+    kubectl port-forward --address 127.0.0.1 \
+        -n "${PROMETHEUS_NAMESPACE}" "pod/${pod}" \
+        "${KUBE_STATE_METRICS_TELEMETRY_LOCAL_PORT}:8081" \
+        > "${port_forward_log}" 2>&1 &
+    port_forward_pid=$!
+
+    deadline=$((SECONDS + 30))
+    while (( SECONDS <= deadline )); do
+        if curl --fail --silent --show-error --max-time "${REQUEST_TIMEOUT_SECONDS}" \
+            "http://127.0.0.1:${KUBE_STATE_METRICS_TELEMETRY_LOCAL_PORT}/metrics" \
+            > "${metrics_file}" 2>/dev/null; then
+            break
+        fi
+        if ! kill -0 "${port_forward_pid}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    kill "${port_forward_pid}" 2>/dev/null || true
+    wait "${port_forward_pid}" 2>/dev/null || true
+
+    if [[ ! -s "${metrics_file}" ]]; then
+        fail_check "${description}"
+        printf '    Could not read the loopback-forwarded telemetry endpoint.\n' >&2
+        sed -n '1,80p' "${port_forward_log}" | sed 's/^/    /' >&2
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+
+    if output=$(python3 - \
+        "${metrics_file}" \
+        "${KUBE_STATE_METRICS_VERSION}" \
+        "${architecture}" 2>&1 <<'PY'
+import re
+import sys
+from pathlib import Path
+
+metrics_path = Path(sys.argv[1])
+expected_version = sys.argv[2]
+expected_architecture = sys.argv[3]
+samples = [
+    line
+    for line in metrics_path.read_text(encoding="utf-8").splitlines()
+    if line.startswith("kube_state_metrics_build_info{")
+]
+if len(samples) != 1:
+    print(f"expected one kube_state_metrics_build_info sample, found {len(samples)}", file=sys.stderr)
+    raise SystemExit(1)
+
+match = re.search(r'(?:\{|,)version="([^"]+)"(?:,|})', samples[0])
+if match is None:
+    print("kube_state_metrics_build_info has no version label", file=sys.stderr)
+    raise SystemExit(1)
+if match.group(1) != expected_version:
+    print(
+        f"kube_state_metrics_build_info reports {match.group(1)!r}, expected {expected_version!r}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+architecture_match = re.search(r'(?:\{|,)goarch="([^"]+)"(?:,|})', samples[0])
+if architecture_match is None:
+    print("kube_state_metrics_build_info has no goarch label", file=sys.stderr)
+    raise SystemExit(1)
+if architecture_match.group(1) != expected_architecture:
+    print(
+        "kube_state_metrics_build_info reports architecture "
+        f"{architecture_match.group(1)!r}, expected {expected_architecture!r}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if not samples[0].endswith(" 1"):
+    print(f"unexpected kube_state_metrics_build_info sample value: {samples[0]}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(samples[0])
+PY
+    ); then
+        pass "${description}"
+        printf '%s\n' "${output}" | sed 's/^/    /'
+        rm -rf "${tmp_dir}"
+        return 0
+    fi
+
+    fail_check "${description}"
+    printf '%s\n' "${output}" | sed 's/^/    /' >&2
+    rm -rf "${tmp_dir}"
+    return 1
 }
 
 promtool_query_json() {
@@ -837,6 +1079,10 @@ main() {
     discover_prometheus_pod
 
     printf 'Using Prometheus pod: %s/%s\n' "${PROMETHEUS_NAMESPACE}" "${PROMETHEUS_POD}"
+
+    section "kube-state-metrics Runtime Identity"
+    verify_kube_state_metrics_image_identity || true
+    verify_kube_state_metrics_build_info || true
 
     section "Required Objects"
     verify_required_objects || true

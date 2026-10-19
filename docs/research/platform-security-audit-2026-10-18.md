@@ -271,6 +271,107 @@ for prioritizing the narrow follow-up. It is not proof that those code paths
 are reachable in `2.18.0`, and it is not a claim that `2.20.0` has no remaining
 risk.
 
+### kube-state-metrics narrow follow-up evidence — 2026-10-19
+
+The ordered follow-up selected
+`registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b`.
+Registry inspection on 2026-10-19 reconfirmed that the tag still resolves to
+that reviewed multi-platform source manifest and that its `linux/arm64/v8`
+child is
+`sha256:92b46557c71ecac53825772e4827dbcd9fca876b1950060f8fb2f2ef0d7a27af`.
+The index also contains Linux AMD64, ARMv7, PPC64LE, and S390X children; only
+the ARM64 child is the production/controller scanner target.
+
+kube-state-metrics `2.20.0` release notes and container help retain the chart's
+rendered `--port=8080` and `--resources=...` interface. Every resource selected
+by kube-prometheus-stack `83.4.3` / kube-state-metrics subchart `7.2.2` remains
+supported. The render keeps the same ports, `/livez` and `/readyz` probes,
+service account, RBAC, Service, ServiceMonitor, security contexts, projected
+token, and resources. The one release-note metric semantic change is reduced
+cardinality for `kube_pod_status_reason`; neither repository dashboards and
+verifiers nor the enabled rendered rules reference that metric. No metric used
+by this repository was removed.
+
+Normalized local and production-reference before/after renders changed only
+the kube-state-metrics container image. The bundled subchart still emits
+`app.kubernetes.io/version: 2.18.0` from its `Chart.appVersion`; that generated
+label is retained as chart metadata and is not rewritten or treated as runtime
+truth. Focused verification instead uses the exact pod image, the CRI-reported
+container image ID (which may identify the pinned multi-platform index or its
+selected platform child), and the binary's `kube_state_metrics_build_info`
+version and architecture labels.
+
+The final focused scan used the checksum-verified Trivy `0.76.0` Linux 64-bit
+binary with `--image-src remote --platform linux/arm64 --scanners vuln`
+against the exact ARM64 child above. Scanner metadata was:
+
+- database schema: `2`;
+- database `UpdatedAt`: `2026-10-19 00:45:30.553047111 +0000 UTC`;
+- database `DownloadedAt`: `2026-10-19 07:48:00.187493848 +0000 UTC`;
+- scan completed: `2026-10-19 07:48:17 UTC`;
+- identified image platform and OS: `linux/arm64/v8`, Debian `13.6`; and
+- package inventory: 5 OS packages and 104 application packages.
+
+The report contained 0 critical and 9 high entries. The former critical IDs
+`CVE-2026-33186` and `CVE-2025-68121` were absent. The residual high findings
+were:
+
+| Vulnerability | Package | Installed | Fixed version reported by Trivy |
+| --- | --- | --- | --- |
+| `CVE-2026-56854` | `golang.org/x/crypto` | `v0.54.0` | `0.55.0` |
+| `CVE-2026-78669` | `golang.org/x/net` | `v0.57.0` | `0.60.0` |
+| `CVE-2026-56851` | `golang.org/x/text` | `v0.40.0` | `0.41.0` |
+| `CVE-2026-84304` | `google.golang.org/grpc` | `v1.79.3` | `1.83.1` |
+| `CVE-2026-84445` | `google.golang.org/grpc` | `v1.79.3` | `1.82.2`, `1.83.2`, or later listed development fixes |
+| `GHSA-hrxh-6v49-42gf` | `google.golang.org/grpc` | `v1.79.3` | `1.82.1` |
+| `CVE-2026-78667` | Go standard library | `v1.26.6` | `1.26.9` or `1.27.2` |
+| `CVE-2026-78669` | Go standard library | `v1.26.6` | `1.26.9` or `1.27.2` |
+| `CVE-2026-97031` | Go standard library | `v1.26.6` | `1.26.9` or `1.27.2` |
+
+These counts happen to match the 2026-10-18 candidate scan, but they come from
+a newer database and are independently recorded rather than forced to match.
+They remain raw package findings, not evidence that vulnerable functions are
+reachable in this deployment. Zero critical findings does not mean the image
+has no security risk. Full scanner JSON, image layers, caches, and generated
+renders remain disposable under `tmp/` and are not committed.
+
+The live-local follow-up completed on 2026-10-19 after the native-runtime
+preflight verified the exact loopback `kind-kind` target. Tilt reconciled Helm
+release revision 5 without a chart migration: the release remained
+`kube-prometheus-stack-83.4.3`, and the kube-state-metrics Deployment became
+Ready on the exact source image above. On the local AMD64 Kind node, Kubernetes
+reported the CRI image ID as the same pinned source-index digest, while
+`kube_state_metrics_build_info` reported `version="v2.20.0"`, `goos="linux"`,
+and `goarch="amd64"`. The runtime verifier accepts either valid CRI form—the
+pinned source index or its reviewed platform child—and separately requires the
+binary architecture to match the node.
+
+Prometheus reported the kube-state-metrics ServiceMonitor target Up through
+Service DNS. The application JVM and HTTP metrics used by repository dashboards
+remained nonempty with the expected application labels. Kiali reported
+`monitoring/prometheus` Healthy, its Prometheus and Jaeger integrations were
+healthy, and the final triage snapshot contained no unhealthy workload or app
+health findings. Live inspection also retained Prometheus Operator and config
+reloader `0.90.1`, Prometheus `3.11.3`, Grafana `12.4.13`, the reduced Operator
+RBAC object set, and the Bound 10 Gi Prometheus PVC.
+
+Final validation results were:
+
+- local and production-reference monitoring renders selected the reviewed
+  kube-state-metrics image while preserving chart-owned version metadata;
+- the production image overlay, pinned-PyYAML static security suite, and static
+  suite self-test passed;
+- the monitoring runtime verifier passed 18 checks;
+- the Prometheus Operator least-privilege verifier passed 31 checks, including
+  its positive and negative permission matrix and Kiali triage;
+- the loopback-only observability access verifier passed; and
+- the aggregate local smoketest completed successfully when run with the
+  repository-pinned PyYAML interpreter.
+
+These results prove the narrow change in the authorized local Tilt/Kind runtime
+and the offline production reference. They do not claim execution against a
+hosted production environment.
+
 ### Retained-family exact artifacts
 
 | Family/image | Checked-in or rendered source | Resolved `linux/arm64` child | Critical | High |

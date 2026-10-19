@@ -373,7 +373,12 @@ proving the current cluster:
 `smoketest/verify-monitoring-runtime.sh` is the runtime observability proof for
 the current cluster. It keeps the existing Spring Boot dashboard-input checks
 and now also verifies the service-DNS-backed `istiod`, Grafana, Prometheus
-Operator, and kube-state-metrics scrapes plus the Kiali
+Operator, and kube-state-metrics scrapes. It verifies kube-state-metrics from
+the exact pod image and CRI-reported container image ID (which may identify
+either the pinned multi-platform index or the selected platform child), then
+checks the binary-reported version and architecture through
+`kube_state_metrics_build_info` on a temporary VM-loopback port-forward to the
+otherwise unexposed telemetry port. It also keeps the Kiali
 `monitoring/prometheus` health regression and the live Jaeger integration
 contract (`16685` gRPC queries, `16686` HTTP health check, no repeated Jaeger
 version-check failures in the current Kiali pod logs).

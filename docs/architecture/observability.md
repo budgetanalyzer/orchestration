@@ -501,8 +501,19 @@ post-renderer before apply.
 | `prometheus/prometheus` | v3.11.3 | pinned |
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
-| `kube-state-metrics/kube-state-metrics` | v2.18.0 | pinned |
+| `kube-state-metrics/kube-state-metrics` | v2.20.0 | pinned |
 | `quay.io/kiali/kiali` | v2.26.0 | pinned |
+
+kube-prometheus-stack remains on chart `83.4.3`. Its bundled
+kube-state-metrics subchart `7.2.2` still renders
+`app.kubernetes.io/version: 2.18.0` from the subchart's `Chart.appVersion`
+even though the supported values override selects the immutable `v2.20.0`
+runtime image. That generated label is chart metadata, not runtime-version
+evidence; do not rewrite it with a post-render patch. The exact pod image and
+container image ID identify the artifact, and the focused runtime verifier
+checks `kube_state_metrics_build_info` on the pod's loopback-forwarded
+telemetry port to confirm the running binary reports `v2.20.0`. The telemetry
+port remains outside the Service and ServiceMonitor contract.
 
 ### Workload Hardening
 
@@ -551,14 +562,15 @@ watcher is needed.
 ```
 
 This script re-renders the pinned chart, verifies every image is
-digest-pinned, checks that no host-level node-exporter shapes remain, asserts
-the Prometheus Operator namespace-scope args stay exactly on the documented
-`monitoring` and `default` model, asserts that the repo-owned reduced operator
-RBAC still renders to the approved effective permission set, and runs
-`kubectl apply --dry-run=server` against the current cluster. That render-time
-guardrail is what fails fast on any regression back toward cluster-wide secret
-access, namespaced mutation outside `monitoring`, or unexpected watched
-namespaces after a chart upgrade.
+digest-pinned, asserts the exact reviewed kube-state-metrics runtime image
+while treating its chart-owned version label as metadata, checks that no
+host-level node-exporter shapes remain, asserts the Prometheus Operator
+namespace-scope args stay exactly on the documented `monitoring` and `default`
+model, asserts that the repo-owned reduced operator RBAC still renders to the
+approved effective permission set, and runs `kubectl apply --dry-run=server`
+against the current cluster. That render-time guardrail is what fails fast on
+any regression back toward cluster-wide secret access, namespaced mutation
+outside `monitoring`, or unexpected watched namespaces after a chart upgrade.
 
 ## Helm Chart
 

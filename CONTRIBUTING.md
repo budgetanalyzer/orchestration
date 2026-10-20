@@ -23,23 +23,22 @@ Budget Analyzer is a reference architecture for enterprise architects and senior
 
 ## Getting Started
 
-1. Use the sibling workspace's
-   [development VM workflow](../workspace/docs/host-isolation.md) to provision
-   the guest and its side-by-side repositories.
-2. Complete the workspace-owned native tool and trust preparation.
-3. Open the guest repositories from a shell or editor connected to the
-   development VM. VS Code users should use the reviewed Remote SSH profile.
-4. Follow orchestration's [Getting Started guide](docs/development/getting-started.md)
-   for first application bootstrap or daily `tilt up` startup.
+1. Clone the application repositories side by side under one parent directory.
+2. Follow orchestration's [Getting Started guide](docs/development/getting-started.md)
+   to install local prerequisites, prepare ingress TLS, bootstrap the
+   application and use the daily `tilt up` startup.
+3. Use the optional workspace
+   [development VM workflow](../workspace/docs/host-isolation.md) when you want
+   the project's managed VM, agent tooling or personal-host tunnel.
 
-The native development VM is the only supported agent environment. The
-orchestration first-bootstrap command recreates Kind with the required Calico
-configuration; do not delete or replace the cluster outside that workflow.
+The orchestration first-bootstrap command recreates Kind with the required
+Calico configuration; do not delete or replace the cluster outside that
+workflow.
 
 > **Note**: Orchestration does not require a specific editor. VS Code Remote
-> SSH is a documented and tested option. Other editor or terminal workflows
-> must keep agent and development processes inside the guest and preserve the
-> workspace-owned credential, forwarding, and host-isolation controls.
+> SSH is a documented and tested option for the workspace development VM.
+> Other editors and terminals may use orchestration's self-contained local
+> application workflow.
 
 ## How to Contribute
 

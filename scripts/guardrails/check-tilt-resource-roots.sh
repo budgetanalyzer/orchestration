@@ -243,7 +243,6 @@ if jq -e '
         contains("setup-k8s-tls.sh")
         or contains("renew-host-ingress-tls.sh")
         or contains("install-agent-vm-local-ca-trust.sh")
-        or contains("--install-system-trust")
       )
 ' "${tilt_result_file}" >/dev/null; then
     printf 'ERROR: Tilt must not generate browser TLS or install guest trust.\n' >&2

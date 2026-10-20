@@ -1,160 +1,111 @@
 # Getting Started
 
-The application workflow is editor-independent. It is tested from native guest
-shells, including VS Code Remote SSH terminals, with Claude Code, Codex, and
-Gemini. Other clients must preserve the workspace-owned host-isolation and
-credential boundary.
+Orchestration owns a self-contained local application path. It does not require
+the sibling `workspace` repository or any workspace verifier. The optional
+workspace development VM is documented separately below.
 
-The native development VM is the only supported agent environment. The sibling
-`workspace` repository owns VM provisioning, repositories, the normal guest
-user and home, native tools, guest Docker, Remote SSH, trust installation and
-the host-isolation audit. Complete its human-operated
-[development VM setup](../../../workspace/docs/host-isolation.md) and
-[native user/tool preparation](../../../workspace/docs/native-user-tools.md)
-before application bootstrap. Former guest-specific and personal-host agent
-runtimes are retired and must not be reconstructed.
+Full local Tilt expects the Budget Analyzer repositories, including
+`../ext-authz`, to be cloned side by side under one parent directory. Install
+the repository build prerequisites reported by
+`./scripts/bootstrap/check-tilt-prerequisites.sh`, and edit `.env` before
+`tilt up`; Auth0 values and `FRED_API_KEY` are required for local startup.
 
-Orchestration owns the application bootstrap, exact local Kind target, Tilt,
-imported ingress-file validation and Kubernetes Secret reconciliation. Read the
-[application authority contract](../architecture/autonomous-ai-execution.md)
-before changing those controls.
+Read the [application authority contract](../architecture/autonomous-ai-execution.md)
+before changing the local-target or credential controls.
 
-Full local Tilt expects the Budget Analyzer repositories to be cloned
-side-by-side by the workspace-owned repository workflow. That includes
-`../ext-authz`, which owns the Go external authorization service source that
-Tilt builds into the local `ext-authz` image.
+## First Bootstrap
 
-## Development VM Native Workflow
+Use this path for first setup or an explicitly reviewed clean rebuild:
 
-Do not install native tools ad hoc from orchestration or create a second
-agent-specific home. Edit `.env` before `tilt up`; Auth0 values and
-`FRED_API_KEY` are required for local startup.
-
-### Browser TLS Preparation And VM Handoff
-
-The complete first-bootstrap flow crosses the personal-host/VM boundary in
-this order:
-
-1. From the personal-host orchestration checkout, the human prepares browser
-   trust and the three transferable ingress files without creating or
-   contacting Kind:
+1. Install Docker on the machine that will run Kind. Configure the Docker CLI
+   to use a reachable local Unix-socket daemon; remote TCP and SSH contexts are
+   rejected.
+2. On the machine whose browser will open the application, install `mkcert` and
+   OpenSSL, open its orchestration checkout, and have a human prepare or renew
+   the browser certificate and the three published files:
 
    ```bash
-   ./scripts/bootstrap/setup-k8s-tls.sh
+   ./scripts/bootstrap/renew-host-ingress-tls.sh
    ```
 
-   For a migrated environment, skip this command and reuse the existing
-   wildcard leaf, leaf key and public CA when the VM validation in the next
-   section accepts them.
-2. The human follows workspace's
-   [exact three-file SSH transfer procedure](../../../workspace/docs/local-budget-analyzer-tls.md#transfer-the-three-published-files).
-   The mkcert CA signing key remains on the personal host.
-3. From the normal-user VM shell, the human runs the trust installation and
-   application bootstrap sequence in the next section. `./setup.sh` runs only
-   here: it recreates VM-local Kind and installs the transferred leaf/key into
-   the Kubernetes TLS Secret. It never runs mkcert.
-4. For an interactive personal-host browser, the human starts workspace's
-   [default application and Tilt host tunnel](../../../workspace/docs/host-isolation.md#default-application-and-tilt-host-tunnel).
+   This command establishes trust for that machine's browser and never contacts
+   Kubernetes. If Kind runs on another machine, place exactly these three files
+   in that machine's orchestration checkout under `nginx/certs/k8s/`:
 
-Do not run `./setup.sh` on the personal host, run mkcert in the VM, or copy the
-mkcert CA signing key into the VM. Orchestration's
-[local ingress CA contract](local-environment.md#host-published-local-ingress-ca)
-owns certificate preparation and Kubernetes behavior; workspace owns transfer,
-host forwarding and guest OS/NSS trust.
+   ```text
+   _wildcard.budgetanalyzer.localhost.pem
+   _wildcard.budgetanalyzer.localhost-key.pem
+   _mkcert-rootCA.pem
+   ```
 
-### Development VM First Bootstrap
+   Never transfer the mkcert CA private key. The
+   [ingress TLS contract](local-environment.md#host-published-local-ingress-ca)
+   owns validation, renewal and handoff details.
+3. On the Kind machine, run the human-operated bootstrap:
 
-Use this path only for first bootstrap or an explicitly reviewed clean rebuild,
-after guest provisioning, repository setup, native trust/provider verification
-and approved TLS transfer. End affected workers before a clean rebuild. Do not
-run this path simply to restart agents. Run bootstrap from a human-operated
-guest OS shell:
+   ```bash
+   ./setup.sh
+   ```
+
+   Setup validates the supplied TLS files, installs orchestration's exact
+   pinned kubectl, Helm, Tilt and Kind versions through the verified installer,
+   recreates the local Kind cluster, and reconciles the ingress Secret. It is a
+   destructive local rebuild, not a daily-start command.
+4. Install the frontend's local npm dependencies, complete `.env`, and start
+   the platform:
+
+   ```bash
+   cd ../budget-analyzer-web
+   npm install
+   cd ../orchestration
+   tilt up
+   ```
+
+Run `./scripts/bootstrap/check-tilt-prerequisites.sh` for the broader tooling,
+repository, certificate, cluster and runtime-security report before or after
+bootstrap. Its live security checks can create and clean named disposable
+resources in the approved local cluster.
+
+Valid TLS files are not the same as client trust.
+`check-tilt-prerequisites.sh` reports whether the local system trust bundle
+verifies the supplied current ingress leaf for
+`app.budgetanalyzer.localhost`. It does not prove which certificate a running
+ingress serves, or whether Chromium's NSS database trusts it. Follow the
+environment-specific trust documentation and complete its exact-URL browser
+acceptance check. For the workspace development VM, use the
+[local TLS owner document](../../../workspace/docs/local-budget-analyzer-tls.md)
+and [exact ingress trust procedure](../../../workspace/docs/native-user-tools.md#establish-exact-ingress-trust).
+
+The `ingress-tls-secret` Tilt resource revalidates the supplied files and
+reconciles the local Kind Secret on startup. It never runs mkcert or changes a
+client trust store. Missing, expired or replaced files must return to the
+human-operated renewal, three-file handoff and environment-specific trust flow;
+`tilt up` does not repair them.
+
+## Daily Startup
+
+With the bootstrap complete, daily startup is read-only preflight followed by
+Tilt:
 
 ```bash
-./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
-. "$HOME/.config/budget-analyzer-native/env.sh"
-../workspace/scripts/install-agent-vm-local-ca-trust.sh \
-  --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
-  --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
-./scripts/bootstrap/check-agent-vm-prerequisites.sh
-./setup.sh
-cd ../budget-analyzer-web
-npm install
-cd ../orchestration
-./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local
+./scripts/bootstrap/check-local-runtime.sh
 tilt up
 ```
 
-The orchestration guest preflight invokes workspace's complete read-only native
-runtime verifier, including VM/user identity, repository topology, forwarded
-authority, guest Docker, manifest-owned tools and established trust. The
-imported-TLS validation checks the public CA, validity period, hostname, chain
-and leaf/key match without changing trust or Kubernetes. The reviewed workspace
-command is the only guest OS/NSS trust writer. `./setup.sh`
-repeats the full workspace verifier before any Kind deletion, recreates a fresh
-guest `kind` cluster, and applies the ingress TLS Secret only after the strict
-loopback `kind-kind` checks pass; it does not change guest trust.
+The local-runtime check requires a reachable local Docker Unix socket and the
+exact Ready loopback `kind-kind` Kubernetes target. It does not install tools,
+change trust or recreate the cluster. Do not run `setup.sh` for daily startup.
 
-`./setup.sh` recreates Kind. It is a first-bootstrap or explicit
-clean-rebuild command, never a daily VM-start command. Use the daily native
-startup below for ordinary guest work.
+## Running In The Workspace Development VM
 
-The `ingress-tls-secret` Tilt resource validates the already transferred files
-and reconciles the local Kind Secret on startup. It does not run mkcert or alter
-guest trust. Missing, expired, or replaced files return to the host renewal,
-three-file transfer, workspace trust and orchestration Secret-reconciliation
-workflow; they are not repaired by `tilt up`.
-
-There is no personal-host Kind cluster or host application container in this
-flow. The personal host owns browser trust and the mkcert signing key; the VM
-receives only the wildcard leaf, leaf key and public CA. For a migrated setup,
-reuse those three ignored files from the old host checkout when they still
-validate. For a fresh or stale setup, the human runs the non-Kubernetes host
-certificate preparation command and transfers the same three files. The exact
-artifact flow and renewal procedure live in the
-[local-environment guide](local-environment.md#host-published-local-ingress-ca),
-while workspace owns the SSH transfer and guest OS/NSS trust procedure.
-
-### Daily Native Startup
-
-Open a fresh guest shell as the normal development user. The managed shell
-environment should already be loaded; the native runtime preflight verifies
-that user/home, every local working/bare repository pair, pinned user tools,
-the credential boundary, guest Docker and the exact loopback Kind target still
-agree:
-
-```bash
-./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
-tilt up
-```
-
-Run `./scripts/bootstrap/check-tilt-prerequisites.sh --guest-local` when
-diagnosing tool, repository, cluster or runtime-security drift. It also fails
-closed through workspace's complete native verifier and orchestration's exact
-Kubernetes target before its runtime security proof creates and cleans named
-disposable probe resources.
-The native runtime preflight is read-only; neither command installs packages,
-changes trust or recreates the cluster. Do not run `setup.sh` during daily
-startup.
-
-Launch agents and AI Session Handler from that same fresh guest shell. Do not
-recreate a retired runtime or use a separate agent home. Plain provider
-commands keep their upstream defaults; use the reviewed wrapper when a plan
-calls for it:
-
-```bash
-codex
-# Or, from a repository that owns PLAN_NAME:
-ai-run PLAN_NAME
-```
-
-Exit the agent independently when its work is complete. Tilt, guest Docker,
-Kind and the application remain running, and the next fresh login shell reuses
-the normal user's provider state, Maven Local and Gradle caches. Run
-`check-budget-analyzer-local-ca-trust` when diagnosing native HTTPS trust; it is
-read-only. After provisioning or a reboot, verify fresh-shell PATH resolution,
-agent exit/reentry, live saves and runtime persistence before relying on the
-environment.
+Workspace owns VM provisioning,
+repository transport, the three-file transfer, guest OS/NSS and Chromium trust,
+the personal-host tunnel, and agent launch. Follow its
+[development-VM guide](../../../workspace/docs/host-isolation.md),
+[TLS handoff guide](../../../workspace/docs/local-budget-analyzer-tls.md), and
+[agent-tooling guide](../../../workspace/docs/native-user-tools.md), then use
+the same orchestration `./setup.sh` and daily-start commands above. Workspace
+commands are environment preparation, not orchestration prerequisites.
 
 ## Validation
 
@@ -207,15 +158,16 @@ The app requires both Auth0 and FRED credentials for local startup.
 
 ## Operator Entry Points
 
-Orchestration starts the application and Tilt in the VM and owns their guest
-publication on VM loopback:
+Orchestration starts the application and Tilt on the Kind machine and owns
+their publication on that machine's loopback (VM loopback in the workspace
+development VM):
 
 - Application: `https://app.budgetanalyzer.localhost`
 - Tilt UI: `http://localhost:10350`
 - Unified API docs surface: `https://app.budgetanalyzer.localhost/api-docs`
 
-These guest-local entry points are not automatically available on the personal
-host. After `tilt up` is healthy, use workspace's
+In the workspace development VM, these VM-loopback entry points are not
+automatically available on the personal host. After `tilt up` is healthy, use workspace's
 [default combined host tunnel](../../../workspace/docs/host-isolation.md#default-application-and-tilt-host-tunnel)
 to carry application HTTPS and the Tilt UI from VM loopback to personal-host
 loopback in one foreground process.

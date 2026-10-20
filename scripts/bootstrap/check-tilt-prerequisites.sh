@@ -12,16 +12,19 @@ WORKSPACE_DIR="$(cd "$ORCHESTRATION_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/local-kubernetes-target.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/local-kubernetes-target.sh"
-NATIVE_PREFLIGHT="$SCRIPT_DIR/check-agent-vm-prerequisites.sh"
+# shellcheck source=scripts/lib/local-ingress-client-trust.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/../lib/local-ingress-client-trust.sh"
 
-GUEST_LOCAL=false
+if [[ $# -gt 1 ]]; then
+    echo "ERROR: expected no arguments" >&2
+    exit 2
+fi
+
 case "${1:-}" in
     "") ;;
-    --guest-local)
-        GUEST_LOCAL=true
-        ;;
     --help|-h)
-        echo "Usage: scripts/bootstrap/check-tilt-prerequisites.sh [--guest-local]"
+        echo "Usage: scripts/bootstrap/check-tilt-prerequisites.sh"
         exit 0
         ;;
     *)
@@ -29,11 +32,6 @@ case "${1:-}" in
         exit 2
         ;;
 esac
-
-if [[ $# -gt 1 ]]; then
-    echo "ERROR: expected at most one argument" >&2
-    exit 2
-fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,7 +41,9 @@ NC='\033[0m' # No Color
 
 ERRORS=0
 WARNINGS=0
-NATIVE_PREFLIGHT_PASSED=false
+LOCAL_DOCKER_ENDPOINT_PASSED=false
+KIND_CLUSTER_EXISTS=false
+LOCAL_KIND_TARGET_PASSED=false
 INOTIFY_MIN_INSTANCES=8192
 INOTIFY_MIN_WATCHES=524288
 
@@ -54,19 +54,6 @@ echo
 echo "Orchestration directory: $ORCHESTRATION_DIR"
 echo "Looking for service repos in: $WORKSPACE_DIR"
 echo
-
-if [[ "$GUEST_LOCAL" == true ]]; then
-    echo "0. Checking workspace-owned native runtime..."
-    echo "---------------------------------------------"
-    if "$NATIVE_PREFLIGHT"; then
-        NATIVE_PREFLIGHT_PASSED=true
-        echo -e "${GREEN}✓${NC} Complete workspace native runtime contract passed"
-    else
-        echo -e "${RED}✗${NC} Complete workspace native runtime contract failed"
-        ((ERRORS++))
-    fi
-    echo
-fi
 
 # Function to check if command exists
 check_command() {
@@ -89,9 +76,6 @@ check_command() {
                 ;;
             kind)
                 version=$($cmd version 2>&1 | head -n1)
-                ;;
-            mkcert)
-                version=$($cmd --version 2>&1 | head -n1)
                 ;;
             openssl)
                 version=$($cmd version 2>&1 | head -n1)
@@ -148,10 +132,6 @@ normalize_semver() {
 
 version_ge() {
     [ "$1" = "$2" ] || [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
-}
-
-version_lt() {
-    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
 }
 
 check_java_version() {
@@ -235,11 +215,11 @@ tool_raw_version() {
         kubectl)
             kubectl version --client 2>/dev/null | head -n1 || true
             ;;
+        helm)
+            helm version --template '{{.Version}}' 2>/dev/null | head -n1 || true
+            ;;
         tilt)
             tilt version 2>/dev/null | head -n1 || true
-            ;;
-        mkcert)
-            mkcert --version 2>/dev/null | head -n1 || true
             ;;
         kind)
             kind version 2>/dev/null | head -n1 || true
@@ -251,11 +231,10 @@ tool_raw_version() {
 }
 
 check_pinned_tool_version() {
-    local tool raw_version parsed_version expected_version expected_semver
+    local tool raw_version parsed_version expected_version
 
     tool="$1"
     expected_version="$(phase7_tool_version "$tool")"
-    expected_semver="$(normalize_semver "$expected_version")"
     raw_version="$(tool_raw_version "$tool")"
     parsed_version="$(normalize_semver "$raw_version")"
 
@@ -268,7 +247,7 @@ check_pinned_tool_version() {
         return 1
     fi
 
-    if [ "$parsed_version" = "$expected_semver" ]; then
+    if phase7_tool_version_matches "$tool" "$raw_version"; then
         echo -e "${GREEN}✓${NC} ${tool} version matches this repo ($raw_version; expected $expected_version)"
         return 0
     fi
@@ -276,38 +255,6 @@ check_pinned_tool_version() {
     echo -e "${RED}✗${NC} ${tool} version mismatch: $raw_version"
     echo "  Expected: $expected_version"
     echo "  Install with: $(phase7_install_hint "$tool" "$ORCHESTRATION_DIR")"
-    ((ERRORS++))
-    return 1
-}
-
-check_helm_version() {
-    local raw_version supported_minimum supported_maximum tested_version parsed_version
-
-    supported_minimum="3.20.0"
-    supported_maximum="4.0.0"
-    tested_version="$PHASE7_HELM_VERSION"
-    raw_version=$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)
-    parsed_version=$(normalize_semver "$raw_version")
-
-    if [ -z "$parsed_version" ]; then
-        echo -e "${RED}✗${NC} Could not parse Helm version"
-        echo "  Raw output: $raw_version"
-        echo "  Install Helm $tested_version with:"
-        echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
-        ((ERRORS++))
-        return 1
-    fi
-
-    if version_ge "$parsed_version" "$supported_minimum" && version_lt "$parsed_version" "$supported_maximum"; then
-        echo -e "${GREEN}✓${NC} Helm version supported for this repo ($raw_version; tested with $tested_version)"
-        return 0
-    fi
-
-    echo -e "${RED}✗${NC} Unsupported Helm version: $raw_version"
-    echo "  Supported range: >= $supported_minimum and < $supported_maximum"
-    echo "  Helm 4 is not supported in this repo."
-    echo "  Install Helm $tested_version with:"
-    echo "  $(phase7_install_hint helm "$ORCHESTRATION_DIR")"
     ((ERRORS++))
     return 1
 }
@@ -368,8 +315,8 @@ check_local_inotify_budget() {
 }
 
 check_kind_node_inotify_budget() {
-    if ! command -v kind >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
-        echo -e "${YELLOW}!${NC} Skipping Kind node inotify check (kind or docker unavailable)"
+    if [[ "$LOCAL_KIND_TARGET_PASSED" != true ]]; then
+        echo -e "${YELLOW}!${NC} Skipping Kind node inotify check (exact local Kind target unavailable)"
         return 0
     fi
 
@@ -406,13 +353,7 @@ check_kind_node_inotify_budget() {
 echo "1. Checking required tools..."
 echo "---------------------------------------------"
 
-if [[ "$GUEST_LOCAL" == false ]]; then
-    check_command "docker" "Docker" "sudo apt-get install -y docker.io && sudo usermod -aG docker \$USER"
-elif [[ "$NATIVE_PREFLIGHT_PASSED" == true ]]; then
-    echo -e "${GREEN}✓${NC} Docker, native identity, credentials and managed tools verified by workspace"
-else
-    echo -e "${RED}✗${NC} Docker, native identity, credentials and managed tools were not established"
-fi
+check_command "docker" "Docker" "Install Docker Engine and grant this user access to its local Unix socket"
 if check_command "kind" "Kind" "$(phase7_install_hint kind "$ORCHESTRATION_DIR")"; then
     check_pinned_tool_version kind
 fi
@@ -421,28 +362,19 @@ if check_command "kubectl" "kubectl" "$(phase7_install_hint kubectl "$ORCHESTRAT
 fi
 check_command "openssl" "OpenSSL" "Install via your OS package manager (for example: sudo apt-get install -y openssl)"
 if check_command "helm" "Helm" "$(phase7_install_hint helm "$ORCHESTRATION_DIR")"; then
-    check_helm_version
+    check_pinned_tool_version helm
 fi
 if check_command "tilt" "Tilt" "$(phase7_install_hint tilt "$ORCHESTRATION_DIR")"; then
     check_pinned_tool_version tilt
 fi
-if [[ "$GUEST_LOCAL" == false ]]; then
-    if check_command "mkcert" "mkcert" "$(phase7_install_hint mkcert "$ORCHESTRATION_DIR")"; then
-        check_pinned_tool_version mkcert
-    fi
-else
-    echo -e "${GREEN}✓${NC} Guest-local mode uses imported ingress TLS; mkcert is not required"
+if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
+    check_java_version
 fi
-if [[ "$GUEST_LOCAL" == false ]]; then
-    if check_command "java" "Java" "Install JDK 25 and set JAVA_HOME/PATH to that JDK"; then
-        check_java_version
-    fi
-    if check_command "node" "Node.js" "Install Node.js 20+ from your OS package manager, nvm, or Volta"; then
-        check_node_version
-    fi
-    if check_command "npm" "npm" "Install npm 10+ with Node.js"; then
-        check_npm_version
-    fi
+if check_command "node" "Node.js" "Install Node.js 20+ from your OS package manager, nvm, or Volta"; then
+    check_node_version
+fi
+if check_command "npm" "npm" "Install npm 10+ with Node.js"; then
+    check_npm_version
 fi
 
 echo
@@ -450,23 +382,19 @@ echo
 echo "2. Checking Docker daemon..."
 echo "---------------------------------------------"
 
-if [[ "$GUEST_LOCAL" == true ]]; then
-    if [[ "$NATIVE_PREFLIGHT_PASSED" == true ]]; then
-        echo -e "${GREEN}✓${NC} Docker daemon and exact guest-local target were checked by workspace"
-    else
-        echo -e "${RED}✗${NC} Docker daemon and exact guest-local target remain unverified"
-    fi
-elif docker info &> /dev/null; then
-    echo -e "${GREEN}✓${NC} Docker daemon is running"
+if assert_local_docker_endpoint; then
+    LOCAL_DOCKER_ENDPOINT_PASSED=true
+    echo -e "${GREEN}✓${NC} Docker selects a reachable local Unix-socket daemon"
 else
-    echo -e "${RED}✗${NC} Docker daemon is NOT running or not accessible"
-    echo "  Start Docker or add user to docker group: sudo usermod -aG docker \$USER && newgrp docker"
     ((ERRORS++))
 fi
 
-if [[ "$GUEST_LOCAL" == true ]]; then
+if [[ "$LOCAL_DOCKER_ENDPOINT_PASSED" == true ]] \
+    && kind get clusters 2>/dev/null | grep -Fxq kind; then
+    KIND_CLUSTER_EXISTS=true
     if assert_local_kind_target; then
-        echo -e "${GREEN}✓${NC} Kubernetes target is the Ready guest-local loopback kind-kind cluster"
+        LOCAL_KIND_TARGET_PASSED=true
+        echo -e "${GREEN}✓${NC} Kubernetes target is the Ready local loopback kind-kind cluster"
     else
         ((ERRORS++))
     fi
@@ -544,7 +472,7 @@ echo "---------------------------------------------"
 
 CLUSTER_CONNECTED=false
 
-if kind get clusters 2>/dev/null | grep -q "kind"; then
+if [[ "$KIND_CLUSTER_EXISTS" == true && "$LOCAL_KIND_TARGET_PASSED" == true ]]; then
     echo -e "${GREEN}✓${NC} Kind cluster 'kind' exists"
 
     EXPECTED_KIND_IMAGE="$(expected_kind_node_image)"
@@ -620,9 +548,14 @@ if kind get clusters 2>/dev/null | grep -q "kind"; then
             ((ERRORS++))
         fi
     fi
-else
+elif [[ "$KIND_CLUSTER_EXISTS" == true ]]; then
+    echo -e "${RED}✗${NC} Skipping cluster diagnostics because the exact local Kind target failed"
+elif [[ "$LOCAL_DOCKER_ENDPOINT_PASSED" == true ]]; then
     echo -e "${YELLOW}!${NC} Kind cluster 'kind' does not exist"
     echo "  Create with: cd $ORCHESTRATION_DIR && kind create cluster --config kind-cluster-config.yaml"
+    ((WARNINGS++))
+else
+    echo -e "${YELLOW}!${NC} Skipping Kind cluster discovery because the local Docker endpoint failed"
     ((WARNINGS++))
 fi
 
@@ -686,43 +619,25 @@ fi
 
 echo
 
-echo "11. Checking host-published local ingress CA..."
+echo "11. Checking imported ingress TLS and client trust..."
 echo "---------------------------------------------"
 
-PUBLISHED_LOCAL_CA="$ORCHESTRATION_DIR/nginx/certs/k8s/_mkcert-rootCA.pem"
 LOCAL_INGRESS_CERT="$ORCHESTRATION_DIR/nginx/certs/k8s/_wildcard.budgetanalyzer.localhost.pem"
 
-if [ ! -r "$PUBLISHED_LOCAL_CA" ]; then
-    echo -e "${RED}✗${NC} Published public local CA is missing: $PUBLISHED_LOCAL_CA"
-    if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
-    else
-        echo "  Run ./setup.sh from the host orchestration checkout to publish it."
-    fi
-    ((ERRORS++))
-elif ! command -v openssl >/dev/null 2>&1; then
-    echo -e "${RED}✗${NC} Cannot validate the published public local CA because OpenSSL is unavailable"
-    ((ERRORS++))
-elif ! openssl x509 -in "$PUBLISHED_LOCAL_CA" -noout >/dev/null 2>&1; then
-    echo -e "${RED}✗${NC} Published public local CA is invalid: $PUBLISHED_LOCAL_CA"
-    if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
-    else
-        echo "  Run ./setup.sh from the host orchestration checkout to replace it."
-    fi
-    ((ERRORS++))
-elif [ ! -r "$LOCAL_INGRESS_CERT" ] \
-    || ! openssl verify -CAfile "$PUBLISHED_LOCAL_CA" "$LOCAL_INGRESS_CERT" >/dev/null 2>&1; then
-    echo -e "${RED}✗${NC} Published public local CA is stale for the wildcard ingress certificate: $PUBLISHED_LOCAL_CA"
-    if [[ "$GUEST_LOCAL" == true ]]; then
-        echo "  Recopy the three approved host-created TLS files, then rerun ./setup.sh."
-    else
-        echo "  Run ./setup.sh from the host orchestration checkout to reconcile local TLS."
-    fi
-    ((ERRORS++))
+if "$SCRIPT_DIR/install-imported-ingress-tls.sh" --validate-only; then
+    echo -e "${GREEN}✓${NC} All three imported ingress TLS files are valid"
 else
-    echo -e "${GREEN}✓${NC} Published public local CA verifies the wildcard ingress certificate"
-    echo "  $PUBLISHED_LOCAL_CA"
+    echo -e "${RED}✗${NC} Imported ingress TLS validation failed"
+    echo "  Follow docs/development/local-environment.md#development-vm-import-and-renewal"
+    ((ERRORS++))
+fi
+
+if assert_system_trusts_local_ingress_leaf "$LOCAL_INGRESS_CERT"; then
+    echo -e "${GREEN}✓${NC} System trust verifies the ingress certificate for app.budgetanalyzer.localhost"
+else
+    echo -e "${RED}✗${NC} The current ingress certificate is not trusted by the system client store"
+    echo "  Follow docs/development/local-environment.md#development-vm-import-and-renewal"
+    ((ERRORS++))
 fi
 
 echo
@@ -761,11 +676,7 @@ if [ "$CLUSTER_CONNECTED" = true ]; then
         for missing in "${PHASE4_MISSING[@]}"; do
             echo "  Missing: $missing"
         done
-        if [[ "$GUEST_LOCAL" == true ]]; then
-            echo "  Run ./scripts/bootstrap/setup-infra-tls.sh from the human-operated VM shell, then rerun this check."
-        else
-            echo "  Run ./scripts/bootstrap/setup-infra-tls.sh on your host, then rerun the prerequisite check."
-        fi
+        echo "  Run ./scripts/bootstrap/setup-infra-tls.sh from the human-operated local shell, then rerun this check."
         ((ERRORS++))
     fi
 else

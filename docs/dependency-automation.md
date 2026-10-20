@@ -105,15 +105,21 @@ The active dependency-automation scope contains ten repositories: `orchestration
 Orchestration owns the shared preset and its own extraction for Kubernetes,
 Helm values, Tilt, Kind, shell version contracts, pinned tools, chart image
 overrides, the exact-image scanner, and the bounded PyYAML input used only by
-the ingress rate-limit static proof. Consumer repositories own their native
-package managers and any repository-specific extraction:
+the ingress rate-limit static proof. In particular, orchestration is the
+canonical owner of the kubectl, Helm, Tilt, and Kind versions, release URLs,
+amd64/arm64 checksums, installation safeguards, and release-input validation
+described in [`scripts/README.md`](../scripts/README.md#bootstrap). Changes to
+one of those four pins must update every supported architecture and pass
+`scripts/bootstrap/verify-platform-tool-releases.sh`; downloaded binaries are
+never executed by that gate. Consumer repositories own their native package
+managers and any repository-specific extraction:
 
 | Repository family | Repository-owned coverage |
 | --- | --- |
 | Java library and services | Gradle/version catalogs, wrapper, Actions, Dockerfiles, complete resolved dependency submission |
 | Frontend | npm manifest and lockfile, Dockerfiles, Actions, full and production-only npm audit |
 | `ext-authz` | Go modules, Go/runtime declarations, Dockerfiles, Actions, reachable `govulncheck` |
-| `workspace` | Native npm manifest and lock, downloaded-tool declarations with standard datasources, Actions, and version/URL/checksum/architecture-coupled inputs |
+| `workspace` | Native npm manifest and lock, workspace-owned downloaded-tool declarations with standard datasources, Actions, and version/URL/checksum/architecture-coupled inputs; kubectl, Helm, Tilt, and Kind belong to orchestration |
 | `budget-analyzer-api-tests` | Bounded PEP 621 requirements, Python/runtime and tool pins, exact uv lock, Actions, frozen CI, lock maintenance, and complete parity/SBOM/audit evidence |
 
 The four Java consumers must continue to exclude `org.budgetanalyzer` from

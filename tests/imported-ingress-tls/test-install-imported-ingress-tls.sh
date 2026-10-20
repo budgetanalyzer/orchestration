@@ -118,34 +118,18 @@ pass "matching-host certificate passes hostname-aware validate-only checks"
 : > "$OPENSSL_LOG"
 : > "$MUTATION_LOG"
 if PATH="$MOCK_BIN:$PATH" \
-    BUDGET_ANALYZER_WORKTREE_PARENT=/fixture/worktrees \
-    BUDGET_ANALYZER_BARE_PARENT=/fixture/bares \
     "$REPO_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" \
     --install-system-trust --cert-dir "$CERT_DIR" \
-    > "$FIXTURE_DIR/retired-trust.out" 2>&1; then
-    fail "retired orchestration trust writer unexpectedly succeeded"
+    > "$FIXTURE_DIR/unknown-option.out" 2>&1; then
+    fail "unknown option unexpectedly succeeded"
 fi
-grep -Fq -- '--install-system-trust is retired' "$FIXTURE_DIR/retired-trust.out" \
-    || fail "retired trust option did not explain ownership migration"
-grep -Fq '../workspace/scripts/install-agent-vm-local-ca-trust.sh' \
-    "$FIXTURE_DIR/retired-trust.out" \
-    || fail "retired trust option did not report the canonical workspace command"
-expected_environment_load=". \"\$HOME/.config/budget-analyzer-native/env.sh\""
-grep -Fq -- "$expected_environment_load" "$FIXTURE_DIR/retired-trust.out" \
-    || fail "retired trust option omitted the native environment prerequisite"
-expected_worktree_arg="--worktree-parent \"\$BUDGET_ANALYZER_WORKTREE_PARENT\""
-expected_bare_arg="--bare-parent \"\$BUDGET_ANALYZER_BARE_PARENT\""
-grep -Fq -- "$expected_worktree_arg" \
-    "$FIXTURE_DIR/retired-trust.out" \
-    || fail "retired trust option omitted the canonical worktree input"
-grep -Fq -- "$expected_bare_arg" \
-    "$FIXTURE_DIR/retired-trust.out" \
-    || fail "retired trust option omitted the canonical bare-repository input"
+grep -Fq -- 'unknown argument: --install-system-trust' "$FIXTURE_DIR/unknown-option.out" \
+    || fail "unknown option did not fail through the generic argument parser"
 [[ ! -s "$OPENSSL_LOG" ]] \
-    || fail "retired trust option inspected certificates before rejecting mutation"
+    || fail "unknown option inspected certificates before rejection"
 [[ ! -s "$MUTATION_LOG" ]] \
-    || fail "retired trust option invoked a mutation command"
-pass "retired orchestration trust writer rejects with canonical human command"
+    || fail "unknown option invoked a mutation command"
+pass "unknown option is rejected generically before trust or cluster mutation"
 
 if grep -Fq -- '--install-system-trust' "$REPO_DIR/setup.sh"; then
     fail "guest bootstrap still requests orchestration system-trust mutation"
@@ -154,6 +138,6 @@ expected_setup_call="\"\$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-t
 grep -Fq "$expected_setup_call" \
     "$REPO_DIR/setup.sh" \
     || fail "guest bootstrap no longer reconciles the imported ingress Secret"
-pass "guest bootstrap delegates trust and retains Secret reconciliation"
+pass "bootstrap retains imported ingress Secret reconciliation"
 
 printf 'Imported ingress TLS fixtures passed: %s checks.\n' "$pass_count"

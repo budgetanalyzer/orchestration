@@ -99,6 +99,61 @@ phase7_verify_sha256() {
     fi
 }
 
+phase7_normalize_semver() {
+    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+}
+
+phase7_semver_is_newer() {
+    local installed selected
+    local installed_major installed_minor installed_patch
+    local selected_major selected_minor selected_patch
+
+    installed="$(phase7_normalize_semver "$1")"
+    selected="$(phase7_normalize_semver "$2")"
+    [[ -n "$installed" && -n "$selected" ]] || return 2
+
+    IFS=. read -r installed_major installed_minor installed_patch <<< "$installed"
+    IFS=. read -r selected_major selected_minor selected_patch <<< "$selected"
+
+    (( 10#$installed_major > 10#$selected_major )) ||
+        { (( 10#$installed_major == 10#$selected_major )) &&
+          (( 10#$installed_minor > 10#$selected_minor )); } ||
+        { (( 10#$installed_major == 10#$selected_major )) &&
+          (( 10#$installed_minor == 10#$selected_minor )) &&
+          (( 10#$installed_patch > 10#$selected_patch )); }
+}
+
+phase7_tool_raw_version_at() {
+    local tool executable
+
+    tool="$1"
+    executable="$2"
+    case "$tool" in
+        kubectl)
+            "$executable" version --client 2>&1 | head -n1
+            ;;
+        helm)
+            "$executable" version --template '{{.Version}}' 2>&1 | head -n1
+            ;;
+        tilt|kind)
+            "$executable" version 2>&1 | head -n1
+            ;;
+        mkcert|yq)
+            "$executable" --version 2>&1 | head -n1
+            ;;
+        kubeconform)
+            "$executable" -v 2>&1 | head -n1
+            ;;
+        kube-linter|kyverno)
+            "$executable" version 2>&1 | head -n1
+            ;;
+        *)
+            echo "Unsupported tool version command: $tool" >&2
+            return 1
+            ;;
+    esac
+}
+
 phase7_tool_version() {
     case "$1" in
         kubectl)
@@ -133,6 +188,14 @@ phase7_tool_version() {
             return 1
             ;;
     esac
+}
+
+phase7_tool_version_matches() {
+    local expected observed
+
+    expected="$(phase7_normalize_semver "$(phase7_tool_version "$1")")"
+    observed="$(phase7_normalize_semver "$2")"
+    [[ -n "$observed" && "$observed" == "$expected" ]]
 }
 
 phase7_tool_url() {
@@ -260,6 +323,87 @@ phase7_tool_sha256() {
             return 1
             ;;
     esac
+}
+
+phase7_tool_archive_member() {
+    local tool platform
+
+    tool="$1"
+    platform="$2"
+    case "$tool" in
+        helm)
+            printf '%s/helm\n' "$platform"
+            ;;
+        tilt)
+            printf 'tilt\n'
+            ;;
+        kubectl|mkcert|kind|yq)
+            return 1
+            ;;
+        kubeconform)
+            printf 'kubeconform\n'
+            ;;
+        kube-linter)
+            printf 'kube-linter\n'
+            ;;
+        kyverno)
+            printf 'kyverno\n'
+            ;;
+        *)
+            echo "Unsupported tool archive lookup: $tool" >&2
+            return 1
+            ;;
+    esac
+}
+
+phase7_validate_tool_artifact() {
+    local tool platform artifact expected_sha256 member listing verbose_listing name
+
+    tool="$1"
+    platform="$2"
+    artifact="$3"
+    expected_sha256="${4:-$(phase7_tool_sha256 "$tool" "$platform")}" || return 1
+
+    if [[ ! -s "$artifact" ]]; then
+        echo "Downloaded artifact is empty: $artifact" >&2
+        return 1
+    fi
+    phase7_verify_sha256 "$artifact" "$expected_sha256" || return 1
+
+    if ! member="$(phase7_tool_archive_member "$tool" "$platform" 2>/dev/null)"; then
+        return 0
+    fi
+
+    if ! listing="$(tar -tzf "$artifact")"; then
+        echo "Invalid release archive for $tool on $platform" >&2
+        return 1
+    fi
+    if ! verbose_listing="$(tar -tvzf "$artifact")"; then
+        echo "Cannot inspect release archive for $tool on $platform" >&2
+        return 1
+    fi
+
+    while IFS= read -r name; do
+        case "$name" in
+            ""|/*|*\\*|../*|*/../*|*/..)
+                echo "Unsafe archive member for $tool on $platform: $name" >&2
+                return 1
+                ;;
+        esac
+    done <<< "$listing"
+
+    if printf '%s\n' "$verbose_listing" | grep -Evq '^[-d]'; then
+        echo "Archive contains a non-file entry for $tool on $platform" >&2
+        return 1
+    fi
+    if [[ "$(printf '%s\n' "$listing" | grep -Fxc -- "$member" || true)" != 1 ]]; then
+        echo "Required archive member is missing or duplicated for $tool on $platform: $member" >&2
+        return 1
+    fi
+    if ! tar -tvzf "$artifact" "$member" | grep -q '^-'; then
+        echo "Required archive member is not a regular file for $tool on $platform: $member" >&2
+        return 1
+    fi
 }
 
 phase7_install_hint() {

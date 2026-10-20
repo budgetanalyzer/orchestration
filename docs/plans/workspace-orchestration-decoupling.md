@@ -38,7 +38,8 @@ Recorded decisions:
   sudo). Workspace stops declaring, installing, checking and running Renovate
   for them. Workspace's install-path, ownership, symlink and collision
   safeguards and its amd64/arm64 release validation for these four tools move
-  to orchestration. The prerequisite checker enforces the exact pinned Helm
+  to orchestration, including rejection of unsafe group writes and unexpected
+  downgrades. Setup and the prerequisite checker enforce the exact pinned Helm
   version, matching kubectl, Tilt and Kind.
 - **AI provider CLIs float.** Claude Code, Codex and Gemini CLI install at the
   latest published version on first install, or when the human explicitly
@@ -102,10 +103,10 @@ Checks that must survive:
 | Existing check | New owner | Regression evidence |
 | --- | --- | --- |
 | kubectl/Helm/Tilt/Kind exact releases and checksums | Orchestration installer and prerequisite checker | Wrong versions rejected; amd64/arm64 release and archive checks |
-| Install-path ownership, symlink and collision safeguards for those binaries | Orchestration installer; workspace keeps its own for its remaining tools | Unsafe-path fixtures fail before writes |
+| Install-path ownership, group/world-write, symlink, collision and downgrade safeguards for those binaries | Orchestration installer; workspace keeps its own for its remaining tools | Unsafe-path and unexpected-downgrade fixtures fail before writes |
 | VM/user/home, repositories, Git, denied authority, guest Docker | Workspace boundary entry point | Existing negative cases |
 | Exact local Kind target and local Docker endpoint | Orchestration setup, daily checks and mutation entry points | Remote or wrong targets rejected before cluster changes |
-| Current ingress certificate trusted by the client | Orchestration prerequisite checker; workspace installs and checks OS/NSS trust | Renewed root not in system trust fails |
+| Current ingress certificate trusted by the client | Orchestration supplied-leaf/system-trust check; workspace OS/NSS checks and documented browser acceptance | Renewed root not in system trust fails; exact-URL browser check after installation/renewal |
 | Provider exact versions and checked-in integrity | Intentionally removed | n/a |
 | Playwright lock and Chromium apt compatibility | Workspace | Lock/package mismatch and stale apt provenance fail |
 | All other pins and checks (Go, actionlint, VIA, mitmproxy, Node/JDK policy, helper convergence) | Unchanged owner, scoped to a component | Existing negative cases |
@@ -221,12 +222,13 @@ drop them in Phase 5.
 ### Scope
 
 - `scripts/bootstrap/install-verified-tool.sh` and its pin helpers.
-- `scripts/bootstrap/check-tilt-prerequisites.sh`: exact Helm version check,
-  replacing the current supported-range check.
-- Install safeguards: destination and parent ownership, no world-writable
-  parents, no symlinked parents or destinations, no collision with an
-  unexpected existing file. User-owned `--install-dir` paths used by CI keep
-  working with owner-appropriate checks.
+- `setup.sh` and `scripts/bootstrap/check-tilt-prerequisites.sh`: exact Helm
+  version enforcement, replacing both independent supported-range checks.
+- Install safeguards: destination and parent ownership, no group- or
+  world-writable root-owned destinations or parents, no symlinked parents or
+  destinations, no collision with an unexpected existing file, and refusal
+  to downgrade an installed version newer than the selected pin. User-owned
+  `--install-dir` paths used by CI keep working with owner-appropriate checks.
 - amd64/arm64 release-download, checksum and archive validation for all four
   tools in orchestration's own tests or CI.
 - `docs/OWNERSHIP.md` first, then `scripts/README.md` and
@@ -254,7 +256,9 @@ drop them in Phase 5.
 1. List the four-tool checks in workspace's `provision.py` and
    `verify_release_inputs.py`.
 2. Implement each in orchestration, or record why it does not apply.
-3. Replace the Helm range check with `check_pinned_tool_version`.
+3. Use `check_pinned_tool_version` for Helm prerequisites and exact pinned-tool
+   enforcement in `setup.sh` instead of `ensure_supported_helm`. A newer
+   installed release must fail before replacement, not silently downgrade.
 4. Add offline fixtures and the two-architecture release validation.
 5. Update the docs.
 
@@ -268,8 +272,10 @@ preferable to a cross-repository dependency.
 
 - `bash -n` and `shellcheck -x` on changed shell files; `actionlint` on changed
   workflows.
-- Fixtures: wrong Helm version, unsafe or symlinked parent, destination
-  collision, checksum mismatch, missing archive member.
+- Fixtures: non-pinned Helm fails prerequisites and is not accepted by setup;
+  group/world-writable root-owned destinations or parents, symlinked parents,
+  destination collisions and unexpected downgrades fail before writes.
+- Fixtures: checksum mismatch and missing archive member.
 - Two-architecture release validation passes without privileged writes,
   cluster changes or executing foreign binaries.
 
@@ -370,9 +376,11 @@ previously got from workspace's verifier.
 
 ### Implementation notes
 
-The Docker endpoint assertion proves Kind runs on a local daemon, not that the
-machine is a VM; workspace keeps that stronger check. Do not add a fallback
-that silently accepts remote Docker endpoints. Keep the helper pattern used by
+The Docker endpoint assertion checks the selected Unix-socket transport and
+daemon reachability. It does not prove the daemon behind that socket is local
+or that the machine is a VM; workspace retains the stronger guest-isolation
+checks. Do not add a fallback that silently accepts remote Docker endpoints.
+Keep the helper pattern used by
 `local-kubernetes-target.sh` (failures print a reason and return non-zero).
 `setup.sh` does not call `check-tilt-prerequisites.sh`, so the client-trust
 check does not block bootstrap before trust is installed.
@@ -468,8 +476,10 @@ them. Keep cross-repository documentation links where they help readers.
   - daily startup is `check-local-runtime.sh` followed by `tilt up`.
 
   State that valid TLS files are not the same as client trust, and that
-  `check-tilt-prerequisites.sh` reports whether the system trusts the current
-  certificate. Link to the environment-specific trust docs.
+  `check-tilt-prerequisites.sh` reports whether the system trusts the supplied
+  current ingress leaf. It does not establish which certificate the running
+  ingress serves or whether Chromium's NSS database trusts it. Link to the
+  environment-specific trust docs and their exact-URL browser acceptance check.
 
   Add a short "Running in the workspace development VM" note that links to
   workspace for VM provisioning, three-file transfer, guest trust, the host
@@ -659,8 +669,10 @@ workspace-owned record of the approved root.
 - `check-budget-analyzer-local-ca-trust`: verify OS and NSS trust against the
   recorded root, and that the recorded root has not expired. Do not read any
   application checkout path. It reports store state, not whether the running
-  application's current certificate is trusted; orchestration's
-  `check-tilt-prerequisites.sh` checks that (Phase 3).
+  application's current certificate is trusted. Orchestration's
+  `check-tilt-prerequisites.sh` verifies the supplied current ingress leaf
+  against system trust (Phase 3); it does not prove browser trust or the
+  certificate actually served by ingress.
 - `tests/native/test_local_ca.py`: replace orchestration fixture paths with
   explicit-input fixtures.
 - `docs/local-budget-analyzer-tls.md` and the trust sections of
@@ -670,6 +682,14 @@ workspace-owned record of the approved root.
   `"$BUDGET_ANALYZER_WORKTREE_PARENT/orchestration/nginx/certs/k8s/_mkcert-rootCA.pem"`)
   and link orchestration's TLS docs. Only the code must not derive those
   paths. After a certificate renewal, the human reruns the installer.
+  After initial installation and each renewal, document an acceptance check
+  opening exactly `https://app.budgetanalyzer.localhost` in the normal
+  Workspace Chromium/Playwright browser using its NSS store. Require a
+  successful HTTPS load without certificate exceptions or verification
+  bypasses. A system bundle trusting roots A and B while NSS trusts only A
+  must not be reported as browser-ready for an application serving root B.
+  This needs a documented browser check, not a new trust framework or stored
+  leaf state.
 
 ### Non-goals
 
@@ -693,7 +713,8 @@ workspace-owned record of the approved root.
 3. Update the tests: explicit inputs, rejected inputs (private key, expired
    root or leaf, non-CA, hostname mismatch), missing record, and a failed
    install that leaves no record.
-4. Update the two docs.
+4. Update the two docs with the separate store, supplied-leaf/system-trust and
+   live-browser acceptance checks, including the installation/renewal sequence.
 
 ### Implementation notes
 
@@ -716,6 +737,8 @@ prints the human install command. Never generate certificates or call
 No workspace code reads orchestration paths for trust. The human installer and
 the read-only check work from explicit inputs and workspace-owned state. All
 current trust safety checks keep their tests.
+The documented exact-URL browser check covers the live ingress and NSS trust;
+successful store or system-leaf checks alone are not called browser acceptance.
 
 ## Phase 7: Workspace Manifest Split, Floating Providers And Single-Source Playwright Pin
 
@@ -750,6 +773,11 @@ integrity source.
   - verification checks presence, `--version` exit status, ownership and
     fresh-shell command resolution, with no version match;
   - provide an update command, for example `--update-provider NAME`.
+- Update every provider-path consumer in this phase to the managed global
+  prefix's `bin` directory: generated CLI wrappers, helper launch paths and
+  `scripts/native/proxy.py`, including Claude's direct invocation and
+  `CODEX_REAL_BIN`. Playwright keeps its separate project path. Do not leave
+  proxy/optional-helper paths pointing into the old combined npm project.
 - Playwright: remove the duplicated release fields from `toolchain.json`.
   `validate_lock()` and the Chromium selection read the version from the
   lockfile, and `package.json` must agree with it. `chromium_apt_source` stays
@@ -769,7 +797,8 @@ integrity source.
 - Component-scoped verification and installation (Phase 8).
 - Migrating or cleaning up the old combined npm prefix; the human does a
   clean install.
-- Changing helpers, settings overlays or skills.
+- Unrelated helper behavior changes, settings overlay changes or skill changes.
+  Provider-path wiring needed by the new prefix is in scope.
 - Changing Go, actionlint, VIA, mitmproxy or Node/JDK major policy.
 
 ### Required context
@@ -778,14 +807,16 @@ integrity source.
 - `docs/native-user-tools.md`
 - `docs/dependency-automation.md`
 - `scripts/native/provision.py`, `scripts/native/user_tools.py`,
-  `scripts/native/verify_release_inputs.py`
+  `scripts/native/verify_release_inputs.py`, `scripts/native/proxy.py`
+- Provider launch helpers and their existing argument/environment fixture tests.
 
 ### Execution steps
 
 1. Split the manifest and narrow `provision.py:load_manifest()` to system
    inputs.
 2. Implement the provider prefix, update command and version-free
-   verification.
+   verification. Update generated wrappers and all helper/proxy path consumers
+   together; preserve their existing argument and environment behavior.
 3. Make the Playwright lockfile authoritative and remove the duplicated
    fields.
 4. Update Renovate, the evidence checks, workflow path filters, tests and docs.
@@ -810,6 +841,10 @@ Keep the transitive-lock HTTPS/integrity checks for the Playwright graph.
 - Fixtures: updating one provider leaves the others and the Playwright
   project unchanged; Playwright `npm ci` leaves providers unchanged; routine
   preparation does not fetch new provider versions.
+- Wrapper and proxy fixtures prove Claude and Codex launches resolve through
+  the new provider prefix, including `CODEX_REAL_BIN`, while retaining their
+  existing argv/environment assertions. No provider launch uses the old
+  `npm/node_modules/.bin` path; Playwright still uses its pinned project.
 - Fixtures: a lockfile-only Playwright upgrade fails on stale apt provenance;
   package/lock disagreement and missing transitive integrity fail.
 
@@ -979,7 +1014,9 @@ human handoff for the clean install.
      command (no in-place upgrade from the previous layout);
   2. run the trust installer with the explicit inputs;
   3. run the boundary check, the component checks and orchestration's
-     `check-tilt-prerequisites.sh`;
+     `check-tilt-prerequisites.sh`, then perform the documented exact-URL
+     Chromium/Playwright browser acceptance check; repeat the trust/browser
+     acceptance sequence after certificate renewal;
   4. after the human commits, run `check_install_inputs.py --publication
      committed` and publication CI.
 

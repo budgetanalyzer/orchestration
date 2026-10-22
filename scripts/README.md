@@ -205,8 +205,8 @@ scripts/
   Java `serviceCommon` version when applicable, and can prompt before
   delegating to `repo/tag-release.sh --repo <repo>`.
 - `repo/tag-release.sh` - Normal single-repository release tag helper. It
-  requires `--repo`, validates only that repository, and refuses tooling repos
-  such as `checkstyle-config` for runtime release tagging.
+  requires `--repo`, validates only that repository, and accepts any repo in
+  `LOCKSTEP_RELEASE_REPOS`.
 - `repo/tag-lockstep-release.sh` - Explicit helper for rare coordinated
   all-repo tags across the `LOCKSTEP_RELEASE_REPOS` set. Use
   `--repo-set runtime-images --current-state --plan-only` to preview which
@@ -560,6 +560,11 @@ directory without writing outside the repository.
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state without changing branches or pulling.
+- The tag helpers below push tags to each sibling repository's `origin`. Run
+  them where `origin` is GitHub; in the optional development VM, `origin` is a
+  guest-local bare repository, so tag pushes there do not trigger publish
+  workflows. See
+  [docs/ci-cd.md#where-to-run-tag-helpers](../docs/ci-cd.md#where-to-run-tag-helpers).
 - `repo/prepare-lockstep-release.sh` is the release-manager source preflight
   for lockstep releases. Run it with `--release-version X.Y.Z` after
   `service-common` and Java consumers are pinned to the released
@@ -572,8 +577,12 @@ directory without writing outside the repository.
   deployable state and the tagger should decide which repos still need the
   requested tag.
 - `repo/tag-release.sh` creates a normal single-repository release tag. It
-  requires `--repo`, validates only that repository, and refuses tooling repos
-  for runtime release tagging.
+  requires `--repo`, validates only that repository, and accepts any repo in
+  `LOCKSTEP_RELEASE_REPOS`. A tag produces a release artifact only in repos
+  with a tag-triggered publish workflow; tagging repos such as
+  `checkstyle-config` or `budget-analyzer-api-tests` only marks the source
+  version. `RUNTIME_IMAGE_REPOS` and the production image inventory, not tag
+  presence, define the runtime artifact set.
 - `repo/tag-lockstep-release.sh` creates coordinated lockstep tags across the
   explicit `LOCKSTEP_RELEASE_REPOS` set by default. `--repo-set runtime-images`
   narrows the operation to the runtime image source repos. In the default

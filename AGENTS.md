@@ -289,6 +289,7 @@ Keep repository workflows on Node 24-ready action majors. In this repo that mean
 - `docker/login-action@v4`
 - `docker/build-push-action@v7`
 - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope
+- `runs-on: ubuntu-24.04`, not `ubuntu-latest`; the static guardrail PyYAML hash contract requires the 24.04 runner's CPython 3.12 (`docs/ci-cd.md#security-guardrailsyml`)
 
 Treat action-source admission and commit pinning as separate controls. Before
 introducing an external `uses:` reference, confirm that the effective

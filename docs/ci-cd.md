@@ -126,6 +126,24 @@ deploy a cluster. Any future image-baseline update must keep the deployment
 manifest, image inventory, app overlay, runtime metadata patch, and `/api-docs`
 metadata consistent in one reviewed change.
 
+### Where To Run Tag Helpers
+
+The tag helpers create tags in each sibling repository and push them to that
+repository's `origin`. A release tag triggers publish workflows only when
+`origin` is GitHub, so run `repo/tag-release.sh`,
+`repo/prepare-lockstep-release.sh --tag`, `repo/tag-lockstep-release.sh`, and
+`repo/release-service-common-snapshot.sh tag --push` from a checkout whose
+sibling repositories push to GitHub, with every repository in the selected
+release set cloned side by side.
+
+In the optional development VM, `origin` is the guest-local bare repository,
+and only the personal host may publish to GitHub. Tags pushed from the guest
+stay in the bare repositories, and the helpers' remote-tag checks inspect those
+bare repositories instead of GitHub. Transfer the guest release branches to the
+personal host as described in
+[workspace branch transfer](../../workspace/docs/host-isolation.md#branch-transfer),
+merge them on GitHub, and run the tag helpers on the personal host.
+
 Do not try to make a checked-in reference manifest self-reference the commit
 that contains itself. Treat per-artifact commit fields as historical image
 build inputs, not proof of a live rollout.
@@ -195,8 +213,9 @@ What it runs:
 The workflow bootstraps repo-pinned `helm`, `kubectl`, `kubeconform`,
 `kube-linter`, and `kyverno` binaries through
 `scripts/bootstrap/install-verified-tool.sh`. It does not require ripgrep; the
-static scans retain a `grep` fallback. Separately, it uses the runner's
-CPython 3.12 x86_64 `python3` only to create a disposable private virtual
+static scans retain a `grep` fallback. Separately, it runs on the explicit
+`ubuntu-24.04` runner label and uses that runner's CPython 3.12 x86_64
+`python3` only to create a disposable private virtual
 environment under `.cache/phase7-static-tools`, installs the exact PyYAML wheel
 declared in
 `scripts/guardrails/requirements-ingress-rate-limit.txt` with required hash
@@ -391,8 +410,9 @@ Release image publishing is tag-driven and owned by the source repositories:
   `serviceCommon` value
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
-  default, and it refuses tooling repos such as `checkstyle-config` for runtime
-  release tagging
+  default, and it accepts any repo in `LOCKSTEP_RELEASE_REPOS`. Tagging a repo
+  without a tag-triggered publish workflow, such as `checkstyle-config`, only
+  marks the source version and does not add it to the runtime artifact set
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
 - production-reference manifests record the historical reference id,

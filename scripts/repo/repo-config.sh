@@ -51,6 +51,7 @@ LOCKSTEP_RELEASE_REPOS=(
     "permission-service"
     "ext-authz"
     "checkstyle-config"
+    "budget-analyzer-api-tests"
 )
 
 # Backward-compatible alias for older repo-wide maintenance helpers. New

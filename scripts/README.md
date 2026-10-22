@@ -560,6 +560,11 @@ directory without writing outside the repository.
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state without changing branches or pulling.
+- The tag helpers below push tags to each sibling repository's `origin`. Run
+  them where `origin` is GitHub; in the optional development VM, `origin` is a
+  guest-local bare repository, so tag pushes there do not trigger publish
+  workflows. See
+  [docs/ci-cd.md#where-to-run-tag-helpers](../docs/ci-cd.md#where-to-run-tag-helpers).
 - `repo/prepare-lockstep-release.sh` is the release-manager source preflight
   for lockstep releases. Run it with `--release-version X.Y.Z` after
   `service-common` and Java consumers are pinned to the released

@@ -65,10 +65,18 @@ Prefer discovery commands over static inventories:
 
 This repository coordinates the deployment and development environment for the Budget Analyzer application, a reference microservices architecture used as an open source learning resource for AI-assisted development.
 
-This project is designed for AI-assisted development. The sibling `../workspace`
-repository owns development-VM provisioning, native users and tools,
-guest-local repositories and Docker, Remote SSH, exact OS/NSS trust and the
-personal-host isolation audit.
+This project is designed for AI-assisted development. The optional sibling
+`../workspace` repository owns the development-VM and agent environment,
+including provisioning, native users and tools, repositories, Docker, Remote
+SSH, OS/NSS trust and the personal-host isolation audit. Read
+`../workspace/docs/host-isolation.md` when working on that environment. Before
+agent work in its development VM, follow the workspace pre-agent procedure and
+run `../workspace/scripts/check-agent-vm-boundary.sh` with the documented
+arguments; this is an agent duty, not an orchestration startup prerequisite.
+Workspace owns the agent-runtime rules: agents run only as the normal VM user,
+GitHub credentials and publication and all personal-host access stay with the
+human, no personal-host credential, mount, socket or kubeconfig reaches the
+guest, and a VM marker does not prove host isolation.
 
 Orchestration owns **guest publication**: selection and lifecycle of
 application and operator endpoints made available on VM loopback, including
@@ -85,16 +93,7 @@ repository. This orchestration repository owns its Kubernetes manifests, Istio
 `ext_authz` wiring, NGINX integration, Redis ACL wiring, production image
 policy, and deployment documentation.
 
-Run agents only as the normal user in the development VM. Former guest-specific
-and personal-host agent runtimes are retired; do not reconstruct them or rerun
-destructive cutover work. Read `../workspace/docs/host-isolation.md` before
-changing or diagnosing VM identity, native tooling, repository transport,
-Remote SSH, guest Docker, trust or host isolation. The human alone may access
-or change the personal host, collect live host evidence or apply host policy;
-agents may review only explicitly supplied redacted evidence.
-
-Native agents run as the normal development-VM user inside the trusted local
-development boundary. Local workspace files, the local Kind kubeconfig and
+Within the trusted local development boundary, local files, the local Kind kubeconfig and
 Kubernetes Secrets, generated development TLS keys, and disposable local
 API-test credentials are not hidden from the agent. Never expose staging or
 production kubeconfigs, cloud or deployment credentials, user credentials, or
@@ -103,16 +102,10 @@ administer staging or production. Before an agent-authorized cluster mutation,
 require the current context and referenced cluster to equal `kind-kind`,
 require an exact loopback HTTPS Kubernetes API authority with no kubeconfig
 proxy override, require the local `kind` cluster and require the
-`kind-control-plane` node to be Ready. A VM marker, cluster name or process
-name alone does not prove personal-host isolation. For orchestration's
-application authority and API-test target checks, read
+`kind-control-plane` node to be Ready. For orchestration's application
+authority and API-test target checks, read
 `docs/architecture/autonomous-ai-execution.md` before changing agent
 credential, Kubernetes-access, or autonomous execution behavior.
-
-Keep GitHub credentials and publication on the personal host. Do not expose a
-personal-host credential, mount, Docker/libvirt socket or kubeconfig to the
-guest. Consult workspace before changing guest bootstrap, repository transport,
-Remote SSH, Docker selection or trust.
 
 OCI is retired and no production environment is currently configured. Local
 Tilt/Kind is the live validation target. Keep provider-neutral Kubernetes
@@ -245,16 +238,17 @@ Observability rules:
 
 ## Development Workflow
 
-Use the prerequisite script rather than guessing tool or environment state:
+Use the orchestration prerequisite scripts rather than guessing tool or
+environment state:
 
 ```bash
+./scripts/bootstrap/check-local-runtime.sh
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-In the development VM, run
-`./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime` before
-native daily work and use `check-tilt-prerequisites.sh --guest-local` for the
-deeper Tilt/runtime-security report. Neither command replaces the human-owned
+Run `check-local-runtime.sh` before daily `tilt up`. Use
+`check-tilt-prerequisites.sh` for the broader tooling, repository, certificate,
+cluster and runtime-security report. Neither command replaces the human-run
 destructive first bootstrap.
 
 Supported local startup path:
@@ -265,7 +259,7 @@ Supported local startup path:
 - Preserve the local frontend production-smoke path as one atomic Tilt image target mapped into `nginx-gateway`; read `docs/development/local-environment.md#frontend-reactvite` before changing that build or rollout wiring
 
 Guest publication and personal-host access:
-- `docs/development/getting-started.md#operator-entry-points` owns the supported application/Tilt sequence and guest-local URLs
+- `docs/development/getting-started.md#operator-entry-points` owns the supported application/Tilt sequence and VM-loopback URLs
 - `docs/architecture/observability.md#access` owns the optional observability guest publication procedure and operator contract
 - `../workspace/docs/host-isolation.md#personal-host-access` owns the default combined application/Tilt host tunnel and the separate optional observability host tunnel
 - Do not imply that a VM-loopback listener is automatically available on personal-host loopback or that `tilt up` owns observability forwards
@@ -447,26 +441,21 @@ Allowed read-only operations:
 - `kubectl get secret -o yaml`
 - Certificate file reads for debugging
 
-For native live agent work against exactly
-`https://app.budgetanalyzer.localhost`, agents may run the workspace-owned
-read-only trust checks. The human-owned workspace installer alone establishes
-guest system/NSS trust. Read `../workspace/docs/local-budget-analyzer-tls.md`
-before changing or debugging that flow.
-
-Keep native guest trust ownership singular. The workspace human installer is
-the only OS/NSS trust writer; orchestration validates the three transferred
-files and reconciles the Kubernetes ingress Secret. The retired orchestration
-`--install-system-trust` interface must fail with the canonical workspace
-command, and Tilt must never invoke either trust installation or certificate
-generation. Read `docs/development/local-environment.md#development-vm-import-and-renewal`
-before changing guest bootstrap, renewal or imported-TLS behavior.
+Orchestration validates the three supplied files, reports system-bundle trust
+for the current ingress leaf, and reconciles the Kubernetes ingress Secret; it
+does not install client trust. For the optional development VM's human-owned
+OS/NSS trust and exact-URL browser acceptance checks, read
+`../workspace/docs/local-budget-analyzer-tls.md`. Tilt must never invoke trust
+installation or certificate generation. Read
+`docs/development/local-environment.md#development-vm-import-and-renewal`
+before changing bootstrap, renewal or imported-TLS behavior.
 
 If `nginx/certs/k8s/_mkcert-rootCA.pem` is missing, invalid, or stale, stop and
 follow the environment-specific human workflow in
 `docs/development/local-environment.md#development-vm-import-and-renewal`.
-The development VM path requires host-only renewal when necessary, explicit
-transfer of the three approved files, the workspace human trust installer and
-orchestration Secret reconciliation. Renewal must not recreate a host cluster.
+The development VM path requires browser-machine renewal when necessary,
+explicit transfer of the three approved files, environment-owned client trust
+and orchestration Secret reconciliation. Renewal must not recreate a host cluster.
 Do not generate or rotate certificates from an agent process, and do not bypass
 verification with HTTP, `--insecure`, `verify=False`, or
 `ignore_https_errors`.

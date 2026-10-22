@@ -1,7 +1,71 @@
 #!/bin/bash
 
-# Shared fail-closed checks for native commands that inspect or mutate the
-# guest-local Kind cluster. Source this file; do not execute it directly.
+# Shared fail-closed checks for commands that inspect or mutate the local Kind
+# cluster. Source this file; do not execute it directly.
+
+is_local_docker_unix_endpoint() {
+    local endpoint="$1"
+
+    [[ "$endpoint" =~ ^unix:///[^[:space:]]+$ ]]
+}
+
+assert_local_docker_endpoint() {
+    local selected_context endpoint
+
+    # Unset lets Kind pick Docker, which the checks below require. Any other
+    # provider would bypass those Docker endpoint checks.
+    if [[ -n "${KIND_EXPERIMENTAL_PROVIDER:-}" \
+        && "$KIND_EXPERIMENTAL_PROVIDER" != docker ]]; then
+        printf "ERROR: KIND_EXPERIMENTAL_PROVIDER='%s' is unsupported; unset it or set it to docker.\n" \
+            "$KIND_EXPERIMENTAL_PROVIDER" >&2
+        return 1
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        printf 'ERROR: required command is missing: docker\n' >&2
+        return 1
+    fi
+
+    if [[ -n "${DOCKER_HOST:-}" && -n "${DOCKER_CONTEXT:-}" ]]; then
+        printf 'ERROR: DOCKER_HOST and DOCKER_CONTEXT must not both select the Docker endpoint.\n' >&2
+        return 1
+    fi
+
+    if [[ -n "${DOCKER_HOST:-}" ]]; then
+        endpoint="$DOCKER_HOST"
+    else
+        if [[ -n "${DOCKER_CONTEXT:-}" ]]; then
+            selected_context="$DOCKER_CONTEXT"
+        elif ! selected_context="$(docker context show 2>/dev/null)" \
+            || [[ -z "$selected_context" ]]; then
+            printf 'ERROR: unable to determine the current Docker context.\n' >&2
+            return 1
+        fi
+
+        if ! endpoint="$(
+            docker context inspect "$selected_context" \
+                --format '{{ (index .Endpoints "docker").Host }}' 2>/dev/null
+        )" || [[ -z "$endpoint" ]]; then
+            printf "ERROR: unable to inspect Docker context '%s'.\n" \
+                "$selected_context" >&2
+            return 1
+        fi
+    fi
+
+    if ! is_local_docker_unix_endpoint "$endpoint"; then
+        printf 'ERROR: selected Docker endpoint is not a local Unix socket: %s\n' \
+            "${endpoint:-unknown}" >&2
+        return 1
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        printf 'ERROR: selected local Docker daemon is unreachable: %s\n' \
+            "$endpoint" >&2
+        return 1
+    fi
+
+    return 0
+}
 
 is_supported_local_kubernetes_api_server() {
     local api_server="$1"

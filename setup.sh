@@ -2,8 +2,8 @@
 
 # setup.sh - One-command setup for Budget Analyzer development environment
 #
-# This script bootstraps Budget Analyzer in the native development VM.
-# Run it after workspace preparation, TLS transfer and guest trust setup.
+# This script bootstraps Budget Analyzer on a local Docker daemon.
+# Run it after transferring the three approved ingress TLS files.
 
 set -e
 
@@ -11,16 +11,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./scripts/lib/pinned-tool-versions.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/scripts/lib/pinned-tool-versions.sh"
+# shellcheck source=./scripts/lib/local-kubernetes-target.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/scripts/lib/local-kubernetes-target.sh"
 
 usage() {
     cat <<'EOF'
 Usage: ./setup.sh
 
-Recreate Kind on the development VM's local Docker daemon and reconcile the
-three imported ingress TLS files into its Secret.
+Recreate Kind on the selected local Docker Unix socket and reconcile the three
+imported ingress TLS files into its Secret.
 
-Guest OS/NSS trust must be installed first by the workspace-owned human
-workflow. This is a destructive Kind bootstrap, not a daily start command.
+This is a destructive Kind bootstrap, not a daily start command. Optional
+development-VM setup and trust guidance lives in ../workspace/docs/.
 EOF
 }
 
@@ -72,52 +75,17 @@ print_warning() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
-SUPPORTED_HELM_MINIMUM="3.20.0"
-SUPPORTED_HELM_MAXIMUM="4.0.0"
-TESTED_HELM_VERSION="$PHASE7_HELM_VERSION"
-
-normalize_semver() {
-    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
-}
-
-version_ge() {
-    [ "$1" = "$2" ] || [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
-}
-
-version_lt() {
-    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
-}
-
-assert_vm_os_execution() {
+assert_not_in_container() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        print_error "Run ./setup.sh from a human-operated development-VM OS shell, not from a container."
-        echo "VM setup requires the reviewed workspace trust and TLS-transfer workflow."
-        echo "It recreates Kind and generates infrastructure TLS in the VM."
-        echo "Open a human-operated VM terminal in this repository and run:"
+        print_error "Run ./setup.sh from a human-operated OS shell on the machine that runs Docker and Kind, not from a container."
+        echo "Setup recreates Kind and generates infrastructure TLS on the local machine."
+        echo "Open a human-operated machine terminal in this repository and run:"
         echo "  ./setup.sh"
         exit 1
     fi
 }
 
-tool_raw_version() {
-    case "$1" in
-        kubectl)
-            kubectl version --client 2>/dev/null | head -n1 || true
-            ;;
-        tilt)
-            tilt version 2>/dev/null | head -n1 || true
-            ;;
-        mkcert)
-            mkcert --version 2>/dev/null | head -n1 || true
-            ;;
-        kind)
-            kind version 2>/dev/null | head -n1 || true
-            ;;
-        *)
-            "$1" --version 2>/dev/null | head -n1 || true
-            ;;
-    esac
-}
+PINNED_TOOL_INSTALL_DIR=/usr/local/bin
 
 install_pinned_tool() {
     local tool expected_version
@@ -134,22 +102,18 @@ install_pinned_tool() {
 }
 
 ensure_pinned_tool() {
-    local tool expected_version expected_semver raw_version parsed_version
+    local tool expected_version resolved raw_version
 
     tool="$1"
     expected_version="$(phase7_tool_version "$tool")"
-    expected_semver="$(normalize_semver "$expected_version")"
-
-    if command -v "$tool" &> /dev/null; then
-        raw_version="$(tool_raw_version "$tool")"
-        parsed_version="$(normalize_semver "$raw_version")"
-
-        if [[ "$parsed_version" == "$expected_semver" ]]; then
+    if resolved="$(command -v "$tool")"; then
+        if raw_version="$(phase7_tool_raw_version_at "$tool" "$resolved")" &&
+            phase7_tool_version_matches "$tool" "$raw_version"; then
             print_success "${tool} version ready: $raw_version"
             return 0
         fi
 
-        print_warning "${tool} version mismatch detected: ${raw_version:-unknown}"
+        print_warning "${tool} at ${resolved} is not the pinned version: ${raw_version:-version probe failed}"
         echo "  Expected ${tool} ${expected_version} from scripts/lib/pinned-tool-versions.sh"
     else
         print_warning "${tool} not found"
@@ -157,62 +121,13 @@ ensure_pinned_tool() {
 
     install_pinned_tool "$tool"
 
-    if ! command -v "$tool" &> /dev/null; then
-        print_error "${tool} installation completed, but ${tool} is still not on PATH"
-        echo "Make sure the install directory used by install-verified-tool.sh is on PATH, then rerun ./setup.sh"
-        exit 1
-    fi
-
-    raw_version="$(tool_raw_version "$tool")"
-    parsed_version="$(normalize_semver "$raw_version")"
-    if [[ "$parsed_version" != "$expected_semver" ]]; then
-        print_error "${tool} installation did not produce the pinned version"
-        echo "Expected ${expected_version}; got ${raw_version:-unknown}"
+    if ! raw_version="$(phase7_verify_effective_tool_version "$tool" "$PINNED_TOOL_INSTALL_DIR/$tool")"; then
+        print_error "${tool} selected by PATH is not the pinned ${expected_version} after installation"
+        echo "Fix PATH as reported above, then rerun ./setup.sh"
         exit 1
     fi
 
     print_success "${tool} version ready: $raw_version"
-}
-
-install_supported_helm() {
-    print_step "Installing Helm ${TESTED_HELM_VERSION}..."
-    if ! "$SCRIPT_DIR/scripts/bootstrap/install-verified-tool.sh" helm; then
-        print_error "Automatic Helm installation failed"
-        echo "Install Helm ${TESTED_HELM_VERSION} manually, then rerun ./setup.sh"
-        exit 1
-    fi
-    hash -r 2>/dev/null || true
-}
-
-ensure_supported_helm() {
-    local raw_version
-    local parsed_version
-
-    if command -v helm &> /dev/null; then
-        raw_version="$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)"
-        parsed_version="$(normalize_semver "$raw_version")"
-
-        if [[ -n "$parsed_version" ]] && version_ge "$parsed_version" "$SUPPORTED_HELM_MINIMUM" && version_lt "$parsed_version" "$SUPPORTED_HELM_MAXIMUM"; then
-            print_success "Helm version supported: $raw_version"
-            return 0
-        fi
-
-        print_warning "Unsupported Helm version detected: ${raw_version:-unknown}"
-    else
-        print_warning "Helm not found"
-    fi
-
-    install_supported_helm
-
-    raw_version="$(helm version --template '{{.Version}}' 2>/dev/null || helm version --short 2>/dev/null || true)"
-    parsed_version="$(normalize_semver "$raw_version")"
-    if [[ -z "$parsed_version" ]] || ! version_ge "$parsed_version" "$SUPPORTED_HELM_MINIMUM" || ! version_lt "$parsed_version" "$SUPPORTED_HELM_MAXIMUM"; then
-        print_error "Helm installation did not produce a supported version"
-        echo "Expected >= ${SUPPORTED_HELM_MINIMUM} and < ${SUPPORTED_HELM_MAXIMUM}; got ${raw_version:-unknown}"
-        exit 1
-    fi
-
-    print_success "Helm version ready: $raw_version"
 }
 
 expected_kind_node_image() {
@@ -261,12 +176,9 @@ check_kind_cluster_network_model() {
     fi
 }
 
-print_header "Budget Analyzer - Development VM Setup"
-assert_vm_os_execution
+print_header "Budget Analyzer - Local Kind Bootstrap"
+assert_not_in_container
 
-print_step "Checking the complete workspace-owned native runtime..."
-"$SCRIPT_DIR/scripts/bootstrap/check-agent-vm-prerequisites.sh"
-print_success "Workspace-owned native runtime verified"
 print_step "Validating imported ingress TLS before recreating Kind..."
 "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
 print_success "Imported ingress TLS files verified"
@@ -292,25 +204,24 @@ check_tool "git" || true
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
     print_error "Missing required tools: ${MISSING_TOOLS[*]}"
     echo ""
-    echo "Complete the workspace-owned native preparation, then rerun:"
-    echo "  ./scripts/bootstrap/check-agent-vm-prerequisites.sh"
+    echo "Install the missing local prerequisite(s), then rerun ./setup.sh."
     exit 1
 fi
 
 print_success "All required tools installed"
 
-# Check Docker daemon
-if ! docker info &> /dev/null; then
-    print_error "Docker daemon is not running"
-    echo "Please start Docker and try again"
+# Check the Kind provider and the transport that Docker CLI and Kind will
+# actually use before any cluster deletion or creation.
+if ! assert_local_docker_endpoint; then
+    print_error "Kind must use the Docker provider on a reachable local Unix-socket daemon"
     exit 1
 fi
 
-print_success "Docker daemon is running"
+print_success "Kind provider is Docker on a reachable local Unix-socket daemon"
 
 ensure_pinned_tool "kubectl"
 ensure_pinned_tool "kind"
-ensure_supported_helm
+ensure_pinned_tool "helm"
 ensure_pinned_tool "tilt"
 
 # =============================================================================
@@ -458,7 +369,7 @@ fi
 # =============================================================================
 print_header "Setup Complete!"
 
-print_warning "VM bootstrap recreated Kind. Do not use ./setup.sh as a daily start command."
+print_warning "Bootstrap recreated Kind. Do not use ./setup.sh as a daily start command."
 
 echo -e "${GREEN}Almost ready!${NC} Just configure your external services:"
 echo ""

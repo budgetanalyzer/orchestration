@@ -20,6 +20,10 @@
 *.truststore
 nginx/certs/k8s/_mkcert-rootCA.pem
 nginx/certs/k8s/_mkcert-rootCA.pem.tmp.*
+# Public test-only certificates; provenance in that directory's README.md
+!tests/tilt-prerequisites/fixtures/client-trust/root.pem
+!tests/tilt-prerequisites/fixtures/client-trust/leaf.pem
+!tests/tilt-prerequisites/fixtures/client-trust/unrelated-root.pem
 secrets/
 !archive/oci/deploy/scripts/secrets/
 archive/oci/deploy/scripts/secrets/*

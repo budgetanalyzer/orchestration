@@ -99,6 +99,80 @@ phase7_verify_sha256() {
     fi
 }
 
+phase7_normalize_semver() {
+    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
+}
+
+# Print the first stdout line of a pinned tool's version command. Stderr is
+# discarded; a failing command or empty output is a probe failure (status 1).
+phase7_tool_raw_version_at() {
+    local tool executable output
+
+    tool="$1"
+    executable="$2"
+    case "$tool" in
+        kubectl)
+            output="$("$executable" version --client 2>/dev/null)" || return 1
+            ;;
+        helm)
+            output="$("$executable" version --template '{{.Version}}' 2>/dev/null)" || return 1
+            ;;
+        tilt|kind|kube-linter|kyverno)
+            output="$("$executable" version 2>/dev/null)" || return 1
+            ;;
+        mkcert|yq)
+            output="$("$executable" --version 2>/dev/null)" || return 1
+            ;;
+        kubeconform)
+            output="$("$executable" -v 2>/dev/null)" || return 1
+            ;;
+        *)
+            echo "Unsupported tool version command: $tool" >&2
+            return 2
+            ;;
+    esac
+    output="${output%%$'\n'*}"
+    [[ -n "$output" ]] || return 1
+    printf '%s\n' "$output"
+}
+
+# Check the command PATH selects after installing to DESTINATION. Prints the
+# raw version on success; on mismatch reports the installed destination,
+# resolved executable, expected version and detected version.
+phase7_verify_effective_tool_version() {
+    local tool destination expected resolved raw_version
+
+    tool="$1"
+    destination="$2"
+    expected="$(phase7_tool_version "$tool")" || return 2
+    hash -r 2>/dev/null || true
+    if ! resolved="$(command -v "$tool" 2>/dev/null)"; then
+        {
+            echo "$tool is not on PATH"
+            echo "  Installed destination: $destination"
+            echo "  Expected version: $expected"
+            echo "  Add $(dirname "$destination") to PATH"
+        } >&2
+        return 1
+    fi
+    raw_version="$(phase7_tool_raw_version_at "$tool" "$resolved")" || raw_version=""
+    if phase7_tool_version_matches "$tool" "$raw_version"; then
+        printf '%s\n' "$raw_version"
+        return 0
+    fi
+    {
+        echo "$tool selected by PATH is not the pinned version"
+        echo "  Installed destination: $destination"
+        echo "  Resolved executable: $resolved"
+        echo "  Expected version: $expected"
+        echo "  Detected version: ${raw_version:-unknown (version probe failed)}"
+        if [[ "$resolved" != "$destination" ]]; then
+            echo "  An earlier PATH entry shadows $destination; reorder PATH or remove that executable"
+        fi
+    } >&2
+    return 1
+}
+
 phase7_tool_version() {
     case "$1" in
         kubectl)
@@ -133,6 +207,14 @@ phase7_tool_version() {
             return 1
             ;;
     esac
+}
+
+phase7_tool_version_matches() {
+    local expected observed
+
+    expected="$(phase7_normalize_semver "$(phase7_tool_version "$1")")"
+    observed="$(phase7_normalize_semver "$2")"
+    [[ -n "$observed" && "$observed" == "$expected" ]]
 }
 
 phase7_tool_url() {
@@ -257,6 +339,96 @@ phase7_tool_sha256() {
         yq:darwin-arm64) printf 'fee511a181bd8b3e6b7da98842b41973bfac8cd3bcd341ed29a584620b5b2844\n' ;;
         *)
             echo "Unsupported checksum lookup: $1 on $2" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Explicit release artifact kind: "binary" is installed byte-for-byte;
+# "archive" is a gzip tarball with one required member extracted to stdout.
+phase7_tool_artifact_kind() {
+    case "$1" in
+        kubectl|mkcert|kind|yq)
+            printf 'binary\n'
+            ;;
+        helm|tilt|kubeconform|kube-linter|kyverno)
+            printf 'archive\n'
+            ;;
+        *)
+            echo "Unsupported tool artifact kind lookup: $1" >&2
+            return 1
+            ;;
+    esac
+}
+
+phase7_tool_archive_member() {
+    case "$1" in
+        helm)
+            printf '%s/helm\n' "$2"
+            ;;
+        tilt|kubeconform|kube-linter|kyverno)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            echo "No archive member for tool: $1" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Verify the downloaded artifact digest and, for archives, require exactly one
+# regular-file entry for the selected member. Other archive entries are never
+# extracted, so they are not inspected.
+phase7_validate_tool_artifact() {
+    local tool platform artifact expected_sha256 kind member entries
+
+    tool="$1"
+    platform="$2"
+    artifact="$3"
+    expected_sha256="${4:-$(phase7_tool_sha256 "$tool" "$platform")}" || return 1
+    kind="$(phase7_tool_artifact_kind "$tool")" || return 1
+
+    if [[ ! -s "$artifact" ]]; then
+        echo "Downloaded artifact is empty: $artifact" >&2
+        return 1
+    fi
+    phase7_verify_sha256 "$artifact" "$expected_sha256" || return 1
+    [[ "$kind" == archive ]] || return 0
+
+    member="$(phase7_tool_archive_member "$tool" "$platform")" || return 1
+    if ! entries="$(tar -tvzf "$artifact" "$member" 2>/dev/null)" || [[ -z "$entries" ]]; then
+        echo "Required archive member is missing or the archive is unreadable for $tool on $platform: $member" >&2
+        return 1
+    fi
+    if [[ "$(printf '%s\n' "$entries" | wc -l)" -ne 1 ]]; then
+        echo "Required archive member is duplicated for $tool on $platform: $member" >&2
+        return 1
+    fi
+    if [[ "$entries" != -* ]]; then
+        echo "Required archive member is not a regular file for $tool on $platform: $member" >&2
+        return 1
+    fi
+}
+
+# Write the tool binary from a validated artifact to OUTPUT.
+phase7_stage_tool_binary() {
+    local tool platform artifact output kind member
+
+    tool="$1"
+    platform="$2"
+    artifact="$3"
+    output="$4"
+    kind="$(phase7_tool_artifact_kind "$tool")" || return 1
+    case "$kind" in
+        binary)
+            cp -- "$artifact" "$output"
+            ;;
+        archive)
+            member="$(phase7_tool_archive_member "$tool" "$platform")" || return 1
+            tar -xOzf "$artifact" "$member" > "$output"
+            ;;
+        *)
+            echo "Unsupported artifact kind for $tool: $kind" >&2
             return 1
             ;;
     esac

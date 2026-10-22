@@ -22,15 +22,12 @@ Kind/Tilt proves the live local path.
 
 **Live code reload inside a real Kubernetes cluster.** Edit a Spring Boot service or the React frontend locally, and Tilt syncs the change into a running pod in seconds. Java services get a recompiled JAR synced and process-restarted; the React frontend gets sub-second Vite HMR. Changes to the shared library (`service-common`) automatically cascade to all downstream services. This all happens while the full security stack stays active: Istio mTLS between services, network policies enforcing least-privilege pod communication, ext_authz session validation at the ingress, and Kyverno admission policies guarding workload security contexts.
 
-**AI agents can debug the full stack.** The selected target runs agents directly
-in a dedicated development VM, with repeatable tooling owned by
-[workspace](https://github.com/budgetanalyzer/workspace). Repositories, the
-normal guest home, Docker and Kind stay guest-local while GitHub publication
-remains on the personal host. Former guest-specific and personal-host agent
-runtimes are retired and must not be reconstructed. The
-[boundary contract](docs/architecture/autonomous-ai-execution.md) explains the
-target, and workspace's [host-isolation audit](../workspace/docs/host-isolation-audit.md)
-owns the human-only firewall and confinement evidence workflow.
+**AI agents can debug the full stack.** Orchestration's
+[application authority contract](docs/architecture/autonomous-ai-execution.md)
+defines the exact local Kind target, local credentials and production
+exclusions. The optional
+[workspace environment](../workspace/docs/host-isolation.md) owns development-VM
+provisioning, agent tooling, host isolation and personal-host transport.
 
 **Production architecture remains reviewable offline.** The `deploy/`
 directory renders provider-neutral routing, infrastructure, and observability
@@ -50,27 +47,25 @@ complete tagged Git history. Neither is an active deployment path.
 ## Quick Start
 
 ```bash
-# After the workspace-owned VM, repositories, native tools and trust are ready:
-./scripts/bootstrap/check-agent-vm-prerequisites.sh
+# After installing Docker and preparing the three ingress TLS files:
 ./setup.sh
 tilt up
 ```
 
-The native development VM is the supported agent environment. Workspace owns
-its human provisioning, repository transport, native tools, guest Docker and
-OS/NSS trust. Orchestration's first-bootstrap path validates the approved
-host-created ingress files, recreates the local Kind cluster and reconciles the
-ingress Secret. It is not a daily start command; ordinary work uses the
-read-only `--native-runtime` preflight and `tilt up`.
+Run `scripts/bootstrap/renew-host-ingress-tls.sh` on the machine whose browser
+will be used; if Kind runs elsewhere, place the three published files in that
+machine's `nginx/certs/k8s/` directory. `setup.sh` installs the pinned platform
+tools, validates those files, recreates Kind and reconciles the ingress Secret.
+For daily startup, run `scripts/bootstrap/check-local-runtime.sh` and then
+`tilt up` instead of rebuilding the cluster.
 
-The application development runtime is Ubuntu Linux. A personal host may use a
-different OS only if the workspace-owned VM, SSH, browser-forwarding and
-certificate-transfer contract supports it; orchestration's CI does not claim
-native macOS or Windows setup support.
+The application development runtime is Ubuntu Linux; orchestration's CI does
+not claim native macOS or Windows setup support. Other personal-host operating
+systems can use the optional workspace development VM.
 
 See [Getting Started](docs/development/getting-started.md) for the full setup walkthrough.
 
-Once the stack is running, orchestration publishes these entry points on VM
+Once the stack is running, orchestration publishes these entry points on local
 loopback:
 
 | | |
@@ -79,8 +74,8 @@ loopback:
 | Tilt UI | `http://localhost:10350` |
 | API docs | `https://app.budgetanalyzer.localhost/api-docs` |
 
-VM-loopback availability does not make these URLs available on the personal
-host. Follow the [end-to-end local workflow](docs/development/getting-started.md#operator-entry-points)
+In the optional workspace development VM, VM-loopback availability does not
+make these URLs available on the personal host. Follow the [end-to-end local workflow](docs/development/getting-started.md#operator-entry-points)
 and workspace's [personal-host access contract](../workspace/docs/host-isolation.md#personal-host-access)
 for the default combined application/Tilt host tunnel. Observability requires
 the separate orchestration guest publication helper and remains an optional
@@ -88,7 +83,7 @@ second host tunnel.
 
 ## Documentation
 
-- [Getting Started](docs/development/getting-started.md) — native VM application setup walkthrough
+- [Getting Started](docs/development/getting-started.md) — self-contained application setup and daily startup
 - [Personal-Host Access](../workspace/docs/host-isolation.md#personal-host-access) — workspace-owned host tunnel and host-loopback transport
 - [Local Environment Mechanics](docs/development/local-environment.md) — live update pipeline, mixed workflows
 - [Host Isolation Audit](../workspace/docs/host-isolation-audit.md) — workspace-owned human-only host evidence collection and security review

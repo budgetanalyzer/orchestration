@@ -13,7 +13,6 @@ ORCHESTRATION_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$SCRIPT_DIR/../lib/local-kubernetes-target.sh"
 CERT_DIR="$ORCHESTRATION_DIR/nginx/certs/k8s"
 VALIDATE_ONLY=false
-INSTALL_SYSTEM_TRUST=false
 EXPECTED_HOSTNAME="app.budgetanalyzer.localhost"
 SECRET_NAME="budgetanalyzer-localhost-wildcard-tls"
 NAMESPACE="default"
@@ -24,7 +23,6 @@ Usage: scripts/bootstrap/install-imported-ingress-tls.sh [options]
 
 Options:
   --validate-only         Validate files without changing trust or Kubernetes.
-  --install-system-trust  Rejected legacy option; workspace owns guest trust.
   --cert-dir DIR          Validate/install the three required files from DIR.
   --help                  Show this help.
 EOF
@@ -35,26 +33,10 @@ fail() {
     exit 1
 }
 
-reject_legacy_trust_writer() {
-    cat >&2 <<'EOF'
-ERROR: --install-system-trust is retired; orchestration does not change guest trust.
-After reviewing workspace changes and ending affected workers, the human must run:
-  . "$HOME/.config/budget-analyzer-native/env.sh"
-  ../workspace/scripts/install-agent-vm-local-ca-trust.sh \
-    --worktree-parent "$BUDGET_ANALYZER_WORKTREE_PARENT" \
-    --bare-parent "$BUDGET_ANALYZER_BARE_PARENT"
-EOF
-    exit 1
-}
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --validate-only)
             VALIDATE_ONLY=true
-            shift
-            ;;
-        --install-system-trust)
-            INSTALL_SYSTEM_TRUST=true
             shift
             ;;
         --cert-dir)
@@ -72,10 +54,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-if [[ "$INSTALL_SYSTEM_TRUST" == true ]]; then
-    reject_legacy_trust_writer
-fi
 
 CERT_FILE="$CERT_DIR/_wildcard.budgetanalyzer.localhost.pem"
 KEY_FILE="$CERT_DIR/_wildcard.budgetanalyzer.localhost-key.pem"

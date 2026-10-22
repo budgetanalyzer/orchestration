@@ -32,6 +32,9 @@ jobs:
 
       - name: Run focused offline setup contracts
         run: |
+          ./tests/platform-tools/test-platform-tool-safeguards.sh
           ./tests/local-kubernetes-target/test-local-kubernetes-target.sh
-          ./tests/native-preflight-wrapper/test-native-preflight-wrapper.sh
+          ./tests/local-runtime/test-check-local-runtime.sh
           ./tests/imported-ingress-tls/test-install-imported-ingress-tls.sh
+          ./tests/tilt-prerequisites/test-client-trust.sh
+          ./tests/tilt-prerequisites/test-local-target-gating.sh

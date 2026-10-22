@@ -156,6 +156,26 @@ one artifact retained for seven days. Its operating boundary, evidence
 contract, artifact contents, and known coverage gaps are owned by
 [Dependency Automation](dependency-automation.md#exact-image-security-evidence).
 
+### `test-setup.yml` and `verify-platform-tool-releases.yml`
+
+`test-setup.yml` runs offline: script syntax plus the focused setup fixture
+suites listed in the workflow. It runs on every pull request targeting `main`,
+on relevant pushes to `main` or `setup`, and on manual dispatch, and it
+downloads no release artifacts.
+
+`verify-platform-tool-releases.yml` runs
+`scripts/bootstrap/verify-platform-tool-releases.sh`, which downloads the
+pinned kubectl, Helm, Tilt and Kind artifacts for Linux amd64 and arm64 and
+verifies them without installing or executing them. GitHub's built-in `paths`
+filters limit it to pushes to `main` or `setup` and pull requests targeting
+`main` that change `scripts/lib/pinned-tool-versions.sh`,
+`scripts/bootstrap/install-verified-tool.sh`,
+`scripts/bootstrap/verify-platform-tool-releases.sh` or the workflow itself;
+manual dispatch runs it on demand. Because it is skipped on unrelated pull
+requests, it must not be configured as a required status check; branch
+protection and rulesets remain human-owned. The release-input contract is
+owned by [Dependency Automation](dependency-automation.md#configuration-and-repository-ownership).
+
 ### `security-guardrails.yml`
 
 The orchestration repo now has a dedicated static security workflow for the

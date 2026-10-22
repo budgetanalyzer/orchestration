@@ -37,31 +37,50 @@ scripts/
   for the human-only personal-host isolation audit, private evidence handling,
   collector, protocol fixture and binary verifier. Orchestration does not keep
   fallback copies of those tools.
-- `../setup.sh` - First bootstrap for the development VM's local Docker daemon
-  using imported host-created ingress TLS. Setup recreates Kind and is not a
-  daily-start command.
-- `bootstrap/check-agent-vm-prerequisites.sh` - Thin read-only application
-  preflight that invokes workspace's complete native verifier. Pass
-  `--native-runtime` to add orchestration's exact live loopback `kind-kind`
-  target for daily work.
+- `../setup.sh` - Human-run first bootstrap against the local Docker daemon
+  using the three supplied ingress TLS files. It installs the pinned platform
+  tools, recreates Kind and is not a daily-start command.
+- `bootstrap/check-local-runtime.sh` - Read-only daily application preflight
+  requiring Kind's Docker provider, a reachable local Docker Unix-socket daemon
+  and the exact Ready loopback `kind-kind` Kubernetes target. It has no
+  workspace dependency.
 - `bootstrap/install-imported-ingress-tls.sh` - Non-generating imported TLS
   validator and strict local-`kind-kind` Secret installer; use
   `--validate-only` for static file checks. Tilt uses its default install mode
-  to reconcile the existing files into the Secret in both local runtime modes.
-  The retired `--install-system-trust` interface fails with the canonical
-  workspace human command; this script never changes guest trust.
+  to reconcile the existing files into the Secret. This script never changes
+  client trust.
 - `bootstrap/check-tilt-prerequisites.sh` - Tooling and environment preflight.
-  Pass `--guest-local` in the development VM to delegate the complete native
-  boundary to workspace and retain orchestration repository, tool compatibility,
-  Ready loopback `kind-kind`, Tilt and runtime-security diagnostics.
+  It checks orchestration repository inputs, exact tool versions, local Docker,
+  the Ready loopback `kind-kind` target, supplied ingress TLS and system-bundle
+  trust, Tilt and runtime-security diagnostics without invoking workspace.
 - `../tests/local-kubernetes-target/test-local-kubernetes-target.sh` - Tracked
   fail-closed fixtures for wrong Kubernetes context/referenced cluster,
   nonloopback, malformed or deceptive API authorities, kubeconfig proxy
-  redirection and missing control-plane node. Invalid authority/proxy fixtures
-  use command stubs and assert rejection before cluster access.
-- `../tests/native-preflight-wrapper/test-native-preflight-wrapper.sh` - Offline
-  wrapper fixtures proving exact workspace argument forwarding, bootstrap versus
-  daily Kind behavior, fail-closed setup ordering and Tilt delegation.
+  redirection and missing control-plane node, plus the Docker guard's
+  `KIND_EXPERIMENTAL_PROVIDER` contract: unset, empty and `docker` pass;
+  alternate and malformed values fail before any Docker, Kind or kubectl
+  command. All fixtures use command stubs.
+- `../tests/local-runtime/test-check-local-runtime.sh` - Offline stub fixtures
+  for the daily wrapper: local Docker Unix-socket selection and reachability,
+  Kind provider rejection, exact Kind enforcement, read-only success, and
+  unknown-option and extra-argument rejection with exit status, diagnostics
+  and no Docker, Kind or kubectl invocation. Its final check is structural
+  evidence only: a source ordering check that `setup.sh` places the shared
+  Docker/Kind-provider guard before its Kind deletion line; it does not execute
+  setup or prove every mutation path.
+- `../tests/tilt-prerequisites/test-client-trust.sh` - Offline real-OpenSSL
+  chain, hostname and bundle-only verification using the public test-only
+  certificates in `fixtures/client-trust/`: a matching root/leaf passes, while a wrong
+  hostname, an unrelated root bundle and a root available only through
+  `SSL_CERT_DIR` fail. A command stub covers OpenSSL stderr propagation. It
+  also runs the copied prerequisite checker with failing Docker, Kind and
+  kubectl stubs to prove missing and untrusted leaves are reported as trust
+  failures, without mkcert.
+- `../tests/tilt-prerequisites/test-local-target-gating.sh` - Offline stub
+  fixtures running the prerequisite checker with an absent Kind cluster, a
+  wrong Kubernetes context and an alternate Kind provider. Tool checks still
+  report, while cluster-specific Docker, Kind and kubectl commands do not run
+  until the exact target passes.
 - `../tests/imported-ingress-tls/test-install-imported-ingress-tls.sh` -
   Offline command fixtures that reproduce the zero-exit `x509 -checkhost`
   mismatch, require hostname-aware chain verification, accept the matching
@@ -218,34 +237,81 @@ Choose scripts by runtime boundary:
 - `bootstrap/install-verified-tool.sh` installs repo-pinned `kubectl`, Helm,
   Tilt, `mkcert`, Kind, `kubeconform`, `kube-linter`, `kyverno`, and `yq`
   releases from checked-in upstream URLs after verifying each downloaded
-  artifact against its checked-in SHA-256 value.
+  artifact against its checked-in SHA-256 value. Installing a pin converges a
+  recognized existing destination binary to that pin, upgrading or
+  downgrading it, and prints `Replacing <tool> <old> with pinned <new> at
+  <destination>` first. Symlinked, non-regular or unidentifiable destinations
+  are rejected before download. The default `/usr/local/bin` destination is
+  written with sudo; it, every ancestor and any existing destination must be
+  root-owned, non-symlinked and non-writable by group/other, rechecked before
+  the final write. A custom `--install-dir` is written without sudo: missing
+  directories are created with `mkdir -p` under the caller's umask (for
+  example mode 775 cache directories under umask `0002`), symlinked ancestors
+  are allowed, and normal filesystem permissions govern the write. The
+  installer does not inspect other copies of the tool on `PATH`; `setup.sh`
+  runs `hash -r` and then reports the installed destination, resolved
+  executable, expected version and detected version when `PATH` selects a
+  different version. Every tool follows one download and checksum path;
+  explicit per-tool metadata in `lib/pinned-tool-versions.sh` selects either a
+  raw binary copy or stdout extraction of one named archive member, and a tool
+  without that metadata fails rather than defaulting to a raw copy. An archive
+  must contain exactly one regular-file entry for that member, so duplicate
+  entries cannot be concatenated into the installed binary; other archive
+  entries are never extracted and are not inspected. Version probing for both
+  scripts also lives in `lib/pinned-tool-versions.sh`; destination checks live
+  in `lib/verified-tool-destination.sh`.
+- `bootstrap/verify-platform-tool-releases.sh` downloads the pinned `kubectl`,
+  Helm, Tilt, and Kind inputs for Linux amd64 and arm64, verifies all eight
+  checked-in checksums, and applies the installer's Helm/Tilt archive-member
+  check without installing or executing downloaded binaries. It is the
+  release-input gate for the four pins and runs in the separate
+  `verify-platform-tool-releases.yml` workflow only for changes to
+  `lib/pinned-tool-versions.sh`, `bootstrap/install-verified-tool.sh`, this
+  script or that workflow, plus manual dispatch.
 - `bootstrap/check-tilt-prerequisites.sh` validates local tools, pinned binary
-  versions, the host-published public ingress CA, DNS, Docker/Kind
+  versions (including exact Helm, not a supported range), the host-published
+  public ingress CA, DNS, Docker/Kind
   prerequisites, inotify budgets, pinned Gateway API and Calico state, and
   optional runtime security state. It reports drift and install commands
-  without performing interactive cluster changes.
-- `bootstrap/check-agent-vm-prerequisites.sh` resolves the sibling workspace,
-  requires the managed worktree/bare-parent inputs and invokes workspace's
-  complete native runtime verifier for both guest bootstrap and daily work.
-  The optional `--native-runtime` mode then adds the exact Ready local Kind
-  target. VM identity, user/home, repository, credential, Docker, tool and
-  trust checks have no orchestration fallback implementation.
+  without performing interactive cluster changes. Tool, repository and file
+  checks run before a cluster exists; an absent cluster is a warning, and
+  cluster-specific checks run only after the Docker/Kind-provider guard and
+  exact `kind-kind` target pass.
+- `bootstrap/check-local-runtime.sh` requires Kind's Docker provider
+  (`KIND_EXPERIMENTAL_PROVIDER` unset or `docker`) and a Docker CLI that selects
+  a reachable local Unix-socket daemon, then enforces the exact Ready loopback
+  `kind-kind` target. It is the read-only daily-start preflight and accepts no
+  mode flags.
+- `../tests/platform-tools/test-platform-tool-safeguards.sh` provides offline
+  fixtures with stubbed downloads and executables: exact Helm probing
+  (including failed probes), custom installs under the current umask and
+  `0002`, nested missing and symlinked-ancestor directories, replacement of
+  newer and older recognized versions, destination symlink, non-regular and
+  unidentifiable rejection, checksum mismatch, successful archive-member
+  extraction, duplicated and missing archive members, refusal to stage a tool
+  without artifact metadata, privileged ownership/mode/symlink rejection on
+  disposable paths, and setup's final `PATH` check. It needs no host platform
+  binary, sudo or privileged write. Two checks are not behavioral: a metadata
+  check that every tool declares an artifact kind and complete checksums, and
+  a wiring check that greps that setup and the prerequisite checker call the
+  shared probe. The offline `test-setup.yml` workflow runs these fixtures
+  without downloading releases.
 - `bootstrap/install-imported-ingress-tls.sh` validates the three approved
   host-created ingress files without invoking mkcert, including one
   hostname-aware chain verification for `app.budgetanalyzer.localhost`.
   Install mode applies the TLS Secret only after exact context,
   referenced-cluster, strict loopback HTTPS authority, absent kubeconfig proxy
-  override, Kind-cluster and control-plane-node checks pass. The workspace
-  human installer is the only native guest OS/NSS trust writer. The
-  `ingress-tls-secret` Tilt resource reconciles only the existing files and
-  Secret; it never generates certificates or changes host/guest trust.
+  override, Kind-cluster and control-plane-node checks pass. Orchestration does
+  not install client trust. The `ingress-tls-secret` Tilt resource reconciles
+  only the existing files and Secret; it never generates certificates or
+  changes browser-machine or Kind-machine trust.
 - `bootstrap/setup-k8s-tls.sh` and
-  `bootstrap/renew-host-ingress-tls.sh` are human-operated personal-host
-  preparation paths. They create or retain the host mkcert CA, establish host
-  browser trust, create and validate a leaf/key, publish only the public root,
+  `bootstrap/renew-host-ingress-tls.sh` are human-operated browser-machine
+  preparation paths. They create or retain that machine's mkcert CA, establish
+  its browser trust, create and validate a leaf/key, publish only the public root,
   and never contact or recreate Kubernetes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
-  used by `setup.sh` and Tilt. Tilt reruns the guest-local
+  used by `setup.sh` and Tilt. Tilt reruns the local
   `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
   so namespace recreation cannot leave the infrastructure TLS secrets missing.
 - `bootstrap/reconcile-kind-inotify-budget.sh` raises low Kind node inotify
@@ -257,21 +323,23 @@ Choose scripts by runtime boundary:
   reconciliation helper. A live `docker exec kind-control-plane sysctl ...`
   recovery command is diagnostic only; use the helper or Tilt resource for the
   durable local fix.
-- `bootstrap/setup-infra-tls.sh` is the guest-local internal infrastructure
+- `bootstrap/setup-infra-tls.sh` is the local internal infrastructure
   certificate producer used by setup and its Tilt resource. It is separate
   from browser trust; agents must not invoke certificate writers directly.
-  Browser-facing certificate preparation remains a personal-host human action;
-  it publishes the three ignored transfer files under `nginx/certs/k8s/` and
+  Browser-facing certificate preparation remains a browser-machine human
+  action; it publishes the three ignored transfer files under `nginx/certs/k8s/` and
   never requires a host Kind cluster. No CA private key is published.
 
-Use `../setup.sh` in the development VM only after it has the approved imported
-TLS files, workspace-owned guest trust and passing native prerequisites. Use
+Use `../setup.sh` on the local Kind machine after it has the three approved
+ingress TLS files and a reachable local Docker Unix socket. Use
 `bootstrap/install-verified-tool.sh` for a single pinned binary, and use
 `bootstrap/check-tilt-prerequisites.sh` as a diagnostic before or after setup;
 its live security proof creates and cleans named disposable probe resources.
-For normal native guest startup, run
-`bootstrap/check-agent-vm-prerequisites.sh --native-runtime` and then
-`tilt up`; never rerun `setup.sh` as a daily start command.
+For normal daily startup, run `bootstrap/check-local-runtime.sh` and then
+`tilt up`; never rerun `setup.sh` as a daily start command. Browser-machine
+client trust is environment-owned and required for browser use, but
+Kind-machine system-bundle trust does not gate `setup.sh`; see the
+getting-started guide.
 
 ## Guardrails
 
@@ -283,7 +351,7 @@ For normal native guest startup, run
 - `guardrails/check-tilt-resource-roots.sh` evaluates the Tiltfile and verifies
   that resources without `resource_deps` match
   `lib/tilt-intentional-root-resources.txt`. It requires the standard
-  side-by-side workspace checkout because Tiltfile evaluation references
+  side-by-side checkout under a common parent because Tiltfile evaluation references
   sibling service repositories. It also requires the ingress TLS resource to
   use the non-generating installer and rejects any Tilt command that invokes
   the host-only certificate generator. The startup graph must reconcile

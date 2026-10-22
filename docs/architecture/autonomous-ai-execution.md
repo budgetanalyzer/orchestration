@@ -3,19 +3,17 @@
 ## Scope
 
 Orchestration grants agents broad authority over the disposable Budget Analyzer
-application environment inside the native development VM. That authority covers
+application environment on the trusted local development machine, which for
+agents is the workspace development VM. That authority covers
 local builds, tests, Tilt, application containers, the approved Kind cluster,
 development Kubernetes Secrets and disposable local API-test credentials. It
 does not cover the personal host, GitHub publication, staging or production.
 
-The native development VM is the only supported agent environment. Former
-guest-specific and personal-host agent runtimes are retired and must not be
-reconstructed. The sibling workspace's
+The optional sibling workspace's
 [development VM owner document](../../../workspace/docs/host-isolation.md)
-owns VM identity, native users and tools, repositories, Git transport, Remote
-SSH, guest Docker, exact OS/NSS trust, personal-host isolation and its audit.
-Read that document before changing or diagnosing any of those concerns; do not
-duplicate its procedures here.
+owns that agent environment, its boundary check, native tools, trust and
+personal-host transport. Read it before changing or diagnosing those concerns;
+they are separate from orchestration's application prerequisites.
 
 This document owns only the application-facing authority enforced by
 orchestration:
@@ -28,9 +26,9 @@ orchestration:
 
 ## Application Authority
 
-Within the verified native VM boundary, an agent may:
+Within that local application environment, an agent may:
 
-- modify guest working clones and run application builds and tests;
+- modify local working clones and run application builds and tests;
 - build and run application images and Testcontainers workloads;
 - inspect and mutate the approved local `kind-kind` cluster;
 - read local Kubernetes Secrets, imported ingress keys, generated
@@ -42,7 +40,7 @@ credentials, personal-host credentials, or personal-host administration
 authority. Never deploy to or administer staging or production from an agent
 session.
 
-Local development secrets are inside the trusted guest boundary and are not
+Local development secrets are inside the trusted local boundary and are not
 hidden from the agent. Use disposable test identities and local-only
 credentials. Human review, branch protection and pull-request controls remain
 required before publication.
@@ -65,9 +63,17 @@ config view`; they must not invoke credential plugins or contact an API server
 merely to inspect the selected authority.
 
 `scripts/lib/local-kubernetes-target.sh` owns the reusable implementation.
-`scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime` adds that
-check after workspace's complete native-runtime verifier. Bootstrap and
-Secret-install paths repeat the applicable guard before mutation.
+Its Docker endpoint guard first rejects any nonempty `KIND_EXPERIMENTAL_PROVIDER`
+other than `docker`, so the transport it checks is the one Kind uses; it then
+requires a reachable local Unix-socket daemon. This is a transport check, not
+host-isolation proof: it accepts any reachable local Unix socket, including a
+host Docker socket forwarded into the VM. In the workspace development VM, the
+workspace
+[pre-agent VM boundary check](../../../workspace/docs/host-isolation.md#pre-agent-vm-boundary-check)
+owns guest Docker and forwarded-authority checks. `scripts/bootstrap/check-local-runtime.sh` combines that
+guard with the exact-target check for daily startup. Setup and the prerequisite
+checker call the same guard before any Kind access, and the Secret installer
+repeats the exact-target check before mutation.
 
 ## Bootstrap And Daily Startup
 
@@ -77,24 +83,22 @@ The explicit first application bootstrap is:
 ./setup.sh
 ```
 
-It is a destructive local rebuild. It verifies workspace-owned native
-prerequisites and the imported ingress files before deleting Kind, then creates
-the cluster, installs application prerequisites, generates guest-owned
-infrastructure TLS and prepares `.env`. It is not a VM-start or daily-start
-command.
+It is a destructive local rebuild. It requires a reachable local Docker Unix
+socket and validates the supplied ingress files before deleting Kind, installs
+the pinned platform tools, creates the cluster, installs application
+prerequisites, generates local infrastructure TLS and prepares `.env`. It is
+not a daily-start command.
 
-Daily work starts from a fresh normal-user guest shell:
+Daily application work starts with the read-only local-runtime check:
 
 ```bash
-./scripts/bootstrap/check-agent-vm-prerequisites.sh --native-runtime
+./scripts/bootstrap/check-local-runtime.sh
 tilt up
 ```
 
-Agents and AI Session Handler are ordinary guest-user processes and remain
-independent of Tilt, Kind and the application lifecycle. Do not recreate a
-retired runtime or a separate agent home. The exact first-bootstrap sequence,
-including its human trust prerequisite, lives in
-[Getting Started](../development/getting-started.md#development-vm-first-bootstrap).
+The exact first-bootstrap sequence, including human browser-machine
+certificate preparation, lives in
+[Getting Started](../development/getting-started.md#first-bootstrap).
 
 ## Local API-Test Gate
 
@@ -109,19 +113,21 @@ HTTP, `--insecure`, `verify=False` or `ignore_https_errors`.
 
 ## Ingress TLS Boundary
 
-The personal host owns browser certificate generation and renewal. Workspace
-owns human-operated guest OS/NSS trust installation and read-only trust
-verification. Orchestration receives only the approved wildcard leaf, leaf key
-and public CA; it validates those files and reconciles the local Kubernetes TLS
-Secret.
+The browser machine owns browser certificate generation and renewal, and each
+client environment owns its trust. Orchestration receives only the approved
+wildcard leaf, leaf key and public CA; it validates those files, reports
+whether the Kind machine's system bundle alone verifies the leaf, and
+reconciles the local Kubernetes TLS Secret. That report is not browser
+acceptance and does not gate bootstrap. The optional workspace development VM
+owns its OS/NSS and Chromium trust procedure.
 
 `scripts/bootstrap/install-imported-ingress-tls.sh` never generates
-certificates or writes guest trust. In install mode it applies the Secret only
+certificates or writes client trust. In install mode it applies the Secret only
 after the exact local Kubernetes checks pass. Tilt uses that same
 non-generating path for the `ingress-tls-secret` resource.
 
 If an imported file is missing, expired or mismatched, stop. Do not generate a
-replacement in the guest. Follow the host-only renewal and approved
+replacement from an agent. Follow the browser-machine renewal and
 three-file-transfer flow in
 [Local Environment Mechanics](../development/local-environment.md#development-vm-import-and-renewal),
 then reconcile the Secret without recreating Kind.
@@ -129,11 +135,16 @@ then reconcile the Secret without recreating Kind.
 ## Autonomous Execution Workflow
 
 1. Define the task and explicit success criteria.
-2. Run the workspace-owned native prerequisite through orchestration's wrapper.
-3. Require the exact local Kubernetes target before any cluster mutation.
-4. Confirm live API tests select the exact local origin when applicable.
-5. Execute only within the local application authority described above.
-6. Verify the result with repo-owned checks and human review before publication.
+2. In the workspace development VM, pass the workspace
+   [pre-agent VM boundary check](../../../workspace/docs/host-isolation.md#pre-agent-vm-boundary-check)
+   (`check-agent-vm-boundary.sh`) before agent work. Workspace-managed provider
+   launchers enforce it; run it manually for work started outside them.
+   Orchestration never invokes it.
+3. Run `scripts/bootstrap/check-local-runtime.sh` before daily local work.
+4. Require the exact local Kubernetes target before any cluster mutation.
+5. Confirm live API tests select the exact local origin when applicable.
+6. Execute only within the local application authority described above.
+7. Verify the result with repo-owned checks and human review before publication.
 
 Permission-bypass flags do not establish the operating boundary. If a required
 prerequisite is absent, stop instead of weakening a control or hiding a

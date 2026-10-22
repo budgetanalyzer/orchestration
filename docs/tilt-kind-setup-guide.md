@@ -7,8 +7,8 @@ This is not the supported default onboarding path.
 
 Use [docs/development/getting-started.md](development/getting-started.md) for
 the supported `./setup.sh` and `tilt up` workflow. Use this guide only when you
-need to understand or reproduce the underlying development-VM bootstrap steps one by
-one.
+need to understand or reproduce the underlying local Kind bootstrap steps one
+by one.
 
 ## When To Use This Guide
 
@@ -21,7 +21,7 @@ For the live-update pipeline, mixed local-and-cluster workflows, and
 troubleshooting after the stack is already up, use
 [docs/development/local-environment.md](development/local-environment.md).
 
-## Development VM Prerequisites
+## Local Prerequisites
 
 Run the repo preflight first:
 
@@ -29,7 +29,7 @@ Run the repo preflight first:
 ./scripts/bootstrap/check-tilt-prerequisites.sh
 ```
 
-For VM-local binary installs, prefer the verified installer:
+For local binary installs, prefer the verified installer:
 
 ```bash
 ./scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|kind|kubeconform|kube-linter|kyverno>
@@ -56,8 +56,7 @@ Manual equivalents for repo-managed binaries:
 ./scripts/bootstrap/install-verified-tool.sh tilt
 ```
 
-Keep the repos side by side under a common parent directory if you are working
-outside the sibling `workspace` repo:
+Keep the repos side by side under a common parent directory:
 
 ```text
 parent-directory/
@@ -144,27 +143,29 @@ recovery only; do not treat it as a persistent setup step.
 
 ### 4. Configure Browser Access
 
-The personal host owns the interactive browser, its loopback hostname mapping,
-and the reviewed SSH forwarding path into VM port 443. Workspace owns those
-host-boundary details; do not expose the VM ingress on a broad interface.
+The browser machine owns its loopback hostname mapping and client trust. When
+the browser and Kind run on different machines, use an explicit loopback-only
+transport; the optional workspace development VM documents one reviewed
+[host tunnel](../../workspace/docs/host-isolation.md#personal-host-access).
+Do not expose ingress on a broad interface.
 
 ### 5. Transfer And Reconcile Browser TLS Material
 
-The human runs the browser-facing certificate preparation in the personal-host
-orchestration checkout, then transfers only the wildcard leaf, leaf key and
-public CA into the VM checkout. There is no personal-host Kind cluster:
+The human runs browser-facing certificate preparation on the browser machine.
+If Kind runs elsewhere, transfer only the wildcard leaf, leaf key and public CA
+into that orchestration checkout:
 
 ```bash
-# Personal host only
-./scripts/bootstrap/setup-k8s-tls.sh
+# Browser machine only
+./scripts/bootstrap/renew-host-ingress-tls.sh
 
-# Development VM only, after the workspace-owned transfer and trust procedure
+# Kind machine, after the three files are in place (Kind-machine trust is not required)
 ./scripts/bootstrap/install-imported-ingress-tls.sh
 ```
 
-Agents must not run host-trust certificate generation; use the documented
-human-operated personal-host workflow. Existing migrated files may be reused
-when `install-imported-ingress-tls.sh --validate-only` accepts them.
+Agents must not run browser-certificate generation; use the documented
+human-operated workflow. Existing files may be reused when
+`install-imported-ingress-tls.sh --validate-only` accepts them.
 
 ### 6. Generate Internal Transport TLS Material
 
@@ -254,10 +255,10 @@ kind create cluster --config kind-cluster-config.yaml
 Repair only the affected TLS material in its owning environment:
 
 ```bash
-# Personal host: browser-facing files; then repeat transfer and reconciliation
+# Browser machine: browser-facing files; then repeat transfer and reconciliation
 ./scripts/bootstrap/setup-k8s-tls.sh
 
-# Development VM: internal application transport
+# Kind machine: internal application transport
 ./scripts/bootstrap/setup-infra-tls.sh
 ```
 

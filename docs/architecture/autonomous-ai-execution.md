@@ -63,9 +63,13 @@ config view`; they must not invoke credential plugins or contact an API server
 merely to inspect the selected authority.
 
 `scripts/lib/local-kubernetes-target.sh` owns the reusable implementation.
-`scripts/bootstrap/check-local-runtime.sh` combines that check with the local
-Docker endpoint guard for daily startup. Bootstrap and Secret-install paths
-repeat the applicable guard before mutation.
+Its Docker endpoint guard first rejects any nonempty `KIND_EXPERIMENTAL_PROVIDER`
+other than `docker`, so the transport it checks is the one Kind uses; it then
+requires a reachable local Unix-socket daemon. This is a transport check, not
+host-isolation proof. `scripts/bootstrap/check-local-runtime.sh` combines that
+guard with the exact-target check for daily startup. Setup and the prerequisite
+checker call the same guard before any Kind access, and the Secret installer
+repeats the exact-target check before mutation.
 
 ## Bootstrap And Daily Startup
 
@@ -88,8 +92,8 @@ Daily application work starts with the read-only local-runtime check:
 tilt up
 ```
 
-The exact first-bootstrap sequence, including its human trust prerequisite,
-lives in
+The exact first-bootstrap sequence, including human browser-machine
+certificate preparation, lives in
 [Getting Started](../development/getting-started.md#first-bootstrap).
 
 ## Local API-Test Gate
@@ -107,9 +111,11 @@ HTTP, `--insecure`, `verify=False` or `ignore_https_errors`.
 
 The browser machine owns browser certificate generation and renewal, and each
 client environment owns its trust. Orchestration receives only the approved
-wildcard leaf, leaf key and public CA; it validates those files, reports local
-system-bundle trust and reconciles the local Kubernetes TLS Secret. The
-optional workspace development VM owns its OS/NSS and Chromium trust procedure.
+wildcard leaf, leaf key and public CA; it validates those files, reports
+whether the Kind machine's system bundle alone verifies the leaf, and
+reconciles the local Kubernetes TLS Secret. That report is not browser
+acceptance and does not gate bootstrap. The optional workspace development VM
+owns its OS/NSS and Chromium trust procedure.
 
 `scripts/bootstrap/install-imported-ingress-tls.sh` never generates
 certificates or writes client trust. In install mode it applies the Secret only

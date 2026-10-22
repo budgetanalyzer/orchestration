@@ -75,9 +75,9 @@ print_warning() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
-assert_vm_os_execution() {
+assert_not_in_container() {
     if [ -f "/.dockerenv" ] || [ -f "/run/.containerenv" ]; then
-        print_error "Run ./setup.sh from a human-operated development-VM OS shell, not from a container."
+        print_error "Run ./setup.sh from a human-operated OS shell on the machine that runs Docker and Kind, not from a container."
         echo "Setup recreates Kind and generates infrastructure TLS on the local machine."
         echo "Open a human-operated machine terminal in this repository and run:"
         echo "  ./setup.sh"
@@ -85,28 +85,7 @@ assert_vm_os_execution() {
     fi
 }
 
-tool_raw_version() {
-    case "$1" in
-        kubectl)
-            kubectl version --client 2>/dev/null | head -n1 || true
-            ;;
-        helm)
-            helm version --template '{{.Version}}' 2>/dev/null | head -n1 || true
-            ;;
-        tilt)
-            tilt version 2>/dev/null | head -n1 || true
-            ;;
-        mkcert)
-            mkcert --version 2>/dev/null | head -n1 || true
-            ;;
-        kind)
-            kind version 2>/dev/null | head -n1 || true
-            ;;
-        *)
-            "$1" --version 2>/dev/null | head -n1 || true
-            ;;
-    esac
-}
+PINNED_TOOL_INSTALL_DIR=/usr/local/bin
 
 install_pinned_tool() {
     local tool expected_version
@@ -123,19 +102,18 @@ install_pinned_tool() {
 }
 
 ensure_pinned_tool() {
-    local tool expected_version raw_version
+    local tool expected_version resolved raw_version
 
     tool="$1"
     expected_version="$(phase7_tool_version "$tool")"
-    if command -v "$tool" &> /dev/null; then
-        raw_version="$(tool_raw_version "$tool")"
-
-        if phase7_tool_version_matches "$tool" "$raw_version"; then
+    if resolved="$(command -v "$tool")"; then
+        if raw_version="$(phase7_tool_raw_version_at "$tool" "$resolved")" &&
+            phase7_tool_version_matches "$tool" "$raw_version"; then
             print_success "${tool} version ready: $raw_version"
             return 0
         fi
 
-        print_warning "${tool} version mismatch detected: ${raw_version:-unknown}"
+        print_warning "${tool} at ${resolved} is not the pinned version: ${raw_version:-version probe failed}"
         echo "  Expected ${tool} ${expected_version} from scripts/lib/pinned-tool-versions.sh"
     else
         print_warning "${tool} not found"
@@ -143,16 +121,9 @@ ensure_pinned_tool() {
 
     install_pinned_tool "$tool"
 
-    if ! command -v "$tool" &> /dev/null; then
-        print_error "${tool} installation completed, but ${tool} is still not on PATH"
-        echo "Make sure the install directory used by install-verified-tool.sh is on PATH, then rerun ./setup.sh"
-        exit 1
-    fi
-
-    raw_version="$(tool_raw_version "$tool")"
-    if ! phase7_tool_version_matches "$tool" "$raw_version"; then
-        print_error "${tool} installation did not produce the pinned version"
-        echo "Expected ${expected_version}; got ${raw_version:-unknown}"
+    if ! raw_version="$(phase7_verify_effective_tool_version "$tool" "$PINNED_TOOL_INSTALL_DIR/$tool")"; then
+        print_error "${tool} selected by PATH is not the pinned ${expected_version} after installation"
+        echo "Fix PATH as reported above, then rerun ./setup.sh"
         exit 1
     fi
 
@@ -205,8 +176,8 @@ check_kind_cluster_network_model() {
     fi
 }
 
-print_header "Budget Analyzer - Development VM Setup"
-assert_vm_os_execution
+print_header "Budget Analyzer - Local Kind Bootstrap"
+assert_not_in_container
 
 print_step "Validating imported ingress TLS before recreating Kind..."
 "$SCRIPT_DIR/scripts/bootstrap/install-imported-ingress-tls.sh" --validate-only
@@ -239,14 +210,14 @@ fi
 
 print_success "All required tools installed"
 
-# Check the transport that Docker CLI and Kind will actually use before any
-# cluster deletion or creation.
+# Check the Kind provider and the transport that Docker CLI and Kind will
+# actually use before any cluster deletion or creation.
 if ! assert_local_docker_endpoint; then
-    print_error "Docker must select a reachable local Unix-socket daemon"
+    print_error "Kind must use the Docker provider on a reachable local Unix-socket daemon"
     exit 1
 fi
 
-print_success "Docker selects a reachable local Unix-socket daemon"
+print_success "Kind provider is Docker on a reachable local Unix-socket daemon"
 
 ensure_pinned_tool "kubectl"
 ensure_pinned_tool "kind"
@@ -398,7 +369,7 @@ fi
 # =============================================================================
 print_header "Setup Complete!"
 
-print_warning "VM bootstrap recreated Kind. Do not use ./setup.sh as a daily start command."
+print_warning "Bootstrap recreated Kind. Do not use ./setup.sh as a daily start command."
 
 echo -e "${GREEN}Almost ready!${NC} Just configure your external services:"
 echo ""

@@ -39,8 +39,12 @@ Recorded decisions:
   for them. Workspace's install-path, ownership, symlink and collision
   safeguards and its amd64/arm64 release validation for these four tools move
   to orchestration, including rejection of unsafe group writes and unexpected
-  downgrades. Setup and the prerequisite checker enforce the exact pinned Helm
-  version, matching kubectl, Tilt and Kind.
+  downgrades. (Superseded for orchestration's installer: downgrade refusal and
+  custom-path ownership/mode checks were removed by
+  [decoupling-review-remediation.md](decoupling-review-remediation.md); see
+  `scripts/README.md#bootstrap` for the current contract.) Setup and the
+  prerequisite checker enforce the exact pinned Helm version, matching
+  kubectl, Tilt and Kind.
 - **AI provider CLIs float.** Claude Code, Codex and Gemini CLI install at the
   latest published version on first install, or when the human explicitly
   updates them. Routine preparation keeps the installed versions. They have no
@@ -103,10 +107,10 @@ Checks that must survive:
 | Existing check | New owner | Regression evidence |
 | --- | --- | --- |
 | kubectl/Helm/Tilt/Kind exact releases and checksums | Orchestration installer and prerequisite checker | Wrong versions rejected; amd64/arm64 release and archive checks |
-| Install-path ownership, group/world-write, symlink, collision and downgrade safeguards for those binaries | Orchestration installer; workspace keeps its own for its remaining tools | Unsafe-path and unexpected-downgrade fixtures fail before writes |
+| Install-path ownership, group/world-write, symlink, collision and downgrade safeguards for those binaries | Orchestration installer; workspace keeps its own for its remaining tools | Unsafe-path and unexpected-downgrade fixtures fail before writes (orchestration superseded by [decoupling-review-remediation.md](decoupling-review-remediation.md): ownership/mode checks apply to `/usr/local/bin` only, and pinned installs upgrade or downgrade) |
 | VM/user/home, repositories, Git, denied authority, guest Docker | Workspace boundary entry point | Existing negative cases |
 | Exact local Kind target and local Docker endpoint | Orchestration setup, daily checks and mutation entry points | Remote or wrong targets rejected before cluster changes |
-| Current ingress certificate trusted by the client | Orchestration supplied-leaf/system-trust check; workspace OS/NSS checks and documented browser acceptance | Renewed root not in system trust fails; exact-URL browser check after installation/renewal |
+| Current ingress certificate trusted by the client | Orchestration supplied-leaf/system-trust check; workspace OS/NSS checks and documented browser acceptance | Renewed root not in system trust fails; exact-URL browser check after installation/renewal (orchestration's check is bundle-only with real-certificate fixtures per [decoupling-review-remediation.md](decoupling-review-remediation.md)) |
 | Provider exact versions and checked-in integrity | Intentionally removed | n/a |
 | Playwright lock and Chromium apt compatibility | Workspace | Lock/package mismatch and stale apt provenance fail |
 | All other pins and checks (Go, actionlint, VIA, mitmproxy, Node/JDK policy, helper convergence) | Unchanged owner, scoped to a component | Existing negative cases |
@@ -229,6 +233,10 @@ drop them in Phase 5.
   destinations, no collision with an unexpected existing file, and refusal
   to downgrade an installed version newer than the selected pin. User-owned
   `--install-dir` paths used by CI keep working with owner-appropriate checks.
+  Superseded by
+  [decoupling-review-remediation.md](decoupling-review-remediation.md):
+  pinned installs now replace newer or older recognized binaries, and custom
+  paths rely on filesystem permissions.
 - amd64/arm64 release-download, checksum and archive validation for all four
   tools in orchestration's own tests or CI.
 - `docs/OWNERSHIP.md` first, then `scripts/README.md` and
@@ -259,6 +267,8 @@ drop them in Phase 5.
 3. Use `check_pinned_tool_version` for Helm prerequisites and exact pinned-tool
    enforcement in `setup.sh` instead of `ensure_supported_helm`. A newer
    installed release must fail before replacement, not silently downgrade.
+   (Superseded by [decoupling-review-remediation.md](decoupling-review-remediation.md): installing the pin
+   replaces a newer recognized release and prints the replacement first.)
 4. Add offline fixtures and the two-architecture release validation.
 5. Update the docs.
 
@@ -275,9 +285,15 @@ preferable to a cross-repository dependency.
 - Fixtures: non-pinned Helm fails prerequisites and is not accepted by setup;
   group/world-writable root-owned destinations or parents, symlinked parents,
   destination collisions and unexpected downgrades fail before writes.
+  (Superseded by [decoupling-review-remediation.md](decoupling-review-remediation.md): these rejections
+  apply to `/usr/local/bin`; custom paths reject only symlinked, non-regular or
+  unidentifiable destinations, and pinned downgrades succeed.)
 - Fixtures: checksum mismatch and missing archive member.
 - Two-architecture release validation passes without privileged writes,
   cluster changes or executing foreign binaries.
+  (Under [decoupling-review-remediation.md](decoupling-review-remediation.md), CI runs it in the
+  path-filtered `verify-platform-tool-releases.yml` workflow; offline fixtures
+  stay in `test-setup.yml`.)
 
 ### Completion criteria
 
@@ -317,7 +333,10 @@ previously got from workspace's verifier.
   ingress TLS files. Add a client-trust check: the current ingress leaf must
   verify for `app.budgetanalyzer.localhost` against the system trust bundle,
   not only against the supplied `_mkcert-rootCA.pem`. A failure links to the
-  trust documentation. mkcert is not a platform prerequisite; only the
+  trust documentation. (Refined by
+  [decoupling-review-remediation.md](decoupling-review-remediation.md): the bundle is the only trust
+  source, and real public test certificates prove chain, hostname and
+  alternate-source rejection.) mkcert is not a platform prerequisite; only the
   certificate-preparation script needs it, and that script checks for itself.
 - `scripts/bootstrap/install-imported-ingress-tls.sh`: remove the retired
   `--install-system-trust` option and its workspace command text, so unknown

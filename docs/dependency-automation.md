@@ -111,7 +111,14 @@ amd64/arm64 checksums, installation safeguards, and release-input validation
 described in [`scripts/README.md`](../scripts/README.md#bootstrap). Changes to
 one of those four pins must update every supported architecture and pass
 `scripts/bootstrap/verify-platform-tool-releases.sh`; downloaded binaries are
-never executed by that gate. Consumer repositories own their native package
+never executed by that gate. The path-filtered
+`verify-platform-tool-releases.yml` workflow downloads and verifies all eight
+Linux amd64/arm64 artifacts on pushes to `main` or `setup` and pull requests
+targeting `main` that change `scripts/lib/pinned-tool-versions.sh` (pins,
+URLs, checksums or archive handling), `scripts/bootstrap/install-verified-tool.sh`,
+`scripts/bootstrap/verify-platform-tool-releases.sh` or the workflow itself,
+and on manual dispatch. Other changes run only the offline setup checks in
+`test-setup.yml`. Consumer repositories own their native package
 managers and any repository-specific extraction:
 
 | Repository family | Repository-owned coverage |

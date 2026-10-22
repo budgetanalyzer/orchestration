@@ -65,17 +65,9 @@ check_command() {
         # Different tools use different version flags
         local version
         case "$cmd" in
-            kubectl)
-                version=$($cmd version --client 2>&1 | head -n1 || $cmd version 2>&1 | head -n1)
-                ;;
-            helm)
-                version=$($cmd version --template '{{.Version}}' 2>&1 | head -n1 || $cmd version 2>&1 | head -n1)
-                ;;
-            tilt)
-                version=$($cmd version 2>&1 | head -n1)
-                ;;
-            kind)
-                version=$($cmd version 2>&1 | head -n1)
+            kubectl|helm|tilt|kind)
+                # check_pinned_tool_version probes and reports the version.
+                version=$(command -v "$cmd")
                 ;;
             openssl)
                 version=$($cmd version 2>&1 | head -n1)
@@ -126,10 +118,6 @@ check_file() {
     fi
 }
 
-normalize_semver() {
-    printf '%s\n' "$1" | sed -nE 's/^[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
-}
-
 version_ge() {
     [ "$1" = "$2" ] || [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
 }
@@ -164,7 +152,7 @@ check_node_version() {
     local raw_version parsed_version
 
     raw_version=$(node --version 2>/dev/null || true)
-    parsed_version=$(normalize_semver "$raw_version")
+    parsed_version=$(phase7_normalize_semver "$raw_version")
 
     if [ -z "$parsed_version" ]; then
         echo -e "${RED}✗${NC} Could not parse Node.js version"
@@ -189,7 +177,7 @@ check_npm_version() {
     local raw_version parsed_version
 
     raw_version=$(npm --version 2>/dev/null || true)
-    parsed_version=$(normalize_semver "$raw_version")
+    parsed_version=$(phase7_normalize_semver "$raw_version")
 
     if [ -z "$parsed_version" ]; then
         echo -e "${RED}✗${NC} Could not parse npm version"
@@ -210,37 +198,15 @@ check_npm_version() {
     return 1
 }
 
-tool_raw_version() {
-    case "$1" in
-        kubectl)
-            kubectl version --client 2>/dev/null | head -n1 || true
-            ;;
-        helm)
-            helm version --template '{{.Version}}' 2>/dev/null | head -n1 || true
-            ;;
-        tilt)
-            tilt version 2>/dev/null | head -n1 || true
-            ;;
-        kind)
-            kind version 2>/dev/null | head -n1 || true
-            ;;
-        *)
-            "$1" --version 2>/dev/null | head -n1 || true
-            ;;
-    esac
-}
-
 check_pinned_tool_version() {
-    local tool raw_version parsed_version expected_version
+    local tool resolved raw_version expected_version
 
     tool="$1"
     expected_version="$(phase7_tool_version "$tool")"
-    raw_version="$(tool_raw_version "$tool")"
-    parsed_version="$(normalize_semver "$raw_version")"
+    resolved="$(command -v "$tool")"
 
-    if [ -z "$parsed_version" ]; then
-        echo -e "${RED}✗${NC} Could not parse ${tool} version"
-        echo "  Raw output: $raw_version"
+    if ! raw_version="$(phase7_tool_raw_version_at "$tool" "$resolved")"; then
+        echo -e "${RED}✗${NC} Could not determine ${tool} version from $resolved"
         echo "  Expected: $expected_version"
         echo "  Install with: $(phase7_install_hint "$tool" "$ORCHESTRATION_DIR")"
         ((ERRORS++))
@@ -252,7 +218,7 @@ check_pinned_tool_version() {
         return 0
     fi
 
-    echo -e "${RED}✗${NC} ${tool} version mismatch: $raw_version"
+    echo -e "${RED}✗${NC} ${tool} version mismatch at $resolved: $raw_version"
     echo "  Expected: $expected_version"
     echo "  Install with: $(phase7_install_hint "$tool" "$ORCHESTRATION_DIR")"
     ((ERRORS++))
@@ -384,7 +350,7 @@ echo "---------------------------------------------"
 
 if assert_local_docker_endpoint; then
     LOCAL_DOCKER_ENDPOINT_PASSED=true
-    echo -e "${GREEN}✓${NC} Docker selects a reachable local Unix-socket daemon"
+    echo -e "${GREEN}✓${NC} Kind provider is Docker on a reachable local Unix-socket daemon"
 else
     ((ERRORS++))
 fi

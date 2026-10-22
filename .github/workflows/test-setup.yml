@@ -37,6 +37,4 @@ jobs:
           ./tests/local-runtime/test-check-local-runtime.sh
           ./tests/imported-ingress-tls/test-install-imported-ingress-tls.sh
           ./tests/tilt-prerequisites/test-client-trust.sh
-
-      - name: Verify amd64 and arm64 platform-tool releases
-        run: ./scripts/bootstrap/verify-platform-tool-releases.sh
+          ./tests/tilt-prerequisites/test-local-target-gating.sh

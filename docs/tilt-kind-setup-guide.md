@@ -159,7 +159,7 @@ into that orchestration checkout:
 # Browser machine only
 ./scripts/bootstrap/renew-host-ingress-tls.sh
 
-# Kind machine, after the three files and client trust are in place
+# Kind machine, after the three files are in place (Kind-machine trust is not required)
 ./scripts/bootstrap/install-imported-ingress-tls.sh
 ```
 

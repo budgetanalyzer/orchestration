@@ -12,6 +12,15 @@ is_local_docker_unix_endpoint() {
 assert_local_docker_endpoint() {
     local selected_context endpoint
 
+    # Unset lets Kind pick Docker, which the checks below require. Any other
+    # provider would bypass those Docker endpoint checks.
+    if [[ -n "${KIND_EXPERIMENTAL_PROVIDER:-}" \
+        && "$KIND_EXPERIMENTAL_PROVIDER" != docker ]]; then
+        printf "ERROR: KIND_EXPERIMENTAL_PROVIDER='%s' is unsupported; unset it or set it to docker.\n" \
+            "$KIND_EXPERIMENTAL_PROVIDER" >&2
+        return 1
+    fi
+
     if ! command -v docker >/dev/null 2>&1; then
         printf 'ERROR: required command is missing: docker\n' >&2
         return 1

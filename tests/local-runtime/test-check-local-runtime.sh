@@ -17,6 +17,7 @@ cp "$REPO_DIR/scripts/lib/local-kubernetes-target.sh" \
     "$FIXTURE_REPO/scripts/lib/"
 touch "$DOCKER_LOG" "$KUBECTL_LOG" "$KIND_LOG"
 export DOCKER_LOG KUBECTL_LOG KIND_LOG
+unset KIND_EXPERIMENTAL_PROVIDER
 trap 'rm -rf "$FIXTURE_DIR"' EXIT
 
 cat > "$MOCK_BIN/docker" <<'EOF'
@@ -87,7 +88,7 @@ fail() {
 run_runtime() {
     env -u DOCKER_HOST -u DOCKER_CONTEXT \
         PATH="$MOCK_BIN:$PATH" \
-        "$FIXTURE_REPO/scripts/bootstrap/check-local-runtime.sh"
+        "$FIXTURE_REPO/scripts/bootstrap/check-local-runtime.sh" "$@"
 }
 
 expect_failure() {
@@ -173,6 +174,61 @@ expect_failure "wrong Kubernetes context" "expected 'kind-kind'" \
 [[ ! -s "$KIND_LOG" ]] \
     || fail "wrong Kubernetes context reached Kind cluster inspection"
 
+clear_logs() {
+    : > "$DOCKER_LOG"
+    : > "$KUBECTL_LOG"
+    : > "$KIND_LOG"
+}
+
+assert_no_runtime_commands() {
+    local description="$1"
+
+    [[ ! -s "$DOCKER_LOG" && ! -s "$KUBECTL_LOG" && ! -s "$KIND_LOG" ]] \
+        || fail "$description invoked Docker, kubectl or Kind"
+}
+
+clear_logs
+env -u DOCKER_HOST -u DOCKER_CONTEXT PATH="$MOCK_BIN:$PATH" \
+    KIND_EXPERIMENTAL_PROVIDER=docker \
+    "$FIXTURE_REPO/scripts/bootstrap/check-local-runtime.sh" >/dev/null \
+    || fail "explicit Docker Kind provider was rejected"
+grep -Fxq 'get clusters' "$KIND_LOG" \
+    || fail "explicit Docker Kind provider did not reach Kind inspection"
+pass "explicit Docker Kind provider passes"
+
+for provider in podman nerdctl Docker 'docker '; do
+    clear_logs
+    expect_failure "Kind provider '$provider'" \
+        "KIND_EXPERIMENTAL_PROVIDER='$provider' is unsupported" \
+        env -u DOCKER_HOST -u DOCKER_CONTEXT PATH="$MOCK_BIN:$PATH" \
+        KIND_EXPERIMENTAL_PROVIDER="$provider" \
+        "$FIXTURE_REPO/scripts/bootstrap/check-local-runtime.sh"
+    assert_no_runtime_commands "Kind provider '$provider'"
+done
+
+clear_logs
+if run_runtime --guest-local >"$FIXTURE_DIR/option.out" 2>&1; then
+    fail "unknown option unexpectedly passed"
+else
+    option_status=$?
+fi
+(( option_status == 2 )) \
+    || fail "unknown option exited $option_status; expected 2"
+grep -Fq 'ERROR: unknown argument: --guest-local' "$FIXTURE_DIR/option.out" \
+    || fail "unknown option did not name the rejected argument"
+grep -Fq 'Usage: scripts/bootstrap/check-local-runtime.sh' "$FIXTURE_DIR/option.out" \
+    || fail "unknown option did not print usage"
+assert_no_runtime_commands "unknown option"
+pass "unknown option exits 2 with usage before runtime inspection"
+
+clear_logs
+expect_failure "extra positional arguments" "expected no arguments" \
+    run_runtime --help extra
+assert_no_runtime_commands "extra positional arguments"
+
+# Ordering check only: setup.sh source places the shared Docker/Kind-provider
+# guard before its Kind deletion line. This does not execute setup or prove
+# every runtime mutation path.
 setup_docker_line="$(grep -nF 'if ! assert_local_docker_endpoint; then' \
     "$REPO_DIR/setup.sh" | cut -d: -f1)"
 setup_delete_line="$(grep -nE '^[[:space:]]*kind delete cluster --name kind$' \
@@ -181,6 +237,6 @@ setup_delete_line="$(grep -nE '^[[:space:]]*kind delete cluster --name kind$' \
     || fail "could not locate setup Docker guard and Kind deletion"
 (( setup_docker_line < setup_delete_line )) \
     || fail "setup does not assert the local Docker endpoint before Kind deletion"
-pass "setup checks the selected Docker transport before cluster mutation"
+pass "setup source orders the Docker/Kind-provider guard before Kind deletion (ordering check)"
 
 printf 'Local runtime fixtures passed: %s checks.\n' "$pass_count"

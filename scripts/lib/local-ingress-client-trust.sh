@@ -25,9 +25,14 @@ assert_system_trusts_local_ingress_leaf() {
         return 1
     fi
 
-    if ! openssl verify -CAfile "$system_trust_bundle" \
+    # The selected bundle is the only trust source: -no-CApath and -no-CAstore
+    # stop OpenSSL from also consulting SSL_CERT_DIR or its default store.
+    # OpenSSL stderr stays visible so verification or option errors are
+    # diagnosable; an implementation that rejects an option fails closed.
+    if ! openssl verify -no-CApath -no-CAstore \
+        -CAfile "$system_trust_bundle" \
         -verify_hostname "$expected_hostname" \
-        "$certificate_file" >/dev/null 2>&1; then
+        "$certificate_file" >/dev/null; then
         printf 'ERROR: system trust does not verify the ingress certificate for %s.\n' \
             "$expected_hostname" >&2
         return 1

@@ -83,15 +83,18 @@ The current local platform baseline still works like this:
 1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
    scratch, which is the clean-state contract for PVC-backed local
    infrastructure such as Redis.
-2. Before deletion it requires a reachable local Docker Unix socket and
-   validates the three human-supplied ingress files.
+2. Before deletion it requires Kind's Docker provider and a reachable local
+   Docker Unix socket, and validates the three human-supplied ingress files.
 3. It installs or reconciles pinned Calico and Gateway API inputs, waits for
    cluster readiness, configures local DNS and infrastructure TLS, reconciles
    the imported ingress Secret, and prepares `.env`.
 
 Client trust must be established in the environment where each client runs.
-Bootstrap recreates Kind and is inappropriate for daily startup; daily work
-uses `check-local-runtime.sh` and then `tilt up`.
+Bootstrap validates the supplied files but does not check or require
+client trust on the Kind machine; browser-machine trust remains required
+before a browser can use the application. Bootstrap recreates Kind and is
+inappropriate for daily startup; daily work uses `check-local-runtime.sh` and
+then `tilt up`.
 
 On every `tilt up`, the `ingress-tls-secret` resource runs the non-generating
 `scripts/bootstrap/install-imported-ingress-tls.sh` path. That resource
@@ -153,14 +156,32 @@ The human runs `scripts/bootstrap/renew-host-ingress-tls.sh` in that machine's
 orchestration checkout for initial preparation or replacement. It establishes
 browser-machine trust, generates and validates the transferable files, and
 never accesses or creates Kubernetes. The script name does not imply that Kind
-runs on the same machine. `scripts/bootstrap/check-tilt-prerequisites.sh`
-reports missing or invalid files and whether the local system trust bundle
-verifies the current leaf, without printing certificate subject or issuer
-metadata.
+runs on the same machine.
 
-Valid supplied files do not prove client trust, the certificate served by a
-running ingress, or Chromium NSS trust. For the optional workspace development
-VM, follow its
+Four trust checks answer different questions:
+
+| Check | Where it runs | What it proves |
+| --- | --- | --- |
+| Browser-machine certificate preparation | Browser machine, human-run `renew-host-ingress-tls.sh` | That machine's browser trusts the mkcert CA, and the three published files are valid |
+| System-bundle verification | Kind machine, `check-tilt-prerequisites.sh` | `/etc/ssl/certs/ca-certificates.crt` alone verifies the supplied leaf for `app.budgetanalyzer.localhost` |
+| NSS store diagnosis | Each client environment's own trust procedure | Chromium's NSS database contains the expected CA |
+| Live browser check | The client browser against the running ingress | The served certificate is accepted at the exact application URL |
+
+`scripts/bootstrap/check-tilt-prerequisites.sh` reports missing or invalid
+files and runs the system-bundle verification. That verification passes
+`-no-CApath -no-CAstore`, so a CA available only through `SSL_CERT_DIR`, a
+default certificate directory or the default store cannot satisfy it. On
+failure it shows OpenSSL's diagnostic, which includes the leaf subject line;
+keep that output out of uploaded logs and artifacts. An OpenSSL build that
+rejects either option fails the check rather than falling back.
+`tests/tilt-prerequisites/test-client-trust.sh` proves chain, hostname and
+alternate-source rejection offline with the public test-only certificates in
+`tests/tilt-prerequisites/fixtures/client-trust/`.
+
+System-bundle verification is a Kind-machine diagnostic. It does not prove
+browser-machine trust, the certificate served by a running ingress, or
+Chromium NSS trust, and its failure does not block bootstrap. For the optional
+workspace development VM, follow its
 [local TLS owner document](../../../workspace/docs/local-budget-analyzer-tls.md)
 for the human OS/NSS trust procedure, diagnostics and exact-URL browser
 acceptance check. Orchestration does not write client trust. If the publication
@@ -183,8 +204,9 @@ Before bootstrap, this non-generating check is safe to run against those files:
 ./scripts/bootstrap/install-imported-ingress-tls.sh --validate-only
 ```
 
-Establish trust through the client environment's human-owned workflow. The
-workspace development-VM handoff is summarized in
+Establish trust through the client environment's human-owned workflow before
+using a browser there. Kind-machine client trust is not a bootstrap
+prerequisite. The workspace development-VM handoff is summarized in
 [Getting Started](getting-started.md#running-in-the-workspace-development-vm);
 orchestration has no trust installer.
 

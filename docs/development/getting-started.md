@@ -19,7 +19,8 @@ Use this path for first setup or an explicitly reviewed clean rebuild:
 
 1. Install Docker on the machine that will run Kind. Configure the Docker CLI
    to use a reachable local Unix-socket daemon; remote TCP and SSH contexts are
-   rejected.
+   rejected. Kind must use its Docker provider: leave
+   `KIND_EXPERIMENTAL_PROVIDER` unset or set it to `docker`.
 2. On the machine whose browser will open the application, install `mkcert` and
    OpenSSL, open its orchestration checkout, and have a human prepare or renew
    the browser certificate and the three published files:
@@ -67,12 +68,16 @@ bootstrap. Its live security checks can create and clean named disposable
 resources in the approved local cluster.
 
 Valid TLS files are not the same as client trust.
-`check-tilt-prerequisites.sh` reports whether the local system trust bundle
-verifies the supplied current ingress leaf for
-`app.budgetanalyzer.localhost`. It does not prove which certificate a running
-ingress serves, or whether Chromium's NSS database trusts it. Follow the
-environment-specific trust documentation and complete its exact-URL browser
-acceptance check. For the workspace development VM, use the
+`check-tilt-prerequisites.sh` reports whether the Kind machine's system trust
+bundle, with no other trust source, verifies the supplied current ingress leaf
+for `app.budgetanalyzer.localhost`. That Kind-machine diagnostic does not gate
+`./setup.sh`. It does not prove browser-machine trust, which certificate a
+running ingress serves, or whether Chromium's NSS database trusts it.
+Browser-machine trust from step 2 remains required before using the
+application in a browser. Follow the environment-specific trust documentation
+and complete its exact-URL browser acceptance check. The
+[ingress TLS contract](local-environment.md#host-published-local-ingress-ca)
+distinguishes these checks. For the workspace development VM, use the
 [local TLS owner document](../../../workspace/docs/local-budget-analyzer-tls.md)
 and [exact ingress trust procedure](../../../workspace/docs/native-user-tools.md#establish-exact-ingress-trust).
 
@@ -92,8 +97,8 @@ Tilt:
 tilt up
 ```
 
-The local-runtime check requires a reachable local Docker Unix socket and the
-exact Ready loopback `kind-kind` Kubernetes target. It does not install tools,
+The local-runtime check requires Kind's Docker provider, a reachable local
+Docker Unix socket and the exact Ready loopback `kind-kind` Kubernetes target. It does not install tools,
 change trust or recreate the cluster. Do not run `setup.sh` for daily startup.
 
 ## Running In The Workspace Development VM

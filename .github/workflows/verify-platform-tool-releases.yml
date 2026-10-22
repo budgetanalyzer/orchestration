@@ -1,0 +1,35 @@
+name: Verify Platform Tool Releases
+
+on:
+  push:
+    branches: [main, setup]
+    paths:
+      - 'scripts/lib/pinned-tool-versions.sh'
+      - 'scripts/bootstrap/install-verified-tool.sh'
+      - 'scripts/bootstrap/verify-platform-tool-releases.sh'
+      - '.github/workflows/verify-platform-tool-releases.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/lib/pinned-tool-versions.sh'
+      - 'scripts/bootstrap/install-verified-tool.sh'
+      - 'scripts/bootstrap/verify-platform-tool-releases.sh'
+      - '.github/workflows/verify-platform-tool-releases.yml'
+  workflow_dispatch:  # Manual trigger button
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  verify-platform-tool-releases:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Verify amd64 and arm64 platform-tool releases
+        run: ./scripts/bootstrap/verify-platform-tool-releases.sh

@@ -8,15 +8,24 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../lib/pinned-tool-versions.sh
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 . "$SCRIPT_DIR/../lib/pinned-tool-versions.sh"
+# shellcheck source=../lib/verified-tool-destination.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+. "$SCRIPT_DIR/../lib/verified-tool-destination.sh"
 
 usage() {
     cat <<'EOF'
 Usage: scripts/bootstrap/install-verified-tool.sh <kubectl|helm|tilt|mkcert|kind|kubeconform|kube-linter|kyverno|yq> [--install-dir DIR]
 
 Installs the repo-pinned tool release for the current OS/architecture after
-verifying the checked-in SHA-256 checksum. The default system destination must
-be root-owned; a custom --install-dir must be owned by the invoking user or
-root. Install paths may not be symlinked or writable by group/other.
+verifying the checked-in SHA-256 checksum. A recognized existing binary is
+replaced with the pin, whether it is newer or older.
+
+The default /usr/local/bin destination is installed with sudo; it, its
+ancestors and any existing destination must be root-owned, not symlinked and
+not writable by group/other. A custom --install-dir is installed without sudo:
+missing directories are created with mkdir -p under the current umask, and an
+existing destination must be a regular, non-symlinked file. Normal filesystem
+permissions govern custom writes.
 EOF
 }
 
@@ -27,130 +36,15 @@ require_command() {
     fi
 }
 
-path_uid() {
-    stat -c '%u' -- "$1" 2>/dev/null || stat -f '%u' -- "$1"
-}
-
-path_mode() {
-    stat -c '%a' -- "$1" 2>/dev/null || stat -f '%Lp' -- "$1"
-}
-
-validate_owned_path() {
-    local path context uid mode permissions
-
-    path="$1"
-    context="$2"
-    if [[ -L "$path" ]]; then
-        echo "Symlinked ${context}: $path" >&2
-        return 1
-    fi
-
-    uid="$(path_uid "$path")"
-    mode="$(path_mode "$path")"
-    if [[ "$SYSTEM_INSTALL" == true ]]; then
-        if [[ "$uid" != 0 ]]; then
-            echo "System ${context} is not root-owned: $path" >&2
-            return 1
-        fi
-    elif [[ "$uid" != 0 && "$uid" != "$CURRENT_UID" ]]; then
-        echo "Custom ${context} is not owned by root or uid ${CURRENT_UID}: $path" >&2
-        return 1
-    fi
-
-    permissions=$((8#$mode))
-    if (( permissions & 18 )); then
-        echo "Group/world-writable ${context}: $path" >&2
-        return 1
-    fi
-}
-
-validate_existing_ancestors() {
-    local path context
-
-    path="$1"
-    context="$2"
-    while [[ ! -e "$path" && ! -L "$path" ]]; do
-        path="$(dirname "$path")"
-    done
-    while :; do
-        validate_owned_path "$path" "$context parent" || return 1
-        [[ "$path" == / ]] && break
-        path="$(dirname "$path")"
-    done
-}
-
-validate_install_destination() {
-    local destination raw_version installed_version selected_version
-
-    destination="$1"
-    validate_existing_ancestors "$(dirname "$destination")" "install" || return 1
-
-    if [[ -L "$destination" ]]; then
-        echo "Symlinked install destination: $destination" >&2
-        return 1
-    fi
-    if [[ ! -e "$destination" ]]; then
-        return 0
-    fi
-    validate_owned_path "$destination" "install destination" || return 1
-    if [[ ! -f "$destination" || ! -x "$destination" ]]; then
-        echo "Destination collision with a non-executable file: $destination" >&2
-        return 1
-    fi
-
-    raw_version="$(phase7_tool_raw_version_at "$TOOL" "$destination" 2>/dev/null || true)"
-    installed_version="$(phase7_normalize_semver "$raw_version")"
-    selected_version="$(phase7_normalize_semver "$VERSION")"
-    if [[ -z "$installed_version" ]]; then
-        echo "Destination collision: cannot identify existing $TOOL at $destination" >&2
-        return 1
-    fi
-    if phase7_semver_is_newer "$installed_version" "$selected_version"; then
-        echo "Refusing to downgrade existing $TOOL $installed_version to $VERSION at $destination" >&2
-        return 1
-    fi
-}
-
-check_resolved_system_tool_for_downgrade() {
-    local resolved raw_version installed_version selected_version
-
-    [[ "$SYSTEM_INSTALL" == true ]] || return 0
-    resolved="$(command -v "$TOOL" 2>/dev/null || true)"
-    [[ -n "$resolved" && "$resolved" != "$DESTINATION" ]] || return 0
-    if [[ "$resolved" != /* ]]; then
-        echo "Command collision: $TOOL resolves to a non-absolute path: $resolved" >&2
-        return 1
-    fi
-    validate_existing_ancestors "$(dirname "$resolved")" "resolved command" || return 1
-    validate_owned_path "$resolved" "resolved command" || return 1
-    raw_version="$(phase7_tool_raw_version_at "$TOOL" "$resolved" 2>/dev/null || true)"
-    installed_version="$(phase7_normalize_semver "$raw_version")"
-    selected_version="$(phase7_normalize_semver "$VERSION")"
-    if [[ -z "$installed_version" ]]; then
-        echo "Command collision: cannot identify existing $TOOL at $resolved" >&2
-        return 1
-    fi
-    if phase7_semver_is_newer "$installed_version" "$selected_version"; then
-        echo "Refusing to downgrade existing $TOOL $installed_version to $VERSION from $resolved" >&2
-        return 1
-    fi
-}
-
 ensure_directory() {
     local dir
 
     dir="$1"
-    if [[ -d "$dir" ]]; then
-        return 0
-    fi
-    if [[ -e "$dir" || -L "$dir" ]]; then
-        echo "Install directory collision: $dir" >&2
-        return 1
-    fi
-
     if [[ "$SYSTEM_INSTALL" == false ]]; then
         mkdir -p -- "$dir"
-        chmod 0755 -- "$dir"
+        return 0
+    fi
+    if [[ -d "$dir" ]]; then
         return 0
     fi
     require_command sudo
@@ -223,7 +117,6 @@ esac
 
 require_command curl
 require_command install
-require_command stat
 
 case "$INSTALL_DIR" in
     /*) ;;
@@ -243,79 +136,35 @@ PLATFORM="$(phase7_platform_key)"
 VERSION="$(phase7_tool_version "$TOOL")"
 URL="$(phase7_tool_url "$TOOL" "$PLATFORM")"
 EXPECTED_SHA256="$(phase7_tool_sha256 "$TOOL" "$PLATFORM")"
-CURRENT_UID="$(id -u)"
 SYSTEM_INSTALL=false
 if [[ "$INSTALL_DIR" == /usr/local/bin ]]; then
     SYSTEM_INSTALL=true
+    require_command stat
 fi
 DESTINATION="$INSTALL_DIR/$TOOL"
 
-validate_install_destination "$DESTINATION"
-check_resolved_system_tool_for_downgrade
+if [[ "$SYSTEM_INSTALL" == true ]]; then
+    verified_tool_validate_privileged_destination "$DESTINATION"
+fi
+EXISTING_VERSION="$(verified_tool_existing_destination_version "$TOOL" "$DESTINATION")"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 STAGED_BINARY="$TMP_DIR/staged-$TOOL"
 
-case "$TOOL" in
-    kubectl)
-        ARTIFACT="$TMP_DIR/kubectl"
-        download_file "$URL" "$ARTIFACT"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARTIFACT" "$EXPECTED_SHA256"
-        cp -- "$ARTIFACT" "$STAGED_BINARY"
-        ;;
-    helm)
-        ARCHIVE="$TMP_DIR/helm.tar.gz"
-        download_file "$URL" "$ARCHIVE"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARCHIVE" "$EXPECTED_SHA256"
-        tar -xOzf "$ARCHIVE" "$(phase7_tool_archive_member "$TOOL" "$PLATFORM")" > "$STAGED_BINARY"
-        ;;
-    tilt)
-        ARCHIVE="$TMP_DIR/tilt.tar.gz"
-        download_file "$URL" "$ARCHIVE"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARCHIVE" "$EXPECTED_SHA256"
-        tar -xOzf "$ARCHIVE" "$(phase7_tool_archive_member "$TOOL" "$PLATFORM")" > "$STAGED_BINARY"
-        ;;
-    mkcert)
-        ARTIFACT="$TMP_DIR/mkcert"
-        download_file "$URL" "$ARTIFACT"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARTIFACT" "$EXPECTED_SHA256"
-        cp -- "$ARTIFACT" "$STAGED_BINARY"
-        ;;
-    kind)
-        ARTIFACT="$TMP_DIR/kind"
-        download_file "$URL" "$ARTIFACT"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARTIFACT" "$EXPECTED_SHA256"
-        cp -- "$ARTIFACT" "$STAGED_BINARY"
-        ;;
-    kubeconform)
-        ARCHIVE="$TMP_DIR/kubeconform.tar.gz"
-        download_file "$URL" "$ARCHIVE"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARCHIVE" "$EXPECTED_SHA256"
-        tar -xOzf "$ARCHIVE" "$(phase7_tool_archive_member "$TOOL" "$PLATFORM")" > "$STAGED_BINARY"
-        ;;
-    kube-linter)
-        ARCHIVE="$TMP_DIR/kube-linter.tar.gz"
-        download_file "$URL" "$ARCHIVE"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARCHIVE" "$EXPECTED_SHA256"
-        tar -xOzf "$ARCHIVE" "$(phase7_tool_archive_member "$TOOL" "$PLATFORM")" > "$STAGED_BINARY"
-        ;;
-    kyverno)
-        ARCHIVE="$TMP_DIR/kyverno.tar.gz"
-        download_file "$URL" "$ARCHIVE"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARCHIVE" "$EXPECTED_SHA256"
-        tar -xOzf "$ARCHIVE" "$(phase7_tool_archive_member "$TOOL" "$PLATFORM")" > "$STAGED_BINARY"
-        ;;
-    yq)
-        ARTIFACT="$TMP_DIR/yq"
-        download_file "$URL" "$ARTIFACT"
-        phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARTIFACT" "$EXPECTED_SHA256"
-        cp -- "$ARTIFACT" "$STAGED_BINARY"
-        ;;
-esac
+ARTIFACT="$TMP_DIR/$TOOL.download"
+download_file "$URL" "$ARTIFACT"
+phase7_validate_tool_artifact "$TOOL" "$PLATFORM" "$ARTIFACT" "$EXPECTED_SHA256"
+phase7_stage_tool_binary "$TOOL" "$PLATFORM" "$ARTIFACT" "$STAGED_BINARY"
 
 ensure_directory "$INSTALL_DIR"
-validate_install_destination "$DESTINATION"
+if [[ "$SYSTEM_INSTALL" == true ]]; then
+    verified_tool_validate_privileged_destination "$DESTINATION"
+    EXISTING_VERSION="$(verified_tool_existing_destination_version "$TOOL" "$DESTINATION")"
+fi
+if [[ -n "$EXISTING_VERSION" ]]; then
+    echo "Replacing $TOOL $EXISTING_VERSION with pinned $VERSION at $DESTINATION"
+fi
 install_binary "$STAGED_BINARY" "$DESTINATION"
 
 echo "Installed $TOOL $VERSION to $INSTALL_DIR/$TOOL"

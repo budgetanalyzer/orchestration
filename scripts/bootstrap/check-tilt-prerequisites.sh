@@ -62,21 +62,21 @@ check_command() {
     local install_hint=$3
 
     if command -v "$cmd" &> /dev/null; then
-        # Different tools use different version flags
-        local version
+        # Pinned tools report their resolved path here; others report a version line
+        local detail
         case "$cmd" in
             kubectl|helm|tilt|kind)
                 # check_pinned_tool_version probes and reports the version.
-                version=$(command -v "$cmd")
+                detail=$(command -v "$cmd")
                 ;;
             openssl)
-                version=$($cmd version 2>&1 | head -n1)
+                detail=$($cmd version 2>&1 | head -n1)
                 ;;
             *)
-                version=$($cmd --version 2>&1 | head -n1)
+                detail=$($cmd --version 2>&1 | head -n1)
                 ;;
         esac
-        echo -e "${GREEN}✓${NC} $name installed: $version"
+        echo -e "${GREEN}✓${NC} $name installed: $detail"
         return 0
     else
         echo -e "${RED}✗${NC} $name NOT installed"

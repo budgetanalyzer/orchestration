@@ -66,7 +66,11 @@ merely to inspect the selected authority.
 Its Docker endpoint guard first rejects any nonempty `KIND_EXPERIMENTAL_PROVIDER`
 other than `docker`, so the transport it checks is the one Kind uses; it then
 requires a reachable local Unix-socket daemon. This is a transport check, not
-host-isolation proof. `scripts/bootstrap/check-local-runtime.sh` combines that
+host-isolation proof: it accepts any reachable local Unix socket, including a
+host Docker socket forwarded into the VM. In the workspace development VM, the
+workspace
+[pre-agent VM boundary check](../../../workspace/docs/host-isolation.md#pre-agent-vm-boundary-check)
+owns guest Docker and forwarded-authority checks. `scripts/bootstrap/check-local-runtime.sh` combines that
 guard with the exact-target check for daily startup. Setup and the prerequisite
 checker call the same guard before any Kind access, and the Secret installer
 repeats the exact-target check before mutation.
@@ -131,11 +135,16 @@ then reconcile the Secret without recreating Kind.
 ## Autonomous Execution Workflow
 
 1. Define the task and explicit success criteria.
-2. Run `scripts/bootstrap/check-local-runtime.sh` before daily local work.
-3. Require the exact local Kubernetes target before any cluster mutation.
-4. Confirm live API tests select the exact local origin when applicable.
-5. Execute only within the local application authority described above.
-6. Verify the result with repo-owned checks and human review before publication.
+2. In the workspace development VM, pass the workspace
+   [pre-agent VM boundary check](../../../workspace/docs/host-isolation.md#pre-agent-vm-boundary-check)
+   (`check-agent-vm-boundary.sh`) before agent work. Workspace-managed provider
+   launchers enforce it; run it manually for work started outside them.
+   Orchestration never invokes it.
+3. Run `scripts/bootstrap/check-local-runtime.sh` before daily local work.
+4. Require the exact local Kubernetes target before any cluster mutation.
+5. Confirm live API tests select the exact local origin when applicable.
+6. Execute only within the local application authority described above.
+7. Verify the result with repo-owned checks and human review before publication.
 
 Permission-bypass flags do not establish the operating boundary. If a required
 prerequisite is absent, stop instead of weakening a control or hiding a

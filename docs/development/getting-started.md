@@ -112,6 +112,13 @@ the personal-host tunnel, and agent launch. Follow its
 the same orchestration `./setup.sh` and daily-start commands above. Workspace
 commands are environment preparation, not orchestration prerequisites.
 
+In the VM, pass the workspace
+[pre-agent VM boundary check](../../../workspace/docs/host-isolation.md#pre-agent-vm-boundary-check)
+(`check-agent-vm-boundary.sh`) before `./setup.sh` and before daily startup.
+Orchestration never invokes it. Orchestration's Docker guard is a transport
+check only: it accepts any reachable local Unix socket, including a forwarded
+host socket, so passing it is not VM-boundary evidence.
+
 ## Validation
 
 After Tilt is healthy, run the aggregate local proof:

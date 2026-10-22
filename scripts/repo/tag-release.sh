@@ -15,16 +15,17 @@ Usage:
   ./scripts/repo/tag-release.sh --repo transaction-service v0.0.15
 
 Options:
-  --repo <repo>       Repository to tag. Must be a runtime image repo or
-                      service-common. Use tag-lockstep-release.sh for the
-                      rare coordinated all-repo tag.
+  --repo <repo>       Repository to tag. Must be in LOCKSTEP_RELEASE_REPOS.
+                      Use tag-lockstep-release.sh for the rare coordinated
+                      all-repo tag.
   --version <tag>     Release tag in vX.Y.Z form.
   --yes               Do not prompt before creating and pushing the tag.
   --no-push           Create the local tag only.
   -h, --help          Show this help.
 
 This is the normal single-repository tag helper. It validates only the selected
-repository and does not tag unrelated repos.
+repository and does not tag unrelated repos. A tag produces a release artifact
+only when the repository has a tag-triggered publish workflow.
 EOF
 }
 
@@ -71,16 +72,8 @@ repo_in_set() {
 validate_repo_allowed() {
     local repo="$1"
 
-    if repo_in_set "${repo}" "${RUNTIME_IMAGE_REPOS[@]}" || \
-        repo_in_set "${repo}" "${SHARED_LIBRARY_REPOS[@]}"; then
-        return
-    fi
-
-    if repo_in_set "${repo}" "${TOOLING_REPOS[@]}"; then
-        die "${repo} is a tooling repo, not a runtime release repo"
-    fi
-
-    die "unknown or unsupported release repo: ${repo}"
+    repo_in_set "${repo}" "${LOCKSTEP_RELEASE_REPOS[@]}" || \
+        die "unknown or unsupported release repo: ${repo}"
 }
 
 validate_repo_state() {

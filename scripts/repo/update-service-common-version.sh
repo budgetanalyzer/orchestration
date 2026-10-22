@@ -7,14 +7,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/repo-config.sh"
 
-JAVA_CONSUMER_REPOS=(
-    "transaction-service"
-    "currency-service"
-    "permission-service"
-    "session-gateway"
-)
-readonly JAVA_CONSUMER_REPOS
-
 TARGET_VERSION=""
 DRY_RUN=false
 VALIDATE_ONLY=false
@@ -243,7 +235,7 @@ validate_versions() {
         validation_failed=true
     fi
 
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         catalog_file="$(consumer_catalog_file "${repo}")"
         current_version="$(read_toml_service_common_version "${catalog_file}")" || {
             print_error "Expected exactly one serviceCommon version entry in $(display_path "${catalog_file}")"
@@ -267,7 +259,7 @@ print_targets() {
     print_info "Target service-common version: ${TARGET_VERSION}"
     echo "Targets:"
     echo "- $(display_path "$(service_common_build_file)")"
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         echo "- $(display_path "$(consumer_catalog_file "${repo}")")"
     done
 }
@@ -278,7 +270,7 @@ main() {
     parse_args "$@"
 
     require_file "$(service_common_build_file)"
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         require_file "$(consumer_catalog_file "${repo}")"
     done
 
@@ -291,7 +283,7 @@ main() {
     fi
 
     replace_gradle_version_literal "$(service_common_build_file)"
-    for repo in "${JAVA_CONSUMER_REPOS[@]}"; do
+    for repo in "${JAVA_RUNTIME_REPOS[@]}"; do
         replace_toml_service_common_version "$(consumer_catalog_file "${repo}")"
     done
 

@@ -391,8 +391,9 @@ Release image publishing is tag-driven and owned by the source repositories:
   `serviceCommon` value
 - `./scripts/repo/tag-release.sh` is now the normal single-repository tag
   helper and requires `--repo`; it does not tag every Budget Analyzer repo by
-  default, and it refuses tooling repos such as `checkstyle-config` for runtime
-  release tagging
+  default, and it accepts any repo in `LOCKSTEP_RELEASE_REPOS`. Tagging a repo
+  without a tag-triggered publish workflow, such as `checkstyle-config`, only
+  marks the source version and does not add it to the runtime artifact set
 - keep existing Java consumers on their checked-in `serviceCommon` version
   unless the shared library actually changed
 - production-reference manifests record the historical reference id,

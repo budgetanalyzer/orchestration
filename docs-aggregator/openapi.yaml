@@ -595,7 +595,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PreviewResponse'
         '422':
-          description: Unprocessable Entity
+          description: Unprocessable Content
           content:
             application/json:
               schema:
@@ -794,7 +794,7 @@ paths:
                     - field: files[1].transactions[89].date
                       message: must not be null
         '422':
-          description: Unprocessable Entity
+          description: Unprocessable Content
           content:
             application/json:
               schema:
@@ -4993,11 +4993,11 @@ components:
           minLength: 0
         enabled:
           type: boolean
-          default: true
           description: Whether this currency is enabled for exchange rate access
           example: true
       required:
       - currencyCode
+      - enabled
       - providerSeriesId
     ExchangeRateResponse:
       type: object

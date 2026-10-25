@@ -93,6 +93,16 @@
   ],
   "packageRules": [
     {
+      "description": "Keep setup-trivy's version input a release tag; the action cannot consume a commit digest",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepNames": [
+        "aquasecurity/trivy"
+      ],
+      "pinDigests": false
+    },
+    {
       "description": "Require reviewed wheel hashes for the bounded static PyYAML tool dependency",
       "matchManagers": [
         "pip_requirements"

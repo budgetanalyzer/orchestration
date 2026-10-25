@@ -282,14 +282,15 @@ When the failure is routing-related, start with `nginx/README.md`. When the fail
 
 This repository coordinates GitHub Actions workflow standards and upgrade planning across the Budget Analyzer repos.
 
-Keep repository workflows on Node 24-ready action majors. In this repo that means:
-- `actions/checkout@v7` for first-party checkout steps
-- `docker/setup-qemu-action@v4`
-- `docker/setup-buildx-action@v4`
-- `docker/login-action@v4`
-- `docker/build-push-action@v7`
-- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` at workflow scope
+Workflow rules:
+- External `uses:` refs are full-SHA pinned with a Renovate-managed release comment; do not cite action versions or runtime majors in docs. The workflows are the only record of selected versions; see `docs/dependency-automation.md#ownership-and-update-policy`
+- Keep the JavaScript-actions runtime override set at workflow scope
 - `runs-on: ubuntu-24.04`, not `ubuntu-latest`; the static guardrail PyYAML hash contract requires the 24.04 runner's CPython 3.12 (`docs/ci-cd.md#security-guardrailsyml`)
+
+```bash
+# Show current workflow action refs
+rg -n 'uses:' .github/workflows
+```
 
 Treat action-source admission and commit pinning as separate controls. Before
 introducing an external `uses:` reference, confirm that the effective

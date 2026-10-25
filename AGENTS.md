@@ -283,7 +283,7 @@ When the failure is routing-related, start with `nginx/README.md`. When the fail
 This repository coordinates GitHub Actions workflow standards and upgrade planning across the Budget Analyzer repos.
 
 Keep repository workflows on Node 24-ready action majors. In this repo that means:
-- `actions/checkout@v6` for first-party checkout steps
+- `actions/checkout@v7` for first-party checkout steps
 - `docker/setup-qemu-action@v4`
 - `docker/setup-buildx-action@v4`
 - `docker/login-action@v4`

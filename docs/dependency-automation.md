@@ -63,6 +63,13 @@ annotations, and declarative regex managers in the repository that owns the
 declaration. Do not add a custom crawler or seed a historical expected version
 to make discovery appear complete.
 
+GitHub Actions refs are Renovate-owned. Each external `uses:` ref is pinned to
+a full commit SHA with a trailing release comment that Renovate keeps current,
+so the workflow files are the only record of selected action versions.
+Documentation, `AGENTS.md` files, and Renovate pull-request notes name an
+action only when the name explains behavior, and never cite its version or
+runtime major.
+
 ## Service and cost boundary
 
 Use the open-source Renovate engine through the free Mend Renovate Community
@@ -245,7 +252,7 @@ and evidence shape for the ten active production repositories:
 
 | Owner | Workflow | Production events | Durable result |
 | --- | --- | --- | --- |
-| `orchestration` | Dependency Automation Configuration | Relevant pushes and pull requests on `main`; manual dispatch | Strict validation of the repository config and shared preset under Node 24 |
+| `orchestration` | Dependency Automation Configuration | Relevant pushes and pull requests on `main`; manual dispatch | Strict validation of the repository config and shared preset under the workflow-declared Node runtime |
 | `orchestration` | Exact Image Security Evidence | Pushes to `main`; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
 | `service-common` | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by the workflow | Complete resolved Gradle graph submitted with job-scoped `contents: write` |
 | Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
@@ -489,8 +496,8 @@ Before changing Renovate configuration, workflow events, permissions,
 credentials, evidence allowlists, retention, or Mend settings, read this guide
 and the owning repository's instructions. Validate the changed repository with
 its pinned strict Renovate validator, `actionlint`, and required checks for any
-changed scripts. Keep workflows on the repository's Node 24-ready action
-baseline.
+changed scripts. Keep workflows on the repository's current action baseline
+as declared in its workflows.
 
 Run the strict validator command from
 `.github/workflows/dependency-automation-config.yml` so the checked-in pinned

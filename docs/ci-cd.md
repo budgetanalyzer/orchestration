@@ -166,12 +166,18 @@ requests targeting `main`, and on manual dispatch, the focused
 validator against the repository config and shared preset. It does not install
 the App or open dependency pull requests.
 
-On pushes to `main`, its weekly schedule, and manual dispatch, the
+On pushes to `main`, pull requests targeting `main` that change image render
+inputs, its weekly schedule, and manual dispatch, the
 `exact-image-security-evidence.yml` workflow renders the checked-in production
 and controller sources offline, resolves each rendered ref to an exact platform
 digest, and publishes complete Trivy inventories and vulnerability reports in
-one artifact retained for seven days. Its operating boundary, evidence
-contract, artifact contents, and known coverage gaps are owned by
+one artifact retained for seven days. On pull requests, a missing
+`linux/arm64` manifest, declared-digest mismatch, or incomplete scan fails the
+check before merge; vulnerability findings remain non-gating. Each pull
+request has its own concurrency group and cancels superseded runs, while
+`main`, schedule, and manual runs share one serialized group. The path filter
+is in the workflow; the unfiltered `main` push run remains the backstop. Its
+operating boundary, evidence contract, artifact contents, and known coverage gaps are owned by
 [Dependency Automation](dependency-automation.md#exact-image-security-evidence).
 
 ### `test-setup.yml` and `verify-platform-tool-releases.yml`

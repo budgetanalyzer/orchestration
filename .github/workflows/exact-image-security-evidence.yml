@@ -3,6 +3,20 @@ name: Exact Image Security Evidence
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/exact-image-security-evidence.yml'
+      - 'Tiltfile'
+      - 'kind-cluster-config.yaml'
+      - 'deploy/**'
+      - 'kubernetes/**'
+      - 'nginx/Dockerfile.prod-smoke-assets'
+      - 'scripts/bootstrap/install-verified-tool.sh'
+      - 'scripts/lib/pinned-tool-versions.sh'
+      - 'scripts/lib/production-version-contract.sh'
+      - 'scripts/ops/post-render-*.sh'
+      - 'scripts/security/**'
   schedule:
     - cron: '23 4 * * 6'
   workflow_dispatch:
@@ -11,8 +25,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: exact-image-security-evidence
-  cancel-in-progress: false
+  group: exact-image-security-evidence-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'

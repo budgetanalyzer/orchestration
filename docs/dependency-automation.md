@@ -300,7 +300,7 @@ and evidence shape for the eleven scoped repositories:
 | `orchestration` | Exact Image Security Evidence | Pushes to `main`; pull requests targeting `main` that change image render inputs; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
 | `service-common` | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by the workflow | Complete resolved Gradle graph submitted with job-scoped `contents: write` |
 | Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
-| Four deployable Java services, `budget-analyzer-web`, and `ext-authz` | Image Build Check | Pull requests targeting `main` that change image build inputs; manual dispatch | `linux/arm64` build of the release Dockerfile and context without registry login, tags, or push, using only the release workflow's BuildKit secrets; `budget-analyzer-web` also builds its Tilt development Dockerfile; no evidence artifact |
+| Four deployable Java services, `budget-analyzer-web`, and `ext-authz` | Image Build Check | Pull requests targeting `main` that change the image build inputs in the repository's path filter; manual dispatch | `linux/arm64` build of the release Dockerfile and context without registry login, tags, or push, using only the release workflow's BuildKit secrets; `budget-analyzer-web` also builds its Tilt development Dockerfile; no evidence artifact |
 | `budget-analyzer-web` | Dependency Audit | Pull requests targeting `main` that change npm manifests or the workflow; weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
 | `ext-authz` | Go Vulnerability Check | Pushes to `main`; pull requests targeting `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
 | `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
@@ -311,16 +311,21 @@ and evidence shape for the eleven scoped repositories:
 Build workflows continue to validate Renovate pull requests through their
 normal `main` pull-request events. In each image-owning repository, the
 path-filtered Image Build Check also builds the release Dockerfile for
-`linux/arm64` without pushing when a pull request changes the Dockerfile or the
-dependency manifests, lockfiles, build scripts, or copied configuration it
-consumes. It proves that the base images for the image's `linux/arm64` stages
-resolve and that the build completes before a `v*` release tag. It does not prove
-runtime behavior, publish or scan an image, compare against the released
-digest, or run when only application source changes; the normal build workflow
-covers source. The Java services pass only the package-read BuildKit secrets
-that their release workflows use, so fork pull requests without those secrets
-fail. Each repository's `docs/dependency-automation.md` owns its exact path
-filter and limits.
+`linux/arm64` without pushing when a pull request changes an image build input
+listed in that repository's filter. The Java services filter on the Dockerfile,
+Gradle wrapper, and build scripts but exclude the version catalog, so
+catalog-only dependency updates rely on Build, and manual dispatch provides
+in-container proof when warranted; that exclusion trades emulated-build cost
+against little added signal. `budget-analyzer-web` and `ext-authz` include
+their npm and Go manifests and lockfiles because the image build installs or
+compiles those dependencies. It proves that the base images for the image's
+`linux/arm64` stages resolve and that the build completes before a `v*` release
+tag. It does not prove runtime behavior, publish or scan an image, compare
+against the released digest, or run when only application source changes; the
+normal build workflow covers source. The Java services pass only the
+package-read BuildKit secrets that their release workflows use, so fork pull
+requests without those secrets fail. Each repository's
+`docs/dependency-automation.md` owns its exact path filter and limits.
 
 Do not make a path-filtered workflow, including Image Build Check, the
 `budget-analyzer-web` Dependency Audit, or orchestration's Exact Image Security
@@ -522,9 +527,9 @@ Every week:
    missing or partial reports as operational failures, not clean results.
 4. Review bot-branch checks and package or registry access without moving
    secrets into untrusted pull-request execution. Include Image Build Check
-   results on pull requests that change image build inputs, and the npm audit
-   and `govulncheck` pull-request summaries, whose findings do not fail the
-   pull request.
+   results on pull requests that change the image build inputs in each
+   repository's filter, and the npm audit and `govulncheck` pull-request
+   summaries, whose findings do not fail the pull request.
 5. Confirm Renovate is still the sole update-PR owner, automerge is off, the
    first-party release path is untouched, and Actions/storage usage remains
    within the approved free boundary.
@@ -563,8 +568,10 @@ support state of the installed guest.
   break in a dependency, lockfile, or build step. Pin a base image that
   publishes arm64, fix the credential in its owning system, or fix the build in
   the owning repository. Do not drop the arm64 platform, switch to amd64, skip
-  or path-exclude the check, or move secrets into untrusted pull-request
-  execution.
+  the check, path-exclude a failing input to make the failure pass, or move
+  secrets into untrusted pull-request execution. A deliberate trigger-scope
+  change documented in the owning repository's
+  `docs/dependency-automation.md` is not an exclusion of this kind.
 - **Native workspace evidence failure:** distinguish malformed manifest data,
   incomplete npm lock closure, audit findings, unavailable public release
   assets, checksum or architecture mismatch, and incomplete manual-lifecycle

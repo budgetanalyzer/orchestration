@@ -393,8 +393,8 @@ getting-started guide.
   Jaeger and Kind inputs, and extracts the Tilt Temurin and frontend smoke base
   refs. The helper is offline with respect to Kubernetes: Helm repository and
   container-registry network access are still required. The main-push,
-  weekly, and manual exact-image evidence workflow owns YAML extraction,
-  immutable platform resolution, Trivy scanning, summaries, and short-lived
+  render-input pull-request, weekly, and manual exact-image evidence workflow
+  owns YAML extraction, immutable platform resolution, Trivy scanning, summaries, and short-lived
   artifacts. The workflow uploads its declared evidence paths as one seven-day
   artifact; the shared evidence policy lives in
   `../docs/dependency-automation.md`.

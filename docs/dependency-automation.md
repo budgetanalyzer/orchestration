@@ -104,10 +104,15 @@ operation, not authority to buy capacity, remove evidence, or weaken a scan.
 
 ## Configuration and repository ownership
 
-The active dependency-automation scope contains ten repositories: `orchestration`,
-`service-common`, `currency-service`, `permission-service`,
+The active dependency-automation scope contains eleven repositories:
+`orchestration`, `service-common`, `currency-service`, `permission-service`,
 `transaction-service`, `session-gateway`, `budget-analyzer-web`, `ext-authz`,
-`workspace`, and `budget-analyzer-api-tests`.
+`workspace`, `budget-analyzer-api-tests`, and `ai-session-handler`.
+Repository preparation for `ai-session-handler` is complete, but its hosted
+automation remains pending until the
+[AI Session Handler activation checklist](#ai-session-handler-activation-checklist)
+succeeds. Dependency-automation scope does not make it a runtime-image, Java,
+or lockstep-release repository.
 
 Orchestration owns the shared preset and its own extraction for Kubernetes,
 Helm values, Tilt, Kind, shell version contracts, pinned tools, chart image
@@ -135,6 +140,7 @@ managers and any repository-specific extraction:
 | `ext-authz` | Go modules, Go/runtime declarations, Dockerfiles, Actions, reachable `govulncheck` |
 | `workspace` | Native npm manifest and lock, workspace-owned downloaded-tool declarations with standard datasources, Actions, and version/URL/checksum/architecture-coupled inputs; kubectl, Helm, Tilt, and Kind belong to orchestration |
 | `budget-analyzer-api-tests` | Bounded PEP 621 requirements, Python/runtime and tool pins, exact uv lock, Actions, frozen CI, lock maintenance, and complete parity/SBOM/audit evidence |
+| `ai-session-handler` | Empty runtime dependencies; bounded PEP 621 build (setuptools) and development-tool requirements, exact `.python-version` and annotated uv pins, exact uv lock, Actions, frozen Build workflow, and weekly lock maintenance; no scanner, SBOM, audit, or parity evidence |
 
 The four Java consumers must continue to exclude `org.budgetanalyzer` from
 Maven Central while preserving Maven Local for local development and the
@@ -168,7 +174,8 @@ the wheel still matches the hosted runner's declared Python/platform contract,
 and rerun the static guardrails. Do not add an sdist merely to make a new
 runtime installable, and do not move this package into the standalone-binary
 installer. This bounded input is intentionally distinct from the
-`budget-analyzer-api-tests` PEP 621, uv lock, SBOM, audit, and parity contract.
+`budget-analyzer-api-tests` PEP 621, uv lock, SBOM, audit, and parity contract
+and from the `ai-session-handler` development-only uv contract.
 
 The workspace manifest describes a native Ubuntu VM, not a container image.
 Ubuntu VM lifecycle and installed apt patching remain human/distribution owned;
@@ -244,16 +251,53 @@ a failed proposal. The shared weekly schedule, automerge prohibition,
 major-update approval, and pull-request limits apply without a Python-specific
 shared-preset rule.
 
+## Python tooling repository: `ai-session-handler`
+
+**Activation status:** Repository preparation complete; hosted activation
+pending the [AI Session Handler activation checklist](#ai-session-handler-activation-checklist).
+The repository-local
+[dependency-maintenance guide](https://github.com/budgetanalyzer/ai-session-handler/blob/main/docs/dependency-maintenance.md)
+owns exact versions, commands, Renovate extraction, lock refresh, and failure
+triage. This section owns only the ecosystem boundary.
+
+AI Session Handler reuses the API-tests uv pinning pattern without its
+evidence stack:
+
+- `project.dependencies` stays empty. `pyproject.toml` bounds only the
+  setuptools build backend (declared identically in `[build-system]` and a
+  `build` dependency group) and the development tools in the `dev` extra.
+- `.python-version` owns the exact Python patch within the PEP 621
+  `requires-python` minor line, and one annotated exact uv pin in
+  `pyproject.toml` is the only uv version literal. A stdlib-only bootstrap
+  installs that uv into an isolated versioned environment below
+  `.dependency-tools/`, verifies its version, fails on a stale lock, and
+  synchronizes `.venv` from the checked-in `uv.lock` in frozen mode.
+- Lock refresh is an explicit, reviewed maintenance operation; setup, tests,
+  and CI never refresh the lock.
+- Renovate's native PEP 621, Python-version, and GitHub Actions managers plus
+  one narrow regex manager for the annotated uv pin cover the declarations.
+  Weekly lock maintenance proposes transitive refreshes. Python updates stay
+  within the declared minor line, the two setuptools declarations are grouped,
+  and the shared preset's automerge prohibition, major-update approval, and
+  pull-request limits apply unchanged.
+
+The repository has no scanner, SBOM, `pip-audit`, parity, or
+dependency-evidence workflow and uploads no evidence artifact. Its small
+development-only graph does not justify one; do not add that machinery, or a
+runtime package, in response to a dependency update. Advisory visibility comes
+from GitHub's dependency graph and Dependabot alerts, and update acceptance
+comes from its frozen Build workflow.
+
 ## Production workflow matrix
 
 The workflow files are the executable source of truth for exact paths,
 schedules, permissions, and concurrency. This matrix records the durable event
-and evidence shape for the ten active production repositories:
+and evidence shape for the eleven scoped repositories:
 
 | Owner | Workflow | Production events | Durable result |
 | --- | --- | --- | --- |
 | `orchestration` | Dependency Automation Configuration | Relevant pushes and pull requests on `main`; manual dispatch | Strict validation of the repository config and shared preset under the workflow-declared Node runtime |
-| `orchestration` | Exact Image Security Evidence | Pushes to `main`; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
+| `orchestration` | Exact Image Security Evidence | Pushes to `main`; pull requests targeting `main` that change image render inputs; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
 | `service-common` | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by the workflow | Complete resolved Gradle graph submitted with job-scoped `contents: write` |
 | Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
 | `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
@@ -261,12 +305,14 @@ and evidence shape for the ten active production repositories:
 | `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
 | `budget-analyzer-api-tests` | CI | Pushes to `main`; pull requests targeting `main`; manual dispatch | Frozen all-groups synchronization and deterministic dependency, test-collection, formatting, lint, and type checks without browser installation or application access |
 | `budget-analyzer-api-tests` | Python Dependency Evidence | Relevant trusted pushes to `main`; weekly schedule; manual dispatch | Exact locked-graph inventory, dependency tree, CycloneDX SBOM, `pip-audit`, Playwright-derived metadata, and cross-representation parity evidence |
+| `ai-session-handler` | Build | Pushes to `main`; pull requests targeting `main`; manual dispatch | Read-only frozen bootstrap from `.python-version`, `uv.lock`, and the pinned uv, then formatting, lint, strict type, and test gates; no evidence artifact |
 
 Build workflows continue to validate Renovate pull requests through their
 normal `main` pull-request events. Keep scheduled workflows least-privileged.
 Java dependency submission alone receives job-scoped `contents: write`; package
 reads use the existing package credential pair rather than the submission job
-token. Scanner and validation workflows remain read-only. Workspace's native
+token. Scanner and validation workflows, including AI Session Handler's
+Build, remain read-only. Workspace's native
 evidence workflow must declare read-only token permissions; it must not run the
 provisioner, install packages, mutate a VM, or use private release credentials.
 It may read repository inputs and download only the public release assets
@@ -361,7 +407,7 @@ exact primary application patch.
 ## GitHub and Mend settings
 
 Keep `main` as every repository's default branch and normal protected merge
-target. Scope Mend to the ten repositories above, let it follow each default
+target. Scope Mend to the eleven repositories above, let it follow each default
 branch, and do not configure a separate base branch. Use Scan and Alert behavior
 with automerge disabled.
 
@@ -403,6 +449,31 @@ remain the complete selected-environment evidence. A separate reviewed
 dependency-submission design is required before claiming broader hosted graph
 coverage.
 
+### AI Session Handler activation checklist
+
+Repository preparation performs no GitHub or Mend administrator action, and
+this repository cannot prove Mend scope or GitHub settings. Do not describe
+`ai-session-handler` dependency automation as active until a human
+administrator has:
+
+1. Reviewed and published the prepared repository changes to trusted `main`
+   and recorded the exact commit and a successful hosted `Build` run.
+2. Added `budgetanalyzer/ai-session-handler` to the free Mend Renovate
+   Community App scope, following its default branch, with automerge
+   disabled.
+3. Enabled the GitHub dependency graph and Dependabot alerts while leaving
+   Dependabot version updates and automatic security-update pull requests
+   disabled.
+4. Inspected a hosted Renovate run and the Dependency Dashboard: the shared
+   preset resolves; PEP 621 with `uv.lock`, the Python-version file, GitHub
+   Actions, and the uv regex declaration are extracted; weekly lock
+   maintenance is configured; there are no fatal lookup errors; and automerge
+   remains off.
+
+Then record the published revision and public run links here, as in the
+API-tests record, and update the repository-local status line. Do not commit
+credentials, session data, or private hosted logs.
+
 ## Operator routine
 
 Treat each Dependency Dashboard as a review-decision queue, not a
@@ -421,10 +492,11 @@ Every week:
    the resolved package and configuration or image; a pull request does not
    prove advisory detection.
 3. Check the latest dependency-submission, scanner, native dependency-evidence,
-   Python frozen-CI, and Python dependency-evidence runs. For API tests, require
-   the selected lock graph, installed inventory, audit records, and SBOM to
-   retain exact name/version parity. Treat missing or partial reports as
-   operational failures, not clean results.
+   Python frozen-CI, and Python dependency-evidence runs, including AI Session
+   Handler's frozen Build. For API tests, require the selected lock graph,
+   installed inventory, audit records, and SBOM to retain exact name/version
+   parity; AI Session Handler produces no such evidence and needs none. Treat
+   missing or partial reports as operational failures, not clean results.
 4. Review bot-branch checks and package or registry access without moving
    secrets into untrusted pull-request execution.
 5. Confirm Renovate is still the sole update-PR owner, automerge is off, the
@@ -466,8 +538,8 @@ support state of the installed guest.
 - **Stale Python lock or incomplete resolution:** distinguish an intentional
   manifest change from a missing lock refresh, unsatisfied bound, absent group,
   incomplete transitive closure, or failed artifact/hash selection. Regenerate
-  only through the pinned repository workflow; never make a frozen install
-  update the lock or edit the lock manually.
+  only through the owning repository's pinned `uv` refresh procedure; never
+  make a frozen install update the lock or edit the lock manually.
 - **Python marker or platform mismatch:** compare the pinned runtime, PEP 621
   Python interval, lock markers, current-platform selection, and hosted runner.
   Do not drop a marked dependency merely because it is absent on one platform,
@@ -476,9 +548,9 @@ support state of the installed guest.
   unexpected registry, VCS, URL, path, or editable sources. Preserve source
   diagnostics without persisting package credentials; do not normalize an
   alternate source into an accepted PyPI record.
-- **Python graph or evidence mismatch:** compare normalized names and exact
-  versions across the selected lock graph, installed inventory, audit records,
-  and SBOM. Treat missing Playwright metadata, audit/SBOM components, scanner
+- **Python graph or evidence mismatch (API tests):** compare normalized names
+  and exact versions across the selected lock graph, installed inventory, audit
+  records, and SBOM. Treat missing Playwright metadata, audit/SBOM components, scanner
   completion, or parity records as incomplete evidence rather than zero
   findings.
 - **Python bot lock-update failure:** inspect Renovate extraction, bounded

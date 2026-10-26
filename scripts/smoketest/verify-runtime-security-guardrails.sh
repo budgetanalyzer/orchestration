@@ -18,7 +18,7 @@ REDIS_PROBE_IMAGE="redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82
 # renovate: datasource=docker depName=postgres
 POSTGRES_PROBE_IMAGE="postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
 # renovate: datasource=docker depName=python
-RABBITMQ_PROBE_IMAGE="python:3.12-alpine@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4"
+RABBITMQ_PROBE_IMAGE="python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d"
 WAIT_TIMEOUT="${PHASE7_WAIT_TIMEOUT:-120s}"
 REGRESSION_TIMEOUT="${PHASE7_REGRESSION_TIMEOUT:-35m}"
 RUN_ID="$(date +%s)"

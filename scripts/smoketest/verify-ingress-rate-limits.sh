@@ -19,7 +19,7 @@ PROBE_POD_B="ingress-rate-limit-probe-b"
 PROBE_POLICY_NAME="allow-ingress-rate-limit-egress"
 PROBE_CA_CONFIGMAP="ingress-rate-limit-probe-ca"
 # renovate: datasource=docker depName=curlimages/curl
-PROBE_IMAGE="curlimages/curl:8.23.0@sha256:a134550be58ab783810e613ae96fd253c38f7bdd16d9bf9be350700c7a29ac06"
+PROBE_IMAGE="curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac"
 PROBE_CA_FILE="${REPO_DIR}/nginx/certs/k8s/_mkcert-rootCA.pem"
 PROBE_CA_MOUNT="/etc/budget-analyzer-ca/ca.crt"
 INGRESS_NAMESPACE="istio-ingress"

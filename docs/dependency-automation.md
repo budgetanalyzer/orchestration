@@ -300,15 +300,36 @@ and evidence shape for the eleven scoped repositories:
 | `orchestration` | Exact Image Security Evidence | Pushes to `main`; pull requests targeting `main` that change image render inputs; weekly schedule; manual dispatch | Offline render, exact platform resolution, Trivy inventory and vulnerability evidence |
 | `service-common` | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by the workflow | Complete resolved Gradle graph submitted with job-scoped `contents: write` |
 | Four deployable Java services | Dependency Submission | Trusted `main` events, weekly schedule, and manual dispatch as declared by each workflow | Complete Gradle-resolved application/runtime/test graph submission using package-read credentials |
-| `budget-analyzer-web` | Dependency Audit | Weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
-| `ext-authz` | Go Vulnerability Check | Pushes to `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
+| Four deployable Java services, `budget-analyzer-web`, and `ext-authz` | Image Build Check | Pull requests targeting `main` that change image build inputs; manual dispatch | `linux/arm64` build of the release Dockerfile and context without registry login, tags, or push, using only the release workflow's BuildKit secrets; `budget-analyzer-web` also builds its Tilt development Dockerfile; no evidence artifact |
+| `budget-analyzer-web` | Dependency Audit | Pull requests targeting `main` that change npm manifests or the workflow; weekly schedule and manual dispatch on `main` | Full and production-only npm audit reports |
+| `ext-authz` | Go Vulnerability Check | Pushes to `main`; pull requests targeting `main`; weekly schedule; manual dispatch | Reachability-aware text and JSON `govulncheck` reports |
 | `workspace` | Native dependency evidence | Pushes to `main`; same-repository pull requests targeting `main`; weekly schedule; manual dispatch | Native manifest validation, npm lock-closure and dependency-audit reports, checksum verification against declared public release downloads, and an explicit manual-lifecycle inventory |
 | `budget-analyzer-api-tests` | CI | Pushes to `main`; pull requests targeting `main`; manual dispatch | Frozen all-groups synchronization and deterministic dependency, test-collection, formatting, lint, and type checks without browser installation or application access |
 | `budget-analyzer-api-tests` | Python Dependency Evidence | Relevant trusted pushes to `main`; weekly schedule; manual dispatch | Exact locked-graph inventory, dependency tree, CycloneDX SBOM, `pip-audit`, Playwright-derived metadata, and cross-representation parity evidence |
 | `ai-session-handler` | Build | Pushes to `main`; pull requests targeting `main`; manual dispatch | Read-only frozen bootstrap from `.python-version`, `uv.lock`, and the pinned uv, then formatting, lint, strict type, and test gates; no evidence artifact |
 
 Build workflows continue to validate Renovate pull requests through their
-normal `main` pull-request events. Keep scheduled workflows least-privileged.
+normal `main` pull-request events. In each image-owning repository, the
+path-filtered Image Build Check also builds the release Dockerfile for
+`linux/arm64` without pushing when a pull request changes the Dockerfile or the
+dependency manifests, lockfiles, build scripts, or copied configuration it
+consumes. It proves that the base images for the image's `linux/arm64` stages
+resolve and that the build completes before a `v*` release tag. It does not prove
+runtime behavior, publish or scan an image, compare against the released
+digest, or run when only application source changes; the normal build workflow
+covers source. The Java services pass only the package-read BuildKit secrets
+that their release workflows use, so fork pull requests without those secrets
+fail. Each repository's `docs/dependency-automation.md` owns its exact path
+filter and limits.
+
+Do not make a path-filtered workflow, including Image Build Check, the
+`budget-analyzer-web` Dependency Audit, or orchestration's Exact Image Security
+Evidence, a required status check: pull requests outside its filter never run
+it, so the required check would wait indefinitely. The `ext-authz` Go
+Vulnerability Check runs on every pull request to `main`; making it required is
+a separate branch-protection decision.
+
+Keep scheduled workflows least-privileged.
 Java dependency submission alone receives job-scoped `contents: write`; package
 reads use the existing package credential pair rather than the submission job
 token. Scanner and validation workflows, including AI Session Handler's
@@ -319,7 +340,9 @@ It may read repository inputs and download only the public release assets
 needed to verify the checked-in declarations.
 
 Vulnerability findings are visible but non-gating unless an owning repository
-defines a stricter policy. Malformed output, failed dependency resolution,
+defines a stricter policy. This includes the npm audit and `govulncheck`
+pull-request runs: findings stay in the job summary and evidence artifact
+without failing the pull request. Malformed output, failed dependency resolution,
 failed graph submission, failed database download, malformed native manifests,
 incomplete npm lock closure, missing or mismatched release checksums, incomplete
 inventory, platform mismatch, and incomplete scans remain workflow failures.
@@ -498,7 +521,10 @@ Every week:
    parity; AI Session Handler produces no such evidence and needs none. Treat
    missing or partial reports as operational failures, not clean results.
 4. Review bot-branch checks and package or registry access without moving
-   secrets into untrusted pull-request execution.
+   secrets into untrusted pull-request execution. Include Image Build Check
+   results on pull requests that change image build inputs, and the npm audit
+   and `govulncheck` pull-request summaries, whose findings do not fail the
+   pull request.
 5. Confirm Renovate is still the sole update-PR owner, automerge is off, the
    first-party release path is untouched, and Actions/storage usage remains
    within the approved free boundary.
@@ -531,6 +557,14 @@ support state of the installed guest.
   service; advisory detection and update discovery are separate outcomes.
 - **Bot-branch CI failure:** review checksums, chart rendering, ARM64 support,
   state migration, and cross-repository companions. Do not relax a guardrail.
+- **Image Build Check failure (arm64):** distinguish a base image whose
+  manifest list lacks `linux/arm64`, a package-credential condition such as a
+  missing, expired, or fork-unavailable package-read secret, and a genuine build
+  break in a dependency, lockfile, or build step. Pin a base image that
+  publishes arm64, fix the credential in its owning system, or fix the build in
+  the owning repository. Do not drop the arm64 platform, switch to amd64, skip
+  or path-exclude the check, or move secrets into untrusted pull-request
+  execution.
 - **Native workspace evidence failure:** distinguish malformed manifest data,
   incomplete npm lock closure, audit findings, unavailable public release
   assets, checksum or architecture mismatch, and incomplete manual-lifecycle

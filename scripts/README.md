@@ -217,6 +217,10 @@ scripts/
   OpenAPI artifacts used by `/api-docs`; its opt-in
   `--session-gateway-only OUTPUT_YAML` mode writes one filtered Session Gateway
   YAML snapshot without changing unified or frontend outputs.
+- `repo/generate-local-api-docs-metadata.py` - Generates the purely local
+  `/api-docs` runtime metadata that Tilt serves from
+  `.tilt/api-docs/release-metadata.json`, using read-only git reads of the
+  sibling checkouts.
 - `repo/compare-test-coverage.py` - Compares committed coverage on every
   non-main core sibling repository with its local `origin/main` ref without
   switching branches or changing a working tree.
@@ -623,6 +627,15 @@ directory without writing outside the repository.
   `--session-gateway-only OUTPUT_YAML` to fetch only Session Gateway, apply the
   same `/internal/*` path filter, and write exactly that YAML path without
   writing unified or sibling-repository files.
+
+- `repo/generate-local-api-docs-metadata.py` runs on every Tiltfile
+  evaluation (`python3 -I ... --output .tilt/api-docs/release-metadata.json`).
+  It records orchestration, `../service-common`, and runtime repository state
+  from read-only git commands and file reads, never writes to sibling repos,
+  and rewrites the output only when its content changes. Pass
+  `--repos-parent DIR` to read checkouts from another parent directory. The
+  field contract lives in
+  [docs-aggregator/README.md](../docs-aggregator/README.md).
 
 The repo-management scripts source `repo/repo-config.sh`, which derives the
 orchestration root from `scripts/repo/` and then resolves sibling repos from

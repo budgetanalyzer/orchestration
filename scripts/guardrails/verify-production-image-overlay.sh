@@ -23,6 +23,7 @@ PRODUCTION_DOCS_METADATA="${REPO_DIR}/kubernetes/production/docs-aggregator/rele
 DOCS_SWAGGER_SOURCE="${REPO_DIR}/docs-aggregator/swagger-initializer.js"
 PRODUCTION_DOCS_SWAGGER="${REPO_DIR}/kubernetes/production/docs-aggregator/swagger-initializer.js"
 TILTFILE="${REPO_DIR}/Tiltfile"
+LOCAL_API_DOCS_METADATA_GENERATOR="${REPO_DIR}/scripts/repo/generate-local-api-docs-metadata.py"
 STATIC_TOOLS_DIR="${PHASE7_STATIC_TOOLS_DIR:-${REPO_DIR}/.cache/phase7-static-tools}"
 STATIC_TOOLS_BIN="${STATIC_TOOLS_DIR}/bin"
 LOCKED_DEMO_DOMAIN="demo.budgetanalyzer.org"
@@ -548,10 +549,12 @@ verify_reference_metadata_contract() {
         "production image inventory lost its historical environment provenance"
     assert_not_contains "${PRODUCTION_RUNTIME_METADATA_PATCH}" 'budgetanalyzer\.org/deployment-id' \
         "production runtime metadata still labels the historical reference as a deployment"
-    assert_contains_literal "${TILTFILE}" 'source_path = root / "kubernetes/production/docs-aggregator/release-metadata.json"' \
-        "Tilt no longer generates local metadata from the maintained production source"
-    assert_contains_literal "${TILTFILE}" '"productionReferenceId": production_reference_id' \
-        "Tilt local metadata no longer labels the production id as a reference"
+    assert_contains_literal "${TILTFILE}" 'scripts/repo/generate-local-api-docs-metadata.py' \
+        "Tilt no longer generates local metadata with the local metadata generator"
+    [[ -f "${LOCAL_API_DOCS_METADATA_GENERATOR}" ]] || \
+        fail "local API docs metadata generator is missing: ${LOCAL_API_DOCS_METADATA_GENERATOR}"
+    assert_not_contains "${LOCAL_API_DOCS_METADATA_GENERATOR}" 'kubernetes/production|productionReferenceId' \
+        "local API docs metadata generator references production reference metadata"
     assert_contains_literal "${TILTFILE}" "'budget-analyzer-web-prod-smoke'" \
         "Tilt frontend production-smoke image target is missing"
     assert_contains_literal "${TILTFILE}" "'release-metadata.json=' + LOCAL_API_DOCS_RELEASE_METADATA" \

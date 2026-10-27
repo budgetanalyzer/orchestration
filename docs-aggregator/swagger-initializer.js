@@ -31,6 +31,63 @@ function orchestrationLabel(value) {
     return value.sourceRef + " @ " + value.commit;
 }
 
+var LOCAL_TABLE_COLUMNS = [
+    "Repository",
+    "Version",
+    "Commit",
+    "Branch",
+    "Committed",
+    "Shared library"
+];
+
+function localDescribeLabel(source) {
+    if (!source.tag) {
+        return "untagged";
+    }
+
+    if (source.commitsSinceTag) {
+        return source.tag + "+" + source.commitsSinceTag;
+    }
+
+    return source.tag;
+}
+
+function dirtySuffix(source) {
+    return source.dirty ? " \u00b7 dirty" : "";
+}
+
+function localOrchestrationLabel(value) {
+    if (!value || value.status !== "ok") {
+        return "unknown";
+    }
+
+    return (value.version || "untagged") + " @ " + (value.shortCommit || "unknown") + dirtySuffix(value);
+}
+
+function localSharedLibraryLabel(value) {
+    if (!value || value.status !== "ok") {
+        return "unknown";
+    }
+
+    return (value.version || "unknown") + " \u00b7 " + localDescribeLabel(value) + " @ " +
+        (value.shortCommit || "unknown") + dirtySuffix(value);
+}
+
+function localServiceCommonLabel(repository, sharedLibrary) {
+    var serviceCommon = repository.serviceCommon;
+
+    if (!serviceCommon) {
+        return "n/a";
+    }
+
+    if (serviceCommon.matchesLocalCheckout) {
+        return (serviceCommon.declared || "unknown") + " (local checkout)";
+    }
+
+    return (serviceCommon.declared || "unknown") + " (not local; checkout is " +
+        ((sharedLibrary && sharedLibrary.version) || "unknown") + ")";
+}
+
 function setElementText(id, value) {
     var element = document.getElementById(id);
 
@@ -70,6 +127,126 @@ function orderedArtifactNames(artifacts) {
     return names;
 }
 
+function activeColumnCount() {
+    var header = document.getElementById("deployment-artifacts-header");
+
+    if (header && header.children.length) {
+        return header.children.length;
+    }
+
+    return 7;
+}
+
+function appendMessageRow(tbody, message) {
+    var row = document.createElement("tr");
+    var cell = document.createElement("td");
+
+    cell.colSpan = activeColumnCount();
+    cell.textContent = message;
+    row.appendChild(cell);
+    tbody.appendChild(row);
+}
+
+function renderLocalTableHeader() {
+    var header = document.getElementById("deployment-artifacts-header");
+    var index;
+    var cell;
+
+    if (!header) {
+        return;
+    }
+
+    header.textContent = "";
+
+    for (index = 0; index < LOCAL_TABLE_COLUMNS.length; index += 1) {
+        cell = document.createElement("th");
+        cell.scope = "col";
+        cell.textContent = LOCAL_TABLE_COLUMNS[index];
+        header.appendChild(cell);
+    }
+}
+
+function renderLocalRepositories(metadata) {
+    var tbody = document.getElementById("deployment-artifacts");
+    var repositories = metadata.repositories || {};
+    var names = orderedArtifactNames(repositories);
+    var renderedCount = 0;
+    var index;
+    var name;
+    var repository;
+    var row;
+
+    if (!tbody) {
+        return;
+    }
+
+    tbody.textContent = "";
+
+    for (index = 0; index < names.length; index += 1) {
+        name = names[index];
+        repository = repositories[name];
+
+        if (!repository) {
+            continue;
+        }
+
+        row = document.createElement("tr");
+        if (repository.dirty) {
+            row.className = "deployment-row-dirty";
+        }
+        appendCell(row, name, "deployment-runtime");
+
+        if (repository.status !== "ok") {
+            appendCell(row, "missing repo", "deployment-ref");
+            appendCell(row, "unknown", "");
+            appendCell(row, "unknown", "");
+            appendCell(row, "unknown", "");
+            appendCell(row, "unknown", "");
+        } else {
+            appendCell(row, (repository.version || "untagged") + dirtySuffix(repository), "deployment-ref");
+            appendCell(row, repository.shortCommit, "", repository.commit);
+            appendCell(row, repository.branch, "");
+            appendCell(row, repository.commitDate, "");
+            appendCell(row, localServiceCommonLabel(repository, metadata.sharedLibrary), "");
+        }
+
+        tbody.appendChild(row);
+        renderedCount += 1;
+    }
+
+    if (renderedCount === 0) {
+        appendMessageRow(tbody, "No local repositories found");
+    }
+}
+
+function renderLocalMetadata(metadata, label) {
+    var deployment = metadata.deployment || {};
+    var summary = "Tilt local development";
+    var caption = "Local repository state at Tilt start";
+
+    if (label) {
+        label.textContent = summary;
+        label.title = caption;
+        label.classList.remove("docs-release-muted");
+    }
+
+    setElementText("deployment-summary", summary);
+    setElementText("deployment-artifacts-caption", caption);
+    setElementText("deployment-environment", deployment.environment || "unknown");
+    setElementText("deployment-orchestration", localOrchestrationLabel(metadata.orchestration));
+    setElementText("deployment-shared-library", localSharedLibraryLabel(metadata.sharedLibrary));
+    renderLocalTableHeader();
+    renderLocalRepositories(metadata);
+}
+
+function hideSharedLibraryFact() {
+    var fact = document.getElementById("deployment-shared-library-fact");
+
+    if (fact) {
+        fact.hidden = true;
+    }
+}
+
 function renderDeploymentArtifacts(metadata) {
     var tbody = document.getElementById("deployment-artifacts");
     var artifacts = metadata.artifacts || {};
@@ -95,9 +272,6 @@ function renderDeploymentArtifacts(metadata) {
         }
 
         row = document.createElement("tr");
-        if (artifact.localSource && artifact.localSource.dirty) {
-            row.className = "deployment-row-dirty";
-        }
         appendCell(row, name, "deployment-runtime");
         appendCell(row, artifact.sourceRepository, "");
         appendCell(row, artifact.artifactVersion, "");
@@ -110,11 +284,7 @@ function renderDeploymentArtifacts(metadata) {
     }
 
     if (renderedCount === 0) {
-        row = document.createElement("tr");
-        row.appendChild(document.createElement("td"));
-        row.firstChild.colSpan = 7;
-        row.firstChild.textContent = "No deployment artifacts found";
-        tbody.appendChild(row);
+        appendMessageRow(tbody, "No deployment artifacts found");
     }
 }
 
@@ -137,25 +307,19 @@ function renderDeploymentMetadata() {
             var release = metadata.release || {};
             var version = deployment.id || release.version || "unknown";
             var environment = deployment.environment || "unknown";
-            var baseline = deployment.productionReferenceId || deployment.productionBaselineId || "";
-            var runtime = deployment.runtime || "";
             var orchestration = deployment.orchestrationRepository || {};
             var summary = "Deployment " + version;
-            var labelText = "Deployment " + version;
-            var labelTitle = summary;
 
-            if (runtime === "tilt" || environment === "local-development") {
-                summary = "Tilt local-development";
-                labelText = "Tilt local-development";
-                labelTitle = summary;
-                if (baseline) {
-                    labelTitle = summary + " (production reference " + baseline + ")";
-                }
+            if (deployment.runtime === "tilt") {
+                renderLocalMetadata(metadata, label);
+                return;
             }
 
+            hideSharedLibraryFact();
+
             if (label) {
-                label.textContent = labelText;
-                label.title = labelTitle;
+                label.textContent = summary;
+                label.title = summary;
                 label.classList.remove("docs-release-muted");
             }
 
@@ -166,8 +330,6 @@ function renderDeploymentMetadata() {
         })
         .catch(function() {
             var tbody = document.getElementById("deployment-artifacts");
-            var row;
-            var cell;
 
             if (label) {
                 label.textContent = "Release unavailable";
@@ -178,12 +340,7 @@ function renderDeploymentMetadata() {
             setElementText("deployment-summary", "Deployment metadata unavailable");
             if (tbody) {
                 tbody.textContent = "";
-                row = document.createElement("tr");
-                cell = document.createElement("td");
-                cell.colSpan = 7;
-                cell.textContent = "Deployment metadata unavailable";
-                row.appendChild(cell);
-                tbody.appendChild(row);
+                appendMessageRow(tbody, "Deployment metadata unavailable");
             }
         });
 }

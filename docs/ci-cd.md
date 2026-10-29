@@ -132,7 +132,7 @@ The tag helpers create tags in each sibling repository and push them to that
 repository's `origin`. A release tag triggers publish workflows only when
 `origin` is GitHub, so run `repo/tag-release.sh`,
 `repo/prepare-lockstep-release.sh --tag`, `repo/tag-lockstep-release.sh`, and
-`repo/release-service-common-snapshot.sh tag --push` from a checkout whose
+`repo/release-service-common.sh tag --push` from a checkout whose
 sibling repositories push to GitHub, with every repository in the selected
 release set cloned side by side.
 
@@ -360,15 +360,22 @@ Current contract:
 The detailed local-vs-release resolution rules live in
 [docs/development/service-common-artifact-resolution.md](development/service-common-artifact-resolution.md).
 
-Use `./scripts/repo/release-service-common-snapshot.sh` from the orchestration
+Snapshot publishing is automatic: `service-common` `publish-snapshot.yml` runs
+on every push to `main` and publishes the checked-in version only when it ends
+in `-SNAPSHOT`. Use `./scripts/repo/update-service-common-version.sh` to move
+`service-common` and the Java consumers to a new version, merging the
+`service-common` change and waiting for its snapshot publish before merging the
+consumer changes.
+
+Use `./scripts/repo/release-service-common.sh` from the orchestration
 repo to drive the current manual `service-common` release flow. `prepare`
 reads the checked-in `service-common` snapshot, verifies all Java consumers use
 that exact same snapshot, strips `-SNAPSHOT`, and runs the required Gradle
 validation. `tag --push` pushes the matching `vMAJOR.MINOR.PATCH` tag from
 `service-common` main after verifying local `main` matches `origin/main`.
 `post` updates Java consumers after `publish-release.yml` completes for the
-tag and leaves `service-common` on the released version until it is manually
-bumped back to the next snapshot. The service-common Maven release tag is
+tag and leaves `service-common` on the released version until
+`update-service-common-version.sh` moves the ecosystem to the next snapshot. The service-common Maven release tag is
 intentionally separate from lockstep source tagging
 because Java consumer release workflows also run on tag pushes and must not
 release from source still pinned to the snapshot dependency.

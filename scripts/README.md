@@ -596,8 +596,11 @@ directory without writing outside the repository.
   absent tags, pushes local-only tags that already point at current HEAD, skips
   tags already present at current HEAD, and fails if an existing tag points
   somewhere else. Use `--current-state --plan-only` for a non-mutating preview.
-- `repo/release-service-common-snapshot.sh` coordinates the tag-driven
-  `service-common` snapshot-to-release flow. Run `prepare` while
+- `service-common` snapshots need no script: its `publish-snapshot.yml`
+  publishes the checked-in `-SNAPSHOT` version to GitHub Packages on every
+  push to `main`, and skips numeric versions.
+- `repo/release-service-common.sh` coordinates the tag-driven
+  `service-common` snapshot-to-release promotion. Run `prepare` while
   `service-common` and all Java consumers are pinned to the same
   `MAJOR.MINOR.PATCH-SNAPSHOT`; it reads that version from
   `../service-common/build.gradle.kts`, verifies the Java consumers match
@@ -612,14 +615,18 @@ directory without writing outside the repository.
   snapshot dependency until `post` has run and those changes have been merged.
   Once `publish-release.yml` has completed for the service-common tag, run
   `post` to pin Java consumers to the released version. `post` leaves
-  `service-common` on the released version; bump it back to the next snapshot
-  manually when ready.
+  `service-common` on the released version; once the consumer pins are merged,
+  open the next development cycle with
+  `repo/update-service-common-version.sh MAJOR.MINOR.(PATCH+1)-SNAPSHOT`.
 - `repo/update-service-common-version.sh` bumps the checked-in
   `service-common` version literal in `../service-common/build.gradle.kts` and
   the matching `serviceCommon` catalog entry in each Java consumer repo
   (`transaction-service`, `currency-service`, `permission-service`, and
   `session-gateway`). Use `--dry-run` before edits and `--validate-only` after
-  edits or before release tagging.
+  edits or before release tagging. When moving to a new snapshot, merge the
+  `service-common` change and wait for `publish-snapshot.yml` before merging
+  the consumer changes, because consumer CI resolves `service-common` from
+  GitHub Packages.
 - `repo/generate-unified-api-docs.sh` fetches live in-cluster OpenAPI specs,
   writes `docs-aggregator/openapi.json` and `docs-aggregator/openapi.yaml`, and
   copies the browser-facing API docs into `../budget-analyzer-web/docs/api/`

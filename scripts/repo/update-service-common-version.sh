@@ -32,6 +32,13 @@ Accepted version format:
 - MAJOR.MINOR.PATCH
 - MAJOR.MINOR.PATCH-SNAPSHOT
 
+Snapshot publishing:
+  service-common publish-snapshot.yml publishes the checked-in -SNAPSHOT
+  version to GitHub Packages on every push to main. When moving to a new
+  snapshot, merge the service-common change first and wait for that workflow
+  to finish before merging the consumer changes; consumer CI resolves
+  service-common from GitHub Packages and fails until the snapshot exists.
+
 Examples:
 - ./scripts/repo/update-service-common-version.sh --dry-run 0.0.14-SNAPSHOT
 - ./scripts/repo/update-service-common-version.sh 0.0.13

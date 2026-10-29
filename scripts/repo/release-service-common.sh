@@ -7,35 +7,39 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
 source "${SCRIPT_DIR}/repo-config.sh"
 
-CONSUMER_REPOS=(
-    "currency-service"
-    "permission-service"
-    "session-gateway"
-    "transaction-service"
-)
+CONSUMER_REPOS=("${JAVA_RUNTIME_REPOS[@]}")
 
 usage() {
     cat <<'EOF'
 Usage:
-  ./scripts/repo/release-service-common-snapshot.sh prepare
-  ./scripts/repo/release-service-common-snapshot.sh tag --push
-  ./scripts/repo/release-service-common-snapshot.sh post
+  ./scripts/repo/release-service-common.sh prepare
+  ./scripts/repo/release-service-common.sh tag --push
+  ./scripts/repo/release-service-common.sh post
 
 Correct sequence:
-  ./scripts/repo/release-service-common-snapshot.sh prepare
+  ./scripts/repo/release-service-common.sh prepare
 
   Merge service-common release prep.
 
-  ./scripts/repo/release-service-common-snapshot.sh tag --push
+  ./scripts/repo/release-service-common.sh tag --push
 
   This tags only service-common to trigger Maven artifact publishing.
 
   Wait for service-common publish-release.yml.
 
-  ./scripts/repo/release-service-common-snapshot.sh post
+  ./scripts/repo/release-service-common.sh post
 
-Releases the current service-common snapshot through the tag-driven
-service-common publish-release.yml workflow.
+  Merge the consumer pin changes and finish any lockstep tagging that should
+  use the released pin, then open the next development cycle:
+
+  ./scripts/repo/update-service-common-version.sh MAJOR.MINOR.(PATCH+1)-SNAPSHOT
+
+Promotes the current service-common snapshot to a numeric release through the
+tag-driven service-common publish-release.yml workflow.
+
+This script does not publish snapshots. service-common publish-snapshot.yml
+publishes the checked-in -SNAPSHOT version to GitHub Packages on every push to
+main, so day-to-day snapshot publishing needs no script.
 
 This script intentionally does not use repo/tag-release.sh during the
 service-common Maven release tag. Consumer repos also publish on tag pushes, so
@@ -64,7 +68,9 @@ Phases:
     Verifies the release tag exists on origin and updates Java consumers from
     MAJOR.MINOR.PATCH-SNAPSHOT to MAJOR.MINOR.PATCH. It leaves
     ../service-common/build.gradle.kts on the released version. Run this only
-    after publish-release.yml has completed for the tag.
+    after publish-release.yml has completed for the tag. Afterwards, use
+    repo/update-service-common-version.sh to move service-common and the
+    consumers to the next -SNAPSHOT.
 EOF
 }
 
@@ -291,7 +297,7 @@ run_prepare() {
 
     print_success "service-common release prep complete for ${release_version}"
     echo "Next: commit and merge the service-common release-prep change to main, then run:"
-    echo "./scripts/repo/release-service-common-snapshot.sh tag --push"
+    echo "./scripts/repo/release-service-common.sh tag --push"
 }
 
 run_tag() {
@@ -327,7 +333,7 @@ run_tag() {
 
     print_success "Pushed service-common ${tag_name}"
     echo "Next: wait for service-common publish-release.yml to complete, then run:"
-    echo "./scripts/repo/release-service-common-snapshot.sh post"
+    echo "./scripts/repo/release-service-common.sh post"
 }
 
 run_post() {
@@ -371,7 +377,10 @@ run_post() {
         echo "- ../${repo}/gradle/libs.versions.toml -> ${release_version}"
     done
     echo
-    echo "service-common remains on ${release_version}; bump it manually when ready."
+    echo "service-common remains on ${release_version}."
+    echo "Next: merge the consumer changes, finish any lockstep tagging that should"
+    echo "use ${release_version}, then open the next snapshot with:"
+    echo "./scripts/repo/update-service-common-version.sh ${release_version%.*}.$(( ${release_version##*.} + 1 ))-SNAPSHOT"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then

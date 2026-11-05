@@ -4,6 +4,9 @@
 **Reassessment:** 2026-11-05  
 **KISS reconciliation:** 2026-11-05; incorporates the additional review A1–A13 below.
 
+**Final decisions:** 2026-11-05; currency-service cache eviction moves to `SCAN`, and PDF limits are
+deferred as a documented known limitation.
+
 **Status:** Reviewed recommendations. These verdicts replace the original discussion recommendations;
 they do not implement fixes or amend the [hardening plan](../plans/security-review-consensus-hardening-plan.md).
 
@@ -34,11 +37,11 @@ in the supported side-by-side checkout; the reviewed revisions are recorded belo
 | # | Issue | Verdict on original recommendation | Result |
 | --- | --- | --- | --- |
 | 1 | [CSRF](#1-primary-csrf-control) | **Modify** | Require exact Origin on unsafe requests at the shared ingress; POST heartbeat and form POST logout. Keep OAuth callback binding separate. |
-| 2 | [Redis enumeration](#2-redis-enumeration-after-hashing) | **Modify** | Keep hashing and remove enumeration while preserving ordinary after-commit freshness; stronger cache consistency and a Redis split are separate decisions. |
+| 2 | [Redis enumeration](#2-redis-enumeration-after-hashing) | **Modify** | Keep hashing and cache-wide eviction; clear with `SCAN` instead of `KEYS` and grant `+scan` only. Accept key-name visibility as metadata exposure after hashing; a Redis split remains optional. |
 | 3 | [Encoded paths](#3-encoded-path-traversal-and-rejecting-) | **Modify** | Keep decoded-semicolon rejection and mesh narrowing; the parser discrepancy is reproduced, full-stack exploitability remains unverified. |
 | 4 | [OAuth cookie](#4-oauth-correlation-cookie-and-atomic-consume) | **Modify** | Prefer one reusable browser-binding cookie and read/validate/`DEL == 1` consumption of immutable state; no mandatory Lua or cookie-per-tab scheme. |
 | 5 | [Duplicate cookies](#5-rejecting-duplicate-session-cookies) | **Modify** | Prioritize `__Host-`; duplicate rejection is optional hardening after that cutover. |
-| 6 | [PDF memory](#6-pdf-memory-handling-and-a-parsing-worker) | **Modify** | Start with one shared per-process admission limit, no parse queue, and extraction limits; reuse upload spooling for file input, verify budgets, defer a worker. |
+| 6 | [PDF memory](#6-pdf-memory-handling-and-a-parsing-worker) | **Modify** | Make no limit changes now; record unbounded upload processing as a known availability limitation. Prefer configuration-level controls if revisited. |
 | 7 | [Signed identity](#7-signed-identity-context) | **Keep** | Defer pending a concrete threat model; record intermediate forgery and replay as residual risks. |
 | 8 | [Internal ports](#8-separate-internal-ports) | **Keep** | Defer separate listeners; first prove restrictions on both public lanes. |
 | 9 | [Egress identity](#9-per-caller-egress-identity) | **Keep** | Defer as coordinated design work; discard the one-setting remedy. |
@@ -121,10 +124,11 @@ check on the basis that the directive is absent today.
 | R3 | These are redundant. Hashing or splitting each stops token theft alone. A versioned prefix is only needed to drop the grant on a shared Redis. Split before hosted use, not first. |
 | R4 | Address both properties. Hashing reduces the consequences, but "does not make the original isolation claim true". Also remove enumeration or split. Splitting does not replace hashing or stop anonymous OAuth-state growth. |
 
-**Decision — Modify.** Keep hashing and removal of `KEYS`/`SCAN` from currency-service. Preserve
-the existing cache freshness contract without requiring stronger consistency as part of this fix.
-A separate auth/cache Redis instance is an availability-isolation option, not an unconditional
-prerequisite once command permissions and bearer-key exposure are fixed.
+**Decision — Modify.** Keep hashing. Keep currency-service's cache-wide `@CacheEvict(allEntries = true)`
+eviction and its existing freshness behavior, but clear with `SCAN` instead of `KEYS` and narrow the
+grant to `+scan`. This does not remove key-name enumeration; accept it as residual metadata exposure
+once session keys are hashed. Discard both the cache-generation and TTL-only alternatives. A separate
+auth/cache Redis instance remains an availability-isolation option, not a prerequisite.
 
 **Evidence.** The [Redis ACL bootstrap][redis-acl] grants currency-service both enumeration commands
 alongside `~currency-service:*`. An isolated test of the pinned Redis 7.4.11 image confirmed that
@@ -141,30 +145,33 @@ the independent browser binding in issue 4. Do not describe state as wholly non-
 
 The three [all-entry eviction sites][exchange-import] rely on a [transaction-aware Redis cache][cache-config]
 with a one-hour write TTL. Both sources explicitly accept a read racing an import re-caching a
-stale result until that TTL expires. Eliminating that race is a separate improvement. However,
-ordinary entries written before an import are invalidated after commit today.
+stale result until that TTL expires. Eviction is service-level, not specific to the manual endpoint:
+the [daily scheduler][import-scheduler], optional startup import and manual import endpoint call
+`importLatestExchangeRates`, and the [import consumer][import-consumer] calls
+`importExchangeRatesForSeries` when a currency is created or re-enabled. The third evicting method,
+`importMissingExchangeRates`, has only test callers.
 
-**Recommended change.** Replace enumeration with a cache generation changed after commit, retain
-the entry TTL, then remove the grants and test denial plus normal cache invalidation. A shared
-generation must work across replicas and must not reuse old namespaces if its control key is lost
-(for example, bypass the cache until a fresh unique generation exists). Keep rollback from
-invalidating committed data and define Redis-failure handling in the currency-service owner.
-Capturing one generation per lookup/fill is a straightforward design; removing the already accepted
-stale-read race is not an additional completion gate. Do not promise a fixed I/O cost without the
-implementation.
+Redis has no delete-by-prefix command, so `allEntries` clears by listing matching key names and
+deleting them. `CacheConfig` configures no batch strategy. Spring Boot 4.1.2 manages Spring Data
+Redis 4.1.2, whose `RedisCacheWriter` defaults to `BatchStrategies.keys()`. Each eviction therefore
+runs `KEYS currency-service:exchangeRates::*` followed by `DEL`; the `+scan` grant is currently
+unused. Single-key eviction needs only `DEL`, but cannot cover the arbitrary date-range keys.
 
-**Disagreement with A9.** Dropping eviction and relying only on TTL is simpler but changes normal
-behavior: a read after a successful import can return pre-import data for an hour without any race.
-That requires an explicit freshness decision; it is not parity with today's contract. A9's no-data
-observation applies to a currency with no rates at all. [ExchangeRateService][exchange-rate-service]
-can cache an empty list for an empty date range in an existing currency. Also, the per-series
-importer handles both creation and re-enabling of currencies, through the
-[event listener][currency-events]; it is not exclusively a first-import path. Keeping generation
-invalidation at the existing import boundaries is simpler than adding special cases for new data.
+**Recommended change.** In currency-service, add a `SCAN` batch strategy
+(`BatchStrategies.scan(...)`) to the existing cache-writer configurer alongside `immediateWrites()`,
+and choose the batch size there. Then remove `+keys` from the currency-service ACL, retaining
+`+scan` and `+del`. Test after-commit eviction under the narrowed grant, and extend the
+[credential verifier][credential-verifier] to assert currency-service `KEYS` denial. `SCAN` walks
+the keyspace incrementally instead of blocking Redis for one full `KEYS` pass; this matters because
+ext-authz reads sessions from the same instance on each request. Like the current `KEYS` clear, it is
+not a point-in-time delete; a racing stale write remains the accepted race bounded by the TTL.
 
-Daily scheduling and the `currencies:write` gate reduce normal invalidation frequency; they do not
-bound peak cache memory. Old generations expiring naturally are acceptable here, subject to the
-existing Redis capacity work, without adding a generation garbage collector.
+**Accepted residual.** Redis ACL key patterns do not filter `SCAN` results, as the isolated probe
+showed. After hashing, the currency-service credential can still list session-digest, user-index
+and OAuth-state key names. That exposes user identifiers, session counts and in-flight transactions,
+but no replayable session token, and issue 4's browser binding prevents a listed state from
+completing a login. This accepts R4's metadata point rather than resolving it. Revisit if a Redis
+split is adopted for other reasons or that metadata is treated as sensitive.
 
 A separate instance also isolates memory/eviction policy and administrative blast radius. Separate
 logical Redis database numbers do not provide that process boundary. A new service DNS name must
@@ -315,10 +322,11 @@ optional rule, but a single happy-path assertion would not establish its parsing
 | R3 | The crash is unproven. The default heap is about 128 MiB, so expect `OutOfMemoryError` and GC pressure, not a pod kill. Measure before designing. Defer the worker. |
 | R4 | A stream cache does not remove the byte array or cap parsed objects. Use bounded file-backed input, page and output limits, and global plus per-user concurrency. A worker becomes useful when hard termination is required. |
 
-**Decision — Modify.** Start with one shared per-process parse admission limit that rejects when
-full, plus page/output limits. Reuse the existing multipart spooling when moving to file-backed
-input; do not design another upload subsystem. Defer per-user fairness controls and a separate
-worker until required. A temp-file *stream cache* is not the primary fix for read-only extraction.
+**Decision — Modify; defer all limit changes.** Make no PDF or upload-limit change in this hardening
+pass. Record unbounded upload processing as a known availability limitation of the single-replica
+transaction-service. Discard an unconditional requirement for application admission control,
+page/output limits, file-backed input, per-user limits or a parsing worker now. A temp-file
+*stream cache* is not a fix for read-only extraction.
 
 **Evidence.** There are five `Loader.loadPDF(byte[])` sites:
 [bank monthly][pdf-bank], [credit monthly][pdf-monthly], [credit yearly][pdf-yearly],
@@ -326,15 +334,25 @@ worker until required. A temp-file *stream cache* is not the primary fix for rea
 [TransactionImportService][transaction-import] and the PDF wizard endpoints in
 [StatementFormatController][statement-controller] call `file.getBytes()`.
 [Application configuration][transaction-application] allows 25 MB multipart uploads;
-[the deployment][transaction-deployment] limits container memory to 512 MiB, and
-[the Docker entrypoint][transaction-docker] sets no explicit heap ceiling.
+[the deployment][transaction-deployment] runs one replica with a 512 MiB container limit, and
+[the Docker entrypoint][transaction-docker] sets no explicit heap ceiling. No service manifest or
+Dockerfile sets a heap size or an exit-on-OOM flag.
+
+At the edge, only the `/api/v1/transactions/preview` location raises NGINX's body limit to 25M in
+both [local][nginx-local] and [production-reference][nginx-prod] configuration. The
+`/api/v1/statement-formats` location has no override, so NGINX's 1 MB default applies to the format
+wizard uploads. Whether that wizard limit is intentional is not established here. On first login,
+[UserSyncService][user-sync] assigns the `USER` role, which the [seed data][permission-seed] grants
+transaction and statement-format permissions. Uploads are therefore available to any signed-in user;
+who can sign in depends on IdP configuration outside this repository.
 
 [Spring Boot's multipart default](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/servlet/autoconfigure/MultipartProperties.html)
 sets `file-size-threshold` to zero. With no override here, servlet upload handling already spools
 parts to temporary storage; `getBytes()` then materializes them in the heap. The configured request
 limit bounds each upload, not aggregate temporary storage: the pod's `/tmp` is an `emptyDir` without
-a size limit. Application-level parse admission happens after servlet multipart handling and does
-not cap concurrent uploads. A5 is correct about spooling, but overstates the existing disk budget.
+a size limit. Any application-level admission control would run after servlet multipart handling
+and could not cap concurrent spooling. A5 is correct about spooling, but overstates the existing disk
+budget.
 
 [PDFBox 3's migration guide](https://pdfbox.apache.org/3.0/migration.html) separates the input reader
 from the stream cache used for writing: byte-array input remains in memory, while
@@ -349,26 +367,29 @@ concurrently. Neither JVM `OutOfMemoryError` nor container OOM/restart behavior 
 Native memory, threads and other allocations mean a smaller Java heap does not rule out a container
 kill.
 
-**Recommended change.** Use a shared `Semaphore.tryAcquire` before `getBytes()` or PDF parsing,
-release in `finally`, and reject excess work immediately. Cover import and wizard paths with the
-same limiter. This needs no waiting queue or per-user counters. Check page count before extraction
-and stop while accumulating text/chunks at an explicit output limit; checking only after `getText()`
-or building all chunks is too late. Load from a file-backed reader instead of retaining the upload
-array, with explicit cleanup for any application-created temporary file and an aggregate storage
-budget in the deployment.
+**Known limitation.** A few concurrent maximum-size preview uploads, or one crafted high-expansion
+PDF, can plausibly exhaust the default heap. The transaction API would then fail for every user until
+the JVM recovers or the pod restarts. This is reasoned from source and defaults, not reproduced. It
+affects availability, not data confidentiality. Accept it while there is no hosted deployment or
+open-signup requirement. Defer hardening-plan Phase 23 rather than executing it, and do not present
+any current setting as a capacity bound.
 
-Keep validation proportionate: representative large and adversarial PDFs, simultaneous requests,
-limit rejection, and cleanup/recovery are enough to select initial limits and check heap, resident
-memory and disk use. A separate benchmarking campaign is unnecessary, but unmeasured defaults must
-not be presented as proven capacity bounds.
+**If revisited.** Prefer configuration before application code:
 
-**Disagreement with A10.** A page-count check after loading cannot bound parsing before that check,
-and a small page count does not bound decompressed data or extracted text. Setting an explicit JVM
-heap budget can make deployment behavior predictable; `ExitOnOutOfMemoryError` can improve recovery.
-Neither prevents denial of service from repeated expensive inputs, and restarting loses other
-in-flight work. File backing removes a known allocation; there is no measurement establishing it
-as the smallest consumer. None of these measures is a hard per-document CPU/memory limit. If that
-becomes necessary, use a killable isolated process; an in-process timeout alone cannot enforce it.
+- An NGINX `limit_conn` cap on the 25M preview route, keyed on `$server_name` for one shared counter
+  per NGINX replica and returning 503. This needs a carve-out in the
+  [NGINX owner documentation][nginx-docs] from its rule against backend-specific limits.
+- An explicit heap percentage and `-XX:+ExitOnOutOfMemoryError` in the deployment manifest, with the
+  memory limit raised so heap plus non-heap memory fits. Raising only the heap can turn a JVM
+  `OutOfMemoryError` into a container OOM kill.
+- A lower upload size in both NGINX and Spring if real statements are much smaller than 25 MB.
+- More than one replica in a hosted environment.
+
+These bound concurrent upload memory and improve recovery; they do not bound one crafted document
+or per-document CPU. Configuration cannot cap extracted text. PDFTextStripper collects a page's
+text positions before calling `writeString`, so a later code limit belongs in `processTextPosition`,
+not `writeString`. File-backed input, per-user fairness and a killable isolated worker remain later
+options; an in-process timeout alone cannot enforce a hard per-document limit.
 
 ## 7. Signed identity context
 
@@ -600,8 +621,9 @@ those behind optional generators, signing, port redesigns or egress redesign. Fo
 cutover dependencies in the [hardening plan](../plans/security-review-consensus-hardening-plan.md#plan-wide-rules).
 The plan remains unchanged by this review; its exclusions and decisions need reconciliation before
 execution. In particular, revise D3/Phase 7 for the reusable binding cookie and single-consumer rule,
-reconcile Phase 4's CSP with form logout, add the ingress Origin/POST cutover, and align Phase 23 with
-the simpler PDF admission design. Its phase numbers describe the current draft, not a durable API.
+reconcile Phase 4's CSP with form logout, add the ingress Origin/POST cutover, add the currency-service
+`SCAN` eviction strategy and `+scan`-only grant, and defer Phase 23 as a recorded known limitation. Its
+phase numbers describe the current draft, not a durable API.
 
 ## Settled by checking the code
 
@@ -670,8 +692,8 @@ in Git history. These are review decisions, not implemented controls.
 | A6: shared NGINX include | **Accept.** | Replace the custom parity-parser recommendation with shared blocks plus normal configuration and behavioral checks. Count regex locations too. |
 | A7: Origin, ingress and form logout | **Accept with a concrete dependency.** | Prefer one exact-Origin ingress rule and form POST/303 logout. The existing plan already adds `form-action 'self'`; reconcile it now and verify redirect compatibility, rather than treating CSP as a hypothetical future change. |
 | A8: reusable cookie and DEL count | **Accept with invariants.** | Reuse one browser-session binding cookie; accept a fail-closed first-start race. Validate before deleting and require `DEL == 1` on immutable, never-reused state. Per-transaction eviction policy is unnecessary with this design. |
-| A9: cache parity | **Accept the scope correction; reject TTL-only as equivalent.** | Do not demand stronger race guarantees. Preserve ordinary after-commit freshness; empty date-range results can be cached, and per-series imports are not exclusively for new currencies. |
-| A10: PDF controls | **Accept the no-queue limiter; reject recovery as containment.** | Start with shared admission and extraction limits. Heap sizing/restart flags do not bound one document; retain focused resource and recovery checks. Per-user fairness and a worker remain deferred. |
+| A9: cache parity | **Superseded by the final decision.** | Adopt neither TTL-only expiry nor generation keys. Keep cache-wide eviction, clear with `SCAN`, grant `+scan` only, and accept key-name metadata exposure. |
+| A10: PDF controls | **Superseded by the final decision.** | Make no limit change now and record the known limitation. If revisited, prefer the configuration-level controls in issue 6; heap sizing and restart flags still do not bound one document. |
 | A11: duplicates | **Accept optionality after `__Host-`.** | A small parameterized test per consumer is enough if the rule is implemented; it still needs both duplicate and legitimate-cookie cases. |
 | A12: mesh first | **Accept.** | Fix known excessive caller authority without waiting for a successful full-chain exploit; retain integration tests for the final boundary. |
 | A13: caveats | **Accept selectively.** | Keep one overall evidence boundary and distinguish earlier probes from this pass. Retain limitations where they change the design, such as per-upload versus aggregate disk limits. |
@@ -718,6 +740,18 @@ check passed. Only this research document was edited; the implementation plan re
 No new Envoy, live application, browser or PDF resource test was run. Ingress denial semantics,
 logout under final CSP, service-level callback races and PDF budgets remain implementation
 acceptance work, not reasons to retain the more complicated recommendations.
+
+### Final decision verification
+
+This pass started from orchestration HEAD `bb75b484b5247467aca5bbb72cdcdbe0a1bf8e7b`. All sibling
+HEADs still matched the verification table above and were clean. The workspace boundary check
+passed. Only this research document was edited.
+
+| Check | Result and scope |
+| --- | --- |
+| Cache eviction mechanism | Read `CacheConfig` and the eviction callers. Spring Boot 4.1.2's BOM selects Spring Data Redis 4.1.2; bytecode inspection of that jar showed `RedisCacheWriter` defaulting to `BatchStrategies.keys()`, whose clean runs `KEYS` then `DEL`, and a configurer exposing `batchStrategy(...)`. No `SCAN` strategy was run against Redis. |
+| Upload exposure | Read the NGINX upload locations, transaction-service multipart and deployment settings, Dockerfiles and manifests for heap flags, and the default role grants. No hosted deployment exists. |
+| Runtime | The local cluster had no transaction-service pod, so no heap, resident-memory or non-heap measurement was taken. |
 
 [provider]: ../../kubernetes/istio/istiod-values.yaml
 [custom-policy]: ../../kubernetes/istio/ext-authz-policy.yaml
@@ -786,5 +820,6 @@ acceptance work, not reasons to retain the more complicated recommendations.
 [tiltfile]: ../../Tiltfile
 [prod-apps-kustomization]: ../../kubernetes/production/apps/kustomization.yaml
 [csp-includes]: ../../nginx/includes/security-headers-strict-csp.conf
-[exchange-rate-service]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/service/ExchangeRateService.java
-[currency-events]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/messaging/listener/MessagingEventListener.java
+[import-scheduler]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/scheduler/ExchangeRateImportScheduler.java
+[import-consumer]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/messaging/consumer/ExchangeRateImportConsumer.java
+[permission-seed]: ../../../permission-service/src/main/resources/db/migration/V2__seed_default_data.sql

@@ -8,7 +8,7 @@
 deferred as a documented known limitation.
 
 **Status:** Reviewed recommendations. These verdicts replace the original discussion recommendations;
-they do not implement fixes or amend the [hardening plan](../plans/security-review-consensus-hardening-plan.md).
+they do not implement fixes. The original hardening plan has since been split into plans [01](../plans/security-hardening-01-edge-mesh-redis-acl.md), [02](../plans/security-hardening-02-session-contract.md), [03](../plans/security-hardening-03-service-runtime.md), [04](../plans/security-hardening-04-data-network-infrastructure.md) and [05](../plans/security-hardening-05-closeout-release-handoff.md), which apply these decisions.
 
 This review decides whether to **keep**, **discard**, or **modify** each original recommendation.
 “Keep” can retain a deferral; it does not mean the proposed control already exists. “Discard” rejects
@@ -107,7 +107,7 @@ the configured IdP logout URL. Share that submission helper across all four call
 navigation in the browser without adding a JSON URL response contract. Reject the old mutating
 GET **and HEAD** handlers, and move heartbeat callers to POST in the same cutover.
 
-**Plan dependency.** The current CSP has no `form-action`, but hardening-plan Phase 4 already
+**Plan dependency.** The current CSP has no `form-action`, but [plan 01, Phase 5](../plans/security-hardening-01-edge-mesh-redis-acl.md#phase-5-harden-ingress-headers-and-the-csp-live) already
 proposes `form-action 'self'`. [Form-action constrains form navigation](https://w3c.github.io/webappsec-csp/#directive-form-action),
 and redirect enforcement must be checked in supported browsers. Reconcile that phase with logout:
 permit the configured IdP logout destination alongside self where needed, without a wildcard.
@@ -371,7 +371,7 @@ kill.
 PDF, can plausibly exhaust the default heap. The transaction API would then fail for every user until
 the JVM recovers or the pod restarts. This is reasoned from source and defaults, not reproduced. It
 affects availability, not data confidentiality. Accept it while there is no hosted deployment or
-open-signup requirement. Defer hardening-plan Phase 23 rather than executing it, and do not present
+open-signup requirement. Omit the PDF-bounding phase from [plan 03](../plans/security-hardening-03-service-runtime.md#dropped-phases) rather than executing it, record the limitation in [plan 05, Phase 3](../plans/security-hardening-05-closeout-release-handoff.md#phase-3-full-verification-and-release-handoff-live), and do not present
 any current setting as a capacity bound.
 
 **If revisited.** Prefer configuration before application code:
@@ -618,12 +618,15 @@ Capture the routing baseline when available, but do not delay known mesh overper
 exploit reproduction. Start with small edge/ACL/credential-forwarding fixes, then promptly handle
 browser binding, session-token exposure and CSRF across their owning repositories. Do not postpone
 those behind optional generators, signing, port redesigns or egress redesign. Follow contract
-cutover dependencies in the [hardening plan](../plans/security-review-consensus-hardening-plan.md#plan-wide-rules).
-The plan remains unchanged by this review; its exclusions and decisions need reconciliation before
-execution. In particular, revise D3/Phase 7 for the reusable binding cookie and single-consumer rule,
-reconcile Phase 4's CSP with form logout, add the ingress Origin/POST cutover, add the currency-service
-`SCAN` eviction strategy and `+scan`-only grant, and defer Phase 23 as a recorded known limitation. Its
-phase numbers describe the current draft, not a durable API.
+cutover dependencies in [plan 02's plan-wide rules](../plans/security-hardening-02-session-contract.md#plan-wide-rules).
+The split plans apply the reconciliations: D3 and the binding rule in
+[plan 02, Phase 1](../plans/security-hardening-02-session-contract.md#phase-1-bind-oauth-callbacks-to-the-initiating-browser),
+the CSP and form logout in
+[plan 01, Phase 5](../plans/security-hardening-01-edge-mesh-redis-acl.md#phase-5-harden-ingress-headers-and-the-csp-live),
+the ingress Origin/POST cutover in plan 02, Phases 6, 11, 13 and 16, the currency-service `SCAN`
+strategy and `+scan`-only grant in
+[plan 03, Phases 10 and 12](../plans/security-hardening-03-service-runtime.md#phase-10-clear-the-currency-service-cache-with-scan),
+and the PDF deferral in plan 03's dropped phases.
 
 ## Settled by checking the code
 
@@ -643,7 +646,7 @@ original table is reassessed here; “settled” refers to the stated source-lev
 | The quarterly review “missed” RabbitMQ | **Discard as an established event.** | [R2](application-architecture-security-review-second-opinion-2026-11-01.md) infers process failure from the version. The manifest proves selection of an out-of-community-support series, not that a particular review ran or missed it. |
 | No timeout on the login call | **Keep only the narrower claim.** | [fetchPermissions][permission-client] lacks the explicit operation timeout used by `fetchAuthorization`; [WebClientConfig][webclient-config] sets only the base URL. This proves no application-level deadline here, not the absence of all transport defaults. |
 | ext-authz Go toolchain mismatch (A4) | **Keep as a separate maintenance finding.** | [Build CI][go-build] selects the 1.24 line from [go.mod][go-mod], while [Docker][go-docker] builds with 1.27. The [Go support policy](https://go.dev/doc/devel/release#policy) excludes 1.24 as of this review. Align supported CI/build toolchains in ext-authz; this is independent of the ingress CSRF design. |
-| Redis `maxmemory` at 70–75% | **Discard as a justified value.** | [The StatefulSet][redis-deployment] has a 256 MiB container limit and [startup][redis-acl] supplies no maxmemory budget. Percentages need measured dataset, allocator, persistence and connection overhead. Preserve Phase 28's measurement requirement. |
+| Redis `maxmemory` at 70–75% | **Discard as a justified value.** | [The StatefulSet][redis-deployment] has a 256 MiB container limit and [startup][redis-acl] supplies no maxmemory budget. Percentages need measured dataset, allocator, persistence and connection overhead. Preserve the measurement requirement in [plan 04, Phase 1](../plans/security-hardening-04-data-network-infrastructure.md#phase-1-set-an-explicit-redis-memory-budget-live). |
 | PostgreSQL citation | **Keep the correction; qualify runtime conclusion.** | [The StatefulSet][postgresql] configures SCRAM authentication and `ssl=on`, but neither requires TLS on every accepted connection. [PostgreSQL's HBA rules](https://www.postgresql.org/docs/current/auth-pg-hba-conf.html) distinguish `host` from `hostssl`/`hostnossl`; the checked-in [init configuration][postgresql-init] does not establish a TLS-only HBA policy. Inspect effective HBA rules and test rejection of non-TLS traffic in the eventual local implementation phase. |
 
 ## Verification record

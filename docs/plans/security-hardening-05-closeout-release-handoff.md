@@ -27,7 +27,7 @@ so its silence on those findings is not agreement or disagreement.
 
 ## Inclusion rule
 
-An item is in scope when all three of these hold:
+An original consensus item is in scope when all three of these hold:
 
 1. At least one review proposes it.
 2. No review disputes the fix direction. Silence is not a dispute.
@@ -36,9 +36,13 @@ An item is in scope when all three of these hold:
 A disagreement over severity does not exclude an item. A dispute over part of a remedy excludes only
 that part.
 
+The accepted decisions in the contested issues document extend or supersede that original set.
+The table below covers the final scope, including those additions; item 25 remains explicitly
+deferred and is excluded from implementation acceptance.
+
 `01.1` means plan 01, Phase 1.
 
-| # | Fix | Proposed or endorsed by | Phases |
+| # | Fix | Review or accepted decision | Phases |
 | --- | --- | --- | --- |
 | 1 | Narrow mesh policies to the callers' real paths | All four | 01.1, 02.14 |
 | 2 | Add an explicit mesh deny baseline | R2, R4 | 01.1 |
@@ -48,7 +52,7 @@ that part.
 | 6 | Set ext_authz `statusOnError` and a timeout; correct the contract; test real denials | R2, R3, R4 | 01.4 |
 | 7 | Send HSTS from the ingress | R2, R3, R4 | 01.5 |
 | 8 | Stop trusting caller forwarded headers; fix the OAuth redirect URI | R2, R4 | 01.5, 02.2, 02.14 |
-| 9 | Add CSP `form-action`; drop `X-XSS-Protection` | R2, R4 | 01.5 |
+| 9 | Add CSP `form-action`; drop `X-XSS-Protection` | R2, R4; contested #1 | 01.5, 02.16 |
 | 10 | Replace Session Gateway `+@all` and its literal verifier | All four | 01.6 |
 | 11 | Reconcile the documentation with the code | All four; R2, R3, R4 on additions | 01.7, 02.14 |
 | 12 | Bind OAuth callbacks to the initiating browser | All four | 02.1, 02.15 |
@@ -58,19 +62,26 @@ that part.
 | 16 | Hash session tokens in session keys and index members | R2, R3, R4 | 02.4, 02.9, 02.14, 02.15 |
 | 17 | Adopt the `__Host-` session cookie | R1 ("consider"), R2, R3, R4 | 02.5, 02.9, 02.10, 02.12, 02.14, 02.15 |
 | 18 | Add a login permission-call deadline; move user sync off GET | R2, R3, R4 | 02.7, 02.8, 02.14 |
-| 19 | Separate liveness from readiness | All four | 03.1, 03.5, 03.6, 03.8, 03.9, 03.11 |
+| 19 | Separate liveness from readiness | All four | 03.1, 03.2, 03.6, 03.7, 03.9, 03.10, 03.12 |
 | 20 | Add ext-authz HTTP server timeouts | R2 | 03.1 |
-| 21 | Use the trusted client address | R1, R2, R4 | 03.3 |
-| 22 | Add structured audit events | R1, R2 | 03.4, 03.8 |
-| 23 | Turn body logging and TRACE off by default in all four services | All four | 03.5, 03.6, 03.8, 03.9 |
-| 24 | Add an endpoint authorization coverage rule | R2, R3, R4 | 03.5, 03.6, 03.9 |
+| 21 | Use the trusted client address | R1, R2, R4 | 03.4 |
+| 22 | Add structured audit events | R1, R2 | 03.5, 03.9 |
+| 23 | Turn body logging and TRACE off by default in all four services | All four | 03.6, 03.7, 03.9, 03.10 |
+| 24 | Add an endpoint authorization coverage rule | R2, R3, R4 | 03.6, 03.7, 03.10 |
 | 25 | Bound PDF parsing, limited to the agreed controls | R2, R3, R4 | Deferred per contested #6; limitation recorded in 05.3 |
 | 26 | Set a measured Redis memory budget; no `allkeys-lru` on auth data | All four | 04.1 |
 | 27 | Exclude private destinations from the egress gateway | R1, R3 | 04.2 |
 | 28 | Require TLS on the PostgreSQL server side | R2, R3, R4 | 04.3 |
 | 29 | Separate migration roles from runtime roles | R2, R4 | 04.4 |
 | 30 | Move to a supported RabbitMQ series; report runtime support dates | R2, R3, R4; R2 | 04.5 |
-| 31 | Test the edge contract across layers, including forged headers with no permissions | R2, R3, R4 | 01.1, 01.2, 01.4, 01.5, 05.1 |
+| 31 | Test the edge contract across layers, including forged headers with no permissions | R2, R3, R4; contested #1 | 01.1, 01.2, 01.3, 01.4, 01.5, 02.16, 05.1, 05.3 |
+| 32 | Share NGINX API routes between local and production-reference configurations | Contested #12 | 01.3 |
+| 33 | Reject decoded semicolons on the NGINX lane | Contested #3 | 01.3 |
+| 34 | Move heartbeat and logout to POST across services and clients | Contested #1 | 02.6, 02.11, 02.13, 02.14, 02.15 |
+| 35 | Require exact Origin on unsafe requests on both ingress lanes | Contested #1 | 02.13, 02.16 |
+| 36 | Align the ext-authz Go toolchain | Contested A4 | 03.3 |
+| 37 | Remove the unused `deleteUser` method | Contested #10 | 03.8 |
+| 38 | Use SCAN for currency cache eviction and remove its `KEYS` grant | Contested #2 | 03.11, 03.13 |
 
 **Deferred by agreement.** All four reviews leave these until hosted use is planned: recovery
 objectives and restore tests, secret rotation and storage encryption, exporters and alert delivery,
@@ -115,7 +126,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ```
 
 **Cutover rule:** `kubernetes/production` shares these manifests but pins older images
-(session-gateway 0.0.15, ext-authz 0.0.16). Plan 02, Phases 14 and 15 and plan 03, Phase 11
+(session-gateway 0.0.15, ext-authz 0.0.16). Plan 02, Phases 14 and 15 and plan 03, Phase 2
 therefore describe behaviour those images lack: the new cookie, hashed keys, the POST sync call and
 `/livez`. The mesh policy from plan 02, Phase 14 would also block the pinned Session Gateway's login
 call. The offline checks catch none of this. Phase 3 records the release and pin updates, which are
@@ -128,7 +139,7 @@ human-owned. No production environment exists, so no dual-cookie or session migr
   Phase 3 records intermediary forgery and replay as residual risks.
 - [#2, Redis enumeration](../research/security-review-contested-issues-2026-11-02.md#2-redis-enumeration-after-hashing)
   and [#5, duplicate session cookies](../research/security-review-contested-issues-2026-11-02.md#5-rejecting-duplicate-session-cookies):
-  Phase 1's non-goal is amended. `KEYS` denial is asserted in plan 03, Phase 12, and duplicate
+  Phase 1's non-goal is amended. `KEYS` denial is asserted in plan 03, Phase 13, and duplicate
   rejection is not in these plans.
 - [#6, PDF memory handling](../research/security-review-contested-issues-2026-11-02.md#6-pdf-memory-handling-and-a-parsing-worker):
   Phase 3 drops the PDF evidence, records the known limitation, and excludes scope item 25.
@@ -152,19 +163,21 @@ Finish the single cross-layer verifier, so the seams between components stay tes
 ### Non-goals
 
 (amended per contested #2 and #5) Two-cookie request tests, because
-duplicate rejection is optional and not in these plans, and `KEYS` denial, which plan 03, Phase 12
+duplicate rejection is optional and not in these plans, and `KEYS` denial, which plan 03, Phase 13
 asserts in `verify-credential-isolation.sh`.
 
 ### Required context
 
-R2 "Define the edge contract once"; R3 N3; R4 "Define and test one edge contract"; plan 01, Phases 1-5.
+R2 "Define the edge contract once"; R3 N3; R4 "Define and test one edge contract"; plan 01, Phases 1-5;
+plan 02, Phase 16.
 
 ### Execution steps
 
 1. Add a "Forged Identity" section. Seed a session with empty roles and permissions, send forged
    `X-User-Id`, `X-Roles` and `X-Permissions: users:read` headers to `/api/v1/users`, and assert 403.
 2. Add a positive control: a seeded session that really holds `users:read` gets past the gate.
-3. Confirm the verifier covers the boundary, failure statuses, response headers and forged identity.
+3. Confirm the verifier covers the boundary, failure statuses, response headers, exact Origin on
+   both lanes, and forged identity.
 4. Wire it into `verify-security-guardrails.sh` and update `scripts/README.md`.
 
 ### Implementation notes
@@ -210,11 +223,14 @@ The repository's `AGENTS.md`.
 
 1. Confirm the stack left by earlier phases is running. If it is not, stop and report.
 2. Run the local suite through `./run-tests`.
-3. Record the result in this repository's `docs/` folder, with no credentials.
+3. Record the result in this repository's `docs/` folder, with no credentials. If the suite fails,
+   report each failure with its owner and leave this phase incomplete.
 
 ### Implementation notes
 
-A failure in a service is a finding for that repository. Do not weaken a test to pass it.
+A failure in a service is a finding for that repository. Do not weaken a test to pass it. Have the
+failure fixed in its owning workspace, then rerun this phase. Reporting a failure does not satisfy
+acceptance or permit successful closeout.
 
 ### Validation
 
@@ -222,7 +238,8 @@ A failure in a service is a finding for that repository. Do not weaken a test to
 
 ### Completion criteria
 
-The local suite passes, or every failure is reported with its owner.
+The local suite passes and its passing result is recorded. Unresolved test failures block phase
+completion and progression to Phase 3.
 
 ## Phase 3: Full verification and release handoff (Live)
 
@@ -245,14 +262,16 @@ Releasing images, changing production pins, or starting work the contested decis
 
 ### Required context
 
-`scripts/README.md`; the evidence file; the sibling evidence from Phase 2
-(amended per contested #6: the PDF phase was dropped).
+`scripts/README.md`; the final scope table; the evidence file; the passing sibling evidence from
+Phase 2 (amended per contested #6: the PDF phase was dropped).
 
 ### Execution steps
 
-1. Run the aggregate smoketest.
+1. Confirm Phase 2 has passing local API-test evidence, then run the aggregate smoketest. Any
+   unresolved failure blocks successful closeout; record its owner and rerun the affected gate after
+   the fix.
 2. Confirm the plan 01, Phase 1 probes still fail after every later change.
-3. Update the audit claims at `security-architecture.md:176` and `:451` to describe plan 03, Phase 4's events
+3. Update the audit claims at `security-architecture.md:176` and `:451` to describe plan 03, Phase 5's events
    and D6's scope.
 4. Confirm no doc in the scope table still contradicts the code.
 5. Record the human-owned handoff: release service-common, then session-gateway, ext-authz, the three
@@ -262,9 +281,10 @@ Releasing images, changing production pins, or starting work the contested decis
    Also record that the production reference supports only a deployment that starts from empty state;
    no upgrade path from the pinned images or existing data is provided.
 6. Note the production secrets and configuration added by plan 02, Phase 14 and plan 04, Phase 4.
-7. Summarize evidence per scope item, and note every remaining gap: Session Gateway client address,
-   audit retention and access, anonymous OAuth-state growth, and the migrator credential's location. (amended per
-   contested #2, #6 and #7) Also record unbounded upload processing as a known availability
+7. Link passing evidence for every non-deferred scope item, including additions 32-38, and note
+   every accepted remaining gap: Session Gateway client address, audit retention and access,
+   anonymous OAuth-state growth, and the migrator credential's location. (amended per contested #2,
+   #6 and #7) Also record unbounded upload processing as a known availability
    limitation of the single-replica transaction-service, without presenting any current setting as
    a capacity bound; key-name visibility to the currency-service credential as residual metadata
    exposure; and that a compromised allowed intermediary can forge or replay identity claims.
@@ -283,5 +303,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 
 ### Completion criteria
 
-All 31 scope items, except item 25 deferred per contested #6, have recorded
-evidence, and the release handoff is explicit. (amended per contested #6)
+Every non-deferred scope item in the final table has recorded passing evidence, the local API suite
+and aggregate smoketest pass, and the release handoff is explicit. Item 25 stays deferred per
+contested #6. Accepted limitations are documented separately; unresolved verification failures
+block successful closeout.

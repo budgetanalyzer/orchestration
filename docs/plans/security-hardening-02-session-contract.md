@@ -72,7 +72,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ```
 
 **Cutover rule:** `kubernetes/production` shares these manifests but pins older images
-(session-gateway 0.0.15, ext-authz 0.0.16). Phases 14 and 15 and plan 03, Phase 11 therefore
+(session-gateway 0.0.15, ext-authz 0.0.16). Phases 14 and 15 and plan 03, Phase 2 therefore
 describe behaviour those images lack: the new cookie, hashed keys, the POST sync call and `/livez`.
 The mesh policy from Phase 14 would also block the pinned Session Gateway's login call. The offline
 checks catch none of this. Plan 05, Phase 3 records the release and pin updates, which are
@@ -93,7 +93,7 @@ human-owned. No production environment exists, so no dual-cookie or session migr
   hashing is kept (Phase 4), and key-name visibility is accepted as metadata exposure. The
   currency-service work is in plan 03.
 - [#10, `deleteUser`](../research/security-review-contested-issues-2026-11-02.md#10-the-unused-deleteuser-method):
-  the method is removed in plan 03, Phase 7.
+  the method is removed in plan 03, Phase 8.
 - [Work order](../research/security-review-contested-issues-2026-11-02.md#work-order): handle
   browser binding, token exposure and CSRF promptly across their owning repositories.
 
@@ -437,7 +437,7 @@ Make the write that happens at login an explicit POST, with personal fields out 
 
 ### Non-goals
 
-`deleteUser` (amended per contested #10: removed in plan 03, Phase 7), and
+`deleteUser` (amended per contested #10: removed in plan 03, Phase 8), and
 the read-only authorization lookup.
 
 ### Required context
@@ -752,7 +752,7 @@ Update every orchestration consumer of the session contract, ready for the live 
 
 ### Non-goals
 
-Probe changes, which are plan 03, Phase 11, and `kubernetes/production` image pins.
+Probe changes, which are plan 03, Phases 2 and 12, and `kubernetes/production` image pins.
 
 ### Required context
 

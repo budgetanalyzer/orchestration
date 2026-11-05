@@ -337,7 +337,7 @@ evidence".
 ### Implementation notes
 
 - Apply the `kind-kind` checks, and restore every scaled workload and temporary policy.
-- Until plan 03, Phase 11, a Redis outage also fails ext-authz's probes, so the Redis case may surface as a
+- Until plan 03, Phase 2, a Redis outage also fails ext-authz's probes, so the Redis case may surface as a
   connection failure rather than the authorizer's own 503. Either must reach the client as a 503.
 - The frontend does not depend on the JSON body. `client.ts` handles an unstructured error, and
   `useUsers.ts:29` checks only the status.
@@ -442,7 +442,7 @@ over-grant.
 ### Non-goals
 
 The currency-service `+keys +scan` grant (amended per contested #2: narrowed to
-`+scan` in plan 03, Phases 10 and 12), and any Redis split.
+`+scan` in plan 03, Phases 11 and 13), and any Redis split.
 
 ### Required context
 

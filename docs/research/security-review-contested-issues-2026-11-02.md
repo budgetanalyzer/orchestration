@@ -625,7 +625,7 @@ the CSP and form logout in
 [plan 01, Phase 5](../plans/security-hardening-01-edge-mesh-redis-acl.md#phase-5-harden-ingress-headers-and-the-csp-live),
 the ingress Origin/POST cutover in plan 02, Phases 6, 11, 13 and 16, the currency-service `SCAN`
 strategy and `+scan`-only grant in
-[plan 03, Phases 10 and 12](../plans/security-hardening-03-service-runtime.md#phase-10-clear-the-currency-service-cache-with-scan),
+[plan 03, Phases 11 and 13](../plans/security-hardening-03-service-runtime.md#phase-11-clear-the-currency-service-cache-with-scan),
 and the PDF deferral in plan 03's dropped phases.
 
 ## Settled by checking the code

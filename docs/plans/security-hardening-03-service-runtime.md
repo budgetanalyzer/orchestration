@@ -49,6 +49,10 @@ so its silence on those findings is not agreement or disagreement.
 - Phases marked **Live** need a running stack. In orchestration phases, run
   `./scripts/bootstrap/check-local-runtime.sh` and `tilt up`. If the stack cannot be started, stop
   and report; do not substitute static evidence.
+- Before launching this plan, stop the existing Tilt process from its orchestration terminal.
+  Keep Tilt stopped through Phase 1 and Phase 2's manifest edits. Phase 1 uses repository tests
+  only; Phase 2 starts Tilt after the new health endpoints and probes agree. This is a short local
+  cutover, and the combined dependency-outage drill remains in Phase 12.
 - Do not edit `docs/decisions/` or `docs/archive/`.
 - Do not edit this plan during a run, because the runner stops launching phases when it changes.
 - Record measurements and results in `docs/research/security-consensus-hardening-evidence.md`. A
@@ -65,7 +69,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ```
 
 **Cutover rule:** `kubernetes/production` shares these manifests but pins older images
-(session-gateway 0.0.15, ext-authz 0.0.16). Phase 11 and plan 02, Phases 14 and 15 therefore
+(session-gateway 0.0.15, ext-authz 0.0.16). Phase 2 and plan 02, Phases 14 and 15 therefore
 describe behaviour those images lack: the new cookie, hashed keys, the POST sync call and `/livez`.
 The mesh policy from plan 02, Phase 14 would also block the pinned Session Gateway's login call. The
 offline checks catch none of this. Plan 05, Phase 3 records the release and pin updates, which are
@@ -74,17 +78,17 @@ human-owned. No production environment exists, so no dual-cookie or session migr
 ## Contested decisions applied
 
 - [#6, PDF memory handling](../research/security-review-contested-issues-2026-11-02.md#6-pdf-memory-handling-and-a-parsing-worker):
-  the PDF-bounding phase is dropped (see [Dropped phases](#dropped-phases)), and Phase 5's non-goal
+  the PDF-bounding phase is dropped (see [Dropped phases](#dropped-phases)), and Phase 6's non-goal
   is amended.
 - [#10, `deleteUser`](../research/security-review-contested-issues-2026-11-02.md#10-the-unused-deleteuser-method):
-  Phase 7 is added to remove the unused method.
+  Phase 8 is added to remove the unused method.
 - [#2, Redis enumeration](../research/security-review-contested-issues-2026-11-02.md#2-redis-enumeration-after-hashing):
-  Phases 10 and 12 are added to clear the cache with `SCAN` and drop `+keys`. Residual key-name
+  Phases 11 and 13 are added to clear the cache with `SCAN` and drop `+keys`. Residual key-name
   metadata exposure is accepted.
 - [A4, ext-authz Go toolchain](../research/security-review-contested-issues-2026-11-02.md#settled-by-checking-the-code):
-  Phase 2 is added as a separate maintenance finding.
+  Phase 3 is added as a separate maintenance finding.
 - [#5, duplicate session cookies](../research/security-review-contested-issues-2026-11-02.md#5-rejecting-duplicate-session-cookies):
-  Phase 8 does not add duplicate rejection.
+  Phase 9 does not add duplicate rejection.
 
 ## Dropped phases
 
@@ -108,7 +112,7 @@ HTTP servers.
 
 ### Non-goals
 
-Orchestration manifests, which are Phase 11.
+Orchestration manifests, which are Phase 2.
 
 ### Required context
 
@@ -127,7 +131,7 @@ R1 finding 7; R2 on process exit and server timeouts; R3 N4.
 
 - R3 found the retry loop can back off for about 27.5 seconds, while the startup probe allows about
   10 seconds and the health server only starts after Redis connects. Set a startup probe target for
-  Phase 11.
+  Phase 2.
 - Keep `WriteTimeout` above the Redis call budget, and `IdleTimeout` long enough that closing an idle
   connection does not surface as an authorization failure.
 
@@ -138,10 +142,62 @@ unavailable.
 
 ### Completion criteria
 
-A Redis outage cannot cause a liveness failure or a process exit, authorization stays fail-closed,
-and neither server can hold a connection open indefinitely.
+Repository tests prove a Redis outage cannot cause a liveness failure or a process exit,
+authorization stays fail-closed, and neither server can hold a connection open indefinitely.
+Phase 2 can deploy these health endpoints with the matching probes.
 
-## Phase 2: Align the ext-authz Go toolchain
+## Phase 2: Wire ext-authz probes and resume the local stack (Live)
+
+### Workspace
+
+.
+
+### Goal
+
+Deploy the new ext-authz health endpoints with matching probes immediately after the service change.
+
+### Scope
+
+`kubernetes/services/ext-authz/deployment.yaml`, `scripts/smoketest/verify-credential-isolation.sh`,
+and the docs that reference `/healthz`.
+
+### Non-goals
+
+Spring probe changes and the combined outage drill, which are Phase 12, and service code.
+
+### Required context
+
+Phase 1's repository-local evidence; `docs/runbooks/tilt-debugging.md`;
+`docs/architecture/session-edge-authorization-pattern.md`.
+
+### Execution steps
+
+1. With Tilt still stopped, point ext-authz startup and liveness probes at `/livez`, and readiness
+   at `/readyz`. Use the startup probe budget established in Phase 1.
+2. Update `verify-credential-isolation.sh:624`, `docs/runbooks/tilt-debugging.md:222,492,652`, and
+   `docs/architecture/session-edge-authorization-pattern.md:90` for the new endpoints.
+3. Run the orchestration static gate and `./scripts/bootstrap/check-local-runtime.sh`, then start
+   `tilt up`. Confirm ext-authz is built from the Phase 1 worktree and wait for its rollout.
+4. Confirm the deployed probes use the new paths, ext-authz becomes Ready, and an authenticated API
+   request succeeds. Record the result in the evidence file.
+
+### Implementation notes
+
+Do not start Tilt or wait for healthy workloads before updating the probes: Phase 1 removed
+`/healthz`. Keep this cutover adjacent to Phase 1. Phase 12 proves outage behaviour after the Spring
+services have their final readiness configuration.
+
+### Validation
+
+Orchestration static gate, `./scripts/smoketest/verify-credential-isolation.sh`, and the live rollout
+and authenticated request checks above.
+
+### Completion criteria
+
+The current ext-authz worktree runs with matching startup, liveness and readiness probes, the
+deployment is Ready, and normal authorization works before the remaining runtime phases begin.
+
+## Phase 3: Align the ext-authz Go toolchain
 
 ### Workspace
 
@@ -182,7 +238,7 @@ This is a maintenance finding, independent of the ingress CSRF design.
 
 CI and the Docker build use the same supported Go line.
 
-## Phase 3: Use the trusted client address in service-common
+## Phase 4: Use the trusted client address in service-common
 
 ### Workspace
 
@@ -230,7 +286,7 @@ The repository's documented build and test commands.
 
 A forged `X-Forwarded-For` cannot change the logged client address.
 
-## Phase 4: Add structured audit events to service-common
+## Phase 5: Add structured audit events to service-common
 
 ### Workspace
 
@@ -277,7 +333,7 @@ The repository's documented build and test commands.
 A state-changing request produces exactly one event, and the event holds no payload or personal
 data.
 
-## Phase 5: Safe logging, readiness and authorization coverage in transaction-service
+## Phase 6: Safe logging, readiness and authorization coverage in transaction-service
 
 ### Workspace
 
@@ -334,7 +390,7 @@ no body logging, and that a state-changing request emits one audit event.
 Default configuration logs no bodies and no TRACE, readiness fails when the database is down, and an
 unannotated handler fails the build.
 
-## Phase 6: Safe logging, readiness and authorization coverage in permission-service
+## Phase 7: Safe logging, readiness and authorization coverage in permission-service
 
 ### Workspace
 
@@ -342,7 +398,7 @@ unannotated handler fails the build.
 
 ### Goal
 
-Apply the Phase 5 changes to permission-service.
+Apply the Phase 6 changes to permission-service.
 
 ### Scope
 
@@ -350,11 +406,11 @@ Apply the Phase 5 changes to permission-service.
 
 ### Non-goals
 
-`deleteUser` (amended per contested #10: Phase 7).
+`deleteUser` (amended per contested #10: Phase 8).
 
 ### Required context
 
-Phase 5 notes.
+Phase 6 notes.
 
 ### Execution steps
 
@@ -374,9 +430,9 @@ The repository's documented build and test commands.
 
 ### Completion criteria
 
-Same as Phase 5.
+Same as Phase 6.
 
-## Phase 7: Remove the unused `deleteUser` method
+## Phase 8: Remove the unused `deleteUser` method
 
 ### Workspace
 
@@ -417,7 +473,7 @@ The repository's documented build and test commands.
 
 `deleteUser` is gone, and deactivated subjects still cannot sign in again.
 
-## Phase 8: Safe logging, readiness and session audit events in session-gateway
+## Phase 9: Safe logging, readiness and session audit events in session-gateway
 
 ### Workspace
 
@@ -425,7 +481,7 @@ The repository's documented build and test commands.
 
 ### Goal
 
-Apply the Phase 5 logging and readiness changes, and record session lifecycle events.
+Apply the Phase 6 logging and readiness changes, and record session lifecycle events.
 
 ### Scope
 
@@ -434,11 +490,11 @@ Apply the Phase 5 logging and readiness changes, and record session lifecycle ev
 
 ### Non-goals
 
-Client-address changes, which Phase 3 records as a gap.
+Client-address changes, which Phase 4 records as a gap.
 
 ### Required context
 
-Phase 5 notes; Phase 4; R3 N4 on the leftover override.
+Phase 6 notes; Phase 5; R3 N4 on the leftover override.
 
 ### Execution steps
 
@@ -461,9 +517,9 @@ The repository's documented build and test commands.
 
 ### Completion criteria
 
-Logging matches Phase 5, and each session lifecycle event produces one audit event.
+Logging matches Phase 6, and each session lifecycle event produces one audit event.
 
-## Phase 9: Safe logging, readiness and authorization coverage in currency-service
+## Phase 10: Safe logging, readiness and authorization coverage in currency-service
 
 ### Workspace
 
@@ -471,7 +527,7 @@ Logging matches Phase 5, and each session lifecycle event produces one audit eve
 
 ### Goal
 
-Apply the Phase 5 changes to currency-service.
+Apply the Phase 6 changes to currency-service.
 
 ### Scope
 
@@ -480,11 +536,11 @@ Apply the Phase 5 changes to currency-service.
 ### Non-goals
 
 Cache eviction and `KEYS`/`SCAN` changes (amended per contested #2: Phase
-10).
+11).
 
 ### Required context
 
-Phase 5 notes.
+Phase 6 notes.
 
 ### Execution steps
 
@@ -506,9 +562,9 @@ The repository's documented build and test commands.
 
 ### Completion criteria
 
-Same as Phase 5.
+Same as Phase 6.
 
-## Phase 10: Clear the currency-service cache with SCAN
+## Phase 11: Clear the currency-service cache with SCAN
 
 ### Workspace
 
@@ -554,7 +610,7 @@ The repository's documented build and test commands.
 
 Eviction clears every matching key under a grant without `+keys`.
 
-## Phase 11: Switch probes and run the outage drill (Live)
+## Phase 12: Switch Spring probes and run the combined outage drill (Live)
 
 ### Workspace
 
@@ -562,12 +618,13 @@ Eviction clears every matching key under a grant without `+keys`.
 
 ### Goal
 
-Point every probe at the right contract, and prove a dependency outage causes no restarts.
+Point Spring probes at the final health groups, and prove a dependency outage causes no restarts
+across the services and ext-authz.
 
 ### Scope
 
-Deployment manifests in `kubernetes/services/`, `scripts/smoketest/verify-credential-isolation.sh`,
-and the docs that reference `/healthz`.
+Spring deployment manifests in `kubernetes/services/`, the dependency-outage evidence, and the
+nearest probe documentation.
 
 ### Non-goals
 
@@ -575,16 +632,15 @@ Alerting and service code.
 
 ### Required context
 
-Phases 1-10; `docs/runbooks/tilt-debugging.md`.
+Phases 1-11; `docs/runbooks/tilt-debugging.md`.
 
 ### Execution steps
 
-1. Point ext-authz startup and liveness probes at `/livez`, and readiness at `/readyz`.
-2. Point Spring startup and liveness probes at `.../actuator/health/liveness`, and readiness at
+1. Point Spring startup and liveness probes at `.../actuator/health/liveness`, and readiness at
    `.../actuator/health/readiness`, keeping each service's context path.
-3. Update `verify-credential-isolation.sh:624`, `docs/runbooks/tilt-debugging.md:222,492,652`, and
-   `docs/architecture/session-edge-authorization-pattern.md:90`.
-4. Interrupt Redis on local Kind, then repeat for PostgreSQL. Record readiness, restart counts and
+2. Update the nearest probe documentation and confirm the running services use the current
+   worktrees, including the service-common changes. Retain the ext-authz probes from Phase 2.
+3. Interrupt Redis on local Kind, then repeat for PostgreSQL. Record readiness, restart counts and
    client errors, then confirm recovery.
 
 ### Implementation notes
@@ -602,7 +658,7 @@ Orchestration static gate, and `scripts/smoketest/verify-credential-isolation.sh
 During each outage affected pods become unready with no restarts, authorization stays fail-closed,
 and service recovers without intervention.
 
-## Phase 12: Narrow the currency-service Redis grant to `+scan` (Live)
+## Phase 13: Narrow the currency-service Redis grant to `+scan` (Live)
 
 ### Workspace
 
@@ -623,7 +679,7 @@ Hiding key names from `SCAN`, and a Redis split.
 
 ### Required context
 
-Contested issue #2; Phase 10; plan 01, Phase 6.
+Contested issue #2; Phase 11; plan 01, Phase 6.
 
 ### Execution steps
 

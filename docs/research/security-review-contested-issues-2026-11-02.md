@@ -2,6 +2,8 @@
 
 **Original date:** 2026-11-02  
 **Reassessment:** 2026-11-05  
+**KISS reconciliation:** 2026-11-05; incorporates the additional review A1–A13 below.
+
 **Status:** Reviewed recommendations. These verdicts replace the original discussion recommendations;
 they do not implement fixes or amend the [hardening plan](../plans/security-review-consensus-hardening-plan.md).
 
@@ -20,28 +22,29 @@ judgments are distinguished below. The original reviewers' positions remain for 
 R1 predates the later findings. R3 and R4 assessed R1 and R2, not each other. Silence is not agreement.
 
 **Evidence boundary.** Rechecked the orchestration and sibling working trees and consulted the linked
-primary sources. Ran isolated Redis and Envoy probes, plus static route/OpenAPI checks; results are
-[recorded below](#verification-record). No live application, browser, or PDF load test was run. No
-cluster resources or service code were changed. Planned hashing, cookie renaming, and mesh narrowing
-are not counted as existing protection. Repository links are relative to this document and resolve
+primary sources. Earlier passes ran isolated Redis and Envoy probes, plus static route/OpenAPI
+checks; results are [recorded below](#verification-record). The latest pass records its own checks
+under [reconciliation verification](#reconciliation-verification). No live application, browser, or
+PDF load test was run. No cluster resources or service code were changed. Planned hashing, cookie
+renaming, and mesh narrowing are not counted as existing protection. Repository links are relative to this document and resolve
 in the supported side-by-side checkout; the reviewed revisions are recorded below.
 
 ## Summary
 
 | # | Issue | Verdict on original recommendation | Result |
 | --- | --- | --- | --- |
-| 1 | [CSRF](#1-primary-csrf-control) | **Modify** | Keep Fetch Metadata/exact Origin and POST mutations; reject missing provenance on unsafe browser-session requests. |
-| 2 | [Redis enumeration](#2-redis-enumeration-after-hashing) | **Modify** | Keep hashing plus removal of enumeration; require a concurrency-safe cache invalidation design, with a later instance split. |
+| 1 | [CSRF](#1-primary-csrf-control) | **Modify** | Require exact Origin on unsafe requests at the shared ingress; POST heartbeat and form POST logout. Keep OAuth callback binding separate. |
+| 2 | [Redis enumeration](#2-redis-enumeration-after-hashing) | **Modify** | Keep hashing and remove enumeration while preserving ordinary after-commit freshness; stronger cache consistency and a Redis split are separate decisions. |
 | 3 | [Encoded paths](#3-encoded-path-traversal-and-rejecting-) | **Modify** | Keep decoded-semicolon rejection and mesh narrowing; the parser discrepancy is reproduced, full-stack exploitability remains unverified. |
-| 4 | [OAuth cookie](#4-oauth-correlation-cookie-and-atomic-consume) | **Modify** | Keep transaction cookies and atomic validation/consume; replace the unsupported cookie-size estimate and destructive cap rule. |
-| 5 | [Duplicate cookies](#5-rejecting-duplicate-session-cookies) | **Modify** | Keep `__Host-`; reject duplicate session-name values as modest hardening, without claiming a demonstrated browser exploit. |
-| 6 | [PDF memory](#6-pdf-memory-handling-and-a-parsing-worker) | **Modify** | Prefer bounded file-backed input, early concurrency admission, and parsing limits; measure budgets and defer a worker. |
+| 4 | [OAuth cookie](#4-oauth-correlation-cookie-and-atomic-consume) | **Modify** | Prefer one reusable browser-binding cookie and read/validate/`DEL == 1` consumption of immutable state; no mandatory Lua or cookie-per-tab scheme. |
+| 5 | [Duplicate cookies](#5-rejecting-duplicate-session-cookies) | **Modify** | Prioritize `__Host-`; duplicate rejection is optional hardening after that cutover. |
+| 6 | [PDF memory](#6-pdf-memory-handling-and-a-parsing-worker) | **Modify** | Start with one shared per-process admission limit, no parse queue, and extraction limits; reuse upload spooling for file input, verify budgets, defer a worker. |
 | 7 | [Signed identity](#7-signed-identity-context) | **Keep** | Defer pending a concrete threat model; record intermediate forgery and replay as residual risks. |
 | 8 | [Internal ports](#8-separate-internal-ports) | **Keep** | Defer separate listeners; first prove restrictions on both public lanes. |
 | 9 | [Egress identity](#9-per-caller-egress-identity) | **Keep** | Defer as coordinated design work; discard the one-setting remedy. |
 | 10 | [`deleteUser`](#10-the-unused-deleteuser-method) | **Modify** | Remove the unused method; preserve the existing distinction between deletion and deactivation. |
-| 11 | [HSTS flags](#11-hsts-includesubdomains-and-preload) | **Modify** | Keep neither flag by default; correct the apex-only preload claim and conditional Spring-header evidence. |
-| 12 | [Route generation](#12-generating-the-nginx-route-files) | **Modify** | Keep no generator; compare routing behavior and shared security policy, not just location names. |
+| 11 | [HSTS flags](#11-hsts-includesubdomains-and-preload) | **Modify** | Keep neither flag by default; distinguish automatic whole-domain submission from exceptional subdomain entries. |
+| 12 | [Route generation](#12-generating-the-nginx-route-files) | **Modify** | Share API route includes instead of adding a generator or a custom parity parser; retain configuration and behavioral checks. |
 
 The sections on [severity](#severity-disputes), [work order](#work-order), and
 [previously settled claims](#settled-by-checking-the-code) also have explicit dispositions.
@@ -55,10 +58,10 @@ The sections on [severity](#severity-disputes), [work order](#work-order), and
 | R3 | Fetch Metadata is the main control and tokens are not needed. Allow requests that carry neither header. The auth lane needs its own check. |
 | R4 | Tokens and Fetch Metadata can both work, and R2's claim that Fetch Metadata is stronger is unqualified. Missing headers must be specified, not waived for test clients. Both lanes need cover. Heartbeat and logout must move to POST. |
 
-**Decision — Modify.** Keep a header-based primary defense on both browser lanes, move heartbeat
-and logout to POST, and change the original allow-on-missing-headers recommendation to rejection for
-protected unsafe requests. A token system is not required for this single-origin SPA if that
-contract is implemented and tested; “tokens add nothing” is too broad a general claim.
+**Decision — Modify.** Require exact Origin on unsafe requests at the shared Istio ingress, and
+move heartbeat and logout to POST. This is the simplest sufficient CSRF contract for the current
+single-origin browser application. A Fetch Metadata fallback, a token system, and two independent
+implementations in Go and Java are unnecessary for this topology. Missing Origin fails closed.
 
 **Evidence and corrections.** The [ext-authz provider][provider] explicitly forwards `cookie`, but
 not `origin` or `sec-fetch-site`. Its [CUSTOM policy][custom-policy] covers `/api/*`; the
@@ -69,31 +72,45 @@ and redirects to the IdP; its scope includes the IdP logout flow, not merely a l
 The four navigation call sites are in [useAuth][use-auth], [InactivityWarningModal][warning-modal]
 and [useSessionHeartbeat][use-heartbeat].
 
-[Go's implementation](https://go.dev/src/net/http/csrf.go) explicitly permits requests missing both
-headers. That is an intentional compatibility policy, not proof that such requests must be
-non-browser traffic. [OWASP's guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#use-fetch-metadata-headers-to-verify-nature-of-the-request)
-recognizes older clients and header-stripping intermediaries and recommends a fail-safe policy for
-sensitive endpoints. The existing [httpx client][api-client] can send the configured Origin; its
-current omission is not a reason to weaken the browser contract.
+The session cookie already defaults to `SameSite=Strict` in [configuration][sg-application]. In a
+conforming browser this excludes it from cross-site requests, including top-level navigations;
+same-site cross-origin callers remain relevant. Strict does not stop a top-level response from
+clearing the cookie. Thus the unconditional logout response can still disrupt a browser arriving
+from another site, without reading its session. This follows from the
+[cookie storage rules](https://httpwg.org/http-extensions/draft-ietf-httpbis-rfc6265bis.html#name-storage-model),
+not a new browser reproduction. Changing only GET to POST does not stop a hostile form submission.
 
-The Go version claim also needs correction: [go.mod][go-mod] declares a 1.24 minimum, while the
-[Docker build][go-docker] already selects 1.27 and [build CI][go-build] reads the module version.
-Adopting `CrossOriginProtection` requires aligning the supported minimum and CI, not necessarily a
-Docker toolchain upgrade. Its default missing-header and Host-comparison behavior is not this
-application's proposed exact-origin policy.
+**Recommended contract.** On the application HTTPS ingress, deny methods other than GET, HEAD
+and OPTIONS unless Origin equals the configured serialized browser origin (scheme, host and
+effective port). Reject absent, `null`, foreign or multi-valued Origin; do not accept suffix matches
+or derive the trusted value from caller-controlled forwarding headers. Fetch Metadata must not
+provide an exception to this check. The [Fetch standard](https://fetch.spec.whatwg.org/#origin-header)
+sends Origin on these browser mutations. Its form-POST value can become `null` under `no-referrer`;
+the current `strict-origin-when-cross-origin` policy preserves it for same-origin HTTPS submission.
+The [API-test client][api-client] can supply Origin explicitly; this header is CSRF provenance,
+not authentication for arbitrary HTTP clients.
 
-**Recommended contract.** For unsafe requests, reject `cross-site` and `same-site`; allow
-`same-origin` only without a conflicting Origin. If Fetch Metadata is absent, require an exact
-configured Origin including scheme and port. Reject missing, `null`, malformed or contradictory
-provenance; other metadata values do not authorize an unsafe request. Do not derive the trusted
-origin from arbitrary forwarded headers. Cover both lanes.
-Keep intentional OAuth callbacks outside this unsafe-request rule and protect them with issue 4.
+Prefer one native ingress `DENY` AuthorizationPolicy covering both lanes and scoped to the HTTP
+application listener. [Istio supports negative header matches](https://istio.io/latest/docs/reference/config/security/authorization-policy/).
+Before treating the policy as complete, prove rejection of missing/empty/null/foreign Origin in
+the generated configuration and live local requests, plus success for the configured origin on
+both lanes. A permissive `ALLOW` rule is not a substitute: other ALLOW policies are additive.
+This design depends on the existing mesh restrictions preventing browser access around ingress.
+Internal workload calls use their own caller/path policy. The current OAuth GET callback uses
+issue 4's browser binding; a future POST callback requires an explicit contract change.
 
-Use a same-origin logout fetch that returns a server-constructed, validated IdP navigation URL in
-JSON, then navigate to it. Simply fetching the existing 302 endpoint would follow the redirect
-inside fetch. Update all callers and reject the old mutating GETs. Test hostile same-site requests,
-missing/null/conflicting headers, both lanes, and real browser login/logout. These are implementation
-acceptance checks, not evidence already obtained.
+Use a same-origin top-level form POST to `/logout`, then a server-constructed **303** redirect to
+the configured IdP logout URL. Share that submission helper across all four callers. This keeps
+navigation in the browser without adding a JSON URL response contract. Reject the old mutating
+GET **and HEAD** handlers, and move heartbeat callers to POST in the same cutover.
+
+**Plan dependency.** The current CSP has no `form-action`, but hardening-plan Phase 4 already
+proposes `form-action 'self'`. [Form-action constrains form navigation](https://w3c.github.io/webappsec-csp/#directive-form-action),
+and redirect enforcement must be checked in supported browsers. Reconcile that phase with logout:
+permit the configured IdP logout destination alongside self where needed, without a wildcard.
+Keep the existing referrer policy. Verify login, logout, hostile same-site/cross-site submissions,
+and absence of mutation on rejected requests with the final CSP. Do not defer this compatibility
+check on the basis that the directive is absent today.
 
 ## 2. Redis enumeration after hashing
 
@@ -104,9 +121,10 @@ acceptance checks, not evidence already obtained.
 | R3 | These are redundant. Hashing or splitting each stops token theft alone. A versioned prefix is only needed to drop the grant on a shared Redis. Split before hosted use, not first. |
 | R4 | Address both properties. Hashing reduces the consequences, but "does not make the original isolation claim true". Also remove enumeration or split. Splitting does not replace hashing or stop anonymous OAuth-state growth. |
 
-**Decision — Modify.** Keep hashing and removal of `KEYS`/`SCAN` from currency-service. Retain
-separate auth/cache Redis instances as the preferred hosted direction. Modify the claim that a
-versioned prefix is a trivial fix costing exactly one extra read.
+**Decision — Modify.** Keep hashing and removal of `KEYS`/`SCAN` from currency-service. Preserve
+the existing cache freshness contract without requiring stronger consistency as part of this fix.
+A separate auth/cache Redis instance is an availability-isolation option, not an unconditional
+prerequisite once command permissions and bearer-key exposure are fixed.
 
 **Evidence.** The [Redis ACL bootstrap][redis-acl] grants currency-service both enumeration commands
 alongside `~currency-service:*`. An isolated test of the pinned Redis 7.4.11 image confirmed that
@@ -122,15 +140,31 @@ OAuth state still identifies an in-flight transaction. It must not authorize com
 the independent browser binding in issue 4. Do not describe state as wholly non-sensitive.
 
 The three [all-entry eviction sites][exchange-import] rely on a [transaction-aware Redis cache][cache-config]
-with a one-hour write TTL. Old generations can expire naturally, but rapid invalidation can retain
-several generations simultaneously. TTL bounds lifetime, not peak memory or write rate.
+with a one-hour write TTL. Both sources explicitly accept a read racing an import re-caching a
+stale result until that TTL expires. Eliminating that race is a separate improvement. However,
+ordinary entries written before an import are invalidated after commit today.
 
-**Recommended change.** Replace clear-all enumeration in currency-service, then remove the grants
-and test both denial and normal cache invalidation. A generation scheme is reasonable if it
-preserves after-commit invalidation and binds each cache read/fill to one generation: a query begun
-before an import must not publish stale results into the new generation. Specify concurrent import,
-replica, generation-loss/reuse, rollback, and Redis-failure behavior. The exact extra I/O depends on
-that implementation; do not promise a single read in advance.
+**Recommended change.** Replace enumeration with a cache generation changed after commit, retain
+the entry TTL, then remove the grants and test denial plus normal cache invalidation. A shared
+generation must work across replicas and must not reuse old namespaces if its control key is lost
+(for example, bypass the cache until a fresh unique generation exists). Keep rollback from
+invalidating committed data and define Redis-failure handling in the currency-service owner.
+Capturing one generation per lookup/fill is a straightforward design; removing the already accepted
+stale-read race is not an additional completion gate. Do not promise a fixed I/O cost without the
+implementation.
+
+**Disagreement with A9.** Dropping eviction and relying only on TTL is simpler but changes normal
+behavior: a read after a successful import can return pre-import data for an hour without any race.
+That requires an explicit freshness decision; it is not parity with today's contract. A9's no-data
+observation applies to a currency with no rates at all. [ExchangeRateService][exchange-rate-service]
+can cache an empty list for an empty date range in an existing currency. Also, the per-series
+importer handles both creation and re-enabling of currencies, through the
+[event listener][currency-events]; it is not exclusively a first-import path. Keeping generation
+invalidation at the existing import boundaries is simpler than adding special cases for new data.
+
+Daily scheduling and the `currencies:write` gate reduce normal invalidation frequency; they do not
+bound peak cache memory. Old generations expiring naturally are acceptable here, subject to the
+existing Redis capacity work, without adding a generation garbage collector.
 
 A separate instance also isolates memory/eviction policy and administrative blast radius. Separate
 logical Redis database numbers do not provide that process boundary. A new service DNS name must
@@ -158,12 +192,13 @@ a full-chain test with a valid disposable session.
 [permission-service internal chain][permission-security] permits its two internal GET routes and
 relies on mesh caller enforcement.
 
-The new isolated Envoy 1.38.8 probe with `normalize_path: true` produced:
+The earlier isolated Envoy 1.38.8 probes with `normalize_path: true` produced:
 
 | Input to Envoy | Path after normalization |
 | --- | --- |
 | `/api/v1/users/..%3b/..%3b/internal/v1/users/u1/authorization` | Unchanged |
 | `/permission-service/v1/users/..;/..;/internal/v1/users/u1/authorization` | `/permission-service/internal/v1/users/u1/authorization` |
+| `/a/b/%2e%2e;/c` (additional probe) | `/a/b/..;/c` |
 
 This independently confirms the critical normalization distinction reported by
 [R3's reduced-chain test](application-architecture-security-review-third-assessment-2026-11-01.md#n1-high-priority-medium-high-severity-public-edge-to-internal-endpoints).
@@ -173,12 +208,16 @@ before location matching and a normalized `$uri`; [Istio documents](https://isti
 that normalization precedes authorization and forwarding. These facts explain why a backend firewall
 can receive an already-clean internal path.
 
-**Recommended change.** Keep the server-level `if ($uri ~ ";") { return 400; }` candidate in both
-NGINX files, plus mesh path restrictions as the authorization boundary. The
+**Recommended change.** Narrow the mesh caller/method/path rules now; a complete exploit
+reproduction is not a prerequisite for removing known excessive authority. Keep a server-level
+`if ($uri ~ ";") { return 400; }` in the shared NGINX include proposed in issue 12, plus mesh
+restrictions as the authorization boundary. The
 [checked-in OpenAPI document][openapi] now has **29**, not 22, paths; none contains `;`. This supports
 rejecting undocumented matrix-parameter syntax, but is not a compatibility proof for every client.
 
-Test literal, encoded, mixed-case and double-encoded forms through both the NGINX lane and the direct
+The `%2e%2e;` result also shows that one hop can emit a dot segment that a later hop collapses;
+add it explicitly to the regression cases. Test literal, encoded, mixed-case and double-encoded
+forms through both the NGINX lane and the direct
 Session Gateway lane. NGINX does not protect the latter. Assert absence of internal handler side
 effects, not just a non-200 response. A firewall test remains useful defense in depth, not proof of
 this boundary. An inconclusive baseline stays “not reproduced”; it must not become a claim of safety
@@ -193,10 +232,9 @@ or an automatic severity downgrade.
 | R3 | Agrees on the cookie. Atomic consume is hygiene, because the identity provider should reject a second use of the code. It must not delay the binding. |
 | R4 | Test parallel login tabs. Consume atomically; plain `MULTI` around an earlier read is not atomic. |
 
-**Decision — Modify.** Keep one short-lived correlation cookie per transaction as a reasonable
-parallel-tab design, and keep atomic validation/consume. Discard the fixed 77-byte estimate,
-“clear all five” as a harmless cap, and the suggestion that single-use IdP codes make local consume
-unimportant.
+**Decision — Modify.** Prefer one reusable browser-binding cookie and require exactly one
+successful consumer of each state record. Per-transaction cookies and Lua are possible designs,
+but neither is necessary for that contract. IdP single-use codes do not replace browser binding.
 
 **Evidence.** [RedisAuthorizationRequestRepository][oauth-repository] stores PKCE/nonce data under
 `oauth2:state:<state>` and retrieves it from the callback query alone. Removal performs a read and
@@ -205,27 +243,35 @@ There is no browser-cookie comparison. [RFC 9700](https://www.rfc-editor.org/rfc
 requires transaction-specific PKCE/nonce material to be bound to the initiating user agent. IdP
 code replay protection does not establish that binding or make the local record single-consumer.
 
-**Recommended design.** Give each transaction an independent random secret; store its hash with
-state, and put the secret in a Secure, HttpOnly, `__Host-`, `Path=/`, `SameSite=Lax` cookie selected
-by a bounded hash-derived state suffix. A value derived only from state is not an independent
-browser proof. Lax suits the current top-level GET callback; do not generalize it to cross-site
-POST response modes. Clear only the matching cookie after a terminal callback.
+**Recommended design.** On login start, reuse a valid high-entropy random binding cookie, or
+generate one if absent. Use Secure, HttpOnly, `__Host-`, `Path=/`, `SameSite=Lax`, no Domain and
+browser-session lifetime. Store its hash alongside each transaction's independently random state,
+PKCE and nonce. The cookie must not be the session token or be derivable from state. Each state
+record retains its short TTL. Lax fits the current top-level GET callback, not cross-site POST.
 
-Atomically compare the binding and consume the record before code exchange/session issuance, using
-Lua or an equivalent compare-and-delete primitive. A wrong/missing cookie must not delete somebody
-else's transaction. [Redis guarantees atomic script execution](https://redis.io/docs/latest/develop/programmability/eval-intro/),
-but a read performed before `MULTI` is outside that atomic section. Test replay, concurrent callbacks,
-expiry, denial/error callbacks and parallel starts. Binding is the immediate security priority;
-any staged delivery must explicitly retain atomic consumption as unfinished work.
+Keep the binding cookie across callbacks instead of clearing or rotating it for each login; that
+preserves pending tabs. Cookie loss invalidates pending callbacks. Simultaneous first starts can
+set different bindings: the response that wins cookie storage determines which callback succeeds,
+and the other fails closed with a fresh-login retry. Accept that limited UX race rather than
+building per-tab cookie naming, counting and eviction. Existing-cookie parallel starts share the
+binding and retain independent state. This cookie alone never authenticates an application request.
 
-**Cookie limit correction.** Request overhead is `name + '=' + value + separator`, so it depends on
-chosen encodings; no current code establishes 77 bytes. Cookie-count checks see only the request's
-snapshot: parallel starts can all see fewer than five and each add a cookie. Clearing all pending
-cookies also invalidates legitimate tabs and permits login disruption. Define a count/byte budget,
-reject excess starts without silently cancelling existing transactions, and test simultaneous
-starts plus the actual ingress header limit. A request-count check alone is a soft limit. A reusable
-browser-binding cookie remains a valid simpler alternative if its concurrent initialization and
-lifetime behavior are explicit; this is a design choice, not a requirement of OAuth.
+**Consume rule.** Read the record, validate the browser-binding hash, then delete that exact state
+key. Return the authorization request and set callback attributes **only if `DEL` returns 1**;
+zero or a Redis error fails closed. Do this before code exchange/session issuance, including the
+denial/error callback path. A wrong or missing cookie must never reach deletion.
+[DEL returns the number of keys removed](https://redis.io/docs/latest/commands/del/), so this has
+one winner provided each random state key is immutable and never reused or recreated. Keep these
+records write-once, including their binding. Expiry between read and delete returns zero.
+The comparison and deletion are not one atomic operation;
+immutability makes that unnecessary. If records can be replaced, use atomic compare-and-delete
+instead. A plain read followed by an unchecked delete, as today, does not satisfy this rule.
+
+Test wrong/missing binding without record loss, replay, competing callbacks, expiry between read
+and delete, denial/error callbacks and both kinds of parallel start. This establishes the specific
+single-consumer contract without introducing scripting or changing the Redis record format solely
+to use `GETDEL`. Keep anonymous state TTL/rate/capacity controls: one reusable cookie does not bound
+the number of pending Redis records.
 
 ## 5. Rejecting duplicate session cookies
 
@@ -237,8 +283,8 @@ lifetime behavior are explicit; this is a design choice, not a requirement of OA
 | R4 | Supports "unambiguous handling". Must not reject unrelated cookies or HTTP/2 header splitting. |
 
 **Decision — Modify.** Adopt `__Host-` as the main protection against the cited cookie-tossing
-attack, and add consistent duplicate-name rejection as modest input hardening. Discard the claim
-that duplicate input is impossible to exercise or that it demonstrates a vulnerability by itself.
+attack. Make duplicate-name rejection optional hardening after that cutover; it is not a separate
+security milestone without an identified remaining attack path.
 
 **Evidence.** [SessionCookieHelper][cookie-helper] uses `getFirst(cookieName)`;
 [ext-authz][auth-handler] uses `r.Cookie`, also selecting a match. Current defaults remain
@@ -253,13 +299,13 @@ clients can submit duplicates, and both services can test them. That alone gives
 victim credential and does not prove an exploit. The prefix also does not isolate ports on the same
 host; duplicate rejection does not repair a compromised trusted origin or same-host service.
 
-**Recommended change.** Reject more than one parsed cookie with the configured session name,
-regardless of order or equal values, in both consumers. Continue accepting unrelated cookies and
-ordinary splitting of Cookie fields: [HTTP/2 explicitly permits that splitting](https://www.rfc-editor.org/rfc/rfc9113.html#section-8.2.3).
-Test duplicate values in one field and across fields, one session cookie plus unrelated cookies,
-and the real browser prefix contract. Coordinate the rename, removal of Domain override, and any
-legacy-cookie cleanup. Treat this as a small hardening addition, not a release blocker or a
-substitute for `__Host-`.
+**Recommended change.** Coordinate the rename, remove Domain override, and verify the real browser
+prefix contract. Until that ships, do not count its protections as present. If duplicate rejection
+is included while touching both consumers, count only the configured session name after parsing;
+unrelated cookies and [ordinary HTTP/2 Cookie splitting](https://www.rfc-editor.org/rfc/rfc9113.html#section-8.2.3)
+remain valid. A small parameterized test per consumer can cover one match, duplicates in/across
+fields, and unrelated names. There is no need for a separate browser/HTTP2 test project for this
+optional rule, but a single happy-path assertion would not establish its parsing behavior.
 
 ## 6. PDF memory handling and a parsing worker
 
@@ -269,10 +315,10 @@ substitute for `__Host-`.
 | R3 | The crash is unproven. The default heap is about 128 MiB, so expect `OutOfMemoryError` and GC pressure, not a pod kill. Measure before designing. Defer the worker. |
 | R4 | A stream cache does not remove the byte array or cap parsed objects. Use bounded file-backed input, page and output limits, and global plus per-user concurrency. A worker becomes useful when hard termination is required. |
 
-**Decision — Modify.** Keep measurement and global/per-user concurrency limits, but choose
-bounded file-backed input as the preferred direction now. Discard a temp-file *stream cache* as the
-primary fix for read-only PDF extraction. Defer a separate worker unless hard termination or stronger
-resource isolation becomes a requirement.
+**Decision — Modify.** Start with one shared per-process parse admission limit that rejects when
+full, plus page/output limits. Reuse the existing multipart spooling when moving to file-backed
+input; do not design another upload subsystem. Defer per-user fairness controls and a separate
+worker until required. A temp-file *stream cache* is not the primary fix for read-only extraction.
 
 **Evidence.** There are five `Loader.loadPDF(byte[])` sites:
 [bank monthly][pdf-bank], [credit monthly][pdf-monthly], [credit yearly][pdf-yearly],
@@ -282,6 +328,13 @@ resource isolation becomes a requirement.
 [Application configuration][transaction-application] allows 25 MB multipart uploads;
 [the deployment][transaction-deployment] limits container memory to 512 MiB, and
 [the Docker entrypoint][transaction-docker] sets no explicit heap ceiling.
+
+[Spring Boot's multipart default](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/servlet/autoconfigure/MultipartProperties.html)
+sets `file-size-threshold` to zero. With no override here, servlet upload handling already spools
+parts to temporary storage; `getBytes()` then materializes them in the heap. The configured request
+limit bounds each upload, not aggregate temporary storage: the pod's `/tmp` is an `emptyDir` without
+a size limit. Application-level parse admission happens after servlet multipart handling and does
+not cap concurrent uploads. A5 is correct about spooling, but overstates the existing disk budget.
 
 [PDFBox 3's migration guide](https://pdfbox.apache.org/3.0/migration.html) separates the input reader
 from the stream cache used for writing: byte-array input remains in memory, while
@@ -296,14 +349,26 @@ concurrently. Neither JVM `OutOfMemoryError` nor container OOM/restart behavior 
 Native memory, threads and other allocations mean a smaller Java heap does not rule out a container
 kill.
 
-**Recommended change.** Admit work before `getBytes()`/parsing, bound the waiting queue, spool with
-an explicit byte/disk budget and cleanup, and load through a file-backed reader. Apply page and
-output limits while extracting, not after allocating all text/chunks. Cover import and wizard paths.
-Measure real heap, resident memory, elapsed CPU time and disk use with worst-case fixtures and
-concurrency; choose numerical budgets from those results. File backing is an input-memory reduction,
-not a hard bound on PDF complexity. If a parser cannot reliably stop within required CPU/memory
-limits, move it to a killable isolated process; a timeout around an in-process task does not itself
-terminate that task.
+**Recommended change.** Use a shared `Semaphore.tryAcquire` before `getBytes()` or PDF parsing,
+release in `finally`, and reject excess work immediately. Cover import and wizard paths with the
+same limiter. This needs no waiting queue or per-user counters. Check page count before extraction
+and stop while accumulating text/chunks at an explicit output limit; checking only after `getText()`
+or building all chunks is too late. Load from a file-backed reader instead of retaining the upload
+array, with explicit cleanup for any application-created temporary file and an aggregate storage
+budget in the deployment.
+
+Keep validation proportionate: representative large and adversarial PDFs, simultaneous requests,
+limit rejection, and cleanup/recovery are enough to select initial limits and check heap, resident
+memory and disk use. A separate benchmarking campaign is unnecessary, but unmeasured defaults must
+not be presented as proven capacity bounds.
+
+**Disagreement with A10.** A page-count check after loading cannot bound parsing before that check,
+and a small page count does not bound decompressed data or extracted text. Setting an explicit JVM
+heap budget can make deployment behavior predictable; `ExitOnOutOfMemoryError` can improve recovery.
+Neither prevents denial of service from repeated expensive inputs, and restarting loses other
+in-flight work. File backing removes a known allocation; there is no measurement establishing it
+as the smallest consumer. None of these measures is a hard per-document CPU/memory limit. If that
+becomes necessary, use a killable isolated process; an in-process timeout alone cannot enforce it.
 
 ## 7. Signed identity context
 
@@ -444,8 +509,8 @@ login handling and re-registration semantics first. No service code is changed f
 | R4 | `includeSubDomains` needs an intentional domain policy. Preload is not a default prerequisite. HSTS does not protect a first contact. |
 
 **Decision — Modify the rationale; keep neither flag by default.** Keep ingress-owned HSTS.
-Discard the claim that preload inherently requires serving the registrable apex, and avoid claiming
-that Spring's default proves the auth lane currently emits HSTS.
+Distinguish the public preload submission rules from what a browser preload list can represent,
+and avoid claiming that Spring's default proves the auth lane currently emits HSTS.
 
 **Evidence.** The [auth route][auth-route] and [application route][app-route] serve
 `app.budgetanalyzer.localhost`. Under [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797.html#section-8.2),
@@ -460,13 +525,14 @@ an HTTPS scheme. That is source evidence, not observation of the effective forwa
 client-visible response. Verify the final header on both lanes and ensure ingress ownership does
 not leave duplicate, conflicting values.
 
-[Google's explanation](https://security.googleblog.com/2017/09/broadening-hsts-to-secure-more-of-web.html)
-explicitly allows individual subdomains in the preload list. The relevant scope is the submitted
-hostname and its descendants, not necessarily the registrable apex. The
-[submission requirements](https://hstspreload.org/#submission-requirements) still entail a valid
-certificate, HTTPS commitments and list submission; adding the `preload` token alone does not put
-a domain in browsers' preload lists. Dynamic HSTS does not protect a first visit before a policy
-is learned; actual preload membership can.
+The [public submission requirements](https://hstspreload.org/#submission-requirements) require the
+base domain's HSTS policy with `includeSubDomains`. The
+[Chromium checker](https://github.com/chromium/hstspreload/blob/main/domain.go) explicitly rejects
+automated subdomain submissions and directs applicants to the registrable domain. Exceptional
+subdomain entries do not establish an available self-service path for this project. The earlier
+apex correction was therefore misleading as implementation advice; A3 is accepted in that scope.
+Adding the `preload` token alone does not put a domain in browsers' lists. Dynamic HSTS does not
+protect a first visit before a policy is learned; actual preload membership can.
 
 **Recommended disposition.** Use the planned plain HSTS policy for the current local endpoint.
 Revisit includeSubDomains/preload only with an owned hosted domain, its descendant inventory and
@@ -482,8 +548,8 @@ established by these reviews.
 | R3 | No position on generation. Puts the edge contract first. |
 | R4 | Generating them is optional. The objective is reducing inconsistent ownership. |
 
-**Decision — Modify.** Keep the decision not to introduce a generator. Strengthen the proposed
-parity check to compare route behavior; matching location names alone misses security-relevant drift.
+**Decision — Modify.** Keep no generator, and replace the proposed custom parity parser with
+a shared NGINX include. Remove duplication before writing tooling to police it.
 
 **Evidence.** A static extraction of the 11 `/api` location blocks in [local NGINX][nginx-local]
 and [production-reference NGINX][nginx-prod] found their bodies identical after removing comments
@@ -491,17 +557,19 @@ and whitespace. Both include [backend-headers.conf][backend-headers]. Frontend s
 differs: local Vite/prod-smoke behavior versus the production bundle and rejected development paths.
 The [NGINX owner documentation][nginx-docs] describes that routing contract.
 
-**Recommended change.** Compare location match type and precedence, backend assignment, rewrites,
-`proxy_pass`, query preservation, body-size/timeout overrides and required security includes.
-Require both `/api` and `/api/` unknown-route rejections. Check shared security behavior even when
-it moves to a server-level include. Allowlist intentional frontend differences explicitly.
+**Recommended change.** Put the 11 API location blocks, including both unknown-route rejections,
+in one `nginx/includes/api-routes.conf` included by both server blocks. Ship it through the existing
+includes ConfigMap in [Tilt][tiltfile] and the [production kustomization][prod-apps-kustomization].
+The decoded-semicolon rejection can live at server scope in that include. The five identical
+`/api-docs` blocks can likewise share an include; the earlier additional check counted only three
+because it missed the two regex locations. Keep the intentional frontend differences in their
+existing files.
 
-A normalized comparison of the currently identical API blocks is a useful initial guardrail, but
-a simplistic regex that extracts names is insufficient. Use a parser or an extractor that rejects
-unsupported syntax instead of silently skipping it. Keep behavioral probes for representative
-routes, unknown API paths and encoded inputs: two equally wrong files still pass parity. Reconsider
-generation only if route complexity makes the independent files costly to maintain. This review
-confirms current parity; it does not add a permanent verifier.
+Validate both complete configurations and their mounted includes. Sharing blocks prevents edits
+to those blocks drifting, but inherited server settings and location precedence still affect
+behavior. Keep focused probes for routing, query preservation, security headers, unknown API paths
+and encoded inputs. There is no reason to implement or maintain a general NGINX parser for this
+small route set.
 
 ## Severity disputes
 
@@ -514,7 +582,7 @@ is a prioritization assessment, not CVSS scoring.
 | Session Gateway Redis `+@all` | **Keep the finding; prioritize early.** | [The ACL][redis-acl] grants administration as well as session writes. A compromised session writer already controls sessions, but administration also compromises other ACLs, caches and shared availability. A narrower score does not remove that additional authority. |
 | OAuth callback binding | **Keep; prioritize early.** | [State-only lookup][oauth-repository] lacks the initiating-browser check. Single-use IdP codes and PKCE do not cure that missing local binding; see [issue 4](#4-oauth-correlation-cookie-and-atomic-consume). |
 | Cookies forwarded to backends | **Keep; prioritize early.** | [The shared NGINX include][backend-headers] does not suppress Cookie/Authorization. [NGINX forwards incoming request headers by default](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass_request_headers), so credential exposure is supported by configuration, although no fresh live capture was taken. |
-| CSRF posture | **Keep; qualify exploit scope.** | [Issue 1](#1-primary-csrf-control) establishes missing explicit checks and mutating GETs. CORS, SameSite and endpoint content types affect individual attack paths; neither “all mutations exploitable” nor “SameSite solves it” is established. |
+| CSRF posture | **Keep; qualify exploit scope.** | [Issue 1](#1-primary-csrf-control) establishes missing explicit checks and mutating GETs. The configured Strict cookie blocks cross-site credential attachment, but not same-site cross-origin requests or a top-level response clearing the cookie. Do not label all mutations cross-site exploitable. |
 | Encoded-path traversal | **Modify to high verification priority, confirmed parser discrepancy, unverified full-stack impact.** | [Issue 3](#3-encoded-path-traversal-and-rejecting-) reproduces the Envoy behavior. Rank actual severity after valid-session reachability and handler effects are established. |
 | `deleteUser` | **Discard as a live endpoint finding; keep latent cleanup.** | [Issue 10](#10-the-unused-deleteuser-method) finds no source caller. Do not assign current remote exploit impact to an unused method. |
 
@@ -525,12 +593,15 @@ is a prioritization assessment, not CVSS scoring.
 rank orchestration-owned fixes above service-owned security fixes. Repository boundaries determine
 where changes may be made, not their security priority.
 
-Start with the routing baseline and small edge/ACL/credential-forwarding fixes, then promptly handle
+Capture the routing baseline when available, but do not delay known mesh overpermission fixes for
+exploit reproduction. Start with small edge/ACL/credential-forwarding fixes, then promptly handle
 browser binding, session-token exposure and CSRF across their owning repositories. Do not postpone
 those behind optional generators, signing, port redesigns or egress redesign. Follow contract
 cutover dependencies in the [hardening plan](../plans/security-review-consensus-hardening-plan.md#plan-wide-rules).
-The plan remains unchanged by this review; its exclusions and decisions need a separate reconciliation
-before execution. Its phase numbers below describe the currently reviewed draft, not a durable API.
+The plan remains unchanged by this review; its exclusions and decisions need reconciliation before
+execution. In particular, revise D3/Phase 7 for the reusable binding cookie and single-consumer rule,
+reconcile Phase 4's CSP with form logout, add the ingress Origin/POST cutover, and align Phase 23 with
+the simpler PDF admission design. Its phase numbers describe the current draft, not a durable API.
 
 ## Settled by checking the code
 
@@ -549,14 +620,15 @@ original table is reassessed here; “settled” refers to the stated source-lev
 | RabbitMQ 3.13 is end-of-life | **Modify to community-support ended.** | [The manifest][rabbitmq] selects 3.13. The vendor's [release table](https://www.rabbitmq.com/release-information) gives community EOL as 2024-09-30 and an indicative commercial end of 2029-12-31. Commercial coverage requires a license; it is not implied by this image. Keep the upgrade direction and verify the target's support at implementation time. |
 | The quarterly review “missed” RabbitMQ | **Discard as an established event.** | [R2](application-architecture-security-review-second-opinion-2026-11-01.md) infers process failure from the version. The manifest proves selection of an out-of-community-support series, not that a particular review ran or missed it. |
 | No timeout on the login call | **Keep only the narrower claim.** | [fetchPermissions][permission-client] lacks the explicit operation timeout used by `fetchAuthorization`; [WebClientConfig][webclient-config] sets only the base URL. This proves no application-level deadline here, not the absence of all transport defaults. |
+| ext-authz Go toolchain mismatch (A4) | **Keep as a separate maintenance finding.** | [Build CI][go-build] selects the 1.24 line from [go.mod][go-mod], while [Docker][go-docker] builds with 1.27. The [Go support policy](https://go.dev/doc/devel/release#policy) excludes 1.24 as of this review. Align supported CI/build toolchains in ext-authz; this is independent of the ingress CSRF design. |
 | Redis `maxmemory` at 70–75% | **Discard as a justified value.** | [The StatefulSet][redis-deployment] has a 256 MiB container limit and [startup][redis-acl] supplies no maxmemory budget. Percentages need measured dataset, allocator, persistence and connection overhead. Preserve Phase 28's measurement requirement. |
 | PostgreSQL citation | **Keep the correction; qualify runtime conclusion.** | [The StatefulSet][postgresql] configures SCRAM authentication and `ssl=on`, but neither requires TLS on every accepted connection. [PostgreSQL's HBA rules](https://www.postgresql.org/docs/current/auth-pg-hba-conf.html) distinguish `host` from `hostssl`/`hostnossl`; the checked-in [init configuration][postgresql-init] does not establish a TLS-only HBA policy. Inspect effective HBA rules and test rejection of non-TLS traffic in the eventual local implementation phase. |
 
 ## Verification record
 
-All checks below were performed on 2026-11-05. The workspace VM boundary check passed. The existing
-modified hardening plan was not changed, and the research document was already untracked when this
-review began.
+The following records are from the earlier 2026-11-05 passes. Their workspace VM boundary check
+passed. At the first pass, the hardening plan had pre-existing edits and this document was untracked.
+Those working-tree observations describe that pass, not the later reconciliation.
 
 | Check | Method | Result and scope |
 | --- | --- | --- |
@@ -584,144 +656,25 @@ the pre-existing documentation edits described above:
 
 ## Additional review (2026-11-05)
 
-**Status:** Unreconciled notes from a further reviewer. They do not change any verdict above. A
-later pass should accept, reject or merge each item; items are numbered A1–A13 for reference.
-“Factual” items dispute or add a stated fact. “Design” items propose a simpler recommendation.
-Evidence is recorded in [additional verification](#additional-verification). No service code,
-cluster resources or other sections of this document were changed.
+**Status:** Reconciled into the recommendations above. This table records the disposition of
+A1–A13 rather than leaving a second, conflicting set of recommendations. Original wording remains
+in Git history. These are review decisions, not implemented controls.
 
-### Factual
-
-**A1 — Issue 3: confirmed, plus one variant.** An independent Envoy probe reproduced the `..;`
-collapse. It also showed that `%2e%2e;` decodes to a literal `..;` *without* collapsing in the same
-pass, so one normalizing hop can emit a path that the next hop collapses. A request that is clean at
-the ingress can therefore become a traversal at a later sidecar. Add `%2e%2e;` to the issue 3 test
-matrix. The decoded-`;` NGINX rejection covers this form, because NGINX sees the decoded `;`.
-
-**A2 — Issue 1: the session cookie is already `SameSite=Strict`.** [Session Gateway
-configuration][sg-application] defaults the session cookie to `Strict`. Cross-site requests,
-including top-level navigations, carry no session cookie today. The residual CSRF actor is
-same-site, such as another host or port under the same registrable domain. The evidence paragraph
-and the CSRF severity row should state this; it is the most material fact for exploit scope.
-Separately, [logout][logout] clears the cookie even when none arrived. Under the cookie
-specification's storage rules, a top-level navigation response may set or delete a cookie of any
-SameSite value, so a cross-site navigation can force logout regardless of `Strict`. This is
-reasoning, not a browser test. Moving logout to POST does not change that by itself, because a
-cross-site form POST is also a top-level navigation. The provenance check is what rejects it.
-
-**A3 — Issue 11: the preload correction does not hold for the public submission path.** The
-[submission requirements](https://hstspreload.org/#submission-requirements) are stated for the
-base domain, and the checker rejects subdomain submissions with “we only accept automated preload
-list submissions of whole registered domains” ([reported checker output](https://community.letsencrypt.org/t/hsts-preloading/81241)).
-The list may contain manually added subdomain entries, but for this project the original claim
-holds in practice: preloading requires the registrable apex with `includeSubDomains`. The
-“neither flag by default” verdict is unaffected; drop the correction. The Google blog body could
-not be retrieved in this pass, so its citation was not rechecked.
-
-**A4 — Issue 1: the Go paragraph is not CSRF evidence, but exposes a CI mismatch.** The proposed
-contract deliberately rejects missing headers, unlike `CrossOriginProtection`, so the module
-minimum does not bear on the recommendation. It does show that [build CI][go-build] builds and tests
-the 1.24 line declared in [go.mod][go-mod], while the [image][go-docker] builds with 1.27. Go 1.24 is
-outside Go's two-release support window. Track this in the ext-authz context, not under issue 1.
-
-**A5 — Issue 6: upload spooling already exists.** The [transaction-service
-configuration][transaction-application] does not set `file-size-threshold`. With Spring Boot's
-default of 0 B, the servlet container writes multipart parts to disk, bounds them at the configured
-25 MB, and deletes them after the request. “Spool with an explicit byte/disk budget and cleanup” is
-therefore largely provided. The change is to stop calling `getBytes()` and give PDFBox a
-file-backed reader. This is based on framework defaults, not on observed container behavior.
-
-### Design
-
-**A6 — Issue 12: share an include instead of building a parity verifier.** Move the identical
-`/api` blocks into one include, for example `nginx/includes/api-routes.conf`, and include it from
-both server blocks. [Tilt][tiltfile] and the [production kustomization][prod-apps-kustomization]
-already ship an includes ConfigMap; add the file to both lists. A missing entry fails loudly,
-because NGINX rejects an include of a nonexistent file. This gives API-route parity by construction
-and makes the parser-based comparison unnecessary for that surface. Keep behavioral probes, since
-two identical wrong configurations still agree. The server-level `;` rejection can live in the same
-include.
-
-**A7 — Issue 1: logout by form POST, a simpler header contract, one enforcement point.**
-
-- All four logout call sites ([useAuth][use-auth], [InactivityWarningModal][warning-modal], two in
-  [useSessionHeartbeat][use-heartbeat]) are top-level navigations. Replace them with a same-origin
-  top-level form POST to `/logout`, answered with 303 to the IdP. The browser follows that redirect
-  as a navigation, so a JSON navigation-URL contract is unnecessary. The [CSP
-  includes][csp-includes] have no `form-action` directive, so the cross-origin redirect after
-  submission is not blocked. Recheck this if `form-action` is ever added.
-- Consider reducing the contract to “unsafe methods require an `Origin` exactly equal to the
-  configured origin.” Browsers send `Origin` on non-GET/HEAD requests, including same-origin ones,
-  so this alone rejects cross-site, same-site, missing and `null` provenance; Fetch Metadata then
-  becomes optional corroboration. For form POSTs this depends on the referrer policy: the current
-  `strict-origin-when-cross-origin` keeps the real origin, while `no-referrer` would send
-  `Origin: null`.
-- Consider enforcing the rule once at the Istio ingress for both lanes instead of separately in Go
-  and Java. This also avoids forwarding `origin`/`sec-fetch-site` to ext-authz. Verify how
-  `notValues` treats an absent header before relying on it.
-
-**A8 — Issue 4: a reusable binding cookie by default, and `DEL` count instead of Lua.**
-
-- Prefer the reusable browser-binding cookie as the default: one random Secure, HttpOnly,
-  `__Host-`, `SameSite=Lax` cookie per browser, set if absent, with its hash stored in each state
-  record. Parallel tabs share it, so per-transaction names, count/byte budgets and cap policy
-  disappear. A simultaneous first start in two tabs can overwrite the cookie; the losing callback
-  fails closed and the user retries. It still defeats login CSRF (the attacker's record holds the
-  attacker's binding) and replay of a stolen callback (the attacker's browser lacks the victim's
-  binding).
-- Atomic consume does not need Lua. The [repository][oauth-repository] already reads and then
-  deletes. Compare the binding after the read, then require `DEL` to return 1 before returning the
-  request. Only one concurrent caller can observe 1, a wrong or missing cookie never reaches `DEL`,
-  and random state keys are not rewritten, so the read–compare–delete sequence is single-winner.
-- If per-transaction cookies are kept, evict the oldest rather than rejecting new starts. Rejecting
-  lets stale tabs, or an attacker able to trigger repeated top-level login starts, block login
-  until the TTL expires. Eviction cancels at most an older transaction, whose callback then fails
-  closed.
-
-**A9 — Issue 2: require parity with the current cache race, not stronger guarantees.** The [cache
-configuration][cache-config] and all three [eviction sites][exchange-import] explicitly accept that
-a read begun before an import can re-cache a stale result, bounded by the one-hour TTL. Requiring
-the replacement to exclude that race raises the bar above the current documented design, which is
-out of scope for removing `KEYS`/`SCAN`. Imports run from a daily cron, at startup, from an endpoint
-gated by `currencies:write`, and on new-currency events. Several live generations are therefore not
-a realistic memory concern. Two options at parity, to be chosen in currency-service:
-
-1. A generation key incremented after commit and included in cache keys. This needs `+incr` in the
-   ACL and, in its simplest form, one extra GET per lookup.
-2. Remove the `allEntries` evictions and rely on the TTL, shortening it if staleness after the
-   daily import is unacceptable. The new-currency eviction looks unnecessary in either case:
-   [lookups][exchange-rate-service] throw for a currency with no data rather than caching an empty
-   result, and each cache key is per currency.
-
-**A10 — Issue 6: cheaper controls before file-backed input.** File-backed input addresses the
-smallest consumer: the upload array, already bounded by 25 MB per concurrent parse. Decompressed
-streams and the parsed object graph are unbounded, as the issue notes, and a file-backed reader
-does not touch them. Controls with more effect for less work:
-
-- Set `-XX:MaxRAMPercentage` explicitly and add `-XX:+ExitOnOutOfMemoryError` in the
-  [entrypoint][transaction-docker], so heap exhaustion restarts the pod instead of leaving a
-  partially failed JVM.
-- Put a global `Semaphore.tryAcquire` around PDF parsing that rejects when full. With no waiting
-  queue, there is no queue to bound.
-- Check a page-count limit after load and before extraction.
-
-File-backed input is then a low-cost follow-up. Treat the measurement campaign and per-user limits
-as optional, given the [project priorities](../../AGENTS.md#project-priorities).
-
-**A11 — Issue 5: make duplicate rejection optional.** After the `__Host-` rename, the issue already
-concedes that a conforming browser cannot hold two session-name cookies for this host, and that
-client-supplied duplicates yield no victim credential. The prescribed test matrix (one field,
-across fields, HTTP/2 splitting, browser prefix) is disproportionate for a control with no
-identified attacker. If adopted, one unit test per consumer is enough.
-
-**A12 — Issue 3: do not gate the mesh fix on the full-chain test.** The [permission-service
-policy][mesh-policy] admits both principals with no path rule. Restrict NGINX's principal to the
-public routes and give the internal routes only to their intended caller now. The full-chain test
-then decides severity, not whether to fix.
-
-**A13 — Document-level: consolidate caveats.** Many paragraphs end with “not proof of X”
-disclaimers that restate the evidence boundary. Moving them into the evidence-boundary paragraph
-would shorten the document without losing content.
+| Note | Disposition | Resolution |
+| --- | --- | --- |
+| A1: `%2e%2e;` | **Accept.** | Add the multi-hop normalization case to issue 3 and its regression matrix. |
+| A2: Strict cookie and logout | **Accept with scope.** | State the configured Strict default and its same-site limit; top-level cookie deletion remains possible. Browser effects remain to be tested. |
+| A3: HSTS apex | **Accept for automatic submission.** | Primary Chromium checker source confirms the registrable-domain restriction. Exceptional list entries do not justify the earlier operational advice. |
+| A4: Go CI | **Accept.** | Move the toolchain mismatch out of CSRF and into the source-level findings table. |
+| A5: upload spooling | **Accept in part.** | Reuse servlet spooling; a per-request limit and cleanup do not establish an aggregate disk budget. |
+| A6: shared NGINX include | **Accept.** | Replace the custom parity-parser recommendation with shared blocks plus normal configuration and behavioral checks. Count regex locations too. |
+| A7: Origin, ingress and form logout | **Accept with a concrete dependency.** | Prefer one exact-Origin ingress rule and form POST/303 logout. The existing plan already adds `form-action 'self'`; reconcile it now and verify redirect compatibility, rather than treating CSP as a hypothetical future change. |
+| A8: reusable cookie and DEL count | **Accept with invariants.** | Reuse one browser-session binding cookie; accept a fail-closed first-start race. Validate before deleting and require `DEL == 1` on immutable, never-reused state. Per-transaction eviction policy is unnecessary with this design. |
+| A9: cache parity | **Accept the scope correction; reject TTL-only as equivalent.** | Do not demand stronger race guarantees. Preserve ordinary after-commit freshness; empty date-range results can be cached, and per-series imports are not exclusively for new currencies. |
+| A10: PDF controls | **Accept the no-queue limiter; reject recovery as containment.** | Start with shared admission and extraction limits. Heap sizing/restart flags do not bound one document; retain focused resource and recovery checks. Per-user fairness and a worker remain deferred. |
+| A11: duplicates | **Accept optionality after `__Host-`.** | A small parameterized test per consumer is enough if the rule is implemented; it still needs both duplicate and legitimate-cookie cases. |
+| A12: mesh first | **Accept.** | Fix known excessive caller authority without waiting for a successful full-chain exploit; retain integration tests for the final boundary. |
+| A13: caveats | **Accept selectively.** | Keep one overall evidence boundary and distinguish earlier probes from this pass. Retain limitations where they change the design, such as per-upload versus aggregate disk limits. |
 
 ### Additional verification
 
@@ -732,10 +685,10 @@ document and the hardening plan.
 | Check | Method | Result and scope |
 | --- | --- | --- |
 | Envoy normalization | Disposable `--network none` container from the local `envoyproxy/envoy:v1.38.8` image (`9b6dd34943ea`), config passed with `--config-yaml` and no mounts. HTTP connection manager with `normalize_path: true`, escaped-slash rejection and a direct response echoing `%REQ(:PATH)%`. Requests sent over container loopback. | Results below. No Istio-generated config, NGINX or Spring backend was included. |
-| NGINX API parity | Extracted every `location` starting with `/api` (11 `/api` and 3 `/api-docs` blocks), stripped comments and whitespace, then ran `diff` across both files. | Identical. A one-off check, not a parser. |
+| NGINX API parity | Earlier extraction covered 11 `/api` and 3 non-regex `/api-docs` blocks, stripped comments and whitespace, then ran `diff` across both files. | Identical for that subset. The reconciliation below also includes the two regex docs locations. |
 | Cookie and header policy | Read the Session Gateway config and searched the NGINX includes. | Session cookie `SameSite=Strict` by default. No `form-action` directive; `Referrer-Policy: strict-origin-when-cross-origin`. |
-| HSTS preload | hstspreload.org requirements and community-reported checker output. | Requirements target the base domain; subdomain submissions are rejected. |
-| Cache invalidation | Read currency-service cache configuration, eviction sites, callers and lookup validation. | Stale-read race explicitly accepted with a one-hour TTL bound; lookups for a currency without data throw. |
+| HSTS preload | Earlier pass used hstspreload.org requirements and community-reported checker output. | Automatic submission targets the registrable domain; primary checker source was verified during reconciliation. |
+| Cache invalidation | Read currency-service cache configuration, eviction sites, callers and lookup validation. | Stale-read race explicitly accepted with a one-hour TTL bound; a currency with no data at all throws. Empty date ranges can return cacheable empty lists, as clarified during reconciliation. |
 
 | Input to Envoy | Path after normalization |
 | --- | --- |
@@ -747,6 +700,24 @@ document and the hardening plan.
 | `/a/b;p/../c` | `/a/c` |
 | `/a/b/..%3b/c` | Unchanged |
 | `/a/b/%2e%2e;/c` | `/a/b/..;/c` |
+
+### Reconciliation verification
+
+This pass started from clean orchestration HEAD `3f9685228029fee898e50815d35d2f4cf97f83d3`.
+All sibling HEADs still matched the verification table above and were clean. The workspace boundary
+check passed. Only this research document was edited; the implementation plan remains a draft.
+
+| Check | Result and scope |
+| --- | --- |
+| Source and plan review | Rechecked cookie defaults, logout/controller callers, OAuth repository, mesh/ingress routing, cache configuration/import/query logic, PDF input paths and deployment, NGINX includes, and the plan's CSP/cookie decisions. Found the planned form-action dependency and the cacheable empty-range case. |
+| Redis consume primitive | Disposable network-isolated container using the same pinned Redis image as the earlier probe, reporting 7.4.11; no mounts or published ports, dummy data only, container removed afterwards. Eight callers all read the same immutable hash before competing to delete it: exactly one returned 1 and seven returned 0. Expiring a hash after reading it made deletion return 0. This tests the primitive, not the future Java binding/callback implementation. |
+| NGINX/OpenAPI | Repeated the one-off body comparison including regex locations: 11 API and 5 docs blocks match after comment/whitespace removal. OpenAPI still has 29 paths and no semicolons. No effective-config or live routing claim follows from this comparison. |
+| Primary references | Checked Fetch Origin rules, cookie storage rules, Istio authorization semantics, Chromium's preload checker, Spring multipart defaults, PDFBox input behavior and Go's support policy. Links are in the relevant sections. |
+| Documentation validation | Checked relative file links, local section anchors, reference definitions and `git diff --check`. |
+
+No new Envoy, live application, browser or PDF resource test was run. Ingress denial semantics,
+logout under final CSP, service-level callback races and PDF budgets remain implementation
+acceptance work, not reasons to retain the more complicated recommendations.
 
 [provider]: ../../kubernetes/istio/istiod-values.yaml
 [custom-policy]: ../../kubernetes/istio/ext-authz-policy.yaml
@@ -816,3 +787,4 @@ document and the hardening plan.
 [prod-apps-kustomization]: ../../kubernetes/production/apps/kustomization.yaml
 [csp-includes]: ../../nginx/includes/security-headers-strict-csp.conf
 [exchange-rate-service]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/service/ExchangeRateService.java
+[currency-events]: ../../../currency-service/src/main/java/org/budgetanalyzer/currency/messaging/listener/MessagingEventListener.java

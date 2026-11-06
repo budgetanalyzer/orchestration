@@ -413,7 +413,10 @@ small CSP gaps.
 
 `kubernetes/gateway/*.yaml`, `nginx/includes/security-headers-*.conf`,
 `scripts/smoketest/verify-edge-browser-hardening.sh`, `verify-edge-contract.sh`, `nginx/README.md`,
-and the security architecture doc.
+and the security architecture doc. (clarified per user direction) Also the CSP include wiring needed
+to render the IdP logout allowance: `Tiltfile` (`nginx-gateway-includes`),
+`kubernetes/production/apps/kustomization.yaml` and its offline render path under
+`deploy/scripts/render/`, `deploy/README.md`, and focused static checks for the rendered source.
 
 ### Non-goals
 
@@ -434,6 +437,13 @@ R2 findings G and H; R3 "HSTS details"; R4 "HSTS (G)"; `nginx/README.md`.
    (amended per contested #1) Permit the configured IdP logout destination alongside `'self'`
    where needed, without a wildcard, because logout becomes a form POST with a 303 redirect to the
    IdP in plan 02, Phase 6.
+   (clarified per user direction) Derive that allowance from the issuer each environment already
+   configures: local Tilt from the `AUTH0_ISSUER_URI` environment variable, the same value Session
+   Gateway and `render-istio-egress-config.sh` use, and the offline production reference from
+   `REFERENCE_AUTH0_ISSUER_URI` in `deploy/scripts/render/production-routes.sh`. Render the exact
+   HTTPS origin into the CSP includes rather than checking in one tenant or allowing both.
+   Rendering stays offline-capable. Reject an empty, non-HTTPS, wildcard or otherwise malformed
+   issuer with a clear error instead of emitting a weakened CSP.
 4. Add a "Response Headers" section to `verify-edge-contract.sh`:
    - HSTS appears on `/`, an authenticated `/api/*` request, `/auth/v1/session` and
      `/oauth2/authorization/idp`, with one value on each
@@ -468,7 +478,8 @@ Orchestration static gate, `./scripts/smoketest/verify-edge-contract.sh`,
 ### Completion criteria
 
 All four paths send one HSTS value, a forged forwarded host has no effect on `redirect_uri`, and the
-app runs with no CSP violations.
+app runs with no CSP violations. (clarified per user direction) The live and offline-rendered CSPs
+each permit only `'self'` and that environment's exact IdP origin in `form-action`.
 
 ## Phase 6: Replace the Session Gateway Redis `+@all` grant (Live)
 

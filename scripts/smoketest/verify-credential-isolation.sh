@@ -512,14 +512,43 @@ section "Redis: Positive (authorized operations)"
 
 VERIFY_KEY="__phase1_verify__"
 
-SG_SET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" SET "session:${VERIFY_KEY}" "ok")
-SG_GET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "session:${VERIFY_KEY}")
-redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "session:${VERIFY_KEY}" >/dev/null 2>&1 || true
-if [ "$SG_SET" = "OK" ] && [ "$SG_GET" = "ok" ]; then
-    pass "session-gateway SET/GET on session:*"
-else
-    fail "session-gateway SET/GET on session:* (SET=${SG_SET}, GET=${SG_GET})"
-fi
+sg_expect() {
+    local expected="$1"
+    local label="$2"
+    local out
+    shift 2
+
+    out=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" "$@")
+    if printf '%s\n' "$out" | grep -Eq -- "$expected"; then
+        pass "session-gateway ${label}"
+    else
+        fail "session-gateway ${label} (got: ${out:0:120})"
+    fi
+}
+
+SG_SESSION_KEY="session:${VERIFY_KEY}"
+SG_INDEX_KEY="user_sessions:${VERIFY_KEY}"
+SG_STATE_KEY="oauth2:state:${VERIFY_KEY}"
+SG_LUA_TYPE="return redis.call('type', KEYS[1]).ok"
+SG_LUA_TYPE_SHA=$(printf '%s' "$SG_LUA_TYPE" | sha1sum | awk '{print $1}')
+
+sg_expect '^PONG$' "PING" PING
+sg_expect '^redis_version:' "INFO server" INFO server
+sg_expect '^OK$' "CLIENT SETINFO" CLIENT SETINFO lib-name credential-isolation-verify
+sg_expect 'proto' "HELLO" HELLO 3
+sg_expect '^[0-9]+$' "HSET on session:*" HSET "$SG_SESSION_KEY" field ok
+sg_expect '^ok$' "HGET on session:*" HGET "$SG_SESSION_KEY" field
+sg_expect '^ok$' "HGETALL on session:*" HGETALL "$SG_SESSION_KEY"
+sg_expect '^1$' "EXPIRE on session:*" EXPIRE "$SG_SESSION_KEY" 60
+sg_expect '^hash$' "TYPE on session:*" TYPE "$SG_SESSION_KEY"
+sg_expect '^hash$' "EVAL running TYPE inside Lua" EVAL "$SG_LUA_TYPE" 1 "$SG_SESSION_KEY"
+sg_expect '^hash$' "EVALSHA of the cached script" EVALSHA "$SG_LUA_TYPE_SHA" 1 "$SG_SESSION_KEY"
+sg_expect '^1$' "SADD on user_sessions:*" SADD "$SG_INDEX_KEY" "$VERIFY_KEY"
+sg_expect "^${VERIFY_KEY}\$" "SMEMBERS on user_sessions:*" SMEMBERS "$SG_INDEX_KEY"
+sg_expect '^1$' "SREM on user_sessions:*" SREM "$SG_INDEX_KEY" "$VERIFY_KEY"
+sg_expect '^OK$' "HMSET on oauth2:state:*" HMSET "$SG_STATE_KEY" redirect_uri /login/oauth2/code/idp
+sg_expect '^1$' "DEL on oauth2:state:*" DEL "$SG_STATE_KEY"
+sg_expect '^1$' "UNLINK on session:*" UNLINK "$SG_SESSION_KEY"
 
 EA_SG_HSET=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HSET "oauth2:state:${VERIFY_KEY}" "redirect_uri" "/login/oauth2/code/idp")
 redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" DEL "oauth2:state:${VERIFY_KEY}" >/dev/null 2>&1 || true
@@ -577,12 +606,38 @@ else
     fail "currency-service NOT denied on session:* (${CS_CROSS})"
 fi
 
-SG_CROSS=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" GET "currency-service:anything")
+SG_CROSS=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HGETALL "currency-service:anything")
 if echo "$SG_CROSS" | grep -qi 'NOPERM'; then
     pass "session-gateway denied on currency-service:* keys"
 else
     fail "session-gateway NOT denied on currency-service:* (${SG_CROSS})"
 fi
+
+# ACL DRYRUN checks permission, not capability, so it is used only for denials.
+sg_dryrun_denied() {
+    local out
+
+    out=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL DRYRUN "$REDIS_SG_USER" "$@")
+    if printf '%s' "$out" | grep -q "no permissions to run the '"; then
+        pass "session-gateway ACL DRYRUN denies $*"
+    else
+        fail "session-gateway ACL DRYRUN does not deny $* (got: ${out:0:120})"
+    fi
+}
+
+sg_dryrun_denied FLUSHALL
+sg_dryrun_denied FLUSHDB
+sg_dryrun_denied CONFIG GET maxmemory
+sg_dryrun_denied CONFIG SET appendonly no
+sg_dryrun_denied SHUTDOWN
+sg_dryrun_denied REPLICAOF NO ONE
+sg_dryrun_denied ACL LIST
+sg_dryrun_denied ACL SETUSER "$REDIS_SG_USER" +@all
+sg_dryrun_denied KEYS "session:*"
+sg_dryrun_denied SCAN 0 MATCH "session:*"
+sg_dryrun_denied CLIENT KILL USER "$REDIS_EA_USER"
+sg_dryrun_denied SCRIPT FLUSH
+sg_dryrun_denied PUBLISH "$VERIFY_KEY" message
 
 section "Redis: Break-glass (${REDIS_OPS_USER})"
 

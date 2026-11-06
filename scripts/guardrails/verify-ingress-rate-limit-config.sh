@@ -18,6 +18,8 @@ PRODUCTION_GATEWAY_RENDER="${TEMP_DIR}/ingress-gateway-config.yaml"
 NGINX_CONFIGS=(
     "${REPO_DIR}/nginx/nginx.k8s.conf"
     "${REPO_DIR}/nginx/nginx.production.k8s.conf"
+    "${REPO_DIR}/nginx/includes/api-routes.conf"
+    "${REPO_DIR}/nginx/includes/api-docs-routes.conf"
 )
 NGINX_LIMIT_PATTERN='limit_req(_zone|_status)?[[:space:]]'
 

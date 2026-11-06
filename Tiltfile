@@ -687,17 +687,14 @@ configmap_create(
     watch=True
 )
 
-configmap_create(
-    'nginx-gateway-includes',
-    namespace=DEFAULT_NAMESPACE,
-    from_file=[
-        'backend-headers.conf=nginx/includes/backend-headers.conf',
-        'security-headers-dev-csp.conf=nginx/includes/security-headers-dev-csp.conf',
-        'security-headers-docs-csp.conf=nginx/includes/security-headers-docs-csp.conf',
-        'security-headers-strict-csp.conf=nginx/includes/security-headers-strict-csp.conf',
-    ],
-    watch=True
-)
+# Render the exact environment-specific IdP origin; reject unsafe issuer input.
+watch_file('deploy/scripts/render/render-csp.py')
+watch_file('nginx/includes')
+create_configmap('nginx-gateway-includes', DEFAULT_NAMESPACE, decode_json(local(
+    ['python3', '-I', 'deploy/scripts/render/render-csp.py', '--includes-json',
+     '--issuer', os.getenv('AUTH0_ISSUER_URI', '')],
+    quiet=True,
+)))
 
 configmap_create(
     'nginx-gateway-docs',
@@ -1184,6 +1181,7 @@ local_resource(
         kubectl apply -f kubernetes/gateway/app-httproute.yaml
         kubectl apply -f kubernetes/istio/ext-authz-policy.yaml
         kubectl apply -f kubernetes/istio/ingress-rate-limit.yaml
+        kubectl apply -f kubernetes/istio/ingress-path-hardening.yaml
     ''',
     deps=[
         'kubernetes/gateway/auth-httproute.yaml',
@@ -1191,6 +1189,7 @@ local_resource(
         'kubernetes/gateway/app-httproute.yaml',
         'kubernetes/istio/ext-authz-policy.yaml',
         'kubernetes/istio/ingress-rate-limit.yaml',
+        'kubernetes/istio/ingress-path-hardening.yaml',
     ],
     resource_deps=['istio-ingress-config', 'istio-ingress-network-policies', 'ext-authz', 'nginx-gateway'],
     labels=['gateway'],

@@ -245,7 +245,7 @@ external_headers_and_status() {
     local path="$1"
     shift
 
-    curl -sk -D - -o /dev/null --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
+    curl -sS -D - -o /dev/null --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
         -w 'HTTP_STATUS:%{http_code}\n' \
         "$@" "${APP_BASE_URL}${path}" 2>/dev/null || true
 }
@@ -254,7 +254,7 @@ external_body_and_status() {
     local path="$1"
     shift
 
-    curl -sk --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
+    curl -sS --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
         -w '\nHTTP_STATUS:%{http_code}\n' \
         "$@" "${APP_BASE_URL}${path}" 2>/dev/null || true
 }
@@ -420,6 +420,8 @@ verify_production_nginx_syntax() {
             mkdir -p '${tmpdir}/includes'
             for required in \
                 /etc/nginx/mime.types \
+                /etc/nginx/includes/api-docs-routes.conf \
+                /etc/nginx/includes/api-routes.conf \
                 /etc/nginx/includes/backend-headers.conf \
                 /etc/nginx/includes/security-headers-dev-csp.conf \
                 /etc/nginx/includes/security-headers-strict-csp.conf
@@ -497,44 +499,18 @@ verify_static_contracts() {
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location \\^~ /_prod-smoke/ \\{$" \
         "include includes/security-headers-strict-csp.conf;" \
         "Dev smoke route re-includes the strict CSP"
-    assert_api_fallback_contract "${REPO_DIR}/nginx/nginx.k8s.conf" "Dev NGINX config"
-
-    # Keep docs assertions limited to the retained route graph.
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
-        "include includes/security-headers-docs-csp.conf;" \
-        "Dev /api-docs route re-includes the docs-only CSP"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
-        "alias /usr/share/nginx/html/docs/index.html;" \
-        "Dev /api-docs route still serves the checked-in docs shell"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(swagger-ui\\\\\\.css\\|swagger-ui-bundle\\\\\\.js\\|swagger-initializer\\\\\\.js\\|swagger-ui-overrides\\\\\\.css\\)\\$ \\{$" \
-        "alias /usr/share/nginx/html/docs/\$1;" \
-        "Dev /api-docs route explicitly serves the self-hosted Swagger UI assets"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
-        "alias /usr/share/nginx/html/docs/\$1;" \
-        "Dev OpenAPI download route still serves the mounted spec files"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
-        "return 404;" \
-        "Dev /api-docs/* catch-all fails closed"
+    assert_file_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*include includes/api-routes\\.conf;" \
+        "Dev NGINX config includes the shared API routes"
+    assert_file_contains "${REPO_DIR}/nginx/nginx.k8s.conf" "^[[:space:]]*include includes/api-docs-routes\\.conf;" \
+        "Dev NGINX config includes the shared /api-docs routes"
 
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /@vite/client \\{$" \
         "return 404;" \
         "Production config removes /@vite/client"
-    assert_api_fallback_contract "${REPO_DIR}/nginx/nginx.production.k8s.conf" "Production NGINX config"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
-        "include includes/security-headers-docs-csp.conf;" \
-        "Production /api-docs route re-includes the docs-only CSP"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /api-docs \\{$" \
-        "alias /usr/share/nginx/html/docs/index.html;" \
-        "Production /api-docs route still serves the checked-in docs shell"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(swagger-ui\\\\\\.css\\|swagger-ui-bundle\\\\\\.js\\|swagger-initializer\\\\\\.js\\|swagger-ui-overrides\\\\\\.css\\)\\$ \\{$" \
-        "alias /usr/share/nginx/html/docs/\$1;" \
-        "Production /api-docs route explicitly serves the self-hosted Swagger UI assets"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
-        "alias /usr/share/nginx/html/docs/\$1;" \
-        "Production OpenAPI download route still serves the mounted spec files"
-    warn_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location /api-docs/ \\{$" \
-        "return 404;" \
-        "Production /api-docs/* catch-all fails closed"
+    assert_file_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*include includes/api-routes\\.conf;" \
+        "Production NGINX config includes the shared API routes"
+    assert_file_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*include includes/api-docs-routes\\.conf;" \
+        "Production NGINX config includes the shared /api-docs routes"
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location = /_prod-smoke \\{$" \
         "return 404;" \
         "Production config removes /_prod-smoke"
@@ -565,6 +541,26 @@ verify_static_contracts() {
     assert_location_block_contains "${REPO_DIR}/nginx/nginx.production.k8s.conf" "^[[:space:]]*location \\^~ /assets/ \\{$" \
         "try_files \$uri =404;" \
         "Production config resolves frontend assets without proxying to Vite"
+
+    # Both server configs include these shared route files.
+    assert_api_fallback_contract "${REPO_DIR}/nginx/includes/api-routes.conf" "Shared API routes include"
+
+    # Keep docs assertions limited to the retained route graph.
+    warn_location_block_contains "${REPO_DIR}/nginx/includes/api-docs-routes.conf" "^[[:space:]]*location = /api-docs \\{$" \
+        "include includes/security-headers-docs-csp.conf;" \
+        "Shared /api-docs route re-includes the docs-only CSP"
+    warn_location_block_contains "${REPO_DIR}/nginx/includes/api-docs-routes.conf" "^[[:space:]]*location = /api-docs \\{$" \
+        "alias /usr/share/nginx/html/docs/index.html;" \
+        "Shared /api-docs route still serves the checked-in docs shell"
+    warn_location_block_contains "${REPO_DIR}/nginx/includes/api-docs-routes.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(swagger-ui\\\\\\.css\\|swagger-ui-bundle\\\\\\.js\\|swagger-initializer\\\\\\.js\\|swagger-ui-overrides\\\\\\.css\\)\\$ \\{$" \
+        "alias /usr/share/nginx/html/docs/\$1;" \
+        "Shared /api-docs route explicitly serves the self-hosted Swagger UI assets"
+    warn_location_block_contains "${REPO_DIR}/nginx/includes/api-docs-routes.conf" "^[[:space:]]*location ~ \\^/api-docs/\\(openapi\\\\\\.\\(json\\|yaml\\)\\)\\$ \\{$" \
+        "alias /usr/share/nginx/html/docs/\$1;" \
+        "Shared OpenAPI download route still serves the mounted spec files"
+    warn_location_block_contains "${REPO_DIR}/nginx/includes/api-docs-routes.conf" "^[[:space:]]*location /api-docs/ \\{$" \
+        "return 404;" \
+        "Shared /api-docs/* catch-all fails closed"
 
     if "${SCRIPT_DIR}/../guardrails/verify-ingress-rate-limit-config.sh"; then
         pass "Ingress rate-limit configuration passes the focused structural and matcher proof"
@@ -604,11 +600,40 @@ verify_docs_fail_closed_response() {
         warn "${label} does not include a Content-Security-Policy header"
     fi
 
-    body_response="$(curl -sk --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
+    body_response="$(curl -sS --max-time "${CURL_TIMEOUT}" --max-redirs 0 \
         -w '\nHTTP_STATUS:%{http_code}\n' \
         "${APP_BASE_URL}${path}" 2>/dev/null || true)"
     body="$(extract_body "${body_response}")"
     warn_text_excludes "${body}" "${label} does not fall through to the frontend SPA" "/@vite/client" "/src/main.tsx" '<div id="root"></div>'
+}
+
+assert_hardened_headers() {
+    local response="$1" label="$2" csp hsts issuer origin
+    hsts=$(printf '%s\n' "$response" | sed -n 's/^Strict-Transport-Security:[[:space:]]*//Ip' | tr -d '\r')
+    if [[ "$hsts" == 'max-age=31536000' ]]; then
+        pass "${label} has exactly one ingress-owned HSTS value"
+    else
+        fail "${label} has missing, duplicate or conflicting HSTS"
+    fi
+    if printf '%s\n' "$response" | grep -qi '^X-XSS-Protection:'; then
+        fail "${label} still sends deprecated X-XSS-Protection"
+    else
+        pass "${label} omits deprecated X-XSS-Protection"
+    fi
+    issuer=$(kubectl get configmap session-gateway-idp-config -o jsonpath='{.data.AUTH0_ISSUER_URI}')
+    origin=$(python3 "${REPO_DIR}/deploy/scripts/render/render-csp.py" --issuer "$issuer" --origin)
+    csp=$(extract_header_value Content-Security-Policy "$response")
+    if python3 - "$csp" "$origin" <<'CSP_PY'
+import sys
+forms = [part.split()[1:] for part in sys.argv[1].split(";")
+         if part.split() and part.split()[0] == "form-action"]
+assert forms == [["'self'", sys.argv[2]]], forms
+CSP_PY
+    then
+        pass "${label} form-action permits only self and the configured IdP origin"
+    else
+        fail "${label} form-action differs from the exact configured sources"
+    fi
 }
 
 verify_public_headers() {
@@ -656,6 +681,14 @@ verify_public_headers() {
     fi
     assert_csp_excludes "${csp}" "Production-smoke route omits unsafe CSP directives" "'unsafe-inline'" "'unsafe-eval'"
     assert_csp_contains "${csp}" "Production-smoke route uses the strict CSP contract" "script-src 'self'" "style-src 'self'" "object-src 'none'" "base-uri 'self'"
+}
+
+verify_hardened_csp_profiles() {
+    local path response
+    for path in / /_prod-smoke/ /api-docs; do
+        response=$(external_headers_and_status "$path")
+        assert_hardened_headers "$response" "$path"
+    done
 }
 
 verify_public_api_route_not_spa() {
@@ -840,6 +873,7 @@ main() {
     verify_production_nginx_syntax
     verify_static_contracts
     verify_public_headers
+    verify_hardened_csp_profiles
     verify_public_api_route_ownership
     verify_local_nginx_api_fallback
     verify_docs_headers

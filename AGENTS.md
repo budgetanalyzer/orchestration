@@ -175,7 +175,7 @@ Use the closest source of truth for the topic instead of expanding `AGENTS.md` w
 - Personal-host isolation audit, private evidence handling and repair handoff: sibling `../workspace/docs/host-isolation-audit.md`
 - `ext-authz` service implementation: sibling `../ext-authz` repository
 - Script directory map and canonical entry points: `scripts/README.md`
-- NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, and `nginx/nginx.production.k8s.conf`
+- NGINX routing patterns, adding resource routes, adding microservices, and gateway troubleshooting: `nginx/README.md`, `nginx/nginx.k8s.conf`, `nginx/nginx.production.k8s.conf`, and the shared `nginx/includes/api-routes.conf` and `nginx/includes/api-docs-routes.conf`
 - Provider-neutral production overlays and offline render boundary: `kubernetes/production/README.md` and `deploy/README.md`
 - Retired OCI lean archive, tagged history, and restoration caveats: `archive/oci/README.md`
 - Observability topology and operator access model: `docs/architecture/observability.md`
@@ -191,7 +191,7 @@ Useful discovery commands:
 ```bash
 # List public and internal NGINX route declarations
 rg -n "location .*(/api|/api-docs|/auth|/login|/oauth2|/logout)" \
-  nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
+  nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf nginx/includes/
 
 # List Kubernetes manifests that define the core edge and security contracts
 find kubernetes -maxdepth 2 -type f \
@@ -223,7 +223,7 @@ Session and identity rules:
 
 Operational guardrails:
 - Follow the resource-based routing pattern for new API endpoints
-- Treat any new public `/api/...` route as incomplete until both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` claim it and verification proves it does not fall through to the SPA
+- Treat any new public `/api/...` route as incomplete until the shared `nginx/includes/api-routes.conf`, which both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` include, claims it and verification proves it does not fall through to the SPA; read `nginx/README.md#adding-a-new-resource-route` first
 - Keep Spring Boot workloads on the startup/readiness/liveness probe pattern used by the checked-in manifests
 - Keep PostgreSQL, RabbitMQ, and Redis on their repo-owned stateful deployment patterns
 - Redis `/data` is PVC-backed. Do not treat pod replacement or `tilt down` as a Redis reset. Use `./scripts/ops/flush-redis.sh` for a logical reset, or recreate the cluster/runtime when a full clean state is required

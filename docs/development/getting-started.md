@@ -157,7 +157,10 @@ The app requires both Auth0 and FRED credentials for local startup.
 2. Create an application of type **Regular Web Application**.
 3. Copy the Auth0 domain, client ID, and client secret into `.env`.
 4. `AUTH0_ISSUER_URI` must be valid before `tilt up`; the local Auth0 egress
-   render derives its hostname from that value.
+   render derives its hostname from that value, and the NGINX CSP render
+   derives the `form-action` origin from it. A missing or invalid issuer stops
+   the Tiltfile from loading at all, with `CSP issuer/render error: ...`, not
+   just the egress resource.
 5. Use [auth0-setup.md](../setup/auth0-setup.md) for the full setup guide.
 
 ### FRED API

@@ -1,0 +1,17 @@
+# Fails: no statusOnError, so authorizer failures keep Istio's 403 default.
+meshConfig:
+  extensionProviders:
+    - name: ext-authz-http
+      envoyExtAuthzHttp:
+        service: ext-authz.default.svc.cluster.local
+        port: 9002
+        timeout: 1s
+        headersToUpstreamOnAllow:
+          - x-user-id
+          - x-roles
+          - x-permissions
+        headersToDownstreamOnDeny:
+          - content-type
+        includeRequestHeadersInCheck:
+          - cookie
+        failOpen: false

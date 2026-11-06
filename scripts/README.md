@@ -87,6 +87,42 @@ scripts/
   hostname and prove wrong-host rejection precedes mutation.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
+- `smoketest/verify-edge-contract.sh` - Live cross-layer edge contract
+  verifier and the single home for tests that need the real ingress,
+  `ext_authz`, NGINX, sidecars and services together; later sections are added
+  here. Its Public/Internal Boundary section seeds one synthetic user and
+  session with `loadtest/seed-loadtest-users.sh --count 1`, sends the
+  encoded-path traversal matrix with `curl --path-as-is` on the NGINX lane
+  (`/api/v1/{users,transactions,currencies}/` toward permission-service
+  internal authorization and `actuator/prometheus`) and the direct Session
+  Gateway lane (`GET .../actuator/prometheus` and `DELETE` bulk revocation),
+  and asserts every probe is non-2xx with no internal handler output, an
+  unchanged seeded user row and a surviving seeded session. A 2xx passes only
+  when it is byte-identical to the public frontend shell from `GET /`. It then
+  proves the public routes, OpenAPI routes, heartbeat and login start still
+  work, and removes the fixture with `loadtest/teardown-loadtest.sh`. It
+  refuses to run while another load-test fixture is active. Its Semicolon
+  Rejection section seeds the same fixture and sends literal `;`, `%3b`,
+  `%3B`, `%253b` and `%253B` probes on both lanes, including the `DELETE`
+  revocation probes with the side-effect check. Each must be a `403` from the
+  ingress `ingress-path-hardening` RBAC filter, which must be the listener's
+  only enforcing RBAC filter: the ingress `rbac.denied` counter rises by
+  exactly the probe count and neither the NGINX nor the Session Gateway
+  sidecar records a request. It also shows that literal `..;`, `..;x` and
+  `.;` segments are resolved by ingress normalization with no `;` reaching
+  NGINX, and that `;` in a query string still works. Its Authorization Failure
+  section checks the live Envoy timeout, error status and fail-closed setting,
+  then proves JSON `401` for missing sessions and empty `503` for an unavailable
+  authorizer, a network-policy-induced hang and stopped Redis. It temporarily
+  scales ext-authz and Redis and installs a uniquely named Admin-tier
+  `ClusterNetworkPolicy` using the CRD supplied by the pinned Calico install;
+  it restores replicas and removes the policy, including on ordinary errors,
+  interrupt or termination. Cleanup failures fail the verifier. Run on the
+  disposable local stack without concurrent traffic; these cases interrupt
+  authorization and Redis-dependent services. See the
+  [authorizer failure contract](../docs/architecture/session-edge-authorization-pattern.md#authorizer-failures).
+  `--report FILE` writes
+  one tab-separated line per probe.
 - `smoketest/verify-istio-ingress.sh` - Focused live Istio ingress/egress
   verifier. In addition to gateway identity, mTLS, routing, rate limiting,
   header sanitization, and egress controls, it inspects the rendered Envoy
@@ -368,12 +404,46 @@ getting-started guide.
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
   active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
-  internal-only storage/service contract pinned in static review. Its
+  internal-only storage/service contract pinned in static review. It requires
+  an empty `default-deny-all` AuthorizationPolicy in `default` and rejects a
+  backend policy rule that admits the NGINX identity without a `to` path
+  restriction or with a service- or version-wide wildcard such as
+  `/<service>/v1/*`. It requires `nginx/includes/backend-headers.conf` to strip
+  `Cookie` and `Authorization` and send `X-Forwarded-Proto: https`, and
+  requires every `/api` proxy location in both NGINX configs to include it.
+  It requires both NGINX configs to include `nginx/includes/api-routes.conf`
+  and `nginx/includes/api-docs-routes.conf` exactly once and to declare no
+  `/api` or `/api-docs` location of their own, requires the decoded `;`
+  rejection in `api-routes.conf`, and requires the
+  `kubernetes/istio/ingress-path-hardening.yaml` filter, locally and in the
+  production render, to be one enforcing `DENY` RBAC filter before
+  `ext_authz` that denies literal, encoded and double-encoded `;` in the path
+  and admits ordinary paths and query strings. `--self-test` proves each case
+  with a failing fixture. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
   Kustomize patch fragments under `patches/` directories and the schema-v2
   production desired-state manifest as a standalone Kubernetes resource, and
   validates the rendered production app and infrastructure overlays that
   consume the Kubernetes inputs.
+- `guardrails/verify-nginx-backend-headers.sh` starts one disposable,
+  network-less container from the digest-pinned `nginx-gateway` image declared
+  in `kubernetes/services/nginx-gateway/deployment.yaml`, mounts the checked-in
+  `nginx/includes/backend-headers.conf` read-only, and proxies synthetic
+  requests to an njs echo upstream. It asserts the upstream receives no
+  `Cookie` or `Authorization`, receives `X-Forwarded-Proto: https` and still
+  receives the identity headers, with a control location proving the echo would
+  see the cookie. It requires Docker, prints header names only, and does not
+  contact a Kubernetes cluster.
+- `guardrails/verify-nginx-shared-routes.sh` starts one disposable,
+  network-less container per complete NGINX config (`nginx/nginx.k8s.conf`
+  and `nginx/nginx.production.k8s.conf`) from the same digest-pinned
+  `nginx-gateway` image with `nginx/includes/` mounted read-only. It runs
+  `nginx -t`, asserts a decoded `;` returns `400` with the security headers,
+  that the shared unknown-API rejections return `404`, that query strings
+  reach the proxy locations, and that the shared `/api-docs/` fallback keeps
+  the docs CSP. The live ingress denies these `;` paths before NGINX, so this
+  is where the NGINX layer itself is exercised. It requires Docker and does not
+  contact a Kubernetes cluster.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
   reviewed production route/authorization/ingress/monitoring/egress output,

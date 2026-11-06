@@ -14,6 +14,20 @@ spec:
     - path:
         type: PathPrefix
         value: /api
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        remove:
+        - Forwarded
+        - X-Forwarded-Host
+        - X-Forwarded-Port
+        - X-Forwarded-Prefix
+        - X-Forwarded-Ssl
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        set:
+        - name: Strict-Transport-Security
+          value: "max-age=31536000"
     backendRefs:
     - name: nginx-gateway
       port: 8080

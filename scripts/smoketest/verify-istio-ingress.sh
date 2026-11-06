@@ -1133,6 +1133,7 @@ main() {
     section "AuthorizationPolicy (Ingress Identity)"
 
     require_named_resources authorizationpolicy default \
+        default-deny-all \
         transaction-service-policy \
         currency-service-policy \
         permission-service-policy \

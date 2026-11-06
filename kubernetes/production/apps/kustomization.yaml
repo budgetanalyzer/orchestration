@@ -29,9 +29,13 @@ configMapGenerator:
     namespace: default
     files:
       - nginx.conf=../../../nginx/nginx.production.k8s.conf
+  # CSP templates are finalized by deploy/scripts/render/production-routes.sh.
+  # Raw kustomize output is an intermediate, not a ready NGINX configuration.
   - name: nginx-gateway-includes
     namespace: default
     files:
+      - api-docs-routes.conf=../../../nginx/includes/api-docs-routes.conf
+      - api-routes.conf=../../../nginx/includes/api-routes.conf
       - backend-headers.conf=../../../nginx/includes/backend-headers.conf
       - security-headers-docs-csp.conf=../../../nginx/includes/security-headers-docs-csp.conf
       - security-headers-strict-csp.conf=../../../nginx/includes/security-headers-strict-csp.conf

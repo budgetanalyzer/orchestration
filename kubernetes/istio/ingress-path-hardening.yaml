@@ -1,0 +1,55 @@
+# Denies any request whose path, before the query string, contains a literal
+# ";", an encoded %3b/%3B or a double-encoded %253b/%253B. It runs before
+# ext_authz, so it covers both the NGINX lane and the direct Session Gateway
+# lane, and neither backend sees the request. Envoy path normalization does not
+# decode %3b, so the match is on the undecoded :path. Envoy safe_regex must
+# match the whole value, hence the trailing .*. A denial returns 403 "RBAC:
+# access denied" and increments the listener's rbac.denied counter. No
+# rules_stat_prefix is set, because the gateway stats matcher only exports
+# RBAC counters ending in rbac.denied. Istio's own ingress RBAC filter carries
+# only shadow_rules, so this is the only filter that increments it.
+#
+# HTTP filters only see the path after HCM normalize_path. Normalization treats
+# a "..;<text>" or ".;<text>" segment as a dot segment, resolves it and drops
+# the ";<text>", so those forms are never denied here, but no ";" from them
+# reaches NGINX or Session Gateway either.
+#
+# Kept separate from ingress-rate-limit.yaml, which owns only the rate limits
+# and the HCM normalization settings.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: ingress-path-hardening
+  namespace: istio-ingress
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.ext_authz
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.rbac.ingress_path_hardening
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+            rules:
+              action: DENY
+              policies:
+                deny-semicolon-in-path:
+                  permissions:
+                    - header:
+                        name: ":path"
+                        string_match:
+                          safe_regex:
+                            regex: "^[^?]*(;|%3[bB]|%253[bB]).*$"
+                  principals:
+                    - any: true

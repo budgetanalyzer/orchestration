@@ -39,12 +39,22 @@ verified local CLI tools, so upstream network access can still be required.
 
 `production-routes.sh` renders the shared Gateway API routes, ingress policies,
 workload authorization policies, ingress gateway pod hardening and diagnostics,
-internal-only Grafana values, and Istio egress reference. Production omits only
+internal-only Grafana values, Istio egress reference, and `apps.yaml`. Production omits only
 the standalone frontend authorization policy and does not select an ingress
 Service publication type. Its
 `demo.budgetanalyzer.org` and `https://auth.budgetanalyzer.org/` values are
 non-secret historical reference inputs, not evidence of a live endpoint or
 identity provider.
+
+The apps render resolves the shared CSP templates with
+`REFERENCE_AUTH0_ISSUER_URI`, the same issuer used for egress, through
+`deploy/scripts/render/render-csp.py`. Each production CSP permits only
+`'self'` and `https://auth.budgetanalyzer.org` in `form-action`; local Tilt
+instead derives its own exact origin from `AUTH0_ISSUER_URI`. The renderer
+rejects invalid issuer input before emitting configuration and needs only
+Python's standard library. Raw `kubectl kustomize kubernetes/production/apps`
+output retains CSP placeholders and is an intermediate for scanning/review;
+use `production-routes.sh` for resolved NGINX configuration.
 
 `production-infrastructure.sh` renders the shared PostgreSQL, RabbitMQ, and
 Redis baseline through `kubernetes/production/infrastructure/`.
@@ -62,6 +72,10 @@ point:
 ```bash
 ./scripts/guardrails/verify-production-image-overlay.sh
 ```
+
+The focused header/CSP checks use the repository-local hash-verified PyYAML
+interpreter documented in [the CI setup](../docs/ci-cd.md#security-guardrailsyml),
+with an explicit `INGRESS_RATE_LIMIT_PYTHON` override supported.
 
 In addition to image and exposure checks, it compares rendered routes,
 authorization, gateway pod configuration, and infrastructure against their

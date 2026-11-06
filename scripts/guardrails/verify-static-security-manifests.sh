@@ -87,10 +87,21 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 )
 
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
+ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/istio/authorization-policies.yaml"
+AUTHORIZATION_POLICY_PYTHON="${INGRESS_RATE_LIMIT_PYTHON:-python3}"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
 JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
 KIALI_VALUES_FILE="${REPO_DIR}/kubernetes/monitoring/kiali-values.yaml"
+NGINX_BACKEND_HEADERS_INCLUDE="${REPO_DIR}/nginx/includes/backend-headers.conf"
+NGINX_API_ROUTES_INCLUDE="${REPO_DIR}/nginx/includes/api-routes.conf"
+NGINX_API_DOCS_ROUTES_INCLUDE="${REPO_DIR}/nginx/includes/api-docs-routes.conf"
+NGINX_SERVER_CONFIG_FILES=(
+    "${REPO_DIR}/nginx/nginx.k8s.conf"
+    "${REPO_DIR}/nginx/nginx.production.k8s.conf"
+)
+INGRESS_PATH_HARDENING_FILE="${REPO_DIR}/kubernetes/istio/ingress-path-hardening.yaml"
+PRODUCTION_INGRESS_POLICIES_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
 
 usage() {
     cat <<'EOF'
@@ -106,6 +117,12 @@ Runs the static security guardrail suite:
 - ingress rate-limit policy and production gateway diagnostics render checks
 - Tilt secret/config boundary inventory validation
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
+- Istio AuthorizationPolicy structure: explicit default-deny-all and exact
+  NGINX path allowlists on backend policies
+- NGINX shared route includes: one copy of the API and /api-docs routes and
+  the decoded ";" rejection
+- ingress path hardening: DENY of literal, encoded and double-encoded ";" in
+  the path, locally and in the production render
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
 EOF
@@ -1107,17 +1124,29 @@ scan_istio_tracing_contract() {
     printf 'Istio tracing contract scan passed\n'
 }
 
+# The ext-authz provider must fail closed, bound every check with a timeout
+# and report authorizer failures as 503 instead of Istio's 403 default, and
+# only content-type may reach the client from a denial.
 scan_istio_ext_authz_denial_contract() {
-    local policy_count
+    local subject="$1"
+    local values_file="$2"
+    local label="${values_file#"${REPO_DIR}"/}"
+    local provider_count policy_count fail_open status_on_error timeout
     local -a deny_headers=()
+    local -a provider_fields=()
     local -a failures=()
 
-    if [[ ! -f "${ISTIOD_VALUES_FILE}" ]]; then
-        failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: file is missing")
+    if [[ ! -f "${values_file}" ]]; then
+        failures+=("${label}: file is missing")
     else
-        policy_count=$(grep -Ec '^[[:space:]]*headersToDownstreamOnDeny:[[:space:]]*$' "${ISTIOD_VALUES_FILE}" || true)
+        provider_count=$(grep -Ec '^    - name:[[:space:]]*ext-authz-http[[:space:]]*$' "${values_file}" || true)
+        if [[ "${provider_count}" -ne 1 ]]; then
+            failures+=("${label}: expected exactly one ext-authz-http extension provider, found ${provider_count}")
+        fi
+
+        policy_count=$(grep -Ec '^[[:space:]]*headersToDownstreamOnDeny:[[:space:]]*$' "${values_file}" || true)
         if [[ "${policy_count}" -ne 1 ]]; then
-            failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: expected exactly one headersToDownstreamOnDeny policy, found ${policy_count}")
+            failures+=("${label}: expected exactly one headersToDownstreamOnDeny policy, found ${policy_count}")
         fi
 
         mapfile -t deny_headers < <(
@@ -1132,21 +1161,274 @@ scan_istio_ext_authz_denial_contract() {
                     next
                 }
                 in_deny_list { exit }
-            ' "${ISTIOD_VALUES_FILE}"
+            ' "${values_file}"
         )
 
         if (( ${#deny_headers[@]} != 1 )) || [[ "${deny_headers[0]:-}" != "content-type" ]]; then
-            failures+=("${ISTIOD_VALUES_FILE#"${REPO_DIR}"/}: ext-authz deny responses must forward only content-type")
+            failures+=("${label}: ext-authz deny responses must forward only content-type")
+        fi
+
+        # Scalar fields of the ext-authz-http envoyExtAuthzHttp block, as
+        # key=value with surrounding quotes removed.
+        mapfile -t provider_fields < <(
+            awk '
+                /^    - name:[[:space:]]*ext-authz-http[[:space:]]*$/ {
+                    in_provider = 1
+                    next
+                }
+                in_provider && /^    - / { exit }
+                in_provider && /^        [A-Za-z]+:[[:space:]]*[^[:space:]]/ {
+                    line = $0
+                    sub(/^        /, "", line)
+                    key = line
+                    sub(/:.*/, "", key)
+                    value = line
+                    sub(/^[A-Za-z]+:[[:space:]]*/, "", value)
+                    sub(/[[:space:]]*(#.*)?$/, "", value)
+                    gsub(/^["\047]|["\047]$/, "", value)
+                    print key "=" value
+                }
+            ' "${values_file}"
+        )
+
+        fail_open=$(printf '%s\n' "${provider_fields[@]}" | sed -n 's/^failOpen=//p')
+        status_on_error=$(printf '%s\n' "${provider_fields[@]}" | sed -n 's/^statusOnError=//p')
+        timeout=$(printf '%s\n' "${provider_fields[@]}" | sed -n 's/^timeout=//p')
+
+        if [[ "${fail_open}" != "false" ]]; then
+            failures+=("${label}: ext-authz-http must set failOpen: false")
+        fi
+        if [[ "${status_on_error}" != "503" ]]; then
+            failures+=("${label}: ext-authz-http must set statusOnError: \"503\" so authorizer failures are not reported as Istio's default 403")
+        fi
+        if ! [[ "${timeout}" =~ ^[0-9]+(\.[0-9]+)?s$ ]] || [[ "${timeout}" =~ ^0+(\.0+)?s$ ]]; then
+            failures+=("${label}: ext-authz-http must set a positive timeout in seconds (Istio's default is 600s)")
         fi
     fi
 
     if (( ${#failures[@]} > 0 )); then
-        printf 'Istio ext-authz denial contract scan failed:\n' >&2
+        printf 'Istio ext-authz denial contract scan failed (%s):\n' "${subject}" >&2
         printf '  - %s\n' "${failures[@]}" >&2
         return 1
     fi
 
-    printf 'Istio ext-authz denial contract scan passed\n'
+    printf 'Istio ext-authz denial contract scan passed (%s)\n' "${subject}"
+}
+
+# Structural check for the mesh public/internal boundary. Each file is read as
+# a complete policy set: it must contain default-deny-all in default with an
+# empty spec, and every backend policy rule that admits the nginx-gateway
+# identity must restrict paths without a service- or version-wide wildcard.
+scan_istio_authorization_policy_contract() {
+    local subject="$1"
+    shift
+
+    if ! "${AUTHORIZATION_POLICY_PYTHON}" -I - "${REPO_DIR}" "$@" <<'AUTHZ_PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+NGINX_PRINCIPAL = "cluster.local/ns/default/sa/nginx-gateway"
+BACKEND_APPS = ("transaction-service", "currency-service", "permission-service")
+# Fewer than three fixed segments before a wildcard covers a whole service or
+# API version, for example /transaction-service/* or /transaction-service/v1/*.
+MIN_FIXED_SEGMENTS = 3
+
+repo_dir = Path(sys.argv[1])
+failures = []
+
+
+def label(path):
+    try:
+        return str(Path(path).resolve().relative_to(repo_dir))
+    except ValueError:
+        return str(path)
+
+
+def wildcard_problem(path):
+    if not isinstance(path, str) or not path.startswith("/"):
+        return "is not an absolute path"
+    if "{**}" in path:
+        return "uses a multi-segment {**} template"
+    if "*" in path.replace("{*}", "") and not path.endswith("*"):
+        return "uses a non-suffix wildcard"
+    if path.endswith("*") and not path.endswith("{*}"):
+        fixed = [segment for segment in path[:-1].split("/") if segment]
+        if len(fixed) < MIN_FIXED_SEGMENTS:
+            return "is a service- or version-wide wildcard"
+    return None
+
+
+for policy_file in sys.argv[2:]:
+    name = label(policy_file)
+    try:
+        documents = [
+            document
+            for document in yaml.safe_load_all(Path(policy_file).read_text(encoding="utf-8"))
+            if isinstance(document, dict)
+        ]
+    except (OSError, yaml.YAMLError) as error:
+        failures.append(f"{name}: cannot parse: {error}")
+        continue
+
+    policies = [document for document in documents if document.get("kind") == "AuthorizationPolicy"]
+
+    deny_all = [
+        policy
+        for policy in policies
+        if (policy.get("metadata") or {}).get("name") == "default-deny-all"
+        and (policy.get("metadata") or {}).get("namespace") == "default"
+    ]
+    if len(deny_all) != 1:
+        failures.append(f"{name}: expected exactly one default/default-deny-all, found {len(deny_all)}")
+    elif deny_all[0].get("spec") not in ({}, None):
+        failures.append(f"{name}: default-deny-all must have an empty spec, found {deny_all[0].get('spec')!r}")
+
+    nginx_rules_seen = {app: 0 for app in BACKEND_APPS}
+    for policy in policies:
+        spec = policy.get("spec") or {}
+        app = ((spec.get("selector") or {}).get("matchLabels") or {}).get("app")
+        if app not in BACKEND_APPS:
+            continue
+        policy_name = (policy.get("metadata") or {}).get("name", "<unnamed>")
+        for index, rule in enumerate(spec.get("rules") or []):
+            principals = [
+                principal
+                for source in (rule.get("from") or [])
+                for principal in ((source.get("source") or {}).get("principals") or [])
+            ]
+            if NGINX_PRINCIPAL not in principals:
+                continue
+            nginx_rules_seen[app] += 1
+            where = f"{name}: {policy_name} rule {index}"
+            operations = rule.get("to") or []
+            if not operations:
+                failures.append(f"{where}: nginx-gateway rule has no to restriction")
+                continue
+            for op_index, entry in enumerate(operations):
+                paths = (entry.get("operation") or {}).get("paths") or []
+                if not paths:
+                    failures.append(f"{where}: to[{op_index}] does not restrict paths")
+                for path in paths:
+                    problem = wildcard_problem(path)
+                    if problem:
+                        failures.append(f"{where}: path {path!r} {problem}")
+
+    for app, count in nginx_rules_seen.items():
+        if count == 0:
+            failures.append(f"{name}: no {app} policy rule admits nginx-gateway, so the backend contract is not checkable")
+
+if failures:
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    sys.exit(1)
+AUTHZ_PY
+    then
+        printf '%s Istio AuthorizationPolicy contract scan failed\n' "${subject}" >&2
+        return 1
+    fi
+
+    printf '%s Istio AuthorizationPolicy contract scan passed\n' "${subject}"
+}
+
+# The shared backend include must strip browser credentials and send the real
+# scheme, and every /api proxy location in the shared API routes include must
+# use it.
+scan_nginx_backend_header_contract() {
+    local subject="$1"
+    local include_file="$2"
+    shift 2
+    local -a config_files=("$@")
+    local -a failures=()
+    local -a directives=()
+    local config_file directive count line
+    local -A required=(
+        ['proxy_set_header Cookie "";']=1
+        ['proxy_set_header Authorization "";']=1
+        ['proxy_set_header X-Forwarded-Proto https;']=1
+    )
+
+    if [[ ! -f "${include_file}" ]]; then
+        failures+=("${include_file#"${REPO_DIR}"/}: file is missing")
+    else
+        mapfile -t directives < <(
+            sed -E -e 's/#.*$//' -e 's/^[[:space:]]+//' -e 's/[[:space:]]+$//' -e 's/[[:space:]]+/ /g' \
+                "${include_file}" |
+                grep -Ei '^proxy_set_header (Cookie|Authorization|X-Forwarded-Proto) ' || true
+        )
+
+        for directive in "${!required[@]}"; do
+            count=0
+            for line in "${directives[@]}"; do
+                [[ "${line}" == "${directive}" ]] && count=$((count + 1))
+            done
+            if (( count != 1 )); then
+                failures+=("${include_file#"${REPO_DIR}"/}: expected exactly one '${directive}', found ${count}")
+            fi
+        done
+
+        for line in "${directives[@]}"; do
+            if [[ -z "${required[${line}]:-}" ]]; then
+                failures+=("${include_file#"${REPO_DIR}"/}: unexpected credential or scheme directive '${line}'")
+            fi
+        done
+    fi
+
+    for config_file in "${config_files[@]}"; do
+        if [[ ! -f "${config_file}" ]]; then
+            failures+=("${config_file#"${REPO_DIR}"/}: file is missing")
+            continue
+        fi
+
+        while IFS= read -r line; do
+            failures+=("${config_file#"${REPO_DIR}"/}: ${line}")
+        done < <(
+            awk '
+                function finish() {
+                    if (path ~ /^\/api(\/|$)/ && has_proxy) {
+                        api_locations++
+                        if (!has_include) {
+                            printf "location %s proxies without include includes/backend-headers.conf\n", path
+                        }
+                    }
+                    in_location = 0
+                }
+                {
+                    text = $0
+                    sub(/#.*/, "", text)
+                }
+                !in_location && text ~ /^[[:space:]]*location[[:space:]].*\{[[:space:]]*$/ {
+                    path = text
+                    sub(/^[[:space:]]*location[[:space:]]+(=|\^~|~\*?)?[[:space:]]*/, "", path)
+                    sub(/[[:space:]]*\{[[:space:]]*$/, "", path)
+                    in_location = 1
+                    depth = 1
+                    has_proxy = 0
+                    has_include = 0
+                    next
+                }
+                in_location {
+                    if (text ~ /^[[:space:]]*proxy_pass[[:space:]]/) has_proxy = 1
+                    if (text ~ /^[[:space:]]*include[[:space:]]+includes\/backend-headers\.conf;/) has_include = 1
+                    depth += gsub(/\{/, "{", text)
+                    depth -= gsub(/\}/, "}", text)
+                    if (depth <= 0) finish()
+                }
+                END {
+                    if (api_locations == 0) print "no /api proxy location found"
+                }
+            ' "${config_file}"
+        )
+    done
+
+    if (( ${#failures[@]} > 0 )); then
+        printf '%s NGINX backend header contract scan failed:\n' "${subject}" >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf '%s NGINX backend header contract scan passed\n' "${subject}"
 }
 
 extract_image_refs_from_files() {
@@ -1242,6 +1524,220 @@ scan_image_pinning_in_files() {
     printf '%s image pinning scan passed (%d refs checked)\n' "${subject}" "${refs_checked}"
 }
 
+# Both NGINX server configs must take the API and /api-docs routes from the
+# shared includes instead of keeping their own copies, and the API include
+# must reject a decoded ";" at server level.
+scan_nginx_shared_route_contract() {
+    local subject="$1"
+    local api_include="$2"
+    local docs_include="$3"
+    shift 3
+    local -a config_files=("$@")
+    local -a failures=()
+    local config_file include_name count collapsed line
+
+    for include_name in "${api_include}" "${docs_include}"; do
+        if [[ ! -f "${include_name}" ]]; then
+            failures+=("${include_name#"${REPO_DIR}"/}: file is missing")
+        fi
+    done
+
+    if [[ -f "${api_include}" ]]; then
+        collapsed=$(sed -E -e 's/#.*$//' "${api_include}" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g')
+        # shellcheck disable=SC2016 # $uri is the literal NGINX variable being matched, not a shell expansion.
+        if ! grep -Eq 'if \(\$uri ~ ";"\) \{ return 400; \}' <<<"${collapsed}"; then
+            failures+=("${api_include#"${REPO_DIR}"/}: missing server-level 'if (\$uri ~ \";\") { return 400; }'")
+        fi
+    fi
+
+    for config_file in "${config_files[@]}"; do
+        if [[ ! -f "${config_file}" ]]; then
+            failures+=("${config_file#"${REPO_DIR}"/}: file is missing")
+            continue
+        fi
+
+        for include_name in api-routes.conf api-docs-routes.conf; do
+            count=$(sed -E 's/#.*$//' "${config_file}" |
+                grep -Ec "^[[:space:]]*include[[:space:]]+includes/${include_name//./\\.};" || true)
+            if (( count != 1 )); then
+                failures+=("${config_file#"${REPO_DIR}"/}: expected exactly one 'include includes/${include_name};', found ${count}")
+            fi
+        done
+
+        while IFS= read -r line; do
+            failures+=("${config_file#"${REPO_DIR}"/}: ${line} duplicates a shared route; move it to the shared include")
+        done < <(
+            sed -E 's/#.*$//' "${config_file}" |
+                sed -nE 's/^[[:space:]]*location[[:space:]]+((=|\^~|~\*?)[[:space:]]*)?([^[:space:]{]+).*$/\3/p' |
+                grep -E '^\^?/api' | sed 's/^/location /' || true
+        )
+    done
+
+    if (( ${#failures[@]} > 0 )); then
+        printf '%s NGINX shared route contract scan failed:\n' "${subject}" >&2
+        printf '  - %s\n' "${failures[@]}" >&2
+        return 1
+    fi
+
+    printf '%s NGINX shared route contract scan passed\n' "${subject}"
+}
+
+# The ingress path-hardening EnvoyFilter must insert one RBAC DENY filter
+# before ext_authz whose :path regexes deny literal, encoded and
+# double-encoded ";" before the query string and leave other paths alone.
+scan_istio_ingress_path_hardening_contract() {
+    local subject="$1"
+    shift
+
+    if ! "${AUTHORIZATION_POLICY_PYTHON}" -I - "${REPO_DIR}" "$@" <<'PATH_HARDENING_PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+FILTER_NAME = "ingress-path-hardening"
+RBAC_TYPE = "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC"
+# Paths as the filter sees them after HCM normalize_path. A literal "..;" or
+# ".;" segment never reaches the filter, because normalization resolves it.
+MUST_DENY = (
+    "/api/v1/transactions;x",
+    "/api/v1/transactions/%2e%2e;/actuator/prometheus",
+    "/api/v1/transactions%3bx",
+    "/api/v1/transactions%3Bx",
+    "/api/v1/transactions%253bx",
+    "/api/v1/transactions%253Bx",
+    "/auth/v1/%2e%2e;/internal/v1/sessions/users/x",
+    "/auth/v1/%2e%2e%3b/actuator/prometheus",
+    "/x;",
+    "/x;?a=b",
+)
+MUST_ALLOW = (
+    "/",
+    "/api/v1/transactions",
+    "/api/v1/exchange-rates?targetCurrency=THB",
+    "/api/v1/transactions?q=a;b",
+    "/api/v1/transactions?q=%3b",
+    "/auth/v1/session",
+    "/oauth2/authorization/idp",
+    "/login/oauth2/code/idp?code=a&state=b",
+)
+
+repo_dir = Path(sys.argv[1])
+failures = []
+
+
+def label(path):
+    try:
+        return str(Path(path).resolve().relative_to(repo_dir))
+    except ValueError:
+        return str(path)
+
+
+def check(resource, name):
+    if resource.get("apiVersion") != "networking.istio.io/v1alpha3":
+        failures.append(f"{name}: unexpected apiVersion {resource.get('apiVersion')!r}")
+    if (resource.get("metadata") or {}).get("namespace") != "istio-ingress":
+        failures.append(f"{name}: must be in istio-ingress")
+    spec = resource.get("spec") or {}
+    if (spec.get("workloadSelector") or {}).get("labels") != {
+        "gateway.networking.k8s.io/gateway-name": "istio-ingress-gateway"
+    }:
+        failures.append(f"{name}: must select only the istio-ingress-gateway workload")
+
+    patches = spec.get("configPatches") or []
+    if len(patches) != 1:
+        failures.append(f"{name}: expected exactly one config patch, found {len(patches)}")
+        return
+    patch = patches[0]
+    match = patch.get("match") or {}
+    sub_filter = (
+        ((((match.get("listener") or {}).get("filterChain") or {}).get("filter") or {}).get("subFilter") or {})
+        .get("name")
+    )
+    if patch.get("applyTo") != "HTTP_FILTER" or match.get("context") != "GATEWAY":
+        failures.append(f"{name}: patch must apply to a GATEWAY HTTP_FILTER")
+    if sub_filter != "envoy.filters.http.ext_authz" or (patch.get("patch") or {}).get("operation") != "INSERT_BEFORE":
+        failures.append(f"{name}: patch must be INSERT_BEFORE envoy.filters.http.ext_authz")
+
+    typed = ((patch.get("patch") or {}).get("value") or {}).get("typed_config") or {}
+    if typed.get("@type") != RBAC_TYPE:
+        failures.append(f"{name}: filter must be the Envoy RBAC HTTP filter, found {typed.get('@type')!r}")
+        return
+    if set(typed) != {"@type", "rules"}:
+        # shadow_rules do not enforce, and a stat prefix hides the denials
+        # from the gateway stats matcher, which exports only *rbac.denied.
+        failures.append(f"{name}: RBAC filter must set only @type and rules, found {sorted(typed)}")
+    rules = typed.get("rules") or {}
+    if rules.get("action") != "DENY":
+        failures.append(f"{name}: RBAC action must be DENY, found {rules.get('action')!r}")
+        return
+
+    regexes = []
+    for policy_name, policy in (rules.get("policies") or {}).items():
+        if (policy or {}).get("principals") != [{"any": True}]:
+            failures.append(f"{name}: policy {policy_name} must apply to any principal")
+        for permission in (policy or {}).get("permissions") or []:
+            header = permission.get("header") or {}
+            regex = ((header.get("string_match") or {}).get("safe_regex") or {}).get("regex")
+            if header.get("name") != ":path" or not isinstance(regex, str) or set(permission) != {"header"}:
+                failures.append(f"{name}: policy {policy_name} has a permission that is not a :path regex")
+                continue
+            try:
+                regexes.append(re.compile(regex))
+            except re.error as error:
+                failures.append(f"{name}: invalid regex {regex!r}: {error}")
+    if not regexes:
+        failures.append(f"{name}: no :path regex permission found")
+        return
+
+    def denied(path):
+        # Envoy safe_regex matches the whole header value.
+        return any(pattern.fullmatch(path) for pattern in regexes)
+
+    for path in MUST_DENY:
+        if not denied(path):
+            failures.append(f"{name}: does not deny {path!r}")
+    for path in MUST_ALLOW:
+        if denied(path):
+            failures.append(f"{name}: denies legitimate path {path!r}")
+
+
+for manifest in sys.argv[2:]:
+    name = label(manifest)
+    try:
+        documents = [
+            document
+            for document in yaml.safe_load_all(Path(manifest).read_text(encoding="utf-8"))
+            if isinstance(document, dict)
+        ]
+    except (OSError, yaml.YAMLError) as error:
+        failures.append(f"{name}: cannot parse: {error}")
+        continue
+    matches = [
+        document
+        for document in documents
+        if document.get("kind") == "EnvoyFilter"
+        and (document.get("metadata") or {}).get("name") == FILTER_NAME
+    ]
+    if len(matches) != 1:
+        failures.append(f"{name}: expected exactly one {FILTER_NAME} EnvoyFilter, found {len(matches)}")
+        continue
+    check(matches[0], name)
+
+if failures:
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    sys.exit(1)
+PATH_HARDENING_PY
+    then
+        printf '%s ingress path hardening contract scan failed\n' "${subject}" >&2
+        return 1
+    fi
+
+    printf '%s ingress path hardening contract scan passed\n' "${subject}"
+}
+
 run_repo_pattern_scans() {
     "${IMAGE_PINNING_SCRIPT}"
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
@@ -1254,14 +1750,27 @@ run_repo_pattern_scans() {
     scan_kiali_values_contract
     scan_jaeger_manifest_contract
     scan_istio_ingress_observability_allowances
-    scan_istio_ext_authz_denial_contract
+    scan_istio_ext_authz_denial_contract "repo" "${ISTIOD_VALUES_FILE}"
+    scan_istio_authorization_policy_contract "repo" "${ISTIO_AUTHORIZATION_POLICIES_FILE}"
     scan_istio_tracing_contract
+    scan_nginx_backend_header_contract "repo" "${NGINX_BACKEND_HEADERS_INCLUDE}" "${NGINX_API_ROUTES_INCLUDE}"
+    scan_nginx_shared_route_contract "repo" "${NGINX_API_ROUTES_INCLUDE}" "${NGINX_API_DOCS_ROUTES_INCLUDE}" \
+        "${NGINX_SERVER_CONFIG_FILES[@]}"
+    scan_istio_ingress_path_hardening_contract "repo" "${INGRESS_PATH_HARDENING_FILE}"
+
+    KUSTOMIZE_RENDER_DIR="$(mktemp -d)"
+    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INGRESS_POLICIES_OVERLAY}" \
+        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+    scan_istio_ingress_path_hardening_contract "production render" "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+    rm -rf "${KUSTOMIZE_RENDER_DIR}"
+    KUSTOMIZE_RENDER_DIR=""
 }
 
 run_self_test() {
     local fixture_dir="${REPO_DIR}/tests/security-guardrails/fixtures/fail"
     local pipe_fixture="${fixture_dir}/pipe-to-shell-guidance.md"
     local self_test_failures=0
+    local authz_fixture nginx_fixture path_fixture provider_fixture
     local -a fixture_files=()
     local line
 
@@ -1290,6 +1799,57 @@ run_self_test() {
         echo "self-test pipe-to-shell fixture unexpectedly passed" >&2
         self_test_failures=$((self_test_failures + 1))
     fi
+
+    for authz_fixture in "${fixture_dir}"/authorization-policy-*.yaml; do
+        if scan_istio_authorization_policy_contract "self-test" "${authz_fixture}"; then
+            echo "self-test ${authz_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for nginx_fixture in "${fixture_dir}"/nginx-backend-headers-include-*.conf; do
+        if scan_nginx_backend_header_contract "self-test" "${nginx_fixture}" "${NGINX_API_ROUTES_INCLUDE}"; then
+            echo "self-test ${nginx_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for nginx_fixture in "${fixture_dir}"/nginx-backend-headers-config-*.conf; do
+        if scan_nginx_backend_header_contract "self-test" "${NGINX_BACKEND_HEADERS_INCLUDE}" "${nginx_fixture}"; then
+            echo "self-test ${nginx_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for nginx_fixture in "${fixture_dir}"/nginx-shared-routes-include-*.conf; do
+        if scan_nginx_shared_route_contract "self-test" "${nginx_fixture}" "${NGINX_API_DOCS_ROUTES_INCLUDE}" \
+            "${NGINX_SERVER_CONFIG_FILES[@]}"; then
+            echo "self-test ${nginx_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for nginx_fixture in "${fixture_dir}"/nginx-shared-routes-config-*.conf; do
+        if scan_nginx_shared_route_contract "self-test" "${NGINX_API_ROUTES_INCLUDE}" "${NGINX_API_DOCS_ROUTES_INCLUDE}" \
+            "${nginx_fixture}"; then
+            echo "self-test ${nginx_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for provider_fixture in "${fixture_dir}"/istio-ext-authz-provider-*.yaml; do
+        if scan_istio_ext_authz_denial_contract "self-test" "${provider_fixture}"; then
+            echo "self-test ${provider_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for path_fixture in "${fixture_dir}"/ingress-path-hardening-*.yaml; do
+        if scan_istio_ingress_path_hardening_contract "self-test" "${path_fixture}"; then
+            echo "self-test ${path_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
 
     if (( self_test_failures > 0 )); then
         printf 'Static security guardrail self-test failed (%d unexpected passes)\n' "${self_test_failures}" >&2
@@ -1332,6 +1892,9 @@ main() {
     ensure_static_tool kube-linter
     ensure_static_tool kyverno
     ensure_static_tool helm
+
+    log_step "Ingress headers and environment-specific CSP rendering"
+    "${AUTHORIZATION_POLICY_PYTHON}" "${SCRIPT_DIR}/verify-edge-headers.py"
 
     log_step "kubeconform schema validation"
     run_kubeconform

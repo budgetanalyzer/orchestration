@@ -177,8 +177,24 @@ NGINX now serves three intentional CSP profiles:
 The main strict policy removes both `'unsafe-inline'` and `'unsafe-eval'`:
 
 ```text
-default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self';
+default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self' <configured-IdP-origin>;
 ```
+
+Every profile permits form submissions only to `'self'` and the configured
+IdP's exact HTTPS origin, supporting the upcoming native form logout redirect.
+`deploy/scripts/render/render-csp.py` replaces `__IDP_LOGOUT_ORIGIN__` in the
+shared templates. Tilt uses `AUTH0_ISSUER_URI`, matching Session Gateway and
+egress; the offline production renderer uses its own reference issuer. Empty,
+non-HTTPS, wildcard or malformed values fail rendering. Do not copy a template
+verbatim into a running ConfigMap or add a second tenant allowance.
+
+The includes omit `X-XSS-Protection`. HSTS belongs to the ingress: every route
+rule sets exactly `max-age=31536000`, including the direct Session Gateway
+lane. The same rules strip caller-supplied forwarding authority fields; see
+[the security architecture](../docs/architecture/security-architecture.md#ingress-header-ownership).
+`verify-edge-contract.sh` checks all four response paths and forged login
+forwarding fields; `verify-edge-browser-hardening.sh` checks each live CSP
+profile's exact form sources and headers with normal TLS verification.
 
 NGINX applies those policies with checked-in include files so any `location`
 that adds route-specific headers can also re-include the full security-header
@@ -238,7 +254,10 @@ kubectl logs deployment/nginx-gateway
 # Check NGINX config syntax
 kubectl exec deployment/nginx-gateway -- nginx -t
 
-# Reload NGINX config (Tilt does this automatically)
+# Reload NGINX after an include change. Tilt updates the ConfigMap and the
+# kubelet refreshes /etc/nginx/includes, but the running NGINX keeps the old
+# config until reloaded. nginx.conf is a subPath mount, so a main-config change
+# needs a pod restart instead.
 kubectl exec deployment/nginx-gateway -- nginx -s reload
 
 # Trigger config reload via Tilt
@@ -277,7 +296,10 @@ block the verifier.
 
 **Scenario:** You want to add `/api/accounts` served by Transaction Service.
 
-1. Add matching location blocks in both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf`:
+1. Add the location block once, in the shared `nginx/includes/api-routes.conf`,
+   above the unknown-route rejections. Both `nginx/nginx.k8s.conf` and
+   `nginx/nginx.production.k8s.conf` include that file, so do not add `/api`
+   locations to either server config:
 ```nginx
 location /api/v1/accounts {
     set $transaction_backend "http://transaction-service.default.svc.cluster.local:8082";
@@ -287,22 +309,39 @@ location /api/v1/accounts {
 }
 ```
 
-2. Verify checked-in route ownership in both files:
+2. Allow the rewritten upstream path for the NGINX identity in the backend's
+   rule in `kubernetes/istio/authorization-policies.yaml`, with both an exact
+   entry and a `/*` entry:
+```yaml
+              - "/transaction-service/v1/accounts"
+              - "/transaction-service/v1/accounts/*"
+```
+   The mesh lists exact public prefixes only, so a new resource without its
+   mesh path fails closed with `403` and the body `RBAC: access denied`. Never
+   widen the rule to `/<service>/v1/*`; the static guardrail rejects
+   service- and version-wide wildcards. See
+   [Mesh Public/Internal Boundary](../docs/architecture/security-architecture.md#mesh-publicinternal-boundary).
+
+3. Verify checked-in route ownership and the shared-route contract:
 ```bash
-rg -n "/api/v1/accounts" nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
+rg -n "/api/v1/accounts" nginx/includes/api-routes.conf
+INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+  ./scripts/guardrails/verify-static-security-manifests.sh
+rg -n "/transaction-service/v1/accounts" kubernetes/istio/authorization-policies.yaml
 ```
 
-3. Validate the active NGINX pod still parses the live config:
+4. Validate the active NGINX pod still parses the live config:
 ```bash
 kubectl exec deployment/nginx-gateway -- nginx -t
 ```
 
-4. Probe the public route and make sure it does not leak the frontend SPA:
+5. Probe the public route and make sure it does not leak the frontend SPA or
+   stop at the mesh `403`:
 ```bash
 curl -isS https://app.budgetanalyzer.localhost/api/v1/accounts
 ```
 
-5. Frontend code (no changes needed if using consistent API client):
+6. Frontend code (no changes needed if using consistent API client):
 ```typescript
 apiClient.get('/accounts')
 ```
@@ -316,7 +355,7 @@ explicit non-HTML `404` rather than frontend HTML.
 
 **Scenario:** You're adding a new "Reports Service" on port 8086.
 
-1. Add location blocks for its resources in `nginx.k8s.conf`:
+1. Add location blocks for its resources in the shared `includes/api-routes.conf`:
 ```nginx
 location /api/reports {
     set $reports_backend "http://reports-service.default.svc.cluster.local:8086";
@@ -326,6 +365,12 @@ location /api/reports {
 }
 ```
 
+2. Add an `AuthorizationPolicy` for the service in
+   `kubernetes/istio/authorization-policies.yaml` whose NGINX rule lists the
+   exact rewritten resource paths, as in
+   [Adding a New Resource Route](#adding-a-new-resource-route). `default-deny-all`
+   leaves a workload with no ALLOW rule unreachable.
+
 3. Tilt will reload automatically.
 
 ### Moving a Resource Between Services
@@ -334,7 +379,7 @@ location /api/reports {
 
 **Frontend code:** No changes needed! 🎉
 
-**NGINX config:** Just update the location block:
+**NGINX config:** Just update the location block in `nginx/includes/api-routes.conf`:
 
 ```nginx
 location /api/v1/transactions {
@@ -344,6 +389,9 @@ location /api/v1/transactions {
     include /etc/nginx/includes/backend-headers.conf;
 }
 ```
+
+Move the resource's mesh paths to the new service's policy in
+`kubernetes/istio/authorization-policies.yaml` in the same change.
 
 This is the power of resource-based routing!
 
@@ -378,6 +426,29 @@ This is the power of resource-based routing!
 1. Verify service is running: `kubectl get pods | grep transaction-service`
 2. Check NGINX logs: `kubectl logs deployment/nginx-gateway`
 3. Verify service DNS resolution: `kubectl exec deployment/nginx-gateway -- nslookup transaction-service`
+
+### API route returns 403 `RBAC: access denied`
+
+**Cause:** The Istio sidecar on the backend denied the NGINX identity because
+the rewritten upstream path is not in the backend's NGINX rule in
+`kubernetes/istio/authorization-policies.yaml`. An application `403` has a JSON
+body instead.
+
+**Fix:** Add the exact and `/*` mesh paths for the resource as described in
+[Adding a New Resource Route](#adding-a-new-resource-route). Do not widen the
+rule to `/<service>/v1/*`.
+
+### Path with `;` returns 403 or 400
+
+**Cause:** Matrix-parameter syntax is rejected on purpose. The ingress
+`ingress-path-hardening` filter answers `403` with the body
+`RBAC: access denied` for a literal `;`, `%3b`/`%3B` or `%253b`/`%253B` in the
+path on every lane, before `ext_authz`, NGINX or Session Gateway. The shared
+`api-routes.conf` answers `400` for a decoded `;` that reaches NGINX by another
+route. A `;` in the query string is unaffected. See
+[Ingress Path Hardening](../docs/architecture/security-architecture.md#ingress-path-hardening).
+
+**Fix:** Send the value as a query parameter or a path segment without `;`.
 
 ### Getting 401 Unauthorized
 
@@ -423,8 +494,38 @@ It also trusts only the pod-local loopback proxy hop for `real_ip_*` handling so
 
 ### includes/
 
-Shared configuration snippets:
+Shared configuration snippets. Each file ships through the
+`nginx-gateway-includes` ConfigMap. Tilt renders all `nginx/includes/*.conf`
+through the shared CSP renderer; `kubernetes/production/apps/kustomization.yaml`
+lists the production subset (omitting `security-headers-dev-csp.conf`). Add
+new production includes to that list and render through `production-routes.sh`.
+
+- `api-routes.conf` - The one copy of every `/api` location, including the
+  `= /api` and `/api/` unknown-route `404` rejections, included once at server
+  level by both configs. It also carries the server-level
+  `if ($uri ~ ";") { return 400; }`, which rejects a decoded `;` anywhere in
+  the path as the second layer behind the ingress path-hardening filter.
+  Sharing the blocks stops them drifting, but each including server still
+  supplies the server-level settings, security headers and location
+  precedence.
+- `api-docs-routes.conf` - The one copy of the five `/api-docs` locations. NGINX
+  checks regex locations in file order, so keep its two regex locations in
+  their current relative order. The static guardrail requires both configs to
+  include each shared file exactly once and to declare no `/api` or
+  `/api-docs` location of their own, and
+  `../scripts/guardrails/verify-nginx-shared-routes.sh` runs `nginx -t` and
+  the `;`, unknown-route, query and docs-header probes against both complete
+  configs in disposable containers.
 - `backend-headers.conf` - Standard proxy headers and identity header forwarding
+  for every API route. It forwards `X-User-Id`, `X-Roles` and `X-Permissions`,
+  removes `Cookie` and `Authorization` (`ext_authz` already consumed the session
+  cookie at the ingress), and sends `X-Forwarded-Proto: https`, because
+  `$scheme` is always `http` behind the ingress. Every `/api` location with a
+  `proxy_pass` in both configs must include it; the static guardrail enforces
+  this and the three directives, and
+  `../scripts/guardrails/verify-nginx-backend-headers.sh` proves the stripping
+  against an echo upstream in a disposable container. A backend that needs a
+  browser cookie is a contract change, not a per-route override.
 
 ## Production Considerations
 

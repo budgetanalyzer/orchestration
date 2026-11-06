@@ -1,0 +1,17 @@
+# Fails: no timeout, so a hung authorizer holds requests for Istio's 600s default.
+meshConfig:
+  extensionProviders:
+    - name: ext-authz-http
+      envoyExtAuthzHttp:
+        service: ext-authz.default.svc.cluster.local
+        port: 9002
+        statusOnError: "503"
+        headersToUpstreamOnAllow:
+          - x-user-id
+          - x-roles
+          - x-permissions
+        headersToDownstreamOnDeny:
+          - content-type
+        includeRequestHeadersInCheck:
+          - cookie
+        failOpen: false

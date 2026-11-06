@@ -407,7 +407,7 @@ def spring_boot_dockerfile(port):
     """Inline dev Dockerfile that selects the executable Spring Boot Jar."""
     return '''
 # renovate: datasource=docker depName=eclipse-temurin
-FROM eclipse-temurin:25-jre-alpine@sha256:b7528962e65d43064d8a8b67ba175367896bc948363ea2d3fcd7f10d34e1f048
+FROM eclipse-temurin:25-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918
 WORKDIR /app
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY build/libs/*.jar /tmp/libs/

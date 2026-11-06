@@ -52,7 +52,7 @@ location /api/v1/transactions {
 
 ```bash
 # List current resource routes
-rg -n "location /api" nginx/nginx.k8s.conf nginx/nginx.production.k8s.conf
+rg -n "location /api" nginx/includes/api-routes.conf nginx/includes/api-docs-routes.conf
 
 # Test a route through the public entry point
 curl -v https://app.budgetanalyzer.localhost/api/v1/transactions
@@ -61,8 +61,10 @@ curl -v https://app.budgetanalyzer.localhost/api/v1/transactions
 ## Adding a Route
 
 1. Choose a resource path.
-2. Add matching location blocks to `nginx/nginx.k8s.conf` and
-   `nginx/nginx.production.k8s.conf`.
+2. Add the location block once to the shared `nginx/includes/api-routes.conf`,
+   which both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf`
+   include. The static guardrail rejects an `/api` location declared directly
+   in either server config.
 3. Point it at the correct in-cluster service.
 4. Keep the frontend path resource-based.
 

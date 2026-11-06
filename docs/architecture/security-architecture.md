@@ -16,7 +16,7 @@ Repository security posture:
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
-- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules. The narrow Session Gateway/permission-service relationship allows Session Gateway to resolve login and heartbeat authorization and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
+- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway `GET` on only the login permission and heartbeat authorization lookups and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
 - Istio CNI runtime hardening: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods do not require `istio-init`.
 - Non-root application workload hardening: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
 - `ext-authz` service source lives in sibling `../ext-authz`; this repository
@@ -91,8 +91,7 @@ Security-critical implications:
 
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
-- Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes — no Auth0 tokens are stored
-- Write session data (userId, roles, permissions) as Redis hashes (`session:{id}`) — ext_authz reads the same hashes for ingress-layer authorization
+- Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) — no Auth0 tokens are stored, and ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
 - Session lifecycle management (login/logout)
@@ -142,8 +141,6 @@ The Session Gateway implements session-based edge authorization specifically for
 **Responsibilities:**
 - Route requests to appropriate microservices
 - Load balancing across service instances
-- WAF integration points
-- Circuit breaking and retry logic
 
 **Note:** SSL/TLS termination and per-client auth/API rate limiting are handled by the Istio ingress gateway, not NGINX. Session validation is handled by ext_authz at the Istio ingress layer — NGINX receives admitted, pre-validated API requests with identity headers already injected.
 
@@ -212,24 +209,124 @@ From a security perspective, the important boundaries are:
   user activity.
 - Every browser `/api/*` request remains Redis-only at the edge. It does not
   trigger a heartbeat or a permission-service lookup.
-- Versioned `/api/*` and `/auth/v1/*` authentication and temporary-dependency
-  failures use one `ApiErrorResponse` wire contract across `ext-authz`, Session
-  Gateway, and backend defense-in-depth responses. Producer ownership, exact
-  generic `401` fields, the operational `503` distinction, and browser-route
-  exclusions are defined in
+- Versioned `/api/*` and `/auth/v1/*` authentication failures use one
+  `ApiErrorResponse` wire contract across `ext-authz`, Session Gateway, and
+  backend defense-in-depth responses, as do Session Gateway and backend
+  temporary-dependency failures. An `ext_authz` failure on `/api/*` is a
+  fail-closed `503` with an empty body from the ingress. Producer ownership,
+  exact generic `401` fields, the operational `503` distinction, and
+  browser-route exclusions are defined in
   [Versioned Machine Error Contract](session-edge-authorization-pattern.md#versioned-machine-error-contract).
 - Immediate bulk revocation remains a separate deactivation action through
   `DELETE /internal/v1/sessions/users/{userId}` against the user-session index
   in Redis. Heartbeat refresh is the bounded fallback when an indexed session
   survives that attempt.
 
-Internal services rely on Istio mTLS, ingress-scoped `AuthorizationPolicy`
-rules, and Kubernetes `NetworkPolicy` allowlists. Browser session cookies are
+Internal services rely on Istio mTLS, path-scoped `AuthorizationPolicy`
+rules (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)), and
+Kubernetes `NetworkPolicy` allowlists. Browser session cookies are
 not reused for east-west service calls. Session Gateway calls
 permission-service for login and heartbeat authorization, while
 permission-service calls Session Gateway only for bulk session revocation.
 Kubelet probes and Tilt port-forwards remain host-to-pod exceptions under
 Calico's default host endpoint handling.
+
+---
+
+## Mesh Public/Internal Boundary
+
+`kubernetes/istio/authorization-policies.yaml` owns the east-west path
+contract. The rules are:
+
+- `default-deny-all` (`spec: {}`) in `default` makes deny-by-default explicit.
+  An empty spec is an ALLOW policy that matches nothing, so each workload is
+  reachable only through a rule that selects it. Before this policy, the
+  selector-less `envoy-metrics-prometheus-policy` provided that property by
+  accident. Every `default` workload has its own policy. The Prometheus
+  metrics policies are separate, are unchanged, and admit only Prometheus on
+  the Envoy stats port and each service's `actuator/prometheus` path.
+- Backend policies admit the NGINX identity only on the exact upstream paths
+  that the NGINX API locations rewrite to. Each resource has an exact entry and
+  a `/*` entry, for example `/transaction-service/v1/transactions` and
+  `/transaction-service/v1/transactions/*`. The OpenAPI routes are exact
+  `/<service>/v3/api-docs` paths. A version-wide wildcard such as
+  `/<service>/v1/*` is not allowed, so a future non-public `/v1` controller,
+  `/internal/...` and `/actuator/...` stay unreachable from NGINX without
+  relying on naming. `scripts/repo/generate-unified-api-docs.sh` reads specs
+  through `kubectl exec` to loopback and needs no mesh allowance.
+- Session Gateway may call permission-service only with `GET` on
+  `/permission-service/internal/v1/users/{*}/permissions` (login) and
+  `/permission-service/internal/v1/users/{*}/authorization` (heartbeat).
+- The ingress identity reaches Session Gateway only on the `auth-route`
+  surface: `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/logout/*` and
+  `/auth/*`. permission-service keeps its separate rule for
+  `DELETE /internal/v1/sessions/users/{userId}`.
+
+The sidecar evaluates these rules on the normalized path, so a dot-segment
+traversal that NGINX forwards inside an allowed prefix, such as
+`/permission-service/v1/users/..;/..;/actuator/prometheus`, is denied with the
+Envoy `403` body `RBAC: access denied` instead of reaching the handler.
+
+Adding a public resource therefore needs its mesh path as well as its NGINX
+location in the shared `nginx/includes/api-routes.conf`. Without the mesh path the route fails closed
+with `403`. The step-by-step procedure lives in
+[`nginx/README.md`](../../nginx/README.md#adding-a-new-resource-route), and
+`scripts/guardrails/verify-static-security-manifests.sh` rejects a backend
+NGINX rule without a path restriction or with a version-wide wildcard, and a
+missing or non-empty `default-deny-all`.
+
+`scripts/smoketest/verify-edge-contract.sh` proves the boundary on the live
+chain with an encoded-path traversal matrix on both lanes, including side-effect
+checks for the bulk revocation endpoint. The 2026-11-06 measurement before and
+after narrowing is recorded in
+[security-consensus-hardening-evidence.md](../research/security-consensus-hardening-evidence.md).
+Rejecting `;` is the separate control in
+[Ingress Path Hardening](#ingress-path-hardening), and separate internal ports
+remain deferred.
+
+---
+
+## Ingress Path Hardening
+
+`kubernetes/istio/ingress-path-hardening.yaml` inserts the
+`envoy.filters.http.rbac.ingress_path_hardening` filter on the ingress gateway
+immediately before `envoy.filters.http.ext_authz`, apart from the rate-limit
+filters in `ingress-rate-limit.yaml`. Its single `DENY` policy matches the
+`:path` header against `^[^?]*(;|%(25)*3[bB]).*$`, so a literal `;` or a
+`%3b`/`%3B` at any percent-encoding depth (`%253b`, `%25253b` and so on: `%`,
+any number of `25`, then `3b` or `3B`) before the query string is answered
+with `403` `RBAC: access denied`. Query strings keep `;`. Because the filter runs before
+routing to either lane, it covers the NGINX lane and the direct Session Gateway
+`/auth/*` lane, and the request reaches neither `ext_authz`, NGINX nor Session
+Gateway. The direct lane therefore does not depend on Session Gateway's own
+path-parameter handling. The checked-in OpenAPI document declares no path with
+`;`; this supports rejecting matrix-parameter syntax but is not a compatibility
+proof for every client.
+
+HTTP filters see `:path` after the HCM normalization described in
+[Ingress Per-Client Rate Limiting](#ingress-per-client-rate-limiting).
+Envoy does not decode `%3b`, which is why the regex covers the encoded forms.
+Normalization does treat a literal `..;`, `..;<text>` or `.;` segment as a dot
+segment: it resolves the segment and drops the `;<text>`, so the filter never
+sees those forms. No `;` from them reaches NGINX or Session Gateway, and the
+resolved path is subject to the same routing and mesh rules as any other.
+Encoded forms such as `%2e%2e;` and `..%3b` are denied by the filter.
+
+The shared `nginx/includes/api-routes.conf` keeps a server-level
+`if ($uri ~ ";") { return 400; }` in both NGINX configs as the second layer on
+the NGINX lane. `$uri` is decoded and excludes the query string.
+
+`scripts/guardrails/verify-static-security-manifests.sh` fails if the local
+manifest or the production render lacks the filter, if it is not one enforcing
+`DENY` RBAC filter inserted before `ext_authz`, or if its regex does not deny a
+literal `;` and every encoding of `%3b` from `%3b` to `%2525253b` while
+admitting ordinary paths, near misses such as `%2533`, and query strings. The
+`Semicolon Rejection` section of `scripts/smoketest/verify-edge-contract.sh`
+proves on the live chain that every probe on both lanes is a `403` from this
+filter: the ingress `rbac.denied` counter rises by exactly the probe count,
+and neither the NGINX nor the Session Gateway sidecar records a request.
+`scripts/guardrails/verify-nginx-shared-routes.sh` proves the NGINX `400` in
+disposable containers, because the ingress now stops these paths first.
 
 ---
 
@@ -441,6 +538,7 @@ the versioned Session Gateway JSON endpoints.
 - Session timeout and absolute expiration
 
 **Layer 2: ext_authz (Istio Ingress)**
+- Path hardening before `ext_authz` denies literal and encoded `;` in the path
 - Per-request session validation from Redis
 - Header injection (X-User-Id, X-Roles, X-Permissions)
 - Rejects unauthorized requests before they reach backend services
@@ -477,8 +575,11 @@ the versioned Session Gateway JSON endpoints.
 **Session Cookie:**
 - HttpOnly: true (prevents JavaScript access)
 - Secure: true (HTTPS only)
-- SameSite: Strict (CSRF protection)
-- Max-Age: 15 minutes (matches session timeout)
+- SameSite: Strict (the principal CSRF protection; see [Threat Mitigation](#threat-mitigation))
+- No `Max-Age` or `Expires`: it is a browser-session cookie. The stored
+  `expires_at`, checked by ext_authz and Session Gateway, and the Redis key TTL
+  enforce expiry. Logout and heartbeat invalidation clear the cookie with
+  `Max-Age=0`.
 
 ### Threat Mitigation
 
@@ -486,12 +587,27 @@ the versioned Session Gateway JSON endpoints.
 |--------|-----------|
 | XSS token theft | Tokens never in browser; HTTP-only cookies |
 | Token replay | Short session expiration; server-side session validation |
-| CSRF | SameSite cookies; CSRF tokens on state changes |
+| CSRF | `SameSite=Strict` session cookie is the principal protection. No CSRF tokens are implemented: Session Gateway disables Spring Security CSRF, and ext_authz validates no token or `Origin` |
 | Unauthorized data access | Service-layer authorization by user ID |
 | Credential stuffing and abusive API bursts | Per-client auth/API rate limiting before `ext_authz` at Istio ingress; Auth0 anomaly detection |
 | Session hijacking | Opaque session IDs; Redis-backed validation |
 | Man-in-the-middle | HTTPS/TLS everywhere; HSTS headers |
-| Instant revocation | Delete Redis session — next request fails immediately |
+| Session revocation | Deleting a Redis session rejects every later lookup at once, because ext_authz reads Redis without a cache. It cannot undo requests already authorized or stop a concurrent login or heartbeat that fetched authorization earlier; see [Emergency Admin Containment](#emergency-admin-containment) |
+
+### Ingress Header Ownership
+
+Every rule in the app, API and auth HTTPRoutes uses a response `set` filter
+for one `Strict-Transport-Security: max-age=31536000` value. This replaces
+upstream values, including Spring Security's default on the direct auth lane;
+`includeSubDomains` and `preload` are intentionally absent. Ingress-local
+replies such as ext_authz denials and rate limits may omit HSTS.
+
+Each rule removes caller-supplied `Forwarded`, `X-Forwarded-Host`,
+`X-Forwarded-Port`, `X-Forwarded-Prefix` and `X-Forwarded-Ssl` before routing.
+The ingress-appended `X-Forwarded-For` chain and existing HTTPS proto handling
+remain intact. `verify-edge-contract.sh` proves the final HSTS value on the
+app, authenticated API, session and login-start responses and checks forged
+forwarding fields cannot change the OAuth callback origin.
 
 ### Content Security Policy Posture
 
@@ -500,7 +616,15 @@ routes use the strict production-oriented policy. `/api-docs` keeps a separate
 docs-only CSP because stock Swagger UI requires inline styles that the main app
 policy intentionally forbids.
 
-The security boundary is the important point here:
+All three profiles restrict `form-action` to `'self'` and the environment's
+exact HTTPS IdP origin, anticipating native form logout and its IdP redirect.
+The shared offline renderer derives that origin from Tilt's `AUTH0_ISSUER_URI`
+or the production reference's `REFERENCE_AUTH0_ISSUER_URI`; it rejects missing,
+non-HTTPS, wildcard and malformed issuer input. No profile sends the deprecated
+`X-XSS-Protection` header. The final native POST/303 logout compatibility and
+hostile-form checks remain plan 02, Phase 16 work after that flow is implemented.
+
+The route boundaries are:
 
 - the docs relaxation is isolated to `/api-docs`
 - the main app and `/api/*` routes do not inherit it
@@ -542,7 +666,7 @@ profile comparison.
     ┌────▼────┐                  ┌────▼────┐
     │ Session │                  │ Session │
     │ Gateway │◄────────────────►│ Gateway │
-    │   (1)   │   Redis Cluster  │   (2)   │
+    │   (1)   │      Redis       │   (2)   │
     └─────────┘                  └─────────┘
          │                            │
     ┌────▼────────────────────────────▼────┐
@@ -561,10 +685,17 @@ profile comparison.
 - Stateless (sessions in Redis)
 - Graceful shutdown with connection draining
 
-**Redis Cluster:**
-- 3-node cluster with sentinel
-- Session replication across nodes
-- Automatic failover
+**Redis:**
+- One `redis` StatefulSet replica in `infrastructure`, locally and in the
+  production reference; no Sentinel, replication or automatic failover is
+  configured
+- `/data` is PVC-backed through the `redis-data` claim template, so a pod
+  restart keeps sessions, but Redis unavailability fails session validation
+  until it returns
+- High availability needs a deliberate topology choice: the session Lua
+  scripts update the session hash and user-session index together without a
+  shared Redis Cluster hash slot, so sharded Redis Cluster is not a drop-in
+  replacement for primary/replica failover
 
 **NGINX:**
 - Multiple instances
@@ -693,7 +824,7 @@ containment.
 ## Migration and Rollout Plan
 
 ### Infrastructure Setup
-1. Deploy Redis cluster
+1. Deploy Redis
 2. Deploy Session Gateway (Spring WebFlux)
 3. Deploy ext_authz HTTP service
 4. Configure Istio ingress gateway with ext_authz
@@ -751,7 +882,7 @@ containment.
 | Keep NGINX as API gateway | Industry standard; operational maturity; team familiarity |
 | Spring WebFlux for Session Gateway | Team expertise; minimal code; native OAuth support |
 | Abstract identity provider | Prevent vendor lock-in; centralized control |
-| Opaque session cookies | Instant revocation via Redis delete; no expiry window |
+| Opaque session cookies | Server-side revocation: deleting the Redis session rejects later lookups at once, without waiting for a token to expire. Concurrent login or heartbeat races remain; see [Emergency Admin Containment](#emergency-admin-containment) |
 | Istio ext_authz for validation | Per-request enforcement at ingress; Envoy-native protocol via meshConfig |
 | 15 min session timeout | Favor shorter default session windows for browser sessions |
 | Service-layer authorization | Defense in depth; protect against gateway bypass |

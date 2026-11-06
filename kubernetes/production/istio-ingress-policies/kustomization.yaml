@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - ../../istio/ext-authz-policy.yaml
   - ../../istio/ingress-rate-limit.yaml
+  - ../../istio/ingress-path-hardening.yaml

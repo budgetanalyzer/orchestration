@@ -1,0 +1,18 @@
+# Fails: failOpen: true admits requests when the authorizer fails.
+meshConfig:
+  extensionProviders:
+    - name: ext-authz-http
+      envoyExtAuthzHttp:
+        service: ext-authz.default.svc.cluster.local
+        port: 9002
+        timeout: 1s
+        statusOnError: "503"
+        headersToUpstreamOnAllow:
+          - x-user-id
+          - x-roles
+          - x-permissions
+        headersToDownstreamOnDeny:
+          - content-type
+        includeRequestHeadersInCheck:
+          - cookie
+        failOpen: true

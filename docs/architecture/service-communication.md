@@ -69,7 +69,7 @@ public void handleCurrencyImported(CurrencyImportedEvent event) {
 **Characteristics:**
 - Fire-and-forget
 - Non-blocking
-- Guaranteed delivery (transactional outbox)
+- Durable, atomic publication intent (transactional outbox); delivery of a failed send is not retried, so each use needs its own recovery contract
 - Eventual consistency
 
 **When to Use:**
@@ -83,7 +83,25 @@ public void handleCurrencyImported(CurrencyImportedEvent event) {
 - Strong consistency required
 - Simple request-response
 
-### 3. External API Integration
+### 3. Bounded Synchronous Service-to-Service Calls
+
+**Use Case:** A service needs another service's current, authoritative answer
+before it can respond, and stale or replicated data would be wrong
+
+**Example:** Session Gateway calls permission-service by internal user ID at
+login and on each heartbeat to fetch account status, roles and permissions. A
+cached or replicated copy could keep a deactivated account's grants. The mesh
+admits only `GET` on those lookup paths, the heartbeat lookup has a timeout,
+and neither call is on the per-request `/api/*` path. See
+[session-edge-authorization-pattern.md](session-edge-authorization-pattern.md)
+for its failure behavior.
+
+**Rules:**
+- Call the owning service's API; never read another service's database or cache
+- Bound each call with a timeout and define the caller's failure behavior
+- Prefer async events when the caller does not need the answer to respond
+
+### 4. External API Integration
 
 **Use Case:** Integrating with third-party services
 
@@ -122,35 +140,33 @@ public class FredExchangeRateProvider implements ExchangeRateProvider {
 
 ### Spring Modulith Transactional Outbox
 
-**Pattern:** Guarantees event delivery with database consistency
+**Pattern:** Records publication intent atomically with the business change; it does not guarantee delivery
 
 **How it works:**
 ```
-1. Service writes domain data + event to database (single transaction)
-2. Outbox table persists event
-3. Background job publishes event to RabbitMQ
-4. Event marked as published in outbox
-5. Consuming service processes event
+1. Service writes domain data + event publication to database (single transaction)
+2. After commit, a background listener publishes the message to RabbitMQ
+3. Publication is marked completed only after the broker confirms it
+4. A failed or interrupted publication stays incomplete; nothing resubmits it
+5. Consuming service processes delivered messages
 ```
 
-**Benefits:**
-- ✅ No lost events (transactional)
-- ✅ At-least-once delivery
-- ✅ Survives service crashes
-- ✅ No dual-write problem
+**What it provides:**
+- No message for a rolled-back change, and no committed change without a recorded publication (no dual-write problem)
+- Incomplete publications remain in `event_publication` as a record of failed sends
 
-**Configuration:**
-```yaml
-spring:
-  modulith:
-    events:
-      enabled: true
-      republish-outstanding-events-on-restart: true
-```
+**What it does not provide:** Outstanding publications are not republished on
+restart, so the outbox alone does not deliver a failed send.
 
 **Current Usage:**
-- currency-service: Exchange rate import events
-- Future: Cross-service domain events
+- currency-service: exchange rate import requests. Its recovery contract is
+  import reconciliation: the startup and daily scheduled imports reload every
+  enabled series from its latest stored rate, so a lost import request catches
+  up at the next run. See the
+  [MessagingEventListener contract](../../../currency-service/src/main/java/org/budgetanalyzer/currency/messaging/listener/MessagingEventListener.java).
+  This fits reconstructible exchange-rate imports only; an event that cannot be
+  reconstructed needs its own replay or reconciliation design before it uses
+  this pattern.
 
 **Documentation:**
 - Pattern: [@service-common/docs/advanced-patterns.md](https://github.com/budgetanalyzer/service-common/blob/main/docs/advanced-patterns.md#event-driven-messaging)
@@ -197,29 +213,6 @@ spring:
 ```
 
 ## Anti-Patterns to Avoid
-
-### ❌ Synchronous Service-to-Service Calls
-
-**Don't do this:**
-```java
-// transaction-service calling currency-service directly
-@Autowired
-private RestTemplate restTemplate;
-
-public Transaction createTransaction(TransactionRequest request) {
-    // DON'T: Synchronous HTTP call to another service
-    ExchangeRate rate = restTemplate.getForObject(
-        "http://currency-service:8084/exchange-rates/..." ,
-        ExchangeRate.class
-    );
-    // Creates tight coupling and cascading failures
-}
-```
-
-**Instead:**
-- Cache exchange rates locally (read from shared database or Redis)
-- Use async events if cross-service coordination needed
-- Denormalize data if needed for performance
 
 ### ❌ Shared Database Tables
 

@@ -48,7 +48,7 @@ main() {
     done
 
     [[ -n "${output_dir}" ]] || production_render_die "--output-dir requires a non-empty value"
-    production_render_require_commands kubectl install
+    production_render_require_commands kubectl install python3
     mkdir -p "${output_dir}"
 
     kubectl kustomize "$(production_repo_path "kubernetes/production/gateway-routes")" \
@@ -69,6 +69,13 @@ main() {
 
     "$(production_repo_path "scripts/ops/render-istio-egress-config.sh")" \
         --auth0-issuer-uri "${REFERENCE_AUTH0_ISSUER_URI}" > "${output_dir}/istio-egress.yaml"
+
+    # Kustomize carries the shared CSP templates; resolve them using the same
+    # issuer as egress, without a cluster, secrets, or an environment file.
+    kubectl kustomize "$(production_repo_path "kubernetes/production/apps")" \
+        --load-restrictor=LoadRestrictionsNone | \
+        python3 "$(production_repo_path "deploy/scripts/render/render-csp.py")" \
+            --issuer "${REFERENCE_AUTH0_ISSUER_URI}" > "${output_dir}/apps.yaml"
 
     if grep -R -E -n 'budgetanalyzer\.localhost|auth0-issuer\.placeholder\.invalid' "${output_dir}" >/dev/null; then
         production_render_die "rendered production reference still contains localhost or placeholder Auth0 values"

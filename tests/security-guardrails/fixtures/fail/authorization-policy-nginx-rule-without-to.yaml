@@ -1,0 +1,59 @@
+# Intentional failure: the transaction-service nginx-gateway rule has no to restriction.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec: {}
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: transaction-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: transaction-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: currency-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: currency-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+      to:
+        - operation:
+            paths: ["/currency-service/v1/currencies", "/currency-service/v1/currencies/*"]
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: permission-service-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: permission-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+      to:
+        - operation:
+            paths: ["/permission-service/v1/users", "/permission-service/v1/users/*"]

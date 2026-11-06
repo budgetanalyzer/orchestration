@@ -39,6 +39,9 @@ PHASE7_OBSERVABILITY_RENDER_DIR=""
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+# shellcheck source=../lib/guardrail-python.sh
+. "${SCRIPT_DIR}/../lib/guardrail-python.sh"
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -689,6 +692,7 @@ verify_phase6_render_outputs() {
 
     assert_contains_literal "${ingress_file}" 'name: ext-authz-at-ingress' "rendered ingress policies are missing ext-authz-at-ingress"
     assert_contains_literal "${ingress_file}" 'name: ingress-local-rate-limits' "rendered ingress policies are missing ingress-local-rate-limits"
+    assert_contains_literal "${ingress_file}" 'name: ingress-path-hardening' "rendered ingress policies are missing ingress-path-hardening"
     assert_not_contains "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" \
         "rendered ingress policies redundantly own the production demo hostname"
 
@@ -935,16 +939,18 @@ main() {
     RENDERED_LOCAL_INGRESS_GATEWAY_FILE="${TEMP_DIR}/local-ingress-gateway-config.yaml"
     trap cleanup EXIT
 
-    render_kustomize "${OVERLAY_DIR}" "${RENDERED_APPS_FILE}"
     render_kustomize "${INFRASTRUCTURE_OVERLAY_DIR}" "${RENDERED_INFRASTRUCTURE_FILE}"
     render_kustomize "${SHARED_INFRASTRUCTURE_DIR}" "${RENDERED_SHARED_INFRASTRUCTURE_FILE}"
     render_kustomize "${SHARED_GATEWAY_ROUTES_DIR}" "${RENDERED_SHARED_GATEWAY_ROUTES_FILE}"
     render_kustomize "${LOCAL_INGRESS_GATEWAY_OVERLAY_DIR}" "${RENDERED_LOCAL_INGRESS_GATEWAY_FILE}"
     render_phase6_manifests
+    cp "${PHASE6_RENDER_DIR}/apps.yaml" "${RENDERED_APPS_FILE}"
     render_phase7_observability_manifests
 
     verify_reference_metadata_contract
     verify_apps_overlay
+    require_guardrail_python
+    "${GUARDRAIL_PYTHON}" "${SCRIPT_DIR}/verify-edge-headers.py" "${RENDERED_APPS_FILE}"
     verify_phase6_render_outputs
     verify_phase7_observability_render_outputs
     verify_infrastructure_overlay

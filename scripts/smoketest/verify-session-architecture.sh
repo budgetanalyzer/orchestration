@@ -19,7 +19,7 @@ Usage: ./scripts/smoketest/verify-session-architecture.sh [options]
 
 Verifies the shared session contract across the orchestration, session-gateway,
 and ext-authz repos:
-- Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces
+- Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces, and the Session Gateway user has no `+@all` grant
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
@@ -537,6 +537,7 @@ redis_exec() {
 REDIS_POD=""
 REDIS_OPS_USERNAME=""
 REDIS_OPS_PASSWORD=""
+REDIS_ACL_BOOTSTRAP_FILE="${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh"
 
 run_static_checks() {
     local route_yaml local_permission_policy
@@ -546,6 +547,7 @@ run_static_checks() {
     local session_gateway_key_prefix_default ext_authz_key_prefix_default
     local session_gateway_cookie_name_yaml_default ext_authz_deployment_cookie_name
     local ext_authz_cookie_name_default ext_authz_repo_dir static_prereq_failed
+    local session_gateway_acl_line
 
     section "Static Contract"
 
@@ -559,11 +561,22 @@ run_static_checks() {
     ext_authz_http_server_file="${ext_authz_repo_dir}/http_server.go"
     static_prereq_failed=false
 
-    # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
-    assert_file_contains \
-        "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
-        'user session-gateway reset on >${REDIS_SESSION_GATEWAY_PASSWORD} ~session:* ~user_sessions:* ~oauth2:state:* &* +@all' \
-        "Redis ACL bootstrap grants session-gateway access to session:* and oauth2:state:*"
+    session_gateway_acl_line="$(grep -E '^user session-gateway ' "${REDIS_ACL_BOOTSTRAP_FILE}" || true)"
+    if [[ -n "$session_gateway_acl_line" && "$session_gateway_acl_line" != *$'\n'* ]]; then
+        pass "Redis ACL bootstrap defines exactly one session-gateway user line"
+    else
+        fail "Redis ACL bootstrap must define exactly one session-gateway user line"
+    fi
+    if [[ "$session_gateway_acl_line" == *" ~session:* ~user_sessions:* ~oauth2:state:* "* ]]; then
+        pass "Redis ACL bootstrap scopes session-gateway to session:*, user_sessions:* and oauth2:state:*"
+    else
+        fail "Redis ACL bootstrap does not scope session-gateway to session:*, user_sessions:* and oauth2:state:*"
+    fi
+    if [[ -n "$session_gateway_acl_line" && "$session_gateway_acl_line" != *"+@all"* ]]; then
+        pass "Redis ACL bootstrap session-gateway line has no +@all grant"
+    else
+        fail "Redis ACL bootstrap session-gateway line must not grant +@all"
+    fi
     # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
     assert_file_contains \
         "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
@@ -828,6 +841,11 @@ run_live_checks() {
             pass "live session-gateway ACL matches the unified session namespace contract"
         else
             fail "live session-gateway ACL does not match the unified session namespace contract"
+        fi
+        if grep -Fq '+@all' <<<"$sg_acl"; then
+            fail "live session-gateway ACL grants +@all"
+        else
+            pass "live session-gateway ACL has no +@all grant"
         fi
     else
         fail "live session-gateway ACL query failed"

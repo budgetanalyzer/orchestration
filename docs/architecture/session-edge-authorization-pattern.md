@@ -71,7 +71,7 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 - Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
 - Returns 401 for invalid/expired sessions (request rejected by Istio ingress)
 
-**Key Benefit**: Centralized session validation, instant revocation via Redis key deletion
+**Key Benefit**: Centralized session validation with no session cache, so deleting a Redis session key rejects that session's later requests at once
 
 **Repository**: https://github.com/budgetanalyzer/ext-authz owns the Go source,
 Dockerfile, tests, and service-local release workflow. Orchestration owns the
@@ -97,9 +97,10 @@ kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
 **Responsibilities**:
 - Routes requests to appropriate microservices
 - Resource-based routing with path transformation
+- Applies the backend header contract in `nginx/includes/backend-headers.conf` on every API route: it forwards `X-User-Id`, `X-Roles` and `X-Permissions` from `ext_authz`, removes the `Cookie` and `Authorization` request headers because `ext_authz` already consumed the session cookie at the ingress, and sends `X-Forwarded-Proto: https` because NGINX listens on plain HTTP behind the TLS-terminating ingress. Business services never receive the reusable session cookie. The direct Session Gateway lane does not pass through NGINX and still receives the cookie
 - Serves the production-smoke frontend bundle statically at `/_prod-smoke/` while the live dev route continues to proxy to Vite
 - Uses the checked-in `nginx/nginx.production.k8s.conf` variant for the production cutover, where `/` and `/login` serve the built frontend bundle directly, `/_prod-smoke/` is absent, and Vite-only public routes return `404`
-- Load balancing and circuit breaking
+- Load balancing across service instances
 
 **Key Benefit**: Clean routing logic, decoupled from authentication concerns
 
@@ -128,7 +129,7 @@ kubectl logs deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) using the dedicated `session-gateway` ACL user — no Auth0 tokens are stored
+- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#backend-services-spring-boot)) — no Auth0 tokens are stored
 - Issues HttpOnly, Secure session cookies to browsers
 - Provides browser session endpoints `GET /auth/v1/session` and `GET /auth/v1/user`
 - Calls permission-service during login to establish the account and initial grants, then by internal user ID on every heartbeat to refresh account status, roles, and permissions
@@ -174,8 +175,10 @@ snapshot on its next fetch.
 The internal lookup is
 `GET /permission-service/internal/v1/users/{userId}/authorization` from
 Session Gateway to permission-service. Istio identity and NetworkPolicy permit
-that east-west call in both supported deployments. It is not an NGINX route or
-a public browser API.
+that east-west call in both supported deployments, and the mesh admits Session
+Gateway only with `GET` on this lookup and the login `.../permissions` lookup
+(see [Mesh Public/Internal Boundary](security-architecture.md#mesh-publicinternal-boundary)).
+It is not an NGINX route or a public browser API.
 
 | Heartbeat result | Session behavior | Browser result |
 | --- | --- | --- |
@@ -205,6 +208,16 @@ measured from the deactivation commit. Use the separate
 [emergency admin containment](security-architecture.md#emergency-admin-containment)
 procedure when that race is unacceptable.
 
+**Sliding TTL in ADR 007**: [ADR 007](../decisions/007-browser-only-session-gateway.md)
+says a user revoked at Auth0 but not deactivated in permission-service keeps
+their session "until Redis TTL expiry". That is the sliding session TTL, not a
+fixed deadline from login or from the Auth0 revocation. The heartbeat does not
+call Auth0, so each successful heartbeat for an account permission-service
+still reports active moves `expires_at` and the key TTL forward again, and no
+absolute session lifetime currently caps that renewal. Such a session ends one
+TTL after its last successful heartbeat, at logout, or through
+permission-service deactivation and bulk revocation.
+
 ## Shared Session Contract
 
 The browser session interface shared between Session Gateway and `ext_authz` is intentionally small:
@@ -222,8 +235,10 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 
 ## Versioned Machine Error Contract
 
-Every versioned machine endpoint uses the shared `ApiErrorResponse` wire shape
-regardless of which edge or application layer rejects the request. The required
+Application-produced errors on versioned machine endpoints use the shared
+`ApiErrorResponse` wire shape, including Session Gateway errors and ordinary
+`ext-authz` denials. Ingress-generated authorizer-failure responses are an
+exception: they have an empty body, as described below. The required JSON
 fields are `type` and `message`; `code` and `fieldErrors` are optional. This is
 a wire-level contract rather than a shared runtime implementation: Java
 producers use `service-common`, while the Go `ext-authz` service keeps the
@@ -236,7 +251,7 @@ Producer ownership remains split by route:
 | Request outcome | Producer | Public response |
 | --- | --- | --- |
 | Missing, blank, unknown, or expired session on `/api/*` | `ext-authz`, forwarded by Istio ingress | `401 application/json` with `{"type":"UNAUTHORIZED","message":"Authentication required"}` |
-| Session-store or unexpected lookup failure on `/api/*` | `ext-authz`, forwarded by Istio ingress | Fail-closed `503 application/json` with `type` `SERVICE_UNAVAILABLE`; never report infrastructure failure as invalid credentials |
+| Session-store or unexpected lookup failure on `/api/*`, or `ext-authz` unavailable, unreachable or slower than the provider timeout | Istio ingress (`ext_authz` `statusOnError`) | Fail-closed `503` with an empty body and no `content-type`; never report infrastructure failure as invalid credentials. See [Authorizer failures](#authorizer-failures) |
 | Missing, invalid, expired, or invalidated session on `/auth/v1/*` | Session Gateway | `401 application/json` with `type` `UNAUTHORIZED` and message `Authentication required`; clear the cookie when required by session lifecycle rules |
 | Authorization refresh, Redis, or other temporary dependency failure on `/auth/v1/*` | Session Gateway | Existing temporary-failure status with schema-valid `ApiErrorResponse` JSON |
 | Missing or malformed trusted claims after edge admission | Backend service | Existing service-common JSON `401` defense-in-depth response |
@@ -249,11 +264,40 @@ navigation endpoints are outside this JSON rule: `/login`, `/oauth2/*`,
 navigation behavior.
 
 Orchestration allows only `content-type` from an `ext_authz` denial response to
-reach the downstream client. The body comes from `ext-authz`; Istio does not
-rewrite it. `./scripts/smoketest/verify-istio-ingress.sh` checks the rendered
+reach the downstream client. For a `401` denial the body comes from
+`ext-authz`; Istio does not rewrite it. `./scripts/smoketest/verify-istio-ingress.sh` checks the rendered
 Envoy filter and proves the generic JSON denial through the real local ingress
 for `/api/*`, `/auth/v1/user`, and `/auth/v1/session` with normal TLS
 verification.
+
+### Authorizer failures
+
+The `ext-authz-http` provider in `kubernetes/istio/istiod-values.yaml` sets
+`failOpen: false`, `statusOnError: "503"` and a `timeout`. Without the last two,
+Istio defaults to `403` and `600s`, so an authorizer outage looked like a
+permission denial and a hung authorizer held each request for ten minutes.
+
+Envoy's HTTP `ext_authz` client treats an authorizer `5xx` as an error, not as a
+denial, and discards its body. The `SERVICE_UNAVAILABLE` JSON that `ext-authz`
+writes for a session-store failure therefore never reaches a client. Every
+authorizer failure, whether `ext-authz` answers `5xx`, has no ready endpoint,
+does not answer within the timeout or drops the connection, becomes the same
+ingress-generated `503` with an empty body and no `content-type`. The request
+never reaches NGINX. A missing or unknown session is still a normal denial and
+keeps the JSON `401` above, as long as `ext-authz` can answer. Clients must
+handle a `503` without a body; the frontend reads only the status.
+
+The timeout is about two orders of magnitude above the measured check latency;
+the measurement and the failure-path results are recorded in
+[security-consensus-hardening-evidence.md](../research/security-consensus-hardening-evidence.md).
+Changing it requires repeating that measurement.
+`./scripts/smoketest/verify-edge-contract.sh` (section "Authorization Failure")
+reads the live values from the ingress Envoy config dump and proves the `401`
+through the real ingress. With `--inject-failures` it also proves the empty
+`503` with `ext-authz` scaled to zero, blocked by a temporary network policy so
+the check hangs, and with Redis stopped; the default run changes no Kubernetes
+object and skips those cases. `./scripts/guardrails/verify-static-security-manifests.sh` fails when
+the provider loses `statusOnError`, the `timeout` or `failOpen: false`.
 
 ## Why This Pattern?
 
@@ -284,9 +328,10 @@ Browser → Istio Ingress (app.budgetanalyzer.localhost) → ext_authz → NGINX
 - Session-based approach: Store session data in Redis, issue secure session cookie → XSS cannot steal tokens
 - Financial application: Protecting access tokens is critical for user financial data
 
-**Instant session revocation**:
-- Delete Redis session key → next request immediately fails at ext_authz
-- No token expiry window to wait out (unlike JWTs)
+**Server-side session revocation**:
+- Delete Redis session key → later requests for that session fail at ext_authz, which reads Redis without a cache
+- No bearer-token expiry window to wait out (unlike JWTs)
+- Deletion cannot undo requests already authorized or stop a concurrent login or heartbeat that fetched authorization earlier; see the heartbeat race above and [Emergency Admin Containment](security-architecture.md#emergency-admin-containment)
 
 **For comprehensive security architecture**: See [security-architecture.md](security-architecture.md)
 

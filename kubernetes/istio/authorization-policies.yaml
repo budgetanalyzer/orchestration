@@ -7,11 +7,32 @@
 # and internal — now have AuthorizationPolicies restricting their callers.
 #
 # Ingress-facing services (nginx-gateway, ext-authz, session-gateway) accept
-# traffic only from the Istio ingress gateway identity.
-# Internal backend services accept traffic only from nginx-gateway.
+# traffic only from the Istio ingress gateway identity, and session-gateway
+# only on its public auth-route paths.
+# Internal backend services accept nginx-gateway only on the exact upstream
+# paths the NGINX API locations rewrite to. Each resource prefix has an exact
+# entry and a "/*" entry; never use a version-wide wildcard such as
+# /<service>/v1/*. A new public resource needs its mesh path here as well as
+# its NGINX location (see nginx/README.md); without it the route fails closed
+# with 403.
+#
+# The sidecar normalizes the request path before these rules match, so a
+# traversal such as /permission-service/v1/users/..;/..;/internal/... is
+# evaluated as /permission-service/internal/... and denied.
+#
+# default-deny-all makes deny-by-default explicit: a workload in default is
+# reachable only through an ALLOW rule that selects it.
 # ============================================================================
 
-# Backend services: only accept traffic from nginx-gateway
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec: {}
+---
+# transaction-service: nginx-gateway on the public transaction, statement
+# format, and saved view resources plus the exact OpenAPI route.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -26,7 +47,19 @@ spec:
     - from:
         - source:
             principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+      to:
+        - operation:
+            paths:
+              - "/transaction-service/v1/transactions"
+              - "/transaction-service/v1/transactions/*"
+              - "/transaction-service/v1/statement-formats"
+              - "/transaction-service/v1/statement-formats/*"
+              - "/transaction-service/v1/views"
+              - "/transaction-service/v1/views/*"
+              - "/transaction-service/v3/api-docs"
 ---
+# currency-service: nginx-gateway on the public currency and exchange-rate
+# resources plus the exact OpenAPI route.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -41,9 +74,18 @@ spec:
     - from:
         - source:
             principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+      to:
+        - operation:
+            paths:
+              - "/currency-service/v1/currencies"
+              - "/currency-service/v1/currencies/*"
+              - "/currency-service/v1/exchange-rates"
+              - "/currency-service/v1/exchange-rates/*"
+              - "/currency-service/v3/api-docs"
 ---
-# permission-service: accepts from nginx-gateway and session-gateway
-# (session-gateway calls permission-service during session creation and heartbeat refresh)
+# permission-service: nginx-gateway on the public user administration
+# resource; session-gateway GET on the two internal lookups it makes during
+# session creation and heartbeat refresh.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -57,9 +99,21 @@ spec:
   rules:
     - from:
         - source:
-            principals:
-              - "cluster.local/ns/default/sa/nginx-gateway"
-              - "cluster.local/ns/default/sa/session-gateway"
+            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
+      to:
+        - operation:
+            paths:
+              - "/permission-service/v1/users"
+              - "/permission-service/v1/users/*"
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/session-gateway"]
+      to:
+        - operation:
+            methods: ["GET"]
+            paths:
+              - "/permission-service/internal/v1/users/{*}/permissions"
+              - "/permission-service/internal/v1/users/{*}/authorization"
 ---
 # budget-analyzer-web: accepts from nginx-gateway (proxied by nginx).
 # This policy is local/Tilt-only because the production reference serves the
@@ -173,8 +227,9 @@ spec:
         - source:
             principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
 ---
-# session-gateway: accepts from istio ingress gateway, plus the narrow
-# permission-service revocation path used for bulk session invalidation
+# session-gateway: accepts the istio ingress gateway on the auth-route
+# surface only, plus the narrow permission-service revocation path used for
+# bulk session invalidation
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -189,6 +244,14 @@ spec:
     - from:
         - source:
             principals: ["cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio"]
+      to:
+        - operation:
+            paths:
+              - "/oauth2/*"
+              - "/login/oauth2/*"
+              - "/logout"
+              - "/logout/*"
+              - "/auth/*"
     - from:
         - source:
             principals: ["cluster.local/ns/default/sa/permission-service"]

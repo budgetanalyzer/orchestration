@@ -200,7 +200,7 @@ tilt get uiresources
 - Redux Toolkit (UI state)
 
 **Backend:**
-- Spring Boot 3.x
+- Spring Boot
 - Java 25
 - Pure JPA (Jakarta Persistence API)
 - Spring Modulith (modularity + events)
@@ -245,7 +245,7 @@ tilt get uiresources
 
 ### Data Consistency
 - **Eventual consistency**: For cross-service data
-- **Transactional outbox**: Guarantees event delivery
+- **Transactional outbox**: Records publication intent atomically with the business change; failed sends are not resubmitted, so each use needs its own recovery contract (see [service-communication.md](service-communication.md#spring-modulith-transactional-outbox))
 - **Idempotent consumers**: Services handle duplicate events
 
 ## Deployment Architecture

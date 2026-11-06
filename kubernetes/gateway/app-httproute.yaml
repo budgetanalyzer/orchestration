@@ -17,18 +17,40 @@ spec:
     filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:
+        remove:
+        - Forwarded
+        - X-Forwarded-Host
+        - X-Forwarded-Port
+        - X-Forwarded-Prefix
+        - X-Forwarded-Ssl
         set:
         - name: X-Forwarded-Proto
           value: "https"
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        set:
+        - name: Strict-Transport-Security
+          value: "max-age=31536000"
     backendRefs:
     - name: nginx-gateway
       port: 8080
   - filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:
+        remove:
+        - Forwarded
+        - X-Forwarded-Host
+        - X-Forwarded-Port
+        - X-Forwarded-Prefix
+        - X-Forwarded-Ssl
         set:
         - name: X-Forwarded-Proto
           value: "https"
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        set:
+        - name: Strict-Transport-Security
+          value: "max-age=31536000"
     backendRefs:
     - name: nginx-gateway
       port: 8080

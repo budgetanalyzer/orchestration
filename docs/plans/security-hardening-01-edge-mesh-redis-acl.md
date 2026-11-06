@@ -65,7 +65,9 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 - [#3, encoded-path traversal](../research/security-review-contested-issues-2026-11-02.md#3-encoded-path-traversal-and-rejecting-):
   narrow the mesh rules now without waiting for an exploit reproduction, and reject decoded `;` at
   NGINX in Phase 3. Phase 1 adds `%2e%2e;` and side-effect assertions, and records an inconclusive
-  baseline as "not reproduced".
+  baseline as "not reproduced". (added per user direction) Phase 1 limits each NGINX rule to the
+  exact public prefixes, and Phase 3 also rejects literal and encoded `;` at the ingress, so the
+  direct Session Gateway lane does not depend on Session Gateway's own path handling.
 - [#12, NGINX route files](../research/security-review-contested-issues-2026-11-02.md#12-generating-the-nginx-route-files):
   no route generator or parity parser. Phase 3 shares the API routes through one include.
 - [#1, primary CSRF control](../research/security-review-contested-issues-2026-11-02.md#1-primary-csrf-control):
@@ -97,13 +99,13 @@ encoded-path finding with evidence from the real chain.
 ### Scope
 
 `kubernetes/istio/authorization-policies.yaml`, a new `scripts/smoketest/verify-edge-contract.sh`,
-`scripts/smoketest/verify-istio-ingress.sh`, a static guardrail, `scripts/README.md`, and the
-nearest architecture docs.
+`scripts/smoketest/verify-istio-ingress.sh`, a static guardrail, `scripts/README.md`,
+`nginx/README.md`, and the nearest architecture docs.
 
 ### Non-goals
 
 No `;` rejection at NGINX or the ingress, no separate ports, and no service code. (amended per
-contested #3: NGINX rejects decoded `;` in Phase 3.)
+contested #3 and user direction: Phase 3 rejects `;` at NGINX and the ingress.)
 
 ### Required context
 
@@ -130,10 +132,19 @@ integration evidence"; `docs/architecture/security-architecture.md`;
 5. Run the section before changing any policy, and record the baseline in the evidence file. R3
    tested only the `users` chain against a stand-in, and R4 did not reproduce it, so this is the
    first real measurement.
-6. Add `to.operation` limits to the NGINX rules:
-   - transaction-service: `/transaction-service/v1/*`, `/transaction-service/v3/api-docs`
-   - currency-service: `/currency-service/v1/*`, `/currency-service/v3/api-docs`
-   - permission-service: `/permission-service/v1/*`
+6. (amended per user direction) Add `to.operation` limits to the NGINX rules that list exactly the
+   upstream paths the NGINX API locations rewrite to. Give each resource prefix both an exact entry
+   and a `/*` entry, for example `/transaction-service/v1/transactions` and
+   `/transaction-service/v1/transactions/*`:
+   - transaction-service: `/transaction-service/v1/transactions`,
+     `/transaction-service/v1/statement-formats`, `/transaction-service/v1/views`, and the exact
+     path `/transaction-service/v3/api-docs`
+   - currency-service: `/currency-service/v1/currencies`, `/currency-service/v1/exchange-rates`,
+     and the exact path `/currency-service/v3/api-docs`
+   - permission-service: `/permission-service/v1/users`
+
+   Re-derive the list from the NGINX API locations and the services' `@RequestMapping` prefixes
+   before writing it, and stop if they disagree.
 7. Split `permission-service-policy` so Session Gateway gets `GET` on only
    `/permission-service/internal/v1/users/{*}/permissions` and
    `/permission-service/internal/v1/users/{*}/authorization`.
@@ -143,8 +154,9 @@ integration evidence"; `docs/architecture/security-architecture.md`;
    the resources `verify-istio-ingress.sh` requires.
 10. Extend the boundary section so it also asserts that a legitimate public route and login start
     still work.
-11. Add a static guardrail that fails if a backend policy's NGINX rule has no `to` restriction, or
-    if `default-deny-all` is missing or has rules.
+11. Add a static guardrail that fails if a backend policy's NGINX rule has no `to` restriction,
+    if any of its paths is a version-wide wildcard such as `/<service>/v1/*`, or if
+    `default-deny-all` is missing or has rules.
 
 ### Implementation notes
 
@@ -155,8 +167,10 @@ integration evidence"; `docs/architecture/security-architecture.md`;
 - An empty ALLOW policy matches nothing, so a workload is reachable only through its own rules.
   Confirm every workload in `default` has one before adding it. Today the selector-less
   `envoy-metrics-prometheus-policy` provides this property by accident (R2).
-- `/v1/*` matches today's public surface: the only `/v1` controllers in these three services are
-  the ones NGINX exposes. A future non-public `/v1` route would need a narrower rule.
+- (amended per user direction) Exact prefixes keep a future non-public `/v1` controller
+  unreachable from NGINX's identity without relying on a naming convention. A new public resource
+  needs its mesh path as well as its NGINX location; leaving the mesh path out fails closed with a
+  403, so document that step in `nginx/README.md` where adding a route is described.
 - `scripts/repo/generate-unified-api-docs.sh` reaches specs through `kubectl exec` to loopback, so
   the api-docs allowances are only for the NGINX routes.
 - Assert "not 200" rather than a specific denial, so a later `;` rejection does not break the test.
@@ -233,7 +247,7 @@ request still succeeds.
 The echo upstream receives neither credential header and sees `https`, identity headers still
 arrive, and ext_authz still authorizes requests.
 
-## Phase 3: Share the NGINX API routes and reject decoded semicolons (Live)
+## Phase 3: Share the NGINX routes and reject semicolons at the ingress and NGINX (Live)
 
 ### Workspace
 
@@ -242,13 +256,17 @@ arrive, and ext_authz still authorizes requests.
 ### Goal
 
 (added per contested #3 and #12) Remove the duplicated API route blocks before writing tooling to
-police them, and reject decoded semicolons at NGINX.
+police them, and reject decoded semicolons at NGINX. (added per user direction) Also reject literal
+and encoded semicolons in the path at the ingress, which covers both lanes.
 
 ### Scope
 
-`nginx/nginx.k8s.conf`, `nginx/nginx.production.k8s.conf`, a new `nginx/includes/api-routes.conf`,
-the includes ConfigMap in `Tiltfile` and `kubernetes/production/apps/kustomization.yaml`,
-`nginx/README.md`, and the nearest docs.
+`nginx/nginx.k8s.conf`, `nginx/nginx.production.k8s.conf`, new `nginx/includes/api-routes.conf`
+and `nginx/includes/api-docs-routes.conf` files, the includes ConfigMap in `Tiltfile` and
+`kubernetes/production/apps/kustomization.yaml`, a new `kubernetes/istio/ingress-path-hardening.yaml`
+with its `Tiltfile` and `kubernetes/production/istio-ingress-policies/kustomization.yaml` wiring,
+`scripts/guardrails/verify-static-security-manifests.sh`, `verify-edge-contract.sh`,
+`nginx/README.md`, `docs/architecture/security-architecture.md`, and the nearest docs.
 
 ### Non-goals
 
@@ -264,18 +282,42 @@ Contested issues #3 and #12; `nginx/README.md`.
 1. Put the 11 API location blocks, including both unknown-route rejections, in one
    `nginx/includes/api-routes.conf` included by both server blocks.
 2. Add a server-level `if ($uri ~ ";") { return 400; }` to that include.
-3. The five identical `/api-docs` blocks, including the two regex locations, can likewise share an
-   include.
-4. Ship the includes through the existing includes ConfigMap in Tilt and the production
-   kustomization.
+3. Put the five `/api-docs` location blocks, which differ between the two files only in comments,
+   in one `nginx/includes/api-docs-routes.conf` included by both server blocks. Keep the two regex
+   locations in their current relative order, because NGINX checks regex locations in file order.
+4. Ship both includes through the existing includes ConfigMap in Tilt and the production
+   kustomization. The two lists are maintained separately, because production omits
+   `security-headers-dev-csp.conf`, so add the new files to each.
 5. Keep the intentional frontend differences in their existing files.
-6. Rerun the Phase 1 boundary section and record the `;` results in the evidence file.
+6. Create `kubernetes/istio/ingress-path-hardening.yaml`: an `EnvoyFilter` on the ingress gateway
+   workload that inserts an `envoy.filters.http.rbac` filter before `envoy.filters.http.ext_authz`,
+   with a `DENY` policy matching the raw `:path` header against `^[^?]*(;|%3[bB]|%253[bB])`. The
+   regex stops at `?` so query strings are unaffected.
+7. Apply it in the `Tiltfile` next to `kubernetes/istio/ingress-rate-limit.yaml`, and add it to
+   `kubernetes/production/istio-ingress-policies/kustomization.yaml`.
+8. Extend the static guardrail so it fails if the ingress path-hardening filter is missing, is not
+   `DENY`, or does not match literal, encoded and double-encoded `;`.
+9. Rerun the Phase 1 boundary section. Add a "Semicolon Rejection" section to
+   `verify-edge-contract.sh` asserting that every `;`, `%3b`, `%3B` and `%253b` probe on both the
+   NGINX lane and the direct `/auth/*` lane is denied by the ingress. Prove the denial came from
+   the ingress (the RBAC filter's denied counter increments, and neither NGINX nor Session Gateway
+   logs the request). Keep the side-effect assertion from Phase 1 for the `DELETE` probes. Record
+   the results in the evidence file.
+10. Prove the NGINX `;` rejection with the Phase 2 disposable NGINX container and the shared
+    include, because the ingress now rejects these paths before NGINX sees them.
 
 ### Implementation notes
 
 - Sharing blocks prevents edits to those blocks drifting, but inherited server settings and
   location precedence still affect behaviour.
-- NGINX does not protect the direct Session Gateway lane; Phase 1's mesh rules cover it.
+- (amended per user direction) NGINX does not see the direct Session Gateway lane. The ingress
+  rejection covers both lanes, and the NGINX rejection remains as a second layer on the API lane.
+- Keep the filter in its own file. `verify-ingress-rate-limit-config.sh` proves the four-policy
+  rate-limit configuration in `ingress-rate-limit.yaml`, and an extra patch there would mix
+  concerns.
+- Envoy's path normalization does not decode `%3b`, so the match has to cover encoded forms on the
+  raw path. An RBAC denial returns 403; Phase 1's assertions check for "not 200", so they still
+  hold.
 - The checked-in OpenAPI document has 29 paths and none contains `;`. This supports rejecting
   matrix-parameter syntax, but it is not a compatibility proof for every client.
 
@@ -283,12 +325,16 @@ Contested issues #3 and #12; `nginx/README.md`.
 
 Orchestration static gate, `nginx -t` on both complete configurations with their mounted includes,
 and focused probes for routing, query preservation, security headers, unknown API paths and encoded
-inputs. Run `./scripts/smoketest/verify-edge-contract.sh`.
+inputs. Run `./scripts/smoketest/verify-edge-contract.sh`,
+`./scripts/smoketest/verify-ingress-rate-limits.sh`, `./scripts/smoketest/verify-istio-ingress.sh`,
+and a browser login, including the OAuth callback.
 
 ### Completion criteria
 
-Both configurations use one copy of the API routes, a decoded `;` returns 400 on the NGINX lane, and
-routing probes pass.
+Both configurations use one copy of the API routes and one copy of the `/api-docs` routes. Every
+literal, encoded and double-encoded `;` probe on both lanes is denied at the ingress without
+reaching NGINX or Session Gateway. A decoded `;` returns 400 from the shared NGINX include in the
+disposable container. Routing probes, rate limits and login pass.
 
 ## Phase 4: Bound ext_authz failures and correct the contract (Live)
 
@@ -322,8 +368,9 @@ evidence".
 2. Add `statusOnError: "503"` and the `timeout` to the provider. Keep `failOpen: false`.
 3. Apply the change and confirm both values in the ingress Envoy config dump, not just the values
    file. R3 could not read them because the provider's service was not deployed.
-4. Change the row at `session-edge-authorization-pattern.md:239` to a fail-closed 503 with an empty
-   body. State why: Envoy treats an authorizer 5xx as an error and discards its body, so ext-authz's
+4. In `session-edge-authorization-pattern.md`, change the "Session-store or unexpected lookup
+   failure on `/api/*`" row, which today promises "Fail-closed `503 application/json` with `type`
+   `SERVICE_UNAVAILABLE`", to a fail-closed 503 with an empty body. State why: Envoy treats an authorizer 5xx as an error and discards its body, so ext-authz's
    JSON never reaches a client. R3 and R4 both accept this option, and it is the cheaper one.
 5. Add an "Authorization Failure" section to `verify-edge-contract.sh` that exercises real
    denials through the ingress:
@@ -340,7 +387,7 @@ evidence".
 - Until plan 03, Phase 2, a Redis outage also fails ext-authz's probes, so the Redis case may surface as a
   connection failure rather than the authorizer's own 503. Either must reach the client as a 503.
 - The frontend does not depend on the JSON body. `client.ts` handles an unstructured error, and
-  `useUsers.ts:29` checks only the status.
+  the `shouldReconcile` check in `useUsers.ts` reads only `error.status`.
 
 ### Validation
 
@@ -457,8 +504,10 @@ R1 finding 2; R3 and R4 on `ACL DRYRUN`; `../session-gateway/src/main/resources/
    heartbeat refresh, logout, bulk revocation, and OAuth failure and expiry paths. One successful
    login is not enough.
 3. Replace `+@all`. Drop `&*` if the final list has no pub/sub commands.
-4. Replace the literal assertion at `verify-session-architecture.sh:565` with a check that the
-   Session Gateway line has no `+@all`.
+4. In `verify-session-architecture.sh`, replace the `assert_file_contains` that matches the literal
+   `user session-gateway reset on ... &* +@all` line ("Redis ACL bootstrap grants session-gateway
+   access to session:* and oauth2:state:*") with a check that the Session Gateway line has no
+   `+@all`.
 5. Add negative `ACL DRYRUN` checks to `verify-credential-isolation.sh` for `FLUSHALL`, `FLUSHDB`,
    `CONFIG`, `SHUTDOWN`, `REPLICAOF`, `ACL`, `KEYS` and `SCAN`, and positive checks for the allowed
    commands.
@@ -511,20 +560,30 @@ R1's reconciliation table; R2 "Documentation corrections"; R3 on `expires_at` an
 
 ### Execution steps
 
-1. Correct the CSRF row (`security-architecture.md:489`). SameSite is the principal protection and
-   CSRF tokens are not implemented.
-2. Correct the cookie line (`:481`). No `Max-Age` is issued; `expires_at` and the Redis TTL enforce
-   expiry.
-3. Correct the Redis topology claim (`:565`) to the single replica in use.
-4. Replace "guaranteed delivery" (`service-communication.md:72`, `:125`; `system-overview.md:248`)
-   with the actual recovery contract. Do not generalize it to irreplaceable financial events.
-5. In `service-communication.md`, remove the blanket ban on synchronous calls and the advice to
-   read a shared database or Redis (`:199-222`), citing the permission lookup as a justified call.
-6. Qualify revocation at `security-architecture.md:494` and `:754`. Deleting a session rejects later
-   lookups at once. It cannot undo authorized requests or stop a concurrent login or refresh.
-7. Remove the WAF and circuit-breaking claims (`:145-146`), and merge the duplicate bullet (`:94-95`).
-8. Remove the Spring Boot major version at `system-overview.md:203`. Versions live in the service
-   repositories.
+1. In `security-architecture.md`, correct the Threat Mitigation row
+   "| CSRF | SameSite cookies; CSRF tokens on state changes |". SameSite is the principal
+   protection and CSRF tokens are not implemented.
+2. In the same file, correct the cookie attribute "- Max-Age: 15 minutes (matches session
+   timeout)". No `Max-Age` is issued; `expires_at` and the Redis TTL enforce expiry.
+3. In the same file, correct the "**Redis Cluster:**" block ("3-node cluster with sentinel",
+   "Session replication across nodes", "Automatic failover") to the single replica in use.
+4. Replace the delivery guarantees with the actual recovery contract: "Guaranteed delivery
+   (transactional outbox)" and "**Pattern:** Guarantees event delivery with database consistency"
+   in `service-communication.md`, and "**Transactional outbox**: Guarantees event delivery" in
+   `system-overview.md`. Do not generalize it to irreplaceable financial events.
+5. In `service-communication.md`, under "## Anti-Patterns to Avoid", remove the
+   "### ❌ Synchronous Service-to-Service Calls" section, including its advice to "Cache exchange
+   rates locally (read from shared database or Redis)", and cite the permission lookup as a
+   justified synchronous call.
+6. In `security-architecture.md`, qualify the Threat Mitigation row "| Instant revocation | Delete
+   Redis session — next request fails immediately |" and the decision row "| Opaque session
+   cookies | Instant revocation via Redis delete; no expiry window |". Deleting a session rejects
+   later lookups at once. It cannot undo authorized requests or stop a concurrent login or refresh.
+7. In the same file, remove the NGINX responsibilities "- WAF integration points" and "- Circuit
+   breaking and retry logic", and merge the two Session Gateway "- Write session data (userId,
+   roles, permissions...) as Redis hashes" bullets.
+8. In the Backend technology list in `system-overview.md`, change "- Spring Boot 3.x" to
+   "- Spring Boot". Versions live in the service repositories.
 9. In `session-edge-authorization-pattern.md`, state what ADR 007's "until Redis TTL expiry" means:
    the sliding TTL, which keeps moving while heartbeats continue. Do not edit the ADR.
 10. Replace the absolute `/srv/...` links in R1 with relative links.

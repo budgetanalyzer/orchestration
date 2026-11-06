@@ -4,6 +4,13 @@
 # that send real requests through the local HTTPS ingress and assert how the
 # ingress, ext_authz, NGINX, sidecars and services behave together. Add new
 # cross-layer edge checks here as new sections.
+#
+# A run without flags creates, updates, deletes and scales no Kubernetes
+# object. It only sends ingress requests, uses kubectl get, logs and exec, and
+# seeds and removes the synthetic fixture inside the Postgres and Redis pods.
+# A new section must not change Kubernetes objects except behind
+# --inject-failures, and every function that does must call
+# require_inject_failures first.
 
 set -euo pipefail
 
@@ -52,7 +59,7 @@ BOUNDARY_TRAVERSAL_FORMS=(
 # before NGINX or Session Gateway sees the request. A literal ";" directly
 # after a "." or ".." segment is handled separately: HCM normalize_path
 # resolves that segment and drops the ";" before any filter runs.
-SEMICOLON_FORMS=(";" "%3b" "%3B" "%253b" "%253B")
+SEMICOLON_FORMS=(";" "%3b" "%3B" "%253b" "%253B" "%25253b" "%25253B")
 INGRESS_NAMESPACE="istio-ingress"
 INGRESS_SELECTOR="gateway.networking.k8s.io/gateway-name=istio-ingress-gateway"
 INGRESS_WORKLOAD="istio-ingress-gateway-istio"
@@ -77,6 +84,8 @@ RECOVERY_TIMEOUT_SECONDS=300
 
 PASSED=0
 FAILED=0
+SKIPPED=0
+INJECT_FAILURES=false
 REPORT_FILE=""
 SEEDED=false
 WORK_DIR=""
@@ -93,10 +102,17 @@ BLOCK_POLICY_APPLIED=false
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/smoketest/verify-edge-contract.sh [--report FILE]
+Usage: ./scripts/smoketest/verify-edge-contract.sh [--inject-failures] [--report FILE]
 
 Live cross-layer edge contract verifier for the local Tilt/Kind stack. Every
 request goes through the real HTTPS ingress with normal TLS verification.
+
+The default run changes no Kubernetes object. It sends requests through the
+ingress, including DELETE probes and login start, reads with kubectl get, logs
+and exec, and seeds and removes one synthetic user and session in Postgres and
+Redis with seed-loadtest-users.sh and teardown-loadtest.sh. --inject-failures
+adds the Authorization Failure injection cases, which scale ext-authz and
+Redis, apply a temporary ClusterNetworkPolicy and may delete ext-authz pods.
 
 Sections:
   Response Headers          One exact HSTS value on app, API, session and login;
@@ -111,7 +127,8 @@ Sections:
                             still work. The fixture is removed with
                             teardown-loadtest.sh when the section ends.
   Semicolon Rejection       Seeds the same fixture, then sends literal ";",
-                            %3b, %3B, %253b and %253B probes on the NGINX lane
+                            %3b, %3B, %253b, %253B, %25253b and %25253B
+                            probes on the NGINX lane
                             (with the session cookie) and the direct
                             Session Gateway lane. Each must be a 403 from the
                             ingress path-hardening filter: the ingress
@@ -128,25 +145,35 @@ Sections:
                             config dump and requires the istiod-values
                             timeout, status_on_error 503 and no fail-open.
                             With a seeded session, a missing or unknown
-                            session must stay a JSON 401. It then scales
-                            ext-authz to zero, blocks the ingress from
-                            ext-authz with a temporary ClusterNetworkPolicy
-                            (a hang), and stops Redis. Each must return an
-                            empty 503 within the timeout (the hang no sooner
-                            than the timeout) and never reach NGINX. Every
-                            scaled workload and the temporary policy are
-                            restored, and an authorized request must return
-                            200 again before the section ends.
+                            session must stay a JSON 401. With
+                            --inject-failures it then scales ext-authz to
+                            zero, blocks the ingress from ext-authz with a
+                            temporary ClusterNetworkPolicy (a hang), and
+                            stops Redis. Each must return an empty 503 within
+                            the timeout (the hang no sooner than the timeout)
+                            and never reach NGINX. Every scaled workload and
+                            the temporary policy are restored, and an
+                            authorized request must return 200 again before
+                            the section ends. Without the flag each injection
+                            case prints one [SKIP] line.
 
 Options:
-  --report FILE  Also write one tab-separated line per probe
-                 (lane, method, path, HTTP status, verdict) to FILE.
-  -h, --help     Show this help text.
+  --inject-failures  Also run the Authorization Failure injection cases.
+                     They interrupt authorization and Redis-dependent
+                     services; run them only on the disposable local stack
+                     without concurrent traffic.
+  --report FILE      Also write one tab-separated line per probe
+                     (lane, method, path, HTTP status, verdict) to FILE.
+  -h, --help         Show this help text.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --inject-failures)
+            INJECT_FAILURES=true
+            shift
+            ;;
         --report)
             REPORT_FILE="${2:-}"
             if [[ -z "$REPORT_FILE" ]]; then
@@ -169,13 +196,26 @@ done
 
 pass()    { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
 fail()    { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
+skip()    { printf '  [SKIP] %s\n' "$1"; SKIPPED=$((SKIPPED + 1)); }
 section() { printf '\n=== %s ===\n' "$1"; }
+
+# Backstop for every function that changes a Kubernetes object: without
+# --inject-failures, stop the run before the change is attempted.
+require_inject_failures() {
+    [[ "$INJECT_FAILURES" == true ]] && return 0
+    printf 'ERROR: %s changes Kubernetes objects and runs only with --inject-failures\n' \
+        "${FUNCNAME[1]}" >&2
+    FAILED=$((FAILED + 1))
+    exit 1
+}
 
 cleanup() {
     local exit_status=$?
     set +e
-    if [[ "$BLOCK_POLICY_APPLIED" == true || "$REDIS_STOPPED" == true || "$EXT_AUTHZ_SCALED" == true \
-        || -n "$ORIGINAL_EXT_AUTHZ_REPLICAS" ]]; then
+    # Without --inject-failures, require_inject_failures stopped every change
+    # before it ran, so there is nothing to restore.
+    if [[ "$INJECT_FAILURES" == true ]] && [[ "$BLOCK_POLICY_APPLIED" == true || "$REDIS_STOPPED" == true \
+        || "$EXT_AUTHZ_SCALED" == true || -n "$ORIGINAL_EXT_AUTHZ_REPLICAS" ]]; then
         echo ""
         echo "Restoring the authorization failure workloads..."
         if assert_local_kind_target; then
@@ -809,6 +849,7 @@ assert_nginx_not_reached() {
 }
 
 apply_block_policy() {
+    require_inject_failures
     assert_local_kind_target
     BLOCK_POLICY_APPLIED=true
     kubectl apply -f - >/dev/null <<EOF
@@ -840,6 +881,7 @@ EOF
 }
 
 scale_ext_authz() {
+    require_inject_failures
     assert_local_kind_target
     kubectl scale deployment "$EXT_AUTHZ_DEPLOYMENT" -n default --replicas="$1" >/dev/null
 }
@@ -856,6 +898,7 @@ wait_for_ext_authz_ready() {
         if [[ "$restarted" == false ]] && kubectl get pods -n default -l "app=${EXT_AUTHZ_DEPLOYMENT}" \
             -o jsonpath='{.items[*].status.containerStatuses[*].state.waiting.reason}' 2>/dev/null |
             grep -qw CrashLoopBackOff; then
+            require_inject_failures
             assert_local_kind_target || return 1
             kubectl delete pods -n default -l "app=${EXT_AUTHZ_DEPLOYMENT}" --wait=false >/dev/null || return 1
             restarted=true
@@ -870,6 +913,7 @@ wait_for_ext_authz_ready() {
 restore_authorization_failure_state() {
     local restored=true
 
+    require_inject_failures
     assert_local_kind_target || return 1
     if [[ "$BLOCK_POLICY_APPLIED" == true ]]; then
         if kubectl delete clusternetworkpolicy "$BLOCK_POLICY_NAME" --ignore-not-found >/dev/null; then
@@ -931,7 +975,7 @@ verify_authorization_failure() {
         fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
         return
     fi
-    if ! kubectl get crd "$BLOCK_POLICY_CRD" >/dev/null 2>&1; then
+    if [[ "$INJECT_FAILURES" == true ]] && ! kubectl get crd "$BLOCK_POLICY_CRD" >/dev/null 2>&1; then
         fail "${BLOCK_POLICY_CRD} is missing; the pinned Calico manifest installs it and the hang case needs it"
         return
     fi
@@ -982,6 +1026,14 @@ verify_authorization_failure() {
     sleep 2
     assert_nginx_not_reached "No session" "$nginx_before" "$start_time" "$marker"
 
+    if [[ "$INJECT_FAILURES" != true ]]; then
+        skip "ext-authz scaled to zero: needs --inject-failures"
+        skip "ext-authz unreachable (temporary ClusterNetworkPolicy drop): needs --inject-failures"
+        skip "Redis stopped: needs --inject-failures"
+        remove_authorization_failure_fixture
+        return
+    fi
+
     ORIGINAL_EXT_AUTHZ_REPLICAS=$(kubectl get deployment "$EXT_AUTHZ_DEPLOYMENT" -n default -o jsonpath='{.spec.replicas}')
     ORIGINAL_REDIS_REPLICAS=$(kubectl get statefulset "$REDIS_STATEFULSET" -n "$REDIS_NAMESPACE" -o jsonpath='{.spec.replicas}')
     if [[ ! "$ORIGINAL_EXT_AUTHZ_REPLICAS" =~ ^[1-9][0-9]*$ || ! "$ORIGINAL_REDIS_REPLICAS" =~ ^[1-9][0-9]*$ ]]; then
@@ -1030,6 +1082,7 @@ verify_authorization_failure() {
     # way the client must get the empty 503.
     echo "  Redis stopped:"
     authorizer_503_before=$(ext_authz_checks_from_ingress 503)
+    require_inject_failures
     REDIS_STOPPED=true
     assert_local_kind_target
     kubectl scale statefulset "$REDIS_STATEFULSET" -n "$REDIS_NAMESPACE" --replicas=0 >/dev/null
@@ -1046,6 +1099,10 @@ verify_authorization_failure() {
     restore_authorization_failure_state || { fail "Restoring Redis and ext-authz after the Redis case did not complete"; return; }
     wait_for_authorized_200 "After restarting Redis" || return
 
+    remove_authorization_failure_fixture
+}
+
+remove_authorization_failure_fixture() {
     assert_local_kind_target
     "$TEARDOWN_SCRIPT" >/dev/null
     SEEDED=false
@@ -1125,7 +1182,10 @@ main() {
     verify_response_headers
 
     printf '\n=== Summary ===\n'
-    printf '  Passed: %d\n  Failed: %d\n' "$PASSED" "$FAILED"
+    printf '  Passed: %d\n  Failed: %d\n  Skipped: %d\n' "$PASSED" "$FAILED" "$SKIPPED"
+    if (( SKIPPED > 0 )); then
+        printf '  Skipped cases need --inject-failures; this run is not full coverage.\n'
+    fi
     if (( FAILED > 0 )); then
         exit 1
     fi

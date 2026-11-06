@@ -200,9 +200,10 @@ verify_config() {
     assert_semicolon_rejected "/;x"
 
     # %253b decodes once to the literal text %3b, which holds no ";". Only the
-    # ingress filter rejects this double-encoded form.
+    # ingress filter rejects this double-encoded form and deeper ones such as
+    # %25253b.
     response=$(probe "/api/v1/transactions%253bx")
-    printf '  [INFO] /api/v1/transactions%%253bx -> %s at NGINX (double-encoded form is ingress-only)\n' \
+    printf '  [INFO] /api/v1/transactions%%253bx -> %s at NGINX (double- and deeper-encoded forms are ingress-only)\n' \
         "$(status_of "${response}")"
 
     assert_unknown_api "/api"

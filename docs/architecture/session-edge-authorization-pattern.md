@@ -293,9 +293,10 @@ the measurement and the failure-path results are recorded in
 Changing it requires repeating that measurement.
 `./scripts/smoketest/verify-edge-contract.sh` (section "Authorization Failure")
 reads the live values from the ingress Envoy config dump and proves the `401`
-and the empty `503` through the real ingress with `ext-authz` scaled to zero,
-blocked by a temporary network policy so the check hangs, and with Redis
-stopped. `./scripts/guardrails/verify-static-security-manifests.sh` fails when
+through the real ingress. With `--inject-failures` it also proves the empty
+`503` with `ext-authz` scaled to zero, blocked by a temporary network policy so
+the check hangs, and with Redis stopped; the default run changes no Kubernetes
+object and skips those cases. `./scripts/guardrails/verify-static-security-manifests.sh` fails when
 the provider loses `statusOnError`, the `timeout` or `failOpen: false`.
 
 ## Why This Pattern?

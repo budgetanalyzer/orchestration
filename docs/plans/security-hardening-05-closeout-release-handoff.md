@@ -177,8 +177,10 @@ plan 02, Phase 16.
    `X-User-Id`, `X-Roles` and `X-Permissions: users:read` headers to `/api/v1/users`, and assert 403.
 2. Add a positive control: a seeded session that really holds `users:read` gets past the gate.
 3. Confirm the verifier covers the boundary, failure statuses, response headers, exact Origin on
-   both lanes, and forged identity.
-4. Wire it into `verify-security-guardrails.sh` and update `scripts/README.md`.
+   both lanes, and forged identity. The `503` failure statuses need a direct
+   `verify-edge-contract.sh --inject-failures` run.
+4. Wire the default run, which changes no Kubernetes object, into `verify-security-guardrails.sh`
+   and update `scripts/README.md`.
 
 ### Implementation notes
 
@@ -190,8 +192,8 @@ plan 02, Phase 16.
 
 ### Validation
 
-Orchestration static gate, and `./scripts/smoketest/verify-edge-contract.sh` through the aggregate
-wrapper.
+Orchestration static gate, `./scripts/smoketest/verify-edge-contract.sh` through the aggregate
+wrapper, and one direct `./scripts/smoketest/verify-edge-contract.sh --inject-failures` run.
 
 ### Completion criteria
 

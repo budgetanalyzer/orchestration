@@ -1,5 +1,5 @@
 # Intentional failing fixture for scan_istio_ingress_path_hardening_contract.
-# The regex matches only a literal ";", not %3b or %253b.
+# The regex matches only a literal ";", not %3b or deeper encodings.
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:

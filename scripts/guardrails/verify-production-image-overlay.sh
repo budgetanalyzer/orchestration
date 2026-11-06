@@ -39,6 +39,9 @@ PHASE7_OBSERVABILITY_RENDER_DIR=""
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
 . "${SCRIPT_DIR}/../lib/pinned-tool-versions.sh"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+# shellcheck source=../lib/guardrail-python.sh
+. "${SCRIPT_DIR}/../lib/guardrail-python.sh"
 
 SERVICE_ORDER=(
     "transaction-service"
@@ -946,8 +949,8 @@ main() {
 
     verify_reference_metadata_contract
     verify_apps_overlay
-    "${INGRESS_RATE_LIMIT_PYTHON:-${REPO_DIR}/.cache/phase7-static-tools/pyyaml-venv/bin/python}" \
-        "${SCRIPT_DIR}/verify-edge-headers.py" "${RENDERED_APPS_FILE}"
+    require_guardrail_python
+    "${GUARDRAIL_PYTHON}" "${SCRIPT_DIR}/verify-edge-headers.py" "${RENDERED_APPS_FILE}"
     verify_phase6_render_outputs
     verify_phase7_observability_render_outputs
     verify_infrastructure_overlay

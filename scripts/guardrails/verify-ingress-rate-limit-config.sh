@@ -11,7 +11,6 @@ INGRESS_GATEWAY_CONFIG="${REPO_DIR}/kubernetes/istio/ingress-gateway-config.yaml
 PRODUCTION_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
 PRODUCTION_GATEWAY_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-gateway"
 PYTHON_REQUIREMENTS="${SCRIPT_DIR}/requirements-ingress-rate-limit.txt"
-PYTHON_INTERPRETER="${INGRESS_RATE_LIMIT_PYTHON:-python3}"
 TEMP_DIR="$(mktemp -d)"
 PRODUCTION_RENDER="${TEMP_DIR}/istio-ingress-policies.yaml"
 PRODUCTION_GATEWAY_RENDER="${TEMP_DIR}/ingress-gateway-config.yaml"
@@ -22,6 +21,10 @@ NGINX_CONFIGS=(
     "${REPO_DIR}/nginx/includes/api-docs-routes.conf"
 )
 NGINX_LIMIT_PATTERN='limit_req(_zone|_status)?[[:space:]]'
+
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+# shellcheck source=../lib/guardrail-python.sh
+. "${SCRIPT_DIR}/../lib/guardrail-python.sh"
 
 cleanup() {
     rm -rf "${TEMP_DIR}"
@@ -127,14 +130,16 @@ case "${1:-}" in
         ;;
 esac
 
-for command_name in grep kubectl "${PYTHON_INTERPRETER}"; do
+require_guardrail_python
+
+for command_name in grep kubectl; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
         printf 'ERROR: required command not found: %s\n' "${command_name}" >&2
         exit 1
     fi
 done
 
-if ! "${PYTHON_INTERPRETER}" - "${PYTHON_REQUIREMENTS}" <<'PY'
+if ! "${GUARDRAIL_PYTHON}" - "${PYTHON_REQUIREMENTS}" <<'PY'
 import importlib.metadata
 import re
 import sys
@@ -179,11 +184,8 @@ print(f"PyYAML module: {Path(yaml.__file__).resolve()}")
 PY
 then
     printf 'ERROR: ingress rate-limit structural checks require the hash-verified PyYAML environment.\n' >&2
-    printf 'Selected interpreter: %s\n' "${PYTHON_INTERPRETER}" >&2
-    printf '%s\n' \
-        'Setup: python3 -m venv .cache/phase7-static-tools/pyyaml-venv && .cache/phase7-static-tools/pyyaml-venv/bin/python -I -m pip install --require-hashes --no-deps --only-binary=:all: -r scripts/guardrails/requirements-ingress-rate-limit.txt' >&2
-    printf '%s\n' \
-        'Then set INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python when running the verifier.' >&2
+    printf 'Selected interpreter: %s\n' "${GUARDRAIL_PYTHON}" >&2
+    print_guardrail_python_setup
     exit 1
 fi
 
@@ -195,7 +197,7 @@ kubectl kustomize "${PRODUCTION_OVERLAY}" \
 kubectl kustomize "${PRODUCTION_GATEWAY_OVERLAY}" \
     --load-restrictor=LoadRestrictionsNone > "${PRODUCTION_GATEWAY_RENDER}"
 
-"${PYTHON_INTERPRETER}" - \
+"${GUARDRAIL_PYTHON}" - \
     "${LOCAL_MANIFEST}" \
     "${PRODUCTION_RENDER}" \
     "${INGRESS_GATEWAY_CONFIG}" \

@@ -21,6 +21,9 @@ KUSTOMIZE_RENDER_DIR=""
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/production-version-contract.sh
 . "${REPO_DIR}/scripts/lib/production-version-contract.sh"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+# shellcheck source=../lib/guardrail-python.sh
+. "${SCRIPT_DIR}/../lib/guardrail-python.sh"
 
 KUBECONFORM_ALLOWED_MISSING_KINDS=(
     AuthorizationPolicy
@@ -88,7 +91,6 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
 ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/istio/authorization-policies.yaml"
-AUTHORIZATION_POLICY_PYTHON="${INGRESS_RATE_LIMIT_PYTHON:-python3}"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
 JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
@@ -121,10 +123,14 @@ Runs the static security guardrail suite:
   NGINX path allowlists on backend policies
 - NGINX shared route includes: one copy of the API and /api-docs routes and
   the decoded ";" rejection
-- ingress path hardening: DENY of literal, encoded and double-encoded ";" in
-  the path, locally and in the production render
+- ingress path hardening: DENY of a literal ";" and %3b at any percent-encoding
+  depth in the path, locally and in the production render
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
+
+Python checks use .cache/phase7-static-tools/pyyaml-venv/bin/python unless
+INGRESS_RATE_LIMIT_PYTHON selects another interpreter. There is no python3
+fallback.
 EOF
 }
 
@@ -1223,7 +1229,7 @@ scan_istio_authorization_policy_contract() {
     local subject="$1"
     shift
 
-    if ! "${AUTHORIZATION_POLICY_PYTHON}" -I - "${REPO_DIR}" "$@" <<'AUTHZ_PY'
+    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'AUTHZ_PY'
 import sys
 from pathlib import Path
 
@@ -1583,13 +1589,13 @@ scan_nginx_shared_route_contract() {
 }
 
 # The ingress path-hardening EnvoyFilter must insert one RBAC DENY filter
-# before ext_authz whose :path regexes deny literal, encoded and
-# double-encoded ";" before the query string and leave other paths alone.
+# before ext_authz whose :path regexes deny a literal ";" and %3b at any
+# percent-encoding depth before the query string and leave other paths alone.
 scan_istio_ingress_path_hardening_contract() {
     local subject="$1"
     shift
 
-    if ! "${AUTHORIZATION_POLICY_PYTHON}" -I - "${REPO_DIR}" "$@" <<'PATH_HARDENING_PY'
+    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'PATH_HARDENING_PY'
 import re
 import sys
 from pathlib import Path
@@ -1607,6 +1613,9 @@ MUST_DENY = (
     "/api/v1/transactions%3Bx",
     "/api/v1/transactions%253bx",
     "/api/v1/transactions%253Bx",
+    "/api/v1/transactions%25253bx",
+    "/api/v1/transactions%25253Bx",
+    "/api/v1/transactions%2525253bx",
     "/auth/v1/%2e%2e;/internal/v1/sessions/users/x",
     "/auth/v1/%2e%2e%3b/actuator/prometheus",
     "/x;",
@@ -1615,6 +1624,8 @@ MUST_DENY = (
 MUST_ALLOW = (
     "/",
     "/api/v1/transactions",
+    "/api/v1/transactions%2533",
+    "/api/v1/transactions%25",
     "/api/v1/exchange-rates?targetCurrency=THB",
     "/api/v1/transactions?q=a;b",
     "/api/v1/transactions?q=%3b",
@@ -1882,6 +1893,8 @@ main() {
 
     cd "${REPO_DIR}"
 
+    require_guardrail_python
+
     if (( self_test == 1 )); then
         run_self_test
         return 0
@@ -1894,7 +1907,7 @@ main() {
     ensure_static_tool helm
 
     log_step "Ingress headers and environment-specific CSP rendering"
-    "${AUTHORIZATION_POLICY_PYTHON}" "${SCRIPT_DIR}/verify-edge-headers.py"
+    "${GUARDRAIL_PYTHON}" "${SCRIPT_DIR}/verify-edge-headers.py"
 
     log_step "kubeconform schema validation"
     run_kubeconform

@@ -74,8 +74,10 @@ point:
 ```
 
 The focused header/CSP checks use the repository-local hash-verified PyYAML
-interpreter documented in [the CI setup](../docs/ci-cd.md#security-guardrailsyml),
-with an explicit `INGRESS_RATE_LIMIT_PYTHON` override supported.
+interpreter documented in [the CI setup](../docs/ci-cd.md#security-guardrailsyml)
+by default, with an explicit `INGRESS_RATE_LIMIT_PYTHON` override supported.
+The verifier fails with the setup pointer when the selected interpreter is not
+executable and does not fall back to `python3`.
 
 In addition to image and exposure checks, it compares rendered routes,
 authorization, gateway pod configuration, and infrastructure against their

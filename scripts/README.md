@@ -90,7 +90,12 @@ scripts/
 - `smoketest/verify-edge-contract.sh` - Live cross-layer edge contract
   verifier and the single home for tests that need the real ingress,
   `ext_authz`, NGINX, sidecars and services together; later sections are added
-  here. Its Public/Internal Boundary section seeds one synthetic user and
+  here. A run without flags creates, updates, deletes and scales no
+  Kubernetes object: it sends ingress requests, uses `kubectl get`, `logs` and
+  `exec`, and seeds and removes the synthetic fixture inside the Postgres and
+  Redis pods. Only `--inject-failures` changes Kubernetes objects, and the
+  script's `require_inject_failures` guard stops any such change without the
+  flag. Its Public/Internal Boundary section seeds one synthetic user and
   session with `loadtest/seed-loadtest-users.sh --count 1`, sends the
   encoded-path traversal matrix with `curl --path-as-is` on the NGINX lane
   (`/api/v1/{users,transactions,currencies}/` toward permission-service
@@ -103,7 +108,8 @@ scripts/
   work, and removes the fixture with `loadtest/teardown-loadtest.sh`. It
   refuses to run while another load-test fixture is active. Its Semicolon
   Rejection section seeds the same fixture and sends literal `;`, `%3b`,
-  `%3B`, `%253b` and `%253B` probes on both lanes, including the `DELETE`
+  `%3B`, `%253b`, `%253B`, `%25253b` and `%25253B` probes on both lanes,
+  including the `DELETE`
   revocation probes with the side-effect check. Each must be a `403` from the
   ingress `ingress-path-hardening` RBAC filter, which must be the listener's
   only enforcing RBAC filter: the ingress `rbac.denied` counter rises by
@@ -112,14 +118,17 @@ scripts/
   `.;` segments are resolved by ingress normalization with no `;` reaching
   NGINX, and that `;` in a query string still works. Its Authorization Failure
   section checks the live Envoy timeout, error status and fail-closed setting,
-  then proves JSON `401` for missing sessions and empty `503` for an unavailable
-  authorizer, a network-policy-induced hang and stopped Redis. It temporarily
-  scales ext-authz and Redis and installs a uniquely named Admin-tier
-  `ClusterNetworkPolicy` using the CRD supplied by the pinned Calico install;
-  it restores replicas and removes the policy, including on ordinary errors,
-  interrupt or termination. Cleanup failures fail the verifier. Run on the
-  disposable local stack without concurrent traffic; these cases interrupt
-  authorization and Redis-dependent services. See the
+  then proves JSON `401` for missing sessions. With `--inject-failures` it also
+  proves empty `503` for an unavailable authorizer, a network-policy-induced
+  hang and stopped Redis. Those cases temporarily scale ext-authz and Redis,
+  install a uniquely named Admin-tier `ClusterNetworkPolicy` using the CRD
+  supplied by the pinned Calico install, and may delete an ext-authz pod to
+  reset CrashLoopBackOff; the verifier restores replicas and removes the
+  policy, including on ordinary errors, interrupt or termination. Cleanup
+  failures fail the verifier. Run `--inject-failures` only on the disposable
+  local stack without concurrent traffic; these cases interrupt authorization
+  and Redis-dependent services. Without the flag, each injection case prints
+  one `[SKIP]` line and the summary reports the skip count. See the
   [authorizer failure contract](../docs/architecture/session-edge-authorization-pattern.md#authorizer-failures).
   `--report FILE` writes
   one tab-separated line per probe.
@@ -143,9 +152,11 @@ scripts/
   Its NGINX cutover scan fails closed for missing or unreadable
   inputs and distinguishes a clean negative search from a search error;
   `--self-test-nginx-search` proves the clean, forbidden-directive, and missing
-  input cases with disposable fixtures. The verifier defaults to managed-VM
-  `python3`, honors only `INGRESS_RATE_LIMIT_PYTHON` as its selected interpreter,
-  verifies the exact PyYAML version declared in
+  input cases with disposable fixtures. The verifier defaults to the
+  repository-local `.cache/phase7-static-tools/pyyaml-venv/bin/python`, honors
+  only `INGRESS_RATE_LIMIT_PYTHON` as an override, fails with the setup pointer
+  when the selected interpreter is not executable, never falls back to
+  `python3`, verifies the exact PyYAML version declared in
   `guardrails/requirements-ingress-rate-limit.txt`, and reports the resolved
   interpreter and module path. This static render and matcher proof complements
   the live exhaustion, refill, and client-isolation proof in
@@ -220,8 +231,12 @@ scripts/
   rate-limit proof requires the exact PyYAML wheel declared in
   `guardrails/requirements-ingress-rate-limit.txt`; create the disposable
   `.cache/phase7-static-tools/pyyaml-venv` environment with the hash-verified
-  install documented in `docs/ci-cd.md#security-guardrailsyml`, then set
-  `INGRESS_RATE_LIMIT_PYTHON` to that environment's interpreter.
+  install documented in `docs/ci-cd.md#security-guardrailsyml`. Its Python
+  checks, including the AuthorizationPolicy and ingress path-hardening scans
+  and `guardrails/verify-edge-headers.py`, use that environment's interpreter
+  by default, and `INGRESS_RATE_LIMIT_PYTHON` overrides it. Both the normal and
+  `--self-test` runs fail with the setup pointer when the selected interpreter
+  is not executable; there is no `python3` fallback.
 - `guardrails/verify-production-image-overlay.sh` - Non-mutating,
   provider-neutral verifier for the production reference: app and
   infrastructure overlays, route/authorization/ingress/egress/observability
@@ -417,8 +432,8 @@ getting-started guide.
   rejection in `api-routes.conf`, and requires the
   `kubernetes/istio/ingress-path-hardening.yaml` filter, locally and in the
   production render, to be one enforcing `DENY` RBAC filter before
-  `ext_authz` that denies literal, encoded and double-encoded `;` in the path
-  and admits ordinary paths and query strings. `--self-test` proves each case
+  `ext_authz` that denies a literal `;` and `%3b` at any percent-encoding
+  depth in the path and admits ordinary paths and query strings. `--self-test` proves each case
   with a failing fixture. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
   Kustomize patch fragments under `patches/` directories and the schema-v2

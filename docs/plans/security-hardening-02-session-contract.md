@@ -845,8 +845,9 @@ Phases 1-14; `scripts/smoketest/verify-ingress-browser-callback.py`.
 ### Validation
 
 Orchestration static gate, `verify-session-architecture.sh`, `verify-istio-ingress.sh`,
-`verify-ingress-rate-limits.sh`, `verify-credential-isolation.sh`, `verify-edge-contract.sh` and
-`verify-oauth-browser-binding.py`.
+`verify-ingress-rate-limits.sh`, `verify-credential-isolation.sh`,
+`verify-edge-contract.sh --inject-failures` and `verify-oauth-browser-binding.py`. The flag runs
+the authorizer-down, hang and Redis-stopped cases against the new ext-authz session lookup.
 
 ### Completion criteria
 

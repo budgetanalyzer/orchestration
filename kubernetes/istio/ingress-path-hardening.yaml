@@ -1,8 +1,9 @@
 # Denies any request whose path, before the query string, contains a literal
-# ";", an encoded %3b/%3B or a double-encoded %253b/%253B. It runs before
-# ext_authz, so it covers both the NGINX lane and the direct Session Gateway
-# lane, and neither backend sees the request. Envoy path normalization does not
-# decode %3b, so the match is on the undecoded :path. Envoy safe_regex must
+# ";" or a %3b/%3B at any percent-encoding depth (%253b, %25253b and so on:
+# "%", any number of "25", then "3b" or "3B"). It runs before ext_authz, so it
+# covers both the NGINX lane and the direct Session Gateway lane, and neither
+# backend sees the request. Envoy path normalization does not decode %3b, so
+# the match is on the undecoded :path. Envoy safe_regex must
 # match the whole value, hence the trailing .*. A denial returns 403 "RBAC:
 # access denied" and increments the listener's rbac.denied counter. No
 # rules_stat_prefix is set, because the gateway stats matcher only exports
@@ -50,6 +51,6 @@ spec:
                         name: ":path"
                         string_match:
                           safe_regex:
-                            regex: "^[^?]*(;|%3[bB]|%253[bB]).*$"
+                            regex: "^[^?]*(;|%(25)*3[bB]).*$"
                   principals:
                     - any: true

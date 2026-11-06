@@ -442,8 +442,9 @@ rule to `/<service>/v1/*`.
 
 **Cause:** Matrix-parameter syntax is rejected on purpose. The ingress
 `ingress-path-hardening` filter answers `403` with the body
-`RBAC: access denied` for a literal `;`, `%3b`/`%3B` or `%253b`/`%253B` in the
-path on every lane, before `ext_authz`, NGINX or Session Gateway. The shared
+`RBAC: access denied` for a literal `;` or a `%3b`/`%3B` at any
+percent-encoding depth (`%253b`, `%25253b` and so on) in the path on every
+lane, before `ext_authz`, NGINX or Session Gateway. The shared
 `api-routes.conf` answers `400` for a decoded `;` that reaches NGINX by another
 route. A `;` in the query string is unaffected. See
 [Ingress Path Hardening](../docs/architecture/security-architecture.md#ingress-path-hardening).

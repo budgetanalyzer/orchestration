@@ -747,3 +747,62 @@ anchors. They point at the reviewed revision and may drift as files change.
 
 Deferred as planned: the "absolute expiration" claim (plan 02, Phase 14), the
 audit-logging claims (plan 05, Phase 3) and the eviction policy (plan 04, Phase 1).
+
+## Follow-up 2026-11-06 — `verify-edge-contract.sh` failure injection is opt-in
+
+`verify-edge-contract.sh` now changes no Kubernetes object without
+`--inject-failures`. The Authorization Failure injection cases (ext-authz
+scaled to zero, the `ClusterNetworkPolicy` hang and Redis stopped), their
+recovery and the guarded ext-authz pod replacement run only with that flag,
+and each mutating function calls `require_inject_failures` first. The
+`verify-edge-contract.sh` runs recorded above for Plan 01, Phases 4 and 5
+match today's `--inject-failures` run. The earlier runs predate the
+Authorization Failure section. The recorded commands are left as they were
+run.
+
+- Default run: **170 passed, 0 failed, 3 skipped**, one `[SKIP]` line per
+  injection case. A snapshot of deployment and StatefulSet replicas, pod UIDs
+  and restart counts, and `ClusterNetworkPolicy` objects (none) was identical
+  before and after. The pool file and every `usr_loadtest_%` row in the
+  `permission` database were gone afterwards.
+- Negative control: a scratch copy that called `scale_ext_authz 0` from the
+  default path exited 1 at `require_inject_failures`. A logging `kubectl`
+  shim recorded only the target checks and no `scale`.
+- `--inject-failures` run: **185 passed, 0 failed, 0 skipped**, the same count
+  as the Phase 5 full run. Replicas matched before and after, no
+  `ClusterNetworkPolicy` remained, and every pod was Running.
+
+## Follow-up 2026-11-06 — `;` denied at any encoding depth
+
+Target: local Tilt/Kind (`kind-kind`). Orchestration `HEAD` `59cdc24` plus
+the uncommitted Plan 01 and review follow-up changes.
+
+The ingress path-hardening regex changed from `^[^?]*(;|%3[bB]|%253[bB]).*$`
+to `^[^?]*(;|%(25)*3[bB]).*$`, so `%25253b` and deeper forms are denied as
+well. The Plan 01, Phase 3 section above records the earlier regex and its
+37-probe run and is left as it was run.
+
+- Static guardrail: the scan now also requires denial of `%25253b`,
+  `%25253B` and `%2525253b` and admission of `/api/v1/transactions%2533` and
+  `/api/v1/transactions%25`. The new
+  `ingress-path-hardening-double-encoded-only.yaml` fixture carries the old
+  regex and is rejected only for the three deeper forms. The allow-action,
+  literal-only and missing fixtures still fail for their own reasons. The
+  static suite, `--self-test` and `verify-production-image-overlay.sh` pass.
+- Config dump: after Tilt reapplied `istio-ingress-routes`, the live ingress
+  listener's `envoy.filters.http.rbac.ingress_path_hardening` filter carries
+  `^[^?]*(;|%(25)*3[bB]).*$` and still sits before `ext_authz`.
+- Default `./scripts/smoketest/verify-edge-contract.sh`: **190 passed, 0
+  failed, 3 skipped**. The 20 extra passes over the previous default run's
+  170 are the 16 probes and the four session-survival checks for the
+  `%25253b` and `%25253B` forms. The Semicolon Rejection section sent **53**
+  probes (20 NGINX-lane `GET`; 20 `GET` and 13 `DELETE` on the direct `/auth/*`
+  lane), each a `403` `RBAC: access denied`. Ingress `rbac.denied` rose by
+  exactly 53. Neither sidecar recorded a request from the ingress, NGINX
+  logged no probe, the seeded session survived every `DELETE`, and a query
+  string `;` still returned `200` on both lanes.
+- Mixed encodings: HCM `normalize_path` decodes percent-encoded unreserved
+  characters before the filter runs. One-off probes of `%253%62`, `%25%33b`,
+  `%25%33%62` and `%2%35%33b` were each a `403` `RBAC: access denied`, and
+  NGINX logged none of them. The near miss `%2533b`, which decodes to `3b`,
+  reached the frontend shell as expected.

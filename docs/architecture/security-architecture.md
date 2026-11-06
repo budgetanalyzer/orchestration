@@ -292,9 +292,10 @@ remain deferred.
 `envoy.filters.http.rbac.ingress_path_hardening` filter on the ingress gateway
 immediately before `envoy.filters.http.ext_authz`, apart from the rate-limit
 filters in `ingress-rate-limit.yaml`. Its single `DENY` policy matches the
-`:path` header against `^[^?]*(;|%3[bB]|%253[bB]).*$`, so a literal `;`,
-`%3b`/`%3B` or `%253b`/`%253B` before the query string is answered with `403`
-`RBAC: access denied`. Query strings keep `;`. Because the filter runs before
+`:path` header against `^[^?]*(;|%(25)*3[bB]).*$`, so a literal `;` or a
+`%3b`/`%3B` at any percent-encoding depth (`%253b`, `%25253b` and so on: `%`,
+any number of `25`, then `3b` or `3B`) before the query string is answered
+with `403` `RBAC: access denied`. Query strings keep `;`. Because the filter runs before
 routing to either lane, it covers the NGINX lane and the direct Session Gateway
 `/auth/*` lane, and the request reaches neither `ext_authz`, NGINX nor Session
 Gateway. The direct lane therefore does not depend on Session Gateway's own
@@ -317,8 +318,9 @@ the NGINX lane. `$uri` is decoded and excludes the query string.
 
 `scripts/guardrails/verify-static-security-manifests.sh` fails if the local
 manifest or the production render lacks the filter, if it is not one enforcing
-`DENY` RBAC filter inserted before `ext_authz`, or if its regex does not deny literal, encoded and
-double-encoded `;` while admitting ordinary paths and query strings. The
+`DENY` RBAC filter inserted before `ext_authz`, or if its regex does not deny a
+literal `;` and every encoding of `%3b` from `%3b` to `%2525253b` while
+admitting ordinary paths, near misses such as `%2533`, and query strings. The
 `Semicolon Rejection` section of `scripts/smoketest/verify-edge-contract.sh`
 proves on the live chain that every probe on both lanes is a `403` from this
 filter: the ingress `rbac.denied` counter rises by exactly the probe count,

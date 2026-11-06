@@ -34,6 +34,6 @@ spec:
                         name: ":path"
                         string_match:
                           safe_regex:
-                            regex: "^[^?]*(;|%3[bB]|%253[bB]).*$"
+                            regex: "^[^?]*(;|%(25)*3[bB]).*$"
                   principals:
                     - any: true

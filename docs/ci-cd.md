@@ -269,6 +269,12 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
   ./scripts/guardrails/verify-static-security-manifests.sh
 ```
 
+The static gate, `verify-ingress-rate-limit-config.sh` and
+`verify-production-image-overlay.sh` use that environment's interpreter by
+default. `INGRESS_RATE_LIMIT_PYTHON` overrides it, as the workflow and the
+command above do. If the selected interpreter is not executable, they print the
+setup command above and fail; they never fall back to the system `python3` or its PyYAML.
+
 For full local security guardrail proof on a live cluster, use the separate
 final gate:
 

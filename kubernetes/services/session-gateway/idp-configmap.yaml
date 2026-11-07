@@ -13,3 +13,5 @@ data:
   AUTH0_ISSUER_URI: "https://your-tenant.us.auth0.com/"
   IDP_AUDIENCE: "https://api.budgetanalyzer.org"
   IDP_LOGOUT_RETURN_TO: "https://app.budgetanalyzer.localhost/peace"
+  # Must equal the Allowed Callback URL registered with the IdP.
+  IDP_REDIRECT_URI: "https://app.budgetanalyzer.localhost/login/oauth2/code/idp"

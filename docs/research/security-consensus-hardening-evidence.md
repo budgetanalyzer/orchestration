@@ -886,3 +886,82 @@ bindings, duplicate cookies, races and parallel-tab behavior retain Phase 1's
 service-test evidence. It makes no claim about other browser engines or a
 hosted environment. No sibling files, runner-owned records, plan snapshot,
 TLS material or Git history were changed.
+
+## Plan 02.2, Phase 3: Configured IdP Redirect URI and Live Login Input
+
+Date: 2026-11-07, approximately 09:21–09:40 UTC. Target: local Tilt/Kind
+`kind-kind`, exact origin `https://app.budgetanalyzer.localhost`, disposable
+primary API-test credentials (role `USER`). No hosted production runtime was
+exercised.
+
+### Change
+
+- `IDP_REDIRECT_URI` is now part of `ConfigMap/session-gateway-idp-config`:
+  checked in at `kubernetes/services/session-gateway/idp-configmap.yaml`,
+  rendered by the Tiltfile from `.env` (optional, default
+  `https://app.budgetanalyzer.localhost/login/oauth2/code/idp`) and listed as a
+  required environment-specific key in `kubernetes/production/README.md`. The
+  value equals the Auth0 Allowed Callback URL and what `{baseUrl}` produced
+  through ingress before the change.
+- Updated the session-edge owner doc, Auth0 setup, config inventories and
+  `.env.example`.
+
+### Runtime provenance
+
+- `./scripts/bootstrap/check-local-runtime.sh` passed. The existing Tilt
+  session for this checkout reloaded the Tiltfile at 09:21:44 UTC and applied
+  the ConfigMap with the new key.
+- Session Gateway image `session-gateway:tilt-43399c500c4104eb`. The running
+  `/app/app.jar` and the sibling `build/libs/session-gateway-0.0.1-SNAPSHOT.jar`
+  had the identical SHA-256
+  `d50359eb74c0de5312b7538208ab9901bc5cb14462670d56ef28c50a1b93b323`. That jar
+  was built at 09:11:17 UTC; no Session Gateway source was modified after
+  09:10:30 UTC. Its `application.yml` contains the
+  `${IDP_REDIRECT_URI:{baseUrl}/...}` default and the 600-second OAuth state TTL.
+- The frontend Vite pod's synced `LoginPage.tsx` and `loginRedirect.ts` had the
+  same SHA-256 as the `budget-analyzer-web` worktree files.
+- **Existing-cluster step:** `envFrom` is read only at container start, and
+  Tilt does not restart Session Gateway when this ConfigMap changes. The pod
+  running at 09:21 lacked `IDP_REDIRECT_URI`. After the `kind-kind` checks,
+  `kubectl rollout restart deployment/session-gateway` produced a pod that
+  reports the configured value. A fresh `tilt up` needs no restart. No Redis or
+  database reset was needed.
+
+### Live results
+
+| Probe | Result |
+| --- | --- |
+| Deep link `/analytics?probe=deep-link` via the SPA's authenticated route, then hosted login | Returned to `/analytics?probe=deep-link` (the page then appends its own `year` default); user read `200`; logout ok |
+| `/oauth2/authorization/idp?returnUrl=%2F%5Cevil.com`, then hosted login | Landed on `https://app.budgetanalyzer.localhost/`; user read `200` |
+| Authenticated SPA `/login?returnUrl=%2F%5Cevil.com` | Stayed on the app origin at `/`, the `USER` default page |
+| Control: authenticated SPA `/login?returnUrl=%2Fanalytics` | Followed to `/analytics` |
+| `redirect_uri` on every observed IdP `/authorize` request | Exactly `https://app.budgetanalyzer.localhost/login/oauth2/code/idp` |
+| Direct pod request with `Host` and `X-Forwarded-Host: spoofed.example`, `X-Forwarded-Proto: http` | `302` to the IdP with `redirect_uri=https://app.budgetanalyzer.localhost/login/oauth2/code/idp` |
+
+The spoofed-header probe discriminates: request-derived `{baseUrl}` would have
+produced `http://spoofed.example/...`, so the callback now comes from
+configuration. The browser probes used a one-off Playwright script outside the
+repository, built on the API-test helpers. It printed no cookie, state, code or
+credential values.
+
+### Validation
+
+- Orchestration static gate:
+  `verify-static-security-manifests.sh` (pinned PyYAML interpreter) and
+  `verify-production-image-overlay.sh` passed. No shell scripts changed, so
+  `bash -n` and ShellCheck had no inputs.
+- `./scripts/smoketest/verify-session-architecture.sh`: **58 passed, 0 failed**.
+- `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-ingress-browser-callback.py`:
+  passed; initiation was exhausted and the original callback, user read,
+  heartbeat and logout still completed.
+
+### Limitations
+
+- No `ADMIN` credential was exercised live. The `/admin` default for an unsafe
+  `returnUrl` rests on the frontend unit test.
+- The 2048-character cap and the other rejected `returnUrl` forms rest on
+  Session Gateway's service tests; see
+  [its evidence](../../../session-gateway/docs/research/security-consensus-hardening-evidence.md),
+  section "Plan 02.2, Phase 1".
+- No claim about a hosted environment. A deployment must set
+  `IDP_REDIRECT_URI` to its own registered callback URL.

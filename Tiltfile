@@ -360,6 +360,7 @@ create_configmap('session-gateway-idp-config', DEFAULT_NAMESPACE, {
     'AUTH0_ISSUER_URI': os.getenv('AUTH0_ISSUER_URI', ''),
     'IDP_AUDIENCE': os.getenv('IDP_AUDIENCE', 'https://api.budgetanalyzer.org'),
     'IDP_LOGOUT_RETURN_TO': os.getenv('IDP_LOGOUT_RETURN_TO', 'https://app.budgetanalyzer.localhost/peace'),
+    'IDP_REDIRECT_URI': os.getenv('IDP_REDIRECT_URI', 'https://app.budgetanalyzer.localhost/login/oauth2/code/idp'),
 })
 
 # Session Gateway config: override checked-in configmap so local dev

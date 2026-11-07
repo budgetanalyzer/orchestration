@@ -160,6 +160,18 @@ service-specific Redis ACL users, not a shared password.
 
 Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
+Orchestration sets the callback URL sent to the IdP explicitly through
+`IDP_REDIRECT_URI` in `ConfigMap/session-gateway-idp-config`; locally it is
+`https://app.budgetanalyzer.localhost/login/oauth2/code/idp`. The value must
+equal the IdP's registered callback URL. When it is set, Session Gateway does
+not derive the callback from forwarded request headers.
+
+Session Gateway stores a login `returnUrl` only when it is a relative path of at
+most 2048 characters with no scheme, authority, backslash, whitespace or control
+character; otherwise the callback redirects to `/`. The SPA's `/login` page
+follows a `returnUrl` only when its own check confirms a same-origin relative
+path, and otherwise lands on the role's default page.
+
 OAuth initiation binds the saved authorization request to the browser through
 the reusable `__Host-BA_OAUTH_BINDING` cookie (`Secure`, `HttpOnly`,
 `SameSite=Lax`, `Path=/`, no `Domain`). Redis stores its SHA-256 hash with the

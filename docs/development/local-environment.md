@@ -583,7 +583,12 @@ Current local config names:
 |-----------|-----------|---------|
 | `permission-service-config` | `default` | checked-in Permission Service runtime settings such as `SESSION_GATEWAY_BASE_URL` and bounded session-revocation retry knobs |
 | `session-gateway-config` | `default` | checked-in Session Gateway runtime settings such as `SESSION_TTL_SECONDS` |
-| `session-gateway-idp-config` | `default` | checked-in fallback for non-secret Auth0/IDP settings (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`); Tilt overwrites it locally from `.env` |
+| `session-gateway-idp-config` | `default` | checked-in fallback for non-secret Auth0/IDP settings (`AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`, `IDP_REDIRECT_URI`); Tilt overwrites it locally from `.env` |
+
+Session Gateway reads `session-gateway-idp-config` only at container start, and
+Tilt does not restart it when the ConfigMap changes. After changing those
+values on a running stack, including adding `IDP_REDIRECT_URI` to an existing
+cluster, run `kubectl rollout restart deployment/session-gateway`.
 
 For the full local secret/config inventory and the static guardrail that checks
 it, see [Secrets-Only Handling](secrets-only-handling.md).

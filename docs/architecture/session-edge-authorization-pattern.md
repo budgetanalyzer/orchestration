@@ -160,6 +160,29 @@ service-specific Redis ACL users, not a shared password.
 
 Bare `/login` remains a frontend route. The SPA owns that page and initiates the real OAuth2 login request through `/oauth2/authorization/idp`, while the callback returns through `/login/oauth2/code/*`.
 
+OAuth initiation binds the saved authorization request to the browser through
+the reusable `__Host-BA_OAUTH_BINDING` cookie (`Secure`, `HttpOnly`,
+`SameSite=Lax`, `Path=/`, no `Domain`). Redis stores its SHA-256 hash with the
+short-lived `oauth2:state:*` record, not the raw binding value. The callback
+requires a valid binding and compares its hash in constant time before
+consuming state. Only a callback whose Redis `DEL` removes exactly one record
+may proceed. Missing, malformed, duplicate or mismatched bindings reject login
+without consuming the legitimate browser's state or issuing a session.
+
+The cookie survives callback completion so existing parallel login attempts
+share a binding. Simultaneous first initiations before the browser has a cookie
+can race; a rejected tab must restart login. In-flight authorization requests
+created before binding was introduced also require a fresh login; no legacy
+state format is accepted. This control is separate from authenticated-request
+CSRF protection.
+
+The live [OAuth binding verifier](../../scripts/smoketest/verify-oauth-browser-binding.py)
+pauses an unused hosted-login callback before delivery, proves rejection from
+an empty cookie jar, then resumes the same cross-site browser navigation. Its
+successful login proves both browser cookie delivery and preservation of the
+authorization request after the unbound attempt. See the
+[script catalog](../../scripts/README.md) for prerequisites and invocation.
+
 Active browser sessions call `GET /auth/v1/session` under the `/auth/*` route
 family. Each heartbeat first reads the current Redis session, then performs one
 bounded permission-service lookup by internal `userId`. For an active account,

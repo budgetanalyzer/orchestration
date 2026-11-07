@@ -91,6 +91,9 @@ Security-critical implications:
 
 **Responsibilities:**
 - Manage OAuth 2.0/OIDC flows with identity provider
+- Bind each OAuth callback to its initiating browser before consuming state;
+  the reusable secure binding cookie and single-winner Redis deletion contract
+  are defined in the [browser session contract](session-edge-authorization-pattern.md#session-gateway---auth-layer).
 - Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) — no Auth0 tokens are stored, and ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
@@ -393,7 +396,8 @@ callback capacity; it remains bounded because callback processing can include
 identity-provider and permission lookups.
 
 These limits protect capacity; they do not authenticate the OAuth callback or
-replace OAuth state validation. Independent initiation and completion buckets
+replace OAuth state and browser-binding validation. Independent initiation and
+completion buckets
 prevent one class from spending the other's allowance, but an attacker can
 still target the completion allowance itself. Session endpoints intentionally
 share one budget, so exhaustion does not promise independent logout

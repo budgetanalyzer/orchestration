@@ -806,3 +806,83 @@ well. The Plan 01, Phase 3 section above records the earlier regex and its
   `%25%33%62` and `%2%35%33b` were each a `403` `RBAC: access denied`, and
   NGINX logged none of them. The near miss `%2533b`, which decodes to `3b`,
   reached the frontend shell as expected.
+
+## Plan 02.1, Phase 3: OAuth Callback Browser Binding
+
+Date: 2026-11-07, approximately 08:34–08:37 UTC. Target: local Tilt/Kind
+`kind-kind`, exact origin `https://app.budgetanalyzer.localhost`, disposable
+primary API-test credentials. No hosted production runtime was exercised.
+
+### Runtime provenance and prerequisites
+
+- Workspace pre-agent boundary check passed with the configured worktree and
+  bare-repository parents. `./scripts/bootstrap/check-local-runtime.sh` passed
+  the local Docker, exact loopback Kubernetes authority and Ready Kind checks.
+- `tilt up --stream` refused a second listener on port 10350. Inspection of the
+  existing Tilt API confirmed it already owned this checkout's `Tiltfile`;
+  Session Gateway and its compile resource were ready/up-to-date without
+  pending work. The running stack was reused, with no second Tilt instance.
+- Running image: `session-gateway:tilt-546b072f6662a879`. Tilt's latest Gateway
+  update completed at 08:32:12 UTC, after Phase 1. The running `/app/app.jar`
+  and current sibling `build/libs/session-gateway-0.0.1-SNAPSHOT.jar` had the
+  identical SHA-256
+  `e6820dc5db8c808cf9d379b2fa370a954cece8eb3aeead6f98a970acb1bf7477`.
+  This checks the actual live-updated artifact, not merely the image tag.
+- Phase 1's implementation/test evidence is in
+  [Session Gateway's evidence file](../../../session-gateway/docs/research/security-consensus-hardening-evidence.md).
+  Phase 2's cookie-preserving helper regressions are in
+  [API tests' evidence file](../../../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md).
+
+### Unused callback proof
+
+Added `scripts/smoketest/verify-oauth-browser-binding.py`. It verifies the
+host-only binding cookie's Secure, HttpOnly, SameSite=Lax and Path=/ metadata,
+then drives the hosted login in a fresh Chromium context. Chromium's Fetch
+request-stage interception pauses the callback before it reaches the Gateway.
+An independent HTTP client with no copied cookies or browser headers delivers
+that unused code/state first. Only after checking its rejection does the
+verifier resume the original cross-site browser request.
+
+| Probe | Live result |
+| --- | --- |
+| Unused callback without binding | `302` to local `/login?error=auth_failed`; no session cookie issued |
+| Unbound client's `/auth/v1/user` and `/auth/v1/session` | Both `401` |
+| Same callback resumed in the initiating browser | Login succeeded and issued the session cookie |
+| Authenticated user read and heartbeat | Both `200` |
+| Authenticated logout | `302` or `303`, as required by the verifier |
+
+The positive use of the **same** callback proves the unbound rejection was not
+caused by a stale/consumed code or state and did not consume the legitimate
+transaction. Resuming the original navigation also proves real cross-site
+SameSite=Lax delivery; the binding is never manually injected into Chromium.
+No cookie, state, authorization-code or credential values were recorded.
+
+An initial harness attempt used Playwright routing, which did not intercept
+the redirect hop and correctly failed its interception-count assertion. That
+run is not binding evidence. The final verifier uses Chromium Fetch instead;
+no service fix or orchestration deployment workaround was needed.
+
+### Validation
+
+All required gates passed:
+
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`
+- `./scripts/guardrails/verify-production-image-overlay.sh` (offline reference)
+- `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-oauth-browser-binding.py`
+- `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-ingress-browser-callback.py`:
+  initiation exhausted; original callback, user read, heartbeat and logout
+  still completed in a fresh browser login.
+- `./scripts/smoketest/verify-session-architecture.sh`: **58 passed, 0 failed**;
+  live session keys observed.
+- API-test `.venv/bin/ruff check --extend-select E402` and `ruff format --check`
+  on the new verifier; `git diff --check`.
+
+No shell scripts changed, so `bash -n` and ShellCheck had no changed-script
+inputs. Updated the canonical browser session contract, security summary and
+script catalog. Existing unbound in-flight OAuth transactions require fresh
+login; no Redis reset was needed for these fresh transactions. The live proof
+covers missing binding and successful login in Chromium; malformed/mismatched
+bindings, duplicate cookies, races and parallel-tab behavior retain Phase 1's
+service-test evidence. It makes no claim about other browser engines or a
+hosted environment. No sibling files, runner-owned records, plan snapshot,
+TLS material or Git history were changed.

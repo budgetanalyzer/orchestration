@@ -47,6 +47,28 @@ REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastru
 
 redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" FLUSHALL > /dev/null 2>&1
 
+# FLUSHALL only appends to the AOF on the PVC, so earlier session tokens stay on
+# disk. Rewrite the AOF so the persisted history is replaced by the empty dataset.
+echo -e "${YELLOW}Rewriting the append-only file...${NC}"
+redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" BGREWRITEAOF > /dev/null 2>&1
+
+aof_info=""
+for _ in $(seq 1 60); do
+    aof_info=$(redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" INFO persistence 2>/dev/null | tr -d '\r')
+    if grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" && grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info"; then
+        break
+    fi
+    sleep 1
+done
+
+if ! grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" \
+    || ! grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info" \
+    || ! grep -qx 'aof_last_bgrewrite_status:ok' <<<"$aof_info"; then
+    echo -e "${RED}Redis was flushed, but the append-only file rewrite did not finish successfully${NC}"
+    echo "Check: kubectl logs -n infrastructure $REDIS_POD"
+    exit 1
+fi
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}SUCCESS! Redis has been flushed${NC}"
 echo -e "${GREEN}========================================${NC}"

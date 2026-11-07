@@ -307,9 +307,9 @@ seeded_session_present() {
     local exists member
 
     exists=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
-        EXISTS "session:${SEEDED_SESSION_ID}" 2>/dev/null | tr -d '[:space:]' || true)
+        EXISTS "$(session_key_for "$SEEDED_SESSION_ID")" 2>/dev/null | tr -d '[:space:]' || true)
     member=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
-        SISMEMBER "user_sessions:${SEEDED_USER_ID}" "$SEEDED_SESSION_ID" 2>/dev/null | tr -d '[:space:]' || true)
+        SISMEMBER "user_sessions:${SEEDED_USER_ID}" "$(session_digest_for "$SEEDED_SESSION_ID")" 2>/dev/null | tr -d '[:space:]' || true)
     [[ "$exists" == "1" && "$member" == "1" ]]
 }
 

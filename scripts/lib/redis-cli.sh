@@ -24,3 +24,30 @@ redis_cli_in_pod() {
         --no-auth-warning \
         "$@"
 }
+
+# Prints the lowercase hex SHA-256 of a browser session token. Session Gateway
+# and ext-authz store this digest, never the raw cookie value, as the session
+# key suffix and as the user_sessions:<userId> index member.
+session_digest_for() {
+    local token="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$token" | sha256sum | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        printf '%s' "$token" | shasum -a 256 | awk '{print $1}'
+    else
+        echo "ERROR: neither sha256sum nor shasum is available" >&2
+        return 1
+    fi
+}
+
+# Prints the Redis session key for a browser session token: the key prefix
+# (default session:) followed by session_digest_for of the token.
+session_key_for() {
+    local token="$1"
+    local prefix="${2:-session:}"
+    local digest
+
+    digest=$(session_digest_for "$token")
+    printf '%s%s\n' "$prefix" "$digest"
+}

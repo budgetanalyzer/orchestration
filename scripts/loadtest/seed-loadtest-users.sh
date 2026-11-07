@@ -4,8 +4,10 @@
 # Bulk-creates synthetic Budget Analyzer users for Track 1 (data-path) load
 # testing, then writes matching Redis session hashes plus the per-user
 # `user_sessions:` index entries so ext-authz validates synthetic traffic the
-# same way it validates real logins. Also emits `.loadtest/session-pool.txt`
-# so later traffic-replay tooling can reuse the seeded sessions.
+# same way it validates real logins. Like Session Gateway, Redis keys and index
+# members use the SHA-256 digest of each session token. Also emits
+# `.loadtest/session-pool.txt` with the raw cookie tokens so later
+# traffic-replay tooling can reuse the seeded sessions.
 #
 # Usage:
 #   ./scripts/loadtest/seed-loadtest-users.sh [options]
@@ -42,7 +44,7 @@ SESSION_TTL=900
 # ---- Arg parsing -------------------------------------------------------------
 
 usage() {
-    sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -142,8 +144,10 @@ echo "  permission-service: users + user_roles upserted"
 #
 # One HSET per session populating the full 9-field shape session-gateway
 # produces at real login (see session-gateway SessionHashFields.java), plus
-# the per-user `user_sessions:` SET that bulk revocation consumes. Both keys
-# get the same TTL so they expire together.
+# the per-user `user_sessions:` SET that bulk revocation consumes. The session
+# key is session:<digest> and the index member is the bare digest, where digest
+# is the SHA-256 of the raw token written to the pool file. Both keys get the
+# same TTL so they expire together.
 #
 # display_name intentionally uses an underscore-separated form to avoid
 # quoting issues in redis-cli's line-mode parser.
@@ -152,7 +156,7 @@ echo "  permission-service: users + user_roles upserted"
     for ((n = 1; n <= COUNT; n++)); do
         user_id="${LOADTEST_USER_ID_PREFIX}${n}"
         idp_sub="${LOADTEST_IDP_SUB_PREFIX}${n}"
-        session_id="${LOADTEST_SESSION_ID_PREFIX}${n}"
+        session_digest=$(session_digest_for "${LOADTEST_SESSION_ID_PREFIX}${n}")
         email="loadtest-${n}@${LOADTEST_EMAIL_DOMAIN}"
         display_name="LoadTest_User_${n}"
         picture="https://loadtest.invalid/avatar/${n}.png"
@@ -164,9 +168,9 @@ echo "  permission-service: users + user_roles upserted"
             perms="$LOADTEST_USER_PERMISSIONS"
         fi
         printf "HSET session:%s user_id %s idp_sub %s email %s display_name %s picture %s roles %s permissions %s created_at %s expires_at %s\n" \
-            "$session_id" "$user_id" "$idp_sub" "$email" "$display_name" "$picture" "$role" "$perms" "$CREATED_AT" "$EXPIRES_AT"
-        printf "EXPIRE session:%s %s\n" "$session_id" "$SESSION_TTL"
-        printf "SADD user_sessions:%s %s\n" "$user_id" "$session_id"
+            "$session_digest" "$user_id" "$idp_sub" "$email" "$display_name" "$picture" "$role" "$perms" "$CREATED_AT" "$EXPIRES_AT"
+        printf "EXPIRE session:%s %s\n" "$session_digest" "$SESSION_TTL"
+        printf "SADD user_sessions:%s %s\n" "$user_id" "$session_digest"
         printf "EXPIRE user_sessions:%s %s\n" "$user_id" "$SESSION_TTL"
     done
 } | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" >/dev/null

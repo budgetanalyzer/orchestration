@@ -93,7 +93,7 @@ cleanup_session() {
         -o jsonpath='{.data.ops-password}' 2>/dev/null | base64 -d 2>/dev/null || true)
     if [[ -n "${redis_pod}" && -n "${redis_password}" ]]; then
         redis_cli_in_pod infrastructure "${redis_pod}" redis-ops "${redis_password}" \
-            DEL "session:${SESSION_ID}" >/dev/null 2>&1 || true
+            DEL "$(session_key_for "${SESSION_ID}")" >/dev/null 2>&1 || true
     fi
 }
 

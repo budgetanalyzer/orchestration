@@ -47,6 +47,7 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 baseline. `./scripts/smoketest/verify-session-architecture.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
 `BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
+shared SHA-256 session key derivation and golden vector, the
 explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
 deployment, the internal Session Gateway-to-permission-service heartbeat path
 in local and production policy, its absence from public NGINX routes, and the
@@ -57,8 +58,12 @@ egress hardening. The browser login page is `/login`; the actual OAuth2 redirect
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/v1/session`. The browser only
 carries an opaque `BA_SESSION` cookie; Session Gateway keeps the session data
-in Redis under `session:{id}` and the temporary OAuth2 request state under
-`oauth2:state:{state}`.
+in Redis under `session:{sha256(token)}`, the lowercase hex SHA-256 of the
+cookie value, and the temporary OAuth2 request state under
+`oauth2:state:{state}`. The raw cookie token never appears in Redis keys or
+logs. After the hashed-key cutover, run `./scripts/ops/flush-redis.sh` once if
+the cluster still holds sessions written under raw-token keys. The helper also
+rewrites the append-only file, so those raw tokens leave the PVC as well.
 
 Redis runs as `StatefulSet/redis`; the pod name is `redis-0`. Its `/data`
 directory is PVC-backed by the StatefulSet-created `redis-data-redis-0` claim,
@@ -272,8 +277,10 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 # Test the heartbeat with a copied browser session cookie
 curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
-# Inspect one specific session hash if you have the cookie value
-kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "session:<session-id-from-cookie>"
+# Inspect one specific session hash if you have the cookie value; the key is its SHA-256
+SESSION_TOKEN='<BA_SESSION cookie value>'
+SESSION_KEY="session:$(printf '%s' "$SESSION_TOKEN" | sha256sum | cut -d' ' -f1)"
+kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
 
 # Verify the full shared session contract
 ./scripts/smoketest/verify-session-architecture.sh
@@ -285,7 +292,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 **Log Patterns to Watch**:
 - `OAuth2AuthorizationRequestRedirectFilter` - OAuth flow starting
 - `OAuth2LoginAuthenticationFilter` - Login completing
-- `Session heartbeat for sessionId=` / `Refreshing authorization for userId=` - frontend keep-alive requests are reaching Session Gateway and refreshing permission-service authorization before extension; heartbeat never calls Auth0
+- `Session heartbeat for sessionId=` / `Refreshing authorization for userId=` - the logged `sessionId` is a truncated digest prefix, not the cookie value; frontend keep-alive requests are reaching Session Gateway and refreshing permission-service authorization before extension; heartbeat never calls Auth0
 - `Session revocation requested for userId=` / `Session revocation completed for userId=, deletedSessions=` / `Session revocation failed for userId=` - bulk revocation through `DELETE /internal/v1/sessions/users/{userId}` is being driven east-west by permission-service
 
 ### RabbitMQ

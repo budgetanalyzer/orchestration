@@ -511,6 +511,8 @@ fi
 section "Redis: Positive (authorized operations)"
 
 VERIFY_KEY="__phase1_verify__"
+VERIFY_SESSION_DIGEST=$(session_digest_for "$VERIFY_KEY")
+VERIFY_SESSION_KEY=$(session_key_for "$VERIFY_KEY")
 
 sg_expect() {
     local expected="$1"
@@ -526,7 +528,7 @@ sg_expect() {
     fi
 }
 
-SG_SESSION_KEY="session:${VERIFY_KEY}"
+SG_SESSION_KEY="$VERIFY_SESSION_KEY"
 SG_INDEX_KEY="user_sessions:${VERIFY_KEY}"
 SG_STATE_KEY="oauth2:state:${VERIFY_KEY}"
 SG_LUA_TYPE="return redis.call('type', KEYS[1]).ok"
@@ -543,9 +545,9 @@ sg_expect '^1$' "EXPIRE on session:*" EXPIRE "$SG_SESSION_KEY" 60
 sg_expect '^hash$' "TYPE on session:*" TYPE "$SG_SESSION_KEY"
 sg_expect '^hash$' "EVAL running TYPE inside Lua" EVAL "$SG_LUA_TYPE" 1 "$SG_SESSION_KEY"
 sg_expect '^hash$' "EVALSHA of the cached script" EVALSHA "$SG_LUA_TYPE_SHA" 1 "$SG_SESSION_KEY"
-sg_expect '^1$' "SADD on user_sessions:*" SADD "$SG_INDEX_KEY" "$VERIFY_KEY"
-sg_expect "^${VERIFY_KEY}\$" "SMEMBERS on user_sessions:*" SMEMBERS "$SG_INDEX_KEY"
-sg_expect '^1$' "SREM on user_sessions:*" SREM "$SG_INDEX_KEY" "$VERIFY_KEY"
+sg_expect '^1$' "SADD on user_sessions:*" SADD "$SG_INDEX_KEY" "$VERIFY_SESSION_DIGEST"
+sg_expect "^${VERIFY_SESSION_DIGEST}\$" "SMEMBERS on user_sessions:*" SMEMBERS "$SG_INDEX_KEY"
+sg_expect '^1$' "SREM on user_sessions:*" SREM "$SG_INDEX_KEY" "$VERIFY_SESSION_DIGEST"
 sg_expect '^OK$' "HMSET on oauth2:state:*" HMSET "$SG_STATE_KEY" redirect_uri /login/oauth2/code/idp
 sg_expect '^1$' "DEL on oauth2:state:*" DEL "$SG_STATE_KEY"
 sg_expect '^1$' "UNLINK on session:*" UNLINK "$SG_SESSION_KEY"
@@ -558,9 +560,9 @@ else
     fail "session-gateway HSET on oauth2:state:* (${EA_SG_HSET})"
 fi
 
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "session:${VERIFY_KEY}" "field" "value" >/dev/null 2>&1
-EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "session:${VERIFY_KEY}")
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "session:${VERIFY_KEY}" >/dev/null 2>&1 || true
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" HSET "$VERIFY_SESSION_KEY" "field" "value" >/dev/null 2>&1
+EA_READ=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" HGETALL "$VERIFY_SESSION_KEY")
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "$VERIFY_SESSION_KEY" >/dev/null 2>&1 || true
 if echo "$EA_READ" | grep -q 'value'; then
     pass "ext-authz HGETALL on session:*"
 else
@@ -585,7 +587,7 @@ fi
 
 section "Redis: Negative (unauthorized operations denied)"
 
-EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "session:${VERIFY_KEY}" "nope")
+EA_SET=$(redis_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" SET "$VERIFY_SESSION_KEY" "nope")
 if echo "$EA_SET" | grep -qi 'NOPERM'; then
     pass "ext-authz denied SET command"
 else
@@ -702,7 +704,7 @@ else
     fail "ext-authz session lookup failed (status=${AUTH_STATUS})"
 fi
 
-redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "session:${EXT_AUTHZ_SESSION_ID}" >/dev/null 2>&1 || true
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "$(session_key_for "$EXT_AUTHZ_SESSION_ID")" >/dev/null 2>&1 || true
 
 echo ""
 echo "=============================================="

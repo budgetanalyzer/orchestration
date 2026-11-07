@@ -1986,7 +1986,7 @@ export const config = configs[env as keyof typeof configs];
 #### Weeks 1-2: Credential and Session Hardening
 - Validate Session Gateway and ext_authz behavior in the target environment
 - Deploy ext_authz HTTP service (port 9002)
-- Store sessions in Redis hashes (`session:{id}`), issue HTTP-only session cookies
+- Store sessions in Redis hashes keyed by the SHA-256 of the cookie token (`session:{sha256(token)}`), issue HTTP-only session cookies
 - Begin per-service credential separation
 
 #### Weeks 3-4: Auth0 Integration + Envoy ext_authz Configuration

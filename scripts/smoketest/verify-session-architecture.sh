@@ -7,6 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PARENT_DIR="$(dirname "${REPO_ROOT}")"
+# shellcheck source=scripts/lib/redis-cli.sh
+# shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x when following sources.
+source "${SCRIPT_DIR}/../lib/redis-cli.sh"
+
+# Shared golden vector from the Session Gateway and ext-authz unit tests.
+GOLDEN_SESSION_TOKEN="3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+GOLDEN_SESSION_KEY="session:16362f566387b3cf5a6e92fb0a986c76ca20eb3a0c12cbdfbd0b29501e0c18df"
 
 STATIC_ONLY=false
 REQUIRE_LIVE_SESSION=false
@@ -21,11 +28,12 @@ Verifies the shared session contract across the orchestration, session-gateway,
 and ext-authz repos:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces, and the Session Gateway user has no `+@all` grant
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
+- Session Gateway, ext-authz and orchestration's `session_key_for` all key sessions as `session:<lowercase hex SHA-256 of the cookie token>` and agree on a shared golden vector
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
 - Session Gateway reaches permission-service only through `POST /internal/v1/users/sync` and `GET /internal/v1/users/{userId}/authorization` in the local policy, while the internal surface stays absent from public NGINX routes
 - The source heartbeat contract refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
-- Live Redis ACLs and keyspace hygiene match the checked-in contract
+- Live Redis ACLs and keyspace hygiene match the checked-in contract, and every live `session:*` key is a SHA-256 digest key
 
 Options:
   --static-only           Run only repository-level checks; skip live cluster checks.
@@ -554,7 +562,9 @@ run_static_checks() {
     local session_gateway_key_prefix_default ext_authz_key_prefix_default
     local session_gateway_cookie_name_yaml_default ext_authz_deployment_cookie_name
     local ext_authz_cookie_name_default ext_authz_repo_dir static_prereq_failed
-    local session_gateway_acl_line
+    local session_gateway_acl_line session_gateway_session_dir session_gateway_digest_file
+    local session_gateway_digest_test_file ext_authz_session_file ext_authz_session_test_file
+    local orchestration_golden_key hashed_key_file
 
     section "Static Contract"
 
@@ -566,6 +576,11 @@ run_static_checks() {
     session_gateway_controller_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/api/SessionController.java"
     permission_service_client_file="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/service/PermissionServiceClient.java"
     ext_authz_http_server_file="${ext_authz_repo_dir}/http_server.go"
+    session_gateway_session_dir="${PARENT_DIR}/session-gateway/src/main/java/org/budgetanalyzer/sessiongateway/session"
+    session_gateway_digest_file="${session_gateway_session_dir}/SessionTokenDigest.java"
+    session_gateway_digest_test_file="${PARENT_DIR}/session-gateway/src/test/java/org/budgetanalyzer/sessiongateway/session/SessionTokenDigestTest.java"
+    ext_authz_session_file="${ext_authz_repo_dir}/session.go"
+    ext_authz_session_test_file="${ext_authz_repo_dir}/session_test.go"
     static_prereq_failed=false
 
     session_gateway_acl_line="$(grep -E '^user session-gateway ' "${REDIS_ACL_BOOTSTRAP_FILE}" || true)"
@@ -646,6 +661,19 @@ run_static_checks() {
     else
         static_prereq_failed=true
     fi
+    for hashed_key_file in \
+        "$session_gateway_digest_file" \
+        "$session_gateway_digest_test_file" \
+        "${session_gateway_session_dir}/SessionReader.java" \
+        "${session_gateway_session_dir}/SessionWriter.java" \
+        "$ext_authz_session_file" \
+        "$ext_authz_session_test_file"; do
+        if ! assert_file_exists \
+            "$hashed_key_file" \
+            "$(basename "$hashed_key_file") is available for the hashed session key contract check"; then
+            static_prereq_failed=true
+        fi
+    done
 
     if [[ "$static_prereq_failed" == true ]]; then
         return
@@ -695,6 +723,60 @@ run_static_checks() {
         "$ext_authz_deployment_file" \
         "- name: SESSION_KEY_PREFIX" \
         "ext-authz deployment does not override SESSION_KEY_PREFIX"
+
+    orchestration_golden_key="$(session_key_for "$GOLDEN_SESSION_TOKEN")"
+    assert_value_equals \
+        "$orchestration_golden_key" \
+        "$GOLDEN_SESSION_KEY" \
+        "orchestration session_key_for maps the golden token to the golden SHA-256 key"
+    assert_file_contains \
+        "$session_gateway_digest_file" \
+        'MessageDigest.getInstance("SHA-256")' \
+        "Session Gateway session digest uses SHA-256"
+    assert_file_contains \
+        "$session_gateway_digest_file" \
+        'getBytes(StandardCharsets.UTF_8)' \
+        "Session Gateway session digest hashes the UTF-8 token bytes"
+    assert_file_contains \
+        "$session_gateway_digest_file" \
+        'HexFormat.of()' \
+        "Session Gateway session digest is lowercase hex"
+    assert_file_contains \
+        "${session_gateway_session_dir}/SessionReader.java" \
+        'keyPrefix + sessionDigest' \
+        "Session Gateway SessionReader keys sessions by prefix plus digest"
+    assert_file_contains \
+        "${session_gateway_session_dir}/SessionWriter.java" \
+        'keyPrefix + sessionDigest' \
+        "Session Gateway SessionWriter keys sessions by prefix plus digest"
+    assert_file_contains \
+        "$session_gateway_digest_test_file" \
+        "\"${GOLDEN_SESSION_TOKEN}\"" \
+        "Session Gateway digest test uses the shared golden token"
+    assert_file_contains \
+        "$session_gateway_digest_test_file" \
+        "\"${GOLDEN_SESSION_KEY}\"" \
+        "Session Gateway digest test expects the shared golden key"
+    assert_file_contains \
+        "$ext_authz_session_file" \
+        'sha256.Sum256([]byte(sessionID))' \
+        "ext-authz session key hashes the cookie value with SHA-256"
+    assert_file_contains \
+        "$ext_authz_session_file" \
+        'prefix + hex.EncodeToString(digest[:])' \
+        "ext-authz session key is prefix plus lowercase hex digest"
+    assert_file_contains \
+        "$ext_authz_session_file" \
+        'sessionKey(s.keyPrefix, sessionID)' \
+        "ext-authz LookupSession reads the hashed session key"
+    assert_file_contains \
+        "$ext_authz_session_test_file" \
+        "\"${GOLDEN_SESSION_TOKEN}\"" \
+        "ext-authz session key test uses the shared golden token"
+    assert_file_contains \
+        "$ext_authz_session_test_file" \
+        "\"${GOLDEN_SESSION_KEY}\"" \
+        "ext-authz session key test expects the shared golden key"
 
     assert_file_contains \
         "$session_gateway_controller_file" \
@@ -790,7 +872,7 @@ prepare_live_redis_context() {
 run_live_checks() {
     local route_yaml ext_authz_yaml session_gateway_yaml live_permission_policy
     local ext_authz_deployment_cookie_name session_gateway_permission_service_url
-    local session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl
+    local session_keys old_spring_keys old_extauthz_keys sg_acl ea_acl raw_session_keys
 
     section "Live Cluster Contract"
 
@@ -919,6 +1001,12 @@ run_live_checks() {
             else
                 info "No live session:* keys observed; use --require-live-session after a login if you want that stronger proof"
             fi
+        fi
+        raw_session_keys="$(grep -Ev '^session:[0-9a-f]{64}$' <<<"$session_keys" | sed '/^$/d' || true)"
+        if [[ -z "$raw_session_keys" ]]; then
+            pass "every live session:* key is a SHA-256 digest key"
+        else
+            fail "live Redis has session:* keys that are not SHA-256 digest keys; run ./scripts/ops/flush-redis.sh to clear pre-cutover raw-token sessions"
         fi
     else
         fail "live Redis session:* query failed"

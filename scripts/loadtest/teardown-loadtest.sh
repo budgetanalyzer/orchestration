@@ -4,7 +4,9 @@
 # Removes every synthetic Track 1 artifact created by the loadtest fixture
 # scripts: Redis session hashes, per-user session indexes, transaction-service
 # rows, permission-service user_roles rows, permission-service users rows, and
-# the generated `.loadtest/session-pool.txt` file.
+# the generated `.loadtest/session-pool.txt` file. Session keys are SHA-256
+# digests that no name pattern can match, so they are read from the members of
+# the synthetic `user_sessions:usr_loadtest_*` indexes.
 #
 # Usage:
 #   ./scripts/loadtest/teardown-loadtest.sh
@@ -27,7 +29,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}/../lib/loadtest-common.sh"
 
 usage() {
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
@@ -70,16 +72,23 @@ REPO_ROOT=$(loadtest_repo_root)
 POOL_FILE="${REPO_ROOT}/${LOADTEST_POOL_FILE}"
 POOL_DIR="${REPO_ROOT}/${LOADTEST_POOL_DIR}"
 
-SESSION_KEYS=$(
-    redis_cli_exec_in_pod \
-        "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
-        --scan --pattern "session:${LOADTEST_SESSION_ID_PREFIX}*" || true
-)
 USER_SESSION_KEYS=$(
     redis_cli_exec_in_pod \
         "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
         --scan --pattern "user_sessions:${LOADTEST_USER_ID_PREFIX}*" || true
 )
+
+# Each index member is a session digest; its session hash is session:<digest>.
+SESSION_KEYS=""
+if [ -n "$USER_SESSION_KEYS" ]; then
+    SESSION_KEYS=$(
+        printf '%s\n' "$USER_SESSION_KEYS" \
+            | sed '/^$/d;s/^/SMEMBERS /' \
+            | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+            | sed '/^$/d;s/^/session:/' \
+            | sort -u
+    )
+fi
 
 SESSION_KEY_COUNT=$(count_lines "$SESSION_KEYS")
 USER_SESSION_KEY_COUNT=$(count_lines "$USER_SESSION_KEYS")
@@ -106,13 +115,17 @@ USER_COUNT=$(normalize_count "$(
 echo "Tearing down synthetic Track 1 data"
 echo "  Postgres pod: ${POSTGRES_POD}"
 echo "  Redis pod:    ${REDIS_POD}"
-echo "  Redis keys:   ${SESSION_KEY_COUNT} session hashes, ${USER_SESSION_KEY_COUNT} user_sessions sets"
+echo "  Redis keys:   ${SESSION_KEY_COUNT} indexed sessions, ${USER_SESSION_KEY_COUNT} user_sessions sets"
 echo "  Postgres:     ${TRANSACTION_COUNT} transactions, ${USER_ROLE_COUNT} user_roles, ${USER_COUNT} users"
 
+SESSION_DELETED_COUNT=0
 if [ "$SESSION_KEY_COUNT" -gt 0 ]; then
-    printf '%s\n' "$SESSION_KEYS" \
-        | sed '/^$/d;s/^/UNLINK /' \
-        | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" >/dev/null
+    SESSION_DELETED_COUNT=$(
+        printf '%s\n' "$SESSION_KEYS" \
+            | sed '/^$/d;s/^/UNLINK /' \
+            | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+            | awk '/^[0-9]+$/ { total += $1 } END { print total + 0 }'
+    )
 fi
 
 if [ "$USER_SESSION_KEY_COUNT" -gt 0 ]; then
@@ -150,7 +163,7 @@ if [ -d "$POOL_DIR" ] && [ -z "$(find "$POOL_DIR" -mindepth 1 -maxdepth 1 2>/dev
 fi
 
 echo "Cleanup summary"
-echo "  redis pattern session:${LOADTEST_SESSION_ID_PREFIX}*        -> deleted ${SESSION_KEY_COUNT} keys"
+echo "  redis user_sessions members as session:<digest>  -> deleted ${SESSION_DELETED_COUNT} keys"
 echo "  redis pattern user_sessions:${LOADTEST_USER_ID_PREFIX}* -> deleted ${USER_SESSION_KEY_COUNT} keys"
 echo "  budget_analyzer.transaction                             -> deleted ${TRANSACTION_COUNT} rows"
 echo "  permission.user_roles                                   -> deleted ${USER_ROLE_COUNT} rows"

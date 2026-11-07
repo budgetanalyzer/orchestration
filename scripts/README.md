@@ -628,7 +628,9 @@ the active context and Tilt resource state from the same host shell first.
   port-forwarded Grafana URL, opens the provisioned dashboards, and captures
   browser-side debugging artifacts without committing Node dependency files.
 - `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
-  the TLS-only in-cluster listener.
+  the TLS-only in-cluster listener. Its argument is the `BA_SESSION` cookie
+  value; the Redis key is `session:<sha256 of that value>`, derived with
+  `session_key_for` from `lib/redis-cli.sh`.
 - `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.
 - `ops/reset-databases.sh` resets local PostgreSQL databases.
 
@@ -647,7 +649,10 @@ revocation without driving traffic.
 ```
 
 `seed-loadtest-users.sh` writes `.loadtest/session-pool.txt`, which is
-gitignored and reserved for future traffic-replay tooling. The shared
+gitignored and reserved for future traffic-replay tooling. The pool holds raw
+cookie tokens; Redis holds their SHA-256 digests as `session:<digest>` keys and
+`user_sessions:<userId>` members, and `teardown-loadtest.sh` deletes session
+hashes through those index members. The shared
 `lib/loadtest-common.sh` helper resolves that pool path from the orchestration
 repo root, so callers can run the loadtest scripts from any current working
 directory without writing outside the repository.

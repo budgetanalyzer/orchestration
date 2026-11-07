@@ -71,8 +71,8 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 - [#12, NGINX route files](../research/security-review-contested-issues-2026-11-02.md#12-generating-the-nginx-route-files):
   no route generator or parity parser. Phase 3 shares the API routes through one include.
 - [#1, primary CSRF control](../research/security-review-contested-issues-2026-11-02.md#1-primary-csrf-control):
-  Phase 5's `form-action` also permits the IdP logout destination. The Origin and POST cutover is
-  in plan 02.
+  Phase 5's `form-action` also permits the IdP logout destination. The POST and Origin cutover is
+  in plans 02.7 and 02.8.
 - [#11, HSTS flags](../research/security-review-contested-issues-2026-11-02.md#11-hsts-includesubdomains-and-preload):
   neither `includeSubDomains` nor `preload` by default. Spring's default writer is not proof of the
   client-visible header, so Phase 5 verifies the final header.
@@ -180,7 +180,7 @@ integration evidence"; `docs/architecture/security-architecture.md`;
 - If the baseline shows the traversal is already blocked, record that and continue. Narrowing is
   independently agreed. (amended per contested #3) An inconclusive baseline stays
   "not reproduced"; it must not become a claim of safety or an automatic severity downgrade.
-- Plan 02, Phase 14 replaces the `.../permissions` rule from step 7 with the new sync call.
+- Plan 02.3, Phase 3 replaces the `.../permissions` rule from step 7 with the new sync call.
 
 ### Validation
 
@@ -420,7 +420,7 @@ to render the IdP logout allowance: `Tiltfile` (`nginx-gateway-includes`),
 
 ### Non-goals
 
-`includeSubDomains`, `preload`, and the fixed redirect URI, which is plan 02, Phase 2.
+`includeSubDomains`, `preload`, and the fixed redirect URI, which is plan 02.2.
 
 ### Required context
 
@@ -436,7 +436,7 @@ R2 findings G and H; R3 "HSTS details"; R4 "HSTS (G)"; `nginx/README.md`.
 3. Add `form-action 'self'` to the three CSP includes, and remove `X-XSS-Protection` from them.
    (amended per contested #1) Permit the configured IdP logout destination alongside `'self'`
    where needed, without a wildcard, because logout becomes a form POST with a 303 redirect to the
-   IdP in plan 02, Phase 6.
+   IdP in plan 02.7, Phase 1.
    (clarified per user direction) Derive that allowance from the issuer each environment already
    configures: local Tilt from the `AUTH0_ISSUER_URI` environment variable, the same value Session
    Gateway and `render-istio-egress-config.sh` use, and the offline production reference from
@@ -463,8 +463,8 @@ R2 findings G and H; R3 "HSTS details"; R4 "HSTS (G)"; `nginx/README.md`.
 - Session Gateway is the only consumer of the removed headers today. Removing them on every route
   keeps a future consumer safe.
 - No SPA form posts natively; each uses `onSubmit`, so `form-action 'self'` breaks nothing today.
-  (amended per contested #1) Logout becomes a native form POST in plan 02. Redirect enforcement
-  must be checked in supported browsers; plan 02, Phase 16 verifies login, logout and hostile
+  (amended per contested #1) Logout becomes a native form POST in plan 02.7. Redirect enforcement
+  must be checked in supported browsers; plan 02.8, Phase 2 verifies login, logout and hostile
   submissions with the final CSP. Do not defer this compatibility check on the basis that the
   directive is absent today.
 - `kubernetes/production/gateway-routes` reuses these routes, so the production reference inherits
@@ -562,7 +562,7 @@ and R1's links. Check `docs/OWNERSHIP.md` first.
 ### Non-goals
 
 ADRs. Rows changed by later phases are left to those phases: absolute expiry and session key format
-(plan 02, Phase 14), audit logging (plan 05, Phase 3), and eviction policy (plan 04, Phase 1).
+(plans 02.4 and 02.5), audit logging (plan 05, Phase 3), and eviction policy (plan 04, Phase 1).
 
 ### Required context
 

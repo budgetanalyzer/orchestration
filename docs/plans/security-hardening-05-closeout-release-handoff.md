@@ -126,9 +126,9 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ```
 
 **Cutover rule:** `kubernetes/production` shares these manifests but pins older images
-(session-gateway 0.0.15, ext-authz 0.0.16). Plan 02, Phases 14 and 15 and plan 03, Phase 2
+(session-gateway 0.0.15, ext-authz 0.0.16). Plans 02.3, 02.5 and 02.6 and plan 03, Phase 2
 therefore describe behaviour those images lack: the new cookie, hashed keys, the POST sync call and
-`/livez`. The mesh policy from plan 02, Phase 14 would also block the pinned Session Gateway's login
+`/livez`. The mesh policy from plan 02.3, Phase 3 would also block the pinned Session Gateway's login
 call. The offline checks catch none of this. Phase 3 records the release and pin updates, which are
 human-owned. No production environment exists, so no dual-cookie or session migration is needed.
 
@@ -169,7 +169,7 @@ asserts in `verify-credential-isolation.sh`.
 ### Required context
 
 R2 "Define the edge contract once"; R3 N3; R4 "Define and test one edge contract"; plan 01, Phases 1-5;
-plan 02, Phase 16.
+plan 02.8, Phase 2.
 
 ### Execution steps
 
@@ -278,11 +278,12 @@ Phase 2 (amended per contested #6: the PDF phase was dropped).
 4. Confirm no doc in the scope table still contradicts the code.
 5. Record the human-owned handoff: release service-common, then session-gateway, ext-authz, the three
    services and the frontend, and update `kubernetes/production/apps/deployment-manifest.yaml` and
-   `image-inventory.yaml`. Release them together, because the plan 02, Phase 14 policy blocks the pinned
+   `image-inventory.yaml`. Release them together, because the plan 02.3, Phase 3 policy blocks the pinned
    Session Gateway's login call. (amended per user direction)
    Also record that the production reference supports only a deployment that starts from empty state;
    no upgrade path from the pinned images or existing data is provided.
-6. Note the production secrets and configuration added by plan 02, Phase 14 and plan 04, Phase 4.
+6. Note the production secrets and configuration added by plans 02.2, 02.4 and 02.6 and plan 04,
+   Phase 4.
 7. Link passing evidence for every non-deferred scope item, including additions 32-38, and note
    every accepted remaining gap: Session Gateway client address, audit retention and access,
    anonymous OAuth-state growth, and the migrator credential's location. (amended per contested #2,

@@ -13,7 +13,7 @@ Phase numbers without a plan refer to this plan.
 
 **Order:** 03 of 5
 
-**Depends on:** plan 02: its live phases need the completed cutover.
+**Depends on:** plans 02.1-02.8: its live phases need the completed session-contract cutover.
 
 **Repositories:** ext-authz, service-common, transaction-service, permission-service,
 session-gateway, currency-service, orchestration.
@@ -69,9 +69,9 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ```
 
 **Cutover rule:** `kubernetes/production` shares these manifests but pins older images
-(session-gateway 0.0.15, ext-authz 0.0.16). Phase 2 and plan 02, Phases 14 and 15 therefore
+(session-gateway 0.0.15, ext-authz 0.0.16). Phase 2 and plans 02.3, 02.5 and 02.6 therefore
 describe behaviour those images lack: the new cookie, hashed keys, the POST sync call and `/livez`.
-The mesh policy from plan 02, Phase 14 would also block the pinned Session Gateway's login call. The
+The mesh policy from plan 02.3, Phase 3 would also block the pinned Session Gateway's login call. The
 offline checks catch none of this. Plan 05, Phase 3 records the release and pin updates, which are
 human-owned. No production environment exists, so no dual-cookie or session migration is needed.
 

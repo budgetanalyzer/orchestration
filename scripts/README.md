@@ -141,6 +141,25 @@ scripts/
   before NGINX routing. Parent verifiers that already completed the focused
   rate-limit proof may pass `--skip-ingress-rate-limits` to avoid repeating
   its bounded bursts and refill waits.
+- `smoketest/verify-oauth-browser-binding.py` - Live Chromium proof that an
+  unused OAuth callback without its browser binding returns the controlled
+  login failure, issues no session cookie, and leaves user/session reads at
+  `401`. It pauses the real cross-site redirect with Chromium's Fetch API,
+  submits it through a separate empty HTTP cookie jar, then resumes the
+  initiating browser and requires successful user read, heartbeat and logout.
+  The latter also proves the rejected attempt did not consume state. Requires
+  the running local stack, current Session Gateway sibling build, the API-test
+  sibling's `.venv` with Playwright Chromium, disposable primary credentials
+  in its `.env.local`, and established HTTP/browser TLS trust. Run from this
+  repo with
+  `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-oauth-browser-binding.py`.
+  It accepts only the exact local HTTPS origin and never prints cookie,
+  authorization-code or state values.
+- `smoketest/verify-ingress-browser-callback.py` - Existing hosted-login
+  regression proving callback completion while the same client's initiation
+  allowance is exhausted. Uses the same API-test interpreter, credentials and
+  browser prerequisites as the binding verifier. Run it after the binding
+  proof; its burst temporarily exhausts the local client's initiation budget.
 - `guardrails/verify-ingress-rate-limit-config.sh` - Offline, non-mutating
   structural guardrail for the four per-client Istio ingress policies. It
   renders the production overlay, requires the exact shared EnvoyFilter, checks

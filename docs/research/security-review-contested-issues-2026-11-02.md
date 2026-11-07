@@ -8,7 +8,7 @@
 deferred as a documented known limitation.
 
 **Status:** Reviewed recommendations. These verdicts replace the original discussion recommendations;
-they do not implement fixes. The original hardening plan has since been split into plans [01](../plans/security-hardening-01-edge-mesh-redis-acl.md), [02](../plans/security-hardening-02-session-contract.md), [03](../plans/security-hardening-03-service-runtime.md), [04](../plans/security-hardening-04-data-network-infrastructure.md) and [05](../plans/security-hardening-05-closeout-release-handoff.md), which apply these decisions.
+they do not implement fixes. The original hardening plan has since been split into plans [01](../plans/security-hardening-01-edge-mesh-redis-acl.md), 02 (since split into mergeable plans [02.1](../plans/security-hardening-02.1-oauth-callback-binding.md) through [02.8](../plans/security-hardening-02.8-exact-origin-ingress.md)), [03](../plans/security-hardening-03-service-runtime.md), [04](../plans/security-hardening-04-data-network-infrastructure.md) and [05](../plans/security-hardening-05-closeout-release-handoff.md), which apply these decisions.
 
 This review decides whether to **keep**, **discard**, or **modify** each original recommendation.
 “Keep” can retain a deferral; it does not mean the proposed control already exists. “Discard” rejects
@@ -618,12 +618,14 @@ Capture the routing baseline when available, but do not delay known mesh overper
 exploit reproduction. Start with small edge/ACL/credential-forwarding fixes, then promptly handle
 browser binding, session-token exposure and CSRF across their owning repositories. Do not postpone
 those behind optional generators, signing, port redesigns or egress redesign. Follow contract
-cutover dependencies in [plan 02's plan-wide rules](../plans/security-hardening-02-session-contract.md#plan-wide-rules).
+cutover dependencies in the **Merge unit** of each plan 02.x.
 The split plans apply the reconciliations: D3 and the binding rule in
-[plan 02, Phase 1](../plans/security-hardening-02-session-contract.md#phase-1-bind-oauth-callbacks-to-the-initiating-browser),
+[plan 02.1, Phase 1](../plans/security-hardening-02.1-oauth-callback-binding.md#phase-1-bind-oauth-callbacks-to-the-initiating-browser),
 the CSP and form logout in
 [plan 01, Phase 5](../plans/security-hardening-01-edge-mesh-redis-acl.md#phase-5-harden-ingress-headers-and-the-csp-live),
-the ingress Origin/POST cutover in plan 02, Phases 6, 11, 13 and 16, the currency-service `SCAN`
+the ingress Origin/POST cutover in
+[plan 02.7](../plans/security-hardening-02.7-post-heartbeat-logout.md) and
+[plan 02.8](../plans/security-hardening-02.8-exact-origin-ingress.md), the currency-service `SCAN`
 strategy and `+scan`-only grant in
 [plan 03, Phases 11 and 13](../plans/security-hardening-03-service-runtime.md#phase-11-clear-the-currency-service-cache-with-scan),
 and the PDF deferral in plan 03's dropped phases.

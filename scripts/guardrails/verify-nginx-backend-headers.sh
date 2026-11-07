@@ -169,7 +169,7 @@ probe() {
     local path="$1"
 
     docker exec "${CONTAINER_ID}" curl --silent --show-error --fail --max-time 5 \
-        -H 'Cookie: BA_SESSION=synthetic-session-not-real; other=synthetic' \
+        -H 'Cookie: __Host-BA_SESSION=synthetic-session-not-real; other=synthetic' \
         -H 'Cookie: second=synthetic' \
         -H 'Authorization: Bearer synthetic-token-not-real' \
         -H 'X-Forwarded-Proto: http' \

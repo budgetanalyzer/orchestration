@@ -46,9 +46,9 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security
 baseline. `./scripts/smoketest/verify-session-architecture.sh` proves the
 unified Redis session namespace, the shared `session:` key prefix and
-`BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
+`__Host-BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 shared SHA-256 session key derivation and golden vector, the
-explicit `SESSION_COOKIE_NAME=BA_SESSION` wiring in the `ext-authz`
+explicit `SESSION_COOKIE_NAME=__Host-BA_SESSION` wiring in the `ext-authz`
 deployment, the internal Session Gateway-to-permission-service heartbeat path
 in local and production policy, its absence from public NGINX routes, and the
 full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
@@ -57,7 +57,8 @@ full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
 egress hardening. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
 browser sessions are extended by `GET /auth/v1/session`. The browser only
-carries an opaque `BA_SESSION` cookie; Session Gateway keeps the session data
+carries an opaque, host-only `__Host-BA_SESSION` cookie, which a client stores
+only from an HTTPS response; Session Gateway keeps the session data
 in Redis under `session:{sha256(token)}`, the lowercase hex SHA-256 of the
 cookie value, and the temporary OAuth2 request state under
 `oauth2:state:{state}`. The raw cookie token never appears in Redis keys or
@@ -211,12 +212,12 @@ Pod not starting?
 ```
 Auth failures after login?
 ├── Check browser DevTools → Network tab
-│   ├── Request missing BA_SESSION cookie?
+│   ├── Request missing __Host-BA_SESSION cookie?
 │   │   └── Session Gateway not setting cookie after login
 │   │       └── kubectl logs -f deployment/session-gateway
-│   └── Request has BA_SESSION cookie but still 401/403?
+│   └── Request has __Host-BA_SESSION cookie but still 401/403?
 │       ├── Probe the heartbeat directly with that cookie
-│       │   └── curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+│       │   └── curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 │       ├── /auth/v1/session returns 401?
 │       │   └── Session missing/expired or IDP grant revoked
 │       │       └── kubectl logs -f deployment/session-gateway
@@ -275,10 +276,10 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
-curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
 # Inspect one specific session hash if you have the cookie value; the key is its SHA-256
-SESSION_TOKEN='<BA_SESSION cookie value>'
+SESSION_TOKEN='<__Host-BA_SESSION cookie value>'
 SESSION_KEY="session:$(printf '%s' "$SESSION_TOKEN" | sha256sum | cut -d' ' -f1)"
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
 
@@ -460,10 +461,10 @@ curl http://localhost:8080/health
 
 # 3. Test full flow (requires valid session cookie)
 # Use browser DevTools to copy the Cookie header, then:
-curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
+curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 
 # 4. Probe the heartbeat path with the same cookie
-curl -H "Cookie: BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 ```
 
 ---

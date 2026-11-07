@@ -257,7 +257,7 @@ probe_response() {
         -D - -o /dev/null -w 'HTTP_STATUS:%{http_code}\n'
     )
     [[ -z "${forged_xff}" ]] || curl_args+=(-H "X-Forwarded-For: ${forged_xff}")
-    [[ -z "${session_id}" ]] || curl_args+=(--cookie "BA_SESSION=${session_id}")
+    [[ -z "${session_id}" ]] || curl_args+=(--cookie "__Host-BA_SESSION=${session_id}")
     curl_args+=("https://app.budgetanalyzer.localhost${path}")
     kubectl exec -n "${PROBE_NAMESPACE}" "${pod_name}" -- "${curl_args[@]}" 2>/dev/null
 }

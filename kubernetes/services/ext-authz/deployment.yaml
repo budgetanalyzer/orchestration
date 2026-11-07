@@ -50,7 +50,7 @@ spec:
         - name: REDIS_CA_CERT
           value: "/etc/ssl/infra/ca.crt"
         - name: SESSION_COOKIE_NAME
-          value: "BA_SESSION"
+          value: "__Host-BA_SESSION"
         - name: LOG_FORMAT
           value: "json"
         volumeMounts:

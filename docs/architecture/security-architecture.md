@@ -581,8 +581,13 @@ the versioned Session Gateway JSON endpoints.
 > **Auth0 tenant settings** that produce these token lifetimes and session behavior are documented in [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md) (authoritative values, tied to SESSION_TTL_SECONDS and heartbeat cadence) and [Auth0 Setup Guide — Security Configuration](../setup/auth0-setup.md#6-security-configuration) (quickstart context).
 
 **Session Cookie:**
+- Name: `__Host-BA_SESSION`. The `__Host-` prefix makes browsers reject the
+  cookie unless it is `Secure`, has `Path=/` and has no `Domain` attribute, so
+  it stays host-only and a sibling subdomain cannot set or shadow it. There is
+  no domain override.
 - HttpOnly: true (prevents JavaScript access)
-- Secure: true (HTTPS only)
+- Secure: true (HTTPS only; required by the `__Host-` prefix)
+- Path: `/`, with no `Domain` attribute
 - SameSite: Strict (the principal CSRF protection; see [Threat Mitigation](#threat-mitigation))
 - No `Max-Age` or `Expires`: it is a browser-session cookie. The stored
   `expires_at`, checked by ext_authz and Session Gateway, and the Redis key TTL
@@ -772,7 +777,7 @@ surface; alerting rules are a future follow-up.
 ### Session Management
 
 **Redis Configuration:**
-- Session key pattern: `session:{sha256(token)}`, where the suffix is the lowercase hex SHA-256 of the `BA_SESSION` cookie value; see the [shared session contract](session-edge-authorization-pattern.md#shared-session-contract)
+- Session key pattern: `session:{sha256(token)}`, where the suffix is the lowercase hex SHA-256 of the `__Host-BA_SESSION` cookie value; see the [shared session contract](session-edge-authorization-pattern.md#shared-session-contract)
 - User session index pattern: `user_sessions:{userId}` (SET of session token digests for bulk revocation)
 - Key names remain visible metadata to Redis operators; hashing keeps the reusable token out of them
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)

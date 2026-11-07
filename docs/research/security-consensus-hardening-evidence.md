@@ -1302,3 +1302,147 @@ keys. The only live sessions left were two `test-user-001` fixtures from
 - `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
   0.0.16, which use raw keys. The release and pin update is human-owned under
   plan 05, Phase 3. No production environment exists.
+
+## Plan 02.6, Phase 5: `__Host-BA_SESSION` Wired Into Orchestration
+
+Date: 2026-11-07. Static work only: no stack was running for this phase, and no
+cluster was touched. The live cutover proof belongs to the plan's Live phase.
+
+### Change
+
+- `kubernetes/services/ext-authz/deployment.yaml` sets
+  `SESSION_COOKIE_NAME=__Host-BA_SESSION`. No orchestration session-gateway
+  manifest or Tiltfile entry set the cookie name or
+  `SESSION_COOKIE_DOMAIN_OVERRIDE`, so none needed a change (D4).
+- Scripts that build a `Cookie` header from a seeded token now send
+  `__Host-BA_SESSION`: `verify-edge-contract.sh`,
+  `verify-credential-isolation.sh`, `verify-ingress-rate-limits.sh`,
+  `verify-istio-ingress.sh` and `verify-nginx-backend-headers.sh`. The
+  `seed-ext-authz-session.sh` comment and `scripts/README.md` name the new
+  cookie. The Python browser verifiers read `session_cookie_name` from the
+  api-tests environment, which plan 02.6 Phase 4 already updated.
+- `verify-session-architecture.sh` already compared the Session Gateway and
+  ext-authz defaults with each other; it now expects `__Host-BA_SESSION` for
+  both defaults and the deployment (static and live). It also fails if Session
+  Gateway `application.yml`, `kubernetes/` or the `Tiltfile` mention
+  `SESSION_COOKIE_DOMAIN_OVERRIDE`.
+- The session-edge pattern, security architecture, `SECURITY.md`, Tilt
+  debugging runbook, local environment and GCP history docs use the new name.
+  The session-edge pattern and security architecture describe the `__Host-`
+  attributes (`Secure`, `Path=/`, no `Domain`) and the HTTPS requirement.
+
+### Validation
+
+- `bash -n`, `shellcheck` and `shellcheck -x` on the seven changed scripts:
+  clean.
+- `verify-static-security-manifests.sh` (pinned PyYAML interpreter): passed.
+- `verify-production-image-overlay.sh`: passed.
+- `verify-nginx-backend-headers.sh`: 7 passed, 0 failed.
+- `./scripts/smoketest/verify-session-architecture.sh --static-only`:
+  **62 passed, 0 failed**.
+
+### Limitations
+
+- No live run in this phase.
+- An existing local cluster needs no migration. Browsers holding the old
+  `BA_SESSION` cookie get `401` and sign in again; `./scripts/ops/flush-redis.sh`
+  discards the orphaned sessions instead of waiting for their TTL.
+- `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
+  0.0.16, which use `BA_SESSION`, while the shared ext-authz manifest now sets
+  `__Host-BA_SESSION`. The release and pin update is human-owned under plan 05,
+  Phase 3. No production environment exists.
+
+## Plan 02.6, Phase 6: `__Host-BA_SESSION` Cut Over and Proven Live
+
+Date: 2026-11-07. Live phase against the local Tilt/Kind stack. The
+`kind-kind` checks passed: current context `kind-kind`, loopback HTTPS API
+authority with no proxy override, the `kind` cluster, and a Ready
+`kind-control-plane`. `./scripts/bootstrap/check-local-runtime.sh` passed. No
+cookie, token, authorization-code or state value was printed or recorded.
+
+### Runtime provenance
+
+- Session Gateway: `session-gateway:tilt-30f9df2288c3e7ad`. The `/app/app.jar`
+  in the pod has the same SHA-256 as the sibling worktree's
+  `build/libs/session-gateway-0.0.1-SNAPSHOT.jar`. That jar was built at
+  14:44:38, after the last Session Gateway `src/main` edit at 14:43:18. The
+  running process logged
+  `Public session cookie contract configured: name=__Host-BA_SESSION`.
+- ext-authz: `ext-authz:tilt-d047f1678c9a17e9`. Tilt fully rebuilt it at
+  14:47:14, after the last sibling source edit at 14:47:01. It was redeployed
+  at 14:51:45 with the Phase 5 manifest, and the live deployment sets
+  `SESSION_COOKIE_NAME=__Host-BA_SESSION`.
+- budget-analyzer-web: `budget-analyzer-web:tilt-f883c6771846cc73`, rebuilt at
+  14:48:05 after its comment-only change.
+
+### Live browser proof
+
+`../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-oauth-browser-binding.py`
+passed. Headless Chromium completed a hosted login with the disposable primary
+credentials. The verifier then read the browser's cookie by the api-tests
+`session_cookie_name` (`__Host-BA_SESSION`), and the user read, heartbeat and
+logout passed.
+
+A one-off probe used the api-tests venv and helpers and lived in a temporary
+directory outside the repositories. It printed only cookie names and
+attributes:
+
+| Step | Result |
+| --- | --- |
+| api-tests `session_cookie_name` | `__Host-BA_SESSION` |
+| OAuth callback `302` `Set-Cookie` | `__Host-BA_SESSION=<value>; Path=/; Secure; HTTPOnly; SameSite=Strict`. No `Domain`, no `Max-Age` or `Expires` |
+| Stored in Chromium | domain `app.budgetanalyzer.localhost` (host-only, no leading dot), path `/`, `secure=True`, `httpOnly=True`, `sameSite=Strict`, session cookie |
+| `document.cookie` | does not expose the session cookie |
+| Browser `GET /api/v1/currencies` | `200` |
+| Browser heartbeat `GET /auth/v1/session` | `200` |
+| `/logout` `302` `Set-Cookie` | `__Host-BA_SESSION=; Max-Age=0; Expires=<past>; Path=/; Secure; HTTPOnly; SameSite=Strict` |
+| Browser cookies after logout | no `__Host-BA_SESSION`, `BA_SESSION` or `SESSION` |
+| Browser `GET /auth/v1/user`, `GET /api/v1/currencies` after logout | `401`, `401` |
+
+Chromium stores a `__Host-` cookie only when it has `Secure`, `Path=/` and no
+`Domain`, so the stored cookie is a second proof of the prefix requirements. No
+`BA_SESSION` or `SESSION` cookie appeared at any step.
+
+The old name is inert. A session seeded with
+`./scripts/ops/seed-ext-authz-session.sh` and sent through the HTTPS ingress
+with normal TLS verification returned `401` as `BA_SESSION=<id>` and `200` as
+`__Host-BA_SESSION=<id>`. The probe key was deleted afterwards.
+
+Observation, not a cutover defect: the `/logout` `302` points to the
+configured Auth0 tenant. Headless Chromium reports `net::ERR_ABORTED` on that
+cross-site hop and stays on the application origin. The application-side
+logout contract held: the cookie was cleared and later reads returned `401`.
+
+### Validation
+
+- Orchestration static gate: `bash -n` and `shellcheck -x` on the seven
+  scripts changed in Phase 5 are clean.
+  `verify-static-security-manifests.sh` (pinned PyYAML interpreter) and
+  `verify-production-image-overlay.sh` passed.
+- `./scripts/smoketest/verify-session-architecture.sh` (static and live):
+  **83 passed, 0 failed**. This includes the matching Session Gateway and
+  ext-authz `__Host-BA_SESSION` defaults, the live ext-authz deployment value
+  and the absence of `SESSION_COOKIE_DOMAIN_OVERRIDE`.
+- `./scripts/smoketest/verify-istio-ingress.sh`: **97 passed (out of 97)**,
+  including the nested focused rate-limit proof.
+- `./scripts/smoketest/verify-ingress-rate-limits.sh` (standalone): **33
+  checks passed**.
+- `./scripts/smoketest/verify-credential-isolation.sh`: **76 passed (out of
+  76)**.
+- `./scripts/smoketest/verify-edge-contract.sh` (no flags): **190 passed, 0
+  failed, 3 skipped**. The NGINX-lane cases send the seeded
+  `__Host-BA_SESSION` cookie through `ext_authz`.
+
+### Limitations
+
+- `verify-edge-contract.sh` ran without `--inject-failures`. The three
+  plan 01 failure cases were skipped: ext-authz scaled to zero, ext-authz
+  unreachable, and Redis stopped. This run is not full edge-contract coverage.
+- The api-tests live suite was not run from this repository. The api-tests
+  configuration was exercised through the browser verifier and the probe.
+- Existing local browsers that hold `BA_SESSION` get `401` and sign in again.
+  `./scripts/ops/flush-redis.sh` discards orphaned sessions sooner than their
+  TTL. No other reset is needed.
+- `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
+  0.0.16, which use `BA_SESSION`. The release and pin update is human-owned
+  under plan 05, Phase 3. No production environment exists.

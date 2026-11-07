@@ -2153,11 +2153,11 @@ export const config = configs[env as keyof typeof configs];
        password: 'testpassword',
      });
      check(loginRes, { 'login successful': (r) => r.status === 200 });
-     let sessionCookie = loginRes.cookies['BA_SESSION'];
+     let sessionCookie = loginRes.cookies['__Host-BA_SESSION'];
 
      // Get transactions
      let txRes = http.get('https://api.budgetanalyzer.com/api/v1/transactions', {
-       cookies: { BA_SESSION: sessionCookie },
+       cookies: { '__Host-BA_SESSION': sessionCookie },
      });
      check(txRes, { 'transactions fetched': (r) => r.status === 200 });
 
@@ -3217,7 +3217,7 @@ redis-cli -h MEMORYSTORE_IP ping
 # Expected: PONG
 
 # Test session creation (login via browser, then check cookie)
-# Expected: Set-Cookie: BA_SESSION=... header
+# Expected: Set-Cookie: __Host-BA_SESSION=... header
 
 # Check session stored in Redis
 redis-cli -h MEMORYSTORE_IP KEYS "session:*"

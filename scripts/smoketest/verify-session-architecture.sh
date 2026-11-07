@@ -27,9 +27,10 @@ Usage: ./scripts/smoketest/verify-session-architecture.sh [options]
 Verifies the shared session contract across the orchestration, session-gateway,
 and ext-authz repos:
 - Redis ACL bootstrap uses the unified `session:*` and `oauth2:state:*` namespaces, and the Session Gateway user has no `+@all` grant
-- Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
+- Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=__Host-BA_SESSION` defaults
 - Session Gateway, ext-authz and orchestration's `session_key_for` all key sessions as `session:<lowercase hex SHA-256 of the cookie token>` and agree on a shared golden vector
-- ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
+- ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=__Host-BA_SESSION` and does not override `SESSION_KEY_PREFIX`
+- Neither Session Gateway config nor orchestration manifests set `SESSION_COOKIE_DOMAIN_OVERRIDE`, which `__Host-` forbids
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
 - Session Gateway reaches permission-service only through `POST /internal/v1/users/sync` and `GET /internal/v1/users/{userId}/authorization` in the local policy, while the internal surface stays absent from public NGINX routes
 - The source heartbeat contract refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
@@ -700,24 +701,33 @@ run_static_checks() {
 
     assert_value_equals \
         "$session_gateway_cookie_name_yaml_default" \
-        "BA_SESSION" \
-        "Session Gateway application.yml default is session.cookie.name=BA_SESSION"
+        "__Host-BA_SESSION" \
+        "Session Gateway application.yml default is session.cookie.name=__Host-BA_SESSION"
     assert_file_contains \
         "$session_gateway_cookie_helper_file" \
         'this.cookieName = cookieProperties.name();' \
         "Session Gateway SessionCookieHelper reads the cookie name from SessionProperties"
     assert_value_equals \
         "$ext_authz_cookie_name_default" \
-        "BA_SESSION" \
-        "ext-authz default is SESSION_COOKIE_NAME=BA_SESSION"
+        "__Host-BA_SESSION" \
+        "ext-authz default is SESSION_COOKIE_NAME=__Host-BA_SESSION"
     assert_values_match \
         "$session_gateway_cookie_name_yaml_default" \
         "$ext_authz_cookie_name_default" \
         "Session Gateway and ext-authz share the session cookie-name default"
     assert_value_equals \
         "$ext_authz_deployment_cookie_name" \
-        "BA_SESSION" \
-        "ext-authz deployment explicitly sets SESSION_COOKIE_NAME=BA_SESSION"
+        "__Host-BA_SESSION" \
+        "ext-authz deployment explicitly sets SESSION_COOKIE_NAME=__Host-BA_SESSION"
+    assert_file_not_contains \
+        "$session_gateway_application_file" \
+        "SESSION_COOKIE_DOMAIN_OVERRIDE" \
+        "Session Gateway application.yml has no SESSION_COOKIE_DOMAIN_OVERRIDE (__Host- forbids Domain)"
+    if grep -rFq -- "SESSION_COOKIE_DOMAIN_OVERRIDE" "${REPO_ROOT}/kubernetes" "${REPO_ROOT}/Tiltfile"; then
+        fail "orchestration manifests or Tiltfile still set SESSION_COOKIE_DOMAIN_OVERRIDE"
+    else
+        pass "orchestration manifests and Tiltfile do not set SESSION_COOKIE_DOMAIN_OVERRIDE"
+    fi
 
     assert_file_not_contains \
         "$ext_authz_deployment_file" \
@@ -890,8 +900,8 @@ run_live_checks() {
         ext_authz_deployment_cookie_name="$(extract_named_env_value_from_yaml "SESSION_COOKIE_NAME" <<<"$ext_authz_yaml")"
         assert_value_equals \
             "$ext_authz_deployment_cookie_name" \
-            "BA_SESSION" \
-            "live ext-authz deployment explicitly sets SESSION_COOKIE_NAME=BA_SESSION"
+            "__Host-BA_SESSION" \
+            "live ext-authz deployment explicitly sets SESSION_COOKIE_NAME=__Host-BA_SESSION"
         if grep -Fq 'name: SESSION_KEY_PREFIX' <<<"$ext_authz_yaml"; then
             fail "live ext-authz deployment still overrides SESSION_KEY_PREFIX"
         else

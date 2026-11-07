@@ -1,7 +1,7 @@
 #!/bin/bash
 # Usage: ./scripts/ops/seed-ext-authz-session.sh [session-id]
 # Creates a test session in Redis for ext-authz development/testing. The
-# session-id argument is the BA_SESSION cookie value; Redis stores it under
+# session-id argument is the __Host-BA_SESSION cookie value; Redis stores it under
 # session:<sha256-hex of the session id>, as Session Gateway does.
 
 set -euo pipefail

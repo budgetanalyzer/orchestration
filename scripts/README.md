@@ -628,7 +628,7 @@ the active context and Tilt resource state from the same host shell first.
   port-forwarded Grafana URL, opens the provisioned dashboards, and captures
   browser-side debugging artifacts without committing Node dependency files.
 - `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
-  the TLS-only in-cluster listener. Its argument is the `BA_SESSION` cookie
+  the TLS-only in-cluster listener. Its argument is the `__Host-BA_SESSION` cookie
   value; the Redis key is `session:<sha256 of that value>`, derived with
   `session_key_for` from `lib/redis-cli.sh`.
 - `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.

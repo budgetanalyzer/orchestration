@@ -28,7 +28,7 @@ SEED_SCRIPT="${REPO_DIR}/scripts/loadtest/seed-loadtest-users.sh"
 TEARDOWN_SCRIPT="${REPO_DIR}/scripts/loadtest/teardown-loadtest.sh"
 SEEDED_USER_ID="${LOADTEST_USER_ID_PREFIX}1"
 SEEDED_SESSION_ID="${LOADTEST_SESSION_ID_PREFIX}1"
-SESSION_COOKIE="BA_SESSION=${SEEDED_SESSION_ID}"
+SESSION_COOKIE="__Host-BA_SESSION=${SEEDED_SESSION_ID}"
 
 # NGINX-lane traversal matrix. Each probe is
 # <prefix><form><sep><form><sep><target>, repeating the traversal twice so it
@@ -1022,7 +1022,7 @@ verify_authorization_failure() {
     start_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     nginx_before=$(sidecar_requests_from_ingress nginx-gateway)
     assert_missing_session_401 "No cookie" "$probe_path"
-    assert_missing_session_401 "Unknown session" "$probe_path" --cookie "BA_SESSION=${marker}-unknown"
+    assert_missing_session_401 "Unknown session" "$probe_path" --cookie "__Host-BA_SESSION=${marker}-unknown"
     sleep 2
     assert_nginx_not_reached "No session" "$nginx_before" "$start_time" "$marker"
 

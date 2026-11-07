@@ -37,7 +37,7 @@ the secret values it configures.
 | Checked-in service deployments | PostgreSQL JDBC URLs, service usernames, Redis hosts/ports/usernames, RabbitMQ host/port/username/vhost |
 | `ConfigMap/permission-service-config` | checked-in Permission Service runtime settings such as `SESSION_GATEWAY_BASE_URL` and bounded session-revocation retry knobs |
 | `ConfigMap/session-gateway-config` | checked-in Session Gateway runtime settings such as `SESSION_TTL_SECONDS` |
-| `ConfigMap/session-gateway-idp-config` | checked-in fallback for non-secret Auth0/IDP settings: `AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`; Tilt overwrites it locally from `.env` |
+| `ConfigMap/session-gateway-idp-config` | checked-in fallback for non-secret Auth0/IDP settings: `AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`, `IDP_REDIRECT_URI`; Tilt overwrites it locally from `.env` |
 
 ## Misclassified Keys Removed
 

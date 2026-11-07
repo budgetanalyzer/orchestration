@@ -86,11 +86,13 @@ AUTH0_CLIENT_SECRET=your-client-secret-here
 # Optional - defaults work for most setups
 # IDP_AUDIENCE=https://api.budgetanalyzer.org
 # IDP_LOGOUT_RETURN_TO=https://app.budgetanalyzer.localhost/peace
+# IDP_REDIRECT_URI=https://app.budgetanalyzer.localhost/login/oauth2/code/idp
 ```
 
 The repo ships a checked-in fallback `ConfigMap/session-gateway-idp-config` for
 non-Tilt applies. Tilt overwrites `AUTH0_ISSUER_URI`, `AUTH0_CLIENT_ID`,
-`IDP_AUDIENCE`, and `IDP_LOGOUT_RETURN_TO` from `.env`, keeps only
+`IDP_AUDIENCE`, `IDP_LOGOUT_RETURN_TO`, and `IDP_REDIRECT_URI` from `.env`,
+keeps only
 `AUTH0_CLIENT_SECRET` in `Secret/auth0-credentials`, and renders the Auth0
 egress `ServiceEntry`, egress `Gateway`, and `VirtualService` from the same
 URI. Production deployers should preserve that same contract: whichever system
@@ -119,6 +121,7 @@ heartbeat cadence.
 ### "Invalid callback URL" error
 
 - Verify **Allowed Callback URLs** exactly matches: `https://app.budgetanalyzer.localhost/login/oauth2/code/idp`
+- Verify `IDP_REDIRECT_URI` in `ConfigMap/session-gateway-idp-config` equals that same URL
 - Check for trailing slashes or typos
 
 ### "Unauthorized" after login

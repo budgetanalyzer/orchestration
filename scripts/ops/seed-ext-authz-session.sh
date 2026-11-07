@@ -1,6 +1,8 @@
 #!/bin/bash
 # Usage: ./scripts/ops/seed-ext-authz-session.sh [session-id]
-# Creates a test session in Redis for ext-authz development/testing.
+# Creates a test session in Redis for ext-authz development/testing. The
+# session-id argument is the BA_SESSION cookie value; Redis stores it under
+# session:<sha256-hex of the session id>, as Session Gateway does.
 
 set -euo pipefail
 
@@ -26,9 +28,10 @@ fi
 SESSION_ID="${1:-test-session-001}"
 SESSION_TTL_SECONDS="${SESSION_TTL_SECONDS:-900}"
 EXPIRES_AT="$(($(date +%s) + SESSION_TTL_SECONDS))"
+SESSION_KEY=$(session_key_for "$SESSION_ID")
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" HSET \
-    "session:${SESSION_ID}" \
+    "$SESSION_KEY" \
     user_id "test-user-001" \
     roles "ROLE_USER,ROLE_ADMIN" \
     permissions "transactions:read,transactions:write,currencies:read" \
@@ -36,6 +39,6 @@ redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSW
     expires_at "${EXPIRES_AT}" >/dev/null
 
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" EXPIRE \
-    "session:${SESSION_ID}" "${SESSION_TTL_SECONDS}" >/dev/null
+    "$SESSION_KEY" "${SESSION_TTL_SECONDS}" >/dev/null
 
-echo "Seeded session: session:${SESSION_ID}"
+echo "Seeded session: ${SESSION_KEY} (cookie BA_SESSION=${SESSION_ID})"

@@ -7,7 +7,7 @@
 #   ./scripts/ops/redis-browse.sh --sessions                           # dump all sessions
 #   ./scripts/ops/redis-browse.sh --user-sessions                      # dump all user-session sets
 #   ./scripts/ops/redis-browse.sh --sessions --user-sessions           # both
-#   ./scripts/ops/redis-browse.sh HGETALL session:<id>                 # one-shot command
+#   ./scripts/ops/redis-browse.sh HGETALL session:<sha256-of-cookie>   # one-shot command
 
 set -euo pipefail
 

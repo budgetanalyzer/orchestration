@@ -8,6 +8,8 @@
 #   - redis-cli bulk pipe against the in-cluster Redis pod
 #   - shared loadtest id / marker / pool-file constants
 #   - single-command redis-cli exec helper for scan / unlink workflows
+#   - session_key_for / session_digest_for from redis-cli.sh, because Redis
+#     stores sessions under the SHA-256 of the cookie value, not the raw token
 #
 # Source this file from seed-loadtest-users.sh,
 # seed-loadtest-transactions.sh, and teardown-loadtest.sh.
@@ -16,8 +18,14 @@
 
 set -euo pipefail
 
+# shellcheck source=scripts/lib/redis-cli.sh
+# shellcheck disable=SC1091 # Resolved relative to this file at runtime; run shellcheck -x when following sources.
+source "$(dirname "${BASH_SOURCE[0]}")/redis-cli.sh"
+
 # ---- Shared loadtest identifiers ---------------------------------------------
 # Every synthetic artifact must carry one of these so teardown can find it.
+# LOADTEST_SESSION_ID_PREFIX marks the raw cookie tokens in the pool file only;
+# Redis session keys and user_sessions members are their SHA-256 digests.
 
 LOADTEST_USER_ID_PREFIX="usr_loadtest_"
 LOADTEST_IDP_SUB_PREFIX="loadtest|"
@@ -148,8 +156,8 @@ postgres_query_in_pod() {
 #
 # Usage:
 #   redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" <<'REDIS'
-#   HSET session:loadtest_1 user_id usr_loadtest_1 ...
-#   EXPIRE session:loadtest_1 900
+#   HSET session:<sha256 of loadtest_1> user_id usr_loadtest_1 ...
+#   EXPIRE session:<sha256 of loadtest_1> 900
 #   REDIS
 redis_cli_pipe_in_pod() {
     local pod="$1"
@@ -171,7 +179,7 @@ redis_cli_pipe_in_pod() {
 #
 # Usage:
 #   redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
-#       --scan --pattern 'session:loadtest_*'
+#       --scan --pattern 'user_sessions:usr_loadtest_*'
 redis_cli_exec_in_pod() {
     local pod="$1"
     local user="$2"

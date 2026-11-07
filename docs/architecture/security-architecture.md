@@ -94,7 +94,7 @@ Security-critical implications:
 - Bind each OAuth callback to its initiating browser before consuming state;
   the reusable secure binding cookie and single-winner Redis deletion contract
   are defined in the [browser session contract](session-edge-authorization-pattern.md#session-gateway---auth-layer).
-- Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) — no Auth0 tokens are stored, and ext_authz reads the same hashes for ingress-layer authorization
+- Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{sha256(token)}`) — no Auth0 tokens are stored, and ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
 - Session lifecycle management (login/logout)
@@ -125,7 +125,7 @@ The Session Gateway implements session-based edge authorization specifically for
 **Purpose:** Per-request session validation at the Istio ingress layer
 
 **Responsibilities:**
-- Validate session tokens by looking up Redis session hash (`session:{id}`)
+- Validate session tokens by looking up Redis session hash (`session:{sha256(token)}`)
 - Inject `X-User-Id`, `X-Roles`, `X-Permissions` headers into authorized requests
 - Reject unauthorized requests before they reach NGINX or backend services
 
@@ -562,15 +562,15 @@ the versioned Session Gateway JSON endpoints.
 **Opaque Session Token** (browser cookie value):
 - Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally). Heartbeats never extend it past 8 hours from login (`SESSION_MAX_LIFETIME_SECONDS=28800`); at that point the user must sign in again
 - Format: Opaque session ID (no sensitive data encoded)
-- Storage: Redis session hash (`session:{id}`)
+- Storage: Redis session hash keyed by the lowercase hex SHA-256 of the token (`session:{sha256(token)}`); the raw token never appears in Redis key names, index members, the append-only file or logs
 - Validated by: ext_authz service via Redis lookup
 
-**Session Redis Hash** (`session:{id}`):
+**Session Redis Hash** (`session:{sha256(token)}`):
 - Fields: user_id, idp_sub, email, display_name, picture, roles (comma-joined), permissions (comma-joined), created_at, expires_at
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), never past `created_at` plus `session.max-lifetime-seconds`
 - Written by: Session Gateway on login and, after a successful permission-service refresh, session heartbeat
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
-- Companion index: `user_sessions:{userId}` — a Redis set of session IDs for that user, used by `DELETE /internal/v1/sessions/users/{userId}` for bulk revocation
+- Companion index: `user_sessions:{userId}` — a Redis set of the session token digests for that user, used by `DELETE /internal/v1/sessions/users/{userId}` for bulk revocation
 
 **IDP Access Token** (Auth0):
 - Obtained by Session Gateway during the OAuth2 authorization code exchange
@@ -772,8 +772,9 @@ surface; alerting rules are a future follow-up.
 ### Session Management
 
 **Redis Configuration:**
-- Session key pattern: `session:{session-id}`
-- User session index pattern: `user_sessions:{userId}` (SET of session IDs for bulk revocation)
+- Session key pattern: `session:{sha256(token)}`, where the suffix is the lowercase hex SHA-256 of the `BA_SESSION` cookie value; see the [shared session contract](session-edge-authorization-pattern.md#shared-session-contract)
+- User session index pattern: `user_sessions:{userId}` (SET of session token digests for bulk revocation)
+- Key names remain visible metadata to Redis operators; hashing keeps the reusable token out of them
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery

@@ -75,7 +75,7 @@ When a user account is identified as compromised or malicious, the response invo
 **Immediate Actions:**
 
 1. **Session Deletion**
-   - Delete the user's Redis session hash (`session:{id}`)
+   - Delete the user's Redis session hash (`session:{sha256(token)}`)
    - ext_authz immediately rejects subsequent requests (session not found in Redis)
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
@@ -85,7 +85,7 @@ When a user account is identified as compromised or malicious, the response invo
 The ext_authz architecture provides **instant revocation by design**:
 
 **How it works:**
-- Delete user's session hash from Redis (`session:{id}`)
+- Delete user's session hash from Redis (`session:{sha256(token)}`)
 - ext_authz lookup fails on next request → 401 returned by Envoy
 - Session cookie becomes invalid (no matching session)
 - User redirected to login

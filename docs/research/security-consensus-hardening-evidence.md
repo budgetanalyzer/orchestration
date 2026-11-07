@@ -1157,3 +1157,148 @@ the callback returned (`t0`).
 - No existing local cluster needs a reset. Sessions created before this change
   get the cap at their next heartbeat.
 - No claim about a hosted environment.
+
+## Plan 02.5, Phase 3: Hashed Session Keys Wired Into Orchestration
+
+Date: 2026-11-07. Static work only: no stack was running for this phase, and no
+cluster was touched. The live cutover proof belongs to the plan's Live phase.
+
+### Change
+
+- `scripts/lib/redis-cli.sh` adds `session_digest_for` (lowercase hex SHA-256
+  of the token through `sha256sum`, or `shasum -a 256`) and `session_key_for`
+  (`session:` plus that digest). `scripts/lib/loadtest-common.sh` sources it.
+- `seed-ext-authz-session.sh` writes `session:<digest>` for its cookie-value
+  argument. `seed-loadtest-users.sh` writes `session:<digest>` hashes and bare
+  digest `user_sessions:` members; the pool file keeps the raw cookie tokens.
+- `teardown-loadtest.sh` no longer scans `session:loadtest_*`, which cannot
+  match hashed keys. It reads the members of the synthetic
+  `user_sessions:usr_loadtest_*` indexes, unlinks `session:<member>` and
+  reports the number Redis actually deleted.
+- `verify-credential-isolation.sh`, `verify-ingress-rate-limits.sh` and
+  `verify-edge-contract.sh` build and inspect digest keys and members.
+  `verify-istio-ingress.sh` needed no change: it seeds through
+  `seed-ext-authz-session.sh` and sends the raw cookie.
+- `verify-session-architecture.sh` statically checks that Session Gateway
+  (`SessionTokenDigest`, `SessionReader`, `SessionWriter` and the digest test),
+  ext-authz (`session.go` and `session_test.go`) and orchestration's
+  `session_key_for` use the same derivation and golden vector
+  (`3f2504e0-4f89-41d3-9a0c-0305e82c3301` to
+  `session:16362f566387b3cf5a6e92fb0a986c76ca20eb3a0c12cbdfbd0b29501e0c18df`).
+  Its live checks now fail on any `session:*` key that is not a 64-character
+  hex digest key and point to `./scripts/ops/flush-redis.sh`.
+- The session key descriptions and cookie-value lookup commands in the
+  session-edge pattern, security architecture, `SECURITY.md`, Tilt debugging
+  runbook, local environment, GCP history and session benefits docs now use
+  `session:{sha256(token)}`.
+
+### Validation
+
+- `bash -n` and `shellcheck` (with and without `-x`) on the ten changed
+  scripts: clean.
+- `verify-static-security-manifests.sh` (pinned PyYAML interpreter): passed.
+- `verify-production-image-overlay.sh`: passed.
+- `./scripts/smoketest/verify-session-architecture.sh --static-only`:
+  **60 passed, 0 failed**.
+
+### Limitations
+
+- No live run in this phase. The seeders, teardown and verifiers were checked
+  offline only, until the Live phase brings up the stack.
+- An existing local cluster must run `./scripts/ops/flush-redis.sh` after
+  cutover. Raw-key sessions become unreachable, and the new live check fails
+  until they are gone.
+- `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
+  0.0.16, which use raw keys. The release and pin update is human-owned under
+  plan 05, Phase 3.
+
+## Plan 02.5, Phase 4: Hashed Session Keys Cut Over and Proven Live
+
+Date: 2026-11-07. Live phase against the running Tilt/Kind stack (`kind-kind`,
+loopback HTTPS API server, no kubeconfig proxy, `kind-control-plane` Ready;
+`check-local-runtime.sh` passed). Disposable local API-test identity only. No
+cookie, token or credential value was printed or recorded; every Redis, AOF and
+log check below reports a boolean or a count.
+
+### Runtime provenance
+
+- Session Gateway: the pod's `/app/app.jar` has the same SHA-256 as
+  `../session-gateway/build/libs/session-gateway-0.0.1-SNAPSHOT.jar`, built
+  after the last source change and containing `SessionTokenDigest`.
+- ext-authz: the running `ext-authz:tilt-16b7bc67308afe25` image was built
+  after the last `../ext-authz/session.go` change, and its binary exports
+  `main.sessionKey` and `crypto/sha256.Sum256`.
+
+### Cutover finding and fix
+
+Before the flush, the live keyspace held no `session:*` keys, but the
+append-only file on the `redis-data-redis-0` PVC held 265 distinct raw-UUID
+`session:<token>` key names from before the cutover. Its incremental file had
+never been rewritten. Running the original `./scripts/ops/flush-redis.sh`
+(`FLUSHALL` only) left all 265 on disk, because `FLUSHALL` only appends to the
+AOF.
+
+`scripts/ops/flush-redis.sh` now follows `FLUSHALL` with `BGREWRITEAOF`. It
+waits until `INFO persistence` reports no rewrite in progress or scheduled and
+`aof_last_bgrewrite_status:ok`, and otherwise exits non-zero. After the
+rewrite, the AOF manifest moved to sequence 2 with an empty base and an empty
+incremental file, and 0 raw-UUID session keys remained on disk. The owner line
+in `docs/development/local-environment.md` and the cutover note in
+`docs/runbooks/tilt-debugging.md` describe the rewrite.
+
+### Live session proof
+
+The flow ran through the public ingress with the harness's primary disposable
+identity: hosted browser login, `GET /api/v1/transactions`, the
+`GET /auth/v1/session` heartbeat and `GET /logout`. The script stayed outside
+the repositories. The digest is the lowercase hex SHA-256 of the cookie value.
+
+| Stage | Result |
+| --- | --- |
+| Login | `BA_SESSION` issued; exactly one `session:*` key, equal to `session:<digest>`; digest is the `user_sessions:` member |
+| After login | raw token in key names, index members or hash values: no; raw token in AOF or RDB: no; digest key in AOF: yes (positive control) |
+| API call | `GET /api/v1/transactions` -> 200 (ext-authz resolved the hashed key; it was the only session key) |
+| Heartbeat | `GET /auth/v1/session` -> 200; same absence results as after login |
+| Logout | `GET /logout` -> 302; digest key and index member removed; raw token still absent from AOF and RDB |
+| After logout | API -> 401, heartbeat -> 401 |
+| Logs | raw token in the last 10 minutes of `session-gateway` or `ext-authz` logs: no |
+
+After all the verifiers below had run, the AOF written since the rewrite held
+11 distinct digest session keys, 0 non-digest `session:` keys and 0 raw-UUID
+keys. The only live sessions left were two `test-user-001` fixtures from
+`seed-ext-authz-session.sh`. Both are digest-keyed and expire after 900 seconds.
+
+### Validation
+
+- `bash -n` and `shellcheck` (with and without `-x`) on
+  `scripts/ops/flush-redis.sh`: clean.
+- `verify-static-security-manifests.sh` (pinned PyYAML interpreter): passed.
+- `verify-production-image-overlay.sh`: passed.
+- `verify-session-architecture.sh`: **81 passed, 0 failed**, including the
+  cross-repo derivation and golden-vector checks and "every live session:* key
+  is a SHA-256 digest key".
+- `verify-istio-ingress.sh`: **97 passed (out of 97)**, including the nested
+  focused rate-limit verifier (33 checks).
+- `verify-ingress-rate-limits.sh`: the first standalone run passed every
+  section up to the browser callback proof. There, the hosted-login navigation
+  timed out after 30 seconds waiting for `networkidle` on the app origin. A
+  rerun 20 seconds later passed all **33 checks**, including the real browser
+  callback, user read, heartbeat and logout. The same proof had also passed
+  inside `verify-istio-ingress.sh`. Treated as transient, not a hashed-key
+  defect.
+- `verify-credential-isolation.sh`: **76 passed (out of 76)**.
+- `verify-edge-contract.sh --inject-failures`: **205 passed, 0 failed,
+  0 skipped**. The seeded `loadtest_1` digest session reached
+  currency-service (200). The ext-authz-zero, ext-authz-hang (1.01 s) and
+  Redis-stopped cases returned an empty 503 against the new ext-authz session
+  lookup. `teardown-loadtest.sh` removed the fixture, and ext-authz and Redis
+  were restored to 1/1 Ready.
+
+### Limitations
+
+- Key names remain visible metadata to Redis operators (contested decision 2).
+  Session digests remain in AOF history until the next rewrite, as accepted
+  metadata.
+- `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
+  0.0.16, which use raw keys. The release and pin update is human-owned under
+  plan 05, Phase 3. No production environment exists.

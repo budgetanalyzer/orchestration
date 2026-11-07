@@ -41,4 +41,4 @@ redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSW
 redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" EXPIRE \
     "$SESSION_KEY" "${SESSION_TTL_SECONDS}" >/dev/null
 
-echo "Seeded session: ${SESSION_KEY} (cookie BA_SESSION=${SESSION_ID})"
+echo "Seeded session: ${SESSION_KEY}"

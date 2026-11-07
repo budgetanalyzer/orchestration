@@ -131,7 +131,9 @@ kubectl logs deployment/nginx-gateway
 - Manages OAuth2 flows with Auth0
 - Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{sha256(token)}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#backend-services-spring-boot)) — no Auth0 tokens are stored
 - Issues the host-only `__Host-BA_SESSION` session cookie (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`) to browsers
-- Provides browser session endpoints `GET /auth/v1/session` and `GET /auth/v1/user`
+- Provides browser session inspection at `GET /auth/v1/user`, state-extending
+  heartbeat at `POST /auth/v1/session`, and logout through a top-level form
+  `POST /logout`
 - Calls permission-service during login with `POST` user sync to establish the account and initial grants, then by internal user ID on every heartbeat to refresh account status, roles, and permissions
 
 **Key Benefit**: Maximum security for browser-based financial application (tokens never exposed to XSS)
@@ -208,7 +210,7 @@ written. Session Gateway's
 [Login User Sync](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/session-configuration.md#login-user-sync)
 section owns the client contract.
 
-Active browser sessions call `GET /auth/v1/session` under the `/auth/*` route
+Active browser sessions call `POST /auth/v1/session` under the `/auth/*` route
 family. Each heartbeat first reads the current Redis session, then performs one
 bounded permission-service lookup by internal `userId`. For an active account,
 Session Gateway atomically replaces the roles and permissions snapshot and
@@ -220,6 +222,12 @@ its existing shape and reports the expiration actually stored. This keeps permis
 Redis alone. The heartbeat does not call Auth0. Browser session inspection
 lives alongside it at `GET /auth/v1/user` and reflects the refreshed Redis
 snapshot on its next fetch.
+
+Logout accepts only a same-origin top-level form `POST /logout`. Session
+Gateway deletes the session, clears the public cookie, and returns `303 See
+Other` to its server-constructed identity-provider logout URL. `GET` and
+`HEAD` cannot heartbeat or log out and return `405` without changing the
+session. The exact-Origin ingress control is a separate layer.
 
 The internal lookup is
 `GET /permission-service/internal/v1/users/{userId}/authorization` from

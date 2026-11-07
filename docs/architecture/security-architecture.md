@@ -96,7 +96,9 @@ Security-critical implications:
   are defined in the [browser session contract](session-edge-authorization-pattern.md#session-gateway---auth-layer).
 - Write session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{sha256(token)}`) — no Auth0 tokens are stored, and ext_authz reads the same hashes for ingress-layer authorization
 - Issue HTTP-only, secure session cookies to browsers
-- Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
+- Provide `POST /auth/v1/session` for the state-extending heartbeat and
+  `GET /auth/v1/user` for session inspection; accept logout only through a
+  top-level form `POST /logout`, returning `303` to the identity provider
 - Session lifecycle management (login/logout)
 - Call permission-service during login with a deadline-bounded `POST` user sync to establish initial authorization, and on every heartbeat to refresh account status, roles, and permissions by internal user ID
 
@@ -203,7 +205,7 @@ From a security perspective, the important boundaries are:
   exposed to browser JavaScript.
 - Every browser `/api/*` request is revalidated by `ext_authz`, which rebuilds
   the trusted identity headers from Redis before NGINX forwards the request.
-- Active-session renewal happens on `GET /auth/v1/session`. Session Gateway
+- Active-session renewal happens on `POST /auth/v1/session`. Session Gateway
   first refreshes account status and grants from permission-service, then
   atomically replaces the Redis snapshot and extends the still-existing
   session. Lookup failures return `503` without extending cached authorization;
@@ -560,7 +562,7 @@ the versioned Session Gateway JSON endpoints.
 ### Token Configuration
 
 **Opaque Session Token** (browser cookie value):
-- Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally). Heartbeats never extend it past 8 hours from login (`SESSION_MAX_LIFETIME_SECONDS=28800`); at that point the user must sign in again
+- Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `POST /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally). Heartbeats never extend it past 8 hours from login (`SESSION_MAX_LIFETIME_SECONDS=28800`); at that point the user must sign in again
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash keyed by the lowercase hex SHA-256 of the token (`session:{sha256(token)}`); the raw token never appears in Redis key names, index members, the append-only file or logs
 - Validated by: ext_authz service via Redis lookup
@@ -630,12 +632,12 @@ docs-only CSP because stock Swagger UI requires inline styles that the main app
 policy intentionally forbids.
 
 All three profiles restrict `form-action` to `'self'` and the environment's
-exact HTTPS IdP origin, anticipating native form logout and its IdP redirect.
+exact HTTPS IdP origin, allowing the top-level form POST logout and its IdP redirect.
 The shared offline renderer derives that origin from Tilt's `AUTH0_ISSUER_URI`
 or the production reference's `REFERENCE_AUTH0_ISSUER_URI`; it rejects missing,
 non-HTTPS, wildcard and malformed issuer input. No profile sends the deprecated
-`X-XSS-Protection` header. The final native POST/303 logout compatibility and
-hostile-form checks remain plan 02.8, Phase 2 work after plan 02.7 implements that flow.
+`X-XSS-Protection` header. Exact-Origin ingress enforcement and the hostile-form
+and `form-action` redirect checks remain plan 02.8, Phase 2 work.
 
 The route boundaries are:
 

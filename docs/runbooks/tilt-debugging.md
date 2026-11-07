@@ -56,7 +56,7 @@ full Session Gateway auth-route ownership contract for `/auth/*`, `/oauth2/*`,
 `./scripts/smoketest/verify-istio-ingress.sh` verifies Istio ingress and
 egress hardening. The browser login page is `/login`; the actual OAuth2 redirect starts at
 `/oauth2/authorization/idp`, returns to `/login/oauth2/code/idp`, and active
-browser sessions are extended by `GET /auth/v1/session`. The browser only
+browser sessions are extended by `POST /auth/v1/session`. The browser only
 carries an opaque, host-only `__Host-BA_SESSION` cookie, which a client stores
 only from an HTTPS response; Session Gateway keeps the session data
 in Redis under `session:{sha256(token)}`, the lowercase hex SHA-256 of the

@@ -1,30 +1,27 @@
 # Security Hardening 02.4: Absolute Session Lifetime
 
-**Status:** Draft for iteration. Do not run until D1 and D2 are settled.
+**Status:** Ready to run. D1 and D2 are settled.
 
 Plan 02 is split into plans 02.1-02.8. Each one is a unit you can merge on its own and leaves Tilt
 and the architecture working. Together they apply plan 02's share of the four 2026-11-01 security
 reviews, with the [contested issues](../research/security-review-contested-issues-2026-11-02.md)
-decisions applied. This plan stops heartbeats renewing a session past a fixed maximum lifetime.
-Depending on D2, ext-authz also enforces the cap. The plan confirms that users at the cap get a clear
-re-login, and proves the cap live.
+decisions applied. This plan stops heartbeats renewing a session past a fixed maximum lifetime,
+confirms that users at the cap get a clear re-login, and proves the cap live. ext-authz does not
+re-check the cap (D2).
 Phase numbers without a plan refer to this plan.
 
 **Order:** 02.4 of 02.1-02.8.
 
 **Depends on:** plan 01.
 
-**Repositories:** session-gateway, budget-analyzer-web, ext-authz (only if D2 stands),
-orchestration.
+**Repositories:** session-gateway, budget-analyzer-web, orchestration.
 
 **Merge unit:** Ordered.
 - The session-gateway and budget-analyzer-web PRs are each safe on their own and may merge first:
   - The gateway's default cap applies without configuration. Phase 1 confirms the default is not
     below orchestration's `SESSION_TTL_SECONDS`.
   - The frontend change is a test, a comment or a modal fix.
-- The ext-authz and orchestration PRs merge together. With D2, ext-authz rejects sessions that
-  lack `created_at`, and orchestration supplies the setting and the seeders.
-- If D2 is dropped, the orchestration PR is safe on its own after the gateway.
+- The orchestration PR is safe on its own after the gateway.
 
 | Label | Review |
 | --- | --- |
@@ -38,10 +35,10 @@ so its silence on those findings is not agreement or disagreement.
 
 ## Decisions
 
-| # | Decision | Recommendation | Why it matters | Status |
+| # | Decision | Outcome | Why | Status |
 | --- | --- | --- | --- | --- |
-| D1 | Absolute session lifetime | `SESSION_MAX_LIFETIME_SECONDS=43200` (12 hours) | No review names a value. This is a usability and risk choice. | Open |
-| D2 | Should ext-authz re-check the cap? | Yes, as R2, R3 and R4 propose, but it is optional | ext-authz already rejects a passed `expires_at`, so a Session Gateway cap is enforced transitively. The re-check only guards against a Session Gateway renewal bug, at the cost of one more shared setting. | Open |
+| D1 | Absolute session lifetime | `SESSION_MAX_LIFETIME_SECONDS=28800` (8 hours), also the Session Gateway default | No review names a value. 8 hours matches the Auth0 tenant's Maximum Session Lifetime (480 minutes, non-persistent default policy), so the gateway does not allow more than the tenant config states. The Auth0 idle lifetime is 15 minutes, and nothing after login renews it, because heartbeats and API calls never reach Auth0. A user at the cap therefore always gets a real Auth0 login prompt, without `max_age` or `prompt=login`. | Settled 2026-11-07 |
+| D2 | Should ext-authz re-check the cap? | No. R2, R3 and R4 proposed it. | ext-authz already rejects a passed `expires_at`, so the Session Gateway cap is enforced transitively. A re-check only guards against a Session Gateway renewal bug, which Phase 1's tests cover, and it would add a shared setting, a coupled ext-authz and orchestration merge, and a fail-closed `created_at` contract for every session seeder. | Settled 2026-11-07 |
 
 ## Plan-wide rules
 
@@ -100,8 +97,8 @@ R1 finding 4; R4 on what a cap does not guarantee; `../session-gateway/src/main/
 
 ### Execution steps
 
-1. Add `session.max-lifetime-seconds` from `SESSION_MAX_LIFETIME_SECONDS`, and fail at startup if it
-   is less than `session.ttl-seconds`.
+1. Add `session.max-lifetime-seconds` from `SESSION_MAX_LIFETIME_SECONDS`, defaulting to `28800`
+   (D1), and fail at startup if it is less than `session.ttl-seconds`.
 2. In `updateSession`, compute the new expiry as the earlier of now plus TTL and `created_at` plus
    the maximum. Write the remaining seconds as the TTL.
 3. When no lifetime remains, delete the session and return the existing 401 with a cleared cookie.
@@ -163,7 +160,9 @@ moving heartbeat and logout to POST (plan 02.7).
 
 ### Implementation notes
 
-The cap work may be a test and comment change only.
+- The cap work may be a test and comment change only.
+- Re-login needs no forced re-authentication. With the D1 Auth0 settings, the Auth0 session has
+  expired by the time a user reaches the cap, so the login redirect prompts for credentials.
 
 ### Validation
 
@@ -173,54 +172,7 @@ The repository's documented test, lint and type-check commands.
 
 Reaching the cap has a tested, understandable outcome.
 
-## Phase 3: Re-check the cap in ext-authz
-
-### Workspace
-
-../ext-authz
-
-### Goal
-
-If D2 stands, reject sessions older than the cap.
-
-### Scope
-
-`config.go`, `session.go`, tests, and `README.md`.
-
-### Non-goals
-
-The cookie default (plan 02.6), hashed keys (plan 02.5), and health endpoints and server timeouts,
-which are plan 03, Phase 1.
-
-### Required context
-
-`session.go`; Phase 1.
-
-### Execution steps
-
-1. If D2 was dropped, make no change, report that, and stop.
-2. Add `SESSION_MAX_LIFETIME_SECONDS` and parse `created_at`.
-3. Treat a session past the cap as expired, using the existing 401 path.
-4. Treat a missing or invalid `created_at` the same way as an invalid `expires_at`, so it fails
-   closed.
-5. Add table tests covering below, at and past the cap, and a missing and an invalid field.
-6. Document the setting in `README.md`.
-
-### Implementation notes
-
-The repository has no `session_test.go`, and `LookupSession` needs Redis, so keep the lifetime
-logic in pure functions that can be tested alone. `scripts/ops/seed-ext-authz-session.sh` in
-orchestration already writes `created_at`.
-
-### Validation
-
-`go test ./...` and the repository's other documented checks.
-
-### Completion criteria
-
-If D2 stands, the cap fails closed, including for a missing or invalid `created_at`.
-
-## Phase 4: Configure the cap and prove it live (Live)
+## Phase 3: Configure the cap and prove it live (Live)
 
 ### Workspace
 
@@ -232,31 +184,26 @@ Set the lifetime in every orchestration consumer and prove the cap holds on the 
 
 ### Scope
 
-`kubernetes/services/session-gateway/configmap.yaml`, the Tiltfile's `session-gateway-config`,
-`kubernetes/services/ext-authz/deployment.yaml` if D2 stands, `scripts/ops/`, the owner docs, and the
-evidence file.
+`kubernetes/services/session-gateway/configmap.yaml`, the Tiltfile's `session-gateway-config`, the
+owner docs, and the evidence file.
 
 ### Non-goals
 
-`kubernetes/production` image pins, and fixing service code. If a sibling repository is wrong, stop
-and report it.
+`kubernetes/production` image pins, ext-authz changes (D2), and fixing service code. If a sibling
+repository is wrong, stop and report it.
 
 ### Required context
 
-`docs/architecture/session-edge-authorization-pattern.md`; Phases 1-3.
+`docs/architecture/session-edge-authorization-pattern.md`; Phases 1-2.
 
 ### Execution steps
 
-1. Set `SESSION_MAX_LIFETIME_SECONDS` in `configmap.yaml` and in the Tiltfile's
-   `session-gateway-config`, because Tilt overrides the checked-in ConfigMap. Set it on ext-authz
-   too if D2 stands.
-2. Let `seed-ext-authz-session.sh` accept optional `created_at`, roles and permissions values.
-3. (added in the split) If D2 stands, confirm every orchestration script that seeds sessions,
-   including `seed-loadtest-users.sh`, writes a valid `created_at`.
-4. Confirm the running images came from the current sibling worktrees.
-5. Prove the cap. If D2 stands, seed a session past the cap and confirm the API rejects it. If D2 is
-   dropped, use a short local maximum and a real login.
-6. Update the absolute-expiration description in `docs/architecture/security-architecture.md` and
+1. Set `SESSION_MAX_LIFETIME_SECONDS` to `"28800"` (D1) in `configmap.yaml` and in the Tiltfile's
+   `session-gateway-config`, because Tilt overrides the checked-in ConfigMap.
+2. Confirm the running images came from the current sibling worktrees.
+3. Prove the cap with a temporarily short local maximum and a real login. Restore `28800`
+   afterwards, and do not leave the short value in any checked-in file.
+4. Update the absolute-expiration description in `docs/architecture/security-architecture.md` and
    the session lifetime description in `docs/architecture/session-edge-authorization-pattern.md`,
    and record the results.
 

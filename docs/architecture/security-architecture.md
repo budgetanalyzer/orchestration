@@ -622,7 +622,7 @@ The shared offline renderer derives that origin from Tilt's `AUTH0_ISSUER_URI`
 or the production reference's `REFERENCE_AUTH0_ISSUER_URI`; it rejects missing,
 non-HTTPS, wildcard and malformed issuer input. No profile sends the deprecated
 `X-XSS-Protection` header. The final native POST/303 logout compatibility and
-hostile-form checks remain plan 02, Phase 16 work after that flow is implemented.
+hostile-form checks remain plan 02.8, Phase 2 work after plan 02.7 implements that flow.
 
 The route boundaries are:
 

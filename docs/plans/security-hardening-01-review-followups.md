@@ -172,7 +172,9 @@ look like full coverage.
    - `docs/architecture/session-edge-authorization-pattern.md:294`: the failure cases need
      `--inject-failures`. Check that `docs/architecture/security-architecture.md:278`, `:322` and
      `:606` and `nginx/README.md:195` describe only default-run checks.
-   - `docs/plans/security-hardening-02-session-contract.md:776`, `:848`, `:869`, `:892` and `:914`,
+   - The `verify-edge-contract.sh` validation steps in plans 02.3 Phase 3, 02.4 Phase 4, 02.5
+     Phase 4, 02.6 Phase 6, 02.7 Phase 4 and 02.8 Phase 2 (`docs/plans/security-hardening-02.*.md`,
+     split from the original plan 02, Phases 14-16; only 02.5 Phase 4 uses failure injection),
      and `docs/plans/security-hardening-05-closeout-release-handoff.md:161` and `:193`: add the
      flag only where a validation step relies on failure injection. Plan 05's aggregate smoketest
      wiring uses the default run.

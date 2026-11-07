@@ -147,7 +147,7 @@ SPA fallback, which is outside this phase.
   `authorization-policies.yaml` through its overlay and passes
   `verify-production-image-overlay.sh` offline, but no hosted runtime was
   exercised.
-- Plan 02, Phase 14 replaces the Session Gateway `.../permissions` rule with
+- Plan 02.3, Phase 3 replaces the Session Gateway `.../permissions` rule with
   the new sync call.
 
 ## Plan 01, Phase 2: NGINX Backend Header Contract
@@ -623,8 +623,8 @@ header ownership and CSP posture), `nginx/README.md` (rendered include wiring
 and reload), and `deploy/README.md` (resolved offline apps render).
 Ingress-local authorization denials and 429s remain outside the ordinary
 response HSTS requirement. No hosted production runtime was exercised.
-Native form POST/303 logout is not implemented by this phase: plan 02,
-Phase 16 must still verify its final redirect and hostile-form behavior in
+Native form POST/303 logout is not implemented by this phase: plan 02.7
+implements it and plan 02.8, Phase 2 must still verify its final redirect and hostile-form behavior in
 the supported browsers. This phase's browser observation covers Chromium and
 the current login/application flows, not that future logout contract.
 
@@ -745,7 +745,7 @@ A local link and anchor check of the five edited files found no broken targets,
 and `rg -n '/srv/'` on R1 finds nothing. R1's line references became `#L<n>`
 anchors. They point at the reviewed revision and may drift as files change.
 
-Deferred as planned: the "absolute expiration" claim (plan 02, Phase 14), the
+Deferred as planned: the "absolute expiration" claim (plan 02.4, Phase 4), the
 audit-logging claims (plan 05, Phase 3) and the eviction policy (plan 04, Phase 1).
 
 ## Follow-up 2026-11-06 — `verify-edge-contract.sh` failure injection is opt-in

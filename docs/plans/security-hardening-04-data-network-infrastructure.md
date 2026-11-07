@@ -12,7 +12,7 @@ Phase numbers without a plan refer to this plan.
 
 **Order:** 04 of 5
 
-**Depends on:** plan 02, because Phase 1 measures the final session records. Runs after plan 03.
+**Depends on:** plans 02.1-02.8, because Phase 1 measures the final session records. Runs after plan 03.
 
 **Repositories:** orchestration.
 
@@ -112,7 +112,7 @@ R1 finding 8; R2's capacity estimate; R4's qualifications on `maxmemory` and `no
 ### Implementation notes
 
 - `noeviction` turns a crash into failed writes, so anonymous OAuth-state growth can still block
-  logins. The plan 02, Phase 2 lifetime lowers the ceiling per address to about 625 live records, but this
+  logins. The plan 02.2, Phase 1 lifetime lowers the ceiling per address to about 625 live records, but this
   remains a known gap.
 - `maxmemory` is not an RSS limit (R4).
 - The shared cache is capped along with auth data. If its growth threatens the budget, report it

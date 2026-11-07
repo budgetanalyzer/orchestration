@@ -246,10 +246,17 @@ MANIFEST
 }
 
 probe_response() {
-    local pod_name="$1" path="$2" forged_xff="${3:-}" session_id="${4:-}" probe_id="${5:-rate-limit-probe}"
-    local authority="${6:-app.budgetanalyzer.localhost}"
+    local pod_name="$1" path="$2"
+    shift 2
+    probe_response_with_method "${pod_name}" GET "${path}" "$@"
+}
+
+probe_response_with_method() {
+    local pod_name="$1" method="$2" path="$3" forged_xff="${4:-}" session_id="${5:-}"
+    local probe_id="${6:-rate-limit-probe}" authority="${7:-app.budgetanalyzer.localhost}"
     local -a curl_args=(
         curl --silent --show-error --max-time 10 --max-redirs 0 --path-as-is
+        --request "${method}"
         --cacert "${PROBE_CA_MOUNT}"
         --resolve "app.budgetanalyzer.localhost:443:${INGRESS_CLUSTER_IP}"
         -H "Host: ${authority}"
@@ -685,7 +692,7 @@ main() {
     section "Login Completion Isolation"
     output=$(probe_burst "${PROBE_POD_A}" "/login/oauth2/code/idp?code=invalid&state=invalid" 65 65 rotate "callback-a")
     assert_burst_rejected "${output}" "login-completion" "client A login completion"
-    response=$(probe_response "${PROBE_POD_A}" "/auth/v1/session")
+    response=$(probe_response_with_method "${PROBE_POD_A}" POST "/auth/v1/session")
     assert_response_not_limited "${response}" "client A session operation after callback exhaustion" 401
 
     section "API Isolation And Authorization Order"

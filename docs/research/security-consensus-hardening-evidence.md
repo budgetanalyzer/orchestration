@@ -1446,3 +1446,130 @@ logout contract held: the cookie was cleared and later reads returned `401`.
 - `kubernetes/production` still pins Session Gateway 0.0.15 and ext-authz
   0.0.16, which use `BA_SESSION`. The release and pin update is human-owned
   under plan 05, Phase 3. No production environment exists.
+
+## Plan 02.7, Phase 4: POST Heartbeat And Logout Proven Live
+
+Date: 2026-11-07. Live phase against the local Tilt/Kind stack. The
+`kind-kind` checks passed before every cluster mutation, and
+`./scripts/bootstrap/check-local-runtime.sh` passed. No cookie, token,
+authorization-code or state value was printed or recorded. Sibling evidence:
+Session Gateway
+[Plan 02.7, Phase 1](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/research/security-consensus-hardening-evidence.md),
+the frontend's
+[authentication guide](https://github.com/budgetanalyzer/budget-analyzer-web/blob/main/docs/authentication.md)
+and api-tests
+[Plan 02.7, Phase 3](https://github.com/budgetanalyzer/budget-analyzer-api-tests/blob/main/docs/research/security-consensus-hardening-evidence.md).
+
+### Caller changes
+
+- `verify-edge-contract.sh`: the legitimate heartbeat, the auth-lane semicolon
+  denial and the heartbeat HSTS probe use `POST /auth/v1/session`.
+- `verify-istio-ingress.sh`: `require_json_denial` takes a method. The
+  unauthenticated heartbeat denial is `POST /auth/v1/session`.
+- `verify-ingress-rate-limits.sh`: new `probe_response_with_method`. The
+  session operation after callback exhaustion is `POST /auth/v1/session`.
+- `verify-ingress-rate-limit-config.sh`: the session-operations matcher cases
+  use `POST` for the heartbeat and `/logout`.
+- `verify-oauth-browser-binding.py`: unbound and bound heartbeats use `POST`.
+  Logout is `POST /logout`, which must return `303` and pass the api-tests
+  `assert_logout_redirect` contract.
+- `verify-ingress-browser-callback.py`: waits for the frontend's own
+  `POST /auth/v1/session` `200`, requires `405` for `GET` and `HEAD` on both
+  endpoints followed by a working heartbeat and user read, then clicks the
+  frontend's Logout menu item. That must send a browser `POST /logout` that
+  passes `assert_logout_redirect` and leaves no session cookie.
+- No change was needed in `verify-session-architecture.sh`,
+  `verify-edge-browser-hardening.sh`, `verify-static-security-manifests.sh` or
+  `verify-production-image-overlay.sh`. They match `/logout` and
+  `/auth/v1/session` only as route paths or path-normalization fixtures, not
+  by method.
+- Ingress configuration: the `session-operations` rate-limit matcher in
+  `kubernetes/istio/ingress-rate-limit.yaml` is a path regex with no method,
+  and the ingress-to-Session Gateway `AuthorizationPolicy` lists paths
+  without methods. NGINX does not route these paths. No configuration change
+  was needed.
+
+### Runtime provenance
+
+- Session Gateway: `session-gateway:tilt-4c34223298c45e77`. The pod's
+  `/app/app.jar` SHA-256 (`b6804c75…`) equals the sibling worktree's
+  `build/libs/session-gateway-0.0.1-SNAPSHOT.jar`, built at 16:03:28, after
+  the last `src/main` edit at 16:01:23.
+- budget-analyzer-web: `budget-analyzer-web:tilt-0d03c5b1b3d47878` (16:24:30
+  build). The served prod-smoke image
+  `budget-analyzer-web-prod-smoke:tilt-0626734db8227818` in `nginx-gateway`
+  was built at 16:09:53, after the last frontend `src` edit at 16:09:42.
+
+### Live browser proof
+
+`verify-ingress-browser-callback.py` passed through the real frontend and its
+live CSP. A one-off probe in a temporary directory outside the repositories
+repeated the flow and recorded only methods, statuses, hosts and paths:
+
+| Step | Result |
+| --- | --- |
+| Frontend heartbeat | `POST /auth/v1/session` -> `200` |
+| Logout menu item | form `POST /logout` -> `303` |
+| Redirect hop | `GET https://<auth0-tenant>/v2/logout` -> `302` |
+| Final page | `https://app.budgetanalyzer.localhost/peace` |
+| CSP console violations, failed logout requests | none |
+| Session cookie after logout | absent |
+
+The current `form-action` allows the form POST and Chromium follows its
+cross-site `303` to the IdP and back. Under the old GET logout, plan 02.6,
+Phase 6 recorded `net::ERR_ABORTED` on the IdP hop.
+
+### GET and HEAD rejection
+
+A second one-off probe seeded a disposable session (300 s TTL) with
+`./scripts/ops/seed-ext-authz-session.sh` and sent requests through the HTTPS
+ingress with normal TLS verification:
+
+| Request | Result |
+| --- | --- |
+| `GET`/`HEAD` `/auth/v1/session`, `GET`/`HEAD` `/logout` | `405` each |
+| Redis key after those requests | present, `expires_at` unchanged, TTL 300 s -> 297 s |
+| Form `POST /logout` | `303`, Redis key deleted |
+
+### Validation
+
+- Orchestration static gate: `bash -n` and `shellcheck` on the four changed
+  shell scripts are clean. `verify-static-security-manifests.sh` (pinned
+  PyYAML interpreter), `verify-production-image-overlay.sh` and
+  `verify-ingress-rate-limit-config.sh` passed.
+- `verify-session-architecture.sh`: **83 passed, 0 failed**.
+- `verify-istio-ingress.sh`: **97 passed (out of 97)**, including the nested
+  focused rate-limit proof (**33 checks passed**) with the POST heartbeat after
+  callback exhaustion.
+- `verify-edge-contract.sh` (no flags): **190 passed, 0 failed, 3 skipped**.
+- `verify-edge-browser-hardening.sh`: **91 passed, 0 warnings**, including the
+  nested rate-limit verifier and the runtime-hardening regression cascade
+  (176 of 176).
+- `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-oauth-browser-binding.py`
+  and `../budget-analyzer-api-tests/.venv/bin/python scripts/smoketest/verify-ingress-browser-callback.py`:
+  passed.
+
+### Run interruption and cleanup
+
+An earlier attempt at this phase was interrupted inside the
+runtime-hardening cascade, so its traps never ran. It left behind
+`verify-network-policies.sh` `np2-*` probe pods and Services,
+`verify-transport-encryption.sh` `phase4-*` client pods and the namespace
+`ba-phase5-psa-1794068876`. `np2-istio-ingress` carries the ingress gateway
+label, so it joined the ingress Service. That made the first
+`verify-edge-contract.sh` rerun fail with status `000` on some requests. The
+leftovers were deleted the same way those verifiers clean up, and every
+verifier above ran after the cleanup.
+
+### Limitations
+
+- `verify-edge-contract.sh` ran without `--inject-failures`. Its three
+  fault-injection cases were skipped, so this run is not full coverage.
+- Exact-Origin ingress enforcement, hostile same-site and cross-site form
+  checks, and `form-action` redirect enforcement in other browsers remain
+  plan 02.8, Phase 2. Only headless Chromium was exercised.
+- Local reset: browsers with a pre-change frontend bundle send GET heartbeats,
+  which now return `405`. Reload the page. No Redis or database reset is
+  needed.
+- A namespace `ba-phase5-psa-1792397007`, 19 days old, predates this plan. It
+  was left in place.

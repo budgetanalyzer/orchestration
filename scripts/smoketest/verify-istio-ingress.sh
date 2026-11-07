@@ -256,7 +256,7 @@ external_headers_and_status() {
 }
 
 require_json_denial() {
-    local path="$1" path_label="$2"
+    local method="$1" path="$2" path_label="$3"
     local response_dir status content_type
 
     response_dir=$(mktemp -d)
@@ -266,6 +266,7 @@ require_json_denial() {
         -w '%{http_code}' \
         --max-time "$CURL_TIMEOUT" \
         --max-redirs 0 \
+        --request "$method" \
         "https://app.budgetanalyzer.localhost${path}"); then
         fail "${path_label} request failed under normal TLS verification"
         rm -rf "$response_dir"
@@ -932,10 +933,11 @@ main() {
 
     api_denial_probe_id="phase3-machine-denial-$(date +%s)"
     require_json_denial \
+        GET \
         "/api/v1/transactions?phase3_machine_denial=${api_denial_probe_id}" \
         "GET /api/v1/transactions"
-    require_json_denial "/auth/v1/user" "GET /auth/v1/user"
-    require_json_denial "/auth/v1/session" "GET /auth/v1/session"
+    require_json_denial GET "/auth/v1/user" "GET /auth/v1/user"
+    require_json_denial POST "/auth/v1/session" "POST /auth/v1/session"
 
     sleep 2
     if find_nginx_log_line "$api_denial_probe_id" >/dev/null 2>&1; then

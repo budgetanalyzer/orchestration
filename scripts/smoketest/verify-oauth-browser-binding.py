@@ -16,6 +16,7 @@ sys.path.insert(0, str(API_TEST_ROOT / "src"))
 from api_tests.auth import load_existing_browser_credentials  # noqa: E402
 from api_tests.browser_login import fill_hosted_login_form, read_session_cookie  # noqa: E402
 from api_tests.config import load_environment  # noqa: E402
+from api_tests.session_gateway_assertions import assert_logout_redirect  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 LOCAL_ORIGIN = "https://app.budgetanalyzer.localhost"
@@ -112,10 +113,16 @@ def main() -> None:
                                 raise ProofFailure(
                                     "unbound callback issued a session cookie"
                                 )
-                            for path in ("/auth/v1/user", "/auth/v1/session"):
-                                require_status(
-                                    unbound.get(path), {401}, "unbound session read"
-                                )
+                            require_status(
+                                unbound.get("/auth/v1/user"),
+                                {401},
+                                "unbound user read",
+                            )
+                            require_status(
+                                unbound.post("/auth/v1/session"),
+                                {401},
+                                "unbound heartbeat",
+                            )
                         print(
                             "Unused callback without binding: controlled rejection; no session."
                         )
@@ -190,12 +197,12 @@ def main() -> None:
                             authenticated.get("/auth/v1/user"), {200}, "user read"
                         )
                         require_status(
-                            authenticated.get("/auth/v1/session"), {200}, "heartbeat"
+                            authenticated.post("/auth/v1/session"), {200}, "heartbeat"
                         )
                     finally:
-                        require_status(
-                            authenticated.get("/logout"), {302, 303}, "logout"
-                        )
+                        logout = authenticated.post("/logout")
+                        require_status(logout, {303}, "logout")
+                        assert_logout_redirect(logout, config)
             finally:
                 context.close()
         finally:

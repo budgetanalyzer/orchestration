@@ -181,7 +181,8 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: ht
 ```
 
 Every profile permits form submissions only to `'self'` and the configured
-IdP's exact HTTPS origin, supporting the upcoming native form logout redirect.
+IdP's exact HTTPS origin, supporting the top-level form POST logout and its
+identity-provider redirect.
 `deploy/scripts/render/render-csp.py` replaces `__IDP_LOGOUT_ORIGIN__` in the
 shared templates. Tilt uses `AUTH0_ISSUER_URI`, matching Session Gateway and
 egress; the offline production renderer uses its own reference issuer. Empty,

@@ -461,7 +461,7 @@ verify_public_internal_boundary() {
 
     echo "  Legitimate routes:"
     assert_legitimate_status "Session heartbeat refreshes authorization from permission-service" 200 \
-        GET "/auth/v1/session" --cookie "$SESSION_COOKIE"
+        POST "/auth/v1/session" --cookie "$SESSION_COOKIE"
     assert_legitimate_status "Session user read" 200 \
         GET "/auth/v1/user" --cookie "$SESSION_COOKIE"
     assert_legitimate_status "transaction-service public route" 200 \
@@ -662,7 +662,7 @@ verify_semicolon_rejection() {
                 --cookie "$SESSION_COOKIE"
         done
 
-        assert_ingress_semicolon_denial "auth" GET "/auth/v1/session${form}${marker}"
+        assert_ingress_semicolon_denial "auth" POST "/auth/v1/session${form}${marker}"
         for path in "${segments[@]}"; do
             assert_ingress_semicolon_denial "auth" GET "/auth/v1/${path}/${path}/actuator/prometheus"
             assert_ingress_semicolon_denial "auth" DELETE \
@@ -1113,18 +1113,20 @@ remove_authorization_failure_fixture() {
 verify_response_headers() {
     section "Response Headers"
     seed_fixture
-    local path status expected headers location
+    local path method status expected headers location
     for path in / /api/v1/currencies /auth/v1/session /oauth2/authorization/idp; do
+        method=GET
         expected=200
+        [[ "$path" != /auth/v1/session ]] || method=POST
         [[ "$path" != /oauth2/authorization/idp ]] || expected=302
-        status=$(edge_request GET "$path" --cookie "$SESSION_COOKIE")
+        status=$(edge_request "$method" "$path" --cookie "$SESSION_COOKIE")
         headers=$(sed -n 's/^Strict-Transport-Security:[[:space:]]*//Ip' "${WORK_DIR}/headers" | tr -d '\r')
         if [[ "$status" == "$expected" && "$headers" == 'max-age=31536000' ]]; then
             pass "${path}: ${status} with exactly one HSTS value (no subdomains or preload)"
         else
             fail "${path}: expected ${expected} and one exact HSTS value; got ${status}, ${headers:-missing}"
         fi
-        record "headers" GET "$path" "$status" "hsts=${headers:-missing}"
+        record "headers" "$method" "$path" "$status" "hsts=${headers:-missing}"
     done
 
     # Exercise each field alone as well as together: Forwarded takes precedence

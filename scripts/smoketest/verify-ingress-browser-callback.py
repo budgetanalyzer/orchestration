@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -21,6 +22,7 @@ from api_tests.browser_login import (  # noqa: E402
 )
 from api_tests.config import load_environment  # noqa: E402
 from api_tests.logging import redact_sensitive_text  # noqa: E402
+from api_tests.session_gateway_assertions import assert_logout_redirect  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 
@@ -48,6 +50,7 @@ def main() -> None:
     )
     timeout_ms = int(config.timeouts.eventually_seconds * 1000)
     callback_statuses: list[int] = []
+    heartbeat_statuses: list[tuple[str, int]] = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -59,13 +62,20 @@ def main() -> None:
                 def observe_response(response: object) -> None:
                     url = getattr(response, "url", "")
                     status = getattr(response, "status", None)
-                    if (
+                    if not (
                         isinstance(url, str)
                         and isinstance(status, int)
                         and url.startswith(LOCAL_ORIGIN)
-                        and urlsplit(url).path == CALLBACK_PATH
                     ):
+                        return
+                    path = urlsplit(url).path
+                    if path == CALLBACK_PATH:
                         callback_statuses.append(status)
+                    elif path == "/auth/v1/session":
+                        request = getattr(response, "request", None)
+                        method = getattr(request, "method", "")
+                        if isinstance(method, str):
+                            heartbeat_statuses.append((method, status))
 
                 page.on("response", observe_response)
                 page.goto(
@@ -117,6 +127,14 @@ def main() -> None:
                 if callback_statuses[-1] == 429:
                     raise RuntimeError("OAuth callback consumed the exhausted initiation allowance")
 
+                heartbeat_deadline = time.monotonic() + config.timeouts.eventually_seconds
+                while ("POST", 200) not in heartbeat_statuses:
+                    if time.monotonic() >= heartbeat_deadline:
+                        raise RuntimeError(
+                            "frontend did not complete its initial POST heartbeat"
+                        )
+                    page.wait_for_timeout(100)
+
                 session = read_session_cookie(context, config.session_cookie_name)
                 with httpx.Client(
                     base_url=LOCAL_ORIGIN,
@@ -130,14 +148,54 @@ def main() -> None:
                         "authenticated user read",
                     )
                     require_status(
-                        authenticated.get("/auth/v1/session"),
+                        authenticated.post("/auth/v1/session"),
                         {200},
                         "authenticated heartbeat",
                     )
+                    for method in ("GET", "HEAD"):
+                        for path in ("/auth/v1/session", "/logout"):
+                            require_status(
+                                authenticated.request(method, path),
+                                {405},
+                                f"{method} {path}",
+                            )
                     require_status(
-                        authenticated.get("/logout"),
-                        {302, 303},
-                        "authenticated logout",
+                        authenticated.post("/auth/v1/session"),
+                        {200},
+                        "heartbeat after rejected GET and HEAD requests",
+                    )
+                    require_status(
+                        authenticated.get("/auth/v1/user"),
+                        {200},
+                        "user read after rejected GET and HEAD requests",
+                    )
+
+                page.locator("button", has_text="Preferences").click()
+                with page.expect_response(
+                    lambda response: (
+                        response.url.startswith(LOCAL_ORIGIN)
+                        and urlsplit(response.url).path == "/logout"
+                    ),
+                    timeout=timeout_ms,
+                ) as logout_response_info:
+                    page.get_by_role("menuitem", name="Logout", exact=True).click()
+                logout_response = logout_response_info.value
+                if logout_response.request.method != "POST":
+                    raise RuntimeError("browser logout did not use POST")
+                logout_headers = httpx.Headers(
+                    (header["name"], header["value"])
+                    for header in logout_response.headers_array()
+                )
+                assert_logout_redirect(
+                    httpx.Response(logout_response.status, headers=logout_headers),
+                    config,
+                )
+                if any(
+                    cookie["name"] == config.session_cookie_name
+                    for cookie in context.cookies(LOCAL_ORIGIN)
+                ):
+                    raise RuntimeError(
+                        "browser retained the public session cookie after logout"
                     )
             finally:
                 context.close()
@@ -146,7 +204,8 @@ def main() -> None:
 
     print(
         "Browser callback isolation proof succeeded: initiation exhausted; "
-        "original callback, user read, heartbeat, and logout completed."
+        "original callback, frontend POST heartbeat, rejected GET/HEAD mutations, "
+        "and browser POST/303 logout completed."
     )
 
 

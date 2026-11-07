@@ -1573,3 +1573,152 @@ verifier above ran after the cleanup.
   needed.
 - A namespace `ba-phase5-psa-1792397007`, 19 days old, predates this plan. It
   was left in place.
+
+## Plan 02.8, Phase 2: Exact-Origin Ingress Rule Proven Live
+
+Date: 2026-11-07. Live phase against the local Tilt/Kind stack (Tilt running
+from this worktree, 45 resources healthy, Istio proxy `1.30.6`). The
+`kind-kind` checks passed before cluster mutations, and
+`./scripts/bootstrap/check-local-runtime.sh` passed. No cookie, token,
+authorization-code or state value was printed or recorded. Sibling evidence:
+api-tests
+[Plan 02.8, Phase 1](https://github.com/budgetanalyzer/budget-analyzer-api-tests/blob/main/docs/research/security-consensus-hardening-evidence.md).
+The contract is documented in
+[Exact-Origin Ingress Rule](../architecture/session-edge-authorization-pattern.md#exact-origin-ingress-rule).
+
+### Change
+
+- `kubernetes/istio/ingress-exact-origin.yaml`: one native `DENY`
+  AuthorizationPolicy on the ingress gateway. Hosts
+  `app.budgetanalyzer.localhost` and `app.budgetanalyzer.localhost:*`,
+  `notMethods` `GET`/`HEAD`/`OPTIONS`, condition
+  `request.headers[origin]` `notValues` `https://app.budgetanalyzer.localhost`.
+  Applied by Tilt's `istio-ingress-routes` resource; the production reference
+  includes it and patches host and origin to `demo.budgetanalyzer.org` in
+  `kubernetes/production/istio-ingress-policies`.
+- Host-port finding: `Host: app.budgetanalyzer.localhost:443` is routed to the
+  application (`GET /` -> `200`). Istio matches `hosts` against the whole
+  `:authority`, so without the `:*` entry that form would skip the rule. The
+  live matrix includes it.
+- `verify-static-security-manifests.sh`: new exact-Origin contract scan on
+  the local manifest and the production render. The host must equal the one
+  hostname of the app, API and auth HTTPRoutes. Eight failing fixtures
+  (`ingress-exact-origin-*.yaml`) cover a missing policy, `ALLOW` action, no
+  hosts, wildcard hosts, a missing `:*` host, an exempted `POST`, a prefix
+  origin and a Fetch Metadata exception.
+- `verify-production-image-overlay.sh`: requires `ingress-exact-origin` in the
+  rendered ingress policies; only that policy may carry the public hostname.
+- `verify-edge-contract.sh`: new `Origin` section. The filter-chain check now
+  expects Istio's RBAC filter carrying only `ingress-exact-origin` next to the
+  path-hardening filter. Unsafe probes that test other controls send the
+  configured Origin.
+- Callers updated to send the configured Origin on unsafe methods:
+  `verify-istio-ingress.sh` (`require_json_denial`),
+  `verify-ingress-rate-limits.sh` (`probe_response_with_method`),
+  `verify-oauth-browser-binding.py` and `verify-ingress-browser-callback.py`
+  (httpx clients). The load-test seed and teardown scripts write Postgres and
+  Redis directly and send no ingress requests.
+
+### Generated configuration and live requests
+
+`verify-edge-contract.sh` evaluated the ingress Envoy RBAC config dump with
+Envoy's header semantics: it denies missing, empty, `null`, foreign, same-site,
+suffixed, `http://`, `:443`, trailing-slash, repeated, Fetch-Metadata-only,
+forwarded-header, `:443` Host, upper-case Host, `PUT`, `PATCH` and `DELETE`
+cases, and admits the exact origin, `GET`, `HEAD`, `OPTIONS` and other hosts.
+
+With a seeded session attached (so ext_authz admits `/api/*`), every case
+below was the ingress `403` `RBAC: access denied`:
+
+| Lane | Requests | Result |
+| --- | --- | --- |
+| NGINX | `POST /api/v1/transactions` x 13 cases | `403` each |
+| Session Gateway | `POST /auth/v1/session` x 13 cases | `403` each |
+| Session Gateway | form `POST /logout`: missing, `null`, foreign, same-site | `403` each |
+| Both | `PUT`, `PATCH`, `DELETE` without Origin | `403` each |
+| Both | totals | `rbac.denied` +36 for 36 probes; no NGINX or Session Gateway sidecar request; no NGINX log line |
+| State | session hash, expiry, index; transaction rows | unchanged |
+
+With the configured Origin: `POST /api/v1/transactions` -> `201`; `DELETE` of
+that transaction without or with a foreign Origin -> `403`, row unchanged;
+configured `DELETE` -> `204` (soft-deleted); heartbeat -> `200` (session
+refreshed); form `POST /logout` -> `303`, session removed.
+
+### Browser proof
+
+`verify-oauth-browser-binding.py` and `verify-ingress-browser-callback.py`
+passed: a real hosted login, the frontend's own `POST /auth/v1/session`
+(`200`) and a click on the frontend's form-POST Logout (`303`, IdP redirect,
+cookie cleared) under the live strict CSP.
+
+A one-off headless Chromium `156.0.8078.4` probe in a temporary directory
+outside the repositories logged in through the hosted IdP, stopped the
+frontend tab so its heartbeats could not change the session, then loaded
+hostile pages at a same-site origin (`https://attacker.budgetanalyzer.localhost`)
+and a cross-site origin (`https://attacker.example`) by request interception.
+Each page auto-submitted a form `POST /logout`, a form `POST /auth/v1/session`,
+a `text/plain` form `POST /api/v1/transactions` carrying a JSON body, and three
+`mode: "no-cors"`, `credentials: "include"` `fetch` `POST`s. Chromium's Local
+Network Access check blocks those `fetch` calls before sending, because the
+intercepted page counts as public and the application resolves to loopback.
+That is an artifact of the local target, so the probe disabled it to exercise
+the ingress rule.
+
+| Origin | Session cookie sent | Requests | Result |
+| --- | --- | --- | --- |
+| Same-site | yes | form `/logout`, form heartbeat, form API, 3 `fetch` | `403` ingress denial each, no `Set-Cookie` |
+| Cross-site | no (`Strict`) | form `/logout`, form heartbeat, 2 `fetch` (`/logout`, heartbeat) | `403` ingress denial each, no `Set-Cookie` |
+| Cross-site | no (`Strict`) | form API, `fetch` API | `401` from ext_authz, which runs before the `DENY` |
+| Both | after all submissions | Redis session fingerprint, browser cookie, `GET /auth/v1/user`, transaction list | unchanged, present, `200`, unchanged |
+
+The same-site row shows the `Strict` limit: the cookie was attached and only
+the Origin rule stopped the request. Under the cookie storage rules, a hostile
+top-level `POST /logout` response could clear the cookie even when Strict
+withheld it (contested issue A2; not reproduced before this change). That
+response is now the ingress `403` with no `Set-Cookie`, and the cookie
+survived. No
+remaining safe-method response checked clears the session cookie: `GET`/`HEAD`
+`/logout` and `GET /auth/v1/session` (`405`), `GET /oauth2/authorization/idp`
+(`302`, sets only the binding cookie), failed callbacks (`302`), and
+unauthenticated `GET /auth/v1/user`, `GET /api/v1/currencies` (`401`) and
+`GET /` (`200`) send none.
+
+`form-action` on the app page under the live CSP: a form `POST` to
+`https://attacker.example` was blocked with a CSP `form-action` violation, and
+a same-origin form `POST` whose (intercepted) answer was a `303` to
+`https://attacker.example` was also blocked on the redirect. The frontend
+logout afterwards sent `Origin: https://app.budgetanalyzer.localhost`, got
+`303`, ended on `/peace`, removed the cookie and the Redis session, and
+produced no CSP console violation. One probe assertion failed: its check of
+the ext_authz `401` body format was wrong. The `401` status itself was
+confirmed.
+
+### Validation
+
+- Orchestration static gate: `bash -n` and `shellcheck` clean on
+  `verify-edge-contract.sh`, `verify-istio-ingress.sh`,
+  `verify-ingress-rate-limits.sh`, `verify-static-security-manifests.sh` and
+  `verify-production-image-overlay.sh`. `verify-static-security-manifests.sh`
+  (pinned PyYAML interpreter) passed, including both exact-Origin scans, and
+  its `--self-test` rejected all eight new fixtures.
+  `verify-production-image-overlay.sh` passed.
+- `verify-edge-contract.sh` (no flags): **244 passed, 0 failed, 3 skipped**.
+- `verify-session-architecture.sh`: **83 passed, 0 failed**.
+- `verify-istio-ingress.sh`: **97 passed (out of 97)**.
+- `verify-ingress-rate-limits.sh`: **33 checks passed**.
+- `verify-oauth-browser-binding.py` and `verify-ingress-browser-callback.py`
+  (api-tests interpreter): passed.
+
+### Limitations
+
+- Only headless Chromium was exercised. `form-action` redirect enforcement
+  and Origin sending in Firefox and WebKit were not tested; neither browser is
+  installed in the development VM.
+- The hostile `fetch` cases ran with Chromium's Local Network Access check
+  disabled, as described above.
+- `verify-edge-contract.sh` ran without `--inject-failures`; its three
+  fault-injection cases were skipped.
+- The production reference is checked offline only; no hosted environment
+  exists.
+- Local reset: none required. A browser tab with an old frontend bundle still
+  sends `Origin` on its POSTs.

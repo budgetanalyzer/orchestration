@@ -95,6 +95,12 @@ not authentication for arbitrary HTTP clients.
 
 Prefer one native ingress `DENY` AuthorizationPolicy covering both lanes and scoped to the HTTP
 application listener. [Istio supports negative header matches](https://istio.io/latest/docs/reference/config/security/authorization-policy/).
+Because the listener hostname is a wildcard, also restrict the policy by host to the browser
+application host so it does not apply to every hostname the listener accepts. A future
+machine-to-machine API belongs on a separate hostname with a non-cookie credential, outside this
+rule; the `__Host-` session cookie is never sent there, so CSRF does not apply. Do not instead
+exempt requests carrying an `Authorization` header on the application host, which would put two
+credential types on one lane.
 Before treating the policy as complete, prove rejection of missing/empty/null/foreign Origin in
 the generated configuration and live local requests, plus success for the configured origin on
 both lanes. A permissive `ALLOW` rule is not a substitute: other ALLOW policies are additive.

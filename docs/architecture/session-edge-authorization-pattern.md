@@ -41,6 +41,7 @@ Auth paths: Browser → Istio Ingress → Session Gateway
 **Responsibilities**:
 - Handles SSL/TLS termination for all traffic
 - Enforces ext_authz on `/api/*` paths via `AuthorizationPolicy` with `action: CUSTOM`
+- Denies unsafe requests to the browser application host on both lanes unless `Origin` is exactly the application origin; see [Exact-Origin Ingress Rule](#exact-origin-ingress-rule)
 - Applies four per-client local rate-limit policies to login initiation, login completion, session operations, and `/api/*` before `ext_authz`; the canonical boundaries and capacity model live in [Ingress Per-Client Rate Limiting](security-architecture.md#ingress-per-client-rate-limiting)
 - Routes auth paths to Session Gateway
 - Routes API and frontend paths to NGINX
@@ -227,7 +228,8 @@ Logout accepts only a same-origin top-level form `POST /logout`. Session
 Gateway deletes the session, clears the public cookie, and returns `303 See
 Other` to its server-constructed identity-provider logout URL. `GET` and
 `HEAD` cannot heartbeat or log out and return `405` without changing the
-session. The exact-Origin ingress control is a separate layer.
+session. The [exact-Origin ingress rule](#exact-origin-ingress-rule) is a
+separate layer in front of both endpoints.
 
 The internal lookup is
 `GET /permission-service/internal/v1/users/{userId}/authorization` from
@@ -305,6 +307,73 @@ section owns the exact behavior.
   [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md).
 - The cap is not account-wide revocation and does not require MFA step-up.
   Changing the value applies to existing sessions at their next heartbeat.
+
+## Exact-Origin Ingress Rule
+
+The browser's cookie credential is honored on unsafe requests only from the
+application's own origin. The native Istio `DENY` AuthorizationPolicy
+[`ingress-exact-origin`](../../kubernetes/istio/ingress-exact-origin.yaml) on
+the ingress gateway denies every request to the browser application host
+`app.budgetanalyzer.localhost` whose method is not `GET`, `HEAD` or `OPTIONS`
+unless its `Origin` header is exactly `https://app.budgetanalyzer.localhost`.
+The production reference patches the host and origin to its public hostname in
+`kubernetes/production/istio-ingress-policies`.
+
+- **Both lanes.** NGINX (`/api/*`) and the direct Session Gateway lane
+  (`/auth/*`, `/logout`, `/oauth2/*`, `/login/oauth2/*`) are routes on the same
+  host, so one policy covers both. It also matches that host with any port
+  suffix, because the gateway routes `Host: app.budgetanalyzer.localhost:443`
+  to the application.
+- **What is rejected.** An absent, empty, `null`, foreign, same-site sibling,
+  suffixed, `http://`, explicit `:443`, trailing-slash or repeated `Origin`.
+  Envoy compares repeated headers as one comma-joined value, so they never
+  match. The trusted value is fixed in the policy, never derived from `Host` or
+  forwarding headers, and `Sec-Fetch-*` headers grant no exception. A denial is
+  the ingress `403` `RBAC: access denied`; the request reaches neither NGINX nor
+  Session Gateway.
+- **Order.** Istio evaluates `CUSTOM` before `DENY`, so on `/api/*` ext_authz
+  runs first and a request without a valid session gets its `401` before the
+  Origin check. Both are denials. ext_authz only reads Redis.
+- **Scope.** The rule applies only to the browser application host, not to
+  every name the `*.budgetanalyzer.localhost` listener accepts. It is CSRF
+  provenance for the cookie credential, not authentication: any non-browser
+  client can send this `Origin` and still needs a valid session. Requests that
+  carry an `Authorization` header get no exemption on this host, because that
+  would put two credential types on one lane. A future machine-to-machine API
+  belongs on its own hostname with a non-cookie credential, outside this rule;
+  the host-only `__Host-` session cookie is never sent there, so CSRF does not
+  apply. No such API exists.
+- **Callers.** Browsers send `Origin` on these requests, including the
+  frontend's `POST /auth/v1/session` heartbeat and its form `POST /logout`. The
+  API-test client and the orchestration verifiers send the configured origin
+  on unsafe methods. The OAuth callback is a top-level `GET` and relies on the
+  [browser binding](#session-gateway---auth-layer) instead; a future POST
+  callback needs an explicit contract change.
+- **Mesh assumption.** The rule relies on the mesh policies that keep browsers
+  from reaching NGINX or Session Gateway except through the ingress. Internal
+  workload calls use their own caller and path policies.
+
+**Session cookie `SameSite=Strict`.** The session cookie defaults to
+`SameSite=Strict`. A conforming browser omits it from cross-site requests,
+including top-level navigations, but still sends it on same-site requests such
+as a form on a sibling `*.budgetanalyzer.localhost` host. Strict does not stop
+same-site requests; the Origin rule does. Strict also does not stop a
+top-level response from clearing the cookie, because the cookie storage rules
+let any response to a navigation set or delete it. The Origin rule removes the
+unsafe responses that did so: a hostile form `POST /logout` now gets the
+ingress `403` with no `Set-Cookie`. A future safe-method response that clears
+the session cookie would reopen cross-site logout by navigation.
+
+`scripts/guardrails/verify-static-security-manifests.sh` fails if the local
+policy or the production render is not one such `DENY` rule, loses its host
+restriction or its `:*` host entry, exempts another method, adds a condition
+such as Fetch Metadata, or names an origin other than the routed browser host.
+The `Origin` section of `scripts/smoketest/verify-edge-contract.sh` evaluates
+the generated Envoy RBAC configuration, then proves on the live chain that
+each rejected case is a `403` on both lanes with no mutation and that the
+configured origin succeeds on both. The
+[evidence record](../research/security-consensus-hardening-evidence.md#plan-028-phase-2-exact-origin-ingress-rule-proven-live)
+holds the browser results.
 
 ## Shared Session Contract
 
@@ -411,7 +480,7 @@ Browser → Istio Ingress (app.budgetanalyzer.localhost) → ext_authz → NGINX
 ### Security Benefits - Defense in Depth
 
 **Multiple security layers**:
-1. **Istio Ingress Gateway**: SSL termination for all traffic
+1. **Istio Ingress Gateway**: SSL termination for all traffic, and the [exact-Origin rule](#exact-origin-ingress-rule) for unsafe browser requests
 2. **Session Gateway**: Prevents token exposure to browser (XSS protection)
 3. **ext_authz**: Validates every API request via Redis session lookup
 4. **Backend Services**: Data-level authorization (user owns resource)

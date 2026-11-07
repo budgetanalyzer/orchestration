@@ -258,6 +258,14 @@ external_headers_and_status() {
 require_json_denial() {
     local method="$1" path="$2" path_label="$3"
     local response_dir status content_type
+    local -a origin_args=()
+
+    # Unsafe requests need the exact application Origin
+    # (kubernetes/istio/ingress-exact-origin.yaml) to reach the session check.
+    case "$method" in
+        GET | HEAD | OPTIONS) ;;
+        *) origin_args=(-H "Origin: https://app.budgetanalyzer.localhost") ;;
+    esac
 
     response_dir=$(mktemp -d)
     if ! status=$(curl --silent --show-error \
@@ -267,6 +275,7 @@ require_json_denial() {
         --max-time "$CURL_TIMEOUT" \
         --max-redirs 0 \
         --request "$method" \
+        "${origin_args[@]}" \
         "https://app.budgetanalyzer.localhost${path}"); then
         fail "${path_label} request failed under normal TLS verification"
         rm -rf "$response_dir"

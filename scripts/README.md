@@ -111,12 +111,21 @@ scripts/
   `%3B`, `%253b`, `%253B`, `%25253b` and `%25253B` probes on both lanes,
   including the `DELETE`
   revocation probes with the side-effect check. Each must be a `403` from the
-  ingress `ingress-path-hardening` RBAC filter, which must be the listener's
-  only enforcing RBAC filter: the ingress `rbac.denied` counter rises by
+  ingress `ingress-path-hardening` RBAC filter, which must run before
+  `ext_authz`, with Istio's RBAC filter carrying only `ingress-exact-origin` as
+  the listener's other enforcing RBAC filter: the ingress `rbac.denied` counter rises by
   exactly the probe count and neither the NGINX nor the Session Gateway
   sidecar records a request. It also shows that literal `..;`, `..;x` and
   `.;` segments are resolved by ingress normalization with no `;` reaching
-  NGINX, and that `;` in a query string still works. Its Authorization Failure
+  NGINX, and that `;` in a query string still works. Its Origin section
+  evaluates the generated `ingress-exact-origin` Envoy RBAC configuration on
+  every ingress pod, then seeds the same fixture and sends unsafe requests with
+  a missing, empty, `null`, foreign, same-site, suffixed, `http://`, `:443`,
+  trailing-slash, repeated, Fetch-Metadata-only or forwarded-header `Origin`,
+  or a `:443` Host, on both lanes. Each must be the ingress `403` with an exact
+  `rbac.denied` rise, no NGINX or Session Gateway sidecar request, and an
+  unchanged session and transaction set. The configured origin must then
+  create and delete a transaction, heartbeat and form-POST logout. Its Authorization Failure
   section checks the live Envoy timeout, error status and fail-closed setting,
   then proves JSON `401` for missing sessions. With `--inject-failures` it also
   proves empty `503` for an unavailable authorizer, a network-policy-induced

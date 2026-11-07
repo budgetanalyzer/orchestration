@@ -1,0 +1,20 @@
+# Intentional failing fixture for scan_istio_ingress_exact_origin_contract.
+# POST is treated as a safe method.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ingress-exact-origin
+  namespace: istio-ingress
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            hosts: ["app.budgetanalyzer.localhost", "app.budgetanalyzer.localhost:*"]
+            notMethods: ["GET", "HEAD", "OPTIONS", "POST"]
+      when:
+        - key: request.headers[origin]
+          notValues: ["https://app.budgetanalyzer.localhost"]

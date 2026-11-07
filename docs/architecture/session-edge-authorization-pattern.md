@@ -132,7 +132,7 @@ kubectl logs deployment/nginx-gateway
 - Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{id}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#backend-services-spring-boot)) — no Auth0 tokens are stored
 - Issues HttpOnly, Secure session cookies to browsers
 - Provides browser session endpoints `GET /auth/v1/session` and `GET /auth/v1/user`
-- Calls permission-service during login to establish the account and initial grants, then by internal user ID on every heartbeat to refresh account status, roles, and permissions
+- Calls permission-service during login with `POST` user sync to establish the account and initial grants, then by internal user ID on every heartbeat to refresh account status, roles, and permissions
 
 **Key Benefit**: Maximum security for browser-based financial application (tokens never exposed to XSS)
 
@@ -195,6 +195,19 @@ successful login proves both browser cookie delivery and preservation of the
 authorization request after the unbound attempt. See the
 [script catalog](../../scripts/README.md) for prerequisites and invocation.
 
+After the IdP callback succeeds, Session Gateway calls
+`POST /permission-service/internal/v1/users/sync` with a JSON body carrying
+the IdP subject, email and display name. permission-service creates or updates
+the user and returns the internal `userId`, roles and permissions that seed the
+new session. Identity fields travel only in the body. The whole call is bounded
+by Session Gateway's `PERMISSION_SERVICE_LOGIN_TIMEOUT` (default `5s`). A
+timeout, transport failure, non-2xx response such as `422` for a deactivated
+account, or undecodable body fails the callback: the browser is redirected to
+`/oops` and no session hash, user-session index entry or session cookie is
+written. Session Gateway's
+[Login User Sync](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/session-configuration.md#login-user-sync)
+section owns the client contract.
+
 Active browser sessions call `GET /auth/v1/session` under the `/auth/*` route
 family. Each heartbeat first reads the current Redis session, then performs one
 bounded permission-service lookup by internal `userId`. For an active account,
@@ -211,7 +224,7 @@ The internal lookup is
 `GET /permission-service/internal/v1/users/{userId}/authorization` from
 Session Gateway to permission-service. Istio identity and NetworkPolicy permit
 that east-west call in both supported deployments, and the mesh admits Session
-Gateway only with `GET` on this lookup and the login `.../permissions` lookup
+Gateway only with `GET` on this lookup and `POST` on the login user sync
 (see [Mesh Public/Internal Boundary](security-architecture.md#mesh-publicinternal-boundary)).
 It is not an NGINX route or a public browser API.
 

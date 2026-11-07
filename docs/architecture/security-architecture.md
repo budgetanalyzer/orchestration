@@ -16,7 +16,7 @@ Repository security posture:
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
-- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway `GET` on only the login permission and heartbeat authorization lookups and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
+- Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway only `POST` on the login user sync and `GET` on the heartbeat authorization lookup and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
 - Istio CNI runtime hardening: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods do not require `istio-init`.
 - Non-root application workload hardening: `session-gateway`, `currency-service`, `transaction-service`, `permission-service`, and `ext-authz` disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, and apply the planned container hardening. The Spring Boot services also mount `/tmp` and run read-only as UID/GID `1001`.
 - `ext-authz` service source lives in sibling `../ext-authz`; this repository
@@ -98,7 +98,7 @@ Security-critical implications:
 - Issue HTTP-only, secure session cookies to browsers
 - Provide browser session endpoints (`GET /auth/v1/session`, `GET /auth/v1/user`) for heartbeat and session inspection
 - Session lifecycle management (login/logout)
-- Call permission-service during login to establish initial authorization and on every heartbeat to refresh account status, roles, and permissions by internal user ID
+- Call permission-service during login with a deadline-bounded `POST` user sync to establish initial authorization, and on every heartbeat to refresh account status, roles, and permissions by internal user ID
 
 **Technology:** Spring WebFlux with Spring Security OAuth2 Client
 
@@ -257,9 +257,11 @@ contract. The rules are:
   `/internal/...` and `/actuator/...` stay unreachable from NGINX without
   relying on naming. `scripts/repo/generate-unified-api-docs.sh` reads specs
   through `kubectl exec` to loopback and needs no mesh allowance.
-- Session Gateway may call permission-service only with `GET` on
-  `/permission-service/internal/v1/users/{*}/permissions` (login) and
-  `/permission-service/internal/v1/users/{*}/authorization` (heartbeat).
+- Session Gateway may call permission-service only with `POST` on
+  `/permission-service/internal/v1/users/sync` (login) and `GET` on
+  `/permission-service/internal/v1/users/{*}/authorization` (heartbeat). Any
+  other method or internal path, including a `GET` on the sync path, is denied
+  with `403 RBAC: access denied`.
 - The ingress identity reaches Session Gateway only on the `auth-route`
   surface: `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/logout/*` and
   `/auth/*`. permission-service keeps its separate rule for

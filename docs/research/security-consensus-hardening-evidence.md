@@ -965,3 +965,104 @@ credential values.
   section "Plan 02.2, Phase 1".
 - No claim about a hosted environment. A deployment must set
   `IDP_REDIRECT_URI` to its own registered callback URL.
+
+## Plan 02.3, Phase 3: Login Permission Sync Mesh Rule and Live Login
+
+Date: 2026-11-07, approximately 10:05–10:12 UTC. Target: local Tilt/Kind
+`kind-kind`, exact origin `https://app.budgetanalyzer.localhost`, disposable
+API-test identities. No hosted production runtime was exercised.
+
+### Change
+
+- `permission-service-policy` in `kubernetes/istio/authorization-policies.yaml`
+  now admits the Session Gateway identity with exactly two operations:
+  `POST /permission-service/internal/v1/users/sync` and
+  `GET /permission-service/internal/v1/users/{*}/authorization`. The old
+  `GET .../users/{*}/permissions` entry is gone.
+- `scripts/smoketest/verify-session-architecture.sh` now requires
+  Session Gateway's `PermissionServiceClient` to use `/internal/v1/users/sync`
+  and no `/permissions` path. It also requires the Session Gateway rule's `to`
+  block to equal those two operations exactly. Extracting the rule from the
+  previous policy produces a different block, so the old policy would fail.
+- Step 2's search found no other active consumer of the old path. The
+  `verify-edge-contract.sh` and `verify-nginx-shared-routes.sh` references are
+  traversal targets on the still-valid `/authorization` path. The other scripts
+  named in the plan refer only to the `permission-service-policy` name. None of
+  them needed to change.
+- Owner docs updated: `security-architecture.md` (mesh boundary and Session
+  Gateway responsibilities), `session-edge-authorization-pattern.md` (new login
+  user sync paragraph and mesh sentence) and `service-communication.md` (the
+  bounded synchronous call example). The service contracts live in
+  session-gateway `docs/session-configuration.md#login-user-sync` and
+  permission-service `docs/authorization-model.md#internal-authorization-lookups`.
+
+### Runtime provenance
+
+- `./scripts/bootstrap/check-local-runtime.sh` passed, and so did the
+  `kind-kind` context, loopback API, `kind` cluster and Ready node checks. The
+  existing Tilt session for this checkout applied the new policy at 10:05:33
+  UTC; the live object shows only the two operations.
+- `session-gateway:tilt-eb722a1d6389d416`: the running `/app/app.jar` and the
+  sibling `build/libs/session-gateway-0.0.1-SNAPSHOT.jar` have the same SHA-256
+  `6f4c9212…f16916`. The jar was built at 10:03:45 UTC, and the newest main
+  source was written at 10:02:20 UTC.
+- `permission-service:tilt-76090031780c2eea`: the running jar and the sibling
+  build have the same SHA-256 `f3577d07…0141d`. The jar was built at 09:59:03
+  UTC, and the newest main source was written at 09:58:05 UTC.
+
+### Mesh probes from the Session Gateway identity
+
+These requests were sent with `wget` from the `session-gateway` container
+through its sidecar. The counters are the permission-service sidecar's
+`inbound_0.0.0.0_8086` RBAC counters.
+
+| Request | Status | RBAC counter |
+| --- | --- | --- |
+| `GET .../internal/v1/users/usr_probe/permissions` (old login path) | `403` | `denied` +1 |
+| `GET .../internal/v1/users/sync` (wrong method) | `403` | `denied` +1 |
+| `POST .../internal/v1/users/usr_probe/authorization` (wrong method) | `403` | `denied` +1 |
+| `POST .../internal/v1/users/sync` with body `{}` | `400` (application validation) | `allowed` +1 |
+| `GET .../internal/v1/users/usr_probe/authorization` | `404` (unknown user) | `allowed` +1 |
+
+### Live logins
+
+The logins used real hosted login through Chromium. The driver was a one-off
+Playwright script outside the repository, built on the API-test helpers. It
+printed no cookie, state, code or credential values.
+
+| Identity | Result |
+| --- | --- |
+| Existing primary (`USER`) | Callback `302` to `/`. `BA_SESSION` is HttpOnly and Secure. `/auth/v1/user` `200` with roles `USER` and 9 permissions. Heartbeat `200` |
+| Existing admin | Callback `302` to `/admin`. Roles `USER, ADMIN` and 18 permissions, including `users:*` and `*:any`. Heartbeat `200` |
+| Consumed, still-`DEACTIVATED` disposable identity (`…20261107T093518Z_D5CB4416…`) | Ended on `/oops` with no `BA_SESSION`. Session Gateway logged `PermissionServiceException` after the sync call |
+| Same identity after its local row was hard-deleted (new user) | Callback `302` to `/`. A new row `usr_34cb…` was created as `ACTIVE` with default role `USER`. The session has the 9 `USER` permissions. Heartbeat `200` |
+| Same identity logged in again (now existing) | Same row reused; no duplicate. Session has the same grants |
+
+**Local data reset:** the new-user case hard-deleted one consumed deactivation
+identity's `permission.users` row; it had no `user_roles`. The sync rejects any
+`idp_sub` that has a `DEACTIVATED` row, even a soft-deleted one, so a
+soft-delete would not work. That identity is now an `ACTIVE` `USER`. Existing
+clusters need no other reset for this phase.
+
+### Validation
+
+- `bash -n` and ShellCheck on `verify-session-architecture.sh`: clean.
+- `verify-static-security-manifests.sh` (pinned PyYAML interpreter): passed.
+- `verify-production-image-overlay.sh`: passed.
+- `./scripts/smoketest/verify-session-architecture.sh`: **61 passed, 0 failed**
+  (live).
+- `./scripts/smoketest/verify-istio-ingress.sh`: **97 passed (out of 97)**.
+- `./scripts/smoketest/verify-edge-contract.sh`: passed, 0 failed, 3 skipped.
+  The skipped cases are the opt-in `--inject-failures` cases, which were not
+  run.
+
+### Limitations
+
+- `kubernetes/production` still pins Session Gateway 0.0.15, which calls the
+  removed `GET .../permissions` path. This shared policy denies it. The release
+  and pin update is human-owned and is recorded in plan 05, Phase 3; see the
+  plan's cutover rule.
+- No checked-in verifier sends live requests to test this internal rule. The
+  table above comes from a one-off probe. `verify-network-policies.sh` proves
+  only TCP reachability.
+- No claim about a hosted environment.

@@ -23,7 +23,7 @@ and ext-authz repos:
 - Session Gateway and ext-authz share the `SESSION_KEY_PREFIX=session:` and `SESSION_COOKIE_NAME=BA_SESSION` defaults
 - ext-authz deployment explicitly sets `SESSION_COOKIE_NAME=BA_SESSION` and does not override `SESSION_KEY_PREFIX`
 - `/auth/*`, `/oauth2/*`, `/login/oauth2/*`, and `/logout` still route only to Session Gateway, with no standalone `/user` match
-- Session Gateway can reach permission-service internally in the local policy, while the internal lookup stays absent from public NGINX routes
+- Session Gateway reaches permission-service only through `POST /internal/v1/users/sync` and `GET /internal/v1/users/{userId}/authorization` in the local policy, while the internal surface stays absent from public NGINX routes
 - The source heartbeat contract refreshes authorization through permission-service, while `/api/*` validation remains Redis-only through ext-authz
 - Live Redis ACLs and keyspace hygiene match the checked-in contract
 
@@ -538,9 +538,16 @@ REDIS_POD=""
 REDIS_OPS_USERNAME=""
 REDIS_OPS_PASSWORD=""
 REDIS_ACL_BOOTSTRAP_FILE="${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh"
+EXPECTED_SESSION_GATEWAY_PERMISSION_OPERATIONS='      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/permission-service/internal/v1/users/sync"]
+        - operation:
+            methods: ["GET"]
+            paths: ["/permission-service/internal/v1/users/{*}/authorization"]'
 
 run_static_checks() {
-    local route_yaml local_permission_policy
+    local route_yaml local_permission_policy session_gateway_permission_operations
     local permission_ingress_policy session_gateway_egress_policy
     local ext_authz_config_file ext_authz_deployment_file session_gateway_application_file session_gateway_cookie_helper_file
     local session_gateway_controller_file permission_service_client_file ext_authz_http_server_file
@@ -698,6 +705,14 @@ run_static_checks() {
         '"/internal/v1/users/{userId}/authorization"' \
         "Session Gateway uses the internal authorization lookup"
     assert_file_contains \
+        "$permission_service_client_file" \
+        '"/internal/v1/users/sync"' \
+        "Session Gateway login uses the internal user sync call"
+    assert_file_not_contains \
+        "$permission_service_client_file" \
+        '/permissions"' \
+        "Session Gateway no longer calls the retired login permissions lookup"
+    assert_file_contains \
         "$ext_authz_http_server_file" \
         "store.LookupSession(r.Context(), cookie.Value)" \
         "ext-authz API checks use the Redis-backed session store"
@@ -720,6 +735,14 @@ run_static_checks() {
         "$local_permission_policy" \
         'cluster.local/ns/default/sa/session-gateway' \
         "local Istio policy allows Session Gateway to call permission-service"
+    session_gateway_permission_operations="$(awk '
+        found { print }
+        /principals: \["cluster\.local\/ns\/default\/sa\/session-gateway"\]/ { found = 1 }
+    ' <<<"$local_permission_policy")"
+    assert_value_equals \
+        "$session_gateway_permission_operations" \
+        "$EXPECTED_SESSION_GATEWAY_PERMISSION_OPERATIONS" \
+        "local Istio policy allows Session Gateway only POST user sync and GET authorization on permission-service"
     assert_text_contains \
         "$permission_ingress_policy" \
         'app: session-gateway' \

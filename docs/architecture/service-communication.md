@@ -88,11 +88,12 @@ public void handleCurrencyImported(CurrencyImportedEvent event) {
 **Use Case:** A service needs another service's current, authoritative answer
 before it can respond, and stale or replicated data would be wrong
 
-**Example:** Session Gateway calls permission-service by internal user ID at
-login and on each heartbeat to fetch account status, roles and permissions. A
-cached or replicated copy could keep a deactivated account's grants. The mesh
-admits only `GET` on those lookup paths, the heartbeat lookup has a timeout,
-and neither call is on the per-request `/api/*` path. See
+**Example:** Session Gateway calls permission-service at login, with a
+`POST` user sync by IdP identity, and on each heartbeat, with a `GET` by
+internal user ID, to fetch account status, roles and permissions. A cached or
+replicated copy could keep a deactivated account's grants. The mesh admits
+only those two method and path pairs, both calls have a timeout, and neither
+call is on the per-request `/api/*` path. See
 [session-edge-authorization-pattern.md](session-edge-authorization-pattern.md)
 for its failure behavior.
 

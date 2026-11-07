@@ -84,8 +84,8 @@ spec:
               - "/currency-service/v3/api-docs"
 ---
 # permission-service: nginx-gateway on the public user administration
-# resource; session-gateway GET on the two internal lookups it makes during
-# session creation and heartbeat refresh.
+# resource; session-gateway POST on the login user sync and GET on the
+# heartbeat authorization refresh, and nothing else on the internal surface.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -110,10 +110,11 @@ spec:
             principals: ["cluster.local/ns/default/sa/session-gateway"]
       to:
         - operation:
+            methods: ["POST"]
+            paths: ["/permission-service/internal/v1/users/sync"]
+        - operation:
             methods: ["GET"]
-            paths:
-              - "/permission-service/internal/v1/users/{*}/permissions"
-              - "/permission-service/internal/v1/users/{*}/authorization"
+            paths: ["/permission-service/internal/v1/users/{*}/authorization"]
 ---
 # budget-analyzer-web: accepts from nginx-gateway (proxied by nginx).
 # This policy is local/Tilt-only because the production reference serves the

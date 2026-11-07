@@ -144,6 +144,28 @@ wait_for_pod_ready() {
     kubectl wait --for=condition=Ready "pod/$2" -n "$1" --timeout="${3:-60s}" >/dev/null 2>&1
 }
 
+# A probe carrying the ingress gateway label is selected by the public ingress
+# Service. Delete it and wait for the EndpointSlices to drop it so later
+# external requests cannot be load-balanced to a pod with no ingress listener.
+remove_probe_from_ingress_service() {
+    local pod="$1" endpoint_names
+
+    kubectl delete pod "$pod" -n istio-ingress \
+        --ignore-not-found --wait=true --timeout=60s >/dev/null 2>&1 || true
+
+    for _ in $(seq 1 30); do
+        endpoint_names=$(kubectl get endpointslices -n istio-ingress \
+            -l "kubernetes.io/service-name=${INGRESS_GATEWAY_WORKLOAD_NAME}" \
+            -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}{"\n"}{end}' 2>/dev/null || true)
+        if ! printf '%s\n' "$endpoint_names" | grep -Fxq "$pod"; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
 create_probe() {
     local ns="$1" name="$2"
     shift 2
@@ -1226,6 +1248,12 @@ main() {
         pass "Wrong-identity mesh workload received HTTP 403 from nginx-gateway"
     else
         fail "Wrong-identity mesh workload returned HTTP ${authz_status:-none} (expected 403)"
+    fi
+
+    if remove_probe_from_ingress_service p3-wrong-identity; then
+        pass "Wrong-identity probe was removed from the ingress Service endpoints"
+    else
+        fail "Wrong-identity probe still backs the ingress Service; later external probes may hit it"
     fi
 
     section "Egress Control"

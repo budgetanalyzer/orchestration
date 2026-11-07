@@ -367,6 +367,7 @@ create_configmap('session-gateway-idp-config', DEFAULT_NAMESPACE, {
 # gets Springdoc/Swagger UI enabled.
 create_configmap('session-gateway-config', DEFAULT_NAMESPACE, {
     'SESSION_TTL_SECONDS': '900',
+    'SESSION_MAX_LIFETIME_SECONDS': '28800',
     'SPRINGDOC_ENABLED': 'true',
 })
 

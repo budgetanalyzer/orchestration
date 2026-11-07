@@ -745,7 +745,7 @@ A local link and anchor check of the five edited files found no broken targets,
 and `rg -n '/srv/'` on R1 finds nothing. R1's line references became `#L<n>`
 anchors. They point at the reviewed revision and may drift as files change.
 
-Deferred as planned: the "absolute expiration" claim (plan 02.4, Phase 4), the
+Deferred as planned: the "absolute expiration" claim (plan 02.4, Phase 3), the
 audit-logging claims (plan 05, Phase 3) and the eviction policy (plan 04, Phase 1).
 
 ## Follow-up 2026-11-06 — `verify-edge-contract.sh` failure injection is opt-in
@@ -1065,4 +1065,95 @@ clusters need no other reset for this phase.
 - No checked-in verifier sends live requests to test this internal rule. The
   table above comes from a one-off probe. `verify-network-policies.sh` proves
   only TCP reachability.
+- No claim about a hosted environment.
+
+## Plan 02.4, Phase 3: Absolute Session Lifetime Configured and Proven Live
+
+Date: 2026-11-07. Target: local Tilt/Kind (`kind-kind`) only. No hosted
+environment was touched.
+
+### Change
+
+- `kubernetes/services/session-gateway/configmap.yaml` and the Tiltfile's
+  `session-gateway-config` set `SESSION_MAX_LIFETIME_SECONDS="28800"` (D1). Tilt
+  applied the ConfigMap, and the production reference render
+  (`kubectl kustomize --load-restrictor LoadRestrictionsNone kubernetes/production/apps`)
+  carries the same key from the shared base.
+- `docs/architecture/session-edge-authorization-pattern.md` has a new
+  "Absolute Session Lifetime" section, a heartbeat table row and a corrected
+  ADR 007 paragraph. `docs/architecture/security-architecture.md` replaces the
+  unbacked "absolute expiration" claim (deferred from plan 01, Phase 7) and
+  states the cap in the token and Redis descriptions.
+  `docs/development/local-environment.md` lists the new ConfigMap value.
+- ext-authz is unchanged (D2). `kubernetes/production` still pins Session
+  Gateway 0.0.15, which ignores this setting until the human-owned release and
+  pin update (plan 05, Phase 3).
+
+### Runtime provenance
+
+- `./scripts/bootstrap/check-local-runtime.sh` passed, and so did the
+  `kind-kind` context, loopback API, `kind` cluster and Ready node checks, before
+  each mutation. The Tilt session runs this checkout's Tiltfile.
+- `session-gateway:tilt-131bcdb23ba37830`: the running `/app/app.jar` and the
+  sibling `build/libs/session-gateway-0.0.1-SNAPSHOT.jar` have the same SHA-256
+  `acafb1c8…03d55b`. The jar was built at 11:08:11 UTC, and no source is newer.
+  Its `application.yml` reads `${SESSION_MAX_LIFETIME_SECONDS:28800}`.
+- `budget-analyzer-web` (Vite dev server): `useSessionHeartbeat.ts` and
+  `InactivityWarningModal.tsx` in the pod match the sibling worktree by SHA-256,
+  and the served module contains the capped-session copy.
+
+### Live cap proof
+
+Diagnostic only: `kubectl set env` temporarily set `SESSION_TTL_SECONDS=120`
+and `SESSION_MAX_LIFETIME_SECONDS=1080` on the Session Gateway deployment.
+Session Gateway refuses a maximum below the TTL, so both were shortened. The
+scaled cap (18 minutes) exceeds Auth0's 15-minute idle lifetime, as 8 hours
+does. The overrides were removed afterwards. The deployment has no explicit
+`SESSION_*` env entries, and the pod reads `900` and `28800` from the
+ConfigMap. No checked-in file held the short values.
+
+The driver was a one-off Playwright script outside the repository, built on the
+API-test helpers. It logged in the existing primary (`USER`) identity through
+real hosted login in Chromium, left the SPA so its heartbeat hook could not log
+out, and sent a heartbeat and `GET /api/v1/transactions` every 60 seconds. It
+printed no cookie, state, code or credential values. Times are seconds after
+the callback returned (`t0`).
+
+| t | Heartbeat | `expiresAt - t0` | Sliding `t + TTL` | API |
+| --- | --- | --- | --- | --- |
+| 0 | `200` | 120 | 120 | `200` |
+| 60-901 (15 samples) | `200` | `t + 120` | `t + 120` | `200` |
+| 961 | `200` | **1080** (clamped) | 1081 | `200` |
+| 1021 | `200` | **1080** (58 s left) | 1141 | `200` |
+| 1081 | `401`, cookie cleared with `Max-Age=0` | - | 1201 | `401`; `/auth/v1/user` `401` |
+
+- The heartbeat stopped advancing `expiresAt` at the cap, and ext-authz
+  rejected the API at the cap without reading `created_at` (D2).
+- The Redis key expired at the cap, so the `401` at 1081 s was the
+  missing-session path. Phase 1's integration tests cover the "no lifetime
+  remaining" branch.
+- Re-login at 1081 s in the same browser context, which still held Auth0's
+  cookies from the first login, landed on the hosted Auth0 page with a
+  password prompt. Heartbeats did not renew Auth0's idle lifetime. Completing it
+  created a different session; its heartbeat returned `200`, and logout `302`.
+
+### Validation
+
+- No shell script changed.
+- `verify-static-security-manifests.sh` (pinned PyYAML interpreter): passed.
+- `verify-production-image-overlay.sh`: passed.
+- `./scripts/smoketest/verify-session-architecture.sh`: **61 passed, 0 failed**.
+- `./scripts/smoketest/verify-edge-contract.sh`: **190 passed, 0 failed, 3
+  skipped**. The skipped cases are the opt-in `--inject-failures` cases.
+- All Tilt resources were `ok` afterwards. `git diff --check` was clean.
+
+### Limitations
+
+- The full 8-hour value was not exercised live; the proof used a scaled cap
+  through the same code path.
+- The frontend's capped modal was not driven in a browser. TTL 120 equals the
+  default 120-second warning window, so the scaled run cannot show it; the
+  frontend unit tests cover it.
+- No existing local cluster needs a reset. Sessions created before this change
+  get the cap at their next heartbeat.
 - No claim about a hosted environment.

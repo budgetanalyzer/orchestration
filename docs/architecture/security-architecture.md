@@ -541,7 +541,9 @@ the versioned Session Gateway JSON endpoints.
 - Manages user authentication lifecycle
 - Prevents token exposure to browser
 - HTTP-only, Secure, SameSite cookies
-- Session timeout and absolute expiration
+- Sliding session timeout and an absolute session lifetime: heartbeats never extend a session past
+  `created_at + SESSION_MAX_LIFETIME_SECONDS` (8 hours), and ext_authz enforces it transitively
+  through `expires_at` (see [Absolute Session Lifetime](session-edge-authorization-pattern.md#absolute-session-lifetime))
 
 **Layer 2: ext_authz (Istio Ingress)**
 - Path hardening before `ext_authz` denies literal and encoded `;` in the path
@@ -558,14 +560,14 @@ the versioned Session Gateway JSON endpoints.
 ### Token Configuration
 
 **Opaque Session Token** (browser cookie value):
-- Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally)
+- Lifetime: 15 minutes by default (sliding expiration only after a successful authorization-refreshing `GET /auth/v1/session` heartbeat; frontend gates calls on user activity — idle users and sessions with repeated failed refreshes expire naturally). Heartbeats never extend it past 8 hours from login (`SESSION_MAX_LIFETIME_SECONDS=28800`); at that point the user must sign in again
 - Format: Opaque session ID (no sensitive data encoded)
 - Storage: Redis session hash (`session:{id}`)
 - Validated by: ext_authz service via Redis lookup
 
 **Session Redis Hash** (`session:{id}`):
 - Fields: user_id, idp_sub, email, display_name, picture, roles (comma-joined), permissions (comma-joined), created_at, expires_at
-- TTL: 15 minutes (configurable via `session.ttl-seconds`)
+- TTL: 15 minutes (configurable via `session.ttl-seconds`), never past `created_at` plus `session.max-lifetime-seconds`
 - Written by: Session Gateway on login and, after a successful permission-service refresh, session heartbeat
 - Read by: ext_authz for per-request validation (reads `user_id`, `roles`, `permissions`, `expires_at`)
 - Companion index: `user_sessions:{userId}` — a Redis set of session IDs for that user, used by `DELETE /internal/v1/sessions/users/{userId}` for bulk revocation
@@ -772,7 +774,7 @@ surface; alerting rules are a future follow-up.
 **Redis Configuration:**
 - Session key pattern: `session:{session-id}`
 - User session index pattern: `user_sessions:{userId}` (SET of session IDs for bulk revocation)
-- TTL: 15 minutes (configurable via `session.ttl-seconds`)
+- TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery
 

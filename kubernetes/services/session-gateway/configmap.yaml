@@ -7,3 +7,4 @@ metadata:
     app: session-gateway
 data:
   SESSION_TTL_SECONDS: "900"
+  SESSION_MAX_LIFETIME_SECONDS: "28800"

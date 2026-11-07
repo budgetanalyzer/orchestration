@@ -213,8 +213,9 @@ family. Each heartbeat first reads the current Redis session, then performs one
 bounded permission-service lookup by internal `userId`. For an active account,
 Session Gateway atomically replaces the roles and permissions snapshot and
 extends `expires_at`, the session TTL, and its user-session index TTL only if
-the session still exists. The response retains its existing shape and reports
-the expiration actually stored. This keeps permission-service off the
+the session still exists, never past the
+[absolute session lifetime](#absolute-session-lifetime). The response retains
+its existing shape and reports the expiration actually stored. This keeps permission-service off the
 `/api/*` hot path: `ext_authz` continues to authorize every API request from
 Redis alone. The heartbeat does not call Auth0. Browser session inspection
 lives alongside it at `GET /auth/v1/user` and reflects the refreshed Redis
@@ -230,7 +231,8 @@ It is not an NGINX route or a public browser API.
 
 | Heartbeat result | Session behavior | Browser result |
 | --- | --- | --- |
-| Active account and successful lookup | Replace roles and permissions and extend the existing session atomically | `200` with refreshed roles and stored expiration |
+| Active account and successful lookup | Replace roles and permissions and extend the existing session atomically, up to its absolute lifetime | `200` with refreshed roles and stored expiration |
+| Session at its absolute lifetime | Delete this session and clear its cookie | `401` after invalidation |
 | Deactivated, deleted, or missing account | Delete this session and clear its cookie | `401` after invalidation |
 | Lookup unavailable, timed out, or invalid | Preserve the existing snapshot and expiration; do not extend from cached grants | `503`; keep the cookie so a later heartbeat can retry |
 | Session missing or expired before the final write | Do not recreate or resurrect it; clear the cookie | `401` |
@@ -259,12 +261,42 @@ procedure when that race is unacceptable.
 **Sliding TTL in ADR 007**: [ADR 007](../decisions/007-browser-only-session-gateway.md)
 says a user revoked at Auth0 but not deactivated in permission-service keeps
 their session "until Redis TTL expiry". That is the sliding session TTL, not a
-fixed deadline from login or from the Auth0 revocation. The heartbeat does not
-call Auth0, so each successful heartbeat for an account permission-service
-still reports active moves `expires_at` and the key TTL forward again, and no
-absolute session lifetime currently caps that renewal. Such a session ends one
-TTL after its last successful heartbeat, at logout, or through
-permission-service deactivation and bulk revocation.
+fixed deadline from the Auth0 revocation. The heartbeat does not call Auth0,
+so each successful heartbeat for an account permission-service still reports
+active moves `expires_at` and the key TTL forward again, up to the absolute
+session lifetime. Such a session ends one TTL after its last successful
+heartbeat, at its absolute lifetime, at logout, or through permission-service
+deactivation and bulk revocation.
+
+### Absolute Session Lifetime
+
+Heartbeats cannot renew a session past
+`created_at + SESSION_MAX_LIFETIME_SECONDS`. Orchestration sets it to `28800`
+(8 hours) in the checked-in `session-gateway-config` ConfigMap and in the
+Tiltfile's `session-gateway-config`, which overrides that ConfigMap in local
+Tilt. Session Gateway uses the same default when the setting is absent and
+refuses to start if it is below `SESSION_TTL_SECONDS`. Session Gateway's
+[Absolute Session Lifetime](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/session-configuration.md#absolute-session-lifetime)
+section owns the exact behavior.
+
+- Each successful heartbeat sets `expires_at` and the Redis key TTL to the
+  earlier of `now + SESSION_TTL_SECONDS` and the lifetime deadline. Near the
+  deadline the reported expiration stops advancing, and the key expires at the
+  deadline.
+- Once no lifetime remains, the heartbeat deletes the session, clears its
+  cookie, and returns `401`. A missing session also returns `401`.
+- `ext_authz` does not read `created_at` or the lifetime setting. It enforces
+  the cap transitively by rejecting a passed `expires_at` and a missing session.
+- The frontend detects a capped expiration and replaces its inactivity warning
+  with a sign-in-again prompt; see `budget-analyzer-web`'s
+  [Absolute session lifetime](https://github.com/budgetanalyzer/budget-analyzer-web/blob/main/docs/authentication.md#absolute-session-lifetime).
+- The value matches the Auth0 tenant's 8-hour Maximum Session Lifetime. The
+  Auth0 idle lifetime is 15 minutes and nothing after login reaches Auth0, so a
+  user at the cap gets a real hosted-login prompt without `max_age` or
+  `prompt=login`. See Session Gateway's
+  [Recommended Auth0 Settings](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/auth0-settings.md).
+- The cap is not account-wide revocation and does not require MFA step-up.
+  Changing the value applies to existing sessions at their next heartbeat.
 
 ## Shared Session Contract
 

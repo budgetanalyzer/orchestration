@@ -137,7 +137,10 @@ Contested issue #1; plan 01, Phase 5; plans 02.1 and 02.7; Phase 1.
 
 1. Add one native ingress `DENY` AuthorizationPolicy covering both lanes and scoped to the HTTP
    application listener. It denies methods other than GET, HEAD and OPTIONS unless Origin equals the
-   configured serialized browser origin (scheme, host and effective port).
+   configured serialized browser origin (scheme, host and effective port). (amended per user
+   direction) The listener hostname is the wildcard `*.budgetanalyzer.localhost`, so also restrict
+   the rule with `to.operation.hosts` to the browser application host
+   (`app.budgetanalyzer.localhost`), and do not let it apply to every hostname under the listener.
 2. Reject absent, empty, `null`, foreign or multi-valued Origin. Do not accept suffix matches or
    derive the trusted value from caller-controlled forwarding headers. Fetch Metadata must not
    provide an exception.
@@ -151,12 +154,20 @@ Contested issue #1; plan 01, Phase 5; plans 02.1 and 02.7; Phase 1.
    (amended per contested A2) In those docs, state the configured `Strict` session-cookie default
    and its same-site limit: it does not stop same-site requests, and top-level cookie deletion
    remains possible. Record the observed browser effects from step 4 in the evidence file.
+   (amended per user direction) Also state that the rule covers only the browser application
+   host and is CSRF provenance for the cookie credential, not authentication. A future
+   machine-to-machine API uses its own hostname and non-cookie credential, outside this rule. The
+   static guardrail must fail if the policy loses its host restriction.
 
 ### Implementation notes
 
 - A permissive `ALLOW` rule is not a substitute, because other ALLOW policies are additive.
 - This design depends on the existing mesh restrictions preventing browser access around the
   ingress. Internal workload calls use their own caller and path policy.
+- (amended per user direction) Do not exempt requests that carry an `Authorization` header on the
+  browser application host. A machine API on that host would put two credential types on one lane.
+  Put it on a separate hostname instead: the `__Host-` session cookie is bound to the application
+  host and is never sent there, so CSRF does not apply. That API is not built in this plan.
 - The current OAuth GET callback relies on the plan 02.1 browser binding. A future POST callback
   needs an explicit contract change.
 - Orchestration verifiers and load-test scripts that send unsafe requests through the ingress must
@@ -170,5 +181,6 @@ Orchestration static gate, `./scripts/smoketest/verify-edge-contract.sh`,
 
 ### Completion criteria
 
-Every unsafe request without the exact Origin is denied on both lanes with no mutation, the
-configured origin succeeds, and login and logout work under the final CSP.
+Every unsafe request to the browser application host without the exact Origin is denied on both
+lanes with no mutation, the configured origin succeeds, the policy is restricted to that host, and
+login and logout work under the final CSP.

@@ -83,6 +83,8 @@ def main() -> None:
                         # headers or cookies are copied to this second client.
                         with httpx.Client(
                             base_url=LOCAL_ORIGIN,
+                            # Unsafe requests need the exact application Origin.
+                            headers={"Origin": LOCAL_ORIGIN},
                             follow_redirects=False,
                             timeout=config.timeouts.request_seconds,
                         ) as unbound:
@@ -188,6 +190,8 @@ def main() -> None:
                 session = read_session_cookie(context, config.session_cookie_name)
                 with httpx.Client(
                     base_url=LOCAL_ORIGIN,
+                    # Unsafe requests need the exact application Origin.
+                    headers={"Origin": LOCAL_ORIGIN},
                     cookies={session.cookie_name: session.cookie_value},
                     follow_redirects=False,
                     timeout=config.timeouts.request_seconds,

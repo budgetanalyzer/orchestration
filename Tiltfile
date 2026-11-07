@@ -1173,7 +1173,7 @@ local_resource(
     labels=['gateway'],
 )
 
-# HTTPRoutes and ext-authz AuthorizationPolicy
+# HTTPRoutes, ext-authz and exact-Origin AuthorizationPolicies, and ingress filters
 local_resource(
     'istio-ingress-routes',
     cmd='''
@@ -1184,6 +1184,7 @@ local_resource(
         kubectl apply -f kubernetes/istio/ext-authz-policy.yaml
         kubectl apply -f kubernetes/istio/ingress-rate-limit.yaml
         kubectl apply -f kubernetes/istio/ingress-path-hardening.yaml
+        kubectl apply -f kubernetes/istio/ingress-exact-origin.yaml
     ''',
     deps=[
         'kubernetes/gateway/auth-httproute.yaml',
@@ -1192,6 +1193,7 @@ local_resource(
         'kubernetes/istio/ext-authz-policy.yaml',
         'kubernetes/istio/ingress-rate-limit.yaml',
         'kubernetes/istio/ingress-path-hardening.yaml',
+        'kubernetes/istio/ingress-exact-origin.yaml',
     ],
     resource_deps=['istio-ingress-config', 'istio-ingress-network-policies', 'ext-authz', 'nginx-gateway'],
     labels=['gateway'],

@@ -344,7 +344,7 @@ wait_for_started_url() {
     local deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
 
     while (( SECONDS < deadline )); do
-        if curl -fsS --max-time 2 "${url}" >/dev/null; then
+        if curl -fsS --max-time 2 "${url}" >/dev/null 2>&1; then
             return 0
         fi
 
@@ -373,7 +373,7 @@ wait_for_existing_url() {
     local commands
 
     while (( SECONDS < deadline )); do
-        if curl -fsS --max-time 2 "${url}" >/dev/null; then
+        if curl -fsS --max-time 2 "${url}" >/dev/null 2>&1; then
             return 0
         fi
 

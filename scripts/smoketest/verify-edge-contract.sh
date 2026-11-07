@@ -22,6 +22,11 @@ source "${SCRIPT_DIR}/../lib/local-kubernetes-target.sh"
 source "${SCRIPT_DIR}/../lib/loadtest-common.sh"
 
 BASE_URL="https://app.budgetanalyzer.localhost"
+# The configured browser origin. Unsafe requests to the application host need
+# exactly this Origin (kubernetes/istio/ingress-exact-origin.yaml), so probes
+# that test other controls send it.
+APP_ORIGIN="$BASE_URL"
+ORIGIN_HEADER=(-H "Origin: ${APP_ORIGIN}")
 CURL_TIMEOUT=10
 RATE_LIMIT_RETRIES=5
 SEED_SCRIPT="${REPO_DIR}/scripts/loadtest/seed-loadtest-users.sh"
@@ -64,6 +69,7 @@ INGRESS_NAMESPACE="istio-ingress"
 INGRESS_SELECTOR="gateway.networking.k8s.io/gateway-name=istio-ingress-gateway"
 INGRESS_WORKLOAD="istio-ingress-gateway-istio"
 PATH_HARDENING_FILTER="envoy.filters.http.rbac.ingress_path_hardening"
+ORIGIN_POLICY="ingress-exact-origin"
 RBAC_DENIED_BODY="RBAC: access denied"
 
 # Authorization failure cases. The block policy is a temporary Admin-tier
@@ -93,6 +99,8 @@ POSTGRES_POD=""
 REDIS_POD=""
 FRONTEND_SHELL_SHA=""
 SEMICOLON_PROBES=0
+ORIGIN_PROBES=0
+ORIGIN_CASE_ARGS=()
 EXT_AUTHZ_TIMEOUT_SECONDS=""
 ORIGINAL_EXT_AUTHZ_REPLICAS=""
 ORIGINAL_REDIS_REPLICAS=""
@@ -133,14 +141,26 @@ Sections:
                             Session Gateway lane. Each must be a 403 from the
                             ingress path-hardening filter: the ingress
                             rbac.denied counter rises by the probe count, the
-                            filter is the listener's only enforcing RBAC
-                            filter, and neither the NGINX nor the
+                            filter runs before ext_authz with only the
+                            ingress-exact-origin policy in the other enforcing
+                            RBAC filter, and neither the NGINX nor the
                             Session Gateway sidecar records a request from the
                             ingress. DELETE probes keep the side-effect check.
                             It then shows that "..;", "..;x" and ".;" segments
                             are resolved by ingress normalization with no ";"
                             reaching NGINX, and that a ";" in the query string
                             still works.
+  Origin                    Evaluates the generated ingress-exact-origin RBAC
+                            config, then with the seeded fixture sends unsafe
+                            requests with missing, empty, null, foreign,
+                            same-site, suffixed, http, :443, trailing-slash,
+                            repeated, Fetch-Metadata-only or forwarded-header
+                            Origin, or a :443 Host, on both lanes. Each must be
+                            the ingress 403 with an exact rbac.denied rise, no
+                            NGINX or Session Gateway sidecar request, and an
+                            unchanged session and transaction set. The
+                            configured Origin then creates and deletes a
+                            transaction, heartbeats and form-POST logs out.
   Authorization Failure     Reads the ext_authz filter from the ingress Envoy
                             config dump and requires the istiod-values
                             timeout, status_on_error 503 and no fail-open.
@@ -455,13 +475,13 @@ verify_public_internal_boundary() {
     done
     for form in "${BOUNDARY_TRAVERSAL_FORMS[@]}"; do
         path=$(traversal_path "/auth/v1/" "$form" "internal/v1/sessions/users/${SEEDED_USER_ID}")
-        assert_boundary_probe "auth" DELETE "$path"
+        assert_boundary_probe "auth" DELETE "$path" "${ORIGIN_HEADER[@]}"
         assert_session_survived "$path"
     done
 
     echo "  Legitimate routes:"
     assert_legitimate_status "Session heartbeat refreshes authorization from permission-service" 200 \
-        POST "/auth/v1/session" --cookie "$SESSION_COOKIE"
+        POST "/auth/v1/session" --cookie "$SESSION_COOKIE" "${ORIGIN_HEADER[@]}"
     assert_legitimate_status "Session user read" 200 \
         GET "/auth/v1/user" --cookie "$SESSION_COOKIE"
     assert_legitimate_status "transaction-service public route" 200 \
@@ -528,8 +548,9 @@ ingress_rbac_denied_total() {
     printf '%s\n' "$total"
 }
 
-# Prints the problem when the path-hardening filter is not the only enforcing
-# RBAC filter ahead of ext_authz on every ingress pod; prints nothing otherwise.
+# Prints the problem when the enforcing RBAC filters on any ingress pod are not
+# exactly the path-hardening filter ahead of ext_authz and Istio's RBAC filter
+# carrying only the ingress-exact-origin DENY policy; prints nothing otherwise.
 ingress_path_hardening_filter_problem() {
     local pod
 
@@ -541,7 +562,7 @@ ingress_path_hardening_filter_problem() {
 import json
 import sys
 
-pod, wanted = sys.argv[1], sys.argv[2]
+pod, wanted, origin_policy = sys.argv[1], sys.argv[2], sys.argv[3]
 chains = []
 for config in json.load(sys.stdin).get("configs", []):
     for listener in config.get("dynamic_listeners", []):
@@ -555,16 +576,23 @@ if not chains:
 for filters in chains:
     names = [item.get("name") for item in filters]
     enforcing = [
-        item.get("name")
+        item
         for item in filters
         if (item.get("typed_config") or {}).get("@type", "").endswith("rbac.v3.RBAC")
         and "rules" in item.get("typed_config", {})
     ]
-    if enforcing != [wanted]:
-        print(f"{pod}: enforcing RBAC filters are {enforcing}, expected only {wanted}")
+    enforcing_names = [item.get("name") for item in enforcing]
+    origin_filters = [item for item in enforcing if item.get("name") == "envoy.filters.http.rbac"]
+    origin_policies = [
+        sorted((item["typed_config"]["rules"].get("policies") or {})) for item in origin_filters
+    ]
+    if sorted(enforcing_names) != sorted([wanted, "envoy.filters.http.rbac"]):
+        print(f"{pod}: enforcing RBAC filters are {enforcing_names}, expected {wanted} and envoy.filters.http.rbac")
+    elif len(origin_policies[0]) != 1 or f"policy[{origin_policy}]" not in origin_policies[0][0]:
+        print(f"{pod}: Istio enforcing RBAC policies are {origin_policies[0]}, expected only {origin_policy}")
     elif "envoy.filters.http.ext_authz" not in names or names.index(wanted) > names.index("envoy.filters.http.ext_authz"):
         print(f"{pod}: {wanted} is not ahead of ext_authz")
-' "${pod#pod/}" "$PATH_HARDENING_FILTER"
+' "${pod#pod/}" "$PATH_HARDENING_FILTER" "$ORIGIN_POLICY"
     done < <(kubectl get pods -n "$INGRESS_NAMESPACE" -l "$INGRESS_SELECTOR" -o name)
 }
 
@@ -637,7 +665,7 @@ verify_semicolon_rejection() {
 
     problem=$(ingress_path_hardening_filter_problem)
     if [[ -z "$problem" ]]; then
-        pass "${PATH_HARDENING_FILTER} is the only enforcing RBAC filter and runs before ext_authz"
+        pass "${PATH_HARDENING_FILTER} runs before ext_authz; the only other enforcing RBAC filter carries ${ORIGIN_POLICY}"
     else
         fail "Ingress filter chain: ${problem//$'\n'/; }"
     fi
@@ -662,11 +690,11 @@ verify_semicolon_rejection() {
                 --cookie "$SESSION_COOKIE"
         done
 
-        assert_ingress_semicolon_denial "auth" POST "/auth/v1/session${form}${marker}"
+        assert_ingress_semicolon_denial "auth" POST "/auth/v1/session${form}${marker}" "${ORIGIN_HEADER[@]}"
         for path in "${segments[@]}"; do
             assert_ingress_semicolon_denial "auth" GET "/auth/v1/${path}/${path}/actuator/prometheus"
             assert_ingress_semicolon_denial "auth" DELETE \
-                "/auth/v1/${path}/${path}/internal/v1/sessions/users/${SEEDED_USER_ID}"
+                "/auth/v1/${path}/${path}/internal/v1/sessions/users/${SEEDED_USER_ID}" "${ORIGIN_HEADER[@]}"
             assert_session_survived "/auth/v1/${path}/${path}/internal/v1/sessions/users/${SEEDED_USER_ID}"
         done
     done
@@ -721,6 +749,353 @@ verify_semicolon_rejection() {
     "$TEARDOWN_SCRIPT" >/dev/null
     SEEDED=false
     pass "Synthetic semicolon fixture removed with teardown-loadtest.sh"
+}
+
+# Origin denial cases shared by the live probes. Each name maps to the curl
+# arguments that build the case in origin_case_args.
+ORIGIN_DENY_CASES=(missing empty null foreign same-site suffix http default-port
+    trailing-slash repeated fetch-metadata forwarded host-port)
+
+# Sets ORIGIN_CASE_ARGS to the curl arguments for one ORIGIN_DENY_CASES entry.
+origin_case_args() {
+    case "$1" in
+        missing) ORIGIN_CASE_ARGS=() ;;
+        empty) ORIGIN_CASE_ARGS=(-H "Origin;") ;;
+        null) ORIGIN_CASE_ARGS=(-H "Origin: null") ;;
+        foreign) ORIGIN_CASE_ARGS=(-H "Origin: https://attacker.example") ;;
+        same-site) ORIGIN_CASE_ARGS=(-H "Origin: https://attacker.budgetanalyzer.localhost") ;;
+        suffix) ORIGIN_CASE_ARGS=(-H "Origin: ${APP_ORIGIN}.attacker.example") ;;
+        http) ORIGIN_CASE_ARGS=(-H "Origin: http://${APP_ORIGIN#https://}") ;;
+        default-port) ORIGIN_CASE_ARGS=(-H "Origin: ${APP_ORIGIN}:443") ;;
+        trailing-slash) ORIGIN_CASE_ARGS=(-H "Origin: ${APP_ORIGIN}/") ;;
+        repeated) ORIGIN_CASE_ARGS=("${ORIGIN_HEADER[@]}" "${ORIGIN_HEADER[@]}") ;;
+        fetch-metadata) ORIGIN_CASE_ARGS=(-H "Sec-Fetch-Site: same-origin" -H "Sec-Fetch-Mode: cors") ;;
+        forwarded) ORIGIN_CASE_ARGS=(-H "Origin: https://attacker.example"
+            -H "X-Forwarded-Host: attacker.example" -H "Forwarded: host=attacker.example;proto=https") ;;
+        host-port) ORIGIN_CASE_ARGS=(-H "Host: ${APP_ORIGIN#https://}:443") ;;
+        *) printf 'ERROR: unknown Origin case %s\n' "$1" >&2; exit 1 ;;
+    esac
+}
+
+# Prints the problem when the generated ingress RBAC configuration does not
+# implement the exact-Origin rule on every ingress pod; prints nothing
+# otherwise. It evaluates the Envoy policy itself with Envoy's matching rules:
+# an absent header matches nothing, repeated values are joined with ",", and
+# any matcher it does not model (such as a path that would narrow the lanes)
+# is a problem.
+ingress_origin_config_problem() {
+    local pod
+
+    while IFS= read -r pod; do
+        [[ -n "$pod" ]] || continue
+        kubectl exec -n "$INGRESS_NAMESPACE" "$pod" -c istio-proxy -- \
+            pilot-agent request GET config_dump 2>/dev/null |
+            python3 -I -c '
+import json
+import sys
+
+pod, policy_name, origin = sys.argv[1], sys.argv[2], sys.argv[3]
+host = origin.removeprefix("https://")
+
+
+class Unsupported(Exception):
+    pass
+
+
+def header_value(request, name):
+    values = [value for key, value in request if key.lower() == name.lower()]
+    return ",".join(values) if values else None
+
+
+def string_match(matcher, value):
+    if set(matcher) - {"exact", "prefix", "suffix", "contains", "ignore_case"}:
+        raise Unsupported(f"string matcher {sorted(matcher)}")
+    folded = value.lower() if matcher.get("ignore_case") else value
+    for kind, test in (("exact", str.__eq__), ("prefix", str.startswith),
+                       ("suffix", str.endswith), ("contains", str.__contains__)):
+        if kind in matcher:
+            target = matcher[kind].lower() if matcher.get("ignore_case") else matcher[kind]
+            return test(folded, target)
+    raise Unsupported("empty string matcher")
+
+
+def header(matcher, request):
+    if set(matcher) != {"name", "string_match"}:
+        raise Unsupported(f"header matcher {sorted(matcher)}")
+    value = header_value(request, matcher["name"])
+    return value is not None and string_match(matcher["string_match"], value)
+
+
+def evaluate(node, request, kind):
+    if kind == "permission":
+        and_key, or_key, not_key, list_key = "and_rules", "or_rules", "not_rule", "rules"
+    else:
+        and_key, or_key, not_key, list_key = "and_ids", "or_ids", "not_id", "ids"
+    if set(node) == {"any"}:
+        return node["any"] is True
+    if set(node) == {"header"}:
+        return header(node["header"], request)
+    if set(node) == {and_key}:
+        return all(evaluate(item, request, kind) for item in node[and_key][list_key])
+    if set(node) == {or_key}:
+        return any(evaluate(item, request, kind) for item in node[or_key][list_key])
+    if set(node) == {not_key}:
+        return not evaluate(node[not_key], request, kind)
+    raise Unsupported(f"{kind} {sorted(node)}")
+
+
+filters = []
+for config in json.load(sys.stdin).get("configs", []):
+    for listener in config.get("dynamic_listeners", []):
+        active = (listener.get("active_state") or {}).get("listener") or {}
+        for chain in active.get("filter_chains", []):
+            for network_filter in chain.get("filters", []):
+                if network_filter.get("name") != "envoy.filters.network.http_connection_manager":
+                    continue
+                for item in network_filter["typed_config"].get("http_filters", []):
+                    rules = (item.get("typed_config") or {}).get("rules") or {}
+                    if any(f"policy[{policy_name}]" in key for key in rules.get("policies") or {}):
+                        filters.append(rules)
+if len(filters) != 1:
+    print(f"{pod}: expected one enforcing RBAC filter with {policy_name}, found {len(filters)}")
+    sys.exit(0)
+rules = filters[0]
+if rules.get("action") != "DENY" or len(rules.get("policies") or {}) != 1:
+    print(f"{pod}: {policy_name} filter must be DENY with one policy")
+    sys.exit(0)
+policy = next(iter(rules["policies"].values()))
+
+
+def denied(method, authority, *headers):
+    request = [(":method", method), (":authority", authority), *headers]
+    return any(evaluate(item, request, "permission") for item in policy["permissions"]) and any(
+        evaluate(item, request, "principal") for item in policy["principals"]
+    )
+
+
+good = ("origin", origin)
+must_deny = {
+    "missing": ("POST", host),
+    "empty": ("POST", host, ("origin", "")),
+    "null": ("POST", host, ("origin", "null")),
+    "foreign": ("POST", host, ("origin", "https://attacker.example")),
+    "same-site": ("POST", host, ("origin", "https://attacker.budgetanalyzer.localhost")),
+    "suffix": ("POST", host, ("origin", origin + ".attacker.example")),
+    "http": ("POST", host, ("origin", "http://" + host)),
+    "default-port": ("POST", host, ("origin", origin + ":443")),
+    "trailing-slash": ("POST", host, ("origin", origin + "/")),
+    "repeated": ("POST", host, good, good),
+    "fetch-metadata": ("POST", host, ("sec-fetch-site", "same-origin")),
+    "forwarded": ("POST", host, ("origin", "https://attacker.example"), ("x-forwarded-host", "attacker.example")),
+    "host-port": ("POST", host + ":443"),
+    "host-case": ("POST", host.upper()),
+    "put": ("PUT", host),
+    "patch": ("PATCH", host),
+    "delete": ("DELETE", host),
+}
+must_allow = {
+    "exact-origin": ("POST", host, good),
+    "exact-origin-host-port": ("DELETE", host + ":443", good),
+    "get": ("GET", host),
+    "head": ("HEAD", host),
+    "options": ("OPTIONS", host),
+    "other-host": ("POST", "attacker.budgetanalyzer.localhost"),
+}
+try:
+    problems = [f"does not deny {name}" for name, case in must_deny.items() if not denied(*case)]
+    problems += [f"denies {name}" for name, case in must_allow.items() if denied(*case)]
+except Unsupported as error:
+    problems = [f"unmodelled matcher: {error}"]
+for problem in problems:
+    print(f"{pod}: generated {policy_name} {problem}")
+' "${pod#pod/}" "$ORIGIN_POLICY" "$APP_ORIGIN"
+    done < <(kubectl get pods -n "$INGRESS_NAMESPACE" -l "$INGRESS_SELECTOR" -o name)
+}
+
+seeded_session_hash() {
+    redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+        HGETALL "$(session_key_for "$SEEDED_SESSION_ID")" 2>/dev/null || true
+}
+
+seeded_transaction_rows() {
+    postgres_query_in_pod "$POSTGRES_POD" budget_analyzer \
+        "SELECT id, deleted, updated_at FROM transaction
+         WHERE owner_id = '${SEEDED_USER_ID}' ORDER BY id;" 2>/dev/null
+}
+
+assert_origin_denial() {
+    local lane="$1" method="$2" path="$3" case_name="$4"
+    shift 4
+    local status verdict
+
+    status=$(edge_request "$method" "$path" --cookie "$SESSION_COOKIE" "$@")
+    if [[ "$status" == "403" ]] && [[ "$(cat "${WORK_DIR}/body" 2>/dev/null)" == "$RBAC_DENIED_BODY" ]]; then
+        verdict="origin-denied"
+        pass "${lane} ${method} ${path%%\?*} (${case_name}) -> 403 ${RBAC_DENIED_BODY}"
+    else
+        verdict="not-denied"
+        fail "${lane} ${method} ${path%%\?*} (${case_name}) -> ${status} (expected the ingress 403 ${RBAC_DENIED_BODY})"
+    fi
+    ORIGIN_PROBES=$((ORIGIN_PROBES + 1))
+    record "origin-${lane}" "$method" "$path" "$status" "${case_name}:${verdict}"
+}
+
+verify_origin_enforcement() {
+    local problem marker start_time case_name method status transaction_id
+    local session_before session_after rows_before rows_after
+    local denied_before denied_after nginx_before nginx_after gateway_before gateway_after
+    local -a json_body
+
+    section "Origin"
+
+    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
+        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
+        return
+    fi
+
+    problem=$(ingress_origin_config_problem)
+    if [[ -z "$problem" ]]; then
+        pass "Generated ${ORIGIN_POLICY} RBAC config denies missing, empty, null, foreign, same-site, suffixed, repeated and Fetch-Metadata-only Origin, and admits only the exact origin on ${APP_ORIGIN#https://}"
+    else
+        fail "Generated ${ORIGIN_POLICY} config: ${problem//$'\n'/; }"
+    fi
+
+    POSTGRES_POD=$(require_postgres_pod)
+    REDIS_POD=$(require_redis_pod)
+    load_redis_ops_credentials
+
+    echo "  Seeding one synthetic user and session (${SEEDED_USER_ID})..."
+    seed_fixture
+    if ! seeded_session_present; then
+        fail "Seeded session ${SEEDED_SESSION_ID} is missing from Redis"
+        return
+    fi
+
+    # With a valid session ext_authz admits the API probes, so a 403 here can
+    # only come from the Origin rule.
+    assert_legitimate_status "Seeded session passes ext_authz to currency-service" 200 \
+        GET "/api/v1/currencies" --cookie "$SESSION_COOKIE"
+
+    marker="origin-probe-$(date -u +%s)"
+    json_body=(-H "Content-Type: application/json" --data
+        "{\"date\":\"$(date -u +%F)\",\"description\":\"LOADTEST: ${marker}\",\"amount\":1.00,\"currencyIsoCode\":\"USD\",\"type\":\"DEBIT\"}")
+    session_before=$(seeded_session_hash)
+    rows_before=$(seeded_transaction_rows)
+    ORIGIN_PROBES=0
+    start_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    denied_before=$(ingress_rbac_denied_total)
+    nginx_before=$(sidecar_requests_from_ingress nginx-gateway)
+    gateway_before=$(sidecar_requests_from_ingress session-gateway)
+
+    echo "  Rejected Origin on both lanes (seeded session attached):"
+    for case_name in "${ORIGIN_DENY_CASES[@]}"; do
+        origin_case_args "$case_name"
+        assert_origin_denial "nginx" POST "/api/v1/transactions?probe=${marker}" "$case_name" \
+            "${json_body[@]}" "${ORIGIN_CASE_ARGS[@]}"
+        assert_origin_denial "auth" POST "/auth/v1/session?probe=${marker}" "$case_name" \
+            "${ORIGIN_CASE_ARGS[@]}"
+    done
+    for case_name in missing null foreign same-site; do
+        origin_case_args "$case_name"
+        assert_origin_denial "auth" POST "/logout?probe=${marker}" "$case_name" \
+            -H "Content-Type: application/x-www-form-urlencoded" "${ORIGIN_CASE_ARGS[@]}"
+    done
+    for method in PUT PATCH DELETE; do
+        assert_origin_denial "nginx" "$method" "/api/v1/transactions/1?probe=${marker}" missing
+        assert_origin_denial "auth" "$method" "/auth/v1/session?probe=${marker}" missing
+    done
+    sleep 2
+
+    denied_after=$(ingress_rbac_denied_total)
+    nginx_after=$(sidecar_requests_from_ingress nginx-gateway)
+    gateway_after=$(sidecar_requests_from_ingress session-gateway)
+    if (( denied_after - denied_before == ORIGIN_PROBES )); then
+        pass "Ingress rbac.denied rose by exactly ${ORIGIN_PROBES} (one per rejected probe)"
+    else
+        fail "Ingress rbac.denied rose by $((denied_after - denied_before)), expected ${ORIGIN_PROBES}"
+    fi
+    if (( nginx_after == nginx_before )); then
+        pass "NGINX sidecar recorded no request from the ingress during the rejected probes"
+    else
+        fail "NGINX sidecar recorded $((nginx_after - nginx_before)) request(s) from the ingress during the rejected probes"
+    fi
+    if (( gateway_after == gateway_before )); then
+        pass "Session Gateway sidecar recorded no request from the ingress during the rejected probes"
+    else
+        fail "Session Gateway sidecar recorded $((gateway_after - gateway_before)) request(s) from the ingress during the rejected probes"
+    fi
+    if nginx_logs_since "$start_time" | grep -Fq "$marker"; then
+        fail "NGINX logged a rejected Origin probe"
+    else
+        pass "NGINX logged no rejected Origin probe"
+    fi
+
+    session_after=$(seeded_session_hash)
+    rows_after=$(seeded_transaction_rows)
+    if [[ -n "$session_before" && "$session_before" == "$session_after" ]] && seeded_session_present; then
+        pass "Seeded session hash, expiry and user_sessions index are unchanged (no heartbeat or logout ran)"
+    else
+        fail "Seeded session changed or was removed during the rejected Origin probes"
+    fi
+    if [[ "$rows_before" == "$rows_after" ]]; then
+        pass "No transaction was created or changed for ${SEEDED_USER_ID} by the rejected probes"
+    else
+        fail "Transaction rows for ${SEEDED_USER_ID} changed during the rejected Origin probes"
+    fi
+
+    echo "  Configured Origin ${APP_ORIGIN} on both lanes:"
+    status=$(edge_request POST "/api/v1/transactions" --cookie "$SESSION_COOKIE" \
+        "${json_body[@]}" "${ORIGIN_HEADER[@]}")
+    transaction_id=$(python3 -I -c 'import json, sys; print(int(json.load(sys.stdin)["id"]))' \
+        <"${WORK_DIR}/body" 2>/dev/null || true)
+    if [[ "$status" == "201" && -n "$transaction_id" ]]; then
+        pass "nginx POST /api/v1/transactions with the configured Origin -> 201 (transaction ${transaction_id})"
+    else
+        fail "nginx POST /api/v1/transactions with the configured Origin -> ${status} (expected 201)"
+    fi
+    record "origin-nginx" POST "/api/v1/transactions" "$status" "configured-origin"
+
+    if [[ -n "$transaction_id" ]]; then
+        rows_before=$(seeded_transaction_rows)
+        for case_name in missing foreign; do
+            origin_case_args "$case_name"
+            assert_origin_denial "nginx" DELETE "/api/v1/transactions/${transaction_id}" "$case_name" \
+                "${ORIGIN_CASE_ARGS[@]}"
+        done
+        if [[ "$(seeded_transaction_rows)" == "$rows_before" ]]; then
+            pass "Rejected DELETE requests left transaction ${transaction_id} unchanged"
+        else
+            fail "Rejected DELETE requests changed transaction ${transaction_id}"
+        fi
+        assert_legitimate_status "Configured Origin deletes the transaction" 204 \
+            DELETE "/api/v1/transactions/${transaction_id}" --cookie "$SESSION_COOKIE" "${ORIGIN_HEADER[@]}"
+        if seeded_transaction_rows | grep -Eq "^${transaction_id}\|t\|"; then
+            pass "Transaction ${transaction_id} is soft-deleted after the configured-Origin DELETE"
+        else
+            fail "Transaction ${transaction_id} is not soft-deleted after the configured-Origin DELETE"
+        fi
+    fi
+
+    assert_legitimate_status "Configured Origin heartbeat" 200 \
+        POST "/auth/v1/session" --cookie "$SESSION_COOKIE" "${ORIGIN_HEADER[@]}"
+    if [[ "$(seeded_session_hash)" != "$session_before" ]]; then
+        pass "Configured-Origin heartbeat refreshed the seeded session"
+    else
+        fail "Configured-Origin heartbeat did not refresh the seeded session"
+    fi
+    status=$(edge_request POST "/logout" --cookie "$SESSION_COOKIE" \
+        -H "Content-Type: application/x-www-form-urlencoded" "${ORIGIN_HEADER[@]}")
+    if [[ "$status" == "303" ]] && ! seeded_session_present; then
+        pass "Configured-Origin form POST /logout -> 303 and removed the seeded session"
+    else
+        fail "Configured-Origin form POST /logout -> ${status} (expected 303 and session removal)"
+    fi
+    record "origin-auth" POST "/logout" "$status" "configured-origin"
+
+    assert_local_kind_target
+    "$TEARDOWN_SCRIPT" >/dev/null
+    SEEDED=false
+    pass "Synthetic Origin fixture and transaction removed with teardown-loadtest.sh"
 }
 
 # Prints one "<timeout seconds> <status_on_error code> <failure_mode_allow>"
@@ -1114,12 +1489,14 @@ verify_response_headers() {
     section "Response Headers"
     seed_fixture
     local path method status expected headers location
+    local -a origin_args
     for path in / /api/v1/currencies /auth/v1/session /oauth2/authorization/idp; do
         method=GET
         expected=200
-        [[ "$path" != /auth/v1/session ]] || method=POST
+        origin_args=()
+        [[ "$path" != /auth/v1/session ]] || { method=POST; origin_args=("${ORIGIN_HEADER[@]}"); }
         [[ "$path" != /oauth2/authorization/idp ]] || expected=302
-        status=$(edge_request "$method" "$path" --cookie "$SESSION_COOKIE")
+        status=$(edge_request "$method" "$path" --cookie "$SESSION_COOKIE" "${origin_args[@]}")
         headers=$(sed -n 's/^Strict-Transport-Security:[[:space:]]*//Ip' "${WORK_DIR}/headers" | tr -d '\r')
         if [[ "$status" == "$expected" && "$headers" == 'max-age=31536000' ]]; then
             pass "${path}: ${status} with exactly one HSTS value (no subdomains or preload)"
@@ -1180,6 +1557,7 @@ main() {
 
     verify_public_internal_boundary
     verify_semicolon_rejection
+    verify_origin_enforcement
     verify_authorization_failure
     verify_response_headers
 

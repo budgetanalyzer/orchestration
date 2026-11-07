@@ -1,0 +1,43 @@
+# CSRF provenance for the browser application host. Denies every request to
+# app.budgetanalyzer.localhost whose method is not GET, HEAD or OPTIONS unless
+# its Origin header is exactly the serialized browser origin. It covers both
+# ingress lanes (NGINX /api and the direct Session Gateway auth lane), because
+# both are routes on that host. An absent, empty, "null", foreign, suffixed or
+# repeated Origin is denied with 403 "RBAC: access denied". Repeated headers
+# are compared as one comma-joined value, so they never equal the origin.
+#
+# The trusted value is fixed here, never derived from request headers such as
+# Host or X-Forwarded-*, and Sec-Fetch-* headers grant no exception. The rule
+# is CSRF provenance for the cookie credential, not authentication: any
+# non-browser client can send this Origin and still needs a valid session.
+#
+# The hosts entries keep the rule to the browser application host instead of
+# every name the wildcard listener accepts. Istio matches hosts against the
+# whole :authority, and the gateway routes the host with any port suffix, so
+# the ":*" entry is required: without it "Host: app.budgetanalyzer.localhost:443"
+# reaches the application and skips this rule. A future machine-to-machine API
+# belongs on its own hostname with a non-cookie credential, outside this rule;
+# the __Host- session cookie is never sent there. Do not exempt requests that
+# carry an Authorization header on this host.
+#
+# Istio evaluates CUSTOM (ext_authz on /api/*) before DENY, so ext-authz may
+# look up the session first; it only reads Redis. The production reference
+# patches the host and origin in kubernetes/production/istio-ingress-policies.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ingress-exact-origin
+  namespace: istio-ingress
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            hosts: ["app.budgetanalyzer.localhost", "app.budgetanalyzer.localhost:*"]
+            notMethods: ["GET", "HEAD", "OPTIONS"]
+      when:
+        - key: request.headers[origin]
+          notValues: ["https://app.budgetanalyzer.localhost"]

@@ -5,3 +5,19 @@ resources:
   - ../../istio/ext-authz-policy.yaml
   - ../../istio/ingress-rate-limit.yaml
   - ../../istio/ingress-path-hardening.yaml
+  - ../../istio/ingress-exact-origin.yaml
+
+patches:
+  - target:
+      group: security.istio.io
+      version: v1
+      kind: AuthorizationPolicy
+      name: ingress-exact-origin
+      namespace: istio-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/to/0/operation/hosts
+        value: ["demo.budgetanalyzer.org", "demo.budgetanalyzer.org:*"]
+      - op: replace
+        path: /spec/rules/0/when/0/notValues
+        value: ["https://demo.budgetanalyzer.org"]

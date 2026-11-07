@@ -693,8 +693,18 @@ verify_phase6_render_outputs() {
     assert_contains_literal "${ingress_file}" 'name: ext-authz-at-ingress' "rendered ingress policies are missing ext-authz-at-ingress"
     assert_contains_literal "${ingress_file}" 'name: ingress-local-rate-limits' "rendered ingress policies are missing ingress-local-rate-limits"
     assert_contains_literal "${ingress_file}" 'name: ingress-path-hardening' "rendered ingress policies are missing ingress-path-hardening"
-    assert_not_contains "${ingress_file}" "${LOCKED_DEMO_DOMAIN}" \
-        "rendered ingress policies redundantly own the production demo hostname"
+    assert_contains_literal "${ingress_file}" 'name: ingress-exact-origin' "rendered ingress policies are missing ingress-exact-origin"
+    # The exact-Origin rule is host-scoped, so it alone carries the public
+    # hostname; its exact host and origin values are checked by
+    # verify-static-security-manifests.sh.
+    if awk -v domain="${LOCKED_DEMO_DOMAIN}" '
+        /^---/ { if (!origin_policy && found) bad = 1; origin_policy = 0; found = 0; next }
+        /^  name: ingress-exact-origin$/ { origin_policy = 1 }
+        index($0, domain) { found = 1 }
+        END { if (!origin_policy && found) bad = 1; exit bad ? 0 : 1 }
+    ' "${ingress_file}"; then
+        fail "rendered ingress policies other than ingress-exact-origin own the production demo hostname"
+    fi
 
     verify_production_istio_authorization_policies "${authorization_file}"
     verify_ingress_gateway_parity "${gateway_config_file}"

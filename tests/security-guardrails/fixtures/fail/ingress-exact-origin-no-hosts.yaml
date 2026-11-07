@@ -1,0 +1,19 @@
+# Intentional failing fixture for scan_istio_ingress_exact_origin_contract.
+# The host restriction is removed, so the rule covers every listener hostname.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ingress-exact-origin
+  namespace: istio-ingress
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: istio-ingress-gateway
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            notMethods: ["GET", "HEAD", "OPTIONS"]
+      when:
+        - key: request.headers[origin]
+          notValues: ["https://app.budgetanalyzer.localhost"]

@@ -104,6 +104,13 @@ NGINX_SERVER_CONFIG_FILES=(
 )
 INGRESS_PATH_HARDENING_FILE="${REPO_DIR}/kubernetes/istio/ingress-path-hardening.yaml"
 PRODUCTION_INGRESS_POLICIES_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
+INGRESS_EXACT_ORIGIN_FILE="${REPO_DIR}/kubernetes/istio/ingress-exact-origin.yaml"
+BROWSER_ROUTE_FILES=(
+    "${REPO_DIR}/kubernetes/gateway/app-httproute.yaml"
+    "${REPO_DIR}/kubernetes/gateway/api-httproute.yaml"
+    "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml"
+)
+PRODUCTION_GATEWAY_ROUTES_OVERLAY="${REPO_DIR}/kubernetes/production/gateway-routes"
 
 usage() {
     cat <<'EOF'
@@ -125,6 +132,9 @@ Runs the static security guardrail suite:
   the decoded ";" rejection
 - ingress path hardening: DENY of a literal ";" and %3b at any percent-encoding
   depth in the path, locally and in the production render
+- ingress exact Origin: DENY of unsafe methods without the exact browser
+  origin, restricted to the routed browser application host, locally and in
+  the production render
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
 
@@ -1749,6 +1759,149 @@ PATH_HARDENING_PY
     printf '%s ingress path hardening contract scan passed\n' "${subject}"
 }
 
+# Usage: scan_istio_ingress_exact_origin_contract SUBJECT ROUTES_FILE... -- POLICY_FILE...
+# The browser application host comes from the app, api and auth HTTPRoutes,
+# so the policy must name the same host the browser lanes route.
+scan_istio_ingress_exact_origin_contract() {
+    local subject="$1"
+    shift
+
+    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'EXACT_ORIGIN_PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+POLICY_NAME = "ingress-exact-origin"
+BROWSER_ROUTES = {"app-route", "api-route", "auth-route"}
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+GATEWAY_SELECTOR = {"gateway.networking.k8s.io/gateway-name": "istio-ingress-gateway"}
+
+repo_dir = Path(sys.argv[1])
+arguments = sys.argv[2:]
+if "--" not in arguments:
+    sys.exit("usage: ROUTES_FILE... -- POLICY_FILE...")
+separator = arguments.index("--")
+route_files, policy_files = arguments[:separator], arguments[separator + 1:]
+failures = []
+
+
+def label(path):
+    try:
+        return str(Path(path).resolve().relative_to(repo_dir))
+    except ValueError:
+        return str(path)
+
+
+def documents(path):
+    try:
+        return [
+            document
+            for document in yaml.safe_load_all(Path(path).read_text(encoding="utf-8"))
+            if isinstance(document, dict)
+        ]
+    except (OSError, yaml.YAMLError) as error:
+        failures.append(f"{label(path)}: cannot parse: {error}")
+        return []
+
+
+route_hosts = set()
+seen_routes = set()
+for path in route_files:
+    for document in documents(path):
+        name = (document.get("metadata") or {}).get("name")
+        if document.get("kind") == "HTTPRoute" and name in BROWSER_ROUTES:
+            seen_routes.add(name)
+            route_hosts.update((document.get("spec") or {}).get("hostnames") or [])
+if seen_routes != BROWSER_ROUTES or len(route_hosts) != 1:
+    failures.append(
+        f"browser routes {sorted(seen_routes)} must all name one hostname, found {sorted(route_hosts)}"
+    )
+    host = None
+else:
+    host = next(iter(route_hosts))
+    if "*" in host or ":" in host:
+        failures.append(f"browser route hostname {host!r} must be one exact host without a port")
+        host = None
+
+
+def check(policy, name):
+    if policy.get("apiVersion") != "security.istio.io/v1":
+        failures.append(f"{name}: unexpected apiVersion {policy.get('apiVersion')!r}")
+    if (policy.get("metadata") or {}).get("namespace") != "istio-ingress":
+        failures.append(f"{name}: must be in istio-ingress")
+    spec = policy.get("spec") or {}
+    if set(spec) != {"selector", "action", "rules"}:
+        failures.append(f"{name}: spec must set only selector, action and rules, found {sorted(spec)}")
+    if spec.get("selector") != {"matchLabels": GATEWAY_SELECTOR}:
+        failures.append(f"{name}: must select only the istio-ingress-gateway workload")
+    if spec.get("action") != "DENY":
+        # Other ALLOW policies are additive, so an ALLOW rule cannot enforce this.
+        failures.append(f"{name}: action must be DENY, found {spec.get('action')!r}")
+    rules = spec.get("rules") or []
+    if len(rules) != 1:
+        failures.append(f"{name}: expected exactly one rule, found {len(rules)}")
+        return
+    rule = rules[0]
+    if set(rule) != {"to", "when"}:
+        # A from clause would narrow the rule to some callers.
+        failures.append(f"{name}: rule must set only to and when, found {sorted(rule)}")
+
+    operations = rule.get("to") or []
+    operation = (operations[0] or {}).get("operation") or {} if len(operations) == 1 else {}
+    if len(operations) != 1 or set(operation) != {"hosts", "notMethods"}:
+        failures.append(f"{name}: rule needs exactly one operation with only hosts and notMethods")
+    hosts = operation.get("hosts")
+    if not hosts:
+        failures.append(f"{name}: lost its host restriction to the browser application host")
+    elif host is not None and sorted(hosts) != sorted([host, f"{host}:*"]):
+        failures.append(
+            f"{name}: hosts must be exactly {host!r} and {host + ':*'!r} (any port), found {hosts}"
+        )
+    methods = operation.get("notMethods") or []
+    if len(methods) != len(SAFE_METHODS) or set(methods) != SAFE_METHODS:
+        failures.append(f"{name}: notMethods must be exactly GET, HEAD and OPTIONS, found {methods}")
+
+    conditions = rule.get("when") or []
+    if len(conditions) != 1:
+        # A second condition, such as Sec-Fetch-Site, would add an exception.
+        failures.append(f"{name}: expected exactly one when condition, found {len(conditions)}")
+        return
+    condition = conditions[0] or {}
+    if set(condition) != {"key", "notValues"} or condition.get("key") != "request.headers[origin]":
+        failures.append(f"{name}: condition must be request.headers[origin] with only notValues")
+    if host is not None and condition.get("notValues") != [f"https://{host}"]:
+        failures.append(
+            f"{name}: notValues must be exactly ['https://{host}'], found {condition.get('notValues')}"
+        )
+
+
+policies = []
+for path in policy_files:
+    policies.extend(
+        (document, label(path))
+        for document in documents(path)
+        if document.get("kind") == "AuthorizationPolicy"
+        and (document.get("metadata") or {}).get("name") == POLICY_NAME
+    )
+if len(policies) != 1:
+    failures.append(f"expected exactly one {POLICY_NAME} AuthorizationPolicy, found {len(policies)}")
+else:
+    check(*policies[0])
+
+if failures:
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    sys.exit(1)
+EXACT_ORIGIN_PY
+    then
+        printf '%s ingress exact-Origin contract scan failed\n' "${subject}" >&2
+        return 1
+    fi
+
+    printf '%s ingress exact-Origin contract scan passed\n' "${subject}"
+}
+
 run_repo_pattern_scans() {
     "${IMAGE_PINNING_SCRIPT}"
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
@@ -1768,11 +1921,16 @@ run_repo_pattern_scans() {
     scan_nginx_shared_route_contract "repo" "${NGINX_API_ROUTES_INCLUDE}" "${NGINX_API_DOCS_ROUTES_INCLUDE}" \
         "${NGINX_SERVER_CONFIG_FILES[@]}"
     scan_istio_ingress_path_hardening_contract "repo" "${INGRESS_PATH_HARDENING_FILE}"
+    scan_istio_ingress_exact_origin_contract "repo" "${BROWSER_ROUTE_FILES[@]}" -- "${INGRESS_EXACT_ORIGIN_FILE}"
 
     KUSTOMIZE_RENDER_DIR="$(mktemp -d)"
     "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INGRESS_POLICIES_OVERLAY}" \
         --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_GATEWAY_ROUTES_OVERLAY}" \
+        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml"
     scan_istio_ingress_path_hardening_contract "production render" "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+    scan_istio_ingress_exact_origin_contract "production render" "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml" -- \
+        "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
     rm -rf "${KUSTOMIZE_RENDER_DIR}"
     KUSTOMIZE_RENDER_DIR=""
 }
@@ -1781,7 +1939,7 @@ run_self_test() {
     local fixture_dir="${REPO_DIR}/tests/security-guardrails/fixtures/fail"
     local pipe_fixture="${fixture_dir}/pipe-to-shell-guidance.md"
     local self_test_failures=0
-    local authz_fixture nginx_fixture path_fixture provider_fixture
+    local authz_fixture nginx_fixture path_fixture provider_fixture origin_fixture
     local -a fixture_files=()
     local line
 
@@ -1858,6 +2016,13 @@ run_self_test() {
     for path_fixture in "${fixture_dir}"/ingress-path-hardening-*.yaml; do
         if scan_istio_ingress_path_hardening_contract "self-test" "${path_fixture}"; then
             echo "self-test ${path_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for origin_fixture in "${fixture_dir}"/ingress-exact-origin-*.yaml; do
+        if scan_istio_ingress_exact_origin_contract "self-test" "${BROWSER_ROUTE_FILES[@]}" -- "${origin_fixture}"; then
+            echo "self-test ${origin_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
             self_test_failures=$((self_test_failures + 1))
         fi
     done

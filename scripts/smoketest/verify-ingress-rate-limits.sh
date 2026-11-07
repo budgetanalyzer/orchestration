@@ -265,6 +265,12 @@ probe_response_with_method() {
     )
     [[ -z "${forged_xff}" ]] || curl_args+=(-H "X-Forwarded-For: ${forged_xff}")
     [[ -z "${session_id}" ]] || curl_args+=(--cookie "__Host-BA_SESSION=${session_id}")
+    # Unsafe requests need the exact application Origin
+    # (kubernetes/istio/ingress-exact-origin.yaml) to reach the session check.
+    case "${method}" in
+        GET | HEAD | OPTIONS) ;;
+        *) curl_args+=(-H "Origin: https://app.budgetanalyzer.localhost") ;;
+    esac
     curl_args+=("https://app.budgetanalyzer.localhost${path}")
     kubectl exec -n "${PROBE_NAMESPACE}" "${pod_name}" -- "${curl_args[@]}" 2>/dev/null
 }

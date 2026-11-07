@@ -549,6 +549,7 @@ the versioned Session Gateway JSON endpoints.
 
 **Layer 2: ext_authz (Istio Ingress)**
 - Path hardening before `ext_authz` denies literal and encoded `;` in the path
+- The [exact-Origin rule](session-edge-authorization-pattern.md#exact-origin-ingress-rule) denies unsafe browser-host requests without the exact application `Origin`
 - Per-request session validation from Redis
 - Header injection (X-User-Id, X-Roles, X-Permissions)
 - Rejects unauthorized requests before they reach backend services
@@ -590,7 +591,7 @@ the versioned Session Gateway JSON endpoints.
 - HttpOnly: true (prevents JavaScript access)
 - Secure: true (HTTPS only; required by the `__Host-` prefix)
 - Path: `/`, with no `Domain` attribute
-- SameSite: Strict (the principal CSRF protection; see [Threat Mitigation](#threat-mitigation))
+- SameSite: Strict (blocks cross-site attachment, not same-site requests; see [Threat Mitigation](#threat-mitigation))
 - No `Max-Age` or `Expires`: it is a browser-session cookie. The stored
   `expires_at`, checked by ext_authz and Session Gateway, and the Redis key TTL
   enforce expiry. Logout and heartbeat invalidation clear the cookie with
@@ -602,7 +603,7 @@ the versioned Session Gateway JSON endpoints.
 |--------|-----------|
 | XSS token theft | Tokens never in browser; HTTP-only cookies |
 | Token replay | Short session expiration; server-side session validation |
-| CSRF | `SameSite=Strict` session cookie is the principal protection. No CSRF tokens are implemented: Session Gateway disables Spring Security CSRF, and ext_authz validates no token or `Origin` |
+| CSRF | The principal control is the [exact-Origin ingress rule](session-edge-authorization-pattern.md#exact-origin-ingress-rule): a native Istio `DENY` on the browser application host rejects every method other than `GET`, `HEAD` and `OPTIONS` unless `Origin` is exactly the application origin, on both lanes. It is CSRF provenance for the cookie credential, not authentication, and covers only that host; a future machine-to-machine API uses its own hostname and a non-cookie credential, outside the rule. The session cookie's configured `SameSite=Strict` default keeps it off cross-site requests but not same-site ones, and does not stop a top-level response from clearing it. No CSRF tokens, Fetch Metadata checks, or Session Gateway or ext_authz Origin checks are implemented; Session Gateway disables Spring Security CSRF |
 | Unauthorized data access | Service-layer authorization by user ID |
 | Credential stuffing and abusive API bursts | Per-client auth/API rate limiting before `ext_authz` at Istio ingress; Auth0 anomaly detection |
 | Session hijacking | Opaque session IDs; Redis-backed validation |
@@ -636,8 +637,14 @@ exact HTTPS IdP origin, allowing the top-level form POST logout and its IdP redi
 The shared offline renderer derives that origin from Tilt's `AUTH0_ISSUER_URI`
 or the production reference's `REFERENCE_AUTH0_ISSUER_URI`; it rejects missing,
 non-HTTPS, wildcard and malformed issuer input. No profile sends the deprecated
-`X-XSS-Protection` header. Exact-Origin ingress enforcement and the hostile-form
-and `form-action` redirect checks remain plan 02.8, Phase 2 work.
+`X-XSS-Protection` header. `form-action` does not stop hostile pages
+submitting to the application; the
+[exact-Origin ingress rule](session-edge-authorization-pattern.md#exact-origin-ingress-rule)
+denies those. Under the strict CSP, Chromium blocked an app-page form to a
+foreign origin and a same-origin form answer that redirected to one, and
+hostile same-site and cross-site form and `fetch` submissions were denied
+without changing the session. Other browsers were not exercised; see the
+[evidence record](../research/security-consensus-hardening-evidence.md#plan-028-phase-2-exact-origin-ingress-rule-proven-live).
 
 The route boundaries are:
 

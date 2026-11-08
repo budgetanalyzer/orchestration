@@ -788,7 +788,7 @@ surface; alerting rules are a future follow-up.
 **Redis Configuration:**
 - Session key pattern: `session:{sha256(token)}`, where the suffix is the lowercase hex SHA-256 of the `__Host-BA_SESSION` cookie value; see the [shared session contract](session-edge-authorization-pattern.md#shared-session-contract)
 - User session index pattern: `user_sessions:{userId}` (SET of session token digests for bulk revocation)
-- Key names remain visible metadata to Redis operators; hashing keeps the reusable token out of them
+- Key names remain visible metadata to Redis operators and to the `currency-service` Redis user, whose `+scan` grant (used for cache eviction) is not filtered by ACL key patterns; hashing keeps the reusable token out of them. That user is denied `KEYS` and cannot read session keys
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
 - Eviction policy: allkeys-lru
 - Persistence: AOF for crash recovery

@@ -79,12 +79,32 @@ for the canonical application, infrastructure, and local JDWP debug ports.
 
 ### Service Health Endpoints
 
+Spring startup and liveness probes use `/actuator/health/liveness`, which
+reports only the application's own state. Readiness probes use
+`/actuator/health/readiness`, which adds the dependencies each service cannot
+serve without. A dependency outage therefore removes pods from Service
+endpoints without restarting them; recovery needs no intervention.
+
+| Service | Probe path prefix | Readiness dependencies |
+| --- | --- | --- |
+| session-gateway | `/actuator/health` | Redis |
+| transaction-service | `/transaction-service/actuator/health` | PostgreSQL |
+| currency-service | `/currency-service/actuator/health` | PostgreSQL, Redis |
+| permission-service | `/permission-service/actuator/health` | PostgreSQL |
+| ext-authz (port 8090) | `/livez` and `/readyz` | Redis (readiness only) |
+
+The owning service repositories define the readiness groups and explain the
+exclusions, such as RabbitMQ and downstream HTTP services.
+
 ```bash
-# All Spring Boot services
-curl http://localhost:8081/actuator/health  # session-gateway
-curl http://localhost:8082/actuator/health  # transaction-service
-curl http://localhost:8084/actuator/health  # currency-service
-curl http://localhost:8086/actuator/health  # permission-service
+# Readiness through the Tilt port-forwards
+curl http://localhost:8081/actuator/health/readiness                      # session-gateway
+curl http://localhost:8082/transaction-service/actuator/health/readiness  # transaction-service
+curl http://localhost:8084/currency-service/actuator/health/readiness     # currency-service
+curl http://localhost:8086/permission-service/actuator/health/readiness   # permission-service
+
+# Liveness uses the same prefix with /liveness
+curl http://localhost:8082/transaction-service/actuator/health/liveness
 
 # NGINX Gateway
 curl http://localhost:8080/health
@@ -225,7 +245,8 @@ Auth failures after login?
 │           └── ext_authz session validation or permission injection failing
 │               └── kubectl logs -f deployment/ext-authz
 ├── Check ext-authz health
-│   └── curl http://localhost:8090/healthz
+│   ├── curl http://localhost:8090/livez
+│   └── curl http://localhost:8090/readyz
 ├── Check Redis for session data
 │   └── REDIS_OPS_USERNAME=redis-ops
 │       REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
@@ -490,14 +511,15 @@ All resources should be green
 
 **3. Verify backend services are reachable**
 ```bash
-curl http://localhost:8082/actuator/health  # Should return UP
-curl http://localhost:8084/actuator/health  # Should return UP
+curl http://localhost:8082/transaction-service/actuator/health/readiness  # Should return UP
+curl http://localhost:8084/currency-service/actuator/health/readiness     # Should return UP
 ```
 
 **4. Check ext-authz**
 ```bash
-# Health
-curl http://localhost:8090/healthz
+# Process liveness and Redis-backed readiness
+curl http://localhost:8090/livez
+curl http://localhost:8090/readyz
 
 # Logs - look for session validation failures
 kubectl logs -f deployment/ext-authz
@@ -656,8 +678,8 @@ alias logs-nginx='kubectl logs -f deployment/nginx-gateway'
 alias logs-tx='kubectl logs -f deployment/transaction-service'
 alias logs-currency='kubectl logs -f deployment/currency-service'
 
-# Health checks
-alias health-all='for p in 8081 8082 8084; do echo "Port $p:"; curl -s http://localhost:$p/actuator/health | jq -r .status; done && echo "ext-authz:"; curl -s http://localhost:8090/healthz'
+# Readiness checks
+alias health-all='for u in 8081/actuator 8082/transaction-service/actuator 8084/currency-service/actuator 8086/permission-service/actuator; do echo "$u:"; curl -s "http://localhost:$u/health/readiness" | jq -r .status; done && echo "ext-authz:"; curl -s http://localhost:8090/readyz'
 
 # Pod status
 alias pods='kubectl get pods -A'

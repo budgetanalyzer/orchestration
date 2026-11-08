@@ -608,6 +608,13 @@ else
     fail "currency-service NOT denied on session:* (${CS_CROSS})"
 fi
 
+CS_KEYS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" KEYS "currency-service:*")
+if echo "$CS_KEYS" | grep -qi "NOPERM.*'keys'"; then
+    pass "currency-service denied KEYS command"
+else
+    fail "currency-service NOT denied KEYS (${CS_KEYS})"
+fi
+
 SG_CROSS=$(redis_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" HGETALL "currency-service:anything")
 if echo "$SG_CROSS" | grep -qi 'NOPERM'; then
     pass "session-gateway denied on currency-service:* keys"
@@ -678,11 +685,18 @@ fi
 EXT_AUTHZ_HEALTH_PORT=$(start_port_forward default deployment/ext-authz 8090)
 EXT_AUTHZ_HTTP_PORT=$(start_port_forward default deployment/ext-authz 9002)
 
-http_request GET "http://127.0.0.1:${EXT_AUTHZ_HEALTH_PORT}/healthz"
+http_request GET "http://127.0.0.1:${EXT_AUTHZ_HEALTH_PORT}/livez"
 if [ "$HTTP_STATUS" = "200" ] && grep -qi '^ok$' "$HTTP_BODY"; then
-    pass "ext-authz /healthz returns 200"
+    pass "ext-authz /livez returns 200"
 else
-    fail "ext-authz /healthz failed (status=${HTTP_STATUS})"
+    fail "ext-authz /livez failed (status=${HTTP_STATUS})"
+fi
+
+http_request GET "http://127.0.0.1:${EXT_AUTHZ_HEALTH_PORT}/readyz"
+if [ "$HTTP_STATUS" = "200" ] && grep -qi '^ok$' "$HTTP_BODY"; then
+    pass "ext-authz /readyz returns 200"
+else
+    fail "ext-authz /readyz failed (status=${HTTP_STATUS})"
 fi
 
 EXT_AUTHZ_SESSION_ID="phase1-verify-$RANDOM-$RANDOM"

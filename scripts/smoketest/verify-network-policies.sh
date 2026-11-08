@@ -48,6 +48,8 @@ TRANSACTION_SERVICE_IP=""
 CURRENCY_SERVICE_IP=""
 PERMISSION_SERVICE_IP=""
 BUDGET_ANALYZER_WEB_IP=""
+ISTIO_INGRESS_GATEWAY_IP=""
+PUBLIC_EGRESS_HOST="${PHASE2_PUBLIC_EGRESS_HOST:-api.stlouisfed.org}"
 
 usage() {
     cat <<'EOF'
@@ -597,6 +599,8 @@ main() {
     CURRENCY_SERVICE_IP=$(resolve_live_pod_ip default app=currency-service)
     PERMISSION_SERVICE_IP=$(resolve_live_pod_ip default app=permission-service)
     BUDGET_ANALYZER_WEB_IP=$(resolve_live_pod_ip default app=budget-analyzer-web)
+    ISTIO_INGRESS_GATEWAY_IP=$(resolve_live_pod_ip istio-ingress \
+        gateway.networking.k8s.io/gateway-name=istio-ingress-gateway)
     create_all_probes
 
     # ------------------------------------------------------------------
@@ -853,6 +857,24 @@ main() {
 
     assert_deny_consistently "permission-service -> istio-egress-gateway:443" \
         default "$PROBE_PERM" istio-egress-gateway.istio-egress 443
+
+    # ------------------------------------------------------------------
+    section "Istio Egress Gateway: Private Destinations on 443"
+    # ------------------------------------------------------------------
+    # The gateway's 443 egress excepts private, link-local and carrier-grade
+    # NAT ranges. The Kubernetes API Service DNATs to the apiserver's private
+    # endpoint. The Istio ingress gateway pod accepts 443 from any source, so
+    # only the egress-side exclusion blocks it. The public host proves the
+    # exclusions leave external 443 open.
+
+    assert_deny_consistently "istio-egress -> kubernetes.default:443" \
+        istio-egress "$PROBE_ISTIO_EGRESS" "$KUBERNETES_SERVICE_IP" 443
+
+    assert_deny_consistently "istio-egress -> istio-ingress gateway pod:443" \
+        istio-egress "$PROBE_ISTIO_EGRESS" "$ISTIO_INGRESS_GATEWAY_IP" 443
+
+    assert_allow_eventually "istio-egress -> ${PUBLIC_EGRESS_HOST}:443 (public)" \
+        istio-egress "$PROBE_ISTIO_EGRESS" "$PUBLIC_EGRESS_HOST" 443
 
     # ------------------------------------------------------------------
     # Summary

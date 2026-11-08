@@ -18,6 +18,13 @@ The credential isolation work hardens that local PostgreSQL path:
 - PostgreSQL now starts with SSL enabled using the host-generated
   `infra-tls-postgresql` server certificate and the shared `infra-ca` trust
   bundle.
+- The server reads `pg_hba.conf` from the `postgresql-hba` ConfigMap through
+  `-c hba_file=/etc/postgresql-hba/pg_hba.conf`, not from `PGDATA`. It allows
+  Unix-socket connections and TLS TCP connections (`hostssl`), both with
+  SCRAM-SHA-256, and has no `host` rules, so a non-TLS TCP connection is
+  refused with `no pg_hba.conf entry`. Because the file is outside `PGDATA`, the
+  rules also apply to an existing data volume. After editing the ConfigMap,
+  restart the `postgresql` pod or reload PostgreSQL.
 
 The runtime-hardening work hardens the runtime posture without changing the bootstrap
 contract:
@@ -106,7 +113,7 @@ Tilt will:
 3. Generate one PostgreSQL password secret per consuming service.
 4. Start PostgreSQL with SCRAM-SHA-256 auth enabled.
 5. Enable the PostgreSQL SSL listener with the `infra-tls-postgresql`
-   certificate.
+   certificate and load the TLS-only `pg_hba.conf` from `postgresql-hba`.
 6. Copy the TLS keypair into a writable in-pod volume owned by the `postgres`
    runtime user.
 7. Run PostgreSQL as UID/GID `70` with a read-only root filesystem plus
@@ -131,12 +138,14 @@ For targeted PostgreSQL checks:
 PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql "host=localhost user=transaction_service dbname=budget_analyzer sslmode=verify-full sslrootcert=./nginx/certs/infra/infra-ca.pem" -c 'SELECT current_user;'
 PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql "host=localhost user=transaction_service dbname=currency sslmode=verify-full sslrootcert=./nginx/certs/infra/infra-ca.pem" -c 'SELECT 1;'
 PGPASSWORD="$POSTGRES_BOOTSTRAP_PASSWORD" psql "host=localhost user=postgres_admin dbname=postgres sslmode=verify-full sslrootcert=./nginx/certs/infra/infra-ca.pem" -c 'SHOW ssl;'
+PGPASSWORD="$POSTGRES_TRANSACTION_SERVICE_PASSWORD" psql "host=localhost user=transaction_service dbname=budget_analyzer sslmode=disable" -c 'SELECT 1;'
 ```
 
 The first command should succeed as `transaction_service`. The second should be
 rejected because cross-database `CONNECT` is revoked. The third should return
 `on`, proving the port-forwarded listener presents a certificate trusted by the
-local `infra-ca`. The runtime-hardening verifier also asserts the non-root runtime
+local `infra-ca`. The fourth should fail with `no pg_hba.conf entry ... no
+encryption`, proving the server refuses plaintext. The runtime-hardening verifier also asserts the non-root runtime
 contract: `runAsUser`/`runAsGroup` `70` plus the explicit writable mounts for
 `/tmp` and `/var/run/postgresql`.
 

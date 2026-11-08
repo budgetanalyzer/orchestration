@@ -90,6 +90,7 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 )
 
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
+EGRESS_GATEWAY_VALUES_FILE="${REPO_DIR}/kubernetes/istio/egress-gateway-values.yaml"
 ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/istio/authorization-policies.yaml"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
 JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
@@ -135,6 +136,8 @@ Runs the static security guardrail suite:
 - ingress exact Origin: DENY of unsafe methods without the exact browser
   origin, restricted to the routed browser application host, locally and in
   the production render
+- istio-egress private destinations: no NetworkPolicy in istio-egress allows
+  TCP 443 to private, link-local or carrier-grade NAT ranges
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
 
@@ -1902,6 +1905,183 @@ EXACT_ORIGIN_PY
     printf '%s ingress exact-Origin contract scan passed\n' "${subject}"
 }
 
+# Args: subject egress-gateway-values-file manifest-file...
+scan_istio_egress_private_destination_contract() {
+    local subject="$1"
+    shift
+
+    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'EGRESS_PRIVATE_PY'
+import ipaddress
+import sys
+from pathlib import Path
+
+import yaml
+
+NAMESPACE = "istio-egress"
+POLICY_NAME = "allow-istio-egress-external-egress"
+REQUIRED_EXCEPT = (
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.0.0/16",
+    "100.64.0.0/10",
+)
+PRIVATE = [ipaddress.ip_network(cidr) for cidr in REQUIRED_EXCEPT]
+PORT = 443
+
+repo_dir = Path(sys.argv[1])
+values_file = sys.argv[2]
+manifest_files = sys.argv[3:]
+failures = []
+
+
+def label(path):
+    try:
+        return str(Path(path).resolve().relative_to(repo_dir))
+    except ValueError:
+        return str(path)
+
+
+def documents(path):
+    try:
+        return [
+            document
+            for document in yaml.safe_load_all(Path(path).read_text(encoding="utf-8"))
+            if isinstance(document, dict)
+        ]
+    except (OSError, yaml.YAMLError) as error:
+        failures.append(f"{label(path)}: cannot parse: {error}")
+        return []
+
+
+def allows_port(rule):
+    ports = rule.get("ports") or []
+    if not ports:
+        return True
+    for entry in ports:
+        port = (entry or {}).get("port")
+        if port is None or isinstance(port, str):
+            # A missing port allows every port; a named port may resolve to 443.
+            return True
+        if port == PORT or (entry.get("endPort") is not None and port <= PORT <= entry["endPort"]):
+            return True
+    return False
+
+
+def uncovered_private(block):
+    try:
+        network = ipaddress.ip_network(block.get("cidr"))
+        excepts = [ipaddress.ip_network(cidr) for cidr in block.get("except") or []]
+    except (TypeError, ValueError) as error:
+        return [f"invalid ipBlock: {error}"]
+    if network.version != 4:
+        return ["an IPv6 ipBlock; the cluster is IPv4-only, so add IPv6 exclusions to this check first"]
+    uncovered = []
+    for private in PRIVATE:
+        if not network.overlaps(private):
+            continue
+        remaining = [private if private.subnet_of(network) else network]
+        for excluded in (e for e in excepts if e.version == 4):
+            next_remaining = []
+            for part in remaining:
+                if part.subnet_of(excluded):
+                    continue
+                if excluded.subnet_of(part):
+                    next_remaining.extend(part.address_exclude(excluded))
+                else:
+                    next_remaining.append(part)
+            remaining = next_remaining
+        uncovered.extend(str(part) for part in ipaddress.collapse_addresses(remaining))
+    return uncovered
+
+
+def check_policy(policy, name):
+    spec = policy.get("spec") or {}
+    policy_types = spec.get("policyTypes")
+    egress = spec.get("egress") or []
+    if policy_types is not None and "Egress" not in policy_types:
+        return
+    for index, rule in enumerate(egress):
+        rule = rule or {}
+        if not allows_port(rule):
+            continue
+        peers = rule.get("to") or []
+        if not peers:
+            failures.append(f"{name}: egress rule {index} allows {PORT} to every destination")
+            continue
+        for peer in peers:
+            peer = peer or {}
+            if "ipBlock" in peer:
+                for gap in uncovered_private(peer.get("ipBlock") or {}):
+                    failures.append(f"{name}: egress rule {index} allows {PORT} to {gap}")
+            else:
+                failures.append(
+                    f"{name}: egress rule {index} allows {PORT} to a pod or namespace selector peer"
+                )
+
+
+def check_external_policy(policy, name):
+    spec = policy.get("spec") or {}
+    expected = [
+        {
+            "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": list(REQUIRED_EXCEPT)}}],
+            "ports": [{"protocol": "TCP", "port": PORT}],
+        }
+    ]
+    if spec.get("podSelector") != {"matchLabels": {"istio": "egress-gateway"}}:
+        failures.append(f"{name}: must select only istio=egress-gateway")
+    if spec.get("policyTypes") != ["Egress"]:
+        failures.append(f"{name}: policyTypes must be exactly [Egress]")
+    if spec.get("egress") != expected:
+        failures.append(
+            f"{name}: egress must be exactly TCP {PORT} to 0.0.0.0/0 except {', '.join(REQUIRED_EXCEPT)}"
+        )
+
+
+try:
+    values = yaml.safe_load(Path(values_file).read_text(encoding="utf-8")) or {}
+except (OSError, yaml.YAMLError) as error:
+    failures.append(f"{label(values_file)}: cannot parse: {error}")
+    values = {}
+if ((values.get("networkPolicy") or {}).get("enabled")) is True:
+    failures.append(f"{label(values_file)}: the chart NetworkPolicy must stay disabled")
+
+external = []
+for path in manifest_files:
+    for document in documents(path):
+        metadata = document.get("metadata") or {}
+        if document.get("kind") != "NetworkPolicy" or metadata.get("namespace") != NAMESPACE:
+            continue
+        # The namespace hosts only the egress gateway, so every policy in it
+        # is treated as selecting the gateway.
+        name = f"{label(path)}: {metadata.get('name')}"
+        check_policy(document, name)
+        if metadata.get("name") == POLICY_NAME:
+            external.append((document, name))
+
+if len(external) != 1:
+    failures.append(f"expected exactly one {POLICY_NAME} NetworkPolicy, found {len(external)}")
+else:
+    check_external_policy(*external[0])
+
+if failures:
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    sys.exit(1)
+EGRESS_PRIVATE_PY
+    then
+        printf '%s istio-egress private-destination contract scan failed\n' "${subject}" >&2
+        return 1
+    fi
+
+    printf '%s istio-egress private-destination contract scan passed\n' "${subject}"
+}
+
+collect_network_policy_manifest_files() {
+    find "${REPO_DIR}/kubernetes" -type f \( -name '*.yaml' -o -name '*.yml' \) \
+        -exec grep -lE "kind:[[:space:]]*['\"]?NetworkPolicy" {} + | sort
+}
+
 run_repo_pattern_scans() {
     "${IMAGE_PINNING_SCRIPT}"
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
@@ -1922,6 +2102,13 @@ run_repo_pattern_scans() {
         "${NGINX_SERVER_CONFIG_FILES[@]}"
     scan_istio_ingress_path_hardening_contract "repo" "${INGRESS_PATH_HARDENING_FILE}"
     scan_istio_ingress_exact_origin_contract "repo" "${BROWSER_ROUTE_FILES[@]}" -- "${INGRESS_EXACT_ORIGIN_FILE}"
+    local -a network_policy_files=()
+    local network_policy_file
+    while IFS= read -r network_policy_file; do
+        network_policy_files+=("${network_policy_file}")
+    done < <(collect_network_policy_manifest_files)
+    scan_istio_egress_private_destination_contract "repo" "${EGRESS_GATEWAY_VALUES_FILE}" \
+        "${network_policy_files[@]}"
 
     KUSTOMIZE_RENDER_DIR="$(mktemp -d)"
     "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INGRESS_POLICIES_OVERLAY}" \
@@ -1939,7 +2126,7 @@ run_self_test() {
     local fixture_dir="${REPO_DIR}/tests/security-guardrails/fixtures/fail"
     local pipe_fixture="${fixture_dir}/pipe-to-shell-guidance.md"
     local self_test_failures=0
-    local authz_fixture nginx_fixture path_fixture provider_fixture origin_fixture
+    local authz_fixture nginx_fixture path_fixture provider_fixture origin_fixture egress_fixture
     local -a fixture_files=()
     local line
 
@@ -2023,6 +2210,14 @@ run_self_test() {
     for origin_fixture in "${fixture_dir}"/ingress-exact-origin-*.yaml; do
         if scan_istio_ingress_exact_origin_contract "self-test" "${BROWSER_ROUTE_FILES[@]}" -- "${origin_fixture}"; then
             echo "self-test ${origin_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+
+    for egress_fixture in "${fixture_dir}"/istio-egress-private-destination-*.yaml; do
+        if scan_istio_egress_private_destination_contract "self-test" "${EGRESS_GATEWAY_VALUES_FILE}" \
+            "${egress_fixture}"; then
+            echo "self-test ${egress_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
             self_test_failures=$((self_test_failures + 1))
         fi
     done

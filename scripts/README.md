@@ -466,7 +466,12 @@ getting-started guide.
   `kubernetes/istio/ingress-path-hardening.yaml` filter, locally and in the
   production render, to be one enforcing `DENY` RBAC filter before
   `ext_authz` that denies a literal `;` and `%3b` at any percent-encoding
-  depth in the path and admits ordinary paths and query strings. `--self-test` proves each case
+  depth in the path and admits ordinary paths and query strings. It requires
+  `allow-istio-egress-external-egress` to allow TCP 443 only to `0.0.0.0/0`
+  except `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`
+  and `100.64.0.0/10`, and, because NetworkPolicies are additive, rejects any
+  other `istio-egress` NetworkPolicy, or the egress gateway chart's own policy,
+  that allows 443 to those ranges. `--self-test` proves each case
   with a failing fixture. Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
   Kustomize patch fragments under `patches/` directories and the schema-v2
@@ -687,6 +692,15 @@ directory without writing outside the repository.
 
 - `repo/validate-repos.sh` validates the sibling repository layout and branch
   state without changing branches or pulling.
+- `repo/report-runtime-support-windows.sh` reads
+  `lib/runtime-support-windows.txt` without network access and prints every
+  runtime line whose support end date has passed (`PAST`) or falls within 90
+  days (`DUE`). It exits `0` when nothing is flagged, `1` when a line is
+  flagged, and `2` for a usage error or malformed inventory. `--as-of
+  YYYY-MM-DD` and `--file PATH` select another date or inventory. It is the
+  quarterly runtime-line review aid in
+  [docs/dependency-automation.md](../docs/dependency-automation.md#operator-routine),
+  not a CI or release gate.
 - The tag helpers below push tags to each sibling repository's `origin`. Run
   them where `origin` is GitHub; in the optional development VM, `origin` is a
   guest-local bare repository, so tag pushes there do not trigger publish

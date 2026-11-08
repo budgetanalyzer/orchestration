@@ -1,0 +1,44 @@
+# The external rule is correct, but a port range in another policy covers 443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-external-egress
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-egress-high-ports
+  namespace: istio-egress
+spec:
+  podSelector:
+    matchLabels:
+      istio: egress-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 400
+          endPort: 500

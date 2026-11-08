@@ -4,6 +4,7 @@
 #
 # Runtime verification for infrastructure transport encryption.
 # Proves client-side TLS validation for Redis, PostgreSQL, and RabbitMQ,
+# proves the PostgreSQL server refuses plaintext (sslmode=disable) clients,
 # confirms RabbitMQ listener state as secondary broker proof, runs regressions
 # for earlier security verifiers, and checks the readiness of all
 # transport-encrypted client pods.
@@ -544,6 +545,23 @@ psql -X -v ON_ERROR_STOP=1 -tA -c "SELECT current_user;"
 ' sh "$password" "$username" "$sslrootcert"
 }
 
+run_postgresql_plaintext() {
+    local username="$1"
+    local password="$2"
+
+    # shellcheck disable=SC2016 # This script is evaluated inside the PostgreSQL probe pod.
+    kubectl exec -n default "$POSTGRES_PROBE" -- sh -ceu '
+export PGPASSWORD="$1"
+export PGHOST="postgresql.infrastructure"
+export PGPORT="5432"
+export PGDATABASE="budget_analyzer"
+export PGUSER="$2"
+export PGSSLMODE="disable"
+
+psql -X -v ON_ERROR_STOP=1 -tA -c "SELECT current_user;"
+' sh "$password" "$username"
+}
+
 rabbitmq_listeners() {
     kubectl exec -n infrastructure "$RABBITMQ_POD" -- rabbitmq-diagnostics -q listeners
 }
@@ -654,6 +672,14 @@ main() {
         fail "PostgreSQL unexpectedly trusted the wrong CA bundle: ${out:0:160}"
     else
         pass "PostgreSQL verify-full rejects clients that do not trust the infra CA"
+    fi
+
+    if out=$(run_postgresql_plaintext "$PG_USERNAME" "$PG_PASSWORD" 2>&1); then
+        fail "PostgreSQL plaintext (sslmode=disable) unexpectedly succeeded: ${out:0:160}"
+    elif printf '%s\n' "$out" | grep -q 'no pg_hba.conf entry'; then
+        pass "PostgreSQL server rejects plaintext (sslmode=disable) with no pg_hba.conf entry"
+    else
+        fail "PostgreSQL plaintext failed for an unexpected reason: ${out:0:160}"
     fi
 
     section "RabbitMQ TLS"

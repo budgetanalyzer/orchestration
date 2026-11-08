@@ -325,6 +325,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 - `currency-service` cannot authenticate to AMQP
 - Management UI login fails
 - Boot-time user or permission changes do not appear
+- Queue processes crash in `rabbit_classic_queue_index_v2:recover` after the move to 4.4: the volume was created by the earlier 3.13 broker; recreate it with the one-time reset in [local-environment.md](../development/local-environment.md#backend-services-spring-boot)
 
 **Debug Commands**:
 ```bash

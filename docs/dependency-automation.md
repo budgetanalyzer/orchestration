@@ -539,6 +539,22 @@ Istio, RabbitMQ, NGINX, and other runtime lines with upstream support policies.
 Renovate discovery, abandonment heuristics, and vulnerability databases are
 not comprehensive end-of-life authorities.
 
+Record each selected line, its support end date and the upstream source in
+[`scripts/lib/runtime-support-windows.txt`](../scripts/lib/runtime-support-windows.txt),
+then run:
+
+```bash
+./scripts/repo/report-runtime-support-windows.sh
+```
+
+It uses no network and prints every line whose support has ended (`PAST`) or
+ends within 90 days (`DUE`), exiting `1` when anything is flagged. Re-check each
+source during the review and update the inventory whenever a selected line
+changes; the report is only as current as those dates. It turns the calendar
+check into a command, not a gate: no CI, release, or Renovate workflow runs
+it, and vulnerability gating remains deferred. Plan an upgrade for every
+flagged line, or record why it stays.
+
 For workspace, include every manual-lifecycle manifest input in that review,
 including VIA, and separately review Ubuntu VM lifecycle and available apt
 maintenance. Hosted repository evidence does not establish the patch or

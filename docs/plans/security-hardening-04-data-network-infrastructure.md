@@ -45,8 +45,10 @@ so its silence on those findings is not agreement or disagreement.
 - Treat review claims as leads. Re-check them against the code before relying on them.
 - Before any cluster mutation, apply the `kind-kind` checks in the orchestration `AGENTS.md`.
 - Phases marked **Live** need a running stack. In orchestration phases, run
-  `./scripts/bootstrap/check-local-runtime.sh` and `tilt up`. If the stack cannot be started, stop
-  and report; do not substitute static evidence.
+  `./scripts/bootstrap/check-local-runtime.sh` and confirm with `tilt get uiresources` that Tilt is
+  running and healthy, and that the `tilt up` process's working directory
+  (`readlink /proc/<pid>/cwd`) is this worktree. Start `tilt up` only if it is not running. If the stack
+  cannot be started, stop and report; do not substitute static evidence.
 - Do not edit `docs/decisions/` or `docs/archive/`.
 - Do not edit this plan during a run, because the runner stops launching phases when it changes.
 - Record measurements and results in `docs/research/security-consensus-hardening-evidence.md`. A

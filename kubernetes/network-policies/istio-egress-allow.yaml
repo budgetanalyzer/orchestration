@@ -82,7 +82,14 @@ spec:
         - protocol: TCP
           port: 443
 ---
-# Egress to external internet — only this pod gets external access on port 443
+# Egress to external internet — only this pod gets external access on port 443.
+# Private, link-local and carrier-grade NAT ranges are excluded so the gateway
+# cannot reach pods, Services, nodes, the Kind/Docker host or cloud metadata on
+# 443, beneath Envoy's SNI host rules. Calico enforces `except` after Service
+# DNAT; a hosted CNI must enforce it too. The cluster is IPv4-only; a dual-stack
+# cluster needs a matching IPv6 rule and an updated static check.
+# scripts/guardrails/verify-static-security-manifests.sh fails if this rule, or
+# any other istio-egress policy, allows 443 to these ranges.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -95,7 +102,16 @@ spec:
   policyTypes:
     - Egress
   egress:
-    - ports:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
         - protocol: TCP
           port: 443
 ---

@@ -210,7 +210,7 @@ tilt get uiresources
 - Tilt (development orchestration)
 - PostgreSQL 16+
 - Redis 7+
-- RabbitMQ 3.x
+- RabbitMQ 4.x
 - Istio Ingress Gateway (ingress + ext_authz) and Egress Gateway (outbound control)
 - NGINX (API gateway)
 

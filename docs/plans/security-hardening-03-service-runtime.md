@@ -1,6 +1,7 @@
 # Security Hardening 03: Service Runtime
 
-**Status:** Implemented; post-implementation review remediation is pending.
+**Status:** Implemented; post-implementation review remediation is complete. The production
+release and image-pin updates remain with plan 05, Phase 3, per the cutover rule.
 
 This is plan 03 of five that together implement every finding from the four 2026-11-01 security
 reviews that holds up against the code and that no review disputes, with the decisions in the
@@ -20,8 +21,15 @@ session-gateway, currency-service, orchestration.
 
 **Post-implementation review:** D6 is settled on the scope implemented here: audit
 state-changing requests and session lifecycle events, but not reads. The remaining Session
-Gateway terminal-path audit fixes and runtime-test simplifications are tracked in
-[`security-hardening-03-service-runtime-review-remediation.md`](security-hardening-03-service-runtime-review-remediation.md).
+Gateway terminal-path audit fixes and runtime-test simplifications were completed by
+[`security-hardening-03-service-runtime-review-remediation.md`](security-hardening-03-service-runtime-review-remediation.md):
+Session Gateway now also audits callback transport and unexpected failures and logout
+session-read and deletion failures, recording the completed response status; currency-service's
+runtime test is one sequential test; and each runtime-configuration test documents why it loads
+the shipped base configuration. A failed final logout response write is deliberately not audited.
+Validation evidence is in each owning repository's `docs/` folder. The broader audit-claim
+corrections remain with
+[plan 05, Phase 3](security-hardening-05-closeout-release-handoff.md#phase-3-full-verification-and-release-handoff-live).
 
 | Label | Review |
 | --- | --- |

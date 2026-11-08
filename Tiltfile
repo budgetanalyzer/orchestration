@@ -105,6 +105,7 @@ k8s_resource(
     'postgresql',
     objects=[
         'postgresql-init:configmap',
+        'postgresql-hba:configmap',
         'postgresql-bootstrap-credentials:secret',
     ],
     port_forwards=[

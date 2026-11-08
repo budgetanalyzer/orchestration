@@ -1966,3 +1966,512 @@ confirmed.
   exists.
 - Local reset: none required. A browser tab with an old frontend bundle still
   sends `Origin` on its POSTs.
+
+## Plan 04, Phase 1: Redis Memory Budget
+
+Date: 2026-11-08. Live phase against the local Tilt/Kind stack, with Tilt
+running from this worktree. `./scripts/bootstrap/check-local-runtime.sh` and
+the `kind-kind` checks passed before every cluster mutation. No cookie, token,
+state or authorization-code value is recorded here.
+
+### Change
+
+`kubernetes/infrastructure/redis/start-redis.sh` now starts Redis with
+`--maxmemory 128mb --maxmemory-policy noeviction`. The 256Mi container limit
+is unchanged. Before this phase Redis ran with `maxmemory 0` and the built-in
+default policy `noeviction`. The documented `allkeys-lru` was never
+configured, and `docs/architecture/security-architecture.md` no longer claims
+it.
+
+Tilt's file watch did not pick up the edit, which is the known
+`start-redis.sh` generator gap documented in
+`docs/development/local-environment.md#backend-services-spring-boot`. The
+repo-rendered `redis-acl-bootstrap` ConfigMap was applied, then
+`tilt trigger '(Tiltfile)'` brought Tilt back in sync. After
+`kubectl rollout restart statefulset/redis -n infrastructure`, `CONFIG GET
+maxmemory*` as `redis-ops` returned `maxmemory 134217728` and
+`maxmemory-policy noeviction`.
+
+### Measurements
+
+All measurements were taken on the pinned image (`redis:7-alpine@sha256:858f009f…`,
+Redis 7.4.11, jemalloc 5.3.0, x86_64) after the plan 02 cutovers: hashed
+session keys, the 2048-character `returnUrl` cap, the browser-binding field and
+the 600 s OAuth-state TTL. Record shapes came from real records: anonymous
+login starts through the edge, and a Chromium login with the disposable local
+API-test identity. Per-record cost is the `used_memory` change across 10,000
+copies of each shape. It includes keyspace and expiry overhead, so it is
+higher than `MEMORY USAGE` for a single key.
+
+| Record | Shape | `MEMORY USAGE` | Per-record `used_memory` |
+| --- | --- | --- | --- |
+| `oauth2:state:*`, no `returnUrl` | 4 fields, `hashtable` | 816 B | 919 B |
+| `oauth2:state:*`, 2048-byte `returnUrl` | 5 fields, `hashtable` | 3480 B | 3477 B |
+| `session:{sha256}`, user role | 9 fields, `hashtable` | 1160–1224 B | ~1360 B |
+| `session:{sha256}`, all 18 permissions (upper bound) | 328-byte `permissions` | — | ~1360 B measured; dict resizing masks the difference, so budget ~1.6 KB |
+| `user_sessions:{userId}`, one member | `listpack` set | 176 B | 172 B |
+| `currency-service:exchangeRates::THB:null:null` (all rates) | string, 4.4 MB | 5.24 MB | — |
+| Exchange rates from 2000-01-03 to today | string | 2.62 MB | — |
+
+- The largest OAuth-state record uses ASCII. A `returnUrl` of 2047
+  three-byte characters (6142 bytes) is rejected with `414` before Session
+  Gateway stores it, because the percent-encoded request line is too long.
+  ASCII values longer than about 4000 characters also get `414`, and the
+  2048-character cap discards anything between that and 2048.
+- Base: an empty Redis after restart has `used_memory` 1.15 MB, RSS 10.2 MB
+  and cgroup usage 10 MB.
+- Fragmentation (`used_memory_rss / used_memory`) was 1.08–1.12 with pipelined
+  client writes, under churn and after reload. Bulk loading through a single
+  large Lua script produced allocator fragmentation of 1.55. That is the worst
+  case observed and is used below.
+- Fork copy-on-write: with the dataset at the budget, AOF rewrite and RDB save
+  each copied 1.4 MB, and each fork took 1 s. With 107 MB live and 120,000
+  same-size overwrites streamed during each fork, AOF rewrite copied 7.5 MB
+  and RDB save copied 6.9 MB, each in 2 s. Redis 7's multi-part AOF has no
+  rewrite buffer.
+- Restart: reloading 80 MB of live data took 1.3 s and peaked at 100 MB of
+  cgroup memory, with RSS 89.5 MB. `maxmemory` is not enforced while loading.
+  Replay reproduces history, including the `DEL`s propagated for expired keys,
+  so the load peak follows the dataset that existed before the restart, which
+  the budget bounds.
+
+### Budget derivation
+
+`maxmemory` limits `used_memory`, not RSS. At the budget, the measured
+worst-case RSS is 134 MB × 1.55 fragmentation + 10 MB base + 7.5 MB COW,
+about 226 MB, which is 84% of 256Mi. With the fragmentation seen under
+realistic writes, the peak was 144.7 MB of anon memory, 54% of the limit. That
+peak was sampled every 0.2 s in the pod's cgroup across every test below. The
+remaining headroom covers client buffers, Lua and allocator variance. R2's
+70–75% (179–192 MiB) was not adopted. With realistic fragmentation it would
+fit, at about 220 MB, but at the observed 1.55 its RSS alone would exceed the
+limit.
+
+Capacity at 128 MB: about 37,600 maximum-size OAuth-state records, which is
+about 60 source addresses at 625 live records each (1/s for 600 s plus a burst
+of 25). The budget also holds 75,000–87,000 sessions with their indexes, or
+about 25 all-time exchange-rate cache entries.
+
+### Exhaustion behaviour
+
+Phase A filled Redis with 40,000 maximum-size OAuth-state records with a 45 s
+TTL: 2,349 writes were rejected with `OOM` and `used_memory` stopped at
+134.3 MB. After they expired, phase B filled it again with 45,000
+attack-shaped records with a 600 s TTL, 7,387 of which were rejected, and
+forced AOF rewrites and RDB saves. Redis was never restarted or OOM-killed,
+`evicted_keys` stayed 0, and every application pod stayed Ready, because the
+Redis health checks are read-only. With Redis full, a session
+created before the fill behaved as follows:
+
+| Operation | Result while full |
+| --- | --- |
+| Anonymous login start (`/oauth2/authorization/idp`) | `302` to `/oops` (`RedisSystemException`); browser login cannot reach the IdP |
+| Heartbeat (`POST /auth/v1/session`) | `503 Session refresh unavailable`; the existing finite expiry is kept |
+| User read (`GET /auth/v1/user`) | `200` |
+| API through ext-authz (`/api/v1/currencies`, `/api/v1/transactions`) | `200` (session read only) |
+| Exchange rates, cached range | `200` |
+| Exchange rates, uncached range | `500 INTERNAL_ERROR`: currency-service turns a rejected cache write into a request failure |
+| Logout (`POST /logout`) | `303`; session hash and index deleted, because `DEL` is not OOM-gated |
+
+Recovery: the attack records expired about 600 s after the fill. With no
+restart or operator action, the browser login, heartbeat, user read and API
+calls then returned `200`. An operator can recover sooner by deleting
+`oauth2:state:*` as `redis-ops`; this also fails any logins in progress.
+
+### Shared-cache growth (reported, not changed)
+
+The currency cache shares the budget and is the larger threat. Each distinct
+`(targetCurrency, startDate, endDate)` creates a cache entry with a 1-hour TTL.
+An all-time THB entry takes 5.24 MB, and one from 2000 to today takes 2.6 MB.
+One authenticated user with `currencies:read`, the default user role, filled
+the budget with about 100 ordinary exchange-rate reads. Large ranges were
+rejected first (`500`), and small ranges then used up the remainder. After
+that, heartbeats returned `503` and login starts went to `/oops`
+intermittently, depending on small frees from expiring keys. That would
+continue for up to the 1-hour cache TTL. Deleting `currency-service:*` as
+`redis-ops` restored login and heartbeat immediately. As the plan directs,
+this phase did not change the policy. The fix belongs to currency-service
+(bounding cache entry size or key space, or not caching large ranges) or to
+the optional Redis split. currency-service's `500` on a rejected cache write is
+also service-owned behaviour.
+
+### Validation
+
+- `bash -n` and `shellcheck` on `start-redis.sh`: passed.
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`: passed.
+- `./scripts/guardrails/verify-production-image-overlay.sh`: passed.
+- `CONFIG GET maxmemory*` as `redis-ops` after a final Redis restart:
+  `134217728`, `noeviction`.
+- `./scripts/smoketest/verify-credential-isolation.sh`: 78 passed.
+- `./scripts/smoketest/verify-session-architecture.sh`: 83 passed.
+
+### Limitations
+
+- The worst case assumes the observed 1.55 fragmentation and the measured COW.
+  A fork during which nearly every page is rewritten would copy up to the
+  whole dataset, and that case does not fit below the limit with 128 MB live.
+  At the budget, denied writes cannot rewrite pages; only deletes and expiry
+  can. `activedefrag` is off.
+- `noeviction` turns OOM kills into failed writes; it does not stop
+  anonymous OAuth-state growth from blocking logins. About 60 addresses, or
+  fewer if IPv6 /128s are cheap, can hold logins down for each 600 s state
+  lifetime. That gap remains known and accepted.
+- Synthetic fill records had the measured shapes but repeated values, so the
+  RDB and AOF compress better than real data. This affects disk and fork
+  duration, not `used_memory`.
+- Only the local stack was measured. The production reference uses the same
+  `start-redis.sh` and limit, but no hosted environment exists.
+- Local reset: none required beyond the Redis restart. All synthetic and cache
+  keys were deleted during the run (`./scripts/ops/flush-redis.sh` was used
+  once mid-run), so existing local sessions were logged out.
+
+## Plan 04, Phase 2: Egress Gateway Private-Destination Exclusions
+
+Date: 2026-11-08. Live phase against the local Tilt/Kind stack, with Tilt
+running from this worktree. `./scripts/bootstrap/check-local-runtime.sh` and
+the `kind-kind` checks passed before the cluster mutation. No cookie, token or
+credential value is recorded here.
+
+### Change
+
+`allow-istio-egress-external-egress` in
+`kubernetes/network-policies/istio-egress-allow.yaml` previously allowed TCP
+443 to any destination. Its only rule now allows TCP 443 to `0.0.0.0/0`
+except `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` and
+`100.64.0.0/10`. Tilt's `istio-egress-network-policies` resource applied the
+edit. The other `istio-egress` policies (DNS, istiod, Jaeger OTLP and ingress
+from the two approved callers) are unchanged and allow no 443 egress.
+
+IPv6 (step 2) does not apply: the Kubernetes Service is `IPv4` only, and the
+node's pod CIDR is `192.168.0.0/24`. A dual-stack environment needs a
+matching IPv6 rule, and the static check rejects any IPv6 `ipBlock` on 443
+until its exclusions are added to the check.
+
+This bounds where the gateway can connect. It does not tell the gateway which
+workload is calling; per-caller egress identity remains deferred (contested
+issue #9). Calico enforces `ipBlock.except` locally, after Service DNAT. R1
+qualifies this control with "where the hosting environment supports them".
+A hosted CNI must also enforce `except` after DNAT, or the exclusions are
+ineffective there.
+
+### Static check
+
+`scripts/guardrails/verify-static-security-manifests.sh` now runs
+`scan_istio_egress_private_destination_contract` over every checked-in
+manifest under `kubernetes/` that declares a NetworkPolicy. It treats every
+policy in `istio-egress` as selecting the gateway, because that namespace hosts
+only the gateway. A rule allows 443 if it has no ports, a port without a
+number, a named port, `443` or a range covering 443. The check fails if such a
+rule has no peers, has a pod or namespace selector peer, or has an `ipBlock`
+whose allowed addresses overlap any of the five ranges. It also requires the
+external policy to be exactly the rule above, and it requires the egress
+gateway chart's `networkPolicy.enabled` not to be true. `--self-test` rejects
+four fixtures under `tests/security-guardrails/fixtures/fail/`: the old
+port-only rule, a missing `100.64.0.0/10` exception, an additive policy
+allowing `10.96.0.0/12` on 443, and an additive `400`–`500` port range to a
+namespace selector. An ad-hoc run with `10.0.0.0/9` in place of `10.0.0.0/8`
+reported the `10.128.0.0/9` gap.
+
+### Live proof from the gateway pod
+
+`curl -sk --connect-timeout 3` from the real gateway pod
+`istio-egress-gateway-7d479bdcc9-zbg6q` (`192.168.82.60`):
+
+| Target | Before | After |
+| --- | --- | --- |
+| `10.96.0.1:443` (Kubernetes API Service) | timeout (28) | timeout (28) |
+| `172.18.0.2:6443` (apiserver endpoint) | timeout (28) | timeout (28) |
+| `192.168.82.18:443` (Istio ingress gateway pod) | connected, TLS error (35) | timeout (28) |
+| `10.96.74.43:443` (Istio ingress Service) | connected, TLS error (35) | timeout (28) |
+| `172.18.0.2:30443` (ingress NodePort on the node) | connected, TLS error (35) | timeout (28) |
+| `172.18.0.1:443` (Kind/Docker host) | not tested | timeout (28) |
+| `169.254.169.254:443` (metadata address) | not tested | timeout (28) |
+| `api.stlouisfed.org:443` | `301` | `301` |
+| Auth0 tenant `/.well-known/openid-configuration` | not tested | `200` |
+
+The Kubernetes API Service was already unreachable before the change.
+It DNATs to `172.18.0.2:6443`, and the port-only rule never allowed 6443. The
+real gap was any private listener on 443. The Istio ingress gateway, which
+accepts 443 from any source, was reachable through its pod IP, Service and
+NodePort, and now is not.
+
+`verify-network-policies.sh` has a new section that runs from its
+`istio=egress-gateway` probe. It asserts the Kubernetes API Service and the
+live Istio ingress gateway pod are denied on 443, and that
+`api.stlouisfed.org:443` (override: `PHASE2_PUBLIC_EGRESS_HOST`) still
+connects.
+
+### External integrations
+
+- Auth0: `../budget-analyzer-api-tests/.venv/bin/python
+  scripts/smoketest/verify-oauth-browser-binding.py` completed a real hosted
+  login with the disposable local API-test credentials. The callback completed
+  in the initiating browser, then user read, heartbeat and logout passed. The
+  gateway's Envoy clusters showed 12 upstream connections to the Auth0 tenant,
+  all to public addresses, with 0 connect failures.
+- FRED: a disposable 300-second session with `currencies:read,currencies:write`
+  was seeded through `redis-ops`. `POST /api/v1/exchange-rates/import` through
+  the HTTPS ingress returned `200` for THB and JPY in 1.46 s, with no new
+  records because the data was current. The gateway's
+  `outbound|443||api.stlouisfed.org` connection count went from 1 to 2, to
+  `23.199.152.194`, with 0 connect failures. The session was deleted, and a
+  request with it then returned `401`.
+
+### Validation
+
+- `bash -n` and `shellcheck` on `verify-static-security-manifests.sh` and
+  `verify-network-policies.sh`: clean.
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`:
+  passed, including the new scan; `--self-test`: passed.
+- `./scripts/guardrails/verify-production-image-overlay.sh`: passed. The
+  production reference renders no NetworkPolicies, so it is unaffected.
+- `./scripts/smoketest/verify-network-policies.sh`: 72 passed (out of 72).
+- `./scripts/smoketest/verify-istio-ingress.sh`: 98 passed (out of 98).
+
+### Limitations
+
+- The live denial for the ingress pod depends on that pod accepting 443 from
+  any source; the before/after table, not the verifier, shows that it did.
+- The exclusion list is the plan's five ranges. Other non-public ranges such
+  as `0.0.0.0/8`, `198.18.0.0/15` or multicast are not excluded.
+- The static check covers checked-in Kubernetes NetworkPolicies and the
+  gateway chart toggle. It does not inspect Calico `GlobalNetworkPolicy`,
+  `AdminNetworkPolicy` or live drift.
+- Only the local stack was exercised; no hosted environment exists.
+- Local reset: none required.
+
+## Plan 04, Phase 3: PostgreSQL Server-Side TLS
+
+Date: 2026-11-08. Live phase against the local Tilt/Kind stack, with Tilt
+running from this worktree. `./scripts/bootstrap/check-local-runtime.sh` and
+the `kind-kind` checks passed before the cluster mutation. No credential value
+is recorded here.
+
+### Finding
+
+The running server's `PGDATA/pg_hba.conf` ended with `host all all all
+scram-sha-256`. The image entrypoint appends that line on first init.
+`statefulset.yaml` only chose the method through `--auth-host`, which confirms
+R3's correction of R2's citation. Clients used `sslmode=verify-full`, but the
+server would also accept a client that did not request TLS. Before the change,
+`verify-transport-encryption.sh` with the new negative check failed:
+`sslmode=disable` from a pod in `default` logged in as `transaction_service`.
+
+### Change
+
+- New `kubernetes/infrastructure/postgresql/hba-configmap.yaml`
+  (`postgresql-hba`) holds a `pg_hba.conf` with one `local` SCRAM rule and
+  `hostssl` SCRAM rules for `0.0.0.0/0` and `::/0`. It has no `host` or
+  replication rules. It is a separate ConfigMap because `postgresql-init` is
+  mounted whole into `/docker-entrypoint-initdb.d`.
+- `statefulset.yaml` mounts it read-only at `/etc/postgresql-hba` and adds
+  `-c hba_file=/etc/postgresql-hba/pg_hba.conf`. Using `hba_file` means the
+  rules reach the existing volume; `PGDATA/pg_hba.conf` is written only at
+  first init, and the server now ignores it. The entrypoint passes the same
+  arguments to its temporary init server, which listens only on the Unix
+  socket, so first init uses the `local` rule.
+- `kubernetes/infrastructure/kustomization.yaml` lists the ConfigMap, so the
+  production reference render includes it. The `postgresql` resource in the
+  `Tiltfile` groups it.
+- `verify-transport-encryption.sh` now runs `sslmode=disable` from its
+  disposable probe pod. The check passes only if the connection fails with
+  `no pg_hba.conf entry`. The existing `verify-full` checks remain.
+
+### Live proof
+
+- After the rollout, `pg_hba_file_rules` showed only the three rules, and
+  `SHOW hba_file` returned the ConfigMap path. The pod was Ready with 0
+  restarts.
+- Probes: the readiness and liveness commands use `-h 127.0.0.1` with the
+  default `sslmode=prefer`. A probe-style session reported `ssl = t`,
+  `TLSv1.3`. Loopback `sslmode=disable` was refused: `no pg_hba.conf entry for
+  host "127.0.0.1" ... no encryption`.
+- Tilt port-forward: a raw non-TLS startup message to `127.0.0.1:5432` on the
+  VM returned SQLSTATE `28000`, `no pg_hba.conf entry ... no encryption`.
+- `scripts/ops/reset-databases.sh` connects over the Unix socket. A full reset
+  with `y` dropped and recreated all three databases. A rollout restart of the
+  three services then re-ran Flyway over TLS: 25 successful migrations in
+  `budget_analyzer`, 8 in `currency` and 3 in `permission`.
+- Each service held 10 pooled connections, all with `pg_stat_ssl.ssl = t`.
+  The only non-TLS session was the admin query over the Unix socket.
+- Requests: a disposable 300-second session with `transactions:read`,
+  `currencies:read` and `users:read` was seeded through `redis-ops`. Through
+  the HTTPS ingress, `GET /api/v1/transactions`, `/api/v1/currencies` and
+  `/api/v1/users` each returned `200`. After the session was deleted, a request
+  with it returned `401`.
+
+### Validation
+
+- `bash -n` and `shellcheck` on `verify-transport-encryption.sh`: clean.
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`:
+  passed.
+- `./scripts/guardrails/verify-production-image-overlay.sh`: passed. The
+  production infrastructure render contains `postgresql-hba` and the
+  `hba_file` argument.
+- `./scripts/smoketest/verify-transport-encryption.sh`: 19/19, with nested
+  `verify-credential-isolation.sh` 78/78 and `verify-network-policies.sh`
+  72/72.
+- `./scripts/smoketest/verify-runtime-hardening.sh --skip-regressions`:
+  173/173.
+
+### Limitations
+
+- `hostssl` rejects plaintext but does not check client certificates. Server
+  authentication still depends on clients using `verify-full`, and nothing on
+  the server enforces that.
+- The Unix socket is not encrypted. It is reachable only inside the pod.
+- Changing the ConfigMap does not restart the pod. Restart it or reload
+  PostgreSQL after an edit.
+- No static guardrail checks the `pg_hba.conf` contents; the live verifier is
+  the regression check.
+- Only the local stack was exercised; no hosted environment exists.
+- Local reset: none required. An existing cluster picks up the change on the
+  rollout. The full `reset-databases.sh` run here was a validation step.
+
+## Plan 04, Phase 4: Supported RabbitMQ Series and Support-Date Report
+
+Date: 2026-11-08. Live phase against the local Tilt/Kind stack, with Tilt
+running from this worktree. `./scripts/bootstrap/check-local-runtime.sh` and
+the `kind-kind` checks passed before each cluster mutation. No credential value
+is recorded here.
+
+### Finding
+
+- The previous pin, `rabbitmq:3.13-management@sha256:e582c0bc…`, ran RabbitMQ
+  `3.13.7` on Erlang/OTP `26.2.5.16` (`rabbitmq-diagnostics server_version` in
+  the running pod). This confirms the R2 claim that R3 and R4 could not.
+- The [release table](https://www.rabbitmq.com/release-information), read on
+  2026-11-08, gives 3.13 a community support end of 2024-09-30. Commercial
+  support runs to 2029-12-31 but needs a license, which this project does not
+  hold. So 3.13 was unsupported here, as R3 and R4 concluded.
+- The same table listed 4.4 (4.4.0, community support to 2027-07-31) and 4.3
+  (community support to 2027-01-31) as the only series still in community
+  support. 4.4 is the newest.
+- The 3.13 broker had no policies or operator policies, and
+  `rabbitmqctl list_deprecated_features --used` was empty: no classic mirrored
+  queues, transient non-exclusive queues or global QoS. Its two queues were
+  durable classic queues declared by `currency-service`'s Spring Cloud Stream
+  binder. The boot-time definitions in the `Tiltfile` contain only users, the
+  vhost and permissions. Neither the checked-in configuration nor
+  `../currency-service/src/main/resources/application.yml` sets `ha-*`
+  arguments or a queue type.
+
+### Change
+
+- `kubernetes/infrastructure/rabbitmq/statefulset.yaml` now pins
+  `rabbitmq:4.4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407`.
+  This index digest is the same one `4.4.0-management` points to. Its
+  `linux/arm64` (`sha256:d8b4bcab…`) and `linux/amd64` (`sha256:9f48a2c0…`)
+  image configs both set `RABBITMQ_VERSION=4.4.0`.
+- `rabbitmq.conf`, the definitions, Service and security context are
+  unchanged. 4.4.0 booted with them; the config loader rejects unknown keys,
+  and there were no configuration errors. The 4.4.0 release notes list no
+  breaking change that applies to this configuration or to AMQP 0-9-1 use by
+  `currency-service`.
+- `scripts/lib/image-pinning-targets.txt` already lists the StatefulSet. No
+  inventory entry changed.
+- New `scripts/lib/runtime-support-windows.txt` records, for each runtime line
+  in the quarterly review plus PostgreSQL and Redis, the selected line, its
+  support end date, where it is selected and the upstream source. All sources
+  were read on 2026-11-08.
+- New `scripts/repo/report-runtime-support-windows.sh` reads that file with no
+  network access and prints `PAST` and `DUE` (within 90 days) lines. It exits
+  `1` when anything is flagged and `2` for malformed input.
+  `docs/dependency-automation.md#operator-routine` names it in the quarterly
+  review. No CI, release or Renovate workflow runs it.
+- Docs: `docs/development/local-environment.md` (the series, the mirroring
+  check and the one-time reset), `docs/runbooks/tilt-debugging.md` (the
+  symptom of an un-reset volume), `docs/architecture/system-overview.md`
+  (`RabbitMQ 4.x`) and `scripts/README.md`.
+
+### Old volume and reset
+
+- When Tilt rolled 4.4.0 onto the existing 3.13 volume, the pod became Ready.
+  It enabled the 4.x feature flags and migrated metadata from Mnesia to
+  Khepri, but both classic queues crashed during recovery with `case_clause`
+  in `rabbit_classic_queue_index_v2:recover/4` before restarting empty. A
+  direct 3.13-to-4.4 upgrade is not a supported path, so this state is not
+  trusted.
+- As the plan requires, the volume was recreated rather than upgraded: scale
+  the StatefulSet to `0`, delete `rabbitmq-data-rabbitmq-0`, scale to `1`. No
+  feature flags were enabled on 3.13 and no intermediate version was used.
+  `docs/development/local-environment.md#backend-services-spring-boot`
+  documents the same one-time reset for other existing local clusters.
+- On the fresh volume, the broker reported RabbitMQ `4.4.0` on Erlang/OTP
+  `29.1.2`, all feature flags enabled, 0 restarts and three expected warnings:
+  single-node peer discovery, the intentionally disabled metrics collector,
+  and index creation for a new message store. `classic_queue_mirroring` is
+  reported as `removed`, and `list_deprecated_features --used` is empty.
+- Users `rabbitmq-admin` and `currency-service` and their permissions were
+  re-imported from the boot-time definitions. Listeners: `5671` `amqp/ssl`,
+  `15672` management, `15692` Prometheus and `25672` clustering. No `5672`
+  listener exists.
+- `currency-service` reconnected without a restart over TLS 1.3, redeclared
+  both durable classic queues and attached one consumer.
+
+### Messaging
+
+A disposable 300-second session with `currencies:read,currencies:write` was
+seeded through `redis-ops`. Through the HTTPS ingress with normal TLS
+verification, `PUT /api/v1/currencies/11` with `enabled: true` (JPY was
+disabled) returned `200`. Under one correlation ID, currency-service logged the
+`CurrencyUpdatedEvent` and `Successfully published exchange rate import
+requested message`. Per the publisher contract, that line means the broker
+acked and routed the message. The consumer then logged `Exchange rate import
+completed: currencyCode=JPY, new=13994`, 16 seconds after the request.
+`GET /api/v1/exchange-rates?targetCurrency=JPY` returned `200`. The series
+was then set back to disabled (`200`), leaving the queue and the DLQ at 0
+messages. After the session was deleted, a request with it returned `401`.
+
+### Support-date report
+
+`./scripts/repo/report-runtime-support-windows.sh` on 2026-11-08 flagged 2 of
+12 lines and exited `1`:
+
+- `PAST NGINX 1.29`: support ended 2026-04-14, 208 days earlier. The
+  `nginx-gateway` deployment and the `budget-analyzer-web` Dockerfile pin
+  `nginx-unprivileged:1.29.8-alpine`. 1.29.8 (2026-04-07) was the last 1.29
+  release. The branch closed when 1.30.0 stable shipped, and the 2026-09 and
+  2026-10 security fixes are only in 1.30 stable and 1.31 mainline.
+- `DUE Istio 1.30`: upstream expects end of life around December 2026
+  (recorded as 2026-12-01), 23 days away.
+
+Fixture runs confirmed the boundaries: 90 days is `DUE`, 91 days is not
+flagged, the end date itself is `DUE` and the next day is `PAST`. Empty
+columns, impossible dates, non-HTTPS sources, space-separated rows, an empty
+inventory, an invalid `--as-of` and unknown arguments all exit `2`.
+`--as-of 2025-12-01` flags nothing and exits `0`.
+
+### Validation
+
+- `bash -n` and `shellcheck` on `report-runtime-support-windows.sh`: clean.
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`:
+  passed, with an image-pinning check of 59 refs.
+- `./scripts/guardrails/verify-production-image-overlay.sh`: passed. The
+  production infrastructure render contains the 4.4 pin.
+- `./scripts/smoketest/verify-transport-encryption.sh`: 19/19, with nested
+  `verify-credential-isolation.sh` 78/78 and `verify-network-policies.sh`
+  72/72. The RabbitMQ checks cover hostname-validated TLS, rejection of a
+  wrong CA and wrong hostname, the `5671` `amqp/ssl` listener and no `5672`.
+- `./scripts/smoketest/verify-runtime-hardening.sh --skip-regressions`:
+  173/173, including the RabbitMQ UID/GID `999`, read-only root and mount
+  checks.
+
+### Limitations
+
+- The report is only as current as the inventory. A person must re-check the
+  sources each quarter. Go 1.27 and Istio 1.30 dates are estimates from
+  upstream policy. For month-only dates (Java, Python, Ubuntu, Istio), the
+  first day of the month is recorded.
+- The report does not compare its lines with the pins, so drift between the
+  inventory and a changed pin is caught only by review.
+- The NGINX 1.29 and Istio 1.30 findings are reported, not fixed. They are
+  outside this phase and need their own upgrade work. The NGINX image is also
+  selected in `budget-analyzer-web`.
+- 4.4 community support ends 2027-07-31, so the next series move is due
+  within a year. Renovate's stateful-workload rule requires Dashboard approval
+  for RabbitMQ updates.
+- Only the local stack was exercised; no hosted environment exists.
+- Local reset: required once for any cluster whose RabbitMQ volume was created
+  by 3.13. Queued messages are discarded, and the definitions and
+  reconciliation imports restore everything else.

@@ -95,6 +95,8 @@ spec:
             - ssl_cert_file=/tls/server.crt
             - -c
             - ssl_key_file=/tls/server.key
+            - -c
+            - hba_file=/etc/postgresql-hba/pg_hba.conf
           resources:
             requests:
               memory: 256Mi
@@ -127,6 +129,9 @@ spec:
               mountPath: /tmp
             - name: postgresql-ca
               mountPath: /tls-ca
+              readOnly: true
+            - name: postgresql-hba
+              mountPath: /etc/postgresql-hba
               readOnly: true
           livenessProbe:
             exec:
@@ -167,6 +172,9 @@ spec:
         - name: postgresql-ca
           secret:
             secretName: infra-ca
+        - name: postgresql-hba
+          configMap:
+            name: postgresql-hba
   volumeClaimTemplates:
     - metadata:
         name: postgresql-data

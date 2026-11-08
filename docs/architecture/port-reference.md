@@ -18,7 +18,7 @@
 | 5006 | Transaction Service JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
 | 5007 | Currency Service JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
 | 5009 | Session Gateway JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
-| 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients) | Internal (services only) |
+| 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients; server refuses non-TLS TCP) | Internal (services only) |
 | 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
@@ -183,7 +183,8 @@ kubectl get svc --all-namespaces | grep <port>
 - The caller matrix below applies to pod-to-pod traffic only and is enforced by pod-label-scoped allowlists
 - Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this pod-to-pod allowlist boundary
 - `session-gateway` and `currency-service` egress is constrained to the rendered Istio egress gateway pods only (`app: istio-egress-gateway`, `istio: egress-gateway`) in the `istio-egress` namespace; the gateway handles approved external traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts
-- Infrastructure transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full`, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
+- The egress gateway's own TCP 443 egress excludes the private, link-local and carrier-grade NAT ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `100.64.0.0/10`), so it reaches only public destinations on 443
+- Infrastructure transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full` and the server accepts TCP only through `hostssl` rules, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
 
 **Approved pod-to-pod callers per protected port**:
 

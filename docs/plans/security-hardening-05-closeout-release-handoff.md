@@ -1,6 +1,6 @@
 # Security Hardening 05: Closeout and Release Handoff
 
-**Status:** Draft for iteration. Do not run until D5 and D6 are settled.
+**Status:** Draft for iteration.
 
 This is plan 05 of five that together implement every finding from the four 2026-11-01 security
 reviews that holds up against the code and that no review disputes, with the decisions in the
@@ -38,7 +38,8 @@ that part.
 
 The accepted decisions in the contested issues document extend or supersede that original set.
 The table below covers the final scope, including those additions; item 25 remains explicitly
-deferred and is excluded from implementation acceptance.
+deferred, and item 29 is an accepted risk (plan 04, D5). Both are excluded from implementation
+acceptance.
 
 `01.1` means plan 01, Phase 1.
 
@@ -72,8 +73,8 @@ deferred and is excluded from implementation acceptance.
 | 26 | Set a measured Redis memory budget; no `allkeys-lru` on auth data | All four | 04.1 |
 | 27 | Exclude private destinations from the egress gateway | R1, R3 | 04.2 |
 | 28 | Require TLS on the PostgreSQL server side | R2, R3, R4 | 04.3 |
-| 29 | Separate migration roles from runtime roles | R2, R4 | 04.4 |
-| 30 | Move to a supported RabbitMQ series; report runtime support dates | R2, R3, R4; R2 | 04.5 |
+| 29 | Separate migration roles from runtime roles | R2, R4 | Not implemented; accepted risk per plan 04, D5; recorded in 05.3 |
+| 30 | Move to a supported RabbitMQ series; report runtime support dates | R2, R3, R4; R2 | 04.4 |
 | 31 | Test the edge contract across layers, including forged headers with no permissions | R2, R3, R4; contested #1 | 01.1, 01.2, 01.3, 01.4, 01.5, 02.16, 05.1, 05.3 |
 | 32 | Share NGINX API routes between local and production-reference configurations | Contested #12 | 01.3 |
 | 33 | Reject decoded semicolons on the NGINX lane | Contested #3 | 01.3 |
@@ -92,8 +93,7 @@ and an account generation check for immediate containment.
 
 | # | Decision | Recommendation | Why it matters | Status |
 | --- | --- | --- | --- | --- |
-| D5 | Where the migration credential lives | In the service pod, as a separate credential | This stops DDL through the runtime connection, including SQL injection. It does not stop code execution in the pod, which can read both credentials. An out-of-process migrator would, at much higher cost. | Open |
-| D6 | Audit event coverage | State-changing requests and the session lifecycle | The docs claim audit logging of data access. Auditing reads adds volume and no review requires it, so Phase 3 narrows the claim instead. | Open |
+| D6 | Audit event coverage | State-changing requests and the session lifecycle | The docs claim audit logging of data access. Auditing reads adds volume and no review requires it, so Phase 3 narrows the claim instead. | Settled and implemented by [plan 03](security-hardening-03-service-runtime.md) |
 
 ## Plan-wide rules
 
@@ -273,8 +273,12 @@ Phase 2 (amended per contested #6: the PDF phase was dropped).
    unresolved failure blocks successful closeout; record its owner and rerun the affected gate after
    the fix.
 2. Confirm the plan 01, Phase 1 probes still fail after every later change.
-3. Update the audit claims at `security-architecture.md:176` and `:451` to describe plan 03, Phase 5's events
-   and D6's scope.
+3. Update the audit claims in `docs/architecture/security-architecture.md` to describe the events
+   from plan 03, Phases 5 and 9 and its review remediation, and D6's scope: state-changing requests
+   and the session lifecycle, not reads. The claims are the "Audit logging of data access" bullet
+   under "4. Backend Microservices", the "Audit logging of sensitive data access" bullet under
+   "Layer 3: Backend Services", and the "Audit Logging (Required for Financial Data)" list and its
+   `data_access` read example under "Logging Strategy". Search for `audit` to catch any others.
 4. Confirm no doc in the scope table still contradicts the code.
 5. Record the human-owned handoff: release service-common, then session-gateway, ext-authz, the three
    services and the frontend, and update `kubernetes/production/apps/deployment-manifest.yaml` and
@@ -282,11 +286,11 @@ Phase 2 (amended per contested #6: the PDF phase was dropped).
    Session Gateway's login call. (amended per user direction)
    Also record that the production reference supports only a deployment that starts from empty state;
    no upgrade path from the pinned images or existing data is provided.
-6. Note the production secrets and configuration added by plans 02.2, 02.4 and 02.6 and plan 04,
-   Phase 4.
-7. Link passing evidence for every non-deferred scope item, including additions 32-38, and note
-   every accepted remaining gap: Session Gateway client address, audit retention and access,
-   anonymous OAuth-state growth, and the migrator credential's location. (amended per contested #2,
+6. Note the production secrets and configuration added by plans 02.2, 02.4 and 02.6.
+7. Link passing evidence for every scope item other than items 25 and 29, including additions
+   32-38, and note every accepted remaining gap: Session Gateway client address, audit retention
+   and access, anonymous OAuth-state growth, and runtime database roles that own their schemas with
+   no separate migration role (plan 04, D5). (amended per contested #2,
    #6 and #7) Also record unbounded upload processing as a known availability
    limitation of the single-replica transaction-service, without presenting any current setting as
    a capacity bound; key-name visibility to the currency-service credential as residual metadata
@@ -306,7 +310,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 
 ### Completion criteria
 
-Every non-deferred scope item in the final table has recorded passing evidence, the local API suite
-and aggregate smoketest pass, and the release handoff is explicit. Item 25 stays deferred per
-contested #6. Accepted limitations are documented separately; unresolved verification failures
+Every scope item in the final table other than items 25 and 29 has recorded passing evidence, the
+local API suite and aggregate smoketest pass, and the release handoff is explicit. Item 25 stays
+deferred per contested #6, and item 29 stays an accepted risk per plan 04, D5. Accepted limitations are documented separately; unresolved verification failures
 block successful closeout.

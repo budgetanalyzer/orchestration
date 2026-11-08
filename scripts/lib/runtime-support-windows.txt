@@ -1,0 +1,29 @@
+# Runtime support windows for the quarterly runtime-line review in
+# docs/dependency-automation.md#operator-routine.
+# scripts/repo/report-runtime-support-windows.sh reads this file without network
+# access and prints every line whose support end date has passed or falls within
+# 90 days. A person keeps the dates current: re-check each source during the
+# quarterly review and whenever a selected line changes.
+#
+# Tab-separated columns; every column except note is required:
+#   runtime       product name
+#   line          selected release line
+#   support_end   YYYY-MM-DD, last day of free upstream support for that line;
+#                 when upstream publishes only a month, record its first day
+#   selected_in   where the line is selected (repository: path)
+#   source        upstream support page used for support_end
+#   note          how support_end was derived, when not a published day
+#
+# runtime	line	support_end	selected_in	source	note
+Spring Boot	4.1	2027-07-31	service-common, currency-service, permission-service, transaction-service, session-gateway: gradle/libs.versions.toml	https://spring.io/projects/spring-boot#support	End of OSS support; enterprise support is a commercial offering.
+Java (Eclipse Temurin)	25	2031-09-01	Java repositories: Gradle toolchain and Dockerfile eclipse-temurin:25	https://adoptium.net/support/	Upstream gives "At least Sep 2031".
+Node.js	24	2028-04-30	budget-analyzer-web: Dockerfiles node:24-alpine	https://github.com/nodejs/Release#release-schedule
+Go	1.27	2027-08-01	ext-authz: go.mod and Dockerfile golang:1.27-alpine	https://go.dev/doc/devel/release#policy	Estimate: supported until go1.29 is released; Go majors ship in February and August.
+Python	3.12	2028-10-01	ai-session-handler, budget-analyzer-api-tests: .python-version; orchestration: PyYAML guardrail venv	https://devguide.python.org/versions/	Upstream schedules end of life for 2028-10.
+Ubuntu	24.04 LTS	2029-05-01	GitHub Actions runs-on ubuntu-24.04; workspace development VM	https://ubuntu.com/about/release-cycle	Standard security maintenance ends May 2029; ESM requires Ubuntu Pro.
+Kubernetes	1.35	2027-02-28	orchestration: kind-cluster-config.yaml kindest/node	https://kubernetes.io/releases/
+Istio	1.30	2026-12-01	orchestration: Tiltfile and scripts/lib/production-version-contract.sh	https://istio.io/latest/docs/releases/supported-releases/	Upstream expects end of life around Dec 2026 (6 weeks after 1.32).
+RabbitMQ	4.4	2027-07-31	orchestration: kubernetes/infrastructure/rabbitmq/statefulset.yaml	https://www.rabbitmq.com/release-information	Community support end; commercial support needs a license.
+NGINX	1.29	2026-04-14	orchestration: kubernetes/services/nginx-gateway/deployment.yaml; budget-analyzer-web: Dockerfile nginx-unprivileged:1.29.8-alpine	https://nginx.org/en/download.html	Mainline 1.29 ended when 1.30.0 stable was released (https://nginx.org/en/CHANGES-1.30); fixes ship only in 1.30 stable and 1.31 mainline.
+PostgreSQL	16	2028-11-09	orchestration: kubernetes/infrastructure/postgresql/statefulset.yaml	https://www.postgresql.org/support/versioning/
+Redis	7.4	2029-12-01	orchestration: kubernetes/infrastructure/redis/statefulset.yaml redis:7-alpine	https://redis.io/docs/latest/operate/oss_and_stack/install/version-mgmt/	The 7 tag floats within major 7; the pinned digest runs 7.4.

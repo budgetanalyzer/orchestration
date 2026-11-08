@@ -5,6 +5,7 @@ namespace: infrastructure
 resources:
   - namespace.yaml
   - postgresql/configmap.yaml
+  - postgresql/hba-configmap.yaml
   - postgresql/service.yaml
   - postgresql/statefulset.yaml
   - rabbitmq/configmap.yaml

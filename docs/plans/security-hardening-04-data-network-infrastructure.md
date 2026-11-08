@@ -1,13 +1,13 @@
 # Security Hardening 04: Data, Network and Infrastructure
 
-**Status:** Draft for iteration. Do not run until D5 is settled.
+**Status:** Draft for iteration.
 
 This is plan 04 of five that together implement every finding from the four 2026-11-01 security
 reviews that holds up against the code and that no review disputes, with the decisions in the
 [contested issues](../research/security-review-contested-issues-2026-11-02.md) document applied.
 This plan sets a measured Redis memory budget, excludes private destinations from the egress
-gateway, requires TLS on the PostgreSQL server side, separates migration roles from runtime roles,
-and moves to a supported RabbitMQ series.
+gateway, requires TLS on the PostgreSQL server side, and moves to a supported RabbitMQ series. It
+does not separate migration roles from runtime roles; D5 records that as an accepted risk.
 Phase numbers without a plan refer to this plan.
 
 **Order:** 04 of 5
@@ -30,7 +30,7 @@ so its silence on those findings is not agreement or disagreement.
 
 | # | Decision | Recommendation | Why it matters | Status |
 | --- | --- | --- | --- | --- |
-| D5 | Where the migration credential lives | In the service pod, as a separate credential | This stops DDL through the runtime connection, including SQL injection. It does not stop code execution in the pod, which can read both credentials. An out-of-process migrator would, at much higher cost. | Open |
+| D5 | Where the migration credential lives | No separate migration role. Each runtime role keeps owning its database and runs Flyway; record this as an accepted risk | Flyway runs at startup, so a migrator credential in the service pod is readable by any code execution there. Against SQL injection it would block only owner-only actions such as DDL, triggers and functions, while the runtime role's DML can already read and delete all data, and the services' SQL is parameterized. An out-of-process migrator, as an init container or Job, would separate the credentials, but it adds an image, Flyway version coupling and rollout ordering for little gain; it is deferred. | Decided |
 
 ## Plan-wide rules
 
@@ -45,8 +45,10 @@ so its silence on those findings is not agreement or disagreement.
 - Treat review claims as leads. Re-check them against the code before relying on them.
 - Before any cluster mutation, apply the `kind-kind` checks in the orchestration `AGENTS.md`.
 - Phases marked **Live** need a running stack. In orchestration phases, run
-  `./scripts/bootstrap/check-local-runtime.sh` and `tilt up`. If the stack cannot be started, stop
-  and report; do not substitute static evidence.
+  `./scripts/bootstrap/check-local-runtime.sh` and confirm with `tilt get uiresources` that Tilt is
+  running and healthy, and that the `tilt up` process's working directory
+  (`readlink /proc/<pid>/cwd`) is this worktree. Start `tilt up` only if it is not running. If the stack
+  cannot be started, stop and report; do not substitute static evidence.
 - Do not edit `docs/decisions/` or `docs/archive/`.
 - Do not edit this plan during a run, because the runner stops launching phases when it changes.
 - Record measurements and results in `docs/research/security-consensus-hardening-evidence.md`. A
@@ -71,7 +73,7 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 - [Settled by checking the code](../research/security-review-contested-issues-2026-11-02.md#settled-by-checking-the-code):
   the 70–75% `maxmemory` figure is discarded, so Phase 1 keeps its measurement requirement. The
   PostgreSQL rejection test stands (Phase 3). RabbitMQ 3.13 is out of community support, so verify
-  the target series' support at implementation time (Phase 5).
+  the target series' support at implementation time (Phase 4).
 
 ## Phase 1: Set an explicit Redis memory budget (Live)
 
@@ -86,7 +88,8 @@ Replace unbounded Redis memory with a measured budget that keeps auth data out o
 ### Scope
 
 `kubernetes/infrastructure/redis/start-redis.sh`, the pod limit only if measurement requires it, and
-`docs/architecture/security-architecture.md:639`.
+the `Eviction policy: allkeys-lru` line under "Session Management" in
+`docs/architecture/security-architecture.md`.
 
 ### Non-goals
 
@@ -159,7 +162,8 @@ R1 "Treat egress controls as layered containment"; `kubernetes/istio/egress-rout
    `0.0.0.0/0` that excepts `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` and
    `100.64.0.0/10`. Keep port 443.
 2. Cover IPv6 the same way if the cluster has it.
-3. Add a static check for the exclusions.
+3. Add a static check for the exclusions. NetworkPolicies are additive, so the check must also fail
+   if any other policy selecting the egress gateway allows 443 without the same exclusions.
 4. Prove from the gateway pod that the Kubernetes API service is unreachable on 443.
 5. Confirm a real login reaches Auth0 and a currency import reaches FRED.
 
@@ -229,65 +233,7 @@ services start and serve requests.
 
 A plaintext connection is refused by the server, and every service still connects.
 
-## Phase 4: Separate migration roles from runtime roles (Live)
-
-### Workspace
-
-.
-
-### Goal
-
-Stop each service's runtime database role from owning its database or changing its schema.
-
-### Scope
-
-`kubernetes/infrastructure/postgresql/configmap.yaml`, the three service deployments, `Tiltfile`,
-`scripts/lib/secrets-only-expected-keys.txt`, `scripts/ops/`, a runtime check, and the nearest docs.
-
-### Non-goals
-
-An out-of-process migrator, per D5, and service code.
-
-### Required context
-
-R2 finding H; `scripts/ops/reset-databases.sh`; `kubernetes/production/README.md`.
-
-### Execution steps
-
-1. For each database, add a `<service>_migrator` role that owns the database and schema. Reduce the
-   runtime role to `SELECT`, `INSERT`, `UPDATE` and `DELETE` on tables and `USAGE, SELECT` on
-   sequences, with `ALTER DEFAULT PRIVILEGES` so new tables stay reachable.
-2. Update `01-init-databases.sh` and `scripts/ops/reset-databases.sh`.
-3. (amended per user direction) Reset existing volumes with the
-   updated `scripts/ops/reset-databases.sh`, or by recreating the PostgreSQL volume, and document that
-   one-time reset for existing local clusters. Do not add an ownership-migration script.
-4. Add the migrator credentials to the Tiltfile, the bootstrap secret and
-   `secrets-only-expected-keys.txt`.
-5. Set `SPRING_FLYWAY_USER` and `SPRING_FLYWAY_PASSWORD` on the three deployments.
-6. Add a runtime check that each runtime role is refused `CREATE TABLE`, `ALTER TABLE` and
-   `DROP TABLE`, and that normal reads and writes work.
-7. Update the production secrets contract in `kubernetes/production/README.md`.
-
-### Implementation notes
-
-- (amended per user direction) Init scripts run
-  only on an empty data directory, so an existing volume must be reset (step 3).
-- All three services set `ddl-auto: validate`, and their schemas come from Flyway, so the runtime
-  role needs no DDL. Confirm that the Spring Modulith tables in currency-service came from Flyway.
-- Spring Boot binds the two environment variables, so no service change should be needed. Confirm
-  that Flyway connects as the migrator.
-- Record D5's limit in the evidence file.
-
-### Validation
-
-Orchestration static gate, the new runtime check, and a clean `scripts/ops/reset-databases.sh` run
-after which all three services migrate and serve requests.
-
-### Completion criteria
-
-No runtime role owns a database or can change a schema, and migrations still run at startup.
-
-## Phase 5: Move to a supported RabbitMQ series and report support dates (Live)
+## Phase 4: Move to a supported RabbitMQ series and report support dates (Live)
 
 ### Workspace
 

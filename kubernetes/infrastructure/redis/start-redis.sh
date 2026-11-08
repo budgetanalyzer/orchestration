@@ -15,6 +15,8 @@ EOF
 
 exec redis-server \
   --appendonly yes \
+  --maxmemory 128mb \
+  --maxmemory-policy noeviction \
   --aclfile "$ACL_FILE" \
   --dir /data \
   --tls-port 6379 \

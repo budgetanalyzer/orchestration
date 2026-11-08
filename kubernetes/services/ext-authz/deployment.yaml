@@ -74,18 +74,18 @@ spec:
             cpu: "200m"
         startupProbe:
           httpGet:
-            path: /healthz
+            path: /livez
             port: 8090
           periodSeconds: 2
           failureThreshold: 5
         readinessProbe:
           httpGet:
-            path: /healthz
+            path: /readyz
             port: 8090
           periodSeconds: 5
         livenessProbe:
           httpGet:
-            path: /healthz
+            path: /livez
             port: 8090
           periodSeconds: 10
       volumes:

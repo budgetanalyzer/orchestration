@@ -124,18 +124,18 @@ spec:
             cpu: "500m"
         startupProbe:
           httpGet:
-            path: /currency-service/actuator/health
+            path: /currency-service/actuator/health/liveness
             port: 8084
           periodSeconds: 5
           failureThreshold: 24  # 5s * 24 = 120s max startup time
         readinessProbe:
           httpGet:
-            path: /currency-service/actuator/health
+            path: /currency-service/actuator/health/readiness
             port: 8084
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /currency-service/actuator/health
+            path: /currency-service/actuator/health/liveness
             port: 8084
           periodSeconds: 20
       volumes:

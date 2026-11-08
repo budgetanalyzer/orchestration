@@ -87,8 +87,9 @@ kubectl get pods -l app=ext-authz
 # View ext_authz logs
 kubectl logs deployment/ext-authz
 
-# Check ext_authz health
-kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/healthz
+# Check ext_authz liveness and Redis-backed readiness
+kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/livez
+kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/readyz
 ```
 
 ### NGINX - API Gateway Layer

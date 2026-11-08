@@ -1,6 +1,6 @@
 # Security Hardening 03: Service Runtime
 
-**Status:** Draft for iteration. Do not run until D6 is settled.
+**Status:** Implemented; post-implementation review remediation is pending.
 
 This is plan 03 of five that together implement every finding from the four 2026-11-01 security
 reviews that holds up against the code and that no review disputes, with the decisions in the
@@ -18,6 +18,11 @@ Phase numbers without a plan refer to this plan.
 **Repositories:** ext-authz, service-common, transaction-service, permission-service,
 session-gateway, currency-service, orchestration.
 
+**Post-implementation review:** D6 is settled on the scope implemented here: audit
+state-changing requests and session lifecycle events, but not reads. The remaining Session
+Gateway terminal-path audit fixes and runtime-test simplifications are tracked in
+[`security-hardening-03-service-runtime-review-remediation.md`](security-hardening-03-service-runtime-review-remediation.md).
+
 | Label | Review |
 | --- | --- |
 | R1 | [First review](../research/application-architecture-security-review-2026-11-01.md) |
@@ -32,7 +37,7 @@ so its silence on those findings is not agreement or disagreement.
 
 | # | Decision | Recommendation | Why it matters | Status |
 | --- | --- | --- | --- | --- |
-| D6 | Audit event coverage | State-changing requests and the session lifecycle | The docs claim audit logging of data access. Auditing reads adds volume and no review requires it, so plan 05, Phase 3 narrows the claim instead. | Open |
+| D6 | Audit event coverage | State-changing requests and the session lifecycle | The docs claim audit logging of data access. Auditing reads adds volume and no review requires it, so plan 05, Phase 3 narrows the claim instead. | Settled |
 
 ## Plan-wide rules
 

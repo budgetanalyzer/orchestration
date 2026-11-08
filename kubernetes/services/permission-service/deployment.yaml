@@ -85,18 +85,18 @@ spec:
             cpu: "500m"
         startupProbe:
           httpGet:
-            path: /permission-service/actuator/health
+            path: /permission-service/actuator/health/liveness
             port: 8086
           periodSeconds: 5
           failureThreshold: 24  # 5s * 24 = 120s max startup time
         readinessProbe:
           httpGet:
-            path: /permission-service/actuator/health
+            path: /permission-service/actuator/health/readiness
             port: 8086
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /permission-service/actuator/health
+            path: /permission-service/actuator/health/liveness
             port: 8086
           periodSeconds: 20
       volumes:

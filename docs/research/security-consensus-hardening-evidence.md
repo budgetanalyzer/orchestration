@@ -5,6 +5,250 @@ Measurements and results recorded by the security hardening plans
 Each section names the plan and phase that produced it. Severity scores are
 intentionally not assigned.
 
+## Plan 03, Phase 2: ext-authz Probe Cutover
+
+Date: 2026-11-07. Target: local Tilt/Kind (`kind-kind`), with ext-authz built
+from the adjacent Phase 1 worktree as `ext-authz:tilt-0da52284c1efcdc2`.
+
+The deployment now uses `/livez` for startup and liveness and `/readyz` for
+Redis-backed readiness. The startup budget remains five failures at a
+two-second period (about 10 seconds); Phase 1 made `/livez` available before
+the first Redis connection attempt, so startup no longer waits for Redis.
+`kubectl rollout status deployment/ext-authz` completed, the replacement pod
+was `2/2` Ready with no restarts, the Deployment reported one available
+replica, and Tilt reported `runtime=ok` and `update=ok`.
+
+The existing Tilt process had reconciled the Phase 1 image once before this
+manifest cutover, producing one failed replacement pod whose old `/healthz`
+startup probe no longer existed. Tilt was stopped, the checked-in probes were
+updated, and a fresh `tilt up` replaced that pod through the normal
+repo-owned deployment path; no manual manifest drift was applied.
+
+Validation results:
+
+- The orchestration static security manifest verifier and production image
+  overlay verifier passed.
+- `./scripts/smoketest/verify-credential-isolation.sh` passed 77 of 77 checks,
+  including `200 ok` from both `/livez` and `/readyz`, a Ready ext-authz pod,
+  and successful seeded-session resolution through Redis credentials.
+- A seeded authenticated `GET
+  https://app.budgetanalyzer.localhost/api/v1/currencies` used normal TLS
+  verification and returned `200` with valid JSON through Istio ingress,
+  ext-authz, NGINX, and currency-service. The temporary session key was
+  deleted after the check.
+
+## Plan 03, Phase 12: Spring Probe Cutover and Dependency-Outage Drill
+
+Date: 2026-11-07. Target: local Tilt/Kind (`kind-kind`). The `kind-kind`
+checks passed before any mutation: context and cluster `kind-kind`, loopback
+HTTPS API, no kubeconfig proxy, the `kind` cluster present and
+`kind-control-plane` Ready.
+
+### Change
+
+Spring startup and liveness probes now use `<context-path>/actuator/health/liveness`.
+Readiness uses `<context-path>/actuator/health/readiness`. Session Gateway has
+no context path. Probe timings are unchanged, and ext-authz keeps `/livez` and
+`/readyz` from Phase 2. `docs/runbooks/tilt-debugging.md` lists the probe paths
+and readiness dependencies.
+
+### Runtime provenance
+
+A fresh `tilt up` ran `service-common-publish` and the four Spring compile
+resources from the adjacent worktrees, then rolled out every service.
+
+- Inside each running Spring pod, the nested `service-web-0.1.1-SNAPSHOT.jar`
+  had the same SHA-256 prefix as the Maven Local publish (`063e3a9badf28bf1`)
+  and contained `AuditLogger`.
+- Each jar's `application.yml` had the worktree readiness group:
+  - session-gateway: `readinessState,redis`
+  - transaction-service and permission-service: `readinessState,db`
+  - currency-service: `readinessState,db,redis`
+- Each jar also contained the new `application-debug-logging.yml`.
+- Each live Deployment's startup, readiness and liveness paths matched the
+  checked-in manifests.
+
+### Drill method
+
+Each dependency was interrupted by scaling its StatefulSet in `infrastructure`
+to 0 replicas for 150 seconds, then restored to the declared 1 replica. This
+was a diagnostic step, not a durable change.
+
+A seeded ext-authz session was used for the client requests. The drill sampled
+every five seconds:
+
+- Pod Ready state and per-container `restartCount` for ext-authz, the four
+  Spring services and nginx-gateway.
+- Four HTTPS ingress requests with normal TLS verification:
+  - authenticated `GET /api/v1/currencies` (`authCur`)
+  - authenticated `GET /api/v1/transactions` (`authTx`)
+  - anonymous `GET /api/v1/currencies` (`anonCur`)
+  - anonymous `GET /auth/v1/user` (`authUser`)
+
+### Redis outage
+
+Outage 21:44:24-21:46:54 UTC.
+
+- **Readiness:**
+  - ext-authz was unready within 16 s.
+  - currency-service was unready within 26 s.
+  - session-gateway was unready within 57 s. Its readiness tolerates six
+    10-second failures.
+  - transaction-service, permission-service and nginx-gateway stayed Ready.
+- **Fail-closed:**
+  - Authenticated API requests returned `503` from the first sample until
+    recovery. No `2xx` was returned.
+  - Anonymous API requests returned `401` while ext-authz was Ready, then
+    `503` once it had no endpoints.
+  - `/auth/v1/user` returned `401`, then `503` once session-gateway was
+    unready.
+- **Recovery:** after the restore, ext-authz was Ready within 16 s,
+  session-gateway within 42 s and currency-service within 47 s. All four
+  requests then returned to baseline (`200`, `200`, `401`, `401`). The seeded
+  session still resolved, confirming that Redis data survived the pod
+  replacement on its PVC.
+
+### PostgreSQL outage
+
+Outage 21:47:50-21:50:24 UTC.
+
+- **Readiness:** transaction-service, permission-service and currency-service
+  were unready within 40 s. ext-authz, session-gateway and nginx-gateway stayed
+  Ready. Session Gateway excludes permission-service from readiness by design.
+- **Client errors:** authenticated API requests first returned `500`. Until
+  the services were unready, they then hung past the 8-second client timeout,
+  which curl reports as `000`. After that they returned `503`. Anonymous API
+  requests stayed `401` and `/auth/v1/user` stayed `401`, so authorization was
+  unaffected.
+- **Recovery:** all three services were Ready, and both authenticated requests
+  returned `200`, within 26 s of the restore.
+
+### Restarts
+
+Before and after both drills, every container in the six watched pods had
+`restartCount` 0, including `istio-proxy` and init containers. Pod UIDs were
+unchanged, so nothing was replaced.
+
+The namespace had zero liveness-probe failure events. The only startup-probe
+failure events were from 21:40-21:42, during the normal JVM startup in the
+Tilt rollout, before either drill.
+
+### Validation
+
+- `verify-static-security-manifests.sh` passed, run with the hash-verified
+  PyYAML interpreter.
+- `verify-production-image-overlay.sh` passed.
+- `./scripts/smoketest/verify-credential-isolation.sh` passed 77 of 77 checks.
+- After the drills, Tilt reported every resource `ok`.
+- The seeded drill session was deleted, and a request using it then returned
+  `401`.
+
+### Limitations
+
+- A dependency outage gives clients up to about 40 seconds of `500` responses
+  and slow requests before readiness removes the pods. Probe timings were not
+  changed to shorten this.
+- Login during a PostgreSQL outage was not exercised. Session Gateway stays
+  Ready, but session creation needs permission-service.
+- The production overlays share these probe paths but pin older Spring images.
+  Spring Boot enables the liveness and readiness groups when it detects
+  Kubernetes, so the paths should resolve. The older images' readiness groups
+  do not contain the dependency members, and this was not exercised. Plan 05,
+  Phase 3 owns the pin update.
+
+## Plan 03, Phase 13: currency-service Redis Grant Narrowed to `+scan`
+
+Date: 2026-11-07. Target: local Tilt/Kind (`kind-kind`). The `kind-kind`
+checks passed before any mutation: context and cluster `kind-kind`, loopback
+HTTPS API (`https://127.0.0.1:36209`), no kubeconfig proxy, the `kind` cluster
+present and `kind-control-plane` Ready. `check-local-runtime.sh` passed.
+
+### Change
+
+`kubernetes/infrastructure/redis/start-redis.sh` drops `+keys` from the
+`currency-service` user and keeps `+scan` and `+del`. Plan 03, Phase 11 moved
+currency-service cache clearing to Spring Data Redis's `SCAN` batch strategy,
+so the service no longer issues `KEYS`. `verify-credential-isolation.sh` now
+runs `KEYS currency-service:*` as currency-service and requires a `NOPERM`
+error that names `keys`.
+`docs/development/local-environment.md` and
+`docs/architecture/security-architecture.md` describe the grant and the
+residual exposure.
+
+### Rollout
+
+Tilt's `kustomize('kubernetes/infrastructure')` watch list includes the
+kustomization's resources but not the generator input `redis/start-redis.sh`,
+so the running Tilt did not reapply `redis-acl-bootstrap` after the edit.
+`tilt trigger '(Tiltfile)'` re-rendered it, and only the `redis` resource was
+re-applied. Before the restart, the live ACL still included `+keys`. After
+`kubectl rollout restart statefulset/redis -n infrastructure`, `ACL GETUSER
+currency-service` as `redis-ops` returned:
+
+```text
+commands: -@all +get +set +del +scan +ping +auth +hello +info +ttl +pttl +expire +exists +type +object
+keys:     ~currency-service:*
+```
+
+Every `default` namespace pod stayed `2/2` Running with no restarts. After the
+restart, `ACL LOG` held only the existing `client|setinfo` handshake denials for
+`currency-service` and `ext-authz`, which the clients tolerate and which this
+phase did not change.
+
+### Live eviction proof
+
+The image was `currency-service:tilt-318a06cf93e79122`, built from the Phase 11
+worktree in Phase 12. A disposable 300-second session with
+`currencies:read,currencies:write` was seeded through `redis-ops`, and requests
+went through the HTTPS ingress. `ACL LOG RESET` ran before each attempt.
+
+| Attempt | Cache keys after warm-up | `POST /api/v1/exchange-rates/import` | Cache keys after | `ACL LOG` |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | `503`: FRED reset the connection | 1 (rolled back, no eviction) | empty |
+| 2 | 1 | `200` (THB, JPY) | 0 | empty |
+| 3 | 5 (THB and JPY, three date ranges) | `200` | 0 | empty |
+
+In attempt 1, the egress gateway opened the TLS connection to
+`api.stlouisfed.org`, and the peer reset it after the exchange. The VM could
+reach FRED directly, and the retry succeeded, so this was a transient external
+failure. Because the import threw, `@CacheEvict` did not run. The
+currency-service log had no `NOPERM` or Redis command exception during the
+proof. Each seeded session was deleted, and a request using it returned `401`.
+
+### Residual key-name exposure (accepted, contested issue #2)
+
+Redis ACL key patterns do not filter `SCAN` results. With a disposable session
+seeded, `SCAN MATCH session:*` as currency-service returned that session's
+`session:<sha256>` key. `HGETALL` on it returned `NOPERM`, and so did `KEYS *`.
+The credential can therefore list session-digest, `user_sessions:*` and
+`oauth2:state:*` key names, but it cannot read their values, and session key
+names no longer contain the reusable token. This metadata exposure is accepted.
+A Redis split remains optional and is not planned.
+
+### Validation
+
+- `bash -n` and `shellcheck` were clean on `verify-credential-isolation.sh`.
+  `bash -n`, `sh -n` and `shellcheck` were clean on `start-redis.sh`.
+- `verify-static-security-manifests.sh` passed, run with the hash-verified
+  PyYAML interpreter.
+- `verify-production-image-overlay.sh` passed.
+- Against the restarted Redis, `./scripts/smoketest/verify-credential-isolation.sh`
+  passed 78 of 78 checks, including the new
+  `currency-service denied KEYS command`.
+
+### Limitations
+
+- The production overlays share `start-redis.sh`. The production
+  currency-service image pin (0.0.15) predates Phase 11 and still clears its cache with
+  `KEYS`, so under this grant an import there would fail its eviction. Plan 05,
+  Phase 3 owns the pin update. No production environment exists.
+- Tilt not watching `start-redis.sh` is a pre-existing gap and was not changed
+  here. The local-environment guide documents the `tilt trigger '(Tiltfile)'`
+  step.
+- Local reset: none required. An existing cluster picks up the grant after the
+  ConfigMap is reapplied and Redis is restarted, as above. Redis data persists
+  on the PVC.
+
 ## Plan 01, Phase 1: Mesh Public/Internal Boundary
 
 Date: 2026-11-06. Target: local Tilt/Kind (`kind-kind`), Istio 1.30.6,

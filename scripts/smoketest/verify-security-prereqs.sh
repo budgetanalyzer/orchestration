@@ -310,6 +310,7 @@ metadata:
   name: ${pod_name}
   labels:
     app: ${pod_name}
+    verify-security-prereqs-temp: "true"
 spec:
   automountServiceAccountToken: false
   securityContext:

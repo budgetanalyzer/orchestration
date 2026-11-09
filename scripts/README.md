@@ -87,6 +87,9 @@ scripts/
   hostname and prove wrong-host rejection precedes mutation.
 - `smoketest/smoketest.sh` - Aggregate local validation sequence for a live
   Tilt cluster.
+- `smoketest/cleanup-smoketest-residue.sh` - Bounded, fail-closed removal of
+  test resources left by interrupted live verifiers. `smoketest.sh` runs it
+  first; see [Smoketest](#smoketest) for standalone use and `--dry-run`.
 - `smoketest/verify-edge-contract.sh` - Live cross-layer edge contract
   verifier and the single home for tests that need the real ingress,
   `ext_authz`, NGINX, sidecars and services together; later sections are added
@@ -544,15 +547,42 @@ CI should keep calling the fully static guardrail directly:
 
 `smoketest/smoketest.sh` is a thin dispatcher for live local validation. It runs:
 
-1. `guardrails/verify-static-security-manifests.sh`
-2. `smoketest/verify-security-prereqs.sh`
-3. `smoketest/verify-clean-tilt-deployment-admission.sh`
-4. `smoketest/verify-monitoring-rendered-manifests.sh`
-5. `smoketest/verify-istio-tracing-config.sh`
-6. `smoketest/verify-monitoring-runtime.sh`
-7. `smoketest/verify-observability-port-forward-access.sh`
-8. `smoketest/verify-session-architecture.sh`
-9. `smoketest/verify-security-guardrails.sh`
+1. `smoketest/cleanup-smoketest-residue.sh`, under a 5-minute budget
+2. `guardrails/verify-static-security-manifests.sh`
+3. `smoketest/verify-security-prereqs.sh`
+4. `smoketest/verify-clean-tilt-deployment-admission.sh`
+5. `smoketest/verify-monitoring-rendered-manifests.sh`
+6. `smoketest/verify-istio-tracing-config.sh`
+7. `smoketest/verify-monitoring-runtime.sh`
+8. `smoketest/verify-observability-port-forward-access.sh`
+9. `smoketest/verify-session-architecture.sh`
+10. `smoketest/verify-security-guardrails.sh`
+
+`smoketest/cleanup-smoketest-residue.sh` is the preflight step. It removes
+only objects a verifier marks as its own, by the verifier's temp label or an
+exact verifier name pattern; its `RESIDUE_INVENTORY` array is the list. It
+also deletes temporary `runtime-guardrails-<digits>` RabbitMQ vhosts, kills
+orphaned (PPID 1) verifier port-forwards with a random local port, and
+restores the ingress gateway Deployment to 1 replica after an interrupted
+rate-limit run. It never touches fixed-port or `--address` forwards, which
+are operator guest publication. If ext-authz or Redis is scaled to 0, it
+fails and prints the recovery command instead of scaling them back. It then
+re-checks the inventory and requires every EndpointSlice target behind a
+Service in `default`, `monitoring`, `istio-ingress` and `istio-egress` to
+have an owner, which catches pods that impersonate workload labels.
+
+It refuses to run outside the exact local Kind target, and refuses to mutate
+while a `smoketest/verify-*.sh` process is running. Run it alone after an
+interrupted verifier or smoketest; `tilt down` does not remove this residue:
+
+```bash
+./scripts/smoketest/cleanup-smoketest-residue.sh --dry-run
+./scripts/smoketest/cleanup-smoketest-residue.sh
+```
+
+Kiali health uses a 10-minute rate window. If residue pods received Service
+traffic shortly before cleanup, `verify-monitoring-runtime.sh` can still
+report a Kiali `Failure` until that window passes.
 
 Use targeted verifiers when debugging one capability, and the umbrella when
 proving the current cluster:

@@ -1236,6 +1236,7 @@ main() {
 
     echo "  Creating wrong-identity sidecar probe in istio-ingress namespace..."
     create_sidecar_probe istio-ingress "p3-wrong-identity" "default" \
+        "verify-istio-ingress-temp=true" \
         "${INGRESS_GATEWAY_LABEL_SELECTOR}"
     wait_for_pod_ready istio-ingress p3-wrong-identity 90s
 

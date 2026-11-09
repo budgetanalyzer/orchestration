@@ -261,7 +261,7 @@ Auth failures after login?
 │   │       └── kubectl logs -f deployment/session-gateway
 │   └── Request has __Host-BA_SESSION cookie but still 401/403?
 │       ├── Probe the heartbeat directly with that cookie
-│       │   └── curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+│       │   └── curl -X POST -H "Origin: https://app.budgetanalyzer.localhost" -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 │       ├── /auth/v1/session returns 401?
 │       │   └── Session missing/expired or IDP grant revoked
 │       │       └── kubectl logs -f deployment/session-gateway
@@ -321,7 +321,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
-curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -X POST -H "Origin: https://app.budgetanalyzer.localhost" -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 
 # Inspect one specific session hash if you have the cookie value; the key is its SHA-256
 SESSION_TOKEN='<__Host-BA_SESSION cookie value>'
@@ -510,7 +510,7 @@ curl http://localhost:8080/health
 curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/api/v1/transactions
 
 # 4. Probe the heartbeat path with the same cookie
-curl -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
+curl -X POST -H "Origin: https://app.budgetanalyzer.localhost" -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
 ```
 
 ---

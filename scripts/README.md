@@ -128,7 +128,17 @@ scripts/
   or a `:443` Host, on both lanes. Each must be the ingress `403` with an exact
   `rbac.denied` rise, no NGINX or Session Gateway sidecar request, and an
   unchanged session and transaction set. The configured origin must then
-  create and delete a transaction, heartbeat and form-POST logout. Its Authorization Failure
+  create and delete a transaction, heartbeat and form-POST logout. Its Forged
+  Identity section seeds `--count 2 --admin-count 1`, empties the second
+  session's `roles` and `permissions` in Redis, and sends `GET /api/v1/users`
+  with forged `X-User-Id`, `X-Roles` and `X-Permissions: users:read`. The
+  empty session must still get the permission-service JSON `403 FORBIDDEN`,
+  the same headers without a session must get the `ext_authz` JSON `401`, and
+  the ADMIN session, which really holds `users:read`, must get a JSON `200`.
+  This relies on real service decisions instead of an echo backend. Cookie and
+  `Authorization` stripping stays on the
+  `guardrails/verify-nginx-backend-headers.sh` stand-in, because NGINX has no
+  route to an echo backend. Its Authorization Failure
   section checks the live Envoy timeout, error status and fail-closed setting,
   then proves JSON `401` for missing sessions. With `--inject-failures` it also
   proves empty `503` for an unavailable authorizer, a network-policy-induced
@@ -557,6 +567,13 @@ CI should keep calling the fully static guardrail directly:
 8. `smoketest/verify-observability-port-forward-access.sh`
 9. `smoketest/verify-session-architecture.sh`
 10. `smoketest/verify-security-guardrails.sh`
+
+`smoketest/verify-security-guardrails.sh` runs
+`guardrails/verify-static-security-manifests.sh`,
+`smoketest/verify-runtime-security-guardrails.sh` and then the default
+`smoketest/verify-edge-contract.sh` run, which changes no Kubernetes object.
+The edge contract `--inject-failures` cases are not part of the wrapper; run
+them directly.
 
 `smoketest/cleanup-smoketest-residue.sh` is the preflight step. It removes
 only objects a verifier marks as its own, by the verifier's temp label or an

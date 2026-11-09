@@ -11,6 +11,11 @@
 # A new section must not change Kubernetes objects except behind
 # --inject-failures, and every function that does must call
 # require_inject_failures first.
+#
+# Assertions rest on real service decisions, not an echo backend. Cookie and
+# Authorization stripping before backends is the exception: NGINX has no route
+# to an echo backend, so that stays on the plan 01 P2 stand-in test,
+# scripts/guardrails/verify-nginx-backend-headers.sh.
 
 set -euo pipefail
 
@@ -34,6 +39,12 @@ TEARDOWN_SCRIPT="${REPO_DIR}/scripts/loadtest/teardown-loadtest.sh"
 SEEDED_USER_ID="${LOADTEST_USER_ID_PREFIX}1"
 SEEDED_SESSION_ID="${LOADTEST_SESSION_ID_PREFIX}1"
 SESSION_COOKIE="__Host-BA_SESSION=${SEEDED_SESSION_ID}"
+# Forged Identity fixture: user 1 is seeded ADMIN (holds users:read) and user 2
+# has its session's roles and permissions emptied.
+EMPTY_USER_ID="${LOADTEST_USER_ID_PREFIX}2"
+EMPTY_SESSION_ID="${LOADTEST_SESSION_ID_PREFIX}2"
+EMPTY_SESSION_COOKIE="__Host-BA_SESSION=${EMPTY_SESSION_ID}"
+FORGED_IDENTITY_HEADERS=(-H "X-User-Id: ${SEEDED_USER_ID}" -H "X-Roles: ADMIN" -H "X-Permissions: users:read")
 
 # NGINX-lane traversal matrix. Each probe is
 # <prefix><form><sep><form><sep><target>, repeating the traversal twice so it
@@ -161,7 +172,15 @@ Sections:
                             unchanged session and transaction set. The
                             configured Origin then creates and deletes a
                             transaction, heartbeats and form-POST logs out.
-  Authorization Failure     Reads the ext_authz filter from the ingress Envoy
+  Forged Identity           Seeds one ADMIN session and one session with empty
+                            roles and permissions. GET /api/v1/users with
+                            forged X-User-Id, X-Roles and
+                            X-Permissions: users:read must stay the
+                            permission-service 403 on the empty session and
+                            the ext_authz JSON 401 without a session. The
+                            ADMIN session, which really holds users:read, must
+                            get 200.
+  Authorization Failure    Reads the ext_authz filter from the ingress Envoy
                             config dump and requires the istiod-values
                             timeout, status_on_error 503 and no fail-open.
                             With a seeded session, a missing or unknown
@@ -1098,6 +1117,87 @@ verify_origin_enforcement() {
     pass "Synthetic Origin fixture and transaction removed with teardown-loadtest.sh"
 }
 
+assert_application_forbidden() {
+    local label="$1"
+    shift
+    local status
+
+    status=$(edge_request GET "/api/v1/users" "$@")
+    # The service-common error body is JSON with type FORBIDDEN; a mesh RBAC
+    # denial would be Envoy's plain-text body instead.
+    if [[ "$status" == "403" ]] && python3 -I -c \
+        'import json, sys; sys.exit(json.load(sys.stdin).get("type") != "FORBIDDEN")' \
+        <"${WORK_DIR}/body" 2>/dev/null; then
+        pass "${label}: GET /api/v1/users -> 403 FORBIDDEN from permission-service"
+        record "forged-identity" GET "/api/v1/users" "$status" "${label}:application-403"
+    else
+        fail "${label}: GET /api/v1/users -> ${status} (expected the permission-service 403 FORBIDDEN)"
+        record "forged-identity" GET "/api/v1/users" "$status" "${label}:broken"
+    fi
+}
+
+# ext-authz overwrites the identity headers from the session hash on every
+# allowed request. An empty session value must still replace a forged header,
+# so permission-service sees no permissions and denies users:read.
+verify_forged_identity() {
+    local empty_key user_id roles_length permissions_length status content_type
+
+    section "Forged Identity"
+
+    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
+        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
+        return
+    fi
+
+    POSTGRES_POD=$(require_postgres_pod)
+    REDIS_POD=$(require_redis_pod)
+    load_redis_ops_credentials
+
+    echo "  Seeding ${SEEDED_USER_ID} as ADMIN and ${EMPTY_USER_ID} with empty roles and permissions..."
+    assert_local_kind_target
+    "$SEED_SCRIPT" --count 2 --admin-count 1 >/dev/null
+    SEEDED=true
+    # Only the session hash feeds ext_authz; no heartbeat runs on this
+    # session, so the user's permission-service role is never reloaded.
+    empty_key=$(session_key_for "$EMPTY_SESSION_ID")
+    redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+        HSET "$empty_key" roles "" permissions "" >/dev/null
+    user_id=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+        HGET "$empty_key" user_id | tr -d '[:space:]')
+    roles_length=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+        HSTRLEN "$empty_key" roles | tr -d '[:space:]')
+    permissions_length=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+        HSTRLEN "$empty_key" permissions | tr -d '[:space:]')
+    if [[ "$user_id" == "$EMPTY_USER_ID" && "$roles_length" == "0" && "$permissions_length" == "0" ]]; then
+        pass "Seeded session for ${EMPTY_USER_ID} has empty roles and permissions"
+    else
+        fail "Seeded session for ${EMPTY_USER_ID} is not the empty-authorization fixture (user_id '${user_id}', roles length '${roles_length}', permissions length '${permissions_length}')"
+        return
+    fi
+
+    assert_application_forbidden "Empty session" --cookie "$EMPTY_SESSION_COOKIE"
+    assert_application_forbidden "Empty session with forged X-User-Id, X-Roles and X-Permissions: users:read" \
+        --cookie "$EMPTY_SESSION_COOKIE" "${FORGED_IDENTITY_HEADERS[@]}"
+    assert_missing_session_401 "Forged identity headers without a session" "/api/v1/users" \
+        "${FORGED_IDENTITY_HEADERS[@]}"
+
+    echo "  Positive control:"
+    status=$(edge_request GET "/api/v1/users" --cookie "$SESSION_COOKIE")
+    content_type=$(response_content_type)
+    if [[ "$status" == "200" && "${content_type,,}" == application/json* ]]; then
+        pass "ADMIN session with users:read: GET /api/v1/users -> 200 ${content_type}"
+        record "forged-identity" GET "/api/v1/users" "$status" "users-read-control:ok"
+    else
+        fail "ADMIN session with users:read: GET /api/v1/users -> ${status} content-type '${content_type}' (expected a JSON 200)"
+        record "forged-identity" GET "/api/v1/users" "$status" "users-read-control:broken"
+    fi
+
+    assert_local_kind_target
+    "$TEARDOWN_SCRIPT" >/dev/null
+    SEEDED=false
+    pass "Synthetic forged identity fixture removed with teardown-loadtest.sh"
+}
+
 # Prints one "<timeout seconds> <status_on_error code> <failure_mode_allow>"
 # line per distinct ext_authz filter on the ingress gateway pods.
 ingress_ext_authz_settings() {
@@ -1558,6 +1658,7 @@ main() {
     verify_public_internal_boundary
     verify_semicolon_rejection
     verify_origin_enforcement
+    verify_forged_identity
     verify_authorization_failure
     verify_response_headers
 

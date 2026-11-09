@@ -2475,3 +2475,393 @@ inventory, an invalid `--as-of` and unknown arguments all exit `2`.
 - Local reset: required once for any cluster whose RabbitMQ volume was created
   by 3.13. Queued messages are discarded, and the definitions and
   reconciliation imports restore everything else.
+
+## Plan 05, Phase 1: Edge Contract Verifier Completed
+
+Date: 2026-11-09. Target: local Tilt/Kind (`kind-kind`, `kind-control-plane`
+Ready), with `./scripts/bootstrap/check-local-runtime.sh` passing and the
+running Tilt stack. The human-run API test and aggregate smoketest results
+from before this phase are recorded in plan 05; this phase did not rerun them.
+
+### Change
+
+- `scripts/smoketest/verify-edge-contract.sh` has a new Forged Identity
+  section, run after Origin. It seeds `seed-loadtest-users.sh --count 2
+  --admin-count 1`, then empties the `roles` and `permissions` fields of
+  `usr_loadtest_2`'s session hash in Redis. ext_authz reads only the session
+  hash, and no heartbeat runs on that session, so its permission-service role
+  is never reloaded. The verifier checks that `user_id` is set and both
+  fields have length 0, then requires:
+  - the empty session alone: `GET /api/v1/users` returns the permission-service
+    JSON `403` with `type` `FORBIDDEN`, not Envoy's `RBAC: access denied`;
+  - the empty session with forged `X-User-Id: usr_loadtest_1` (the ADMIN
+    user), `X-Roles: ADMIN` and `X-Permissions: users:read`: the same
+    application `403`. ext-authz sets the three headers from the session even
+    when they are empty, and `headersToUpstreamOnAllow` replaces the caller's
+    values, so permission-service sees no permissions;
+  - the forged headers without a session: the ext_authz JSON `401`;
+  - positive control: the seeded ADMIN session, which really holds
+    `users:read`, gets a JSON `200` from `GET /api/v1/users`.
+  The fixture is removed with `teardown-loadtest.sh`.
+- The header comment says that assertions rest on real service decisions.
+  Cookie and `Authorization` stripping stays on the plan 01 P2 stand-in,
+  `scripts/guardrails/verify-nginx-backend-headers.sh`, because NGINX has no
+  route to an echo backend.
+- `scripts/smoketest/verify-security-guardrails.sh` now runs the default
+  `verify-edge-contract.sh` (no `--inject-failures`) after the static and
+  runtime gates. The injection cases stay a separate, direct run.
+- `scripts/README.md` describes the section and the wrapper order.
+
+### Coverage check
+
+The verifier now covers every edge contract area the plan names:
+
+| Area | Section | Default run | `--inject-failures` |
+| --- | --- | --- | --- |
+| Public/internal boundary across encoded path forms | Public/Internal Boundary, Semicolon Rejection | yes | yes |
+| Failure statuses: JSON `401` | Authorization Failure | yes | yes |
+| Failure statuses: empty `503` (authorizer down, hang, Redis stopped) | Authorization Failure | skipped (3) | yes |
+| Response headers: HSTS, forged forwarding fields | Response Headers | yes | yes |
+| Exact Origin on both lanes | Origin | yes | yes |
+| Forged identity with no permissions, plus positive control | Forged Identity | yes | yes |
+
+### Results
+
+Per-section pass counts, both runs with `--report` written under the
+git-ignored `tmp/edge-contract/`:
+
+| Section | `./scripts/smoketest/verify-edge-contract.sh` | `--inject-failures` |
+| --- | --- | --- |
+| Public/Internal Boundary | 97 passed | 97 passed |
+| Semicolon Rejection | 76 passed | 76 passed |
+| Origin | 54 passed | 54 passed |
+| Forged Identity | 6 passed | 6 passed |
+| Authorization Failure | 7 passed, 3 skipped | 22 passed |
+| Response Headers | 10 passed | 10 passed |
+| **Total** | **250 passed, 0 failed, 3 skipped** | **265 passed, 0 failed, 0 skipped** |
+
+Boundary section detail, identical in both runs: all 54 NGINX-lane traversal
+probes (3 public prefixes x 2 internal targets x 9 encoded forms) were
+non-2xx with no internal handler output. On the direct Session Gateway lane,
+16 probes were non-2xx and 2 were ingress-normalized to the byte-identical
+public frontend shell. All 9 `DELETE` bulk-revocation probes left the
+seeded session and `user_sessions` index intact; the report has 22
+session-intact rows, because the Semicolon section's `DELETE` probes record
+the same check. The seeded permission-service user row was unchanged, and
+the 18 legitimate-route checks were as expected, including login start, the
+OpenAPI routes and the USER-session application `403` on `/api/v1/users`.
+
+Injection run, Authorization Failure: config dump timeout `1s`,
+`status_on_error` `ServiceUnavailable` and `failure_mode_allow` `false`.
+ext-authz scaled to zero gave an empty `503` in 0.015 s and 0.016 s. The
+ClusterNetworkPolicy hang gave an empty `503` in 1.017 s and 1.019 s, with no
+check reaching the ext-authz sidecar. Redis stopped gave an empty `503` in
+0.099 s and 0.133 s, while the ext-authz sidecar recorded 2 authorizer
+`503`s. No case reached NGINX, and an authorized request returned `200`
+after each restore. After the run, ext-authz and Redis were back at `1/1`,
+no `edge-contract-block-*` policy remained and every pod was Running.
+
+### Validation
+
+- `bash -n` and `shellcheck` on `verify-edge-contract.sh` and
+  `verify-security-guardrails.sh`: clean.
+- `INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python ./scripts/guardrails/verify-static-security-manifests.sh`:
+  passed.
+- `./scripts/guardrails/verify-production-image-overlay.sh`: passed.
+- `./scripts/smoketest/verify-edge-contract.sh`: 250/0, 3 skipped.
+- `./scripts/smoketest/verify-edge-contract.sh --inject-failures`: 265/0,
+  0 skipped.
+- `verify-security-guardrails.sh` was edited but not run, per the plan; the
+  user owns that run.
+
+### Limitations
+
+- The first default run failed the two Forged Identity `403` checks because
+  they matched a compact `"type":"FORBIDDEN"` literal. The service-common body
+  is pretty-printed (`"type" : "FORBIDDEN"`). The check now parses the JSON.
+  The statuses were correct in that run.
+- Forged Identity tests one permission-gated route (`/api/v1/users`) and one
+  forged permission. Other services are covered only to the extent that they
+  use the same service-common claims-header filter; this section does not
+  probe them.
+- Two-cookie requests and the `KEYS` denial are out of scope here (contested
+  #5; `verify-credential-isolation.sh`).
+- `cleanup-smoketest-residue.sh --dry-run` lists six orphaned (PPID 1)
+  `kubectl port-forward` processes to ext-authz `:8090`/`:9002` and RabbitMQ
+  `:15672`. They started before this phase, and this verifier opens no
+  port-forwards. They were left in place.
+- Only the local stack was exercised; no hosted environment exists.
+
+## Plan 05, Phase 2: Evidence Record and Release Handoff
+
+Date: 2026-11-09. Documentation-only phase. No suite, verifier or cluster
+command was run, no image was released and no production pin was changed.
+
+### Human-run verification
+
+The user ran both suites against the local Tilt/Kind stack on 2026-11-09,
+after plans 01–04 and before plan 05, Phase 1:
+
+| Suite | Run | Result |
+| --- | --- | --- |
+| Local API tests, `../budget-analyzer-api-tests/run-tests` | `20261109T014950Z-ac3c3b7b` | 436 tests, 0 failures, 0 errors, 0 skipped. Artifacts are git-ignored under `../budget-analyzer-api-tests/artifacts/runs/20261109T014950Z-ac3c3b7b/` |
+| Aggregate smoketest, `./scripts/smoketest/smoketest.sh` | not saved | Passed, as reported by the user. No saved report |
+
+Both runs predate plan 05, Phase 1, so neither exercised the Forged Identity
+section or the wrapper's new Edge Contract step. The evidence for those is
+Phase 1's direct runs: `verify-edge-contract.sh` 250 passed, 0 failed,
+3 skipped, and `--inject-failures` 265 passed, 0 failed, 0 skipped (see
+[Plan 05, Phase 1](#plan-05-phase-1-edge-contract-verifier-completed)). No
+recorded run of `verify-security-guardrails.sh` includes its new Edge
+Contract step.
+
+### Public/internal boundary still denied
+
+Phase 1's Public/Internal Boundary section passed 97/97 in both runs. All 54
+NGINX-lane traversal probes, which include the 18 `..%3b`, `..%3B` and
+`%2e%2e%3b` probes (12 of them leaked before
+[plan 01, Phase 1](#plan-01-phase-1-mesh-publicinternal-boundary)), were
+non-2xx with no internal handler output. On the direct Session Gateway lane,
+16 probes were non-2xx and 2 were normalized by the ingress to the
+byte-identical public frontend shell, as in plan 01. Every
+`DELETE` revocation probe left the seeded session and its `user_sessions`
+index intact, and the seeded user row was unchanged. The plan 01, Phase 1
+denials therefore still hold. Semicolon Rejection passed 76/76 in both runs.
+
+### Evidence by scope item
+
+Links into sibling repositories assume the side-by-side checkout. Item 25 is
+deferred (contested #6) and item 29 is an accepted risk (plan 04, D5); both
+are excluded. Every linked section records a passing result.
+
+| # | Fix | Passing evidence |
+| --- | --- | --- |
+| 1 | Narrow mesh policies to the callers' real paths | [Plan 01, Phase 1][c-01-1]; [plan 02.3, Phase 3][c-023-3] |
+| 2 | Explicit mesh deny baseline | [Plan 01, Phase 1][c-01-1] (`default-deny-all`) |
+| 3 | Public/internal boundary across encoded path forms | [Plan 01, Phase 1][c-01-1]; [`;` at any encoding depth][c-semi]; [plan 05, Phase 1][c-05-1] and [above](#publicinternal-boundary-still-denied) |
+| 4 | Strip `Cookie` and `Authorization` before backends | [Plan 01, Phase 2][c-01-2] (stand-in proof, 7/0; no in-cluster echo backend) |
+| 5 | Real `X-Forwarded-Proto` to backends | [Plan 01, Phase 2][c-01-2] |
+| 6 | ext_authz `statusOnError`, timeout, corrected contract, real denials | [Plan 01, Phase 4][c-01-4]; [opt-in injection][c-inject]; [plan 05, Phase 1][c-05-1] (`--inject-failures` 265/0) |
+| 7 | HSTS from the ingress | [Plan 01, Phase 5][c-01-5]; [plan 05, Phase 1][c-05-1] (Response Headers) |
+| 8 | Stop trusting caller forwarded headers; fix the OAuth redirect URI | [Plan 01, Phase 5][c-01-5]; [plan 02.2, Phase 3][c-022-3]; [Session Gateway plan 02.2, Phase 1][sg-022-1] |
+| 9 | CSP `form-action`; drop `X-XSS-Protection` | [Plan 01, Phase 5][c-01-5]; [plan 02.8, Phase 2][c-028-2] |
+| 10 | Replace Session Gateway `+@all` | [Plan 01, Phase 6][c-01-6] |
+| 11 | Reconcile the documentation with the code | [Plan 01, Phase 7][c-01-7]; the documentation changes in each plan 02.x evidence section; [this phase](#documentation-reconciled-in-this-phase) |
+| 12 | Bind OAuth callbacks to the initiating browser | [Session Gateway plan 02.1, Phase 1][sg-021-1]; [API tests plan 02.1, Phase 2][at-021-2]; [plan 02.1, Phase 3][c-021-3] |
+| 13 | Validate and cap `returnUrl`; shorter OAuth-state lifetime | [Session Gateway plan 02.2, Phase 1][sg-022-1]; [plan 02.2, Phase 3][c-022-3] |
+| 14 | Reject backslashes and control characters in redirect targets | [Session Gateway plan 02.2, Phase 1][sg-022-1]; [plan 02.2, Phase 3][c-022-3] (`%2F%5Cevil.com` live) |
+| 15 | Absolute session lifetime | [Plan 02.4, Phase 3][c-024-3] |
+| 16 | Hashed session tokens in keys and index members | [Session Gateway plan 02.5, Phase 1][sg-025-1]; [plan 02.5, Phase 3][c-025-3]; [plan 02.5, Phase 4][c-025-4] |
+| 17 | `__Host-` session cookie | [Session Gateway plan 02.6, Phase 1][sg-026-1]; [plan 02.6, Phase 5][c-026-5]; [plan 02.6, Phase 6][c-026-6] |
+| 18 | Login permission-call deadline; user sync off GET | [Plan 02.3, Phase 3][c-023-3]; login-timeout test in [Session Gateway review remediation, Phase 1][sg-rem-1]; contract in [Session Gateway login user sync][sg-sync] |
+| 19 | Separate liveness from readiness | [ext-authz Phase 1][ea-1]; [plan 03, Phase 2][c-03-2]; [transaction-service][ts-1]; [permission-service][ps-1]; [Session Gateway Phase 9][sg-03-9]; [currency-service][cs-1]; [plan 03, Phase 12][c-03-12] (outage drill) |
+| 20 | ext-authz HTTP server timeouts | [ext-authz Phase 1][ea-1] |
+| 21 | Trusted client address | [service-common][sc-addr] |
+| 22 | Structured audit events | [service-common][sc-audit]; [transaction-service][ts-1]; [permission-service][ps-1]; [Session Gateway Phase 9][sg-03-9]; [Session Gateway review remediation, Phase 1][sg-rem-1]; [currency-service][cs-1] |
+| 23 | Body logging and `TRACE` off by default in all four services | [transaction-service][ts-1]; [permission-service][ps-1]; [Session Gateway Phase 9][sg-03-9]; [currency-service][cs-1] |
+| 24 | Endpoint authorization coverage rule | [transaction-service][ts-1]; [permission-service][ps-1]; [currency-service][cs-1] |
+| 26 | Measured Redis memory budget; no `allkeys-lru` on auth data | [Plan 04, Phase 1][c-04-1] |
+| 27 | Exclude private destinations from the egress gateway | [Plan 04, Phase 2][c-04-2] |
+| 28 | PostgreSQL server-side TLS | [Plan 04, Phase 3][c-04-3] |
+| 30 | Supported RabbitMQ series; runtime support dates | [Plan 04, Phase 4][c-04-4] |
+| 31 | Edge contract across layers, including forged headers with no permissions | [Plan 01, Phases 1][c-01-1]–[5][c-01-5]; [plan 02.8, Phase 2][c-028-2]; [plan 05, Phase 1][c-05-1] (Forged Identity 6/0) |
+| 32 | Shared NGINX API routes | [Plan 01, Phase 3][c-01-3] |
+| 33 | Reject decoded semicolons on the NGINX lane | [Plan 01, Phase 3][c-01-3]; [`;` at any encoding depth][c-semi] |
+| 34 | POST heartbeat and logout | [Session Gateway plan 02.7, Phase 1][sg-027-1]; [API tests plan 02.7, Phase 3][at-027-3]; [plan 02.7, Phase 4][c-027-4] |
+| 35 | Exact Origin on unsafe requests on both lanes | [API tests plan 02.8, Phase 1][at-028-1]; [plan 02.8, Phase 2][c-028-2] |
+| 36 | ext-authz Go toolchain | [ext-authz Phase 3][ea-3] |
+| 37 | Remove the unused `deleteUser` method | [permission-service][ps-del] |
+| 38 | SCAN for currency cache eviction; no `KEYS` grant | [currency-service][cs-scan]; [plan 03, Phase 13][c-03-13] |
+
+The human-run API tests and smoketest above cover the integrated stack after
+every item except Phase 1's verifier additions.
+
+Phases in `budget-analyzer-web` (plans 02.2 P2, 02.4 P2, 02.6 P3, 02.7 P2),
+ext-authz (02.5 P2, 02.6 P2), permission-service (02.3 P1), Session Gateway
+(02.3 P2, 02.4 P1) and API tests (02.6 P4) left no section in a sibling
+evidence file. Their items rest on the linked live orchestration phases and
+the human-run API tests, not on a recorded sibling build.
+
+[c-01-1]: #plan-01-phase-1-mesh-publicinternal-boundary
+[c-01-2]: #plan-01-phase-2-nginx-backend-header-contract
+[c-01-3]: #plan-01-phase-3-shared-nginx-routes-and-semicolon-rejection
+[c-01-4]: #plan-01-phase-4--bounded-authorizer-failures
+[c-01-5]: #plan-01-phase-5--ingress-headers-and-environment-specific-csp
+[c-01-6]: #plan-01-phase-6--session-gateway-redis-acl
+[c-01-7]: #plan-01-phase-7--documentation-reconciliation
+[c-inject]: #follow-up-2026-11-06--verify-edge-contractsh-failure-injection-is-opt-in
+[c-semi]: #follow-up-2026-11-06---denied-at-any-encoding-depth
+[c-021-3]: #plan-021-phase-3-oauth-callback-browser-binding
+[c-022-3]: #plan-022-phase-3-configured-idp-redirect-uri-and-live-login-input
+[c-023-3]: #plan-023-phase-3-login-permission-sync-mesh-rule-and-live-login
+[c-024-3]: #plan-024-phase-3-absolute-session-lifetime-configured-and-proven-live
+[c-025-3]: #plan-025-phase-3-hashed-session-keys-wired-into-orchestration
+[c-025-4]: #plan-025-phase-4-hashed-session-keys-cut-over-and-proven-live
+[c-026-5]: #plan-026-phase-5-__host-ba_session-wired-into-orchestration
+[c-026-6]: #plan-026-phase-6-__host-ba_session-cut-over-and-proven-live
+[c-027-4]: #plan-027-phase-4-post-heartbeat-and-logout-proven-live
+[c-028-2]: #plan-028-phase-2-exact-origin-ingress-rule-proven-live
+[c-03-2]: #plan-03-phase-2-ext-authz-probe-cutover
+[c-03-12]: #plan-03-phase-12-spring-probe-cutover-and-dependency-outage-drill
+[c-03-13]: #plan-03-phase-13-currency-service-redis-grant-narrowed-to-scan
+[c-04-1]: #plan-04-phase-1-redis-memory-budget
+[c-04-2]: #plan-04-phase-2-egress-gateway-private-destination-exclusions
+[c-04-3]: #plan-04-phase-3-postgresql-server-side-tls
+[c-04-4]: #plan-04-phase-4-supported-rabbitmq-series-and-support-date-report
+[c-05-1]: #plan-05-phase-1-edge-contract-verifier-completed
+[sg-021-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#plan-021-phase-1-oauth-callback-browser-binding
+[sg-022-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#plan-022-phase-1-bound-oauth-login-input
+[sg-025-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#plan-025-phase-1-hashed-session-keys
+[sg-026-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#plan-026-phase-1-__host--session-cookie
+[sg-027-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#plan-027-phase-1-post-heartbeat-and-logout
+[sg-03-9]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#security-hardening-03-phase-9-safe-logging-readiness-and-session-audit-events
+[sg-rem-1]: ../../../session-gateway/docs/research/security-consensus-hardening-evidence.md#security-hardening-03-review-remediation-phase-1-session-lifecycle-audit-completion
+[sg-sync]: ../../../session-gateway/docs/session-configuration.md#login-user-sync
+[at-021-2]: ../../../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md#plan-021-phase-2-api-test-oauth-callback-cookie-preservation
+[at-027-3]: ../../../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md#plan-027-phase-3-post-heartbeat-and-logout-api-test-callers
+[at-028-1]: ../../../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md#plan-028-phase-1-exact-origin-api-test-client
+[ea-1]: ../../../ext-authz/docs/research/security-consensus-hardening-evidence.md#2026-11-07--service-runtime-phase-1
+[ea-3]: ../../../ext-authz/docs/research/security-consensus-hardening-evidence.md#2026-11-07--service-runtime-phase-3
+[sc-addr]: ../../../service-common/docs/research/security-consensus-hardening-evidence.md#2026-11-07-trusted-http-client-address
+[sc-audit]: ../../../service-common/docs/research/security-consensus-hardening-evidence.md#2026-11-07-structured-service-audit-events
+[ts-1]: ../../../transaction-service/docs/research/security-consensus-hardening-evidence.md#2026-11-07-transaction-service-safe-runtime-defaults
+[ps-1]: ../../../permission-service/docs/research/security-consensus-hardening-evidence.md#2026-11-07-safe-logging-readiness-audit-and-authorization-coverage
+[ps-del]: ../../../permission-service/docs/research/security-consensus-hardening-evidence.md#2026-11-07-unused-user-deletion-path-removal
+[cs-1]: ../../../currency-service/docs/research/security-consensus-hardening-evidence.md#2026-11-07-currency-service-safe-runtime-defaults
+[cs-scan]: ../../../currency-service/docs/research/security-consensus-hardening-evidence.md#2026-11-07-currency-service-cache-clears-with-scan
+
+### Documentation reconciled in this phase
+
+- `docs/architecture/security-architecture.md`: the "Audit logging of data
+  access" and "Audit logging of sensitive data access" bullets, the
+  boundary-benefit sentence, and the "Audit Logging (Required for Financial
+  Data)" list with its `data_access` read example now describe the
+  implemented events: mapped `POST`, `PUT`, `PATCH` and `DELETE` requests in
+  the servlet services and the Session Gateway login, logout and bulk
+  revocation lifecycle, not reads. ext_authz denials are stated as
+  operational logs, not audit events (`../ext-authz/http_server.go` logs them
+  with `slog`). The example uses the real six-field shape and the
+  `DELETE /v1/transactions/{id}` operation asserted by transaction-service's
+  test.
+- `docs/architecture/session-security-benefits.md`: the investigation step no
+  longer implies read-access audit logs, and the immediate step names ingress
+  rate limiting instead of a stale NGINX `100 req/min` default.
+- `SECURITY.md` said heartbeats use `GET /auth/v1/session`. They use `POST`
+  (item 34).
+- `docs/runbooks/tilt-debugging.md`: three heartbeat probes were plain `curl`
+  `GET`s, which now return `405`. They send `POST` with the exact `Origin`
+  (items 34 and 35).
+- `kubernetes/production/README.md` states that the pinned baseline predates
+  this work and links the release handoff below.
+- The links to the removed plan 05 "Phase 3" anchor in
+  `docs/plans/security-hardening-03-service-runtime.md` and
+  `docs/research/security-review-contested-issues-2026-11-02.md` now point to
+  plan 05, Phase 2. Earlier sections of this file that say "plan 05, Phase 3"
+  mean this phase; the plan was renumbered.
+
+A search of the active docs (excluding `docs/archive/`, `docs/decisions/`,
+`docs/plans/`, `docs/research/` and the historical GCP design) for the
+replaced behaviours found no other contradiction: `X-XSS-Protection`, `+@all`,
+`allkeys-lru`, `/healthz`, raw session keys, the old cookie name, GET
+heartbeat or logout, request-derived redirect URIs, RabbitMQ 3.x and
+plaintext PostgreSQL.
+
+### Accepted remaining gaps
+
+| Gap | Status and evidence |
+| --- | --- |
+| Session Gateway client address | Session Gateway's reactive request logs omit `clientIp` behind the ingress, because the forwarded remote address stays unresolved and the filter refuses the caller-controlled hostname. Omission is preferred to an untrusted value; a trusted path needs separate design. See [service-common][sc-addr] |
+| Audit retention and access | `budgetanalyzer.audit` events are emitted, but no separate store, retention period or access control exists in local Tilt or the production reference. That belongs to a future deployment's log pipeline. See [service-common][sc-audit] and [Logging Strategy](../architecture/security-architecture.md#logging-strategy) |
+| Anonymous OAuth-state growth | `noeviction` keeps auth data from being evicted, but about 60 source addresses can fill the 128 MB budget with OAuth state and block logins for each 600 s state lifetime. See [plan 04, Phase 1][c-04-1] |
+| Runtime roles own their schemas | Each service's runtime database role owns its schema and runs Flyway; there is no separate migration role. Accepted as plan 04, D5 (scope item 29) |
+| Unbounded upload processing | A few concurrent maximum-size preview uploads, or one crafted PDF, can plausibly exhaust the single-replica transaction-service heap and fail the transaction API for every user until recovery. Reasoned from source and defaults, not reproduced. No current setting, including the 25 MB upload limit, is a capacity bound. Scope item 25 is deferred. See [contested #6](security-review-contested-issues-2026-11-02.md#6-pdf-memory-handling-and-a-parsing-worker) |
+| Key-name visibility to the currency-service credential | Its `+scan` grant is not filtered by ACL key patterns, so it can list session-digest, `user_sessions:*` and `oauth2:state:*` key names. That exposes user IDs, session counts and in-flight logins, but no replayable token. See [contested #2](security-review-contested-issues-2026-11-02.md#2-redis-enumeration-after-hashing) and [plan 03, Phase 13][c-03-13] |
+| Compromised allowed intermediary | Backends trust `X-User-Id`, `X-Roles` and `X-Permissions` from permitted mesh callers without a signature, so a compromised NGINX or other allowed intermediary can forge or replay identity claims. Phase 1 proves only that external forged headers are replaced. See [contested #7](security-review-contested-issues-2026-11-02.md#7-signed-identity-context) |
+
+### Open findings not accepted by this plan
+
+These were reported by earlier phases and are not in the accepted list. They
+need an owner decision and their own work:
+
+- **Shared Redis budget exhaustion through the currency cache.** One
+  authenticated user with the default `currencies:read` filled the 128 MB
+  budget with about 100 exchange-rate reads. Logins and heartbeats then
+  failed intermittently for up to the one-hour cache TTL. The fix belongs to
+  currency-service (bound cache entry size or key space) or to a Redis split.
+  See [plan 04, Phase 1][c-04-1], "Shared-cache growth".
+- **Runtime support.** NGINX 1.29 is past its support end and Istio 1.30 is
+  due (estimated 2026-12-01). See [plan 04, Phase 4][c-04-4].
+- **Conflicting `X-Frame-Options`.** Live `/api/v1/users` responses carry both
+  `DENY` and `SAMEORIGIN`, observed in [plan 05, Phase 1][c-05-1]. Not
+  investigated.
+- `docs/architecture/service-communication.md` shows a FRED `@CircuitBreaker`
+  example, but currency-service has no `@CircuitBreaker`. This is outside the
+  security scope and was not changed.
+
+### Production configuration added by plans 02.2, 02.4 and 02.6
+
+None of these plans adds a secret value. They add configuration that a future
+deployment must supply or keep:
+
+| Plan | Setting | Where | Deployment requirement |
+| --- | --- | --- | --- |
+| 02.2 | `IDP_REDIRECT_URI` | Environment-specific `ConfigMap/session-gateway-idp-config` (not managed by the overlay) | Set to the exact external callback URL registered with the IdP, ending in `/login/oauth2/code/idp`. Session Gateway no longer derives it from request headers. Listed in `kubernetes/production/README.md` |
+| 02.2 | OAuth-state TTL 600 s and the 2048-character `returnUrl` cap | Session Gateway `application.yml` defaults | None; no override is configured |
+| 02.4 | `SESSION_MAX_LIFETIME_SECONDS: "28800"` | Shared `kubernetes/services/session-gateway/configmap.yaml`, inherited by the production render | Keep, or change deliberately; ext-authz enforces it through `expires_at` |
+| 02.6 | `SESSION_COOKIE_NAME=__Host-BA_SESSION` | Shared `kubernetes/services/ext-authz/deployment.yaml` | Must equal the Session Gateway default. Serve the application over HTTPS on a single host, and set no `SESSION_COOKIE_DOMAIN_OVERRIDE`, because `__Host-` forbids `Domain` |
+
+### Release handoff (human-owned)
+
+Plan 05 makes no release and changes no pin. `kubernetes/production` shares
+the updated manifests but still pins the historical images (session-gateway,
+transaction-service, currency-service, permission-service and
+budget-analyzer-web 0.0.15, built on service-common 0.0.14; ext-authz 0.0.16).
+Those images do not work with the shared manifests:
+
+- ext-authz 0.0.16 has no `/livez` or `/readyz`, so its probes fail, and it
+  looks up raw session keys.
+- session-gateway 0.0.15 writes raw session keys and the old cookie, calls the
+  removed `GET .../permissions` path that the mesh now denies, ignores the
+  absolute lifetime and accepts `GET` heartbeat and logout.
+- permission-service 0.0.15 has no `POST /internal/v1/users/sync`.
+- currency-service 0.0.15 clears its cache with `KEYS`, which the narrowed
+  grant denies.
+- budget-analyzer-web 0.0.15 sends `GET` heartbeat and logout.
+- The pinned Spring images predate the readiness group membership, safe
+  logging defaults and audit events.
+
+`verify-production-image-overlay.sh` passes anyway, because it checks renders,
+not image behaviour. Passing offline checks prove only that the reference
+renders; they do not show runtime parity.
+
+The release steps, for a human:
+
+1. Release service-common with a non-SNAPSHOT version. Every Spring service
+   currently builds against `serviceCommon = "0.1.1-SNAPSHOT"` in
+   `gradle/libs.versions.toml`.
+2. Move session-gateway, transaction-service, permission-service and
+   currency-service to that release, then release them together with
+   ext-authz and budget-analyzer-web. The cookie, hashed keys, POST sync
+   call, POST heartbeat and logout, and probe paths are one contract across
+   these images, so no subset can be released alone.
+3. Update the production baseline consistently: `kubernetes/production/apps/deployment-manifest.yaml`
+   and `kubernetes/production/apps/image-inventory.yaml`, and, as
+   `kubernetes/production/README.md` requires, `apps/kustomization.yaml`,
+   `apps/patches/runtime-release-metadata.yaml` and
+   `docs-aggregator/release-metadata.json`. Record each image's tag, digest,
+   source commit and service-common version.
+4. Rerun `./scripts/guardrails/verify-production-image-overlay.sh` and the
+   static security suite with the pinned PyYAML interpreter.
+
+The production reference supports only a deployment that starts from empty
+state. There is no upgrade path from the pinned images or from existing data:
+sessions use a new key format and cookie name, the RabbitMQ 4.4 volume must
+be created fresh (a 3.13 volume is not upgraded), and no data or session
+migration code exists. No production environment exists today.
+
+### Validation
+
+- Every link added in this section and in the edited docs was checked with a
+  local Markdown link and GitHub-anchor resolver against the side-by-side
+  checkouts; all resolved.
+- No suite or verifier was rerun, per the plan.

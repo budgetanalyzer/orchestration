@@ -377,7 +377,7 @@ kill.
 PDF, can plausibly exhaust the default heap. The transaction API would then fail for every user until
 the JVM recovers or the pod restarts. This is reasoned from source and defaults, not reproduced. It
 affects availability, not data confidentiality. Accept it while there is no hosted deployment or
-open-signup requirement. Omit the PDF-bounding phase from [plan 03](../plans/security-hardening-03-service-runtime.md#dropped-phases) rather than executing it, record the limitation in [plan 05, Phase 3](../plans/security-hardening-05-closeout-release-handoff.md#phase-3-full-verification-and-release-handoff-live), and do not present
+open-signup requirement. Omit the PDF-bounding phase from [plan 03](../plans/security-hardening-03-service-runtime.md#dropped-phases) rather than executing it, record the limitation in [plan 05, Phase 2](../plans/security-hardening-05-closeout-release-handoff.md#phase-2-evidence-record-and-release-handoff), and do not present
 any current setting as a capacity bound.
 
 **If revisited.** Prefer configuration before application code:

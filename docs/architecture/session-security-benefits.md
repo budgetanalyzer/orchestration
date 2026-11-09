@@ -105,9 +105,9 @@ With JWTs, revocation requires either waiting for token expiry or maintaining a 
 
 For detected anomalies (rate limit triggers, unusual access patterns):
 
-1. **Immediate:** Rate limiting already in effect at NGINX (100 req/min default)
+1. **Immediate:** Per-client rate limiting already in effect at the Istio ingress (see [Ingress Per-Client Rate Limiting](security-architecture.md#ingress-per-client-rate-limiting))
 2. **Short-term:** Session deletion to force re-authentication
-3. **Investigation:** Query audit logs for access patterns
+3. **Investigation:** Review the account's state-changing and session lifecycle audit events; reads are not audited (see [Logging Strategy](security-architecture.md#logging-strategy))
 4. **Resolution:** Either restore access or escalate to full revocation
 
 ### Future Enhancements

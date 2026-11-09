@@ -29,7 +29,7 @@ runtime test is one sequential test; and each runtime-configuration test documen
 the shipped base configuration. A failed final logout response write is deliberately not audited.
 Validation evidence is in each owning repository's `docs/` folder. The broader audit-claim
 corrections remain with
-[plan 05, Phase 3](security-hardening-05-closeout-release-handoff.md#phase-3-full-verification-and-release-handoff-live).
+[plan 05, Phase 2](security-hardening-05-closeout-release-handoff.md#phase-2-evidence-record-and-release-handoff).
 
 | Label | Review |
 | --- | --- |

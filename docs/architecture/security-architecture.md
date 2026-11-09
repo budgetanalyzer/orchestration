@@ -177,7 +177,7 @@ The Session Gateway implements session-based edge authorization specifically for
 - Enforce data-level authorization
 - Verify user owns requested data
 - Scope all queries by authenticated user ID
-- Audit logging of data access
+- Structured audit events for state-changing requests (mapped `POST`, `PUT`, `PATCH` and `DELETE`); reads are not audited (see [Logging Strategy](#logging-strategy))
 - Business logic execution
 
 **Critical Security Rule:** Always validate that the authenticated user (from `X-User-Id` header injected by ext_authz) has permission to access the specific data being requested.
@@ -519,7 +519,7 @@ the versioned Session Gateway JSON endpoints.
 
 **Benefits:**
 1. **Provider Independence:** Swap Auth0 → Okta → Keycloak without client changes
-2. **Centralized Control:** Per-client auth/API throttling at ingress, resource routing at NGINX, and audit logging at your boundary
+2. **Centralized Control:** Per-client auth/API throttling at ingress, resource routing at NGINX, and session lifecycle audit events at your boundary
 3. **Versioning:** Evolve authentication APIs independently
 4. **Security:** Additional validation layer before external provider
 5. **Compliance:** Keep authentication flows within your infrastructure boundary
@@ -559,7 +559,7 @@ the versioned Session Gateway JSON endpoints.
 **Layer 3: Backend Services**
 - Data-level authorization
 - Query scoping by authenticated user
-- Audit logging of sensitive data access
+- Audit events for state-changing requests, not reads
 - Database row-level security (optional)
 
 ### Token Configuration
@@ -765,25 +765,48 @@ surface; alerting rules are a future follow-up.
 
 ### Logging Strategy
 
-**Audit Logging (Required for Financial Data):**
-- All authentication events (login, logout, token refresh)
-- All authorization failures
-- All sensitive data access with user context
-- ext_authz validation failures
+**Audit events:** Services emit one compact JSON event at `INFO` on the
+dedicated `budgetanalyzer.audit` logger, using service-common's `AuditLogger`.
+Coverage is limited to state-changing requests and the browser session
+lifecycle; reads are not audited.
 
-**Log Format:**
+- Servlet services (transaction-service, permission-service and
+  currency-service): every mapped `POST`, `PUT`, `PATCH` and `DELETE`, emitted
+  once after completion with the actual response status. Unmapped requests
+  and every `GET` are not audited. See service-common's
+  [structured audit events](../../../service-common/docs/common-patterns.md#4-use-structured-audit-events-for-state-changes).
+- Session Gateway: login success, login failure (IdP errors, callback
+  transport and unexpected failures, permission-service and session-write
+  failures), logout success, logout session-read or deletion failure, and bulk
+  revocation. Each terminal path has one owner. A failed final logout response
+  write is deliberately not audited. See Session Gateway's
+  [session lifecycle audit events](../../../session-gateway/docs/security.md#session-lifecycle-audit-events).
+- ext_authz denials (`401` and authorizer `503`) and read-side `403`s are not
+  audit events. ext-authz writes ordinary operational logs for missing,
+  unknown and expired sessions and lookup failures.
+
+**Event format:** six fields. `actor` is the internal user ID or `anonymous`;
+`operation` is the HTTP method and Spring route pattern, or a Session Gateway
+lifecycle operation such as `OAUTH2_LOGIN_SUCCESS`; `resourceIdentifier` holds route path-variable values only;
+`outcome` is the HTTP status:
+
 ```json
 {
-  "timestamp": "2025-11-10T10:15:30Z",
-  "event_type": "data_access",
-  "user_id": "user-abc-123",
-  "client_type": "web",
-  "resource": "/api/budget/accounts/12345",
-  "action": "read",
-  "result": "success",
-  "ip_address": "203.0.113.45"
+  "timestamp": "2026-11-07T21:15:30.123Z",
+  "actor": "usr_abc123",
+  "operation": "DELETE /v1/transactions/{id}",
+  "resourceIdentifier": "42",
+  "outcome": 204,
+  "correlationId": "<correlation-id>"
 }
 ```
+
+Events never contain request or response bodies, query strings, email
+addresses, display names, session tokens or digests, or OAuth codes and state.
+They carry no client address. Retention, access control and routing of
+`budgetanalyzer.audit` to a separately controlled store belong to a future
+deployment's log pipeline; no separate audit destination is configured in
+local Tilt or the production reference.
 
 ### Session Management
 

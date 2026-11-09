@@ -65,6 +65,14 @@ the manifest, inventory, runtime metadata patch, docs metadata, and app
 Kustomization consistently. It does not require publishing new application
 releases merely to retire OCI.
 
+The pinned images predate the 2026-11 security hardening and do not run under
+the current shared manifests: probe paths, the `__Host-BA_SESSION` cookie,
+hashed session keys, the `POST` login user sync and the narrowed mesh and
+Redis grants all need newer releases. The offline checks do not detect this.
+The human-owned release order, the baseline files to update, and the
+empty-state-only deployment boundary are recorded in the
+[release handoff](../../docs/research/security-consensus-hardening-evidence.md#release-handoff-human-owned).
+
 Render the app overlay offline with:
 
 ```bash

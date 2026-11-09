@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Final local security guardrail proof. Runs the static guardrail suite first,
-# then the live-cluster runtime guardrail proof.
+# then the live-cluster runtime guardrail proof, then the default live edge
+# contract verifier, which changes no Kubernetes object.
 
 set -euo pipefail
 
@@ -8,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 STATIC_GATE="${REPO_DIR}/scripts/guardrails/verify-static-security-manifests.sh"
 RUNTIME_GATE="${REPO_DIR}/scripts/smoketest/verify-runtime-security-guardrails.sh"
+EDGE_CONTRACT_GATE="${REPO_DIR}/scripts/smoketest/verify-edge-contract.sh"
 
 runtime_wait_timeout="${PHASE7_WAIT_TIMEOUT:-}"
 runtime_regression_timeout="${PHASE7_REGRESSION_TIMEOUT:-}"
@@ -19,6 +21,8 @@ Usage: ./scripts/smoketest/verify-security-guardrails.sh [options]
 Runs the local final security guardrail proof in this order:
   1. ./scripts/guardrails/verify-static-security-manifests.sh
   2. ./scripts/smoketest/verify-runtime-security-guardrails.sh
+  3. ./scripts/smoketest/verify-edge-contract.sh (default run, no
+     --inject-failures; changes no Kubernetes object)
 
 Options:
   --runtime-wait-timeout <duration>
@@ -36,6 +40,8 @@ Environment:
 
 Notes:
   - This is the local security guardrail command.
+  - The edge contract failure-injection cases stay a separate, direct
+    ./scripts/smoketest/verify-edge-contract.sh --inject-failures run.
   - CI remains intentionally static-only via
     ./scripts/guardrails/verify-static-security-manifests.sh.
 EOF
@@ -90,6 +96,11 @@ if [[ ! -x "${RUNTIME_GATE}" ]]; then
     exit 1
 fi
 
+if [[ ! -x "${EDGE_CONTRACT_GATE}" ]]; then
+    printf 'ERROR: edge contract verifier is missing or not executable: %s\n' "${EDGE_CONTRACT_GATE}" >&2
+    exit 1
+fi
+
 section "Static Security Guardrails"
 "${STATIC_GATE}"
 
@@ -98,5 +109,8 @@ PHASE7_WAIT_TIMEOUT="${runtime_wait_timeout}" \
 PHASE7_REGRESSION_TIMEOUT="${runtime_regression_timeout}" \
     "${RUNTIME_GATE}"
 
+section "Edge Contract"
+"${EDGE_CONTRACT_GATE}"
+
 section "Final Security Guardrail Proof"
-printf 'Static and runtime security guardrails passed.\n'
+printf 'Static, runtime and edge contract security guardrails passed.\n'

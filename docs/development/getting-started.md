@@ -127,6 +127,11 @@ After Tilt is healthy, run the aggregate local proof:
 ./scripts/smoketest/smoketest.sh
 ```
 
+Its first step removes test resources left by earlier interrupted verifier
+runs. If a smoketest or verifier run is interrupted, run
+`./scripts/smoketest/cleanup-smoketest-residue.sh` before continuing. Do not
+use `tilt down` for this; it does not remove verifier residue.
+
 Use targeted verifiers only when you are debugging one capability:
 
 ```bash

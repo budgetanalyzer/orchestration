@@ -195,6 +195,30 @@ After updating an older checkout that lacks this startup ordering, restart Tilt
 with `tilt down` followed by `tilt up` so the corrected graph runs from its root.
 Do not weaken or delete the webhook configuration.
 
+### Issue: A Service Routes To Unexpected Pods After an Interrupted Smoketest
+
+If about half of requests to a service fail, or a Service has endpoints that
+are not Deployment or StatefulSet pods, look for verifier residue. Some
+verifier probe pods, such as `np2-*` from `verify-network-policies.sh`, carry
+real workload labels and become Ready endpoints of the real Services when an
+interrupted run skips their cleanup.
+
+```bash
+./scripts/smoketest/cleanup-smoketest-residue.sh --dry-run
+./scripts/smoketest/cleanup-smoketest-residue.sh
+```
+
+`tilt down` does not remove this residue, because those resources have no Tilt
+label or owner. The cleanup script fails if any EndpointSlice target behind a
+Service in `default`, `monitoring`, `istio-ingress` or `istio-egress` still
+lacks an owner.
+
+Kiali health uses a 10-minute rate window. After cleanup,
+`verify-monitoring-runtime.sh` can still report a Kiali `Failure` for a
+service such as `monitoring/prometheus` until 10 minutes have passed since the
+residue pods stopped receiving traffic. Wait, then rerun; do not treat that as
+a new defect unless it persists.
+
 ### Issue: Service Pod Not Starting
 
 ```

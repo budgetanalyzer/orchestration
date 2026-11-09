@@ -14,15 +14,16 @@ usage() {
 Usage: ./scripts/smoketest/smoketest.sh [options]
 
 Runs the local live-cluster validation sequence:
-  1. ./scripts/guardrails/verify-static-security-manifests.sh
-  2. ./scripts/smoketest/verify-security-prereqs.sh
-  3. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
-  4. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
-  5. ./scripts/smoketest/verify-istio-tracing-config.sh
-  6. ./scripts/smoketest/verify-monitoring-runtime.sh
-  7. ./scripts/smoketest/verify-observability-port-forward-access.sh
-  8. ./scripts/smoketest/verify-session-architecture.sh
-  9. ./scripts/smoketest/verify-security-guardrails.sh
+  1. ./scripts/smoketest/cleanup-smoketest-residue.sh (5-minute budget)
+  2. ./scripts/guardrails/verify-static-security-manifests.sh
+  3. ./scripts/smoketest/verify-security-prereqs.sh
+  4. ./scripts/smoketest/verify-clean-tilt-deployment-admission.sh
+  5. ./scripts/smoketest/verify-monitoring-rendered-manifests.sh
+  6. ./scripts/smoketest/verify-istio-tracing-config.sh
+  7. ./scripts/smoketest/verify-monitoring-runtime.sh
+  8. ./scripts/smoketest/verify-observability-port-forward-access.sh
+  9. ./scripts/smoketest/verify-session-architecture.sh
+  10. ./scripts/smoketest/verify-security-guardrails.sh
 
 Options:
   --observability-grafana-port <port>
@@ -100,6 +101,17 @@ run_step() {
     "$@"
 }
 
+run_cleanup_with_budget() {
+    local status=0
+
+    timeout --kill-after=10s 5m "${SCRIPT_DIR}/cleanup-smoketest-residue.sh" || status=$?
+    if [[ "${status}" -eq 124 || "${status}" -eq 137 ]]; then
+        printf 'ERROR: preflight residue cleanup exceeded its 5-minute budget.\n' >&2
+    fi
+    return "${status}"
+}
+
+run_step "Preflight residue cleanup" run_cleanup_with_budget
 run_step "Static security manifest guardrails" \
     "${REPO_DIR}/scripts/guardrails/verify-static-security-manifests.sh"
 run_step "Platform security baseline" \

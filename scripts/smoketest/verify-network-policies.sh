@@ -33,6 +33,9 @@ ALLOW_RETRY_DELAY="${PHASE2_ALLOW_RETRY_DELAY:-1}"
 DENY_ATTEMPTS="${PHASE2_DENY_ATTEMPTS:-3}"
 DENY_RETRY_DELAY="${PHASE2_DENY_RETRY_DELAY:-1}"
 PROBE_STABILIZATION_SECONDS="${PHASE2_PROBE_STABILIZATION_SECONDS:-5}"
+# Marks every probe Pod and Service so cleanup-smoketest-residue.sh can find
+# them after an interrupted run.
+TEMP_LABEL_KEY="verify-network-policies-temp"
 
 PASSED=0
 FAILED=0
@@ -205,6 +208,7 @@ metadata:
   annotations:
     sidecar.istio.io/inject: "false"
   labels:
+    ${TEMP_LABEL_KEY}: "true"
 ${label_lines}spec:
   automountServiceAccountToken: false
   securityContext:
@@ -252,6 +256,7 @@ kind: Pod
 metadata:
   name: ${name}
   labels:
+    ${TEMP_LABEL_KEY}: "true"
 ${label_lines}spec:
   automountServiceAccountToken: false
   securityContext:
@@ -299,6 +304,7 @@ metadata:
   annotations:
     sidecar.istio.io/inject: "false"
   labels:
+    ${TEMP_LABEL_KEY}: "true"
 ${label_lines}spec:
   automountServiceAccountToken: false
   securityContext:
@@ -340,6 +346,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ${name}
+  labels:
+    ${TEMP_LABEL_KEY}: "true"
 spec:
   selector:
     budgetanalyzer.io/network-policy-listener: "${name}"

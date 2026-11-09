@@ -101,7 +101,7 @@ delete_rabbitmq_temp_vhost() {
     if [[ -n "${rabbitmq_pod}" && -n "${admin_username}" && -n "${admin_password}" ]]; then
         kubectl exec -n "${INFRA_NAMESPACE}" "${rabbitmq_pod}" -- \
             rabbitmqadmin -q -u "${admin_username}" -p "${admin_password}" -V "${admin_vhost}" \
-            delete vhost name="${RABBITMQ_TEMP_VHOST}" >/dev/null 2>&1 || true
+            delete vhost --name "${RABBITMQ_TEMP_VHOST}" >/dev/null 2>&1 || true
     fi
 }
 
@@ -948,7 +948,7 @@ verify_rabbitmq_guardrails() {
 
     if capture_command output \
         rabbitmq_admin "${rabbitmq_pod}" "${admin_username}" "${admin_password}" "${admin_vhost}" \
-        declare vhost "name=${RABBITMQ_TEMP_VHOST}"; then
+        declare vhost --name "${RABBITMQ_TEMP_VHOST}"; then
         RABBITMQ_TEMP_VHOST_CREATED=true
         info "Created temporary RabbitMQ vhost ${RABBITMQ_TEMP_VHOST} for denied-access verification"
     else

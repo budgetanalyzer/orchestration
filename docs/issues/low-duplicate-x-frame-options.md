@@ -18,8 +18,11 @@ response.
 
 ## Impact
 
-None in practice. Browsers ignore conflicting XFO values, and the same
-includes send CSP `frame-ancestors 'self'`, which modern browsers prefer.
+None in practice. Under the HTML standard's X-Frame-Options processing,
+conflicting values block framing. A Chromium check of `DENY, SAMEORIGIN`
+blocked framing and logged "Falling back to 'deny'". The same includes send
+CSP `frame-ancestors 'self'` at line 4, and browsers that support it apply it
+instead of X-Frame-Options. The effective policy is therefore `'self'`.
 Affected responses are JSON.
 
 ## Proposed fix

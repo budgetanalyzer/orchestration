@@ -38,8 +38,11 @@ members.
 - Login initiation is rate limited per client (burst 25, 1/s;
   `kubernetes/istio/ingress-rate-limit.yaml:74-76`).
 - permission-service commits the deactivation before revocation, and heartbeat
-  rechecks account status. An existing session therefore lives at most one
-  sliding TTL (15 minutes) after deactivation.
+  rechecks account status. Normally a session lives no more than one sliding
+  TTL (15 minutes) after deactivation. A login or heartbeat whose
+  authorization lookup started before deactivation can still create or extend
+  a session afterward; see
+  [Emergency Admin Containment](../architecture/security-architecture.md#emergency-admin-containment).
 
 The concrete defects are:
 

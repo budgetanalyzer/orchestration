@@ -687,17 +687,25 @@ each one before a hosted deployment or an open-signup requirement.
   high-expansion PDF, can plausibly exhaust the heap and fail the transaction
   API for every user until the JVM recovers or the pod restarts. This is
   reasoned from source and defaults, not reproduced. It affects availability,
-  not confidentiality. No current setting, including the 25 MB limit, is a
-  capacity bound. A temp-file stream cache is not a fix, because it moves
-  neither the input array nor the parsed document to disk. If revisited,
-  prefer configuration before code: an NGINX `limit_conn` cap on the preview
-  route (an exception to the
+  not confidentiality. Temporary storage is a separate exposure.
+  transaction-service sets no multipart `file-size-threshold`, so Spring's
+  default of 0 applies: every multipart part is spooled to `/tmp` before
+  `getBytes()` copies it to the heap. `/tmp` is an `emptyDir` with no
+  `sizeLimit`. The 25 MB limit bounds each request, not total temporary
+  storage, so concurrent uploads can fill node ephemeral storage.
+  Application-level admission runs after servlet spooling, so it cannot cap
+  this. Only an edge cap or an `emptyDir` `sizeLimit` bounds it. No current
+  setting, including the 25 MB limit, is a capacity bound. A temp-file stream
+  cache is not a fix, because it moves neither the input array nor the parsed
+  document to disk. If revisited, prefer configuration before code: an NGINX
+  `limit_conn` cap on the preview route (an exception to the
   [NGINX rule](../../nginx/README.md) against backend-specific limits), an
   explicit heap percentage with `-XX:+ExitOnOutOfMemoryError` and a memory
-  limit that fits heap plus non-heap memory, a lower upload size in both
-  NGINX and Spring, and more than one replica. These bound concurrent upload
-  memory but not one crafted document. File-backed input, page or text limits,
-  per-user fairness and a killable parsing worker remain later options.
+  limit that fits heap plus non-heap memory, a `sizeLimit` on the `/tmp`
+  `emptyDir`, a lower upload size in both NGINX and Spring, and more than one
+  replica. These bound concurrent upload memory and temporary storage but not
+  one crafted document. File-backed input, page or text limits, per-user
+  fairness and a killable parsing worker remain later options.
 - **Anonymous OAuth-state growth.** `noeviction` keeps sessions and OAuth state
   from being evicted, but it does not stop anonymous login starts from filling
   the budget. About 60 source addresses at the per-client login-initiation
@@ -781,9 +789,16 @@ each one before a hosted deployment or an open-signup requirement.
 - One `redis` StatefulSet replica in `infrastructure`, locally and in the
   production reference; no Sentinel, replication or automatic failover is
   configured
-- `/data` is PVC-backed through the `redis-data` claim template, so a pod
-  restart keeps sessions, but Redis unavailability fails session validation
-  until it returns
+- `/data` is PVC-backed through the `redis-data` claim template, so the AOF
+  and its base RDB survive a pod restart. Recovery is incomplete, though: AOF
+  replay currently drops the effects of session scripts that make more than
+  one write. A restart therefore loses sessions and OAuth state written since
+  the last AOF rewrite, and those users must log in again (it fails closed).
+  If a user's session index held a session key that had expired but was not
+  yet deleted when a bulk revocation ran, the restart can also undo that
+  revocation. See
+  [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
+- Redis unavailability fails session validation until it returns
 - High availability needs a deliberate topology choice: the session Lua
   scripts update the session hash and user-session index together without a
   shared Redis Cluster hash slot, so sharded Redis Cluster is not a drop-in
@@ -885,14 +900,17 @@ local Tilt or the production reference.
 - Key names remain visible metadata to Redis operators and to the `currency-service` Redis user, whose `+scan` grant (used for cache eviction) is not filtered by ACL key patterns; hashing keeps the reusable token out of them. That user is denied `KEYS` and cannot read session keys
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
 - Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache shares the budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
-- Persistence: AOF for crash recovery
+- Persistence: AOF for crash recovery. Replay currently drops multi-write session script effects, so a restart loses sessions and OAuth state written since the last AOF rewrite; see [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
 
 **Redis memory budget derivation:** `maxmemory` bounds `used_memory`, not RSS.
 The 2026-11-08 local measurement put the worst observed case at the budget at
 134 MB × 1.55 allocator fragmentation (a bulk Lua load; ordinary writes stayed
 at 1.08–1.12) + 10 MB empty-process base + 7.5 MB fork copy-on-write during an
 AOF rewrite or RDB save, about 226 MB or 84% of the 256Mi limit. Realistic
-writes peaked at 145 MB. At 128 MB the budget holds about 37,600
+writes peaked at 145 MB. The synthetic fill records repeated values and
+compressed better than real data. Real data would use more disk and make AOF
+rewrites run longer, which can raise the copy-on-write figure. The
+`used_memory` figures are unaffected. At 128 MB the budget holds about 37,600
 maximum-size OAuth-state records (about 3.5 KB each), 75,000–87,000 sessions
 with their indexes, or about 25 all-time exchange-rate cache entries. A fork
 during which nearly every page is rewritten would copy up to the whole

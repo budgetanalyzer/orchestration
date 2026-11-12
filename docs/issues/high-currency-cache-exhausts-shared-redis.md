@@ -157,9 +157,11 @@ from the cached series.
 
 A dense series of `ExchangeRateData` written with the current serializer is
 roughly the measured all-time entry: about 5 MB per currency. With all 23
-seeded currencies enabled, that is about 120 MB, over the 128 MB budget.
-Every request, even a one-week range, would also fetch and deserialize the
-whole series from Redis.
+seeded currencies enabled, that is about 115–120 MB. That fits under the
+128 MiB (134 MB) `maxmemory`, but leaves only about 15–19 MB for sessions,
+session indexes, OAuth state and Redis overhead. Under `noeviction`, new
+logins and heartbeats then fail closed. Every request, even a one-week range,
+would also fetch and deserialize the whole series from Redis.
 
 Cache a compact value instead:
 
@@ -169,7 +171,8 @@ Cache a compact value instead:
 - one published-date offset per day.
 
 The slice index is then `date - startDate`. Measure one all-time entry and
-record the worst case (all currencies enabled) against the Redis budget.
+record the worst case (all currencies enabled) against the Redis budget. The
+worst case must leave a stated allowance for authentication data.
 
 ### Alternative considered
 

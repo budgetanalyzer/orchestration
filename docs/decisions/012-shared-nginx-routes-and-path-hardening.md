@@ -45,9 +45,13 @@ implementation.
    to, with no version-wide wildcards, under an explicit `default-deny-all`.
    Internal routes stay reachable only by their named callers.
 2. **Reject `;` in layers.**
-   - An ingress RBAC path filter runs before `ext_authz` and denies a literal
-     `;` or `%3b` at any percent-encoding depth before the query string. It
-     runs before routing, so it covers the NGINX lane and the direct Session
+   - An ingress RBAC path filter runs before `ext_authz`. It sees `:path`
+     after HCM normalization, which resolves literal `..;`, `..;<text>` and
+     `.;` segments as dot segments and drops the `;<text>`. The filter never
+     denies those forms, but no `;` from them reaches NGINX or Session
+     Gateway. In the path that remains, the filter denies a literal `;` or
+     `%3b` at any percent-encoding depth before the query string. It runs
+     before routing, so it covers the NGINX lane and the direct Session
      Gateway lane, which NGINX does not protect.
    - The shared NGINX include keeps a server-level
      `if ($uri ~ ";") { return 400; }` on the decoded path as a second layer.

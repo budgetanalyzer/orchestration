@@ -1,6 +1,6 @@
 # Security Documentation Reorganization
 
-**Status:** Not started. A manual multi-session plan, not formatted for AI Session Handler.
+**Status:** Phases 1–6 done, Phase 7 not started. A manual multi-session plan, not formatted for AI Session Handler.
 
 Delete the completed `security-hardening-*` plans and the security review documents in
 `docs/research/`. Move anything still useful into its long-term home first:
@@ -317,7 +317,32 @@ section has a Ledger disposition.
 
 ### Phase 6: Sibling evidence copies, index and ownership
 
-**Status:** Not started.
+**Status:** Done. 6b: almost every Q5 contract was already in the owning repo's docs.
+Three were missing and were added. In currency-service, `docs/configuration.md#logging` now says
+the `WebClient` `DEBUG` logger omits the query string, so the FRED `api_key` is not logged. This
+was checked against the disassembled `WebClientUtils` in spring-webflux 7.0.10. In
+permission-service, `docs/authorization-model.md#internal-authorization-lookups` now names
+`RuntimeSecurityIntegrationTest` and its two exceptions. In transaction-service,
+`docs/api/README.md#authentication--authorization` now names the test and its empty exception
+list. The currency-service limitations are obsolete: probes now use the groups, and the Redis
+grant has `+scan` and no `+keys`. The five evidence files and their empty `docs/research/`
+directories were deleted, with no inbound links in any of the five repos. The sibling pattern
+search returns nothing. The file-existence check now lists only the orchestration record, which
+Phase 7 deletes. 6a: Session Gateway's `docs/security.md`,
+`docs/session-configuration.md`, `docs/configuration.md` and `AGENTS.md` already stated every
+contract in its evidence copy, so no contract text was added there. Four stale lines were fixed:
+`security.md` now points to ADR 010 and orchestration's `verify-oauth-browser-binding.py` instead
+of the evidence copy and "plan 02.1 phase 3", and it no longer cites "hardening plan 01" for the
+Redis ACL allowlist. `session-configuration.md` now points to
+`security-architecture.md#accepted-risks` instead of "hardening plan 04, phase 1", and its
+leftover "This phase does not change ingress header handling" sentence was removed. The api-tests
+README already covered POST heartbeat/logout and the exact-Origin client. It lacked
+OAuth binding-cookie preservation, so a paragraph was added under `## Authentication`. Both
+evidence files and their empty `docs/research/` directories were deleted. No ADR index exists.
+`system-overview.md` References now lists ADRs 009–015, and the `security-architecture.md` Key
+Decision Log has rows for 009–014. Before this change, ADRs 009, 010, 012 and 014 had no inbound
+link from any live doc. `docs/OWNERSHIP.md` and `AGENTS.md` do not mention the evidence record or
+the hardening plans, so neither changed.
 Run this phase as two sessions: 6a does steps 1–5 (Q1, index and ownership), 6b does step 6
 (Q5).
 **Read (6a):** the "Implemented contract", "Contract and decisions" and "Handoff and limitations"
@@ -558,3 +583,41 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Platform audit | Reproduction summary | render inputs `covered:scripts/README.md#security-evidence`; monitoring render `covered:verify-monitoring-rendered-manifests.sh`; manual `docker manifest inspect` and Trivy steps `obsolete` (exact-image workflow, manual dispatch) | 5b |
 | Platform audit | Integrated local and offline validation 2026-10-19 | `obsolete`: point-in-time. Kiali health window after denial probes `doc:docs/runbooks/tilt-debugging.md` (added) | 5b |
 | Platform audit | Ordered handoff (kube-state-metrics only) | `obsolete`: done, `v2.20.0` pinned in `kubernetes/monitoring/prometheus-stack-values.yaml`; no issue needed | 5b |
+| SG evidence | 02.1 P1 OAuth callback binding contract | `covered:../session-gateway/docs/security.md#oauth-callback-browser-binding`; link and stale "02.1 phase 3" sentence replaced with `adr:010` and the orchestration browser verifier | 6a |
+| SG evidence | 02.1 P1 limitations: legacy pending records, cookie loss, first-start race, unbounded pending records | `covered:../session-gateway/docs/security.md#oauth-callback-browser-binding`; record growth also `doc:docs/architecture/security-architecture.md#accepted-risks`; live browser proof `covered:docs/architecture/session-edge-authorization-pattern.md` (binding verifier) | 6a |
+| SG evidence | 02.2 P1 bounded `returnUrl`, validated-only `return_url`, 600 s state TTL, `IDP_REDIRECT_URI` | `covered:../session-gateway/docs/session-configuration.md` (`#bounded-login-return-url`, `#oauth2-state-ttl`, `#oauth-callback-uri`) and `docs/configuration.md`; "plan 04, phase 1" pointer replaced with `#accepted-risks`; stale "This phase" sentence removed | 6a |
+| SG evidence | 02.5 P1 hashed session keys, golden vector, log IDs, no raw-key fallback, enumeration | `covered:../session-gateway/docs/session-configuration.md#hashed-session-keys` and `docs/security.md#hashed-session-keys`; `adr:011` | 6a |
+| SG evidence | 02.6 P1 `__Host-BA_SESSION`, no domain override, startup check | `covered:../session-gateway/docs/session-configuration.md#cookie-behavior` and `docs/security.md#session-cookies`; startup log line and cutover notes `obsolete` | 6a |
+| SG evidence | 02.7 P1 POST heartbeat and logout, `405` for `GET`/`HEAD`, `303`, no CSRF token | `covered:../session-gateway/docs/security.md` (Session Heartbeat, Machine Error Contract) and `docs/session-configuration.md#cookie-behavior`; `adr:009`; built-in logout filter detail and OpenAPI operations `obsolete` (implementation detail) | 6a |
+| SG evidence | 03 P9 safe logging, readiness without permission-service, audit events | `covered:../session-gateway/docs/configuration.md` (Logging, Health Probes), `AGENTS.md` and `docs/security.md#session-lifecycle-audit-events`; client-address gap `covered:#accepted-risks` | 6a |
+| SG evidence | 03 remediation P1 audit owners, logout commit point, `spring.config.additional-location` | `covered:../session-gateway/docs/security.md#session-lifecycle-audit-events`; config override `covered:` in-code comment | 6a |
+| SG evidence | Validation transcripts, worker runs, cross-repo handoffs | `obsolete`; file `deleted` | 6a |
+| api-tests evidence | 02.1 P2 OAuth binding cookie preservation | `doc:../budget-analyzer-api-tests/README.md#authentication` (added) | 6a |
+| api-tests evidence | 02.7 P3 POST heartbeat and logout callers, `303` | `covered:../budget-analyzer-api-tests/README.md` (Authentication, Contract Snapshots) and `docs/openapi-coverage.md` | 6a |
+| api-tests evidence | 02.8 P1 exact-Origin `GatewayClient` header | `covered:../budget-analyzer-api-tests/README.md#local-run` (`Origin` paragraph) | 6a |
+| api-tests evidence | Validation results, offline-only notes | `obsolete`; file `deleted` | 6a |
+| Phase 6 step 4 | ADR index and cross-links | no index exists; `doc:docs/architecture/system-overview.md#references` (009–015) and `doc:docs/architecture/security-architecture.md#appendix-key-decision-log` (009–014) | 6a |
+| Phase 6 step 5 | `OWNERSHIP.md` / `AGENTS.md` mentions of evidence record or plans | `obsolete`: none found | 6a |
+| service-common evidence | Servlet client address from `X-Real-IP` or peer only, never `X-Forwarded-For`; NGINX overwrites `X-Real-IP` | `covered:../service-common/README.md` (service-web, HTTP Logging Filter) | 6b |
+| service-common evidence | Reactive filter omits unresolved address, no `getHostString()`; Session Gateway client-address gap | `covered:../service-common/README.md`; gap `covered:docs/architecture/security-architecture.md#accepted-risks` | 6b |
+| service-common evidence | Audit event shape, servlet interceptor (route pattern, path variables, status), reactive explicit emission, data exclusions | `covered:../service-common/README.md` (Structured Audit Events) and `docs/common-patterns.md` (Use Structured Audit Events) | 6b |
+| service-common evidence | Limitations: audit retention, access and routing; reads out of scope | `covered:../service-common/docs/common-patterns.md` (deployment log store) and `docs/architecture/security-architecture.md#accepted-risks` and `#logging-strategy` | 6b |
+| service-common evidence | Validation | `obsolete`; file `deleted` | 6b |
+| ext-authz evidence | `/livez` and `/readyz` split, health socket before first Redis ping, unbounded background retry with capped backoff, fail-closed `503` | `covered:../ext-authz/README.md#runtime-health`; `/healthz` removal `obsolete` | 6b |
+| ext-authz evidence | HTTP server timeouts, write timeout above readiness budget | `covered:../ext-authz/README.md#runtime-health` (values in `main.go`) | 6b |
+| ext-authz evidence | Go 1.27 toolchain alignment; probe changes deferred to orchestration | toolchain `covered:../ext-authz/README.md#local-commands`, otherwise `obsolete`; probe deferral `obsolete` (done) | 6b |
+| ext-authz evidence | Validation | `obsolete`; file `deleted` | 6b |
+| currency-service evidence | Logging boundary: `INFO`, no body flags, `debug-logging` profile, audit logger enabled | `covered:../currency-service/docs/configuration.md#logging` | 6b |
+| currency-service evidence | `WebClient` `DEBUG` logger drops the query string, so the FRED `api_key` is not logged | `doc:../currency-service/docs/configuration.md#logging` (added) | 6b |
+| currency-service evidence | Readiness `readinessState,db,redis`; Redis because no `CacheErrorHandler`; RabbitMQ and FRED excluded | `covered:../currency-service/docs/configuration.md#health-probes` | 6b |
+| currency-service evidence | `@PreAuthorize` coverage test, empty exception list | `covered:../currency-service/docs/configuration.md#security` and `docs/api/README.md` | 6b |
+| currency-service evidence | `SCAN` clearing, batch 1000, no `+keys`, stale-entry race bounded by one-hour TTL | `covered:../currency-service/docs/configuration.md#caching` and `docs/advanced-patterns-usage.md`; `adr:011` | 6b |
+| currency-service evidence | Runtime configuration test: one sequential test, `spring.config.additional-location` override | override `covered:` in-code comment in `RuntimeConfigurationIntegrationTest`; test structure `obsolete` (implementation detail) | 6b |
+| currency-service evidence | Limitations: probes on `/actuator/health`, `KEYS` eviction, `+keys` grant, no live run | `obsolete`: probes use the groups in `kubernetes/services/currency-service/deployment.yaml`, grant has `+scan` and no `+keys`; file `deleted` | 6b |
+| permission-service evidence | Logging boundary and audit logger; readiness `readinessState,db`, Session Gateway excluded | `covered:../permission-service/README.md` (Logging, Health Probes) | 6b |
+| permission-service evidence | `@PreAuthorize` coverage test with the two `InternalPermissionController` exceptions | rule `covered:../permission-service/AGENTS.md` (Security); test `doc:../permission-service/docs/authorization-model.md#internal-authorization-lookups` (added) | 6b |
+| permission-service evidence | `deleteUser` removed; deactivation is the lifecycle operation; sync guard checks `DEACTIVATED` regardless of soft delete | `adr:011`; `covered:../permission-service/docs/authorization-model.md#deactivation-and-revocation-retries` | 6b |
+| permission-service evidence | Validation | `obsolete`; file `deleted` | 6b |
+| transaction-service evidence | Logging boundary and audit logger; readiness `readinessState,db`, RabbitMQ and downstream excluded | `covered:../transaction-service/docs/configuration.md` (Logging, Health Probes) | 6b |
+| transaction-service evidence | `@PreAuthorize` coverage test, empty exception list | rule `covered:../transaction-service/AGENTS.md` (Authorization and Ownership); test `doc:../transaction-service/docs/api/README.md#authentication--authorization` (added) | 6b |
+| transaction-service evidence | Validation | `obsolete`; file `deleted` | 6b |

@@ -1023,6 +1023,12 @@ containment.
 | Service-layer authorization | Defense in depth; protect against gateway bypass |
 | Redis for sessions | Performance; distributed architecture; single hash per session |
 | East-west caller authentication | Istio mTLS plus AuthorizationPolicy for service-to-service traffic |
+| Exact-Origin ingress rule as the primary CSRF control | [ADR 009](../decisions/009-exact-origin-ingress-csrf-control.md) |
+| OAuth callback browser binding | [ADR 010](../decisions/010-oauth-callback-browser-binding.md) |
+| Hashed session keys, `__Host-` cookie, absolute lifetime | [ADR 011](../decisions/011-hashed-session-keys-host-cookie-absolute-lifetime.md) |
+| Shared NGINX routes, narrow mesh paths, `;` rejection | [ADR 012](../decisions/012-shared-nginx-routes-and-path-hardening.md) |
+| Deferred mesh identity hardening | [ADR 013](../decisions/013-deferred-mesh-identity-hardening.md) |
+| HSTS without `includeSubDomains` or `preload` | [ADR 014](../decisions/014-hsts-without-includesubdomains-or-preload.md) |
 
 ---
 

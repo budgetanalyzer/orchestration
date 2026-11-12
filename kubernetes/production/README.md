@@ -212,6 +212,9 @@ Any future hosted environment must separately define and verify:
 - ingress publication, client-address preservation, DNS, and firewall policy;
 - storage classes, capacity, encryption at rest, backups, recovery objectives,
   and restore tests;
+- whether a Redis restore invalidates every restored session, because a
+  snapshot revives sessions that were logged out or revoked after it was taken
+  and have not yet expired;
 - secret provisioning and rotation, and production identity-provider
   configuration;
 - browser and infrastructure TLS issuance and renewal; and

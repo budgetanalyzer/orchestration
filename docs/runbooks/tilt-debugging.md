@@ -84,6 +84,11 @@ reports only the application's own state. Readiness probes use
 `/actuator/health/readiness`, which adds the dependencies each service cannot
 serve without. A dependency outage therefore removes pods from Service
 endpoints without restarting them; recovery needs no intervention.
+Removal waits for consecutive failed readiness probes (three by default,
+six for Session Gateway). In the 2026-11 outage drill, PostgreSQL-backed
+services returned `500`s and hung requests for up to about 40 seconds before
+callers got `503`, and Session Gateway took about a minute to become unready
+during a Redis outage. Probe timings were not tuned to shorten this.
 
 | Service | Probe path prefix | Readiness dependencies |
 | --- | --- | --- |
@@ -217,7 +222,11 @@ Kiali health uses a 10-minute rate window. After cleanup,
 `verify-monitoring-runtime.sh` can still report a Kiali `Failure` for a
 service such as `monitoring/prometheus` until 10 minutes have passed since the
 residue pods stopped receiving traffic. Wait, then rerun; do not treat that as
-a new defect unless it persists.
+a new defect unless it persists. The same window can flag apps right after the
+high-volume denial probes in the security verifiers or the aggregate
+smoketest, which also fails the Kiali triage in
+`verify-prometheus-operator-least-privilege.sh`. Wait for the probe traffic to
+age out and rerun; do not change a threshold.
 
 ### Issue: Service Pod Not Starting
 

@@ -432,6 +432,14 @@ offline-unscannable; do not invent an image or add a live-cluster dependency.
 Trivy inventory also is not proof of an embedded product's support lifecycle or
 exact primary application patch.
 
+Read `CRITICAL`/`HIGH` counts as raw package observations. A finding does not
+show that the vulnerable code is reachable in this deployment, and a lower or
+zero count does not show that an image is free of risk. Base a platform
+upgrade decision on the upstream support status, the release that fixes a
+cited security issue, and published compatibility. A lower count in a newer
+image is comparison input only, not a reason to migrate a chart, operator or
+CRD set.
+
 ## GitHub and Mend settings
 
 Keep `main` as every repository's default branch and normal protected merge

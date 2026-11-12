@@ -261,7 +261,32 @@ returns nothing.
 
 ### Phase 5: Sweep the remaining evidence and reviews for durable facts
 
-**Status:** Not started.
+**Status:** Done. 5b found no ADR candidate and no open handoff item. The audit's version
+selections are executed and live in the manifests and the version contract. Its one ordered
+follow-up, kube-state-metrics `v2.20.0`, is pinned in `prometheus-stack-values.yaml`. Its two
+linked plans no longer exist. Digest pinning, the Trivy workflow, the support-date routine, the
+Kiali and Kyverno digest encodings, the Jaeger gRPC workaround and the kube-state-metrics label
+rule were already recorded in live docs, values comments or post-renderers. The audit's manual
+reproduction steps are superseded by the exact-image workflow (manual dispatch). Three
+still-true facts were missing and were added. How to read scanner counts went into
+`docs/dependency-automation.md#exact-image-security-evidence`. Non-reproducible monitoring
+renders went into `docs/architecture/observability.md#helm-chart`. The Kiali health window
+after denial probes went into `docs/runbooks/tilt-debugging.md`. Not acted on: the cert-manager
+controller images still render mutable tags in the production reference. That is consistent
+with the Kyverno `cert-manager` namespace exclusion and the documented mutable-tag labelling,
+but the reason for the exclusion is not written down anywhere. 5a covered all 20 `### Limitations` sections plus the
+Plan 01 P5 "Handoff and limits" section, which is the same kind of section under another
+name. It also covered the summary and findings tables of all four 11-01 reviews. Nearly
+everything was already covered by ADRs 009–015, live docs or issues, or was point-in-time
+test scope. Three still-true facts were missing and were added. The dependency-outage window
+before readiness removes pods went into `docs/runbooks/tilt-debugging.md#service-health-endpoints`.
+The `client|setinfo` `ACL LOG` noise for `ext-authz` and `currency-service` went into
+`docs/development/local-environment.md` (Redis local access); it was confirmed live on
+2026-11-12. Session invalidation on a Redis restore went into
+`kubernetes/production/README.md#unresolved-deployment-prerequisites`. No new issues or
+ADRs. Spotted but not investigated: `ACL LOG` also holds `default`-user denials
+(`hset`, `sadd`, `pexpireat` inside `MULTI/EXEC`, client `fd=-1`) timestamped at the last
+Redis start, which suggests AOF replay. That needs its own check and is outside this plan.
 Run this phase as two sessions.
 
 **5a: Evidence limitations and the 11-01 reviews.**
@@ -481,3 +506,55 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Plan 05 | Human-run verification 2026-11-09 | `obsolete`: point-in-time | 3 |
 | Plans 01–05 | Status lines and open phases | `obsolete`: all executed. Stale "Draft" lines; 01 follow-up criteria hold (`require_inject_failures`, `__pycache__/` ignored); 03 remediation closed. No new issues | 3 |
 | Scope gap | Five unscoped sibling evidence copies (currency-service, service-common, ext-authz, permission-service, transaction-service) | Q5: delete after moving durable contract text, Phase 6b. The plan's claim that Final verification flags them was wrong; a file-existence check was added | 4 |
+| Evidence Limitations | Plan 03 P12: ~40 s of `500`s before readiness removes pods | `doc:docs/runbooks/tilt-debugging.md#service-health-endpoints` (added) | 5a |
+| Evidence Limitations | Plan 03 P12: login during PostgreSQL outage untested; production pins older Spring images | untested login `obsolete` (test scope); pins `covered:kubernetes/production/README.md#pinned-image-incompatibilities` | 5a |
+| Evidence Limitations | Plan 03 P13: production currency-service pin uses `KEYS`; Tilt does not watch `start-redis.sh`; local reset | pin `covered:kubernetes/production/README.md#pinned-image-incompatibilities`; Tilt watch `covered:docs/development/local-environment.md` (Redis local access, `tilt trigger '(Tiltfile)'`); reset `obsolete` | 5a |
+| Evidence Limitations | Plan 01 P1: `%2e%2e;` auth-lane denial rests on the sidecar rule; local only; 02.3 replaces the rule | `covered:docs/architecture/security-architecture.md#mesh-publicinternal-boundary` and `#ingress-path-hardening`; local-only `covered:deploy/README.md` boundary; 02.3 note `obsolete` | 5a |
+| Evidence Limitations | Plan 01 P2: header stripping proven on a stand-in only | `covered:scripts/README.md` (`verify-nginx-backend-headers.sh` stand-in note) | 5a |
+| Evidence Limitations | Plan 01 P3: literal `..;` normalized; local only; no OpenAPI `;` paths | `covered:adr:012` and `docs/architecture/security-architecture.md#ingress-path-hardening`; local-only `obsolete` | 5a |
+| Evidence Handoff and limits | Plan 01 P5: owner docs, ingress-local replies without HSTS, form-POST logout deferred, Chromium only | HSTS `covered:docs/architecture/security-architecture.md#ingress-header-ownership`; logout `covered:adr:009`; browser scope `covered:docs/architecture/session-edge-authorization-pattern.md#browser-proof`; owner list `obsolete` | 5a |
+| Evidence Limitations | Plan 01 P6: ext-authz and currency-service `CLIENT SETINFO` denied in `ACL LOG` | `doc:docs/development/local-environment.md` (Redis local access, added; confirmed live 2026-11-12) | 5a |
+| Evidence Limitations | Plan 01 P6: heartbeat-invalidation race not driven; no reset | `obsolete`: test scope and point-in-time | 5a |
+| Evidence Limitations | Plan 02.2 P3: no live `ADMIN` login; `returnUrl` cap rests on Session Gateway tests; `IDP_REDIRECT_URI` | test scope `obsolete` (Session Gateway contract text is Phase 6a); `IDP_REDIRECT_URI` `covered:kubernetes/production/README.md#rendering-and-configuration` | 5a |
+| Evidence Limitations | Plan 02.3 P3: production pin calls removed `GET .../permissions`; no live negative probe of the sync rule | pin `covered:kubernetes/production/README.md#pinned-image-incompatibilities`; rule `covered:` static check in `verify-session-architecture.sh` plus every live login, with the static-guard gap in `issue:medium-static-mesh-guard-misses-additive-allow.md` | 5a |
+| Evidence Limitations | Plan 02.4 P3: 8-hour cap and capped modal not driven live; no reset | `obsolete`: test scope, covered by service and frontend unit tests | 5a |
+| Evidence Limitations | Plan 02.5 P3 and P4: no live run, flush after cutover, raw-key production pins, key names and AOF digests visible | flush `covered:adr:015`; pins `covered:kubernetes/production/README.md#pinned-image-incompatibilities`; key names and digests `covered:adr:011` and `docs/architecture/security-architecture.md#accepted-risks` (no replayable token); live run `obsolete` | 5a |
+| Evidence Limitations | Plan 02.6 P5 and P6: no live run, `BA_SESSION` holders get `401`, production pins, `--inject-failures` skipped, api-tests not run | `--inject-failures` opt-in `covered:scripts/README.md`; pins `covered:kubernetes/production/README.md#pinned-image-incompatibilities`; rest `obsolete` | 5a |
+| Evidence Limitations | Plan 02.7 P4: `--inject-failures` skipped, other browsers, stale bundle `405`, old namespace | browsers `covered:docs/architecture/session-edge-authorization-pattern.md#browser-proof`; `--inject-failures` `covered:scripts/README.md`; rest `obsolete` | 5a |
+| Evidence Limitations | Plan 02.8 P2: Chromium only, Local Network Access disabled, `--inject-failures` skipped, offline production | `covered:docs/architecture/session-edge-authorization-pattern.md#browser-proof` and `scripts/README.md`; reset `obsolete` | 5a |
+| Evidence Limitations | Plan 04 P1: fork worst case and `activedefrag`, OAuth-state growth, synthetic fill, local only | `covered:docs/architecture/security-architecture.md#session-management` and `#accepted-risks`; synthetic fill and reset `obsolete` | 5a |
+| Evidence Limitations | Plan 04 P2: five excluded ranges only, static check scope, ingress-pod proof, local only | `covered:docs/architecture/security-architecture.md` Executive Summary (exact ranges, static and live verifiers); proof detail `obsolete` | 5a |
+| Evidence Limitations | Plan 04 P3: `hostssl` without client certs, Unix socket, ConfigMap restart, no static `pg_hba` check | `covered:docs/architecture/security-architecture.md` Executive Summary (`verify-full`, `verify-transport-encryption.sh`) and `docs/development/database-setup.md` (restart or reload); socket `obsolete` (in-pod only) | 5a |
+| Evidence Limitations | Plan 04 P4: inventory currency and pin drift, estimated dates, NGINX/Istio, RabbitMQ 4.4 end date and approval rule, old-volume reset | `covered:docs/dependency-automation.md#operator-routine` (re-check sources, update inventory, stateful approval gate) and `scripts/lib/runtime-support-windows.txt`; NGINX/Istio `issue:medium-nginx-and-istio-runtime-support-windows.md`; dates and reset `obsolete` | 5a |
+| Evidence Limitations | Plan 05 P1: JSON-literal check fixed, Forged Identity scope, two-cookie and `KEYS` scope, orphaned port-forwards | Forged Identity `covered:scripts/README.md` and each service's `RuntimeSecurityIntegrationTest`; two-cookie `covered:adr:011`; `KEYS` `covered:verify-credential-isolation.sh`; rest `obsolete` | 5a |
+| 11-01 review 1 | 1 OAuth binding; 2 Redis `+@all`; 3 backend cookies | 1 `adr:010`; 2 `covered:docs/development/local-environment.md` (session-gateway allowlist); 3 `covered:scripts/README.md` (backend-headers stand-in) | 5a |
+| 11-01 review 1 | 4 absolute lifetime and account-generation containment; 5 CSRF, GET mutations, `__Host-` | 4 `adr:011`, containment `covered:docs/architecture/security-architecture.md#emergency-admin-containment`; 5 `adr:009`, `adr:011` | 5a |
+| 11-01 review 1 | 6 body logging, audit events, `X-Forwarded-For`; 7 probes; 8 Redis memory | 6 body logging `obsolete` (debug profile only), audit `covered:#logging-strategy`, client address `covered:../service-common/README.md`; 7 `covered:docs/runbooks/tilt-debugging.md#service-health-endpoints`; 8 `covered:docs/architecture/security-architecture.md#session-management` | 5a |
+| 11-01 review 1 | Architecture bullets: server-side sessions, topology cost, narrow mesh rules, layered egress, vulnerability policy | sessions and topology `obsolete` (kept, no change); mesh `adr:012`; egress `adr:013` and Executive Summary exclusions; vulnerability policy `covered:docs/dependency-automation.md` (gating deferred) | 5a |
+| 11-01 review 1 | Hosted recovery, alerting, exporters, Redis HA topology | recovery `covered:kubernetes/production/README.md#unresolved-deployment-prerequisites`; alerting and exporters `covered:docs/architecture/observability.md`; Redis HA `covered:docs/architecture/security-architecture.md#high-availability-configuration` | 5a |
+| 11-01 review 1 | Restored sessions after disaster recovery | `doc:kubernetes/production/README.md#unresolved-deployment-prerequisites` (added) | 5a |
+| 11-01 review 1 | Doc reconciliation table (5 rows) and communication-guide rewrite | `obsolete`: all fixed (absolute expiry, CSRF row, no `Max-Age`, single Redis and `noeviction`, outbox intent not delivery, bounded synchronous calls, no shared tables) | 5a |
+| 11-01 review 2 | Assessment of review 1 findings table (rows 1–8) | same dispositions as review 1 rows 1–8 | 5a |
+| 11-01 review 2 | Architectural recommendations table (9 rows) | sessions and topology `obsolete`; edge contract `covered:verify-edge-contract.sh` in `scripts/README.md`; Redis split `adr:011` (Alternative 3) and `issue:high-currency-cache-exhausts-shared-redis.md`; signed identity, separate ports, `ISTIO_MUTUAL` `adr:013`; PDF worker `doc:docs/architecture/security-architecture.md#accepted-risks`; hosted prerequisites as review 1 | 5a |
+| 11-01 review 2 | Revocation wording, work order | wording `covered:` (contested "instant revocation" row); work order `obsolete` | 5a |
+| 11-01 review 3 | Prioritized list rows 1–12 | 1 `adr:011`; 2 `adr:010`, `adr:011`; 3 as review 1 row 3; 4 `covered:docs/architecture/session-edge-authorization-pattern.md#authorizer-failures` and probe table; 5 local-environment allowlist and `#session-management`; 6 as review 1 row 6; 7 `adr:011`; 8 `obsolete` (RabbitMQ 4.4); 9 `#accepted-risks`; 10 `adr:009`, `adr:014`; 11 `adr:011`; 12 `adr:012` | 5a |
+| 11-01 review 3 | New findings A–G | A `adr:011`; B `obsolete`; C `#accepted-risks`; D `adr:011`; E `covered:` (contested login timeout row; sync is `POST`); F `covered:` service `RuntimeSecurityIntegrationTest`; G `adr:014` | 5a |
+| 11-01 review 3 | H smaller items | forwarded headers `covered:#ingress-header-ownership`; zero-permission forged headers `covered:scripts/README.md` (Forged Identity); `hostssl` `covered:` Executive Summary; runtime roles `#accepted-risks`; `X-Forwarded-Proto` fixed; `RedirectUrlValidator` and `LoginPage` `returnUrl` fixed in sibling source; `form-action` and `X-XSS-Protection` `covered:#content-security-policy-posture`; deny-all baseline `covered:` `default-deny-all` in `authorization-policies.yaml`. All `obsolete` as findings | 5a |
+| 11-01 review 3 | Architectural changes 1–6, end-of-life automation, alert suggestions, doc corrections | Redis split `adr:011`; hashing `adr:011`; signed identity and ports `adr:013`; edge contract `covered:verify-edge-contract.sh`; parsing worker `#accepted-risks`; end-of-life `covered:docs/dependency-automation.md#operator-routine`; alerts as review 1; doc corrections `obsolete` (all fixed) | 5a |
+| 11-01 review 4 | N1 public edge to internal endpoints; N2 503 never reaches client | N1 `adr:012` and `#mesh-publicinternal-boundary`; N2 `covered:docs/architecture/session-edge-authorization-pattern.md#authorizer-failures` (empty-body `503`) | 5a |
+| 11-01 review 4 | N3 verifiers check text; N4 ext-authz startup and Session Gateway logging | N3 `covered:verify-edge-contract.sh` live matrix, remaining static gaps in Phase 1 issues; N4 `obsolete` (background Redis retry with `/livez`; leftover logging override gone) | 5a |
+| 11-01 review 4 | Priorities tables (rows 1–14), recommendations table, Fetch Metadata decision, drop/defer list | all `obsolete` as work items (implemented); decisions `adr:009`–`adr:014`; deferred items `adr:013` and `#accepted-risks` | 5a |
+| Platform audit | Header: bounded upgrade set (Istio, Kiali, Kyverno) and links to two plans | `obsolete`: executed; versions live in `scripts/lib/production-version-contract.sh`; both linked plans already deleted | 5b |
+| Platform audit | Verdicts table and asymmetric monitoring decision | `obsolete`: point-in-time version selections, all executed; decision basis `doc:docs/dependency-automation.md#exact-image-security-evidence` (added) | 5b |
+| Platform audit | Checked-in and rendered baseline | `obsolete`: version inventory. Non-reproducible render hash `doc:docs/architecture/observability.md#helm-chart` (added) | 5b |
+| Platform audit | Upstream support and release evidence (link table, release dates) | `obsolete`: point-in-time; method `covered:docs/dependency-automation.md#operator-routine` and `scripts/lib/runtime-support-windows.txt` | 5b |
+| Platform audit | Istio and Kiali implementation review | Kiali digest-before-tag `covered:scripts/ops/post-render-kiali-server.sh`; Jaeger gRPC and `disable_version_check` `covered:docs/architecture/observability.md` (Kiali section); Istio values contracts `obsolete` (enforced by static verifiers) | 5b |
+| Platform audit | Kyverno implementation review | digest-as-tag encoding `covered:deploy/helm-values/kyverno.values.yaml` comment; `Enforce` and exclusions `covered:` Kyverno policies and `docs/architecture/security-architecture.md` Executive Summary; render counts `obsolete` | 5b |
+| Platform audit | Method and interpretation | method `covered:docs/dependency-automation.md#exact-image-security-evidence` (workflow, `linux/arm64`, recorded metadata); interpretation boundary `doc:` same section (added); scanner metadata `obsolete` | 5b |
+| Platform audit | Bounded upgrade candidates and current-image tables | `obsolete`: digest and CVE inventories | 5b |
+| Platform audit | Monitoring comparisons and explicit deferral | `obsolete`: inventories; deferral executed by the kube-state-metrics follow-up | 5b |
+| Platform audit | kube-state-metrics follow-up evidence 2026-10-19 | chart label and runtime identity `covered:docs/architecture/observability.md#image-pinning` and `scripts/README.md` (`verify-monitoring-runtime.sh`); CVE tables and validation `obsolete` | 5b |
+| Platform audit | Retained-family exact artifacts | `obsolete`: inventories. Mutable rendered tags `covered:docs/dependency-automation.md#exact-image-security-evidence`; cert-manager exclusion `covered:kubernetes/kyverno/policies/production/50-require-third-party-image-digests.yaml` (reason not documented; see Phase 5 status) | 5b |
+| Platform audit | Reproduction summary | render inputs `covered:scripts/README.md#security-evidence`; monitoring render `covered:verify-monitoring-rendered-manifests.sh`; manual `docker manifest inspect` and Trivy steps `obsolete` (exact-image workflow, manual dispatch) | 5b |
+| Platform audit | Integrated local and offline validation 2026-10-19 | `obsolete`: point-in-time. Kiali health window after denial probes `doc:docs/runbooks/tilt-debugging.md` (added) | 5b |
+| Platform audit | Ordered handoff (kube-state-metrics only) | `obsolete`: done, `v2.20.0` pinned in `kubernetes/monitoring/prometheus-stack-values.yaml`; no issue needed | 5b |

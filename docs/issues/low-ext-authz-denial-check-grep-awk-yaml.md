@@ -3,8 +3,7 @@
 - **Severity:** Low (maintenance)
 - **Owner:** orchestration
 - **Status:** Open
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  O2
+- **Source:** 2026-11-09 independent implementation review O2
 
 ## Problem
 

@@ -3,8 +3,7 @@
 - **Severity:** Low
 - **Owner:** orchestration
 - **Status:** Open, partly disputed
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C6
+- **Source:** 2026-11-09 independent implementation review C6
 
 ## Problem as reported
 

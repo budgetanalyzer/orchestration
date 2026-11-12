@@ -3,8 +3,7 @@
 - **Severity:** Low
 - **Owner:** orchestration
 - **Status:** Open. This is follow-up work next to the hardening plans, not an unmet plan requirement.
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  O2
+- **Source:** 2026-11-09 implementation review O2
 - **Related:** [edge verifier deletes existing load-test fixture](medium-edge-verifier-deletes-existing-loadtest-fixture.md)
 
 ## Problem

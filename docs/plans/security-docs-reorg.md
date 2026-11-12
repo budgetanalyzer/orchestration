@@ -103,7 +103,12 @@ Recheck the list in Phase 7 with the search in **Final verification**.
 
 ### Phase 1: Make issues self-contained
 
-**Status:** Not started.
+**Status:** Done. 21 issues now use plain `Source:` attributions.
+`high-currency-cache-exhausts-shared-redis.md`, `low-bulk-session-revocation-fails-on-large-index.md`
+and `medium-static-mesh-guard-misses-additive-allow.md` gained condensed measurements and
+reproduction conditions. `info-security-evidence-doc-volume.md` was deleted, and its guidance is
+now a rule in `docs/OWNERSHIP.md`. No new issues were needed. The non-F/O/C rows (open items,
+accepted boundaries, retained controls) are marked `pending` for the phase that owns them.
 **Read:** all of `docs/issues/` (~1,000 lines), both 11-09 reviews (~830 lines). Read only the
 evidence-record sections that issues link to. Today that is `#shared-cache-growth-reported-not-changed`,
 around line 2081.
@@ -291,4 +296,44 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 
 | Source | Item | Disposition | Phase |
 | --- | --- | --- | --- |
-| | | | |
+| 11-09 review | F1 currency cache exhausts Redis | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
+| 11-09 review | F2 edge verifier deletes load-test fixture | `issue:medium-edge-verifier-deletes-existing-loadtest-fixture.md` | 1 |
+| 11-09 review | F3 bulk revocation fails on large index | `issue:low-bulk-session-revocation-fails-on-large-index.md` | 1 |
+| 11-09 review | F4 static mesh guard misses additive ALLOW | `issue:medium-static-mesh-guard-misses-additive-allow.md` | 1 |
+| 11-09 review | O1 static suite runs twice | `issue:low-aggregate-smoketest-runs-static-suite-twice.md` | 1 |
+| 11-09 review | O2 verifier lifecycle: fixture ownership | `issue:medium-edge-verifier-deletes-existing-loadtest-fixture.md` | 1 |
+| 11-09 review | O2 verifier lifecycle: cleanup process regex | `issue:low-cleanup-residue-verifier-detection-regex.md` | 1 |
+| 11-09 review | O2 verifier lifecycle: extract embedded Python checks | `issue:medium-static-mesh-guard-misses-additive-allow.md` (proposed fix); otherwise opportunistic, no standalone issue | 1 |
+| 11-09 review | O3 frontend expiry warning heuristics | `issue:low-frontend-session-expiry-warning-edge-cases.md` | 1 |
+| 11-09 review | Open item: currency cache | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
+| 11-09 review | Open item: runtime support (NGINX 1.29, Istio 1.30) | pending | 4 (step 3) |
+| 11-09 review | Open item: duplicate `X-Frame-Options` | `issue:low-duplicate-x-frame-options.md` | 1 |
+| 11-09 review | Open item: production image compatibility | pending | 4 (step 1) |
+| 11-09 review | Accepted: anonymous OAuth-state growth | pending | 4 (step 2) |
+| 11-09 review | Accepted: reactive client address, audit retention | pending | 4 (step 2) |
+| 11-09 review | Accepted: compromised intermediary, Redis key-name visibility | pending | 2 (mesh ADR), 4 (step 2) |
+| 11-09 review | Accepted/deferred: upload capacity, runtime roles, per-caller egress | pending | 2, 3, 4 |
+| 11-09 review | Controls worth retaining (8 bullets) | pending: cite in Phase 2 ADRs, confirm live-doc coverage in Phase 4 | 2, 4 |
+| 11-09 independent | C1 currency cache | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
+| 11-09 independent | C2 static mesh guard | `issue:medium-static-mesh-guard-misses-additive-allow.md` | 1 |
+| 11-09 independent | C3 bulk revocation | `issue:low-bulk-session-revocation-fails-on-large-index.md` | 1 |
+| 11-09 independent | C4 edge verifier fixture | `issue:medium-edge-verifier-deletes-existing-loadtest-fixture.md` | 1 |
+| 11-09 independent | C5 global counter flakiness | `issue:low-edge-verifier-global-counter-flakiness.md` | 1 |
+| 11-09 independent | C6 exact-inventory assertions | `issue:low-edge-verifier-exact-inventory-checks.md` | 1 |
+| 11-09 independent | C7 `X-Frame-Options` root cause | `issue:low-duplicate-x-frame-options.md` | 1 |
+| 11-09 independent | C8 unused `+hmset` grant | `issue:low-unused-redis-hmset-grant.md` | 1 |
+| 11-09 independent | C8 CSP `form-action` / logout URL coupling | `issue:low-csp-form-action-logout-url-coupling.md` | 1 |
+| 11-09 independent | C8 path-hardening anchor | `issue:info-path-hardening-anchor-not-statically-checked.md` | 1 |
+| 11-09 independent | C8 Tilt fails to load without issuer | `covered:docs/development/getting-started.md` (Auth0 step 4) | 1 |
+| 11-09 independent | C8 audit scope omits filter-chain rejections | `issue:low-audit-scope-doc-omits-filter-chain-rejections.md` | 1 |
+| 11-09 independent | C8 `python3` without `-I` | `issue:low-python-calls-missing-isolation-flag.md` | 1 |
+| 11-09 independent | O1 Envoy RBAC simulator | `issue:low-edge-verifier-envoy-rbac-simulator.md` | 1 |
+| 11-09 independent | O2 grep/awk YAML parsing | `issue:low-ext-authz-denial-check-grep-awk-yaml.md` | 1 |
+| 11-09 independent | O3 egress CIDR arithmetic | `issue:info-egress-guard-cidr-arithmetic.md` | 1 |
+| 11-09 independent | O4 CSP issuer validation scope | `issue:info-csp-issuer-validation-scope.md` | 1 |
+| 11-09 independent | O5 duplicated NGINX Docker harnesses | `issue:info-duplicated-nginx-docker-harnesses.md` | 1 |
+| 11-09 independent | O6 smoketest imports api-tests internals | `issue:low-oauth-binding-smoketest-imports-api-tests-internals.md` | 1 |
+| 11-09 independent | O7 static suite runs twice | `issue:low-aggregate-smoketest-runs-static-suite-twice.md` | 1 |
+| 11-09 independent | O8 documentation volume | `doc:docs/OWNERSHIP.md#rules`; `info-security-evidence-doc-volume.md` deleted | 1 |
+| 11-09 independent | Verified correct (13 bullets) | pending: cite in Phase 2 ADRs, confirm live-doc coverage in Phase 4 | 2, 4 |
+| Evidence | `#shared-cache-growth-reported-not-changed` | condensed into `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |

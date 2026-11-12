@@ -1,12 +1,10 @@
 # Bulk session revocation fails on a large session index
 
-- **Severity:** Low (first review: P2; independent review: Low-Medium)
+- **Severity:** Low (implementation review: P2; independent review: Low-Medium)
 - **Owner:** session-gateway; permission-service for the error message
 - **Status:** Open. The algorithm predates hardening (`55719f2` in
   session-gateway).
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  F3; [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C3
+- **Source:** 2026-11-09 implementation review F3; independent implementation review C3
 
 ## Problem
 
@@ -14,14 +12,18 @@
 loads every member of the user's index and passes them all to one
 `DEL` through `unpack`. Redis's embedded Lua has a finite argument stack.
 
-The first review ran the unchanged script on the manifest-pinned
-`redis:7-alpine` (7.4.11):
+The 2026-11-09 implementation review ran the unchanged script on the
+manifest-pinned `redis:7-alpine` (7.4.11). Each case had one existing session
+hash; the other index members stood for expired sessions. The container had
+no network, mounts, published ports or credentials:
 
 | Index members | Result |
 | --- | --- |
 | 100 | `2` keys deleted |
 | 8,000 | `ERR ... too many results to unpack`; session and index remain |
 | 10,000 | Same error |
+
+These counts demonstrate the failure. 8,000 is not the smallest failing size.
 
 Index members are removed only on logout. Expired sessions leave stale
 members.

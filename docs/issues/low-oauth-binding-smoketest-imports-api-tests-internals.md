@@ -3,8 +3,7 @@
 - **Severity:** Low (maintenance)
 - **Owner:** orchestration, with budget-analyzer-api-tests
 - **Status:** Open
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  O6
+- **Source:** 2026-11-09 independent implementation review O6
 
 ## Problem
 

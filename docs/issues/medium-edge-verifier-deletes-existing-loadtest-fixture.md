@@ -3,9 +3,7 @@
 - **Severity:** Medium
 - **Owner:** orchestration
 - **Status:** Open (plans 01 and 05)
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  F2; [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C4
+- **Source:** 2026-11-09 implementation review F2; independent implementation review C4
 - **Related:** [cleanup residue verifier detection](low-cleanup-residue-verifier-detection-regex.md)
 
 ## Problem

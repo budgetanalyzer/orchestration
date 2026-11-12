@@ -3,9 +3,7 @@
 - **Severity:** High
 - **Owner:** currency-service (orchestration only if Redis storage is split)
 - **Status:** Open, previously known (plans 03 P11/P13, 04 P1)
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  F1; [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C1
+- **Source:** 2026-11-09 implementation review F1; independent implementation review C1
 
 ## Problem
 
@@ -17,8 +15,8 @@ own full copy of the overlapping rates.
 
 - The number of possible keys is roughly (number of days)² per currency, and
   the caller chooses them.
-- Entries are large. The evidence record measured 5.24 MB for an all-time THB
-  entry and 2.6 MB for 2000 to today. Jackson default typing (`NON_FINAL`) in
+- Entries are large. The hardening Redis budget measurement recorded 5.24 MB
+  for an all-time THB entry and 2.6 MB for 2000 to today. Jackson default typing (`NON_FINAL`) in
   `CacheConfig.redisSerializer` probably adds per-value type ids. This
   overhead has not been measured.
 - Each entry has a one-hour TTL (`CacheConfig.EXCHANGE_RATES_TTL`). Nothing
@@ -26,16 +24,24 @@ own full copy of the overlapping rates.
 
 These entries share the `--maxmemory 128mb --maxmemory-policy noeviction`
 instance with sessions and OAuth state
-(`kubernetes/infrastructure/redis/start-redis.sh`). The
-[plan 04 measurement](../research/security-consensus-hardening-evidence.md#shared-cache-growth-reported-not-changed)
-shows a single user with default `currencies:read` filling the budget in
-about 100 reads. After that:
+(`kubernetes/infrastructure/redis/start-redis.sh`). During the hardening
+Redis budget measurement, a single user with the default `currencies:read`
+permission filled the budget with about 100 ordinary exchange-rate reads.
+Large ranges were rejected first with `500`, and small ranges then used up the
+remainder. After that:
 
 - heartbeats return `503`;
-- login initiation redirects to `/oops`;
+- login initiation redirects to `/oops`, intermittently, as expiring keys free
+  small amounts of memory;
 - uncached exchange-rate reads return `500`.
 
-The effect lasts up to the cache TTL.
+The effect lasts up to the cache TTL. Deleting the `currency-service:*` keys
+as `redis-ops` restored login and heartbeat immediately. That is a recovery
+step, not a fix.
+
+For scale, the same measurement found that the 128 MB budget holds about
+75,000–87,000 sessions with their indexes, about 37,600 maximum-size
+OAuth-state records, or about 25 all-time exchange-rate entries.
 
 A second defect: when Redis rejects the cache write, the request returns
 `500`, even though the database read succeeded. Neither currency-service nor

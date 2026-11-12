@@ -3,9 +3,7 @@
 - **Severity:** Medium
 - **Owner:** orchestration
 - **Status:** Open (plan 01 P1)
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  F4; [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C2
+- **Source:** 2026-11-09 implementation review F4; independent implementation review C2
 
 ## Problem
 
@@ -32,7 +30,9 @@ a later broad `ALLOW`.
 
 ## Evidence
 
-The first review ran the exact checker body against temporary policy copies:
+The 2026-11-09 implementation review extracted the `AUTHZ_PY` checker body
+and ran it with the repository PyYAML venv against temporary copies of the
+policy documents. The full static suite was not run:
 
 | Input | Exit |
 | --- | --- |
@@ -56,6 +56,8 @@ Extend the existing Python block. Do not build an Istio policy simulator.
   needs an explicit marker or exclusion, because not every service there is an
   NGINX backend.
 - Make the documented scope of the check match what it checks.
+- If the block grows, move it into a focused Python file that its fail
+  fixtures can invoke directly (implementation review O2).
 
 ## Acceptance
 

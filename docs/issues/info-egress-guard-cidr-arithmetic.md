@@ -3,8 +3,7 @@
 - **Severity:** Info (maintenance judgment call)
 - **Owner:** orchestration
 - **Status:** Leave unless the check is otherwise being changed
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  O3
+- **Source:** 2026-11-09 independent implementation review O3
 
 ## Observation
 

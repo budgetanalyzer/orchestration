@@ -3,8 +3,7 @@
 - **Severity:** Low
 - **Owner:** session-gateway docs; orchestration CSP docs
 - **Status:** Open
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C8
+- **Source:** 2026-11-09 independent implementation review C8
 
 ## Problem
 

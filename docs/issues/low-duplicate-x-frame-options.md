@@ -3,9 +3,7 @@
 - **Severity:** Low
 - **Owner:** orchestration (NGINX edge owns frame policy)
 - **Status:** Open. The closeout evidence recorded it as "not investigated."
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  open items; [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  C7
+- **Source:** 2026-11-09 implementation review, existing open items; independent implementation review C7
 
 ## Problem
 

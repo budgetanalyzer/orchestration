@@ -3,8 +3,7 @@
 - **Severity:** Low (UX only; the server enforces expiry)
 - **Owner:** budget-analyzer-web
 - **Status:** Open
-- **Source:** [review](../research/security-hardening-implementation-review-2026-11-09.md)
-  O3
+- **Source:** 2026-11-09 implementation review O3
 
 ## Problem
 

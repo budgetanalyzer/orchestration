@@ -3,8 +3,7 @@
 - **Severity:** Info (maintenance)
 - **Owner:** orchestration
 - **Status:** Leave unless the renderer is otherwise being changed
-- **Source:** [independent review](../research/security-hardening-implementation-review-independent-2026-11-09.md)
-  O4
+- **Source:** 2026-11-09 independent implementation review O4
 
 ## Observation
 

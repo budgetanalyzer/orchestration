@@ -72,6 +72,9 @@ Redis grants all need newer releases. The offline checks do not detect this.
 The human-owned release order, the baseline files to update, and the
 empty-state-only deployment boundary are recorded in the
 [release handoff](../../docs/research/security-consensus-hardening-evidence.md#release-handoff-human-owned).
+No deployment holds data, so those contract changes shipped without migration
+or compatibility code. A first hosted deployment starts from empty state; see
+[ADR 015](../../docs/decisions/015-reset-local-state-instead-of-migrating.md).
 
 Render the app overlay offline with:
 
@@ -153,8 +156,10 @@ Any future hosted environment must separately define and verify:
 
 - Kubernetes distribution and ARM64 node support;
 - ingress publication, client-address preservation, DNS, and firewall policy;
-- storage classes, capacity, backups, and recovery;
-- secret provisioning and production identity-provider configuration;
+- storage classes, capacity, encryption at rest, backups, recovery objectives,
+  and restore tests;
+- secret provisioning and rotation, and production identity-provider
+  configuration;
 - browser and infrastructure TLS issuance and renewal; and
 - apply, rollout, rollback, runtime verification, and operator access.
 

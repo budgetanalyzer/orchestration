@@ -179,7 +179,19 @@ live-doc section or "obsolete".
 
 ### Phase 3: ADRs and rules from plan Decisions sections
 
-**Status:** Not started.
+**Status:** Done. The plans hold only five `D#` decisions: 02.1 D3, 02.4 D1/D2, 02.6 D4, 03 D6
+and 04 D5. 01 says "None applies", and D1/D2 numbering is per-plan, not global. All five were
+already covered by ADRs 010/011 or live docs. 03 D6 and 04 D5 gained one rationale clause each in
+`security-architecture.md`. The reset rule became
+[ADR 015](../decisions/015-reset-local-state-instead-of-migrating.md), scoped to runtime-state
+formats and cross-service contracts, because services still ship versioned Flyway migrations.
+`kubernetes/production/README.md` links to it next to the empty-state statement. Every plan was
+executed despite stale "Draft" status lines, so no new issues were needed. Plan 05's
+"Deferred by agreement" items were checked against live docs. Three of them (restore tests,
+encryption at rest, secret rotation) were added to
+`kubernetes/production/README.md#unresolved-deployment-prerequisites`. Phase 4 note: the
+production README paragraph that links the evidence record now has an ADR 015 sentence after it.
+Keep that sentence when repointing the link.
 **Read:** only the `## Decisions`, `## Contested decisions applied` and plan-wide rule sections
 of each plan. Use `awk '/^## Decisions/,/^## Plan-wide/'` and similar extracts. Do not read the
 phase bodies.
@@ -331,7 +343,7 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | 11-09 review | Accepted: anonymous OAuth-state growth | pending | 4 (step 2) |
 | 11-09 review | Accepted: reactive client address, audit retention | pending | 4 (step 2) |
 | 11-09 review | Accepted: compromised intermediary, Redis key-name visibility | `adr:013` (intermediary), `adr:011` (key names); Accepted-risks pointers pending | 2, 4 (step 2) |
-| 11-09 review | Accepted/deferred: upload capacity, runtime roles, per-caller egress | per-caller egress `adr:013`; upload capacity and runtime roles pending | 2, 3, 4 |
+| 11-09 review | Accepted/deferred: upload capacity, runtime roles, per-caller egress | per-caller egress `adr:013`; runtime roles `covered:security-architecture.md` (04 D5 row below); upload capacity pending | 2, 3, 4 |
 | 11-09 review | Controls worth retaining (9 bullets) | binding cookie `adr:010`; one session format, absolute lifetime, SCAN clearing `adr:011`; shared routes and narrow mesh `adr:012`; exact-Origin `adr:009`. Audit adapters, liveness/readiness and infrastructure controls: live-doc coverage pending | 2, 4 |
 | 11-09 independent | C1 currency cache | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
 | 11-09 independent | C2 static mesh guard | `issue:medium-static-mesh-guard-misses-additive-allow.md` | 1 |
@@ -384,3 +396,31 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Contested | Settled: PostgreSQL TLS-only HBA | pending: confirm live-doc coverage of the `hostssl`-only `hba_file` | 4 |
 | Contested | Additional review A13 (caveats) | `obsolete`: review-process guidance | 2 |
 | Contested | Verification record, reviewed HEADs, probe transcripts | `obsolete`: point-in-time. The Envoy normalization and Redis enumeration results are condensed into `adr:012` and `adr:011` | 2 |
+| Plan 01 | Decisions: "None applies" | `obsolete`: no decision recorded | 3 |
+| Plan 02.1 | D3 one `__Host-` cookie per login, named from a hash of `state` | `covered:adr:010` (Alternative 1, superseded by contested 4) | 3 |
+| Plan 02.4 | D1 `SESSION_MAX_LIFETIME_SECONDS=28800`, matching the Auth0 8-hour maximum and 15-minute idle lifetime | `covered:docs/architecture/session-edge-authorization-pattern.md#absolute-session-lifetime`; also Session Gateway `auth0-settings.md` | 3 |
+| Plan 02.4 | D2 ext-authz does not re-check the cap | `covered:adr:011` (Decision 5, Alternative 5) | 3 |
+| Plan 02.6 | D4 remove `SESSION_COOKIE_DOMAIN_OVERRIDE` | `covered:adr:011` (Decision 4) | 3 |
+| Plan 03 | D6 audit state-changing requests and the session lifecycle, not reads | `doc:docs/architecture/security-architecture.md#logging-strategy` (added rationale clause); "data access" audit claim already gone | 3 |
+| Plan 04 | D5 runtime roles own schemas, no migration role | `doc:docs/architecture/security-architecture.md` accepted-risk line (added deferral cost); Phase 4 merges it into Accepted risks | 3, 4 |
+| Plans 01–05 | Plan-wide rule: no production data, reset local state, no migration or dual-format code | `adr:015`; pointer in `kubernetes/production/README.md#application-and-image-baseline` | 3 |
+| Plans 01–05 | Other plan-wide rules (workspace scope, `kind-kind` checks, Live phases, static gate, record evidence, do not edit plan or ADRs) | `obsolete`: execution process; durable parts already in `AGENTS.md` | 3 |
+| Plans 02.3, 02.5, 02.6, 03, 05 | Cutover rule: production reference pins pre-hardening images | `covered:kubernetes/production/README.md#application-and-image-baseline`; release order pending | 4 (step 1) |
+| Plan 01 | Contested-decisions-applied bullets (items 1, 2, 3, 8, 11, 12, severity, work order) | `covered:` Phase 2 ADR rows above | 3 |
+| Plans 02.1–04 | Contested-decisions-applied bullets (items 1, 2, 4, 5, 6, 9, 10, A4, settled) | `covered:` Phase 2 ADR and contested rows above; item 6 pending | 3 |
+| Plan 01 follow-ups | Not changed: literal `..;` and `.;` resolved by normalization | `covered:docs/architecture/security-architecture.md` (normalization paragraph) and `adr:012` | 3 |
+| Plan 01 follow-ups | Not changed: raw production kustomize output keeps CSP placeholder | `covered:deploy/README.md` (Maintained Surface) | 3 |
+| Plan 03 remediation | Rule: audit events carry no tokens, digests, OAuth codes/state, emails, names or bodies | `covered:docs/architecture/security-architecture.md#logging-strategy` | 3 |
+| Plan 03 remediation | Rule: do not mock or spy application-owned Spring beans | `covered:../service-common/docs/testing-patterns.md` | 3 |
+| Plan 03 remediation | Rule: keep `spring.config.additional-location` in runtime-config tests | `covered:` in-code comments in all four services' runtime-config tests | 3 |
+| Plan 03 | Dropped phase: bound PDF parsing | pending with contested 6 | 4 (step 2) |
+| Plan 05 | Final scope items 1–24, 26–28, 30–38 | `obsolete`: implemented; review findings get their dispositions in Phase 5a | 3 |
+| Plan 05 | Final scope 25 (PDF) and 29 (migration roles) | 25 pending with contested 6; 29 per 04 D5 | 3, 4 |
+| Plan 05 | Deferred: recovery objectives and restore tests, secret rotation, storage encryption | `doc:kubernetes/production/README.md#unresolved-deployment-prerequisites` (added) | 3 |
+| Plan 05 | Deferred: exporters and alert delivery | `covered:docs/architecture/observability.md` (exporters not deployed); `security-architecture.md` ("Alerting: Not yet configured") | 3 |
+| Plan 05 | Deferred: vulnerability gating | `covered:docs/dependency-automation.md` ("vulnerability gating remains deferred") | 3 |
+| Plan 05 | Deferred: Redis high availability | `covered:docs/architecture/security-architecture.md` (Redis: no Sentinel or failover) | 3 |
+| Plan 05 | Deferred: step-up reauthentication | `covered:docs/architecture/session-edge-authorization-pattern.md#absolute-session-lifetime` | 3 |
+| Plan 05 | Deferred: account generation check for immediate containment | `covered:docs/architecture/session-edge-authorization-pattern.md` ("not an immediate containment guarantee") and `security-architecture.md#emergency-admin-containment` | 3 |
+| Plan 05 | Human-run verification 2026-11-09 | `obsolete`: point-in-time | 3 |
+| Plans 01–05 | Status lines and open phases | `obsolete`: all executed. Stale "Draft" lines; 01 follow-up criteria hold (`require_inject_failures`, `__pycache__/` ignored); 03 remediation closed. No new issues | 3 |

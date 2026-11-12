@@ -1,6 +1,6 @@
 # Security Documentation Reorganization
 
-**Status:** Phases 1–6 done, Phase 7 not started. A manual multi-session plan, not formatted for AI Session Handler.
+**Status:** All phases done. A manual multi-session plan, not formatted for AI Session Handler.
 
 Delete the completed `security-hardening-*` plans and the security review documents in
 `docs/research/`. Move anything still useful into its long-term home first:
@@ -390,7 +390,13 @@ seven sibling evidence files exists.
 
 ### Phase 7: Delete and verify
 
-**Status:** Not started.
+**Status:** Done. The 14 plans and the 9 research files were deleted. The five out-of-scope research
+files remain in `docs/research/`. **Final verification** finds nothing outside this plan. The
+sibling loop also scans `../orchestration`, which is this worktree, so it lists this plan's own
+lines because the plan-exclude glob is relative. Expect that. The link check finds only
+`docs/archive/` links to the kept research files and older links in ADRs 007 and 008. ADR 008's
+`../plans/oracle-cloud-*` targets were already deleted by commit `12d7029`. That breakage is
+older than this plan, and ADRs are not edited, so it stays.
 
 1. Delete the 14 plans and the in-scope research files.
 2. Run **Final verification** and fix any dangling references.
@@ -621,3 +627,7 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | transaction-service evidence | Logging boundary and audit logger; readiness `readinessState,db`, RabbitMQ and downstream excluded | `covered:../transaction-service/docs/configuration.md` (Logging, Health Probes) | 6b |
 | transaction-service evidence | `@PreAuthorize` coverage test, empty exception list | rule `covered:../transaction-service/AGENTS.md` (Authorization and Ownership); test `doc:../transaction-service/docs/api/README.md#authentication--authorization` (added) | 6b |
 | transaction-service evidence | Validation | `obsolete`; file `deleted` | 6b |
+| Scope | 14 `security-hardening-*` plans | `deleted` | 7 |
+| Scope | 9 security research files (four 11-01 reviews, contested issues, evidence record, two 11-09 reviews, platform audit) | `deleted` | 7 |
+| Phase 5 follow-up | cert-manager controller images render mutable tags; namespace exclusion reason undocumented | `issue:low-cert-manager-controller-images-not-digest-pinned.md` | 7 |
+| Phase 5 follow-up | `default`-user `ACL LOG` denials at Redis start (AOF replay of `MULTI`/`EXEC`) | `issue:medium-redis-aof-replay-drops-scripted-session-writes.md` (confirmed live 2026-11-12) | 7 |

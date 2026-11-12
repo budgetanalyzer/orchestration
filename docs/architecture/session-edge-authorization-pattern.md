@@ -372,9 +372,42 @@ such as Fetch Metadata, or names an origin other than the routed browser host.
 The `Origin` section of `scripts/smoketest/verify-edge-contract.sh` evaluates
 the generated Envoy RBAC configuration, then proves on the live chain that
 each rejected case is a `403` on both lanes with no mutation and that the
-configured origin succeeds on both. The
-[evidence record](../research/security-consensus-hardening-evidence.md#plan-028-phase-2-exact-origin-ingress-rule-proven-live)
-holds the browser results.
+configured origin succeeds on both.
+
+### Browser Proof
+
+On 2026-11-07 a one-off headless Chromium probe logged in through the hosted
+IdP, stopped the frontend tab's heartbeats, then loaded hostile pages at a
+same-site origin (`https://attacker.budgetanalyzer.localhost`) and a cross-site
+origin (`https://attacker.example`). Each page auto-submitted form `POST`s to
+`/logout`, `/auth/v1/session` and `/api/v1/transactions` (a `text/plain` form
+carrying a JSON body), plus credentialed `no-cors` `fetch` `POST`s.
+
+| Origin | Session cookie sent | Result |
+| --- | --- | --- |
+| Same-site | yes | Every request was the ingress `403` with no `Set-Cookie` |
+| Cross-site | no (`Strict`) | `/logout` and heartbeat requests were the ingress `403`; API requests were the ext_authz `401`, which runs before the `DENY` |
+
+Afterwards the Redis session, the browser cookie, `GET /auth/v1/user` and the
+transaction list were unchanged. The same-site row shows the `Strict` limit:
+the cookie was attached and only the Origin rule stopped the request. Under
+the live strict CSP, `form-action` blocked an app-page form to a foreign
+origin and a same-origin form answer that redirected to one, and the
+frontend's own heartbeat and form logout succeeded with no CSP violation.
+No safe-method response checked clears the session cookie.
+
+Limits of this proof:
+
+- Only headless Chromium was exercised. Firefox and WebKit `form-action`
+  redirect enforcement and `Origin` sending were not tested.
+- Chromium's Local Network Access check blocks hostile `fetch` calls to a
+  loopback-resolved application before sending, so the probe disabled it to
+  exercise the ingress rule. That is an artifact of the local target.
+- The production reference is checked offline only.
+
+`verify-oauth-browser-binding.py` and `verify-ingress-browser-callback.py` are
+the repeatable browser checks: a real hosted login, the frontend's own
+heartbeat and its form logout under the live CSP.
 
 ## Shared Session Contract
 
@@ -450,10 +483,19 @@ never reaches NGINX. A missing or unknown session is still a normal denial and
 keeps the JSON `401` above, as long as `ext-authz` can answer. Clients must
 handle a `503` without a body; the frontend reads only the status.
 
-The timeout is about two orders of magnitude above the measured check latency;
-the measurement and the failure-path results are recorded in
-[security-consensus-hardening-evidence.md](../research/security-consensus-hardening-evidence.md).
-Changing it requires repeating that measurement.
+The `1s` timeout is 100 times the highest populated authorizer latency bucket
+in a quiet local baseline taken on 2026-11-06. With one fixture from
+`./scripts/loadtest/seed-loadtest-users.sh --count 1`, 200 sequential requests
+to `/api/v1/currencies`, 125 ms apart and every fourth without a cookie,
+produced 150 authorizations and 50 denials. The difference in ext-authz's
+sidecar `istio_request_duration_milliseconds_bucket` (`reporter="destination"`,
+`source_workload_namespace="istio-ingress"`, read with
+`kubectl exec deployment/ext-authz -c istio-proxy -- pilot-agent request GET stats/prometheus`)
+put 149 of 150 authorizations and all 50 denials at 1 ms or less, and every
+check at 10 ms or less. Wait until the exported counts match the requests
+sent, because histogram export lags. This is not a load-capacity or
+hosted-latency guarantee. Changing the timeout requires repeating that
+measurement.
 `./scripts/smoketest/verify-edge-contract.sh` (section "Authorization Failure")
 reads the live values from the ingress Envoy config dump and proves the `401`
 through the real ingress. With `--inject-failures` it also proves the empty

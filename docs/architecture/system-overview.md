@@ -285,3 +285,10 @@ grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
 - [service-communication.md](service-communication.md) - Inter-service communication
 - [001-orchestration-repo.md](../decisions/001-orchestration-repo.md) - Why this repo exists
 - [002-resource-based-routing.md](../decisions/002-resource-based-routing.md) - Routing decision
+- [009-exact-origin-ingress-csrf-control.md](../decisions/009-exact-origin-ingress-csrf-control.md) - Exact-Origin ingress rule as the primary CSRF control
+- [010-oauth-callback-browser-binding.md](../decisions/010-oauth-callback-browser-binding.md) - OAuth callback browser binding
+- [011-hashed-session-keys-host-cookie-absolute-lifetime.md](../decisions/011-hashed-session-keys-host-cookie-absolute-lifetime.md) - Hashed session keys, `__Host-` cookie and absolute lifetime
+- [012-shared-nginx-routes-and-path-hardening.md](../decisions/012-shared-nginx-routes-and-path-hardening.md) - Shared NGINX routes and path hardening
+- [013-deferred-mesh-identity-hardening.md](../decisions/013-deferred-mesh-identity-hardening.md) - Deferred mesh identity hardening
+- [014-hsts-without-includesubdomains-or-preload.md](../decisions/014-hsts-without-includesubdomains-or-preload.md) - HSTS flags
+- [015-reset-local-state-instead-of-migrating.md](../decisions/015-reset-local-state-instead-of-migrating.md) - Reset local state instead of migrating

@@ -20,7 +20,7 @@ meshConfig:
         # timeout or authorizer 5xx) as 503 instead of Istio's 403 default.
         # Envoy discards the authorizer body on that path, so the 503 is
         # empty. The timeout comes from the measured check latency in
-        # docs/research/security-consensus-hardening-evidence.md.
+        # docs/architecture/session-edge-authorization-pattern.md#authorizer-failures.
         timeout: 1s
         statusOnError: "503"
         headersToUpstreamOnAllow:

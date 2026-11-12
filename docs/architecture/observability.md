@@ -581,6 +581,10 @@ outside `monitoring`, or unexpected watched namespaces after a chart upgrade.
 
 The chart version is pinned. Any upgrade requires re-rendering and
 re-validating the hardening, operator RBAC reduction, and image inventory.
+Client-side renders are not byte-reproducible, because the chart generates a
+new Grafana admin password and a matching pod-template checksum on every
+render. Compare stable component and image fields between the before and after
+renders, not whole-file hashes.
 
 ## Storage
 

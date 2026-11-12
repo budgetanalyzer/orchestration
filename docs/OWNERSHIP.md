@@ -16,6 +16,8 @@ link instead of copying.
   implementation detail.
 - If no existing owner fits a new recurring topic, choose one and update this
   file in the same change.
+- Record security and hardening changes by updating the owning architecture
+  docs and verifiers, not by adding evidence records or review prose.
 
 ## Exact Detail vs. Summary
 

@@ -68,10 +68,56 @@ releases merely to retire OCI.
 The pinned images predate the 2026-11 security hardening and do not run under
 the current shared manifests: probe paths, the `__Host-BA_SESSION` cookie,
 hashed session keys, the `POST` login user sync and the narrowed mesh and
-Redis grants all need newer releases. The offline checks do not detect this.
-The human-owned release order, the baseline files to update, and the
-empty-state-only deployment boundary are recorded in the
-[release handoff](../../docs/research/security-consensus-hardening-evidence.md#release-handoff-human-owned).
+Redis grants all need newer releases. The offline checks do not detect this,
+because `verify-production-image-overlay.sh` checks renders, not image
+behavior.
+No deployment holds data, so those contract changes shipped without migration
+or compatibility code. A first hosted deployment starts from empty state; see
+[ADR 015](../../docs/decisions/015-reset-local-state-instead-of-migrating.md).
+
+### Pinned Image Incompatibilities
+
+- `ext-authz` has no `/livez` or `/readyz`, so its probes fail, and it looks up
+  raw session keys.
+- `session-gateway` writes raw session keys and the old cookie name, calls the
+  removed `GET .../permissions` path that the mesh now denies, ignores the
+  absolute session lifetime, and accepts `GET` heartbeat and logout.
+- `permission-service` has no `POST /internal/v1/users/sync`.
+- `currency-service` clears its cache with `KEYS`, which its narrowed Redis
+  grant denies.
+- `budget-analyzer-web` sends `GET` heartbeat and logout.
+- The pinned Spring images predate the readiness group membership, safe
+  logging defaults and structured audit events.
+
+### Release Order
+
+Releasing is human-owned, and no active command publishes or applies a
+release:
+
+1. Release `service-common` with a non-SNAPSHOT version. The Spring services
+   currently build against a SNAPSHOT `serviceCommon` in
+   `gradle/libs.versions.toml`.
+2. Move `session-gateway`, `transaction-service`, `permission-service` and
+   `currency-service` to that release, then release them together with
+   `ext-authz` and `budget-analyzer-web`. The cookie, hashed keys, `POST` user
+   sync, `POST` heartbeat and logout, and probe paths are one contract across
+   these images, so no subset can be released alone.
+3. Update `apps/deployment-manifest.yaml`, `apps/image-inventory.yaml`,
+   `apps/kustomization.yaml`, `apps/patches/runtime-release-metadata.yaml` and
+   `docs-aggregator/release-metadata.json` consistently. Record each image's
+   tag, digest, source commit and `service-common` version.
+4. Rerun `./scripts/guardrails/verify-production-image-overlay.sh` and the
+   static security suite with the pinned PyYAML interpreter.
+
+### Empty-State Boundary
+
+The reference supports only a deployment that starts from empty state. There
+is no upgrade path from the pinned images or from existing data: sessions use
+a new key format and cookie name, a RabbitMQ data volume created by an earlier
+major series is not upgraded and must be created fresh, and no data or session
+migration code exists.
+
+### Rendering And Configuration
 
 Render the app overlay offline with:
 
@@ -89,6 +135,17 @@ must supply `AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`,
 exact external callback URL registered with the IdP, ending in
 `/login/oauth2/code/idp`, so Session Gateway does not derive it from request
 headers.
+
+The render also inherits two session settings from the shared manifests:
+
+- `SESSION_MAX_LIFETIME_SECONDS` in
+  `kubernetes/services/session-gateway/configmap.yaml` sets the absolute
+  session lifetime, which `ext-authz` enforces through `expires_at`. Keep it,
+  or change it deliberately.
+- `SESSION_COOKIE_NAME=__Host-BA_SESSION` in
+  `kubernetes/services/ext-authz/deployment.yaml` must equal the Session
+  Gateway default. The `__Host-` prefix forbids a cookie `Domain`, so serve
+  the application over HTTPS on a single host.
 
 ## Offline Render Commands
 
@@ -153,8 +210,13 @@ Any future hosted environment must separately define and verify:
 
 - Kubernetes distribution and ARM64 node support;
 - ingress publication, client-address preservation, DNS, and firewall policy;
-- storage classes, capacity, backups, and recovery;
-- secret provisioning and production identity-provider configuration;
+- storage classes, capacity, encryption at rest, backups, recovery objectives,
+  and restore tests;
+- whether a Redis restore invalidates every restored session, because a
+  snapshot revives sessions that were logged out or revoked after it was taken
+  and have not yet expired;
+- secret provisioning and rotation, and production identity-provider
+  configuration;
 - browser and infrastructure TLS issuance and renewal; and
 - apply, rollout, rollback, runtime verification, and operator access.
 

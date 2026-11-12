@@ -54,22 +54,25 @@ Research (`docs/research/`), 9 files:
 | `security-hardening-implementation-review-independent-2026-11-09.md` | 445 | Source of most `docs/issues/` |
 | `platform-security-audit-2026-10-18.md` | 513 | Earlier image and support audit. No inbound links. Mine it for ADRs and live-doc facts (Q2) |
 
-### Delete (sibling repositories, Q1)
+### Delete (sibling repositories, Q1 and Q5)
 
-| File | Lines | Inbound links |
-| --- | --- | --- |
-| `../session-gateway/docs/research/security-consensus-hardening-evidence.md` | ~430 | `../session-gateway/docs/security.md:69` |
-| `../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md` | ~90 | the session-gateway copy only |
+Each file is at `docs/research/security-consensus-hardening-evidence.md` in the named repo and is
+the only file in that `docs/research/` directory.
 
-Both files link back to the orchestration contested-issues doc. Each one is the only file in
-its `docs/research/` directory.
+| Repo | Lines | Inbound links | Decision |
+| --- | --- | --- | --- |
+| `../session-gateway` | ~430 | `../session-gateway/docs/security.md:69` | Q1 |
+| `../budget-analyzer-api-tests` | ~90 | the session-gateway copy only | Q1 |
+| `../currency-service` | ~140 | orchestration evidence record only | Q5 |
+| `../service-common` | ~81 | orchestration evidence record only | Q5 |
+| `../ext-authz` | ~63 | orchestration evidence record only | Q5 |
+| `../permission-service` | ~60 | orchestration evidence record only | Q5 |
+| `../transaction-service` | ~41 | orchestration evidence record only | Q5 |
 
-**Scope gap found in Phase 2 (needs a user decision before Phase 6):** five more tracked
-copies exist, none with inbound links from outside `docs/research/`:
-`../currency-service` (~140 lines), `../service-common` (~81), `../ext-authz` (~63),
-`../permission-service` (~60) and `../transaction-service` (~41), each at
-`docs/research/security-consensus-hardening-evidence.md`. **Final verification** loops over
-every sibling, so it will flag them. Q1 covers only the two repos above.
+The two Q1 files link back to the orchestration contested-issues doc. The five Q5 files link to
+no orchestration document, but they name plans such as "Plan 03, Phase 12" that Phase 7
+deletes. Their content does not match the **Final verification** pattern, so that search does
+not detect them; its file-existence check does.
 
 ### Keep (out of scope)
 
@@ -104,6 +107,9 @@ Recheck the list in Phase 7 with the search in **Final verification**.
   accepted residual risk goes into a single "Accepted risks" section in
   `security-architecture.md`, next to the existing accepted risk that runtime roles own their
   schemas.
+- **Q5:** Delete the evidence copies in `currency-service`, `service-common`, `ext-authz`,
+  `permission-service` and `transaction-service` as well, using the same procedure as Q1:
+  move durable contract text into each repo's owning docs first (Phase 6).
 - ADRs are never edited after they are written. See **How to run this plan**.
 
 ## Phases
@@ -212,7 +218,20 @@ phase bodies.
 
 ### Phase 4: Evidence record to live docs
 
-**Status:** Not started.
+**Status:** Done. `docs/OWNERSHIP.md` gives `deploy/README.md` the render surface, but the
+image baseline is described in `kubernetes/production/README.md#application-and-image-baseline`,
+so the release handoff went there as three subsections: pinned image incompatibilities, release
+order and the empty-state boundary. Version numbers are left out. The `SESSION_MAX_LIFETIME_SECONDS`
+and `SESSION_COOKIE_NAME` requirements were added next to the existing `IDP_REDIRECT_URI` text,
+and the ADR 015 sentence was kept. `security-architecture.md#accepted-risks` now holds seven
+risks. The schema-owner bullet moved there from the Executive Summary, which now carries only a
+pointer. The step 4 work went beyond the two named anchors because two more links pointed at
+the record. The plan 01 traversal before/after summary went into the mesh boundary section. The
+ext_authz `1s` timeout derivation and its repeat method went into
+`session-edge-authorization-pattern.md#authorizer-failures`, which `istiod-values.yaml` now
+references. The Redis budget derivation went under Session Management, and the Chromium proof
+went into a new `#browser-proof` subsection. Two issues were added. The 11-09 "pending live-doc
+coverage" controls were all already covered (see Ledger).
 **Read:** evidence-record lines ~2595–2867 (plan 05, Phase 2: accepted gaps, open findings,
 production configuration, release handoff), plus the anchors linked from live docs:
 `#plan-028-phase-2-exact-origin-ingress-rule-proven-live` (~1821) and
@@ -274,10 +293,15 @@ section has a Ledger disposition.
 ### Phase 6: Sibling evidence copies, index and ownership
 
 **Status:** Not started.
-**Read:** the "Implemented contract", "Contract and decisions" and "Handoff and limitations"
+Run this phase as two sessions: 6a does steps 1–5 (Q1, index and ownership), 6b does step 6
+(Q5).
+**Read (6a):** the "Implemented contract", "Contract and decisions" and "Handoff and limitations"
 subsections of `../session-gateway/docs/research/security-consensus-hardening-evidence.md`.
 Read all of `../budget-analyzer-api-tests/docs/research/security-consensus-hardening-evidence.md`
 (~90 lines). Also read `../session-gateway/docs/security.md` and each sibling repo's `AGENTS.md`.
+**Read (6b):** all five Q5 evidence copies (~385 lines in total), skipping `### Validation`
+subsections, plus each repo's `AGENTS.md`, `README.md` and the `docs/` files that `rg` finds for
+each contract.
 
 1. **session-gateway (Q1):** for each contract section (OAuth callback binding, bounded login
    input, hashed keys, `__Host-` cookie, POST heartbeat/logout, safe logging and audit events),
@@ -294,8 +318,25 @@ Read all of `../budget-analyzer-api-tests/docs/research/security-consensus-harde
    `docs/architecture/system-overview.md` and `README.md`.
 5. If `docs/OWNERSHIP.md` or `AGENTS.md` mentions the evidence record or hardening plans,
    update it. Apply `docs/agents-md-checkstyle.md` to any `AGENTS.md` edit.
+6. **Q5 repos:** for each contract below, check that the repo's README or docs already state
+   it. Add a condensed version where they do not. Skip validation transcripts, test counts,
+   coverage numbers and "no live cluster run" notes. Limitations that are still true go into
+   that repo's docs, into `security-architecture.md#accepted-risks` or into an orchestration
+   issue. Then delete the file, which leaves each `docs/research/` directory empty.
+   - `service-common`: the servlet client address comes only from `X-Real-IP` or the peer,
+     never `X-Forwarded-For`; the reactive filter omits unresolved addresses (already in
+     `README.md:168-171`); the audit event data boundary and its remaining limitations.
+   - `ext-authz`: the `/livez` and `/readyz` split; the HTTP server timeouts (already in
+     `README.md:66`); the Go toolchain alignment, likely `obsolete`.
+   - `currency-service`: the logging boundary, readiness group, `@PreAuthorize` coverage
+     (already in `docs/api/README.md`), cache clearing with `SCAN` and its accepted
+     stale-entry race bounded by the one-hour TTL, and the runtime configuration test rule.
+   - `permission-service`: the logging boundary, readiness and authorization coverage, and the
+     removal of `deleteUser` (covered by ADR 011, so likely `obsolete` here).
+   - `transaction-service`: the logging boundary, readiness and authorization coverage.
 
-**Done when:** the sibling part of **Final verification** returns nothing.
+**Done when:** the sibling part of **Final verification** returns nothing, and none of the
+seven sibling evidence files exists.
 
 ### Phase 7: Delete and verify
 
@@ -313,6 +354,9 @@ Read all of `../budget-analyzer-api-tests/docs/research/security-consensus-harde
 pat='security-hardening-0|application-architecture-security-review|platform-security-audit-2026-10-18|security-consensus-hardening-evidence|security-hardening-implementation-review|security-review-contested-issues'
 rg -n "$pat" --hidden -g '!.git' -g '!docs/archive/**' -g '!docs/plans/security-docs-reorg.md' .
 for d in ../*/; do rg -n "$pat" -g '!.git' -g '!node_modules' -g '!target' -g '!build' "$d"; done
+
+# Deleted files that the content search cannot detect (Q1, Q5)
+ls ../*/docs/research/security-consensus-hardening-evidence.md docs/research/security-consensus-hardening-evidence.md 2>/dev/null
 
 # Broken relative links in touched docs (manual spot check of any hits)
 rg -n '\]\((\.\./)*(research|plans)/' docs kubernetes deploy
@@ -337,14 +381,14 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | 11-09 review | O2 verifier lifecycle: extract embedded Python checks | `issue:medium-static-mesh-guard-misses-additive-allow.md` (proposed fix); otherwise opportunistic, no standalone issue | 1 |
 | 11-09 review | O3 frontend expiry warning heuristics | `issue:low-frontend-session-expiry-warning-edge-cases.md` | 1 |
 | 11-09 review | Open item: currency cache | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
-| 11-09 review | Open item: runtime support (NGINX 1.29, Istio 1.30) | pending | 4 (step 3) |
+| 11-09 review | Open item: runtime support (NGINX 1.29, Istio 1.30) | `issue:medium-nginx-and-istio-runtime-support-windows.md` (report still flags NGINX `PAST`, Istio `DUE`) | 4 |
 | 11-09 review | Open item: duplicate `X-Frame-Options` | `issue:low-duplicate-x-frame-options.md` | 1 |
-| 11-09 review | Open item: production image compatibility | pending | 4 (step 1) |
-| 11-09 review | Accepted: anonymous OAuth-state growth | pending | 4 (step 2) |
-| 11-09 review | Accepted: reactive client address, audit retention | pending | 4 (step 2) |
-| 11-09 review | Accepted: compromised intermediary, Redis key-name visibility | `adr:013` (intermediary), `adr:011` (key names); Accepted-risks pointers pending | 2, 4 (step 2) |
-| 11-09 review | Accepted/deferred: upload capacity, runtime roles, per-caller egress | per-caller egress `adr:013`; runtime roles `covered:security-architecture.md` (04 D5 row below); upload capacity pending | 2, 3, 4 |
-| 11-09 review | Controls worth retaining (9 bullets) | binding cookie `adr:010`; one session format, absolute lifetime, SCAN clearing `adr:011`; shared routes and narrow mesh `adr:012`; exact-Origin `adr:009`. Audit adapters, liveness/readiness and infrastructure controls: live-doc coverage pending | 2, 4 |
+| 11-09 review | Open item: production image compatibility | `doc:kubernetes/production/README.md#pinned-image-incompatibilities`, `#release-order`, `#empty-state-boundary` | 4 |
+| 11-09 review | Accepted: anonymous OAuth-state growth | `doc:docs/architecture/security-architecture.md#accepted-risks` | 4 |
+| 11-09 review | Accepted: reactive client address, audit retention | `doc:docs/architecture/security-architecture.md#accepted-risks` (audit retention also `#logging-strategy`) | 4 |
+| 11-09 review | Accepted: compromised intermediary, Redis key-name visibility | `adr:013` (intermediary), `adr:011` (key names); pointers in `doc:docs/architecture/security-architecture.md#accepted-risks` | 2, 4 |
+| 11-09 review | Accepted/deferred: upload capacity, runtime roles, per-caller egress | per-caller egress `adr:013`; runtime roles and upload capacity `doc:docs/architecture/security-architecture.md#accepted-risks` | 2, 3, 4 |
+| 11-09 review | Controls worth retaining (9 bullets) | binding cookie `adr:010`; one session format, absolute lifetime, SCAN clearing `adr:011`; shared routes and narrow mesh `adr:012`; exact-Origin `adr:009`. Audit adapters `covered:docs/architecture/security-architecture.md#logging-strategy`; liveness/readiness `covered:docs/runbooks/tilt-debugging.md` (probe table); infrastructure controls `covered:security-architecture.md` Executive Summary (egress excepts, PostgreSQL `hostssl`) and `#session-management` (Redis budget) | 2, 4 |
 | 11-09 independent | C1 currency cache | `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
 | 11-09 independent | C2 static mesh guard | `issue:medium-static-mesh-guard-misses-additive-allow.md` | 1 |
 | 11-09 independent | C3 bulk revocation | `issue:low-bulk-session-revocation-fails-on-large-index.md` | 1 |
@@ -366,14 +410,26 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | 11-09 independent | O6 smoketest imports api-tests internals | `issue:low-oauth-binding-smoketest-imports-api-tests-internals.md` | 1 |
 | 11-09 independent | O7 static suite runs twice | `issue:low-aggregate-smoketest-runs-static-suite-twice.md` | 1 |
 | 11-09 independent | O8 documentation volume | `doc:docs/OWNERSHIP.md#rules`; `info-security-evidence-doc-volume.md` deleted | 1 |
-| 11-09 independent | Verified correct (13 bullets) | Redis, absolute lifetime, session keys `adr:011`; OAuth binding `adr:010`; logout/heartbeat, production host drift `adr:009`; path hardening `adr:012`; forged identity `adr:013`; forwarded headers/HSTS `adr:014`. ext_authz timeouts, egress excepts, PostgreSQL `hba_file`, audit/`@PreAuthorize` coverage: live-doc coverage pending | 2, 4 |
+| 11-09 independent | Verified correct (13 bullets) | Redis, absolute lifetime, session keys `adr:011`; OAuth binding `adr:010`; logout/heartbeat, production host drift `adr:009`; path hardening `adr:012`; forged identity `adr:013`; forwarded headers/HSTS `adr:014`. ext_authz timeouts `doc:docs/architecture/session-edge-authorization-pattern.md#authorizer-failures` (provider, measurement added) and `covered:../ext-authz/README.md` (server timeouts); egress excepts and PostgreSQL `hba_file` `covered:security-architecture.md` Executive Summary and `docs/development/database-setup.md`; audit `covered:#logging-strategy`; `@PreAuthorize` `covered:` service-owned (`../permission-service/AGENTS.md`, `../transaction-service/AGENTS.md`, `../currency-service/docs/api/README.md`) and each service's `RuntimeSecurityIntegrationTest` | 2, 4 |
 | Evidence | `#shared-cache-growth-reported-not-changed` | condensed into `issue:high-currency-cache-exhausts-shared-redis.md` | 1 |
+| Evidence | Plan 05 P2 accepted remaining gaps (7 rows) | `doc:docs/architecture/security-architecture.md#accepted-risks` | 4 |
+| Evidence | Plan 05 P2 open finding: currency cache | `covered:issue:high-currency-cache-exhausts-shared-redis.md` | 4 |
+| Evidence | Plan 05 P2 open finding: runtime support | `issue:medium-nginx-and-istio-runtime-support-windows.md` | 4 |
+| Evidence | Plan 05 P2 open finding: conflicting `X-Frame-Options` | `covered:issue:low-duplicate-x-frame-options.md` | 4 |
+| Evidence | Plan 05 P2 open finding: `@CircuitBreaker` doc mismatch | `issue:low-service-communication-resilience-examples-not-implemented.md` (currency-service still has no resilience4j) | 4 |
+| Evidence | Plan 05 P2 production configuration (02.2, 02.4, 02.6) | `doc:kubernetes/production/README.md#rendering-and-configuration` (`IDP_REDIRECT_URI` already present; session lifetime and cookie name added); OAuth-state TTL and `returnUrl` cap need no override, `obsolete` | 4 |
+| Evidence | Plan 05 P2 release handoff | `doc:kubernetes/production/README.md#pinned-image-incompatibilities`, `#release-order`, `#empty-state-boundary` | 4 |
+| Evidence | Plan 05 P2 human-run verification, boundary rerun, scope-item table, docs reconciled, validation | `obsolete`: point-in-time; review findings get their dispositions in Phase 5a | 4 |
+| Evidence | `#plan-028-phase-2-exact-origin-ingress-rule-proven-live` | `doc:docs/architecture/session-edge-authorization-pattern.md#browser-proof`; links removed from both architecture docs | 4 |
+| Evidence | `#plan-04-phase-1-redis-memory-budget` | `doc:docs/architecture/security-architecture.md#session-management` (derivation and exhaustion behavior); OAuth-state limit in `#accepted-risks` | 4 |
+| Evidence | Plan 01 P1 boundary measurement (unanchored link at mesh boundary section) | `doc:docs/architecture/security-architecture.md#mesh-publicinternal-boundary` (before/after summary) | 4 |
+| Evidence | Plan 01 P4 ext_authz latency and timeout choice (unanchored link, `istiod-values.yaml` comment) | `doc:docs/architecture/session-edge-authorization-pattern.md#authorizer-failures` (method and result) | 4 |
 | Contested | 1 primary CSRF control (and A2, A7) | `adr:009` | 2 |
 | Contested | 2 Redis enumeration after hashing (and A9) | `adr:011` | 2 |
 | Contested | 3 encoded-path traversal, rejecting `;` (and A1, A12) | `adr:012` | 2 |
 | Contested | 4 OAuth correlation cookie, atomic consume (and A8) | `adr:010` | 2 |
 | Contested | 5 duplicate session cookies (and A11) | `adr:011` (duplicate rejection optional, not implemented) | 2 |
-| Contested | 6 PDF memory and parsing worker (and A5, A10) | pending: `security-architecture.md` Accepted risks, including the "if revisited" configuration-first options | 4 (step 2) |
+| Contested | 6 PDF memory and parsing worker (and A5, A10) | `doc:docs/architecture/security-architecture.md#accepted-risks` (Unbounded upload processing, with the "if revisited" options) | 4 |
 | Contested | 7 signed identity context | `adr:013` | 2 |
 | Contested | 8 separate internal ports | `adr:013` | 2 |
 | Contested | 9 per-caller egress identity | `adr:013` | 2 |
@@ -383,8 +439,8 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Contested | Severity disputes table | `obsolete`: every row is fixed (Redis `+@all`, OAuth binding, Cookie/Authorization stripping, CSRF, path traversal) or covered by `adr:011` (`deleteUser`) | 2 |
 | Contested | Work order | `obsolete`: plans executed | 2 |
 | Contested | Settled: body logging in four services | `obsolete`: `include-request-body` now only in each service's `application-debug-logging.yml` | 2 |
-| Contested | Settled: five `loadPDF` sites | folded into item 6 (pending, Phase 4) | 4 |
-| Contested | Settled: `@PreAuthorize` enforced | `covered:` 11-09 verified-correct audit/`@PreAuthorize` coverage test; live-doc check pending | 4 |
+| Contested | Settled: five `loadPDF` sites | folded into item 6, `doc:docs/architecture/security-architecture.md#accepted-risks` | 4 |
+| Contested | Settled: `@PreAuthorize` enforced | `covered:` service-owned docs and `RuntimeSecurityIntegrationTest` (see 11-09 verified-correct row) | 4 |
 | Contested | Settled: sessions last forever | `adr:011` (absolute lifetime) | 2 |
 | Contested | Settled: ADR 007 "revoked at Auth0" wording | `covered:docs/architecture/session-edge-authorization-pattern.md` ("Sliding TTL in ADR 007") | 2 |
 | Contested | Settled: "instant revocation" timing | `covered:docs/architecture/security-architecture.md#threat-mitigation` (Session revocation row) | 2 |
@@ -392,8 +448,8 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Contested | Settled: RabbitMQ 3.13 community EOL, quarterly review "missed" it | `obsolete`: manifest now selects RabbitMQ 4.4 | 2 |
 | Contested | Settled: login call timeout | `covered:docs/architecture/session-edge-authorization-pattern.md` (`PERMISSION_SERVICE_LOGIN_TIMEOUT`) | 2 |
 | Contested | Settled: ext-authz Go toolchain mismatch (A4) | `obsolete`: `go.mod`, CI and Dockerfile all on 1.27 | 2 |
-| Contested | Settled: Redis `maxmemory` must be measured | pending: Redis budget derivation (`#plan-04-phase-1-redis-memory-budget`) | 4 (step 4) |
-| Contested | Settled: PostgreSQL TLS-only HBA | pending: confirm live-doc coverage of the `hostssl`-only `hba_file` | 4 |
+| Contested | Settled: Redis `maxmemory` must be measured | `doc:docs/architecture/security-architecture.md#session-management` (budget derivation) | 4 |
+| Contested | Settled: PostgreSQL TLS-only HBA | `covered:docs/architecture/security-architecture.md` (Executive Summary) and `docs/development/database-setup.md` | 4 |
 | Contested | Additional review A13 (caveats) | `obsolete`: review-process guidance | 2 |
 | Contested | Verification record, reviewed HEADs, probe transcripts | `obsolete`: point-in-time. The Envoy normalization and Redis enumeration results are condensed into `adr:012` and `adr:011` | 2 |
 | Plan 01 | Decisions: "None applies" | `obsolete`: no decision recorded | 3 |
@@ -402,20 +458,20 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Plan 02.4 | D2 ext-authz does not re-check the cap | `covered:adr:011` (Decision 5, Alternative 5) | 3 |
 | Plan 02.6 | D4 remove `SESSION_COOKIE_DOMAIN_OVERRIDE` | `covered:adr:011` (Decision 4) | 3 |
 | Plan 03 | D6 audit state-changing requests and the session lifecycle, not reads | `doc:docs/architecture/security-architecture.md#logging-strategy` (added rationale clause); "data access" audit claim already gone | 3 |
-| Plan 04 | D5 runtime roles own schemas, no migration role | `doc:docs/architecture/security-architecture.md` accepted-risk line (added deferral cost); Phase 4 merges it into Accepted risks | 3, 4 |
+| Plan 04 | D5 runtime roles own schemas, no migration role | `doc:docs/architecture/security-architecture.md#accepted-risks` (moved from the Executive Summary) | 3, 4 |
 | Plans 01–05 | Plan-wide rule: no production data, reset local state, no migration or dual-format code | `adr:015`; pointer in `kubernetes/production/README.md#application-and-image-baseline` | 3 |
 | Plans 01–05 | Other plan-wide rules (workspace scope, `kind-kind` checks, Live phases, static gate, record evidence, do not edit plan or ADRs) | `obsolete`: execution process; durable parts already in `AGENTS.md` | 3 |
-| Plans 02.3, 02.5, 02.6, 03, 05 | Cutover rule: production reference pins pre-hardening images | `covered:kubernetes/production/README.md#application-and-image-baseline`; release order pending | 4 (step 1) |
+| Plans 02.3, 02.5, 02.6, 03, 05 | Cutover rule: production reference pins pre-hardening images | `covered:kubernetes/production/README.md#application-and-image-baseline`; release order `doc:kubernetes/production/README.md#release-order` | 4 |
 | Plan 01 | Contested-decisions-applied bullets (items 1, 2, 3, 8, 11, 12, severity, work order) | `covered:` Phase 2 ADR rows above | 3 |
-| Plans 02.1–04 | Contested-decisions-applied bullets (items 1, 2, 4, 5, 6, 9, 10, A4, settled) | `covered:` Phase 2 ADR and contested rows above; item 6 pending | 3 |
+| Plans 02.1–04 | Contested-decisions-applied bullets (items 1, 2, 4, 5, 6, 9, 10, A4, settled) | `covered:` Phase 2 ADR and contested rows above; item 6 `doc:docs/architecture/security-architecture.md#accepted-risks` | 3, 4 |
 | Plan 01 follow-ups | Not changed: literal `..;` and `.;` resolved by normalization | `covered:docs/architecture/security-architecture.md` (normalization paragraph) and `adr:012` | 3 |
 | Plan 01 follow-ups | Not changed: raw production kustomize output keeps CSP placeholder | `covered:deploy/README.md` (Maintained Surface) | 3 |
 | Plan 03 remediation | Rule: audit events carry no tokens, digests, OAuth codes/state, emails, names or bodies | `covered:docs/architecture/security-architecture.md#logging-strategy` | 3 |
 | Plan 03 remediation | Rule: do not mock or spy application-owned Spring beans | `covered:../service-common/docs/testing-patterns.md` | 3 |
 | Plan 03 remediation | Rule: keep `spring.config.additional-location` in runtime-config tests | `covered:` in-code comments in all four services' runtime-config tests | 3 |
-| Plan 03 | Dropped phase: bound PDF parsing | pending with contested 6 | 4 (step 2) |
+| Plan 03 | Dropped phase: bound PDF parsing | with contested 6, `doc:docs/architecture/security-architecture.md#accepted-risks` | 4 |
 | Plan 05 | Final scope items 1–24, 26–28, 30–38 | `obsolete`: implemented; review findings get their dispositions in Phase 5a | 3 |
-| Plan 05 | Final scope 25 (PDF) and 29 (migration roles) | 25 pending with contested 6; 29 per 04 D5 | 3, 4 |
+| Plan 05 | Final scope 25 (PDF) and 29 (migration roles) | 25 with contested 6 and 29 per 04 D5, both `doc:docs/architecture/security-architecture.md#accepted-risks` | 3, 4 |
 | Plan 05 | Deferred: recovery objectives and restore tests, secret rotation, storage encryption | `doc:kubernetes/production/README.md#unresolved-deployment-prerequisites` (added) | 3 |
 | Plan 05 | Deferred: exporters and alert delivery | `covered:docs/architecture/observability.md` (exporters not deployed); `security-architecture.md` ("Alerting: Not yet configured") | 3 |
 | Plan 05 | Deferred: vulnerability gating | `covered:docs/dependency-automation.md` ("vulnerability gating remains deferred") | 3 |
@@ -424,3 +480,4 @@ One row per source item. Disposition is one of: `issue:<file>`, `adr:<NNN>`, `do
 | Plan 05 | Deferred: account generation check for immediate containment | `covered:docs/architecture/session-edge-authorization-pattern.md` ("not an immediate containment guarantee") and `security-architecture.md#emergency-admin-containment` | 3 |
 | Plan 05 | Human-run verification 2026-11-09 | `obsolete`: point-in-time | 3 |
 | Plans 01–05 | Status lines and open phases | `obsolete`: all executed. Stale "Draft" lines; 01 follow-up criteria hold (`require_inject_failures`, `__pycache__/` ignored); 03 remediation closed. No new issues | 3 |
+| Scope gap | Five unscoped sibling evidence copies (currency-service, service-common, ext-authz, permission-service, transaction-service) | Q5: delete after moving durable contract text, Phase 6b. The plan's claim that Final verification flags them was wrong; a file-existence check was added | 4 |

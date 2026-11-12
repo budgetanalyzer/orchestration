@@ -15,7 +15,7 @@ Repository security posture:
 - Ingress, session, and routing follow the topology described here.
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
 - Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
-- Accepted risk: each service's PostgreSQL role owns its database and runs its Flyway migrations at startup, so the runtime connection can change the schema. There is no separate migration role. One in the same pod would not survive code execution there, because Flyway's credential would sit beside the runtime one. Against SQL injection it would block only owner-only actions such as DDL, triggers and functions, while the runtime role's DML can already read and delete the service's data. An out-of-process migrator, such as an init container or Job, would separate the credentials but is deferred: it adds an image, Flyway version coupling and rollout ordering for little gain.
+- Known residual risks, including runtime database roles that own their schemas, are listed in [Accepted Risks](#accepted-risks).
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. The egress gateway's TCP 443 egress excludes `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` and `100.64.0.0/10`, so beneath Envoy's SNI host rules it cannot reach pods, Services, the Kubernetes API, nodes or metadata endpoints on 443. This bounds where the gateway connects, not which caller it serves, and it relies on the CNI enforcing `ipBlock.except` after Service DNAT, as Calico does locally; a hosted CNI must as well. The cluster is IPv4-only, so a dual-stack environment needs a matching IPv6 rule. `verify-static-security-manifests.sh` rejects any `istio-egress` policy that reopens these ranges on 443, and `verify-network-policies.sh` proves the denial live. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
 - Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway only `POST` on the login user sync and `GET` on the heartbeat authorization lookup and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
 - Istio CNI runtime hardening: Tilt installs Istio CNI, enables `pilot.cni.enabled=true` for `istiod`, and reinjects existing `default` namespace workloads so new sidecar pods do not require `istio-init`.
@@ -286,9 +286,13 @@ missing or non-empty `default-deny-all`.
 
 `scripts/smoketest/verify-edge-contract.sh` proves the boundary on the live
 chain with an encoded-path traversal matrix on both lanes, including side-effect
-checks for the bulk revocation endpoint. The 2026-11-06 measurement before and
-after narrowing is recorded in
-[security-consensus-hardening-evidence.md](../research/security-consensus-hardening-evidence.md).
+checks for the bulk revocation endpoint. Before the 2026-11-06 narrowing, it
+reproduced the encoded-semicolon traversal: `..%3b`-style paths on the NGINX
+lane read permission-service's internal authorization snapshot and every
+backend's Prometheus metrics with any session, and on the direct auth lane an
+unauthenticated `%2e%2e;` path read Session Gateway's metrics and revoked
+every session of an arbitrary user. After narrowing, all of those probes are
+the sidecar's `403` and the seeded session stays intact.
 Rejecting `;` is the separate control in
 [Ingress Path Hardening](#ingress-path-hardening), and separate internal ports
 remain deferred.
@@ -645,8 +649,8 @@ submitting to the application; the
 denies those. Under the strict CSP, Chromium blocked an app-page form to a
 foreign origin and a same-origin form answer that redirected to one, and
 hostile same-site and cross-site form and `fetch` submissions were denied
-without changing the session. Other browsers were not exercised; see the
-[evidence record](../research/security-consensus-hardening-evidence.md#plan-028-phase-2-exact-origin-ingress-rule-proven-live).
+without changing the session. Only headless Chromium was exercised; see
+[Browser proof](session-edge-authorization-pattern.md#browser-proof).
 
 The route boundaries are:
 
@@ -660,6 +664,70 @@ checked-in CSP split is implemented in
 `nginx/includes/security-headers-{strict,dev,docs}-csp.conf`; see
 [nginx/README.md — CSP Split](../../nginx/README.md#csp-split) for the NGINX
 profile comparison.
+
+### Accepted Risks
+
+These gaps are known and accepted while no hosted deployment exists. Revisit
+each one before a hosted deployment or an open-signup requirement.
+
+- **Runtime roles own their schemas.** Each service's PostgreSQL role owns its
+  database and runs its Flyway migrations at startup, so the runtime
+  connection can change the schema. There is no separate migration role. One
+  in the same pod would not survive code execution there, because Flyway's
+  credential would sit beside the runtime one. Against SQL injection it would
+  block only owner-only actions such as DDL, triggers and functions, while the
+  runtime role's DML can already read and delete the service's data. An
+  out-of-process migrator, such as an init container or Job, would separate
+  the credentials but is deferred: it adds an image, Flyway version coupling
+  and rollout ordering for little gain.
+- **Unbounded upload processing.** transaction-service runs one replica with a
+  512Mi memory limit and no explicit heap setting. It accepts 25 MB uploads on
+  the preview route, reads each upload into a byte array and parses PDFs from
+  that array. A few concurrent maximum-size uploads, or one crafted
+  high-expansion PDF, can plausibly exhaust the heap and fail the transaction
+  API for every user until the JVM recovers or the pod restarts. This is
+  reasoned from source and defaults, not reproduced. It affects availability,
+  not confidentiality. No current setting, including the 25 MB limit, is a
+  capacity bound. A temp-file stream cache is not a fix, because it moves
+  neither the input array nor the parsed document to disk. If revisited,
+  prefer configuration before code: an NGINX `limit_conn` cap on the preview
+  route (an exception to the
+  [NGINX rule](../../nginx/README.md) against backend-specific limits), an
+  explicit heap percentage with `-XX:+ExitOnOutOfMemoryError` and a memory
+  limit that fits heap plus non-heap memory, a lower upload size in both
+  NGINX and Spring, and more than one replica. These bound concurrent upload
+  memory but not one crafted document. File-backed input, page or text limits,
+  per-user fairness and a killable parsing worker remain later options.
+- **Anonymous OAuth-state growth.** `noeviction` keeps sessions and OAuth state
+  from being evicted, but it does not stop anonymous login starts from filling
+  the budget. About 60 source addresses at the per-client login-initiation
+  limit, or fewer if IPv6 addresses are cheap, can fill 128 MB with
+  maximum-size OAuth-state records and block new logins for each 600 s state
+  lifetime. Existing sessions keep working. Recovery is automatic when the
+  records expire; an operator can recover sooner by deleting
+  `oauth2:state:*` as `redis-ops`, which also fails logins in progress. See
+  [Session Management](#session-management).
+- **Session Gateway client address.** Session Gateway's reactive request logs
+  omit `clientIp` behind the ingress, because the forwarded remote address
+  stays unresolved and the shared logging filter refuses the caller-controlled
+  hostname. Omission is preferred to an untrusted value. A trusted path needs
+  separate design.
+- **Audit retention and access.** `budgetanalyzer.audit` events are emitted,
+  but no separate store, retention period or access control exists. That
+  belongs to a future deployment's log pipeline; see
+  [Logging Strategy](#logging-strategy).
+- **Redis key-name visibility.** The currency-service Redis user's `+scan`
+  grant is not filtered by ACL key patterns, so it can list session-digest,
+  `user_sessions:*` and `oauth2:state:*` key names. That exposes user IDs,
+  session counts and in-flight logins, but no replayable token. See
+  [ADR 011](../decisions/011-hashed-session-keys-host-cookie-absolute-lifetime.md).
+- **Compromised allowed intermediary.** Backends trust `X-User-Id`, `X-Roles`
+  and `X-Permissions` from permitted mesh callers without a signature, so a
+  compromised NGINX or other allowed intermediary can forge or replay identity
+  claims. The edge only guarantees that external forged headers are replaced.
+  Signed identity context, separate internal ports and per-caller egress
+  identity are deferred in
+  [ADR 013](../decisions/013-deferred-mesh-identity-hardening.md).
 
 ---
 
@@ -816,8 +884,26 @@ local Tilt or the production reference.
 - User session index pattern: `user_sessions:{userId}` (SET of session token digests for bulk revocation)
 - Key names remain visible metadata to Redis operators and to the `currency-service` Redis user, whose `+scan` grant (used for cache eviction) is not filtered by ACL key patterns; hashing keeps the reusable token out of them. That user is denied `KEYS` and cannot read session keys
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
-- Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache shares the budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see the [measurements and limits](../research/security-consensus-hardening-evidence.md#plan-04-phase-1-redis-memory-budget)
+- Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache shares the budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
 - Persistence: AOF for crash recovery
+
+**Redis memory budget derivation:** `maxmemory` bounds `used_memory`, not RSS.
+The 2026-11-08 local measurement put the worst observed case at the budget at
+134 MB × 1.55 allocator fragmentation (a bulk Lua load; ordinary writes stayed
+at 1.08–1.12) + 10 MB empty-process base + 7.5 MB fork copy-on-write during an
+AOF rewrite or RDB save, about 226 MB or 84% of the 256Mi limit. Realistic
+writes peaked at 145 MB. At 128 MB the budget holds about 37,600
+maximum-size OAuth-state records (about 3.5 KB each), 75,000–87,000 sessions
+with their indexes, or about 25 all-time exchange-rate cache entries. A fork
+during which nearly every page is rewritten would copy up to the whole
+dataset and does not fit, but at the budget only deletes and expiry can
+rewrite pages. `activedefrag` is off. While full, Redis was never OOM-killed
+and every pod stayed Ready, because the Redis health checks are read-only;
+login starts failed to `/oops`, heartbeats returned `503` and kept the
+existing expiry, session reads and API calls succeeded, and logout still
+deleted the session because `DEL` is not OOM-gated. Repeat the measurement
+when changing the budget, the container limit or the session and OAuth-state
+record shapes.
 
 **Session Cleanup:**
 - Expired sessions automatically removed by Redis TTL

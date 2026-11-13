@@ -24,7 +24,7 @@ These are settled. Do not reopen them in a phase.
   currency, `providerSeriesId`), the series start date, one rate per day (already normalized to
   USD base) and one published-date offset per day (0 means a source rate on that day).
 - **Serializer:** a Jackson serializer bound to the cached value type. No default typing and no
-  type ids in cached values.
+  type ids in cached values. Disable pretty printing on the cache mapper copy.
 - **TTL:** 1 hour. Imports keep `@CacheEvict(allEntries = true)` after commit.
 - **No reseeding:** the cache is filled lazily on a miss. Do not add `@CachePut` warm-up or import
   events for the cache.
@@ -32,7 +32,9 @@ These are settled. Do not reopen them in a phase.
   stale series after the eviction, and a failed after-commit eviction leaves the previous series in
   place. The TTL bounds both. Document them in one or two sentences; do not add versioned keys.
 - **End date:** the effective end date is `min(endDate, today)`. A missing `endDate` means today.
-  "Today" is the UTC date from an injected `java.time.Clock`.
+  "Today" is the UTC date from an injected `java.time.Clock`. When both dates are supplied,
+  `startDate > endDate` is an error, checked against the original inputs before clamping. A valid
+  future range that becomes empty after clamping returns an empty list.
 - **Fail open:** cache `get`, `put`, `evict` and `clear` errors are logged and the request is
   served from the database; a successful database operation never fails because of the cache,
   including deferred after-commit writes and evictions. Fail-open handling lives in a `Cache`
@@ -123,15 +125,21 @@ semantics. The cached value is compact and uses a type-bound serializer.
 
 ### Scope
 
-- A compact series value type, for example `ExchangeRateSeries`, as described in the plan
-  decisions. Use types that Jackson round-trips without type ids.
-- A separate bean, for example `ExchangeRateSeriesProvider`, with
+- A compact `ExchangeRateSeries` record in `service.dto`, as described in the plan decisions.
+  Use types that Jackson round-trips without type ids.
+- A separate concrete `ExchangeRateSeriesService` in `service`, annotated `@Service`, with
   `@Cacheable(cacheNames = CacheConfig.EXCHANGE_RATE_SERIES_CACHE, key = "#currencyCode")` and
   `@Transactional(readOnly = true)`. It loads every rate for the currency in date order and builds
   the dense series from the first to the last source rate, applying the existing USD-base
   normalization from `ExchangeRateData.from`. When the currency has no rates it throws the
   existing `NO_EXCHANGE_RATE_DATA_AVAILABLE` `BusinessException`; exceptions are not cached.
-- `ExchangeRateService.getExchangeRates`, uncached, in this order:
+  Do not add an interface or use the external-integration `*Provider` naming pattern.
+- Keep the controller's original-input date-order validation: when both dates are supplied and
+  `startDate > endDate`, return `400 INVALID_REQUEST` before invoking the service. Preserve the
+  existing service precondition and its `IllegalArgumentException` for direct callers, including
+  `queryWithStartAfterEndThrowsException`. Do not repeat this validation in the cached series
+  service. Clamping must not turn an invalid input range into a successful empty response.
+- `ExchangeRateService.getExchangeRates`, uncached, after that original-input precondition:
   1. reject a disabled currency with `CURRENCY_NOT_ENABLED` (uncached lookup);
   2. fetch the cached series;
   3. compute `today` from an injected UTC `Clock`; effective end is today when `endDate` is null,
@@ -143,14 +151,16 @@ semantics. The cached value is compact and uses a type-bound serializer.
      forward-filling the last element, with its published date, for days after the series end.
 - `CacheConfig`: replace `EXCHANGE_RATES_CACHE` with `EXCHANGE_RATE_SERIES_CACHE =
   "exchangeRateSeries"`; replace the default-typing `GenericJacksonJsonRedisSerializer` with a
-  serializer bound to the series type, built from a copy of the application `JsonMapper`; keep the
+  serializer bound to the series type, built from a copy of the application `JsonMapper`. Disable
+  `SerializationFeature.INDENT_OUTPUT` on that copy; the application mapper enables pretty
+  printing, which needlessly enlarges cache values. Keep the application mapper unchanged, the
   1-hour TTL, the `currency-service:` prefix, `immediateWrites()`, `SCAN` batch clears and
   `transactionAware()` (Phase 2 changes how transaction awareness is applied).
 - `ExchangeRateImportService`: point the three `@CacheEvict` annotations at the new cache name and
   update the javadoc that justifies global eviction with range-key `SCAN` patterns.
 - A `Clock` bean (UTC) if the service does not already have one.
 - The controller's OpenAPI description for `endDate`: defaults to today; dates after today are
-  treated as today (UTC).
+  treated as today (UTC). Document that reversed input dates remain an error before clamping.
 
 ### Non-goals
 
@@ -168,13 +178,17 @@ semantics. The cached value is compact and uses a type-bound serializer.
 - `src/main/java/org/budgetanalyzer/currency/service/ExchangeRateImportService.java`
 - `src/main/java/org/budgetanalyzer/currency/api/ExchangeRateController.java`
 - `ExchangeRateServiceIntegrationTest`, `ExchangeRateImportCacheIntegrationTest`,
-  `ExchangeRateCacheEvictionAclIntegrationTest`
+  `ExchangeRateCacheEvictionAclIntegrationTest`, `ExchangeRateImportServiceIntegrationTest`,
+  `ExchangeRateControllerIntegrationTest`
+- `../service-common/docs/code-quality-standards.md`,
+  `../service-common/docs/spring-boot-conventions.md` (service naming and records),
+  `../service-common/docs/testing-patterns.md` (unit and integration testing)
 
 ### Execution steps
 
 1. Read the current service, cache config, import service and the listed tests. List every test
    that asserts a null-`endDate`-means-last-rate or unbounded-`endDate` behavior.
-2. Add the series value type, the provider bean and the `Clock` bean.
+2. Add the series record, the concrete series service and the `Clock` bean.
 3. Rewrite `getExchangeRates` as specified and delete the code it replaces (the range
    specification and the lookback query, if no longer used).
 4. Update `CacheConfig` and the import service eviction annotations.
@@ -183,16 +197,24 @@ semantics. The cached value is compact and uses a type-bound serializer.
    null `endDate` forward-filling to today; repeated requests for different ranges of one currency
    creating exactly one cache key; a currency disabled after its series was cached being rejected;
    the cached value round-tripping through the configured serializer. Use a fixed `Clock` in
-   tests.
-6. Update the eviction tests' key patterns to `currency-service:exchangeRateSeries::*`.
+   tests. Cover reversed original dates (including both dates in the future) returning `400`,
+   and valid future ranges becoming empty after clamping. Preserve the direct service
+   reversed-date exception test.
+6. Update the eviction tests' key patterns to `currency-service:exchangeRateSeries::*`. Replace
+   arbitrary string and integer cache values with a reusable valid `ExchangeRateSeries` fixture,
+   including the import service tests and their rollback case. Assert the entry is present and
+   readable before the import, then absent after commit or unchanged after rollback. Preserve
+   the ACL test's multi-batch SCAN coverage and unrelated-key assertion.
 
 ### Implementation notes
 
 - Call the cached method on the separate bean so the Spring proxy applies.
 - The cached series ends at the last source rate. Forward-filling to today happens per request, so
   the cached value does not change at midnight.
-- A request entirely in the future ends with an effective end before its start and returns an
-  empty list, which keeps `queryForFutureDateRangeReturnsEmptyList` passing.
+- A request with correctly ordered original dates entirely in the future ends with an effective
+  end before its start and returns an empty list, which keeps
+  `queryForFutureDateRangeReturnsEmptyList` passing. An originally reversed range remains an
+  error even when both dates are in the future.
 
 ### Validation
 
@@ -232,6 +254,13 @@ currency-service documentation describes the new cache and end-date behavior.
   `TransactionAwareCacheDecorator(FailOpenCache(redisCache))` (for example by overriding
   `decorateCache` in a `RedisCacheManager` subclass). Deferred after-commit operations then run
   through the fail-open layer. Do not add a `CacheErrorHandler` or `CachingConfigurer`.
+- Register the custom Redis cache manager only when `spring.cache.type=redis`, leaving Boot's
+  no-op manager active for `spring.cache.type=none`, as used by most tests. Pass the typed
+  `RedisCacheConfiguration` and the writer configured with `immediateWrites()` and SCAN batches
+  directly to the custom manager. A manually created manager does not receive Boot's
+  `RedisCacheManagerBuilderCustomizer` automatically; remove the superseded customizer instead
+  of leaving unused configuration. Update documentation of supported cache properties to match
+  the explicit configuration.
 - `application.yml`: remove `redis` from the readiness group; set
   `spring.data.redis.timeout` and `spring.data.redis.connect-timeout` to short values (about 1 s;
   state the chosen values and why in `docs/configuration.md`).
@@ -254,26 +283,45 @@ currency-service documentation describes the new cache and end-date behavior.
 - `src/main/java/org/budgetanalyzer/currency/config/CacheConfig.java`
 - `src/main/java/org/budgetanalyzer/currency/service/ExchangeRateImportService.java`
 - `src/main/resources/application.yml`
+- `src/test/resources/application.yml`, `AbstractIntegrationTest`,
+  `RuntimeConfigurationIntegrationTest`, `ExchangeRateImportServiceIntegrationTest`
+- `../service-common/docs/testing-patterns.md` (real application beans, framework fakes,
+  integration tests and Testcontainers)
 - `docs/local-development.md`, `docs/configuration.md`,
   `docs/advanced-patterns-usage.md`, `docs/api/README.md`,
   `docs/domain-model.md`, `README.md`, `AGENTS.md`
 
 ### Execution steps
 
-1. Add the fail-open decorator and the explicit cache decoration.
-2. Change readiness and timeouts.
+1. Add the fail-open decorator and the explicit, conditional cache manager configuration. Verify
+   `spring.cache.type=none` still selects a no-op manager and Redis-enabled tests exercise the
+   decorated manager.
+2. Change readiness and timeouts. Update `RuntimeConfigurationIntegrationTest` so Redis is absent
+   from readiness and stopping Redis leaves readiness `UP`; preserve PostgreSQL failure and
+   liveness coverage. Reuse its dedicated containers and production-configuration loading
+   pattern: the ordinary test `application.yml` shadows the shipped configuration. Never stop
+   the shared reusable Redis container to simulate an outage.
 3. Add unit tests for the decorator: each `Cache` method swallows a Redis failure and returns the
-   miss or no-op result.
+   miss or no-op result. Use a small concrete failing implementation of the framework `Cache`
+   interface, and verify loader exceptions still propagate.
 4. Add integration tests with the cache Redis unreachable or failing (stopped or blocked
    container, or the cache pointed at an unreachable port):
    - `GET /v1/exchange-rates` returns the database result with `200` and the readiness group
      stays `UP`;
-   - a cache miss inside the provider's read-only transaction whose deferred `put` fails after
-     commit still returns `200` with the database result;
+   - a cache miss whose deferred `put` fails after commit still returns the database result;
    - an import whose deferred after-commit `clear` fails completes successfully and its rows are
      committed.
-   Each test must prove the cache operation actually failed (for example by asserting the `WARN`
-   log or a failing-cache spy), not only that the response succeeded.
+   For the deferred-operation cases, invoke the real proxied service inside an explicit enclosing
+   `TransactionTemplate` transaction (read-only for the query). This ensures the cache interceptor
+   runs inside the transaction regardless of advisor ordering. Prove the operation is deferred:
+   before the enclosing transaction commits, assert no `put`/`clear` failure warning has occurred;
+   after it commits, assert the operation-specific warning and the successful result. Verify
+   imported rows from a separate transaction after commit. Retain the HTTP outage case above to
+   prove the endpoint returns `200`.
+   Use real Redis failure conditions, such as an unreachable dedicated container or restricted
+   ACLs, and capture the cache name, operation and applicable key in WARN logs. Do not replace or
+   spy application-owned beans. A successful response or a generic cache warning alone does not
+   prove an after-commit failure was handled.
 5. Update javadoc and documentation.
 
 ### Implementation notes
@@ -296,9 +344,10 @@ sessions. The second returns nothing.
 
 ### Completion criteria
 
-Build passes, the fail-open tests pass for reads, deferred writes and after-commit import
-eviction, readiness excludes Redis, local development targets `localhost:6380`, and the docs match
-the code.
+Build passes, cache-disabled tests retain the no-op manager, and the fail-open tests prove reads,
+deferred writes and after-commit import eviction succeed despite cache failures. Readiness excludes
+Redis while retaining PostgreSQL failure coverage, local development targets `localhost:6380`, and
+the docs match the code.
 
 ## Phase 3: service-common Caching Pattern Documentation
 
@@ -315,6 +364,10 @@ date ranges and reflects the pattern currency-service now uses.
 
 - `docs/advanced-patterns.md`, section "Redis Distributed Caching", and the caching lines in
   `AGENTS.md`.
+- `docs/common-patterns.md`, section "Implement Caching Where Appropriate": replace its
+  date-range `@Cacheable` example with a short relative link to the canonical Redis caching
+  section in `advanced-patterns.md`. Spring's default key includes all method arguments, so
+  omitting an explicit `key` still produces the unbounded range-key pattern.
 - Replace the range-key example and the "include all query parameters" key-design rule with: key by
   a bounded domain identifier, cache the expensive derived data set, slice per request in Java.
 - Replace the default-typing serializer example with a type-bound serializer.
@@ -333,14 +386,29 @@ Code changes in service-common.
 ### Required context
 
 - `docs/advanced-patterns.md` ("Redis Distributed Caching")
+- `docs/common-patterns.md` ("Implement Caching Where Appropriate")
 - `AGENTS.md` caching references
+- `../orchestration/docs/agents-md-checkstyle.md` before editing `AGENTS.md`
+- `docs/code-quality-standards.md`, `docs/spring-boot-conventions.md`, and
+  `docs/testing-patterns.md`
 - `../currency-service/src/main/java/org/budgetanalyzer/currency/config/CacheConfig.java` as
   updated by Phases 1 and 2
+- The completed currency-service series service, fail-open decorator, and tests from Phases 1
+  and 2: bounded keys, typed serialization, commit/rollback eviction, deferred-operation failures,
+  HTTP outage behavior, and readiness
 
 ### Execution steps
 
-1. Read the current section and the updated currency-service cache code.
-2. Rewrite the section and the `AGENTS.md` summary lines.
+1. Confirm Phases 1 and 2 are complete. Read the shared caching guidance and the updated
+   currency-service implementation and tests. Stop and report missing prerequisites rather than
+   documenting the planned behavior as implemented.
+2. Rewrite the canonical caching section and replace the `common-patterns.md` example with its
+   pointer. Read and apply the AGENTS.md checkstyle before updating the `AGENTS.md` summary lines.
+3. Compare the replacement guidance with the completed implementation and executable test cases.
+   Verify the decorator ordering, synchronous writes, SCAN clears, serializer, supported cache
+   properties, timeouts, readiness, and TTL limitations. Confirm the tests use concrete framework
+   fakes and real application beans with dedicated Redis failure conditions, without mocking or
+   spying application-owned beans. Report discrepancies rather than copying them into guidance.
 
 ### Implementation notes
 
@@ -350,14 +418,24 @@ copying it in full.
 ### Validation
 
 ```bash
-rg -n "startDate|endDate|DefaultTyping|NON_FINAL|arbitrary parameters" docs/advanced-patterns.md AGENTS.md
+rg -n "startDate|endDate|DefaultTyping|NON_FINAL|arbitrary parameters|exchangeRates" \
+  docs/advanced-patterns.md docs/common-patterns.md AGENTS.md
+rg -n -i 'cache|redis' docs/advanced-patterns.md docs/common-patterns.md AGENTS.md
 ```
 
-No match remains in the caching section.
+No first-command match remains in the caching sections. Review all caching references from the
+second command, including annotations with implicit keys, for consistency with the canonical
+pattern. Verify the new relative link resolves and the `AGENTS.md` changes satisfy the checkstyle.
+Record the implementation and test files reviewed and which cases support the documented behavior;
+an empty search alone is not proof of correctness. This documentation-only phase reviews the
+Phase 1 and 2 test evidence without adding tests or rerunning sibling builds.
 
 ### Completion criteria
 
-The caching section describes the bounded-key, dedicated-instance, fail-open pattern.
+The caching section describes the bounded-key, dedicated-instance, fail-open pattern and matches
+the completed currency-service implementation and tests. `common-patterns.md` points to that
+canonical guidance without retaining a range-key example, and the `AGENTS.md` summary complies
+with its checkstyle.
 
 ## Phase 4: Rename The Session Instance To redis-session
 

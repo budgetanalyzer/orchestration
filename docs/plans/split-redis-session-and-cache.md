@@ -29,13 +29,23 @@ These are settled. Do not reopen them in a phase.
 - **No reseeding:** the cache is filled lazily on a miss. Do not add `@CachePut` warm-up or import
   events for the cache.
 - **Stale-write race:** a read that queried the database before an import committed can write a
-  stale series after the eviction. The TTL bounds it. Document it in one or two sentences; do not
-  add versioned keys.
+  stale series after the eviction, and a failed after-commit eviction leaves the previous series in
+  place. The TTL bounds both. Document them in one or two sentences; do not add versioned keys.
 - **End date:** the effective end date is `min(endDate, today)`. A missing `endDate` means today.
   "Today" is the UTC date from an injected `java.time.Clock`.
 - **Fail open:** cache `get`, `put`, `evict` and `clear` errors are logged and the request is
-  served from the database. Redis is not part of currency-service readiness. Redis connect and
-  command timeouts are short.
+  served from the database; a successful database operation never fails because of the cache,
+  including deferred after-commit writes and evictions. Fail-open handling lives in a `Cache`
+  decorator that wraps the Redis cache directly, beneath the transaction-aware decorator, so that
+  each cache is `TransactionAwareCacheDecorator(FailOpenCache(RedisCache))`. Do not use a
+  `CacheErrorHandler`: Spring's transaction-aware decorator runs deferred `put`, `evict` and
+  `clear` in `afterCommit`, outside the annotation-level handler, and exceptions there propagate
+  to the caller. Redis is not part of currency-service readiness. Redis connect and command
+  timeouts are short.
+- **Local ports:** both Kubernetes Services listen on `6379`. Tilt forwards VM-loopback `6379` to
+  `redis-session` and VM-loopback `6380` to `redis-cache`. currency-service's local `bootRun`
+  workflow uses `localhost:6380`; its `application.yml` port default stays `6379` because the
+  Kubernetes deployment sets the port explicitly.
 - **Naming:** directories `kubernetes/infrastructure/redis-session/` and
   `kubernetes/infrastructure/redis-cache/`; Services, labels (`app: ...`) and Tilt resources
   `redis-session` and `redis-cache`; hosts `redis-session.infrastructure` and
@@ -62,16 +72,26 @@ These are settled. Do not reopen them in a phase.
 - Never run `scripts/bootstrap/setup-infra-tls.sh`, `mkcert`, or any `openssl` generation command,
   and never trigger the Tilt `infra-tls-prerequisites` resource. Editing those scripts is allowed.
 - Phases 1 to 8 are static work. Do not mutate the cluster or run `tilt up` in them.
+- Tilt must be stopped before Phase 1 and stay stopped through Phase 8. A running Tilt watches the
+  Tiltfile, manifests and sibling sources and would deploy partial changes before the new
+  certificates and credentials exist. Each of Phases 1 to 8 first runs `tilt get uiresources`; if
+  it succeeds, stop and report "Tilt is running; stop it before continuing". Do not stop Tilt from
+  the agent.
 - Every changed shell script passes `bash -n` and `shellcheck`.
 - No compatibility shims, fallbacks to old names, or legacy aliases. The one-time cutover below is
   a human procedure recorded only in this plan.
+
+## Before Phase 1 (human)
+
+Stop Tilt (Ctrl-C in its terminal, or `tilt down`) and keep it stopped until step 5 of the Human
+Cutover. Workloads already in the cluster may keep running.
 
 ## Human Cutover (between Phase 8 and Phase 9)
 
 Phase 9 stops if these have not been done. The user runs them from a human-operated shell against
 the local Kind cluster, after Phases 1 to 8 are complete:
 
-1. Stop Tilt (`tilt down` or Ctrl-C).
+1. Confirm Tilt is still stopped: `tilt get uiresources` must fail.
 2. Rename `REDIS_DEFAULT_PASSWORD` and `REDIS_OPS_PASSWORD` in `.env` to the `REDIS_SESSION_*`
    names and add `REDIS_CACHE_DEFAULT_PASSWORD` and `REDIS_CACHE_OPS_PASSWORD`, following
    `.env.example`.
@@ -125,7 +145,7 @@ semantics. The cached value is compact and uses a type-bound serializer.
   "exchangeRateSeries"`; replace the default-typing `GenericJacksonJsonRedisSerializer` with a
   serializer bound to the series type, built from a copy of the application `JsonMapper`; keep the
   1-hour TTL, the `currency-service:` prefix, `immediateWrites()`, `SCAN` batch clears and
-  `transactionAware()`.
+  `transactionAware()` (Phase 2 changes how transaction awareness is applied).
 - `ExchangeRateImportService`: point the three `@CacheEvict` annotations at the new cache name and
   update the javadoc that justifies global eviction with range-key `SCAN` patterns.
 - A `Clock` bean (UTC) if the service does not already have one.
@@ -203,8 +223,15 @@ currency-service documentation describes the new cache and end-date behavior.
 
 ### Scope
 
-- Register a `CachingConfigurer` (or `CacheErrorHandler` bean used by caching) that logs `get`,
-  `put`, `evict` and `clear` errors at `WARN` with the cache name and key, without rethrowing.
+- A fail-open `Cache` decorator, for example `FailOpenCache`, that wraps the Redis cache and
+  delegates every `Cache` method. Read and write failures are logged at `WARN` with the cache name
+  and key (no key for `clear`) and not rethrown: a failed read is a miss, a failed write or
+  eviction is a no-op. Loader exceptions from `get(key, Callable)` still propagate.
+- `CacheConfig`: remove `transactionAware()` from the `RedisCacheManager` builder and apply the
+  decoration explicitly, so that each cache the manager returns is
+  `TransactionAwareCacheDecorator(FailOpenCache(redisCache))` (for example by overriding
+  `decorateCache` in a `RedisCacheManager` subclass). Deferred after-commit operations then run
+  through the fail-open layer. Do not add a `CacheErrorHandler` or `CachingConfigurer`.
 - `application.yml`: remove `redis` from the readiness group; set
   `spring.data.redis.timeout` and `spring.data.redis.connect-timeout` to short values (about 1 s;
   state the chosen values and why in `docs/configuration.md`).
@@ -213,6 +240,9 @@ currency-service documentation describes the new cache and end-date behavior.
 - Update the currency-service docs that describe caching, Redis or the exchange-rate endpoint:
   discover them with `rg -n -i "cache|redis|endDate|end date" README.md AGENTS.md docs`. Describe
   Redis as the dedicated `redis-cache` instance, not a shared or session instance.
+- Local development: `docs/local-development.md` exports and `README.md` point `bootRun` at the
+  `redis-cache` VM-loopback forward on `localhost:6380`, and `docs/configuration.md` states the
+  local cache endpoint as `localhost:6380`. The `application.yml` port default stays `6379`.
 
 ### Non-goals
 
@@ -222,23 +252,35 @@ currency-service documentation describes the new cache and end-date behavior.
 ### Required context
 
 - `src/main/java/org/budgetanalyzer/currency/config/CacheConfig.java`
+- `src/main/java/org/budgetanalyzer/currency/service/ExchangeRateImportService.java`
 - `src/main/resources/application.yml`
-- `docs/configuration.md`, `docs/advanced-patterns-usage.md`, `docs/api/README.md`,
+- `docs/local-development.md`, `docs/configuration.md`,
+  `docs/advanced-patterns-usage.md`, `docs/api/README.md`,
   `docs/domain-model.md`, `README.md`, `AGENTS.md`
 
 ### Execution steps
 
-1. Add the error handler.
+1. Add the fail-open decorator and the explicit cache decoration.
 2. Change readiness and timeouts.
-3. Add an integration test that stops or blocks the cache Redis (or points the cache at an
-   unreachable port) and asserts that `GET /v1/exchange-rates` returns the database result with
-   `200`, and that the readiness group stays `UP`.
-4. Update javadoc and documentation.
+3. Add unit tests for the decorator: each `Cache` method swallows a Redis failure and returns the
+   miss or no-op result.
+4. Add integration tests with the cache Redis unreachable or failing (stopped or blocked
+   container, or the cache pointed at an unreachable port):
+   - `GET /v1/exchange-rates` returns the database result with `200` and the readiness group
+     stays `UP`;
+   - a cache miss inside the provider's read-only transaction whose deferred `put` fails after
+     commit still returns `200` with the database result;
+   - an import whose deferred after-commit `clear` fails completes successfully and its rows are
+     committed.
+   Each test must prove the cache operation actually failed (for example by asserting the `WARN`
+   log or a failing-cache spy), not only that the response succeeded.
+5. Update javadoc and documentation.
 
 ### Implementation notes
 
 A cache outage still costs up to the command timeout per request; that is the accepted "slower"
-mode. Keep the `redis` health contributor available outside the readiness group.
+mode. Keep the `redis` health contributor available outside the readiness group. Fail-open must
+not depend on the relative order of the transaction and cache interceptors.
 
 ### Validation
 
@@ -246,13 +288,17 @@ mode. Keep the `redis` health contributor available outside the readiness group.
 ./gradlew clean spotlessApply
 ./gradlew clean build
 rg -n -i "shared redis|session" docs README.md AGENTS.md | rg -i redis
+rg -n "CacheErrorHandler|CachingConfigurer|\.transactionAware\(\)" src/main
 ```
 
-Review the `rg` output; no remaining text may describe the cache as sharing Redis with sessions.
+Review the first `rg` output; no remaining text may describe the cache as sharing Redis with
+sessions. The second returns nothing.
 
 ### Completion criteria
 
-Build passes, the fail-open test passes, readiness excludes Redis, and the docs match the code.
+Build passes, the fail-open tests pass for reads, deferred writes and after-commit import
+eviction, readiness excludes Redis, local development targets `localhost:6380`, and the docs match
+the code.
 
 ## Phase 3: service-common Caching Pattern Documentation
 
@@ -272,7 +318,9 @@ date ranges and reflects the pattern currency-service now uses.
 - Replace the range-key example and the "include all query parameters" key-design rule with: key by
   a bounded domain identifier, cache the expensive derived data set, slice per request in Java.
 - Replace the default-typing serializer example with a type-bound serializer.
-- Add the fail-open `CachingConfigurer`, short Redis timeouts, and keeping Redis out of readiness.
+- Add fail-open caching as a `Cache` decorator beneath the transaction-aware decorator, with the
+  reason (a `CacheErrorHandler` does not cover deferred after-commit writes and evictions), short
+  Redis timeouts, and keeping Redis out of readiness.
 - State that caches belong on a dedicated Redis with an eviction policy, never on the
   `noeviction` session instance.
 - Remove the "TTL also bounds memory for keys built from arbitrary parameters" guidance; keep the
@@ -333,7 +381,8 @@ connects to it at the end of this phase; Phase 5 moves it.
   `kubernetes/production/infrastructure/kustomization.yaml` (patch target `redis-session`; rename
   the patch file if its name refers to the instance).
 - `Tiltfile`: resource name, objects, `redis_host`, Secret names, `REDIS_SESSION_*` variables, and
-  `resource_deps` of `session-gateway`, `ext-authz` and `currency-service`.
+  `resource_deps` of `session-gateway`, `ext-authz` and `currency-service`. The port forward stays
+  `6379` and is renamed `redis-session`.
 - `kubernetes/services/*/deployment.yaml` hosts: `redis-session.infrastructure`.
 - Network policies: selectors and policy names.
 - `scripts/bootstrap/setup-infra-tls.sh` (`SERVICES`, secret creation, output listing),
@@ -427,9 +476,10 @@ no access to `redis-session`.
   `redis-session-bootstrap-credentials`.
 - `kustomization.yaml` entries and `redis-cache-acl-bootstrap` generator; the production overlay
   includes it through the base, with no storage patch.
-- `Tiltfile`: `redis-cache` resource with a VM-loopback port forward on a distinct local port,
-  `redis-cache-bootstrap-credentials`, `REDIS_CACHE_*` variables, currency-service
-  `resource_deps` on `redis-cache` instead of `redis-session`.
+- `Tiltfile`: `redis-cache` resource with the VM-loopback port forward
+  `port_forward(6380, 6379, name='redis-cache')`, `redis-cache-bootstrap-credentials`,
+  `REDIS_CACHE_*` variables, currency-service `resource_deps` on `redis-cache` instead of
+  `redis-session`.
 - `kubernetes/services/currency-service/deployment.yaml`: host `redis-cache.infrastructure`.
 - Network policies: currency-service egress only to `redis-cache`; `redis-cache` ingress only from
   currency-service; `redis-session` ingress no longer allows currency-service.
@@ -603,9 +653,10 @@ issues record their resolution, and a cross-repo inventory finds no stale refere
 - `README.md`, `SECURITY.md`, `deploy/README.md`, `kubernetes/production/README.md`,
   `scripts/README.md`, `nginx/README.md`, `nginx/includes/backend-headers.conf` comments,
   `kubernetes/istio/ingress-exact-origin.yaml` comments, `docs/OWNERSHIP.md`, `docs/ci-cd.md`.
-- `docs/architecture/*` (system overview, security architecture, port reference with the new
-  `redis-cache` port forward, session edge authorization pattern, session security benefits,
-  observability, deployment architecture), `docs/development/*`, `docs/runbooks/*`.
+- `docs/architecture/*` (system overview, security architecture, port reference with the
+  `redis-session` VM-loopback forward on `6379` and the `redis-cache` forward on `6380`, session
+  edge authorization pattern, session security benefits, observability, deployment
+  architecture), `docs/development/*`, `docs/runbooks/*`.
 - Open issue and plan documents in `docs/issues/` and `docs/plans/` that name the instance, its
   paths or its scripts.
 - `docs/issues/high-currency-cache-exhausts-shared-redis.md`: replace "Chosen approach" with the
@@ -685,11 +736,13 @@ size is measured and recorded, and generated API documentation is refreshed.
 - Verify the human cutover was completed; stop otherwise.
 - Run the focused and aggregate verifiers.
 - Measure cache entry sizes and set `redis-cache` `maxmemory` from the measurement.
-- Refresh the unified API docs for the `endDate` description change.
+- Refresh the unified API docs for the `endDate` description change by running the generator in
+  its normal mode.
 
 ### Non-goals
 
-Certificate generation, `.env` edits, deleting old cluster resources (all human cutover steps).
+- Certificate generation, `.env` edits, deleting old cluster resources (all human cutover steps).
+- Changing the API-doc generator.
 
 ### Required context
 
@@ -715,35 +768,60 @@ Certificate generation, `.env` edits, deleting old cluster resources (all human 
      ./scripts/smoketest/smoketest.sh
    ```
 
-3. Exercise the cache: request the full range and two different sub-ranges for several enabled
-   currencies through the supported API path, then confirm with `redis-ops` on `redis-cache` that
-   the key count equals the number of currencies requested and that `redis-session` holds no
-   `currency-service:*` key.
-4. Measure: request every enabled currency, record `MEMORY USAGE` of the largest entry and the
-   total `used_memory`. Compute the worst case with all seeded currencies enabled. If it exceeds
-   half of `maxmemory`, raise `maxmemory` and the container limits in
-   `kubernetes/infrastructure/redis-cache/` to keep at least 2x headroom. Record the measurement
-   and the chosen value in the port reference or system overview (whichever owns Redis sizing per
-   `docs/OWNERSHIP.md`) and in the high-severity issue document.
-5. Fail-open check: scale `redis-cache` to 0, confirm exchange-rate reads return `200` and
-   currency-service pods stay Ready, login and heartbeat still work, then scale it back to 1.
-6. Regenerate the unified API docs as described in `docs-aggregator/README.md`.
+3. Fail-open check: scale `deployment/redis-cache` in `infrastructure` to 0, confirm
+   exchange-rate reads return `200` and currency-service pods stay Ready, and confirm login and
+   heartbeat still work. Restoring the cache is guaranteed cleanup: whether the checks pass or
+   fail, scale it back to 1 and wait for `kubectl rollout status` to succeed before recording a
+   result or continuing. Because `redis-cache` has no persistence, it restarts empty.
+4. Exercise the cache: confirm with `redis-ops` that `redis-cache` holds no
+   `currency-service:exchangeRateSeries::*` keys, then request the full range and two different
+   sub-ranges for several enabled currencies through the supported API path. Confirm that exactly
+   one `currency-service:exchangeRateSeries::*` key exists per currency requested, with no other
+   keys under that prefix, and that `redis-session` holds no `currency-service:*` key.
+5. Measure:
+   - Record the baseline `used_memory` and `evicted_keys` from `INFO`.
+   - Request every enabled currency. Confirm with `EXISTS` that every currency's key is present
+     and that `evicted_keys` has not increased. If either check fails, measure one currency at a
+     time instead, reading its `MEMORY USAGE` immediately after its request.
+   - Record `MEMORY USAGE` for every key, their sum, the largest entry, and the final
+     `used_memory`.
+   - Count the seeded currencies `N` from the `currency_series` table, not from a hard-coded
+     number. Compute the worst case as `W = baseline used_memory + N × largest entry` and record
+     the formula with its inputs.
+   - If `W` exceeds half of `maxmemory`, raise `maxmemory` to at least `2 × W` and raise the
+     container memory request and limit in `kubernetes/infrastructure/redis-cache/` in the same
+     proportion to `maxmemory` as the Phase 5 values. After Tilt applies the change, wait for
+     `kubectl rollout status`, confirm `CONFIG GET maxmemory` shows the new value, rerun
+     `verify-runtime-hardening.sh` and the focused Redis verifiers from Phases 4 and 5, and repeat
+     Step 4.
+   - Record the measurements, the formula and the chosen value in the port reference or system
+     overview (whichever owns Redis sizing per `docs/OWNERSHIP.md`) and in the high-severity issue
+     document.
+6. Run `./scripts/repo/generate-unified-api-docs.sh` with no arguments. Exception to the
+   single-workspace rule: this script normally also writes
+   `../budget-analyzer-web/docs/api/budget-analyzer-api.yaml` and `session-gateway-api.yaml`, and
+   that write is accepted for this step only. Make no other changes in `../budget-analyzer-web`.
+   Confirm that the diffs in `docs-aggregator/` and `../budget-analyzer-web/docs/api/` are limited
+   to the currency-service exchange-rate contract changes from Phase 1 (the Session Gateway spec
+   should be unchanged). Report any other drift as a blocker.
 7. Mark both issue documents resolved with the verification evidence.
 
 ### Implementation notes
 
-Steps 5 and 6 mutate the local cluster; apply the `AGENTS.md` mutation preconditions before each.
-If a verifier fails because of a sibling-service defect, stop and describe it; do not compensate
-in orchestration.
+Steps 3 to 6 mutate or exec into the local cluster; apply the `AGENTS.md` mutation preconditions
+before each. If a verifier fails because of a sibling-service defect, stop and describe it; do not
+compensate in orchestration. Recording a failed Step 3 check does not skip its cleanup.
 
 ### Validation
 
-The smoketest passes; Steps 3 to 5 produce the expected evidence.
+The smoketest passes; Steps 3 to 6 produce the expected evidence; `redis-cache` is running with
+one Ready replica at the end of the phase.
 
 ### Completion criteria
 
-Live separation and fail-open behavior are proven, `maxmemory` is set from a recorded measurement,
-generated API docs are current, and both issues are marked resolved.
+Live separation and fail-open behavior are proven, `maxmemory` is set from a recorded measurement
+with its formula, the generated API docs are current in `docs-aggregator/` and
+`../budget-analyzer-web/docs/api/`, and both issues are marked resolved.
 
 ## Phase 10: Web Client End-Date Documentation
 
@@ -767,6 +845,7 @@ The web client's description of `GET /v1/exchange-rates` matches the new end-dat
 - Runtime changes. `useCurrencies` passes the transactions' latest date as `endDate`, and that
   behavior stays.
 - Changing mocked API responses in tests unless one asserts the old omitted-`endDate` behavior.
+- Editing `docs/api/*.yaml`; Phase 9's generator run owns those files.
 
 ### Required context
 

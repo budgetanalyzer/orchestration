@@ -631,8 +631,13 @@ No session-gateway configuration default or document refers to the old Redis ins
 
 - `src/main/resources/application-kubernetes.yml`: default host `redis-session.infrastructure`
   (or the fully qualified form already used by orchestration).
+- `src/main/resources/application.yml`: replace the obsolete Docker hostname comment with the
+  Kubernetes profile's session Redis endpoint; retain the local `localhost:6379` default.
 - `docs/local-development.md`, `docs/configuration.md`, `AGENTS.md`: pod `redis-session-0`, label
   `app=redis-session`, the `redis-session` port forward, the instance name.
+- Troubleshooting credential lookup: use `redis-session-bootstrap-credentials`; rename local
+  variables to `REDIS_SESSION_OPS_USERNAME` and `REDIS_SESSION_OPS_PASSWORD`, including every use.
+  Keep the application credential `REDIS_SESSION_GATEWAY_PASSWORD` and its client Secret unchanged.
 - Any other reference found by the inventory below.
 
 ### Non-goals
@@ -643,16 +648,46 @@ stays.
 ### Required context
 
 - `AGENTS.md`
+- `../orchestration/docs/agents-md-checkstyle.md` before updating `AGENTS.md`
+- `docs/configuration.md` (Redis settings and health probes), `docs/local-development.md`
+- `docs/security.md`, `docs/session-configuration.md` (existing session and OAuth Redis contracts)
 - `../orchestration/docs/plans/split-redis-session-and-cache.md` decisions
 
 ### Execution steps
 
-1. `rg -n -P 'redis\.infrastructure|(?<![-\w])redis-0|app=redis(?![-\w])|SPRING_DATA_REDIS_HOST:redis\}|pod/redis(?![-\w])' .`
-2. Update each match.
+1. Inventory stale instance references, including credentials and configuration comments:
+
+   ```bash
+   rg -n -P --glob '!**/build/**' --glob '!docs/archive/**' --glob '!archive/**' \
+     --glob '!docs/decisions/**' \
+     -e 'redis\.infrastructure' -e '(?<![-\w])redis-0' -e 'app[:=] ?redis(?![-\w])' \
+     -e 'SPRING_DATA_REDIS_HOST:redis\}' -e '(statefulset|svc|service|pod)/redis(?![-\w])' \
+     -e 'infra-tls-redis(?![-\w])' -e 'redis-bootstrap-credentials' -e 'redis-acl-bootstrap' \
+     -e 'REDIS_(DEFAULT|OPS)_PASSWORD' -e 'REDIS_OPS_USERNAME' \
+     -e 'infrastructure/redis/' -e 'redis-data-redis-0' -e "Use 'redis'" .
+   ```
+
+2. Update the configuration and affected documentation, applying the AGENTS.md checkstyle. Update
+   credential lookup commands and variable uses together so the troubleshooting procedure works
+   with the renamed Secret.
+3. Review remaining Redis references for instance-specific prose or comments the targeted search
+   may miss:
+
+   ```bash
+   rg -n -i --glob '!**/build/**' --glob '!docs/archive/**' --glob '!archive/**' \
+     --glob '!docs/decisions/**' 'redis' .
+   ```
+
+   Generic technology mentions, Spring property/health-indicator names, and Testcontainers image
+   identifiers stay unchanged. Do not edit excluded historical documents.
 
 ### Implementation notes
 
-None.
+Keep one Redis connection for session storage. Preserve session/OAuth key names and schemas,
+session-token hashing, existing ACL requirements, TLS verification, and failure behavior. Keep
+`management.endpoint.health.group.readiness.include=readinessState,redis`: session Redis is
+required for authentication. The currency-service cache fail-open policy does not apply here.
+No Java abstractions or session migration mechanism are needed for the hostname change.
 
 ### Validation
 
@@ -661,11 +696,15 @@ None.
 ./gradlew clean build
 ```
 
-Rerun the Step 1 inventory; it returns nothing.
+Rerun the Step 1 inventory; it returns nothing. Review the Step 3 results and the diff to confirm
+the existing security contracts and Redis readiness requirement remain intact. Live TLS and
+instance-isolation verification belongs to Phase 9.
 
 ### Completion criteria
 
-Build passes and the inventory is empty.
+Build passes, the stale-reference inventory is empty, and remaining Redis mentions have been
+reviewed. Configuration and troubleshooting docs consistently target `redis-session`, with
+working credential lookup names and unchanged session security and readiness behavior.
 
 ## Phase 7: ext-authz Default And Documentation
 

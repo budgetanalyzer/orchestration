@@ -52,7 +52,7 @@ spec:
           value: "kubernetes"
         # Redis connection
         - name: SPRING_DATA_REDIS_HOST
-          value: "redis.infrastructure"
+          value: "redis-session.infrastructure"
         - name: SPRING_DATA_REDIS_PORT
           value: "6379"
         - name: SPRING_DATA_REDIS_USERNAME

@@ -19,7 +19,8 @@
 | 5007 | Currency Service JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
 | 5009 | Session Gateway JDWP | JDWP | Local remote debugging (dev only) | Local developer only |
 | 5432 | PostgreSQL | TCP/TLS | Relational database (`sslmode=verify-full` required for clients; server refuses non-TLS TCP) | Internal (services only) |
-| 6379 | Redis | TCP/TLS | TLS-only session hash storage, caching | Internal (services only) |
+| 6379 | Redis (`redis-session`) | TCP/TLS | TLS-only session hash, session index and OAuth2 state storage; Tilt VM-loopback forward `6379` | Internal (services only) |
+| 6379 | Redis (`redis-cache`) | TCP/TLS | TLS-only disposable currency-service cache; Tilt VM-loopback forward `6380` | Internal (services only) |
 | 5671 | RabbitMQ | AMQPS/TLS | TLS-only message broker listener | Internal (services only) |
 | 15672 | RabbitMQ Management | HTTP | RabbitMQ admin UI | Internal (dev access) |
 | 9090 | Prometheus | HTTP | Metrics query and UI | Internal (operator access; see [observability.md](observability.md)) |
@@ -58,7 +59,8 @@
 
 ### Infrastructure Layer (Internal)
 - **5432** - PostgreSQL (database, client cert trust anchored by `infra-ca`)
-- **6379** - Redis (TLS-only session hash storage)
+- **6379** - `redis-session` (TLS-only session hash storage)
+- **6379** - `redis-cache` (TLS-only disposable currency-service cache)
 - **5671** - RabbitMQ (TLS-only AMQPS messaging)
 - **15672** - RabbitMQ Management UI
 
@@ -121,7 +123,7 @@ kubectl exec deployment/nginx-gateway -- curl http://transaction-service:8082/ac
 
 **Infrastructure (Standard ports)**:
 - 5432: PostgreSQL (standard)
-- 6379: Redis (standard)
+- 6379: Redis (standard; both `redis-session` and `redis-cache` Services)
 - 5671: RabbitMQ AMQPS (TLS-enabled standard secure listener)
 - 15672: RabbitMQ Management (standard)
 
@@ -175,6 +177,21 @@ kubectl get svc --all-namespaces | grep <port>
 - Port 3000: Often used by other React apps (stop other dev servers)
 - Port 8080: Common default for many services (ensure NGINX has exclusive use)
 - Port 5432: If running local PostgreSQL (use Kubernetes version instead)
+- Ports 6379 and 6380: If running local Redis (use the Kubernetes instances instead)
+
+## Local Infrastructure Forwards
+
+Both Redis Services listen on `6379` inside the cluster, so Tilt publishes them
+on different VM-loopback ports:
+
+| VM-loopback port | Target | Clients |
+|------------------|--------|---------|
+| `6379` | `redis-session:6379` | direct `bootRun` of session-gateway, local ext-authz, operator `redis-cli` for sessions |
+| `6380` | `redis-cache:6379` | direct `bootRun` of currency-service (`SPRING_DATA_REDIS_PORT=6380`), operator `redis-cli` for the cache |
+
+PostgreSQL (`5432`) and RabbitMQ (`5671`, `15672`) forward on their own port
+numbers. Credentials and `redis-cli` usage live in
+[local-environment.md](../development/local-environment.md#environment-variables).
 
 ## Security Considerations
 
@@ -184,7 +201,7 @@ kubectl get svc --all-namespaces | grep <port>
 - Kubelet probes and Tilt port-forwards are host-to-pod traffic; under Calico's default `defaultEndpointToHostAction=Accept`, they are outside this pod-to-pod allowlist boundary
 - `session-gateway` and `currency-service` egress is constrained to the rendered Istio egress gateway pods only (`app: istio-egress-gateway`, `istio: egress-gateway`) in the `istio-egress` namespace; the gateway handles approved external traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts
 - The egress gateway's own TCP 443 egress excludes the private, link-local and carrier-grade NAT ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `100.64.0.0/10`), so it reaches only public destinations on 443
-- Infrastructure transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full` and the server accepts TCP only through `hostssl` rules, Redis uses `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
+- Infrastructure transport TLS is mandatory for infrastructure clients: PostgreSQL uses hostname-validated `sslmode=verify-full` and the server accepts TCP only through `hostssl` rules, both Redis instances use `--tls` with the shared `infra-ca`, and RabbitMQ data-plane traffic uses AMQPS on `5671`
 
 **Approved pod-to-pod callers per protected port**:
 
@@ -199,7 +216,8 @@ kubectl get svc --all-namespaces | grep <port>
 | 3000 | React Dev Server | nginx-gateway only |
 | 8086 | Permission Service | session-gateway only |
 | 5432 | PostgreSQL | transaction-service, currency-service, permission-service only |
-| 6379 | Redis | session-gateway, ext-authz, currency-service only |
+| 6379 | `redis-session` | session-gateway, ext-authz only |
+| 6379 | `redis-cache` | currency-service only |
 | 5671 | RabbitMQ | currency-service only |
 | 15672 | RabbitMQ Management | No in-cluster callers (blocked by NetworkPolicy) |
 

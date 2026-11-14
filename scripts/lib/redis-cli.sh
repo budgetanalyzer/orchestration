@@ -4,18 +4,32 @@
 set -euo pipefail
 
 redis_cli_in_pod() {
-    local namespace="$1"
-    local pod="$2"
-    local user="$3"
-    local password="$4"
-    shift 4
+    if (( $# < 5 )); then
+        echo "ERROR: redis_cli_in_pod requires an instance, namespace, pod, user, and password." >&2
+        return 2
+    fi
+
+    local instance="$1"
+    local namespace="$2"
+    local pod="$3"
+    local user="$4"
+    local password="$5"
+    shift 5
+
+    case "$instance" in
+        redis-session|redis-cache) ;;
+        *)
+            echo "ERROR: unsupported Redis instance '$instance' (expected redis-session or redis-cache)." >&2
+            return 2
+            ;;
+    esac
 
     local -a kubectl_flags=()
     if [ -t 0 ] && [ $# -eq 0 ]; then
         kubectl_flags+=("-it")
     fi
 
-    kubectl exec "${kubectl_flags[@]}" -n "$namespace" "$pod" -- \
+    kubectl exec "${kubectl_flags[@]}" -n "$namespace" "$pod" -c "$instance" -- \
         redis-cli \
         --tls \
         --cacert /tls-ca/ca.crt \

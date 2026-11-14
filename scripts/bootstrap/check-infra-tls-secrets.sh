@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies internal transport-TLS secrets before infrastructure StatefulSets start.
+# Verifies internal transport-TLS secrets before infrastructure workloads start.
 
 set -euo pipefail
 
@@ -36,7 +36,8 @@ if ! kubectl get namespace infrastructure >/dev/null 2>&1; then
 else
     check_secret infrastructure infra-ca
     check_secret infrastructure infra-tls-postgresql
-    check_secret infrastructure infra-tls-redis
+    check_secret infrastructure infra-tls-redis-cache
+    check_secret infrastructure infra-tls-redis-session
     check_secret infrastructure infra-tls-rabbitmq
 fi
 

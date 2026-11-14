@@ -533,20 +533,20 @@ assert_ready_statefulset() {
 
 # shellcheck disable=SC2317,SC2329 # Invoked indirectly through capture_command_output.
 redis_exec() {
-    kubectl exec -n infrastructure "$REDIS_POD" -- \
+    kubectl exec -n infrastructure "$REDIS_POD" -c redis-session -- \
         redis-cli \
         --tls \
         --cacert /tls-ca/ca.crt \
         --user "$REDIS_OPS_USERNAME" \
-        --pass "$REDIS_OPS_PASSWORD" \
+        --pass "$REDIS_SESSION_OPS_PASSWORD" \
         --no-auth-warning \
         "$@"
 }
 
 REDIS_POD=""
 REDIS_OPS_USERNAME=""
-REDIS_OPS_PASSWORD=""
-REDIS_ACL_BOOTSTRAP_FILE="${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh"
+REDIS_SESSION_OPS_PASSWORD=""
+REDIS_ACL_BOOTSTRAP_FILE="${REPO_ROOT}/kubernetes/infrastructure/redis-session/start-redis.sh"
 EXPECTED_SESSION_GATEWAY_PERMISSION_OPERATIONS='      to:
         - operation:
             methods: ["POST"]
@@ -602,15 +602,15 @@ run_static_checks() {
     fi
     # shellcheck disable=SC2016 # Match the literal checked-in Redis bootstrap template.
     assert_file_contains \
-        "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
+        "${REPO_ROOT}/kubernetes/infrastructure/redis-session/start-redis.sh" \
         'user ext-authz reset on >${REDIS_EXT_AUTHZ_PASSWORD} ~session:* +hgetall +ping +auth +hello +info' \
         "Redis ACL bootstrap restricts ext-authz to read-only session:* access"
     assert_file_not_contains \
-        "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
+        "${REPO_ROOT}/kubernetes/infrastructure/redis-session/start-redis.sh" \
         "~spring:session:*" \
         "Redis ACL bootstrap no longer references spring:session:*"
     assert_file_not_contains \
-        "${REPO_ROOT}/kubernetes/infrastructure/redis/start-redis.sh" \
+        "${REPO_ROOT}/kubernetes/infrastructure/redis-session/start-redis.sh" \
         "~extauthz:session:*" \
         "Redis ACL bootstrap no longer references extauthz:session:*"
 
@@ -867,12 +867,12 @@ run_static_checks() {
 }
 
 prepare_live_redis_context() {
-    REDIS_POD="$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    REDIS_POD="$(kubectl get pods -n infrastructure -l app=redis-session -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
     REDIS_OPS_USERNAME="redis-ops"
-    REDIS_OPS_PASSWORD="$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+    REDIS_SESSION_OPS_PASSWORD="$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 
-    if [[ -z "$REDIS_POD" || -z "$REDIS_OPS_USERNAME" || -z "$REDIS_OPS_PASSWORD" ]]; then
-        fail "live Redis proof prerequisites are missing (redis pod or redis-bootstrap-credentials)"
+    if [[ -z "$REDIS_POD" || -z "$REDIS_OPS_USERNAME" || -z "$REDIS_SESSION_OPS_PASSWORD" ]]; then
+        fail "live Redis proof prerequisites are missing (redis-session pod or redis-session-bootstrap-credentials)"
         return 1
     fi
 
@@ -940,10 +940,10 @@ run_live_checks() {
         fail "networkpolicy/allow-permission-service-ingress-from-session-gateway is missing"
     fi
 
-    if require_kubectl_resource statefulset redis infrastructure; then
-        assert_ready_statefulset infrastructure redis
+    if require_kubectl_resource statefulset redis-session infrastructure; then
+        assert_ready_statefulset infrastructure redis-session
     else
-        fail "statefulset/redis is missing from the live cluster"
+        fail "statefulset/redis-session is missing from the live cluster"
     fi
 
     if ! prepare_live_redis_context; then
@@ -1016,7 +1016,7 @@ run_live_checks() {
         if [[ -z "$raw_session_keys" ]]; then
             pass "every live session:* key is a SHA-256 digest key"
         else
-            fail "live Redis has session:* keys that are not SHA-256 digest keys; run ./scripts/ops/flush-redis.sh to clear pre-cutover raw-token sessions"
+            fail "live Redis has session:* keys that are not SHA-256 digest keys; run ./scripts/ops/flush-redis.sh session to clear pre-cutover raw-token sessions"
         fi
     else
         fail "live Redis session:* query failed"

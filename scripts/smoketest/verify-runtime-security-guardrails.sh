@@ -346,7 +346,7 @@ spec:
               kubernetes.io/metadata.name: ${INFRA_NAMESPACE}
           podSelector:
             matchLabels:
-              app: redis
+              app: redis-cache
       ports:
         - protocol: TCP
           port: 6379
@@ -413,7 +413,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: redis
+      app: redis-cache
   policyTypes:
     - Ingress
   ingress:
@@ -499,7 +499,7 @@ redis_cli_probe() {
         --cacert /tls-ca/ca.crt \
         --user "${username}" \
         --no-auth-warning \
-        -h redis.infrastructure \
+        -h redis-cache.infrastructure \
         "$@"
 }
 

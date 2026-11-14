@@ -73,7 +73,7 @@ find_postgres_pod() {
 }
 
 find_redis_pod() {
-    kubectl get pods -n infrastructure -l app=redis \
+    kubectl get pods -n infrastructure -l app=redis-session \
         -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
 }
 
@@ -101,17 +101,17 @@ require_redis_pod() {
 
 # ---- Redis credentials -------------------------------------------------------
 
-# Exports REDIS_USERNAME and REDIS_OPS_PASSWORD from the
-# redis-bootstrap-credentials secret.
+# Exports REDIS_USERNAME and REDIS_SESSION_OPS_PASSWORD from the
+# redis-session-bootstrap-credentials secret.
 load_redis_ops_credentials() {
     REDIS_USERNAME="redis-ops"
-    REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials \
+    REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials \
         -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-    if [ -z "$REDIS_OPS_PASSWORD" ]; then
-        echo "ERROR: redis-bootstrap-credentials is missing the ops-password key." >&2
+    if [ -z "$REDIS_SESSION_OPS_PASSWORD" ]; then
+        echo "ERROR: redis-session-bootstrap-credentials is missing the ops-password key." >&2
         exit 1
     fi
-    export REDIS_USERNAME REDIS_OPS_PASSWORD
+    export REDIS_USERNAME REDIS_SESSION_OPS_PASSWORD
 }
 
 # ---- PostgreSQL pipe / query helpers -----------------------------------------
@@ -155,16 +155,25 @@ postgres_query_in_pod() {
 # so bulk HSET / EXPIRE / SADD runs stay fast.
 #
 # Usage:
-#   redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" <<'REDIS'
+#   redis_cli_pipe_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" <<'REDIS'
 #   HSET session:<sha256 of loadtest_1> user_id usr_loadtest_1 ...
 #   EXPIRE session:<sha256 of loadtest_1> 900
 #   REDIS
 redis_cli_pipe_in_pod() {
-    local pod="$1"
-    local user="$2"
-    local password="$3"
+    local instance="$1"
+    local pod="$2"
+    local user="$3"
+    local password="$4"
 
-    kubectl exec -i -n infrastructure "$pod" -- \
+    case "$instance" in
+        redis-session|redis-cache) ;;
+        *)
+            echo "ERROR: unsupported Redis instance '$instance' (expected redis-session or redis-cache)." >&2
+            return 2
+            ;;
+    esac
+
+    kubectl exec -i -n infrastructure "$pod" -c "$instance" -- \
         redis-cli \
         --tls \
         --cacert /tls-ca/ca.crt \
@@ -178,15 +187,24 @@ redis_cli_pipe_in_pod() {
 # structured output.
 #
 # Usage:
-#   redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+#   redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
 #       --scan --pattern 'user_sessions:usr_loadtest_*'
 redis_cli_exec_in_pod() {
-    local pod="$1"
-    local user="$2"
-    local password="$3"
-    shift 3
+    local instance="$1"
+    local pod="$2"
+    local user="$3"
+    local password="$4"
+    shift 4
 
-    kubectl exec -n infrastructure "$pod" -- /bin/sh -ceu '
+    case "$instance" in
+        redis-session|redis-cache) ;;
+        *)
+            echo "ERROR: unsupported Redis instance '$instance' (expected redis-session or redis-cache)." >&2
+            return 2
+            ;;
+    esac
+
+    kubectl exec -n infrastructure "$pod" -c "$instance" -- /bin/sh -ceu '
         user="$1"
         password="$2"
         shift 2

@@ -851,6 +851,7 @@ size is measured and recorded, and generated API documentation is refreshed.
 ### Scope
 
 - Verify the human cutover was completed; stop otherwise.
+- Fix the `verify-credential-isolation.sh` port-forward leak found in the 2026-11-14 attempt.
 - Run the focused and aggregate verifiers.
 - Measure cache entry sizes and set `redis-cache` `maxmemory` from the measurement.
 - Refresh the unified API docs for the `endDate` description change by running the generator in
@@ -860,6 +861,8 @@ size is measured and recorded, and generated API documentation is refreshed.
 
 - Certificate generation, `.env` edits, deleting old cluster resources (all human cutover steps).
 - Changing the API-doc generator.
+- Removing the credential-isolation signatures from `cleanup-smoketest-residue.sh`; they still
+  cover interrupted runs.
 
 ### Required context
 
@@ -877,13 +880,29 @@ size is measured and recorded, and generated API documentation is refreshed.
      `pvc/redis-data-redis-0` do not;
    - `tilt get uiresources` shows `redis-session`, `redis-cache`, `currency-service`,
      `session-gateway` and `ext-authz` healthy.
-2. Run `./scripts/bootstrap/check-tilt-prerequisites.sh`, then the focused verifiers changed in
-   Phases 4 and 5, then:
+2. Fix the port-forward leak in `scripts/smoketest/verify-credential-isolation.sh`, then run the
+   verifiers. The 2026-11-14 attempt found six orphaned `kubectl port-forward` processes after
+   two smoketest runs, three per run (RabbitMQ `:15672`, ext-authz `:8090` and `:9002`).
+   Cause: lines 388, 747 and 748 call `start_port_forward` inside command substitution
+   (`PORT=$(start_port_forward ...)`). The function runs in a subshell, so its
+   `PORT_FORWARD_PIDS`, `PORT_FORWARD_LOGS` and `TMP_FILES` appends never reach the parent shell.
+   The EXIT trap then has no PIDs to kill and no log files to remove. The defect predates this
+   plan.
+   - Make `start_port_forward` run in the parent shell and return the port through a named
+     output variable (`printf -v`). This is the pattern `verify-ingress-rate-limits.sh` already
+     uses. Update the three callers.
+   - Run `bash -n` and `shellcheck` on the script.
+   - Run `./scripts/bootstrap/check-tilt-prerequisites.sh`, then the focused verifiers changed in
+     Phases 4 and 5, then:
 
-   ```bash
-   INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
-     ./scripts/smoketest/smoketest.sh
-   ```
+     ```bash
+     INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
+       ./scripts/smoketest/smoketest.sh
+     ```
+
+   - After the smoketest, run `./scripts/smoketest/cleanup-smoketest-residue.sh --dry-run`. It
+     must report no orphaned verifier `kubectl port-forward` process, and no `kubectl
+     port-forward` for RabbitMQ `:15672` or ext-authz `:8090` or `:9002` may still be running.
 
 3. Fail-open check: scale `deployment/redis-cache` in `infrastructure` to 0, confirm
    exchange-rate reads return `200` and currency-service pods stay Ready, and confirm login and
@@ -918,9 +937,19 @@ size is measured and recorded, and generated API documentation is refreshed.
    single-workspace rule: this script normally also writes
    `../budget-analyzer-web/docs/api/budget-analyzer-api.yaml` and `session-gateway-api.yaml`, and
    that write is accepted for this step only. Make no other changes in `../budget-analyzer-web`.
-   Confirm that the diffs in `docs-aggregator/` and `../budget-analyzer-web/docs/api/` are limited
-   to the currency-service exchange-rate contract changes from Phase 1 (the Session Gateway spec
-   should be unchanged). Report any other drift as a blocker.
+   The working tree may already contain this output from the blocked 2026-11-14 attempt; rerun the
+   generator anyway. Confirm that the diffs in `docs-aggregator/` and
+   `../budget-analyzer-web/docs/api/` are limited to the currency-service exchange-rate contract
+   changes from Phase 1 plus this accepted pre-existing drift, which the human has approved:
+   - `session-gateway-api.yaml`: session-gateway `ffd0105` ("use POST for logout and heartbeat")
+     moved `/logout` and `/auth/v1/session` from GET to POST, changed the logout redirect to `303`,
+     added logout `302` and `400` responses and the heartbeat `400` response, updated
+     descriptions, and reordered paths and schemas. The web client already uses POST for both.
+   - The unified spec: an unreferenced `UserSyncRequest` component schema from permission-service
+     `c7aecf9`. It is tracked in
+     `docs/issues/low-user-sync-request-schema-leaks-into-public-api-docs.md`; do not fix it here.
+
+   Report any other drift as a blocker.
 7. Mark both issue documents resolved with the verification evidence.
 
 ### Implementation notes
@@ -931,13 +960,15 @@ compensate in orchestration. Recording a failed Step 3 check does not skip its c
 
 ### Validation
 
-The smoketest passes; Steps 3 to 6 produce the expected evidence; `redis-cache` is running with
-one Ready replica at the end of the phase.
+`bash -n` and `shellcheck` pass on `verify-credential-isolation.sh`; the smoketest passes and
+leaves no orphaned verifier port-forwards; Steps 3 to 6 produce the expected evidence;
+`redis-cache` is running with one Ready replica at the end of the phase.
 
 ### Completion criteria
 
-Live separation and fail-open behavior are proven, `maxmemory` is set from a recorded measurement
-with its formula, the generated API docs are current in `docs-aggregator/` and
+The credential-isolation verifier cleans up its own port-forwards, live separation and fail-open
+behavior are proven, `maxmemory` is set from a recorded measurement with its formula, the
+generated API docs are current in `docs-aggregator/` and
 `../budget-analyzer-web/docs/api/`, and both issues are marked resolved.
 
 ## Phase 10: Web Client End-Date Documentation
@@ -1006,8 +1037,10 @@ the public API tests cover the new end-date behavior against the live local stac
 ### Scope
 
 - Refresh `schemas/openapi.json` with the documented intentional refresh command, and confirm the
-  diff is limited to the currency-service exchange-rate contract changes from Phase 1. Any other
-  drift is a blocker to report, not to accept.
+  diff is limited to the currency-service exchange-rate contract changes from Phase 1 plus the
+  unreferenced `UserSyncRequest` component schema that Phase 9 accepted (tracked in
+  `../orchestration/docs/issues/low-user-sync-request-schema-leaks-into-public-api-docs.md`). Any
+  other drift is a blocker to report, not to accept.
 - New tests in `tests/api/exchange_rates/`, marked `readonly` and `production_safe` and carrying
   the `getExchangeRates` OpenAPI marker:
   - a far-future `endDate` (for example `9999-12-31`) returns `200`, and the last item's `date` is
@@ -1056,4 +1089,5 @@ and accept either value as "today".
 ### Completion criteria
 
 The quality gates and `./run-tests` pass, the snapshot diff contains only the intended contract
-change, and the new tests prove the cap-at-today and omitted-means-today behavior.
+change and the accepted `UserSyncRequest` schema, and the new tests prove the cap-at-today and
+omitted-means-today behavior.

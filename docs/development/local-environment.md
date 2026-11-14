@@ -82,7 +82,7 @@ The current local platform baseline still works like this:
 
 1. `./setup.sh` deletes any existing `kind` cluster and recreates it from
    scratch, which is the clean-state contract for PVC-backed local
-   infrastructure such as Redis.
+   infrastructure such as `redis-session`.
 2. Before deletion it requires Kind's Docker provider and a reachable local
    Docker Unix socket, and validates the three human-supplied ingress files.
 3. It installs or reconciles pinned Calico and Gateway API inputs, waits for
@@ -276,12 +276,12 @@ The tracing and monitoring runtime proofs remain:
 ## Optional Synthetic Data
 
 Track 1 currently stops at data loading. Use the synthetic fixture scripts when
-you want realistic local data volume, including live Redis session hashes and
+you want realistic local data volume, including live `redis-session` session hashes and
 `user_sessions:{userId}` revocation indexes, without running a local load
 driver.
 
 ```bash
-# Seed synthetic users plus Redis-backed sessions. The first 25 users become
+# Seed synthetic users plus redis-session-backed sessions. The first 25 users become
 # ADMIN so admin-path flows are available; the 24h TTL keeps sessions alive for
 # manual testing.
 ./scripts/loadtest/seed-loadtest-users.sh --count 1000 --admin-count 25 --session-ttl 86400
@@ -299,7 +299,7 @@ The synthetic identities are deterministic: user `n` is
 known admin session plus many ordinary users, then exercise flows such as user
 deactivation and bulk session revocation against predictable IDs. The seeder
 also writes `.loadtest/session-pool.txt` for any future traffic-replay tooling,
-but no local k6 step is currently required. As with real logins, Redis stores
+but no local k6 step is currently required. As with real logins, `redis-session` stores
 each session under `session:<sha256 of the token>` and indexes the bare digest
 in `user_sessions:usr_loadtest_<n>`, so teardown finds session hashes through
 those index members rather than a key-name pattern.
@@ -340,7 +340,8 @@ Tilt compiles services locally using Gradle, then builds Docker images:
 ### Infrastructure Resources
 
 - `postgresql` - PostgreSQL StatefulSet
-- `redis` - Redis StatefulSet
+- `redis-session` - Redis StatefulSet for sessions, session indexes, and OAuth2 state (VM-loopback `6379`)
+- `redis-cache` - disposable Redis Deployment for the shared currency-service cache (VM-loopback `6380`)
 - `rabbitmq` - RabbitMQ StatefulSet
 - `istio-ingress-config` - Istio ingress gateway (auto-provisioned from Gateway API)
 - `istio-ingress-routes` - HTTPRoute and ext_authz policy resources
@@ -562,9 +563,10 @@ Sensitive environment variables are injected via Kubernetes secrets, while
 non-secret runtime settings stay on checked-in manifests or ConfigMaps.
 PostgreSQL Step 2 uses a `postgres_admin` bootstrap user plus dedicated service
 users. RabbitMQ Step 3 now bootstraps `rabbitmq-admin` and `currency-service`
-from a definitions file. Redis Step 4 now uses ACL users: a restricted
-`default` user for probes plus dedicated `session-gateway`, `ext-authz`,
-`currency-service`, and `redis-ops` identities.
+from a definitions file. Redis Step 4 now uses ACL users on two instances. Each
+instance has a restricted `default` user for probes and its own `redis-ops`
+identity; `redis-session` adds the dedicated `session-gateway` and `ext-authz`
+identities, and `redis-cache` adds only `currency-service`.
 
 Current local secret names:
 
@@ -577,10 +579,11 @@ Current local secret names:
 | `permission-service-postgresql-credentials` | `default` | permission-service PostgreSQL password |
 | `rabbitmq-bootstrap-credentials` | `infrastructure` | RabbitMQ admin password plus boot-time definitions document |
 | `currency-service-rabbitmq-credentials` | `default` | currency-service RabbitMQ password |
-| `redis-bootstrap-credentials` | `infrastructure` | Redis ACL bootstrap and probe passwords |
-| `session-gateway-redis-credentials` | `default` | session-gateway Redis password |
-| `ext-authz-redis-credentials` | `default` | ext-authz Redis password |
-| `currency-service-redis-credentials` | `default` | currency-service Redis password |
+| `redis-session-bootstrap-credentials` | `infrastructure` | `redis-session` ACL bootstrap and probe passwords |
+| `redis-cache-bootstrap-credentials` | `infrastructure` | `redis-cache` ACL bootstrap and probe passwords |
+| `session-gateway-redis-credentials` | `default` | session-gateway `redis-session` password |
+| `ext-authz-redis-credentials` | `default` | ext-authz `redis-session` password |
+| `currency-service-redis-credentials` | `default` | currency-service `redis-cache` password |
 
 Current local config names:
 
@@ -648,25 +651,28 @@ For `permission-service`, use `permission`, `permission_service`, and set
 `SPRING_DATASOURCE_PASSWORD` from `POSTGRES_PERMISSION_SERVICE_PASSWORD`.
 `transaction-service` no longer needs any RabbitMQ env vars. `session-gateway`
 only needs `SPRING_DATA_REDIS_PASSWORD`; its Redis username defaults to
-`session-gateway`.
+`session-gateway`, and the template's `localhost:6379` reaches `redis-session`.
+`currency-service` must set `SPRING_DATA_REDIS_PORT=6380` to reach `redis-cache`.
 Set `POSTGRES_SSLROOTCERT="$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
 for JDBC `sslrootcert`, and
 `INFRA_CA_CERT_PATH="file:$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
 for Spring SSL bundles.
 
 Redis local access:
-- `session-gateway` uses username `session-gateway`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
-- `currency-service` uses username `currency-service`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
-- `ext-authz` uses `REDIS_ADDR=localhost:6379`, `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
-- `redis-ops` is the maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_OPS_PASSWORD" -h localhost -p 6379 ...`
+- Tilt forwards VM-loopback `6379` to `redis-session` and VM-loopback `6380` to `redis-cache`; both Services listen on `6379` in the cluster. See the [port reference](../architecture/port-reference.md)
+- `session-gateway` uses username `session-gateway` on `redis-session`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `currency-service` uses username `currency-service` on `redis-cache`; direct `bootRun` should set `SPRING_DATA_REDIS_PORT=6380`, `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
+- `ext-authz` uses `REDIS_ADDR=localhost:6379` (`redis-session`), `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
+- `redis-ops` is the per-instance maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_SESSION_OPS_PASSWORD" -h localhost -p 6379 ...` for `redis-session`, or `--pass "$REDIS_CACHE_OPS_PASSWORD" -h localhost -p 6380` for `redis-cache`. `./scripts/ops/redis-browse.sh session|cache` wraps the in-cluster equivalent
 - `default` is probe-only and should not be used by application code
-- `session-gateway` gets only the commands it issues, including those inside its Lua scripts in `../session-gateway/src/main/resources/redis/`: connection and health (`hello`, `auth`, `client|setinfo`, `ping`, `info`), session and OAuth2 state (`hset`, `hmset`, `hget`, `hgetall`, `expire`, `del`, `unlink`, `type`), the user session index (`sadd`, `srem`, `smembers`) and script execution (`evalsha`, `eval`). It has no administration, key-enumeration or pub/sub access. If Session Gateway starts issuing a new Redis command, add it to `kubernetes/infrastructure/redis/start-redis.sh` and confirm `ACL LOG` shows no `session-gateway` denials across login, heartbeat, logout, bulk revocation and OAuth failure. `verify-session-architecture.sh` and `verify-credential-isolation.sh` fail if `+@all` returns
-- `currency-service` is limited to `currency-service:*` keys and has no `KEYS` permission. Cache-wide eviction after an exchange-rate import clears the cache with `SCAN` and `DEL` (see `../currency-service/docs/configuration.md`), so the grant keeps `+scan` and `+del`. Redis ACL key patterns do not filter `SCAN` results, so this credential can still list the names of `session:*`, `user_sessions:*` and `oauth2:state:*` keys, but it cannot read them. Session key names are SHA-256 digests, not tokens, and this metadata exposure is accepted. `verify-credential-isolation.sh` asserts the `KEYS` denial
+- `session-gateway` gets only the commands it issues, including those inside its Lua scripts in `../session-gateway/src/main/resources/redis/`: connection and health (`hello`, `auth`, `client|setinfo`, `ping`, `info`), session and OAuth2 state (`hset`, `hmset`, `hget`, `hgetall`, `expire`, `del`, `unlink`, `type`), the user session index (`sadd`, `srem`, `smembers`) and script execution (`evalsha`, `eval`). It has no administration, key-enumeration or pub/sub access. If Session Gateway starts issuing a new Redis command, add it to `kubernetes/infrastructure/redis-session/start-redis.sh` and confirm `ACL LOG` shows no `session-gateway` denials across login, heartbeat, logout, bulk revocation and OAuth failure. `verify-session-architecture.sh` and `verify-credential-isolation.sh` fail if `+@all` returns
+- `currency-service` exists only on `redis-cache`, is limited to `currency-service:*` keys and has no `KEYS` permission. Cache-wide eviction after an exchange-rate import clears the cache with `SCAN` and `DEL` (see `../currency-service/docs/configuration.md`), so the grant keeps `+scan` and `+del`. Redis ACL key patterns do not filter `SCAN` results, but `redis-cache` holds no session, session-index or OAuth2 state keys, so the scan exposes only cache key names. `verify-credential-isolation.sh` asserts the `KEYS` denial and that each instance rejects the other instance's application users
 - `ACL LOG` routinely shows `client|setinfo` denials for `ext-authz` and `currency-service`. Their Redis clients send `CLIENT SETINFO` on connect, the grants omit it, and both clients continue normally. Treat any other denial for those users as real
-- Redis builds its ACL and memory budget (`--maxmemory`, `--maxmemory-policy noeviction`) from the `redis-acl-bootstrap` ConfigMap only at startup, and the ConfigMap name has no content hash, so a changed `start-redis.sh` does not restart Redis. Tilt's `kustomize()` watch does not include the generator input `start-redis.sh`, so a running Tilt does not reapply the ConfigMap when that file changes; run `tilt trigger '(Tiltfile)'` to reapply it. After the ConfigMap is applied, run `kubectl rollout restart statefulset/redis -n infrastructure` and confirm the live rules with `ACL GETUSER <user>` and the budget with `CONFIG GET maxmemory*` as `redis-ops` before trusting a verifier run
+- Each instance builds its ACL and memory budget from its own ConfigMap only at startup: `redis-session` from `redis-session-acl-bootstrap` (`--maxmemory-policy noeviction`) and `redis-cache` from `redis-cache-acl-bootstrap` (`--maxmemory-policy allkeys-lru`). The ConfigMap names have no content hash, so a changed `start-redis.sh` does not restart Redis. Tilt's `kustomize()` watch does not include the generator input `start-redis.sh`, so a running Tilt does not reapply the ConfigMap when that file changes; run `tilt trigger '(Tiltfile)'` to reapply it. After the ConfigMap is applied, run `kubectl rollout restart statefulset/redis-session -n infrastructure` or `kubectl rollout restart deployment/redis-cache -n infrastructure` and confirm the live rules with `ACL GETUSER <user>` and the budget with `CONFIG GET maxmemory*` as `redis-ops` before trusting a verifier run
 - `session-gateway` owns the long-lived `session:{sha256(token)}` hashes, keyed by the lowercase hex SHA-256 of the `__Host-BA_SESSION` cookie value (see the [shared session contract](../architecture/session-edge-authorization-pattern.md#shared-session-contract)), plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
-- active browser sessions use same-origin `POST /auth/v1/session` heartbeats from the frontend; each successful heartbeat refreshes account status and grants from permission-service before atomically extending the Redis session, while a temporary lookup failure returns `503` without extending it; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
-- The in-cluster Redis StatefulSet runs with `readOnlyRootFilesystem: true`; local ACL bootstrap still writes `/tmp/users.acl`, and Redis AOF writes to `/data` on the PVC-backed `redis-data-redis-0` claim. Reset local Redis state with the explicit `./scripts/ops/flush-redis.sh` helper or by recreating the local cluster/runtime, not by deleting `redis-0` or relying on `tilt down`. The helper runs `FLUSHALL` and then `BGREWRITEAOF`, because `FLUSHALL` alone only appends to the AOF and leaves earlier keys, such as pre-cutover raw session tokens, on the PVC.
+- active browser sessions use same-origin `POST /auth/v1/session` heartbeats from the frontend; each successful heartbeat refreshes account status and grants from permission-service before atomically extending the `redis-session` session, while a temporary lookup failure returns `503` without extending it; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
+- Both instances run with `readOnlyRootFilesystem: true`, and their ACL bootstrap writes `/tmp/users.acl`. The `redis-session` StatefulSet writes its AOF to `/data` on the PVC-backed `redis-data-redis-session-0` claim. Reset local session state with `./scripts/ops/flush-redis.sh session` or by recreating the local cluster/runtime, not by deleting `redis-session-0` or relying on `tilt down`. That helper runs `FLUSHALL` and then `BGREWRITEAOF`, because `FLUSHALL` alone only appends to the AOF and leaves earlier keys, such as pre-cutover raw session tokens, on the PVC.
+- The `redis-cache` Deployment is deliberately disposable: `/data` is an `emptyDir`, AOF and RDB snapshots are off, and `allkeys-lru` evicts entries at its memory budget. Losing it only costs currency-service cache misses, which the service [fails open](../../../currency-service/docs/configuration.md#caching) to PostgreSQL. `./scripts/ops/flush-redis.sh cache` clears it without restarting the pod.
 
 RabbitMQ local access:
 - Management UI: `http://localhost:15672`
@@ -852,7 +858,7 @@ kubectl get secret -n default budgetanalyzer-localhost-wildcard-tls
 
 # Verify infra secrets exist
 kubectl get secret -n default infra-ca
-kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis infra-tls-rabbitmq
+kubectl get secret -n infrastructure infra-tls-postgresql infra-tls-redis-session infra-tls-redis-cache infra-tls-rabbitmq
 
 # Run the same read-only post-check setup.sh and Tilt use
 ./scripts/bootstrap/check-infra-tls-secrets.sh

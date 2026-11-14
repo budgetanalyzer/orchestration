@@ -12,6 +12,10 @@ status, and recommendations are not maintained or approved for execution. Use
 [`deploy/README.md`](../../deploy/README.md) for the maintained provider-neutral
 production reference and its unresolved deployment prerequisites.
 
+This proposal places sessions and the currency cache in one Redis. The current
+architecture separates them into `redis-session` and a disposable
+`redis-cache`; see [system-overview.md](system-overview.md#shared-infrastructure-and-observability).
+
 ---
 
 ## Table of Contents

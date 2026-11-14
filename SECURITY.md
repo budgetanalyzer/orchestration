@@ -36,7 +36,8 @@ Budget Analyzer implements defense-in-depth security patterns. Browsers
 authenticate through Session Gateway, receive an opaque, host-only
 `__Host-BA_SESSION` cookie (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`,
 no `Domain`), and keep the server-side session alive with same-origin `POST /auth/v1/session`
-heartbeats. Session state lives in Redis hashes that ext-authz reads at the
+heartbeats. Session state lives in hashes on the dedicated `redis-session` instance,
+separate from the application cache, that ext-authz reads at the
 Istio ingress, so browser clients never receive long-lived API tokens. Redis
 keys and revocation index members use the SHA-256 digest of the cookie token,
 so the reusable token itself is not stored in Redis or written to logs.

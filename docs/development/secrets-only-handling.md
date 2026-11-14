@@ -20,7 +20,8 @@ This repo now enforces a simple boundary:
 | `permission-service-postgresql-credentials` | `password` |
 | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` |
 | `currency-service-rabbitmq-credentials` | `password` |
-| `redis-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password`, `currency-service-password` |
+| `redis-session-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password` |
+| `redis-cache-bootstrap-credentials` | `default-password`, `ops-password`, `currency-service-password` |
 | `session-gateway-redis-credentials` | `password` |
 | `ext-authz-redis-credentials` | `password` |
 | `currency-service-redis-credentials` | `password` |
@@ -49,7 +50,8 @@ the secret values it configures.
 | `currency-service-rabbitmq-credentials` | `host`, `amqp-port`, `username`, `virtual-host` | checked-in currency-service deployment env |
 | `rabbitmq-bootstrap-credentials` | `username`, `currency-service-username`, `virtual-host` | checked-in manifest values and the documented `definitions.json` exception |
 | `*-redis-credentials` | `host`, `port`, `username` | checked-in service deployment env |
-| `redis-bootstrap-credentials` | `default-username`, `ops-username`, `session-gateway-username`, `ext-authz-username`, `currency-service-username` | checked-in manifest values and verifier constants |
+| `redis-session-bootstrap-credentials` | `default-username`, `ops-username`, `session-gateway-username`, `ext-authz-username` | checked-in manifest values and verifier constants |
+| `redis-cache-bootstrap-credentials` | `default-username`, `ops-username`, `currency-service-username` | checked-in manifest values and verifier constants |
 
 `PREVIEW_IMPORT_TOKEN_TTL` is non-sensitive and owned by the transaction-service
 runtime default unless a deployment intentionally chooses a non-default value.

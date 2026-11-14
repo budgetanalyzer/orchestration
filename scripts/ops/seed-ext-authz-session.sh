@@ -11,17 +11,17 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x from repo root.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
-REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis-session -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$REDIS_POD" ]; then
     echo "ERROR: Redis pod not found in infrastructure namespace. Is Tilt running?" >&2
     exit 1
 fi
 
 REDIS_USERNAME="redis-ops"
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_OPS_PASSWORD" ]; then
-    echo "ERROR: redis-bootstrap-credentials is missing redis-ops credentials." >&2
+if [ -z "$REDIS_USERNAME" ] || [ -z "$REDIS_SESSION_OPS_PASSWORD" ]; then
+    echo "ERROR: redis-session-bootstrap-credentials is missing redis-ops credentials." >&2
     exit 1
 fi
 
@@ -30,7 +30,7 @@ SESSION_TTL_SECONDS="${SESSION_TTL_SECONDS:-900}"
 EXPIRES_AT="$(($(date +%s) + SESSION_TTL_SECONDS))"
 SESSION_KEY=$(session_key_for "$SESSION_ID")
 
-redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" HSET \
+redis_cli_in_pod redis-session infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" HSET \
     "$SESSION_KEY" \
     user_id "test-user-001" \
     roles "ROLE_USER,ROLE_ADMIN" \
@@ -38,7 +38,7 @@ redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSW
     created_at "$(date +%s)" \
     expires_at "${EXPIRES_AT}" >/dev/null
 
-redis_cli_in_pod infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" EXPIRE \
+redis_cli_in_pod redis-session infrastructure "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" EXPIRE \
     "$SESSION_KEY" "${SESSION_TTL_SECONDS}" >/dev/null
 
 echo "Seeded session: ${SESSION_KEY}"

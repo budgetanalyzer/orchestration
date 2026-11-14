@@ -3,11 +3,11 @@
 # Connects as redis-ops (full access) over TLS.
 #
 # Usage:
-#   ./scripts/ops/redis-browse.sh                                      # interactive session
-#   ./scripts/ops/redis-browse.sh --sessions                           # dump all sessions
-#   ./scripts/ops/redis-browse.sh --user-sessions                      # dump all user-session sets
-#   ./scripts/ops/redis-browse.sh --sessions --user-sessions           # both
-#   ./scripts/ops/redis-browse.sh HGETALL session:<sha256-of-cookie>   # one-shot command
+#   ./scripts/ops/redis-browse.sh session                              # interactive session
+#   ./scripts/ops/redis-browse.sh session --sessions                   # dump all sessions
+#   ./scripts/ops/redis-browse.sh session --user-sessions              # dump all user-session sets
+#   ./scripts/ops/redis-browse.sh cache                                # interactive cache CLI
+#   ./scripts/ops/redis-browse.sh session HGETALL session:<digest>     # one-shot command
 
 set -euo pipefail
 
@@ -16,19 +16,40 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x from repo root.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
-REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+usage() {
+    echo "Usage: $0 <session|cache> [--sessions] [--user-sessions] [redis-cli arguments...]" >&2
+}
+
+if (( $# < 1 )); then
+    usage
+    exit 2
+fi
+
+case "$1" in
+    session) REDIS_INSTANCE="redis-session" ;;
+    cache) REDIS_INSTANCE="redis-cache" ;;
+    *)
+        usage
+        exit 2
+        ;;
+esac
+shift
+
+REDIS_BOOTSTRAP_SECRET="${REDIS_INSTANCE}-bootstrap-credentials"
+
+REDIS_POD=$(kubectl get pods -n infrastructure -l "app=${REDIS_INSTANCE}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$REDIS_POD" ]; then
-    echo "ERROR: Redis pod not found in infrastructure namespace. Is Tilt running?" >&2
+    echo "ERROR: ${REDIS_INSTANCE} pod not found in infrastructure namespace. Is Tilt running?" >&2
     exit 1
 fi
 
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-if [ -z "$REDIS_OPS_PASSWORD" ]; then
-    echo "ERROR: redis-bootstrap-credentials is missing ops-password." >&2
+REDIS_INSTANCE_OPS_PASSWORD=$(kubectl get secret "$REDIS_BOOTSTRAP_SECRET" -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+if [ -z "$REDIS_INSTANCE_OPS_PASSWORD" ]; then
+    echo "ERROR: ${REDIS_BOOTSTRAP_SECRET} is missing ops-password." >&2
     exit 1
 fi
 
-rcli() { redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" "$@"; }
+rcli() { redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" "$@"; }
 
 dump_keys() {
     local pattern="$1"
@@ -67,6 +88,11 @@ for arg in "$@"; do
         *)                passthrough+=("$arg") ;;
     esac
 done
+
+if [ "$REDIS_INSTANCE" = "redis-cache" ] && { "$show_sessions" || "$show_user_sessions"; }; then
+    echo "ERROR: session dump options apply only to the session Redis instance." >&2
+    exit 2
+fi
 
 if $show_sessions || $show_user_sessions; then
     $show_sessions      && dump_keys "session:*"       "sessions"

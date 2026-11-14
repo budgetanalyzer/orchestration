@@ -90,13 +90,28 @@ scripts/
 - `smoketest/cleanup-smoketest-residue.sh` - Bounded, fail-closed removal of
   test resources left by interrupted live verifiers. `smoketest.sh` runs it
   first; see [Smoketest](#smoketest) for standalone use and `--dry-run`.
+- `smoketest/verify-credential-isolation.sh` - Proves service and operator
+  credentials are isolated across PostgreSQL, RabbitMQ, `redis-session` and
+  `redis-cache`, including rejection of each Redis instance's foreign users.
+- `smoketest/verify-network-policies.sh` - Proves the live pod-to-pod allowlist,
+  including currency-service-only access to `redis-cache` and auth-edge-only
+  access to `redis-session`.
+- `smoketest/verify-transport-encryption.sh` - Proves both Redis instances,
+  PostgreSQL and RabbitMQ accept their intended TLS clients and reject the
+  corresponding plaintext or wrong-CA paths.
+- `smoketest/verify-runtime-security-guardrails.sh` - Proves service-scoped
+  Redis, PostgreSQL and RabbitMQ authorization at runtime, then runs the shared
+  live security regression umbrella.
+- `smoketest/verify-runtime-hardening.sh` - Proves workload security contexts
+  and volume contracts, including persistent `redis-session` data and
+  deliberately disposable `redis-cache` data.
 - `smoketest/verify-edge-contract.sh` - Live cross-layer edge contract
   verifier and the single home for tests that need the real ingress,
   `ext_authz`, NGINX, sidecars and services together; later sections are added
   here. A run without flags creates, updates, deletes and scales no
   Kubernetes object: it sends ingress requests, uses `kubectl get`, `logs` and
   `exec`, and seeds and removes the synthetic fixture inside the Postgres and
-  Redis pods. Only `--inject-failures` changes Kubernetes objects, and the
+  `redis-session` pods. Only `--inject-failures` changes Kubernetes objects, and the
   script's `require_inject_failures` guard stops any such change without the
   flag. Its Public/Internal Boundary section seeds one synthetic user and
   session with `loadtest/seed-loadtest-users.sh --count 1`, sends the
@@ -130,7 +145,7 @@ scripts/
   unchanged session and transaction set. The configured origin must then
   create and delete a transaction, heartbeat and form-POST logout. Its Forged
   Identity section seeds `--count 2 --admin-count 1`, empties the second
-  session's `roles` and `permissions` in Redis, and sends `GET /api/v1/users`
+  session's `roles` and `permissions` in `redis-session`, and sends `GET /api/v1/users`
   with forged `X-User-Id`, `X-Roles` and `X-Permissions: users:read`. The
   empty session must still get the permission-service JSON `403 FORBIDDEN`,
   the same headers without a session must get the `ext_authz` JSON `401`, and
@@ -142,14 +157,15 @@ scripts/
   section checks the live Envoy timeout, error status and fail-closed setting,
   then proves JSON `401` for missing sessions. With `--inject-failures` it also
   proves empty `503` for an unavailable authorizer, a network-policy-induced
-  hang and stopped Redis. Those cases temporarily scale ext-authz and Redis,
+  hang and stopped `redis-session`. Those cases temporarily scale ext-authz and
+  `redis-session`,
   install a uniquely named Admin-tier `ClusterNetworkPolicy` using the CRD
   supplied by the pinned Calico install, and may delete an ext-authz pod to
   reset CrashLoopBackOff; the verifier restores replicas and removes the
   policy, including on ordinary errors, interrupt or termination. Cleanup
   failures fail the verifier. Run `--inject-failures` only on the disposable
   local stack without concurrent traffic; these cases interrupt authorization
-  and Redis-dependent services. Without the flag, each injection case prints
+  and `redis-session`-dependent services. Without the flag, each injection case prints
   one `[SKIP]` line and the summary reports the skip count. See the
   [authorizer failure contract](../docs/architecture/session-edge-authorization-pattern.md#authorizer-failures).
   `--report FILE` writes
@@ -289,7 +305,7 @@ scripts/
   renders, immutable image provenance, and the production Kyverno image
   policy. Focused comparisons allow only the declared route hostname,
   standalone-frontend authorization omission, local gateway publication, and
-  Redis storage-size differences. It uses client-side rendering only and does
+  `redis-session` storage-size differences. It uses client-side rendering only and does
   not inspect or contact a Kubernetes cluster.
 - `repo/prepare-lockstep-release.sh` - Release-manager preflight for the
   lockstep source release. It validates the sibling repository set, prints the
@@ -413,7 +429,7 @@ Choose scripts by runtime boundary:
   and never contact or recreate Kubernetes.
 - `bootstrap/check-infra-tls-secrets.sh` is the focused read-only post-check
   used by `setup.sh` and Tilt. Tilt reruns the local
-  `bootstrap/setup-infra-tls.sh` before PostgreSQL, Redis, and RabbitMQ start
+  `bootstrap/setup-infra-tls.sh` before PostgreSQL, both Redis instances, and RabbitMQ start
   so namespace recreation cannot leave the infrastructure TLS secrets missing.
 - `bootstrap/reconcile-kind-inotify-budget.sh` raises low Kind node inotify
   values used by Kubernetes log-follow streams. Tilt runs it as
@@ -520,9 +536,10 @@ getting-started guide.
   `imagePullPolicy: Never`, rejects rendered observability Ingress/HTTPRoute/
   Gateway exposure for Grafana, Prometheus, Jaeger, and Kiali, asserts that the
   offline Kiali render contains namespace-scoped RBAC for every approved
-  discovery namespace, verifies the Redis StatefulSet uses a `5Gi`
-  `redis-data` claim template, and applies the production image Kyverno policy
-  to the rendered app overlay.
+  discovery namespace, verifies the `redis-session` StatefulSet uses a `5Gi`
+  `redis-data` claim template, asserts that the `redis-cache` Deployment and
+  Service render without a standalone PersistentVolumeClaim, and applies the
+  production image Kyverno policy to the rendered app overlay.
 
 ## Security evidence
 
@@ -582,8 +599,9 @@ also deletes temporary `runtime-guardrails-<digits>` RabbitMQ vhosts, kills
 orphaned (PPID 1) verifier port-forwards with a random local port, and
 restores the ingress gateway Deployment to 1 replica after an interrupted
 rate-limit run. It never touches fixed-port or `--address` forwards, which
-are operator guest publication. If ext-authz or Redis is scaled to 0, it
-fails and prints the recovery command instead of scaling them back. It then
+are operator guest publication. If ext-authz or either Redis instance is
+scaled to 0, it fails and prints the recovery command instead of scaling them
+back. It then
 re-checks the inventory and requires every EndpointSlice target behind a
 Service in `default`, `monitoring`, `istio-ingress` and `istio-egress` to
 have an owner, which catches pods that impersonate workload labels.
@@ -693,11 +711,13 @@ the active context and Tilt resource state from the same host shell first.
   port-forward at `http://127.0.0.1:3300` by default, logs into that
   port-forwarded Grafana URL, opens the provisioned dashboards, and captures
   browser-side debugging artifacts without committing Node dependency files.
-- `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in Redis using
+- `ops/seed-ext-authz-session.sh` seeds a test ext-authz session in `redis-session` using
   the TLS-only in-cluster listener. Its argument is the `__Host-BA_SESSION` cookie
   value; the Redis key is `session:<sha256 of that value>`, derived with
   `session_key_for` from `lib/redis-cli.sh`.
-- `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear local Redis.
+- `ops/flush-redis.sh` and `ops/redis-browse.sh` inspect or clear one local Redis instance;
+  both require an explicit `session` (`redis-session`) or `cache`
+  (`redis-cache`) target.
 - `ops/reset-databases.sh` resets local PostgreSQL databases.
 
 ## Loadtest Fixtures
@@ -716,7 +736,7 @@ revocation without driving traffic.
 
 `seed-loadtest-users.sh` writes `.loadtest/session-pool.txt`, which is
 gitignored and reserved for future traffic-replay tooling. The pool holds raw
-cookie tokens; Redis holds their SHA-256 digests as `session:<digest>` keys and
+cookie tokens; `redis-session` holds their SHA-256 digests as `session:<digest>` keys and
 `user_sessions:<userId>` members, and `teardown-loadtest.sh` deletes session
 hashes through those index members. The shared
 `lib/loadtest-common.sh` helper resolves that pool path from the orchestration

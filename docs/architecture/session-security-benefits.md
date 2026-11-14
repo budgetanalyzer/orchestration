@@ -3,7 +3,7 @@
 ### 1. **XSS Attack Protection**
 **The Critical Advantage:** Tokens never reach the browser's JavaScript environment at all.
 
-- **Session Pattern:** Session Gateway stores Auth0 tokens server-side in Redis session hashes. Browser only receives HTTP-only session cookies that JavaScript cannot access. ext_authz reads the same session hash for per-request validation.
+- **Session Pattern:** Session Gateway stores Auth0 tokens server-side in `redis-session` session hashes. Browser only receives HTTP-only session cookies that JavaScript cannot access. ext_authz reads the same session hash for per-request validation.
 - **Direct Token:** Browser must store tokens in localStorage or sessionStorage, making them vulnerable to XSS attacks. Any malicious script can steal the token.
 
 **Impact:** Even if an attacker injects malicious JavaScript, they cannot steal authentication credentials.
@@ -12,8 +12,8 @@
 
 The session-based edge authorization architecture creates 3 independent security layers:
 
-1. **Session Gateway** - Validates session cookies, manages token lifecycle, writes session data to Redis
-2. **ext_authz (Envoy)** - Per-request session validation from Redis, header injection
+1. **Session Gateway** - Validates session cookies, manages token lifecycle, writes session data to `redis-session`
+2. **ext_authz (Envoy)** - Per-request session validation from `redis-session`, header injection
 3. **Backend Services** - Data-level authorization
 
 **Why this matters:** If one layer is compromised, others still protect the system.

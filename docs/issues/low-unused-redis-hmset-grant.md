@@ -1,4 +1,4 @@
-# Unused HMSET grant on the Session Gateway Redis ACL
+# Unused HMSET grant on the Session Gateway `redis-session` ACL
 
 - **Severity:** Low
 - **Owner:** orchestration
@@ -8,7 +8,7 @@
 ## Problem
 
 The Session Gateway ACL grants `+hmset`
-(`kubernetes/infrastructure/redis/start-redis.sh:9`). No Session Gateway code
+(`kubernetes/infrastructure/redis-session/start-redis.sh:9`). No Session Gateway code
 issues it:
 
 - session and OAuth-state writes are `HSET` inside Lua (`create-session.lua`,

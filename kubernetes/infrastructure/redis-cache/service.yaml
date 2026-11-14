@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cache
+  namespace: infrastructure
+  labels:
+    app: redis-cache
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cache
+  ports:
+    - name: redis-cache
+      port: 6379
+      targetPort: 6379

@@ -173,7 +173,7 @@ echo "  permission-service: users + user_roles upserted"
         printf "SADD user_sessions:%s %s\n" "$user_id" "$session_digest"
         printf "EXPIRE user_sessions:%s %s\n" "$user_id" "$SESSION_TTL"
     done
-} | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" >/dev/null
+} | redis_cli_pipe_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" >/dev/null
 
 echo "  redis:              ${COUNT} session hashes + user_sessions indices written"
 

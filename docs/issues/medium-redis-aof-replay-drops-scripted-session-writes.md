@@ -1,7 +1,7 @@
 # Redis AOF replay drops scripted session writes
 
 - **Severity:** Medium
-- **Owner:** orchestration (`kubernetes/infrastructure/redis/`)
+- **Owner:** orchestration (`kubernetes/infrastructure/redis-session/`)
 - **Status:** Open
 - **Source:** live `ACL LOG` inspection, 2026-11-12 (security documentation reorganization follow-up)
 
@@ -14,7 +14,7 @@ Redis 7 writes the effects of a Lua script to the AOF as one batch. If the
 batch has one write, Redis logs it as a plain command. If it has more than
 one, Redis wraps them in a `MULTI`/`EXEC` block. The AOF loader runs as the
 `default` user. Redis does not check ACLs for plain replayed commands, but
-`EXEC` re-checks ACLs for every queued command. `kubernetes/infrastructure/redis/start-redis.sh` limits `default` to
+`EXEC` re-checks ACLs for every queued command. `kubernetes/infrastructure/redis-session/start-redis.sh` limits `default` to
 `+ping +auth`, so every command queued in a replayed transaction is refused
 with `NOPERM` and skipped. Upstream tracks this behavior in redis/redis#14156.
 
@@ -87,7 +87,7 @@ operation.
   narrow, but this undoes a security control (emergency containment).
 - **Stale data.** Restored sessions carry permissions and expiry from the
   base RDB, not from their last refresh.
-- **Production reference.** It reuses the same Redis base through
+- **Production reference.** It reuses the same `redis-session` base through
   `kubernetes/production/infrastructure/kustomization.yaml`, so it inherits
   the defect.
 
@@ -105,13 +105,13 @@ Choose one option and record it:
   for the AOF client, upgrade to it instead.
 
 Either way, reset local Redis state before relying on the fix, in line with
-ADR 015. Use `./scripts/ops/flush-redis.sh`, which runs `FLUSHALL` and
+ADR 015. Use `./scripts/ops/flush-redis.sh session`, which runs `FLUSHALL` and
 `BGREWRITEAOF`. Without the reset, the first fixed start would replay
 transactions that earlier starts dropped.
 
 ## Acceptance
 
-- After `kubectl rollout restart statefulset/redis -n infrastructure`,
+- After `kubectl rollout restart statefulset/redis-session -n infrastructure`,
   `ACL LOG` has no `default`-user entries from the AOF loader client.
 - A session created after the last AOF rewrite still works after a Redis
   restart.
@@ -127,5 +127,5 @@ transactions that earlier starts dropped.
   reproduction, not the live cluster.
 - Logging in as `default` is refused, and the Redis probes still pass.
 - `verify-credential-isolation.sh` asserts both behaviors.
-- When the fix lands, `security-architecture.md` is updated to say Redis
-  restarts preserve sessions again.
+- When the fix lands, `security-architecture.md` is updated to say
+  `redis-session` restarts preserve sessions again.

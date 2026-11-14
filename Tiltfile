@@ -116,13 +116,26 @@ k8s_resource(
 )
 
 k8s_resource(
-    'redis',
+    'redis-cache',
     objects=[
-        'redis-acl-bootstrap:configmap',
-        'redis-bootstrap-credentials:secret',
+        'redis-cache-acl-bootstrap:configmap',
+        'redis-cache-bootstrap-credentials:secret',
     ],
     port_forwards=[
-        port_forward(6379, 6379, name='Redis'),
+        port_forward(6380, 6379, name='redis-cache'),
+    ],
+    labels=['infrastructure', 'cache'],
+    resource_deps=['infra-tls-prerequisites'],
+)
+
+k8s_resource(
+    'redis-session',
+    objects=[
+        'redis-session-acl-bootstrap:configmap',
+        'redis-session-bootstrap-credentials:secret',
+    ],
+    port_forwards=[
+        port_forward(6379, 6379, name='redis-session'),
     ],
     labels=['infrastructure', 'cache'],
     resource_deps=['infra-tls-prerequisites'],
@@ -270,7 +283,8 @@ local(
 
 postgresql_host = 'postgresql.' + INFRA_NAMESPACE
 rabbitmq_host = 'rabbitmq.' + INFRA_NAMESPACE
-redis_host = 'redis.' + INFRA_NAMESPACE
+redis_session_host = 'redis-session.' + INFRA_NAMESPACE
+redis_cache_host = 'redis-cache.' + INFRA_NAMESPACE
 
 # PostgreSQL Step 2: keep the bootstrap/admin path separate from the
 # service-owned database identities.
@@ -328,17 +342,24 @@ create_secret('currency-service-rabbitmq-credentials', DEFAULT_NAMESPACE, {
     'password': rabbitmq_currency_service_password,
 })
 
-redis_default_password = os.getenv('REDIS_DEFAULT_PASSWORD', 'budget-analyzer-redis-default')
-redis_ops_password = os.getenv('REDIS_OPS_PASSWORD', 'budget-analyzer-redis-ops')
+redis_session_default_password = os.getenv('REDIS_SESSION_DEFAULT_PASSWORD', 'budget-analyzer-redis-session-default')
+redis_session_ops_password = os.getenv('REDIS_SESSION_OPS_PASSWORD', 'budget-analyzer-redis-session-ops')
 redis_session_gateway_password = os.getenv('REDIS_SESSION_GATEWAY_PASSWORD', 'budget-analyzer-session-gateway-redis')
 redis_ext_authz_password = os.getenv('REDIS_EXT_AUTHZ_PASSWORD', 'budget-analyzer-ext-authz-redis')
+redis_cache_default_password = os.getenv('REDIS_CACHE_DEFAULT_PASSWORD', 'budget-analyzer-redis-cache-default')
+redis_cache_ops_password = os.getenv('REDIS_CACHE_OPS_PASSWORD', 'budget-analyzer-redis-cache-ops')
 redis_currency_service_password = os.getenv('REDIS_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service-redis')
 
-create_secret('redis-bootstrap-credentials', INFRA_NAMESPACE, {
-    'default-password': redis_default_password,
-    'ops-password': redis_ops_password,
+create_secret('redis-session-bootstrap-credentials', INFRA_NAMESPACE, {
+    'default-password': redis_session_default_password,
+    'ops-password': redis_session_ops_password,
     'session-gateway-password': redis_session_gateway_password,
     'ext-authz-password': redis_ext_authz_password,
+})
+
+create_secret('redis-cache-bootstrap-credentials', INFRA_NAMESPACE, {
+    'default-password': redis_cache_default_password,
+    'ops-password': redis_cache_ops_password,
     'currency-service-password': redis_currency_service_password,
 })
 
@@ -526,7 +547,7 @@ def spring_boot_service(name, deps=[]):
     if debug_port:
         port_forwards_list.append(port_forward(debug_port, 5005, name='Debug'))
 
-    base_deps = ['postgresql', 'rabbitmq', 'istio-injection'] if name == 'currency-service' else ['postgresql', 'istio-injection'] if name in ['transaction-service', 'permission-service'] else ['istio-injection']
+    base_deps = ['postgresql', 'rabbitmq', 'redis-cache', 'istio-injection'] if name == 'currency-service' else ['postgresql', 'istio-injection'] if name in ['transaction-service', 'permission-service'] else ['istio-injection']
 
     k8s_resource(
         name,
@@ -598,7 +619,7 @@ k8s_resource(
         port_forward(5009, 5005, name='Debug'),
     ],
     labels=['gateway'],
-    resource_deps=['session-gateway-compile', 'redis', 'permission-service', 'istio-injection']
+    resource_deps=['session-gateway-compile', 'redis-session', 'permission-service', 'istio-injection']
 )
 
 # ============================================================================
@@ -630,7 +651,7 @@ k8s_resource(
         port_forward(8090, 8090, name='Health'),
     ],
     labels=['gateway'],
-    resource_deps=['redis', 'istio-injection'],
+    resource_deps=['redis-session', 'istio-injection'],
 )
 
 # ============================================================================

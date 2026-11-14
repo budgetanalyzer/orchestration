@@ -3,7 +3,8 @@
 
 kind-cluster-config.yaml
 kubernetes/infrastructure/postgresql/statefulset.yaml
-kubernetes/infrastructure/redis/statefulset.yaml
+kubernetes/infrastructure/redis-cache/deployment.yaml
+kubernetes/infrastructure/redis-session/statefulset.yaml
 kubernetes/infrastructure/rabbitmq/statefulset.yaml
 kubernetes/monitoring/jaeger/deployment.yaml
 kubernetes/monitoring/kiali-values.yaml

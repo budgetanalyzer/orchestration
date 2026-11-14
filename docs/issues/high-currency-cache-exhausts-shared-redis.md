@@ -1,11 +1,16 @@
 # Currency cache can exhaust the shared Redis budget
 
 - **Severity:** High
-- **Owner:** currency-service (orchestration only if Redis storage is split)
-- **Status:** Open, previously known (plans 03 P11/P13, 04 P1)
+- **Owner:** currency-service and orchestration (Redis storage was split)
+- **Status:** Resolved and verified live on 2026-11-14 in Phase 9 of
+  [split-redis-session-and-cache.md](../plans/split-redis-session-and-cache.md).
+  Previously known (plans 03 P11/P13, 04 P1)
 - **Source:** 2026-11-09 implementation review F1; independent implementation review C1
 
 ## Problem
+
+The analysis below describes the code and topology before the fix. File paths
+and line numbers refer to that state.
 
 `ExchangeRateService.getExchangeRates` is `@Cacheable` with a key of
 `currency:startDate:endDate`
@@ -24,7 +29,7 @@ own full copy of the overlapping rates.
 
 These entries share the `--maxmemory 128mb --maxmemory-policy noeviction`
 instance with sessions and OAuth state
-(`kubernetes/infrastructure/redis/start-redis.sh`). During the hardening
+(then `start-redis.sh` of the single shared instance). During the hardening
 Redis budget measurement, a single user with the default `currencies:read`
 permission filled the budget with about 100 ordinary exchange-rate reads.
 Large ranges were rejected first with `500`, and small ranges then used up the
@@ -104,94 +109,122 @@ service.
 Keep `noeviction` on the auth instance. Do not compensate in orchestration by
 raising `maxmemory` or changing the eviction policy.
 
-## Chosen approach
+## Resolution
 
-Option 1, plus a variant of option 3: a separate bean builds the
-forward-filled (dense) series for one currency and caches it per currency.
-`ExchangeRateService` stops being `@Cacheable` and slices the requested range
-from the cached series.
+The implemented design combines option 1, a variant of option 3 and option 4.
+Option 4 was chosen after all, because isolation, not only a bounded cache
+size, is what keeps a cache fault from becoming an authentication outage.
 
-### Shape
+### Dedicated cache instance
 
-- **Series bean** (for example `ExchangeRateSeriesProvider`):
-  - `@Cacheable(cacheNames = "exchangeRateSeries", key = "#currencyCode")`,
-    `@Transactional(readOnly = true)`.
-  - Loads every rate for the currency in date order and builds the dense
-    series from the first source rate to the last.
-  - Being a separate bean also avoids the self-invocation proxy bypass.
-  - Use a new cache name. Old range entries under `exchangeRates` cannot
-    collide with the new keys, but a new name makes leftover entries obvious;
-    they expire within the old 1-hour TTL.
-- **`ExchangeRateService.getExchangeRates`** (no longer cached):
-  1. Checks the currency is enabled, uncached. Today the check sits inside the
-     cached method, so a currency disabled after its range was cached is served
-     for up to the TTL.
-  2. Fetches the cached series.
-  3. Rejects a `startDate` before the series start with the existing
-     `START_DATE_OUT_OF_RANGE` error.
-  4. Slices the requested range.
-- **Eviction:** the existing `@CacheEvict(allEntries = true)` on import
-  applies unchanged; the cache name it targets must be updated.
+The single instance is now two:
 
-### Semantics to preserve
+- `redis-session` is the former instance, renamed. It holds only sessions,
+  session indexes and OAuth state for Session Gateway and `ext-authz`, and
+  keeps the PVC-backed `/data`, AOF and `noeviction`.
+- `redis-cache` is new. It holds only the currency-service cache and is shared
+  by every currency-service replica. It is disposable: no PVC, no AOF, no RDB
+  snapshots, `allkeys-lru`. Its ACL has only the `currency-service`, `default`
+  and `redis-ops` users, its NetworkPolicy admits only currency-service, and it
+  has its own TLS leaf, bootstrap Secret, production render and verifier
+  coverage.
 
-`ExchangeRateServiceIntegrationTest` locks these in:
+A cache key flood now lowers the cache hit rate; it cannot reject session or
+OAuth-state writes. The `currency-service` `+scan` grant also no longer sees
+session key names, because those keys are on another instance. Topology and
+operations live in
+[system-overview.md](../architecture/system-overview.md#shared-infrastructure-and-observability),
+[port-reference.md](../architecture/port-reference.md#local-infrastructure-forwards)
+and [local-environment.md](../development/local-environment.md#environment-variables).
 
-- A null `startDate` means the first source rate. A null `endDate` means the
-  last source rate.
-- If no source rate (an entry whose `publishedDate == date`) falls inside the
-  requested range, return an empty list. This covers future ranges and
-  ranges inside a data gap (`queryForFutureDateRangeReturnsEmptyList`,
-  `queryForDateRangeWithNoDataReturnsEmptyList`,
-  `emptyResultIsDistinctFromNoDataException`). A dense slice would otherwise
-  return forward-filled values for these.
-- If the range contains a source rate but ends after the last source rate,
-  the current code forward-fills the last rate up to `endDate`. Slicing alone
-  stops at the series end, so the slice has to be extended. This is where the
-  [unbounded end date issue](medium-exchange-rate-end-date-unbounded-response.md)
-  must be decided, rather than carrying the unbounded behavior over.
-- Lookback for a `startDate` on a non-rate day and `publishedDate`
-  preservation come for free from the dense series.
+### Per-currency series
 
-### Cached value must be compact
+`ExchangeRateSeriesService.getExchangeRateSeries` is the only `@Cacheable`
+method. It caches one dense, forward-filled series per currency in the cache
+`exchangeRateSeries`, keyed by the currency code. `ExchangeRateService` is no
+longer cached: it checks that the currency is enabled on every call and slices
+the requested range in Java, so request date ranges never create cache keys.
+The old `exchangeRates` cache and its range key are gone.
 
-A dense series of `ExchangeRateData` written with the current serializer is
-roughly the measured all-time entry: about 5 MB per currency. With all 23
-seeded currencies enabled, that is about 115–120 MB. That fits under the
-128 MiB (134 MB) `maxmemory`, but leaves only about 15–19 MB for sessions,
-session indexes, OAuth state and Redis overhead. Under `noeviction`, new
-logins and heartbeats then fail closed. Every request, even a one-week range,
-would also fetch and deserialize the whole series from Redis.
+The cached value is compact: the base currency, target currency and
+`providerSeriesId` once, the series start date, one USD-based rate per day and
+one published-date offset per day (0 marks a source rate on that day). A
+Jackson serializer bound to that type writes it without default typing or type
+ids, and the cache mapper copy disables pretty printing. Entries have a
+one-hour TTL, and imports keep `@CacheEvict(allEntries = true)` after commit.
+The cache is filled lazily on a miss; there is no warm-up.
 
-Cache a compact value instead:
+A read that queried the database before an import committed can write a stale
+series after the eviction, and a failed after-commit eviction leaves the
+previous series in place. The one-hour TTL bounds both.
 
-- the constant per-currency fields once (base, target, `providerSeriesId`);
-- the series start date;
-- one rate per day;
-- one published-date offset per day.
+### Fail open
 
-The slice index is then `date - startDate`. Measure one all-time entry and
-record the worst case (all currencies enabled) against the Redis budget. The
-worst case must leave a stated allowance for authentication data.
+Each cache is `TransactionAwareCacheDecorator(FailOpenCache(RedisCache))`.
+`FailOpenCache` logs `get`, `put`, `evict` and `clear` failures and does not
+rethrow, so a failed read is served from PostgreSQL and a successful database
+operation never fails because of the cache, including deferred after-commit
+writes and evictions. A `CacheErrorHandler` was not used because it does not
+cover those after-commit operations. Redis connect and command timeouts are
+short, and Redis is not part of currency-service readiness.
+
+The end-date bound from the
+[unbounded end date issue](medium-exchange-rate-end-date-unbounded-response.md)
+was decided as part of the same change.
+
+The authoritative behavior lives in currency-service
+[configuration.md](https://github.com/budgetanalyzer/currency-service/blob/main/docs/configuration.md#caching).
+
+### Live measurement (Phase 9, 2026-11-14)
+
+Measured on the local Tilt/Kind stack after the cutover, with `redis-cache`
+restarted empty (`maxmemory 64mb`, `allkeys-lru`):
+
+- Baseline `used_memory` `1,091,840` bytes, `evicted_keys` `0`.
+- Only THB is enabled locally. Its full range, a 2001 sub-range, a range ending
+  in 2099 and a future-only range returned `200` and left exactly one key,
+  `currency-service:exchangeRateSeries::THB`, with a one-hour TTL. The range
+  ending in 2099 stopped at today and the future-only range was empty.
+  `redis-session` held no `currency-service:*` key.
+- `MEMORY USAGE` of the THB entry (1981-01-02 to 2026-11-06, 16,745 days):
+  `196,696` bytes, a `167,590`-byte value. That is the sum and the largest
+  entry. Final `used_memory` `1,462,648` bytes, `evicted_keys` still `0`. The
+  previous all-time THB range entry was 5.24 MB.
+- `N = 23` rows in `currency_series`. Worst case
+  `W = baseline used_memory + N × largest entry = 1,091,840 + 23 × 196,696 =
+  5,615,848` bytes (about 5.4 MiB), below half of the `64mb` `maxmemory`
+  (`33,554,432` bytes). `maxmemory` stays `64mb` and the container request and
+  limit stay 96Mi and 128Mi. JPY data starts in 1971; at the measured
+  11.7 bytes per day its entry would be about 240 KB, and `W` about 6.6 MB.
+- With `redis-cache` scaled to 0, exchange-rate reads returned `200`
+  (about 2.1 to 2.4 seconds, bounded by the short command timeout),
+  currency-service stayed Ready with no restarts, `FailOpenCache` logged each
+  `get` and deferred `put` failure, and login initiation (`302`), heartbeat
+  (`200`) and `/auth/v1/user` (`200`) worked. `redis-cache` was scaled back to
+  one Ready replica afterwards.
+- Focused verifiers passed: credential isolation 84/84, network policies
+  77/77, transport encryption 22/22 and runtime hardening 191/191. The
+  pinned-PyYAML smoketest passed (see the plan's Phase 9 outcome).
 
 ### Alternative considered
 
 An in-process cache (Caffeine through the same Spring cache abstraction)
-would take the cache out of Redis entirely. currency-service runs one
-replica today. With more replicas, an import evicts only the local cache, and
-other pods serve stale data up to the TTL. That is the same staleness the
-existing read-during-import race already accepts. ShedLock still needs Redis,
-so the currency-service Redis credential would stay.
+would take the cache out of Redis entirely. With more than one replica, an
+import evicts only the local cache, and other pods serve stale data up to the
+TTL. A shared `redis-cache` keeps one eviction for all replicas. ShedLock does
+not need Redis; it uses its JDBC provider and the PostgreSQL `shedlock` table.
 
 ## Acceptance
 
+Verified statically by Phases 1 to 8 of the plan and live in Phase 9 (above).
+
 - Requests with arbitrary date ranges never create new cache keys. The key
   count is at most the number of enabled currencies.
-- The recorded worst-case total cache size fits inside the Redis budget
-  alongside the session and OAuth-state allowance.
-- A rejected cache write (Redis at `maxmemory`) returns the database result,
-  not `500`.
+- The cache has its own memory budget and `allkeys-lru` policy, so it cannot
+  fill the `redis-session` budget. The measured worst-case cache size is about
+  5.4 MiB against the 64 MB `redis-cache` budget.
+- A failed cache operation returns the database result, not `500`.
 - A currency disabled after its series was cached is rejected immediately.
-- The existing `ExchangeRateServiceIntegrationTest` cases pass. The only
-  exceptions are deliberate changes from the end-date decision, and those
-  update the affected tests explicitly.
+- The existing `ExchangeRateServiceIntegrationTest` cases pass, except for
+  deliberate changes from the end-date decision, which update the affected
+  tests explicitly.

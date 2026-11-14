@@ -14,7 +14,7 @@ This document outlines the security architecture for a financial data applicatio
 Repository security posture:
 - Ingress, session, and routing follow the topology described here.
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
-- Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets.
+- Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets. Each Redis application user exists on exactly one instance: `session-gateway` and `ext-authz` on `redis-session`, `currency-service` on `redis-cache`; each instance has its own `default` and `redis-ops` passwords.
 - Known residual risks, including runtime database roles that own their schemas, are listed in [Accepted Risks](#accepted-risks).
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. The egress gateway's TCP 443 egress excludes `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` and `100.64.0.0/10`, so beneath Envoy's SNI host rules it cannot reach pods, Services, the Kubernetes API, nodes or metadata endpoints on 443. This bounds where the gateway connects, not which caller it serves, and it relies on the CNI enforcing `ipBlock.except` after Service DNAT, as Calico does locally; a hosted CNI must as well. The cluster is IPv4-only, so a dual-stack environment needs a matching IPv6 rule. `verify-static-security-manifests.sh` rejects any `istio-egress` policy that reopens these ranges on 443, and `verify-network-policies.sh` proves the denial live. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
 - Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway only `POST` on the login user sync and `GET` on the heartbeat authorization lookup and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
@@ -26,7 +26,7 @@ Repository security posture:
 - Gateway workload hardening on the Istio `1.30.6` baseline: the auto-provisioned ingress gateway receives pod `seccompProfile.type: RuntimeDefault`, fixed NodePort ownership, and explicit service-account token retention through Gateway `spec.infrastructure.parametersRef`, and the egress gateway installs directly from the `istio/gateway` chart using checked-in values that keep `service.type=ClusterIP`, preserve the low-port binding sysctl needed by the non-root proxy, and add pod-level seccomp hardening. The ingress gateway intentionally keeps its Kubernetes API token mount for TLS secret watching, while the egress gateway currently keeps the chart-managed token behavior because this repo does not add a separate post-render patch just to remove it.
 - `nginx-gateway` runtime hardening: the Deployment and ServiceAccount disable service-account token automount, the pod sets `seccompProfile.type: RuntimeDefault`, the container runs as UID/GID `101` from `nginxinc/nginx-unprivileged:1.29.8-alpine`, `readOnlyRootFilesystem: true` is enabled, and the gateway relies on an explicit writable `/tmp` mount while logging to stdout/stderr.
 - Frontend runtime hardening across the orchestration and `budget-analyzer-web` repos: the frontend dev image runs Vite as UID/GID `1001`, the Kubernetes Deployment and ServiceAccount disable service-account token automount, the pod sets `seccompProfile.type: RuntimeDefault`, the container pins `runAsUser`/`runAsGroup` to `1001`, and the container applies the planned non-root baseline without forcing `readOnlyRootFilesystem` before the HMR workflow is proven on explicit writable paths.
-- Redis runtime hardening: the StatefulSet disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs Redis as UID `999` / GID `1000` with a read-only root filesystem, mounts an explicit writable `emptyDir` for ACL bootstrap at `/tmp`, and keeps AOF data on the PVC-backed `/data` volume created from the `redis-data` claim template. Pod replacement and `tilt down` retain that data; recreating the disposable Kind cluster resets it.
+- Redis runtime hardening: the `redis-session` StatefulSet and the `redis-cache` Deployment disable service-account token automount, set pod `seccompProfile.type: RuntimeDefault`, run Redis as UID `999` / GID `1000` with a read-only root filesystem, and mount an explicit writable `emptyDir` for ACL bootstrap at `/tmp`. `redis-session` keeps AOF data on the PVC-backed `/data` volume created from the `redis-data` claim template; pod replacement and `tilt down` retain that data, and recreating the disposable Kind cluster resets it. `redis-cache` is deliberately disposable: `/data` is an `emptyDir`, AOF and RDB snapshots are off, and a restart only empties the cache.
 - PostgreSQL runtime hardening: the StatefulSet disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, pins pod and container ownership to UID/GID `70`, hardens the TLS-prep init container to the same ownership with `readOnlyRootFilesystem: true`, and keeps the main container `readOnlyRootFilesystem: true` compatible through explicit writable mounts at `/tmp` and `/var/run/postgresql`.
 - PostgreSQL server-side TLS enforcement: the server loads `pg_hba.conf` from the `postgresql-hba` ConfigMap through `-c hba_file=...`, so the rules also govern existing data volumes. It has a `local` SCRAM rule and IPv4 and IPv6 `hostssl` SCRAM rules, and no `host` rules, so a TCP client that does not negotiate TLS gets no `pg_hba.conf` entry, including on loopback and through Tilt's port-forward. Clients still use `sslmode=verify-full` to authenticate the server; the server rule only removes the plaintext fallback. `verify-transport-encryption.sh` proves that `sslmode=disable` is refused and `verify-full` still connects.
 - RabbitMQ runtime hardening: the StatefulSet disables service-account token automount, sets pod `seccompProfile.type: RuntimeDefault`, runs the broker as UID/GID `999` with `fsGroup: 999`, and enables `readOnlyRootFilesystem: true` while keeping `/var/lib/rabbitmq` as the explicit PVC-backed writable path and leaving config, definitions, and TLS mounts read-only.
@@ -65,11 +65,11 @@ Browser
    │ HTTPS + session cookie
    ▼
 Istio Ingress Gateway
-   ├─ Auth lane → Session Gateway → Redis session writes
+   ├─ Auth lane → Session Gateway → redis-session writes
    └─ API lane → ext_authz → NGINX → Backend services
                                    │
                                    ├─ PostgreSQL
-                                   ├─ Redis
+                                   ├─ redis-cache (currency-service only)
                                    └─ RabbitMQ
 ```
 
@@ -77,7 +77,7 @@ Security-critical implications:
 
 - All browser traffic enters through the Istio ingress gateway.
 - Session Gateway owns login, logout, and browser session renewal.
-- `ext_authz` turns the Redis-backed session into trusted upstream identity
+- `ext_authz` turns the `redis-session`-backed session into trusted upstream identity
   headers on every browser API request.
 - Backend services still own data-level authorization after ingress validation.
 - Exact service ports and exposure rules live in
@@ -724,11 +724,6 @@ each one before a hosted deployment or an open-signup requirement.
   but no separate store, retention period or access control exists. That
   belongs to a future deployment's log pipeline; see
   [Logging Strategy](#logging-strategy).
-- **Redis key-name visibility.** The currency-service Redis user's `+scan`
-  grant is not filtered by ACL key patterns, so it can list session-digest,
-  `user_sessions:*` and `oauth2:state:*` key names. That exposes user IDs,
-  session counts and in-flight logins, but no replayable token. See
-  [ADR 011](../decisions/011-hashed-session-keys-host-cookie-absolute-lifetime.md).
 - **Compromised allowed intermediary.** Backends trust `X-User-Id`, `X-Roles`
   and `X-Permissions` from permitted mesh callers without a signature, so a
   compromised NGINX or other allowed intermediary can forge or replay identity
@@ -746,7 +741,7 @@ each one before a hosted deployment or an open-signup requirement.
 | Session Gateway | Spring WebFlux | Team expertise; minimal code; OAuth 2.0 native support |
 | ext_authz | Go HTTP service | Lightweight; Envoy-native protocol; low latency |
 | API Gateway | NGINX | Industry standard; proven reliability; operational maturity |
-| Session Store | Redis | Fast; distributed; single hash per session; shared by Session Gateway and ext_authz |
+| Session Store | Redis (`redis-session`) | Fast; distributed; single hash per session; shared by Session Gateway and ext_authz; isolated from the application cache |
 | Identity Provider | Auth0 (abstracted) | Managed service; swappable via Session Gateway |
 | Backend Services | Spring Boot | Existing architecture; team expertise |
 
@@ -766,7 +761,7 @@ each one before a hosted deployment or an open-signup requirement.
     ┌────▼────┐                  ┌────▼────┐
     │ Session │                  │ Session │
     │ Gateway │◄────────────────►│ Gateway │
-    │   (1)   │      Redis       │   (2)   │
+    │   (1)   │  redis-session   │   (2)   │
     └─────────┘                  └─────────┘
          │                            │
     ┌────▼────────────────────────────▼────┐
@@ -782,13 +777,16 @@ each one before a hosted deployment or an open-signup requirement.
 
 **Session Gateway:**
 - Multiple instances behind load balancer
-- Stateless (sessions in Redis)
+- Stateless (sessions in `redis-session`)
 - Graceful shutdown with connection draining
 
 **Redis:**
-- One `redis` StatefulSet replica in `infrastructure`, locally and in the
-  production reference; no Sentinel, replication or automatic failover is
-  configured
+- Two instances in `infrastructure`, locally and in the production reference:
+  `redis-session` for sessions, session indexes and OAuth state, and
+  `redis-cache` for the currency-service cache. A full or failed cache cannot
+  evict, block or lose session writes
+- One `redis-session` StatefulSet replica; no Sentinel, replication or
+  automatic failover is configured
 - `/data` is PVC-backed through the `redis-data` claim template, so the AOF
   and its base RDB survive a pod restart. Recovery is incomplete, though: AOF
   replay currently drops the effects of session scripts that make more than
@@ -798,7 +796,10 @@ each one before a hosted deployment or an open-signup requirement.
   yet deleted when a bulk revocation ran, the restart can also undo that
   revocation. See
   [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
-- Redis unavailability fails session validation until it returns
+- `redis-session` unavailability fails session validation until it returns
+- One disposable `redis-cache` Deployment replica, shared by every
+  currency-service replica. Its unavailability only slows exchange-rate reads,
+  because currency-service fails open to PostgreSQL
 - High availability needs a deliberate topology choice: the session Lua
   scripts update the session hash and user-session index together without a
   shared Redis Cluster hash slot, so sharded Redis Cluster is not a drop-in
@@ -894,12 +895,12 @@ local Tilt or the production reference.
 
 ### Session Management
 
-**Redis Configuration:**
+**Redis Configuration (`redis-session`):**
 - Session key pattern: `session:{sha256(token)}`, where the suffix is the lowercase hex SHA-256 of the `__Host-BA_SESSION` cookie value; see the [shared session contract](session-edge-authorization-pattern.md#shared-session-contract)
 - User session index pattern: `user_sessions:{userId}` (SET of session token digests for bulk revocation)
-- Key names remain visible metadata to Redis operators and to the `currency-service` Redis user, whose `+scan` grant (used for cache eviction) is not filtered by ACL key patterns; hashing keeps the reusable token out of them. That user is denied `KEYS` and cannot read session keys
+- Key names remain visible metadata to Redis operators; hashing keeps the reusable token out of them. No application cache user exists on `redis-session`, so the `currency-service` `+scan` grant on `redis-cache` cannot list session, session-index or OAuth2-state key names
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
-- Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache shares the budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
+- Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis-session/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache runs on `redis-cache` and does not share this budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
 - Persistence: AOF for crash recovery. Replay currently drops multi-write session script effects, so a restart loses sessions and OAuth state written since the last AOF rewrite; see [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
 
 **Redis memory budget derivation:** `maxmemory` bounds `used_memory`, not RSS.
@@ -911,8 +912,9 @@ writes peaked at 145 MB. The synthetic fill records repeated values and
 compressed better than real data. Real data would use more disk and make AOF
 rewrites run longer, which can raise the copy-on-write figure. The
 `used_memory` figures are unaffected. At 128 MB the budget holds about 37,600
-maximum-size OAuth-state records (about 3.5 KB each), 75,000–87,000 sessions
-with their indexes, or about 25 all-time exchange-rate cache entries. A fork
+maximum-size OAuth-state records (about 3.5 KB each) or 75,000–87,000 sessions
+with their indexes. That measurement predates the split, when the currency
+cache still shared this instance; it remains the session record baseline. A fork
 during which nearly every page is rewritten would copy up to the whole
 dataset and does not fit, but at the budget only deletes and expiry can
 rewrite pages. `activedefrag` is off. While full, Redis was never OOM-killed
@@ -931,11 +933,11 @@ record shapes.
 
 ### Emergency Admin Containment
 
-For a compromised application admin, use human operator access to Redis for
+For a compromised application admin, use human operator access to `redis-session` for
 emergency session invalidation. This does not require a new application
 super-admin role or a dedicated session-management UI. Infrastructure operator
 access is a separate authority from application roles; use the existing
-`redis-ops` maintenance identity over the internal, TLS-verified connection.
+`redis-session` `redis-ops` maintenance identity over the internal, TLS-verified connection.
 Production access remains human-owned and outside agent sessions, as described
 in [autonomous-ai-execution.md](autonomous-ai-execution.md).
 
@@ -949,7 +951,7 @@ The containment procedure is:
    application's admin session. Deletion of Redis sessions alone only logs the
    user out. An IdP block alone does not invalidate existing Redis sessions.
 3. Delete **all** of the user's session hashes and their `user_sessions:{userId}`
-   index through operator Redis access. Reuse the atomic deletion semantics in
+   index through operator `redis-session` access. Reuse the atomic deletion semantics in
    Session Gateway's [delete-user-sessions.lua](../../../session-gateway/src/main/resources/redis/delete-user-sessions.lua).
    Deleting only the index does not revoke any session. Avoid `FLUSHALL` for
    targeted containment because it removes unrelated users' sessions and data.
@@ -977,7 +979,7 @@ containment.
 ## Migration and Rollout Plan
 
 ### Infrastructure Setup
-1. Deploy Redis
+1. Deploy Redis (`redis-session`)
 2. Deploy Session Gateway (Spring WebFlux)
 3. Deploy ext_authz HTTP service
 4. Configure Istio ingress gateway with ext_authz

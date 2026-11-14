@@ -11,13 +11,18 @@ resources:
   - rabbitmq/configmap.yaml
   - rabbitmq/service.yaml
   - rabbitmq/statefulset.yaml
-  - redis/service.yaml
-  - redis/statefulset.yaml
+  - redis-cache/service.yaml
+  - redis-cache/deployment.yaml
+  - redis-session/service.yaml
+  - redis-session/statefulset.yaml
 
 configMapGenerator:
-  - name: redis-acl-bootstrap
+  - name: redis-cache-acl-bootstrap
     files:
-      - start-redis.sh=redis/start-redis.sh
+      - start-redis.sh=redis-cache/start-redis.sh
+  - name: redis-session-acl-bootstrap
+    files:
+      - start-redis.sh=redis-session/start-redis.sh
 
 generatorOptions:
   disableNameSuffixHash: true

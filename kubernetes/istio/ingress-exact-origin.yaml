@@ -21,7 +21,7 @@
 # carry an Authorization header on this host.
 #
 # Istio evaluates CUSTOM (ext_authz on /api/*) before DENY, so ext-authz may
-# look up the session first; it only reads Redis. The production reference
+# look up the session first; it only reads redis-session. The production reference
 # patches the host and origin in kubernetes/production/istio-ingress-policies.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy

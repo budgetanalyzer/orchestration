@@ -73,8 +73,8 @@ POOL_FILE="${REPO_ROOT}/${LOADTEST_POOL_FILE}"
 POOL_DIR="${REPO_ROOT}/${LOADTEST_POOL_DIR}"
 
 USER_SESSION_KEYS=$(
-    redis_cli_exec_in_pod \
-        "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    redis_cli_exec_in_pod redis-session \
+        "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         --scan --pattern "user_sessions:${LOADTEST_USER_ID_PREFIX}*" || true
 )
 
@@ -84,7 +84,7 @@ if [ -n "$USER_SESSION_KEYS" ]; then
     SESSION_KEYS=$(
         printf '%s\n' "$USER_SESSION_KEYS" \
             | sed '/^$/d;s/^/SMEMBERS /' \
-            | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+            | redis_cli_pipe_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
             | sed '/^$/d;s/^/session:/' \
             | sort -u
     )
@@ -123,7 +123,7 @@ if [ "$SESSION_KEY_COUNT" -gt 0 ]; then
     SESSION_DELETED_COUNT=$(
         printf '%s\n' "$SESSION_KEYS" \
             | sed '/^$/d;s/^/UNLINK /' \
-            | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+            | redis_cli_pipe_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
             | awk '/^[0-9]+$/ { total += $1 } END { print total + 0 }'
     )
 fi
@@ -131,7 +131,7 @@ fi
 if [ "$USER_SESSION_KEY_COUNT" -gt 0 ]; then
     printf '%s\n' "$USER_SESSION_KEYS" \
         | sed '/^$/d;s/^/UNLINK /' \
-        | redis_cli_pipe_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" >/dev/null
+        | redis_cli_pipe_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" >/dev/null
 fi
 
 {

@@ -135,7 +135,7 @@ curl -kI https://app.budgetanalyzer.localhost/_prod-smoke/ | grep -i content-sec
 ```
 
 The surrounding script layout is purpose-split: gateway day-two helpers such as
-Redis/session maintenance live under `scripts/ops/`, while route and browser
+`redis-session`/`redis-cache` maintenance live under `scripts/ops/`, while route and browser
 contract proofs live under `scripts/smoketest/`.
 
 ## Frontend Configuration
@@ -459,7 +459,7 @@ route. A `;` in the query string is unaffected. See
 **Fix:**
 1. Check ext-authz is running: `kubectl get pods | grep ext-authz`
 2. Check ext-authz logs: `kubectl logs deployment/ext-authz`
-3. Verify session cookie is being sent and Redis has session data
+3. Verify session cookie is being sent and `redis-session` has session data
 
 ### CORS issues
 

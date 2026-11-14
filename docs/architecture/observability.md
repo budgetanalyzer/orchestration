@@ -8,7 +8,7 @@ Budget Analyzer uses [kube-prometheus-stack](https://github.com/prometheus-commu
 collection and visualization. The stack runs in a dedicated `monitoring`
 namespace and is installed via Helm through the Tiltfile.
 
-Infrastructure exporters (PostgreSQL, Redis, RabbitMQ) are not deployed.
+Infrastructure exporters (PostgreSQL, `redis-session`, `redis-cache`, RabbitMQ) are not deployed.
 Spring Boot, Istio, and kube-state-metrics cover the intended observability
 story. The default kube-prometheus-stack API server, kubelet, CoreDNS, and
 kube-proxy ServiceMonitors are disabled so the monitoring NetworkPolicy

@@ -12,7 +12,7 @@
 #   removed. The key name is random per run and cannot be identified later.
 # - /tmp/edge-browser-prod-nginx.* files that verify-edge-browser-hardening.sh
 #   writes inside the nginx-gateway pod are left; they go away on pod restart.
-# - ext-authz or Redis scaled to 0 is reported, not repaired.
+# - ext-authz or either Redis instance scaled to 0 is reported, not repaired.
 
 set -euo pipefail
 
@@ -90,10 +90,12 @@ INGRESS_INTENDED_REPLICAS=1
 
 # Workloads that verify-edge-contract.sh --inject-failures scales to 0. The
 # intended counts come from kubernetes/services/ext-authz/deployment.yaml and
-# kubernetes/infrastructure/redis/statefulset.yaml.
+# kubernetes/infrastructure/redis-session/statefulset.yaml and
+# kubernetes/infrastructure/redis-cache/deployment.yaml.
 REQUIRED_WORKLOADS=(
     "default|deployment|ext-authz|1"
-    "infrastructure|statefulset|redis|1"
+    "infrastructure|deployment|redis-cache|1"
+    "infrastructure|statefulset|redis-session|1"
 )
 
 DRY_RUN=false
@@ -111,7 +113,7 @@ namespaces, the edge-contract ClusterNetworkPolicy, temporary RabbitMQ vhosts,
 and orphaned verifier kubectl port-forwards. It restores the ingress gateway
 replica count, then fails unless no residue remains, every Service endpoint in
 default, monitoring, istio-ingress and istio-egress is a controller-owned pod,
-and ext-authz and Redis have a ready replica.
+and ext-authz and both Redis instances have a ready replica.
 
 Every mutation requires the exact local kind-kind target.
 

@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: redis
+  name: redis-session
   namespace: infrastructure
   labels:
-    app: redis
+    app: redis-session
 spec:
-  serviceName: redis
+  serviceName: redis-session
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: redis-session
   template:
     metadata:
       labels:
-        app: redis
+        app: redis-session
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -23,44 +23,39 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: redis
+        - name: redis-session
           image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
           ports:
-            - name: redis
+            - name: redis-session
               containerPort: 6379
           command:
             - /bin/sh
             - /opt/redis/start-redis.sh
           env:
-            - name: REDIS_DEFAULT_PASSWORD
+            - name: REDIS_SESSION_DEFAULT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redis-bootstrap-credentials
+                  name: redis-session-bootstrap-credentials
                   key: default-password
             - name: REDIS_SESSION_GATEWAY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redis-bootstrap-credentials
+                  name: redis-session-bootstrap-credentials
                   key: session-gateway-password
             - name: REDIS_EXT_AUTHZ_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redis-bootstrap-credentials
+                  name: redis-session-bootstrap-credentials
                   key: ext-authz-password
-            - name: REDIS_CURRENCY_SERVICE_PASSWORD
+            - name: REDIS_SESSION_OPS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redis-bootstrap-credentials
-                  key: currency-service-password
-            - name: REDIS_OPS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: redis-bootstrap-credentials
+                  name: redis-session-bootstrap-credentials
                   key: ops-password
             - name: REDISCLI_AUTH
               valueFrom:
                 secretKeyRef:
-                  name: redis-bootstrap-credentials
+                  name: redis-session-bootstrap-credentials
                   key: default-password
           securityContext:
             allowPrivilegeEscalation: false
@@ -72,17 +67,17 @@ spec:
             runAsNonRoot: true
             runAsUser: 999
           volumeMounts:
-            - name: redis-acl-bootstrap
+            - name: redis-session-acl-bootstrap
               mountPath: /opt/redis
               readOnly: true
-            - name: redis-tmp
+            - name: redis-session-tmp
               mountPath: /tmp
             - name: redis-data
               mountPath: /data
-            - name: redis-tls
+            - name: redis-session-tls
               mountPath: /tls
               readOnly: true
-            - name: redis-ca
+            - name: redis-session-ca
               mountPath: /tls-ca
               readOnly: true
           resources:
@@ -115,16 +110,16 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
       volumes:
-        - name: redis-acl-bootstrap
+        - name: redis-session-acl-bootstrap
           configMap:
-            name: redis-acl-bootstrap
+            name: redis-session-acl-bootstrap
             defaultMode: 0555
-        - name: redis-tmp
+        - name: redis-session-tmp
           emptyDir: {}
-        - name: redis-tls
+        - name: redis-session-tls
           secret:
-            secretName: infra-tls-redis
-        - name: redis-ca
+            secretName: infra-tls-redis-session
+        - name: redis-session-ca
           secret:
             secretName: infra-ca
   volumeClaimTemplates:

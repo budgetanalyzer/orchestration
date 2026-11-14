@@ -56,8 +56,8 @@ Python's standard library. Raw `kubectl kustomize kubernetes/production/apps`
 output retains CSP placeholders and is an intermediate for scanning/review;
 use `production-routes.sh` for resolved NGINX configuration.
 
-`production-infrastructure.sh` renders the shared PostgreSQL, RabbitMQ, and
-Redis baseline through `kubernetes/production/infrastructure/`.
+`production-infrastructure.sh` renders the shared PostgreSQL, RabbitMQ,
+`redis-session`, and `redis-cache` baseline through `kubernetes/production/infrastructure/`.
 
 `observability.sh` copies the maintained Jaeger resources and renders the
 pinned Kiali chart client-side. Because Kiali normally derives namespace RBAC
@@ -82,8 +82,8 @@ executable and does not fall back to `python3`.
 In addition to image and exposure checks, it compares rendered routes,
 authorization, gateway pod configuration, and infrastructure against their
 shared sources. The accepted differences are limited to the documented
-hostname, standalone-frontend omission, local Kind NodePort, and Redis storage
-size.
+hostname, standalone-frontend omission, local Kind NodePort, and
+`redis-session` storage size.
 
 Also run the broader static and image-evidence checks when their inputs change:
 

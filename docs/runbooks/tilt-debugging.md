@@ -45,7 +45,7 @@ docker inspect kind-control-plane --format '{{.Config.Image}}'
 
 `./scripts/smoketest/verify-security-prereqs.sh` proves the platform security
 baseline. `./scripts/smoketest/verify-session-architecture.sh` proves the
-unified Redis session namespace, the shared `session:` key prefix and
+unified `redis-session` session namespace, the shared `session:` key prefix and
 `__Host-BA_SESSION` cookie-name defaults across Session Gateway and ext-authz, the
 shared SHA-256 session key derivation and golden vector, the
 explicit `SESSION_COOKIE_NAME=__Host-BA_SESSION` wiring in the `ext-authz`
@@ -59,18 +59,21 @@ egress hardening. The browser login page is `/login`; the actual OAuth2 redirect
 browser sessions are extended by `POST /auth/v1/session`. The browser only
 carries an opaque, host-only `__Host-BA_SESSION` cookie, which a client stores
 only from an HTTPS response; Session Gateway keeps the session data
-in Redis under `session:{sha256(token)}`, the lowercase hex SHA-256 of the
+in `redis-session` under `session:{sha256(token)}`, the lowercase hex SHA-256 of the
 cookie value, and the temporary OAuth2 request state under
 `oauth2:state:{state}`. The raw cookie token never appears in Redis keys or
-logs. After the hashed-key cutover, run `./scripts/ops/flush-redis.sh` once if
+logs. After the hashed-key cutover, run `./scripts/ops/flush-redis.sh session` once if
 the cluster still holds sessions written under raw-token keys. The helper also
 rewrites the append-only file, so those raw tokens leave the PVC as well.
 
-Redis runs as `StatefulSet/redis`; the pod name is `redis-0`. Its `/data`
-directory is PVC-backed by the StatefulSet-created `redis-data-redis-0` claim,
-so deleting the pod or running `tilt down` is not a Redis reset contract. Use
-`./scripts/ops/flush-redis.sh` when you need to clear sessions/cache, or
-recreate the local cluster/runtime for a fully clean infrastructure state.
+Redis runs as two instances. Sessions run as `StatefulSet/redis-session`; the
+pod name is `redis-session-0`. Its `/data` directory is PVC-backed by the
+StatefulSet-created `redis-data-redis-session-0` claim, so deleting the pod or
+running `tilt down` is not a session reset contract. The currency-service cache
+runs as `Deployment/redis-cache` with disposable `emptyDir` data and no
+persistence. Use `./scripts/ops/flush-redis.sh session` to clear sessions,
+`./scripts/ops/flush-redis.sh cache` to clear the cache, or recreate the local
+cluster/runtime for a fully clean infrastructure state.
 
 ### Port Mapping
 
@@ -88,18 +91,19 @@ Removal waits for consecutive failed readiness probes (three by default,
 six for Session Gateway). In the 2026-11 outage drill, PostgreSQL-backed
 services returned `500`s and hung requests for up to about 40 seconds before
 callers got `503`, and Session Gateway took about a minute to become unready
-during a Redis outage. Probe timings were not tuned to shorten this.
+during a `redis-session` outage. Probe timings were not tuned to shorten this.
 
 | Service | Probe path prefix | Readiness dependencies |
 | --- | --- | --- |
-| session-gateway | `/actuator/health` | Redis |
+| session-gateway | `/actuator/health` | `redis-session` |
 | transaction-service | `/transaction-service/actuator/health` | PostgreSQL |
-| currency-service | `/currency-service/actuator/health` | PostgreSQL, Redis |
+| currency-service | `/currency-service/actuator/health` | PostgreSQL |
 | permission-service | `/permission-service/actuator/health` | PostgreSQL |
-| ext-authz (port 8090) | `/livez` and `/readyz` | Redis (readiness only) |
+| ext-authz (port 8090) | `/livez` and `/readyz` | `redis-session` (readiness only) |
 
 The owning service repositories define the readiness groups and explain the
-exclusions, such as RabbitMQ and downstream HTTP services.
+exclusions, such as RabbitMQ, downstream HTTP services, and the fail-open
+currency-service `redis-cache`.
 
 ```bash
 # Readiness through the Tilt port-forwards
@@ -185,7 +189,7 @@ If an early Tilt resource such as `istiod` fails with an error that mentions
 `validate.kyverno.svc-fail`, inspect Kyverno before debugging that resource:
 
 ```bash
-tilt get uiresources kyverno kyverno-ready istiod postgresql redis rabbitmq
+tilt get uiresources kyverno kyverno-ready istiod postgresql redis-session redis-cache rabbitmq
 kubectl get pods,endpoints -n kyverno
 ```
 
@@ -280,10 +284,10 @@ Auth failures after login?
 ├── Check ext-authz health
 │   ├── curl http://localhost:8090/livez
 │   └── curl http://localhost:8090/readyz
-├── Check Redis for session data
+├── Check redis-session for session data
 │   └── REDIS_OPS_USERNAME=redis-ops
-│       REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-│       kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
+│       REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+│       kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning KEYS "*"
 └── Check Session Gateway Auth0 config and secret
     ├── kubectl get configmap session-gateway-idp-config -o yaml
     └── kubectl get secret auth0-credentials -o yaml
@@ -323,11 +327,11 @@ kubectl logs -f deployment/session-gateway
 # Health check
 curl http://localhost:8081/actuator/health
 
-# Check Redis sessions with the redis-ops ACL user
+# Check redis-session sessions with the redis-ops ACL user
 REDIS_OPS_USERNAME=redis-ops
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
-kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
+REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
+kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning KEYS "oauth2:state:*"
 
 # Test the heartbeat with a copied browser session cookie
 curl -X POST -H "Origin: https://app.budgetanalyzer.localhost" -H "Cookie: __Host-BA_SESSION=<value>" https://app.budgetanalyzer.localhost/auth/v1/session
@@ -335,13 +339,13 @@ curl -X POST -H "Origin: https://app.budgetanalyzer.localhost" -H "Cookie: __Hos
 # Inspect one specific session hash if you have the cookie value; the key is its SHA-256
 SESSION_TOKEN='<__Host-BA_SESSION cookie value>'
 SESSION_KEY="session:$(printf '%s' "$SESSION_TOKEN" | sha256sum | cut -d' ' -f1)"
-kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
+kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
 
 # Verify the full shared session contract
 ./scripts/smoketest/verify-session-architecture.sh
 
-# Flush all Redis data (clears all sessions)
-./scripts/ops/flush-redis.sh
+# Flush all redis-session data (clears all sessions)
+./scripts/ops/flush-redis.sh session
 ```
 
 **Log Patterns to Watch**:
@@ -578,11 +582,11 @@ kubectl get secret postgresql-bootstrap-credentials -n infrastructure -o jsonpat
 kubectl get secret transaction-service-postgresql-credentials -o jsonpath='{.data}' | base64 -d
 ```
 
-**8. Check Redis for session data**
+**8. Check redis-session for session data**
 ```bash
 REDIS_OPS_USERNAME=redis-ops
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "*"
+REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning KEYS "*"
 # Should see session:* keys after login; oauth2:state:* only exists during the OAuth2 round-trip
 ```
 
@@ -590,7 +594,7 @@ kubectl exec -it pod/redis-0 -n infrastructure -- redis-cli --tls --cacert /tls-
 
 | Error | Likely Cause | Fix |
 |-------|--------------|-----|
-| 401 Unauthorized | Session cookie missing or invalid | Check ext-authz logs, verify Redis session data |
+| 401 Unauthorized | Session cookie missing or invalid | Check ext-authz logs, verify `redis-session` session data |
 | 403 Forbidden | Session valid but insufficient permissions | Check ext-authz logs, verify session roles/permissions |
 | 502 Bad Gateway | Backend service not running | Check pod status, restart service |
 | 504 Gateway Timeout | Backend service slow or hung | Check service logs, database connections |
@@ -764,13 +768,14 @@ kubectl delete pod -l app=transaction-service
 tilt trigger transaction-service
 ```
 
-### Clear Redis Sessions
+### Clear Redis Sessions Or Cache
 
 ```bash
-./scripts/ops/flush-redis.sh
+./scripts/ops/flush-redis.sh session   # sessions, session indexes, OAuth2 state
+./scripts/ops/flush-redis.sh cache     # currency-service cache only
 ```
 
-`redis-0` stores AOF data on the `redis-data-redis-0` PVC. If you need a
-fresh Redis data directory rather than a logical flush, delete and recreate the
+`redis-session-0` stores AOF data on the `redis-data-redis-session-0` PVC. If
+you need a fresh session data directory rather than a logical flush, delete and recreate the
 local cluster/runtime; pod deletion and `tilt down` alone should not be treated
 as data reset procedures.

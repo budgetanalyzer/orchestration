@@ -27,6 +27,7 @@ PG_ADMIN_USER="postgres_admin"
 RMQ_ADMIN_USER="rabbitmq-admin"
 RMQ_CS_USER="currency-service"
 REDIS_OPS_USER="redis-ops"
+REDIS_DEFAULT_USER="default"
 REDIS_SG_USER="session-gateway"
 REDIS_EA_USER="ext-authz"
 REDIS_CS_USER="currency-service"
@@ -175,9 +176,15 @@ start_port_forward() {
     local namespace="$1"
     local resource="$2"
     local remote_port="$3"
+    local output_variable="$4"
     local log_file
     local pid
     local forwarded_port
+
+    if [[ ! "$output_variable" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        printf 'ERROR: invalid port-forward output variable: %s\n' "$output_variable" >&2
+        exit 1
+    fi
 
     log_file=$(mktemp)
     TMP_FILES+=("$log_file")
@@ -192,7 +199,7 @@ start_port_forward() {
         if grep -q 'Forwarding from 127\.0\.0\.1:' "$log_file"; then
             forwarded_port=$(sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' "$log_file" | head -n1)
             if [ -n "$forwarded_port" ]; then
-                printf '%s' "$forwarded_port"
+                printf -v "$output_variable" '%s' "$forwarded_port"
                 return 0
             fi
         fi
@@ -257,7 +264,15 @@ redis_cmd() {
     local password="$2"
     shift 2
 
-    redis_cli_in_pod infrastructure "$REDIS_POD" "$user" "$password" "$@" 2>&1 || true
+    redis_cli_in_pod redis-session infrastructure "$REDIS_POD" "$user" "$password" "$@" 2>&1 || true
+}
+
+redis_cache_cmd() {
+    local user="$1"
+    local password="$2"
+    shift 2
+
+    redis_cli_in_pod redis-cache infrastructure "$REDIS_CACHE_POD" "$user" "$password" "$@" 2>&1 || true
 }
 
 rmq_ctl() {
@@ -308,7 +323,8 @@ require_cluster_access
 
 POSTGRES_POD=$(require_pod infrastructure app=postgresql PostgreSQL)
 RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
-REDIS_POD=$(require_pod infrastructure app=redis Redis)
+REDIS_POD=$(require_pod infrastructure app=redis-session Redis)
+REDIS_CACHE_POD=$(require_pod infrastructure app=redis-cache "Redis cache")
 EXT_AUTHZ_POD=$(require_pod default app=ext-authz ext-authz)
 
 PG_ADMIN_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentials password)
@@ -319,10 +335,13 @@ PG_PER_PASS=$(require_secret_value infrastructure postgresql-bootstrap-credentia
 RMQ_ADMIN_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credentials password)
 RMQ_CS_PASS=$(require_secret_value default currency-service-rabbitmq-credentials password)
 
-REDIS_OPS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ops-password)
-REDIS_SG_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
-REDIS_EA_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials ext-authz-password)
-REDIS_CS_PASS=$(require_secret_value infrastructure redis-bootstrap-credentials currency-service-password)
+REDIS_OPS_PASS=$(require_secret_value infrastructure redis-session-bootstrap-credentials ops-password)
+REDIS_DEFAULT_PASS=$(require_secret_value infrastructure redis-session-bootstrap-credentials default-password)
+REDIS_SG_PASS=$(require_secret_value default session-gateway-redis-credentials password)
+REDIS_EA_PASS=$(require_secret_value default ext-authz-redis-credentials password)
+REDIS_CACHE_OPS_PASS=$(require_secret_value infrastructure redis-cache-bootstrap-credentials ops-password)
+REDIS_CACHE_DEFAULT_PASS=$(require_secret_value infrastructure redis-cache-bootstrap-credentials default-password)
+REDIS_CS_PASS=$(require_secret_value default currency-service-redis-credentials password)
 
 section "PostgreSQL: Positive (service user -> own database)"
 
@@ -372,7 +391,7 @@ else
     pass "guest user removed"
 fi
 
-RMQ_API_PORT=$(start_port_forward infrastructure service/rabbitmq 15672)
+start_port_forward infrastructure service/rabbitmq 15672 RMQ_API_PORT
 http_request GET "http://127.0.0.1:${RMQ_API_PORT}/api/whoami" "$RMQ_ADMIN_USER" "$RMQ_ADMIN_PASS"
 if [ "$HTTP_STATUS" = "200" ] \
     && grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${RMQ_ADMIN_USER}\"" "$HTTP_BODY" \
@@ -576,9 +595,9 @@ else
     fail "ext-authz PING (${EA_PING})"
 fi
 
-CS_SET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" SET "currency-service:${VERIFY_KEY}" "ok")
-CS_GET=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "currency-service:${VERIFY_KEY}")
-redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" DEL "currency-service:${VERIFY_KEY}" >/dev/null 2>&1 || true
+CS_SET=$(redis_cache_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" SET "currency-service:${VERIFY_KEY}" "ok")
+CS_GET=$(redis_cache_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "currency-service:${VERIFY_KEY}")
+redis_cache_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" DEL "currency-service:${VERIFY_KEY}" >/dev/null 2>&1 || true
 if [ "$CS_SET" = "OK" ] && [ "$CS_GET" = "ok" ]; then
     pass "currency-service SET/GET on currency-service:*"
 else
@@ -601,14 +620,49 @@ else
     fail "ext-authz NOT denied on oauth2:state:* (${EA_CROSS})"
 fi
 
-CS_CROSS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" GET "session:anything")
-if echo "$CS_CROSS" | grep -qi 'NOPERM'; then
-    pass "currency-service denied on session:* keys"
+CS_SESSION_AUTH=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" PING)
+if echo "$CS_SESSION_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "currency-service cannot authenticate to redis-session"
 else
-    fail "currency-service NOT denied on session:* (${CS_CROSS})"
+    fail "currency-service unexpectedly authenticated to redis-session (${CS_SESSION_AUTH})"
 fi
 
-CS_KEYS=$(redis_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" KEYS "currency-service:*")
+SG_CACHE_AUTH=$(redis_cache_cmd "$REDIS_SG_USER" "$REDIS_SG_PASS" PING)
+if echo "$SG_CACHE_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "session-gateway cannot authenticate to redis-cache"
+else
+    fail "session-gateway unexpectedly authenticated to redis-cache (${SG_CACHE_AUTH})"
+fi
+
+EA_CACHE_AUTH=$(redis_cache_cmd "$REDIS_EA_USER" "$REDIS_EA_PASS" PING)
+if echo "$EA_CACHE_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "ext-authz cannot authenticate to redis-cache"
+else
+    fail "ext-authz unexpectedly authenticated to redis-cache (${EA_CACHE_AUTH})"
+fi
+
+SESSION_OPS_CACHE_AUTH=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" PING)
+CACHE_OPS_SESSION_AUTH=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" PING)
+if echo "$SESSION_OPS_CACHE_AUTH" | grep -qi 'WRONGPASS' \
+    && echo "$CACHE_OPS_SESSION_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "redis-ops credentials are isolated between Redis instances"
+else
+    fail "redis-ops credentials are not isolated (session->cache=${SESSION_OPS_CACHE_AUTH}, cache->session=${CACHE_OPS_SESSION_AUTH})"
+fi
+
+SESSION_DEFAULT_PING=$(redis_cmd "$REDIS_DEFAULT_USER" "$REDIS_DEFAULT_PASS" PING)
+CACHE_DEFAULT_PING=$(redis_cache_cmd "$REDIS_DEFAULT_USER" "$REDIS_CACHE_DEFAULT_PASS" PING)
+SESSION_DEFAULT_CACHE_AUTH=$(redis_cache_cmd "$REDIS_DEFAULT_USER" "$REDIS_DEFAULT_PASS" PING)
+CACHE_DEFAULT_SESSION_AUTH=$(redis_cmd "$REDIS_DEFAULT_USER" "$REDIS_CACHE_DEFAULT_PASS" PING)
+if [ "$SESSION_DEFAULT_PING" = "PONG" ] && [ "$CACHE_DEFAULT_PING" = "PONG" ] \
+    && echo "$SESSION_DEFAULT_CACHE_AUTH" | grep -qi 'WRONGPASS' \
+    && echo "$CACHE_DEFAULT_SESSION_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "default-user credentials are valid only on their own Redis instance"
+else
+    fail "default-user credentials are not isolated (session=${SESSION_DEFAULT_PING}, cache=${CACHE_DEFAULT_PING}, session->cache=${SESSION_DEFAULT_CACHE_AUTH}, cache->session=${CACHE_DEFAULT_SESSION_AUTH})"
+fi
+
+CS_KEYS=$(redis_cache_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" KEYS "currency-service:*")
 if echo "$CS_KEYS" | grep -qi "NOPERM.*'keys'"; then
     pass "currency-service denied KEYS command"
 else
@@ -664,6 +718,20 @@ else
     fail "${REDIS_OPS_USER} CONFIG GET (${OPS_CONFIG})"
 fi
 
+CACHE_OPS_WHOAMI=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" ACL WHOAMI)
+if [ "$CACHE_OPS_WHOAMI" = "$REDIS_OPS_USER" ]; then
+    pass "redis-cache ${REDIS_OPS_USER} ACL WHOAMI"
+else
+    fail "redis-cache ${REDIS_OPS_USER} ACL WHOAMI (${CACHE_OPS_WHOAMI})"
+fi
+
+CACHE_OPS_CONFIG=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" CONFIG GET maxmemory)
+if echo "$CACHE_OPS_CONFIG" | grep -q 'maxmemory'; then
+    pass "redis-cache ${REDIS_OPS_USER} CONFIG GET"
+else
+    fail "redis-cache ${REDIS_OPS_USER} CONFIG GET (${CACHE_OPS_CONFIG})"
+fi
+
 OPS_DB15_SET=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 SET "__phase1_flushdb__" "ok")
 OPS_DB15_FLUSH=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 FLUSHDB ASYNC)
 sleep 1
@@ -682,8 +750,8 @@ else
     fail "ext-authz pod is not Ready"
 fi
 
-EXT_AUTHZ_HEALTH_PORT=$(start_port_forward default deployment/ext-authz 8090)
-EXT_AUTHZ_HTTP_PORT=$(start_port_forward default deployment/ext-authz 9002)
+start_port_forward default deployment/ext-authz 8090 EXT_AUTHZ_HEALTH_PORT
+start_port_forward default deployment/ext-authz 9002 EXT_AUTHZ_HTTP_PORT
 
 http_request GET "http://127.0.0.1:${EXT_AUTHZ_HEALTH_PORT}/livez"
 if [ "$HTTP_STATUS" = "200" ] && grep -qi '^ok$' "$HTTP_BODY"; then

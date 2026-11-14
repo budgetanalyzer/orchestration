@@ -72,12 +72,12 @@ truth.
 | `verify-transport-encryption.sh` | Pods in `default`; NetworkPolicies in `default`, `infrastructure` | `verify-transport-encryption-temp=true` |
 | `verify-runtime-security-guardrails.sh` | Pods in `default`; NetworkPolicies in `default`, `infrastructure`; RabbitMQ vhosts | `verify-runtime-security-guardrails-temp=true`; vhost name `runtime-guardrails-<digits>` |
 | `verify-istio-ingress.sh` | Deployment, Service, NetworkPolicy, AuthorizationPolicy, HTTPRoute in `default`; NetworkPolicy in `istio-ingress`; probe pods such as `p3-mtls-probe` | `verify-istio-ingress-temp=true`; check whether its probe pods carry this label |
-| `verify-ingress-rate-limits.sh` | Pod, NetworkPolicy, ConfigMap in `default`; ingress Deployment scaled to 2; one Redis session key | `verify-ingress-rate-limits-temp=true`; replica count, see Step 4 |
+| `verify-ingress-rate-limits.sh` | Pod, NetworkPolicy, ConfigMap in `default`; ingress Deployment scaled to 2; one `redis-session` session key | `verify-ingress-rate-limits-temp=true`; replica count, see Step 4 |
 | `verify-security-prereqs.sh` | Namespaces `ba-netpol-*`, `ba-psa-*`, `ba-kyverno-*`; pod `default/istio-sidecar-smoke` | Namespace prefix plus exact pod name |
 | `verify-runtime-hardening.sh` | Namespace `ba-phase5-psa-*` | Namespace prefix |
 | `verify-edge-browser-hardening.sh` | `/tmp/edge-browser-prod-nginx.*` inside the `nginx-gateway` pod | Path pattern; harmless and gone on pod restart, so leave out unless trivial |
 | `verify-credential-isolation.sh`, `verify-ingress-rate-limits.sh`, `verify-edge-browser-hardening.sh` | Orphaned `kubectl port-forward` processes on the VM | See Step 3 |
-| `verify-edge-contract.sh --inject-failures` (not in the smoketest chain) | `ClusterNetworkPolicy edge-contract-block-ingress-to-ext-authz-<pid>`; ext-authz or Redis scaled to 0 | Name prefix; replicas are checked only, see Step 4 |
+| `verify-edge-contract.sh --inject-failures` (not in the smoketest chain) | `ClusterNetworkPolicy edge-contract-block-ingress-to-ext-authz-<pid>`; ext-authz or `redis-session` scaled to 0 | Name prefix; replicas are checked only, see Step 4 |
 
 ## Implementation
 
@@ -115,7 +115,8 @@ truth.
   each EndpointSlice target pod has an `ownerReferences` entry. This catches label-impersonating
   pods even when they are not in the inventory, which was the high-impact failure in this
   session.
-- Require the ext-authz Deployment and Redis StatefulSet to have at least 1 ready replica.
+- Require the ext-authz Deployment, `redis-session` StatefulSet and `redis-cache` Deployment to
+  have at least 1 ready replica.
 
 ### Step 2: Label the `np2-*` probes
 
@@ -155,10 +156,10 @@ operator guest publication (`scripts/ops/start-observability-port-forwards.sh`, 
   If the live value differs and no `ingress-rate-limit-probe-*` pod exists, restore it, then wait
   on `kubectl rollout status --timeout=120s`. Do not hardcode `1` without citing where the value
   comes from.
-- ext-authz and Redis at 0 replicas: report and fail. Do not scale them back up. The cause is
+- ext-authz, `redis-session` or `redis-cache` at 0 replicas: report and fail. Do not scale them back up. The cause is
   most likely an interrupted `verify-edge-contract.sh --inject-failures` run, and the user should
   decide. The script may print the exact recovery command.
-- Redis session keys left by `verify-ingress-rate-limits.sh`: out of scope. The key name is
+- `redis-session` session keys left by `verify-ingress-rate-limits.sh`: out of scope. The key name is
   random per run and cannot be identified afterwards. Note this limitation in the script header.
 
 ### Step 5: Wire into `smoketest.sh`

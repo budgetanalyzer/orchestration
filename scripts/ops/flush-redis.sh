@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Flush Redis Cache (Kubernetes/Tilt)
-# Clears all Redis data including sessions
+# Flush a Redis instance (Kubernetes/Tilt).
 #
 # Usage:
-#   ./scripts/ops/flush-redis.sh
+#   ./scripts/ops/flush-redis.sh session
+#   ./scripts/ops/flush-redis.sh cache
 
 set -euo pipefail
 
@@ -13,15 +13,41 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091 # Resolved through SCRIPT_DIR at runtime; run shellcheck -x from repo root.
 source "${SCRIPT_DIR}/../lib/redis-cli.sh"
 
+usage() {
+    echo "Usage: $0 <session|cache>" >&2
+}
+
+if (( $# != 1 )); then
+    usage
+    exit 2
+fi
+
+case "$1" in
+    session)
+        REDIS_INSTANCE="redis-session"
+        REWRITE_AOF=true
+        ;;
+    cache)
+        REDIS_INSTANCE="redis-cache"
+        REWRITE_AOF=false
+        ;;
+    *)
+        usage
+        exit 2
+        ;;
+esac
+
+REDIS_BOOTSTRAP_SECRET="${REDIS_INSTANCE}-bootstrap-credentials"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}Redis Flush Script (Kubernetes)${NC}"
+echo -e "${YELLOW}Redis Flush Script: ${REDIS_INSTANCE} (Kubernetes)${NC}"
 echo ""
 
-printf -v confirm_prompt "%bWARNING: This will delete ALL Redis data including sessions. Continue? [y/N]:%b " "$RED" "$NC"
+printf -v confirm_prompt "%bWARNING: This will delete ALL data from %s. Continue? [y/N]:%b " "$RED" "$REDIS_INSTANCE" "$NC"
 read -r -p "$confirm_prompt" -n 1
 echo
 [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Aborted." && exit 0
@@ -30,9 +56,9 @@ echo ""
 echo -e "${YELLOW}Flushing Redis...${NC}"
 echo ""
 
-REDIS_POD=$(kubectl get pods -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+REDIS_POD=$(kubectl get pods -n infrastructure -l "app=${REDIS_INSTANCE}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [ -z "$REDIS_POD" ]; then
-    echo -e "${RED}Redis pod not found in infrastructure namespace${NC}"
+    echo -e "${RED}${REDIS_INSTANCE} pod not found in infrastructure namespace${NC}"
     echo ""
     echo "Troubleshooting:"
     echo "  1. Is Tilt running? Try: tilt up"
@@ -43,36 +69,41 @@ fi
 echo -e "${YELLOW}Using Redis pod: $REDIS_POD${NC}"
 echo ""
 
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+REDIS_INSTANCE_OPS_PASSWORD=$(kubectl get secret "$REDIS_BOOTSTRAP_SECRET" -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" FLUSHALL > /dev/null 2>&1
+redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" FLUSHALL > /dev/null 2>&1
 
-# FLUSHALL only appends to the AOF on the PVC, so earlier session tokens stay on
-# disk. Rewrite the AOF so the persisted history is replaced by the empty dataset.
-echo -e "${YELLOW}Rewriting the append-only file...${NC}"
-redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" BGREWRITEAOF > /dev/null 2>&1
+# The session instance persists AOF data on its PVC. Rewrite it so prior
+# session tokens are removed from the persisted history. The disposable cache
+# instance has persistence disabled and needs no rewrite.
+if "$REWRITE_AOF"; then
+    echo -e "${YELLOW}Rewriting the append-only file...${NC}"
+    redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" BGREWRITEAOF > /dev/null 2>&1
 
-aof_info=""
-for _ in $(seq 1 60); do
-    aof_info=$(redis_cli_in_pod infrastructure "$REDIS_POD" redis-ops "$REDIS_OPS_PASSWORD" INFO persistence 2>/dev/null | tr -d '\r')
-    if grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" && grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info"; then
-        break
+    aof_info=""
+    for _ in $(seq 1 60); do
+        aof_info=$(redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" INFO persistence 2>/dev/null | tr -d '\r')
+        if grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" && grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info"; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" \
+        || ! grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info" \
+        || ! grep -qx 'aof_last_bgrewrite_status:ok' <<<"$aof_info"; then
+        echo -e "${RED}Redis was flushed, but the append-only file rewrite did not finish successfully${NC}"
+        echo "Check: kubectl logs -n infrastructure $REDIS_POD"
+        exit 1
     fi
-    sleep 1
-done
-
-if ! grep -qx 'aof_rewrite_in_progress:0' <<<"$aof_info" \
-    || ! grep -qx 'aof_rewrite_scheduled:0' <<<"$aof_info" \
-    || ! grep -qx 'aof_last_bgrewrite_status:ok' <<<"$aof_info"; then
-    echo -e "${RED}Redis was flushed, but the append-only file rewrite did not finish successfully${NC}"
-    echo "Check: kubectl logs -n infrastructure $REDIS_POD"
-    exit 1
 fi
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}SUCCESS! Redis has been flushed${NC}"
+echo -e "${GREEN}SUCCESS! ${REDIS_INSTANCE} has been flushed${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "All sessions and cached data have been ${GREEN}cleared${NC}."
-echo -e "Users will need to log in again."
+echo -e "All data in ${REDIS_INSTANCE} has been ${GREEN}cleared${NC}."
+if [ "$REDIS_INSTANCE" = "redis-session" ]; then
+    echo -e "Users will need to log in again."
+fi
 echo ""

@@ -1080,6 +1080,7 @@ containment.
 | Shared NGINX routes, narrow mesh paths, `;` rejection | [ADR 012](../decisions/012-shared-nginx-routes-and-path-hardening.md) |
 | Deferred mesh identity hardening | [ADR 013](../decisions/013-deferred-mesh-identity-hardening.md) |
 | HSTS without `includeSubDomains` or `preload` | [ADR 014](../decisions/014-hsts-without-includesubdomains-or-preload.md) |
+| Separate `redis-session` and `redis-cache` instances | [ADR 016](../decisions/016-separate-session-and-cache-redis.md) |
 
 ---
 

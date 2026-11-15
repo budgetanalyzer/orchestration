@@ -112,7 +112,9 @@ raising `maxmemory` or changing the eviction policy.
 
 The implemented design combines option 1, a variant of option 3 and option 4.
 Option 4 was chosen after all, because isolation, not only a bounded cache
-size, is what keeps a cache fault from becoming an authentication outage.
+size, is what keeps a cache fault from becoming an authentication outage. The
+decision is recorded in
+[ADR 016](../decisions/016-separate-session-and-cache-redis.md).
 
 ### Dedicated cache instance
 

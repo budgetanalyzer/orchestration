@@ -304,3 +304,5 @@ grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
 - [013-deferred-mesh-identity-hardening.md](../decisions/013-deferred-mesh-identity-hardening.md) - Deferred mesh identity hardening
 - [014-hsts-without-includesubdomains-or-preload.md](../decisions/014-hsts-without-includesubdomains-or-preload.md) - HSTS flags
 - [015-reset-local-state-instead-of-migrating.md](../decisions/015-reset-local-state-instead-of-migrating.md) - Reset local state instead of migrating
+- [016-separate-session-and-cache-redis.md](../decisions/016-separate-session-and-cache-redis.md) - Separate session and cache Redis, bounded fail-open currency cache
+- [017-exchange-rate-end-date-cap.md](../decisions/017-exchange-rate-end-date-cap.md) - Exchange-rate end date capped at tomorrow

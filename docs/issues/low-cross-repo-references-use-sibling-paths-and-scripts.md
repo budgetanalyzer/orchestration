@@ -121,10 +121,9 @@ All eleven repositories are public on GitHub, so the URLs work for any reader.
    - Add the one-line rule to `AGENTS.md`.
    - Convert relative sibling links to GitHub URLs.
    - Replace script references with links to the owning doc section.
-4. Run the work as a plan with one phase per repository, separate from
-   `redis-split-review-remediation.md`. That plan already removes the
-   `flush-redis.sh` references in `ext-authz/README.md`,
-   `session-gateway/docs/security.md` and
+4. Run the work as a plan with one phase per repository. The Redis split
+   review remediation already removed the `flush-redis.sh` references in
+   `ext-authz/README.md`, `session-gateway/docs/security.md` and
    `session-gateway/docs/session-configuration.md`.
 
 ## Decisions to make first

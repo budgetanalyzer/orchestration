@@ -45,7 +45,9 @@ Either way, a maximum response is then bounded by the history length (about
 
 ## Resolution
 
-Clamp. currency-service now bounds the range at the service layer:
+Clamp, as recorded in
+[ADR 017](../decisions/017-exchange-rate-end-date-cap.md). currency-service
+now bounds the range at the service layer:
 
 - The effective end date is `min(endDate, tomorrow)`. "Tomorrow" is the UTC
   date from an injected `java.time.Clock` plus one day.

@@ -28,6 +28,8 @@ RMQ_ADMIN_USER="rabbitmq-admin"
 RMQ_CS_USER="currency-service"
 REDIS_OPS_USER="redis-ops"
 REDIS_DEFAULT_USER="default"
+REDIS_HEALTH_USER="redis-health"
+REDIS_SESSION_PROBE_COMMAND="redis-cli -e --tls --cacert /tls-ca/ca.crt --user ${REDIS_HEALTH_USER} ping"
 REDIS_SG_USER="session-gateway"
 REDIS_EA_USER="ext-authz"
 REDIS_CS_USER="currency-service"
@@ -275,6 +277,13 @@ redis_cache_cmd() {
     redis_cli_in_pod redis-cache infrastructure "$REDIS_CACHE_POD" "$user" "$password" "$@" 2>&1 || true
 }
 
+# Runs redis-cli in the redis-session pod without credentials. The pod sets
+# REDISCLI_AUTH for its probes, so it is removed to start unauthenticated.
+redis_session_noauth() {
+    kubectl exec -n infrastructure "$REDIS_POD" -c redis-session -- \
+        env -u REDISCLI_AUTH redis-cli --tls --cacert /tls-ca/ca.crt "$@" 2>&1 || true
+}
+
 rmq_ctl() {
     kubectl exec -n infrastructure "$RABBITMQ_POD" -- \
         rabbitmqctl --quiet "$@" 2>&1 || true
@@ -336,7 +345,7 @@ RMQ_ADMIN_PASS=$(require_secret_value infrastructure rabbitmq-bootstrap-credenti
 RMQ_CS_PASS=$(require_secret_value default currency-service-rabbitmq-credentials password)
 
 REDIS_OPS_PASS=$(require_secret_value infrastructure redis-session-bootstrap-credentials ops-password)
-REDIS_DEFAULT_PASS=$(require_secret_value infrastructure redis-session-bootstrap-credentials default-password)
+REDIS_HEALTH_PASS=$(require_secret_value infrastructure redis-session-bootstrap-credentials health-password)
 REDIS_SG_PASS=$(require_secret_value default session-gateway-redis-credentials password)
 REDIS_EA_PASS=$(require_secret_value default ext-authz-redis-credentials password)
 REDIS_CACHE_OPS_PASS=$(require_secret_value infrastructure redis-cache-bootstrap-credentials ops-password)
@@ -650,16 +659,24 @@ else
     fail "redis-ops credentials are not isolated (session->cache=${SESSION_OPS_CACHE_AUTH}, cache->session=${CACHE_OPS_SESSION_AUTH})"
 fi
 
-SESSION_DEFAULT_PING=$(redis_cmd "$REDIS_DEFAULT_USER" "$REDIS_DEFAULT_PASS" PING)
 CACHE_DEFAULT_PING=$(redis_cache_cmd "$REDIS_DEFAULT_USER" "$REDIS_CACHE_DEFAULT_PASS" PING)
-SESSION_DEFAULT_CACHE_AUTH=$(redis_cache_cmd "$REDIS_DEFAULT_USER" "$REDIS_DEFAULT_PASS" PING)
 CACHE_DEFAULT_SESSION_AUTH=$(redis_cmd "$REDIS_DEFAULT_USER" "$REDIS_CACHE_DEFAULT_PASS" PING)
-if [ "$SESSION_DEFAULT_PING" = "PONG" ] && [ "$CACHE_DEFAULT_PING" = "PONG" ] \
-    && echo "$SESSION_DEFAULT_CACHE_AUTH" | grep -qi 'WRONGPASS' \
+if [ "$CACHE_DEFAULT_PING" = "PONG" ] \
     && echo "$CACHE_DEFAULT_SESSION_AUTH" | grep -qi 'WRONGPASS'; then
-    pass "default-user credentials are valid only on their own Redis instance"
+    pass "redis-cache default credentials are valid only on redis-cache"
 else
-    fail "default-user credentials are not isolated (session=${SESSION_DEFAULT_PING}, cache=${CACHE_DEFAULT_PING}, session->cache=${SESSION_DEFAULT_CACHE_AUTH}, cache->session=${CACHE_DEFAULT_SESSION_AUTH})"
+    fail "redis-cache default credentials are not isolated (cache=${CACHE_DEFAULT_PING}, cache->session=${CACHE_DEFAULT_SESSION_AUTH})"
+fi
+
+HEALTH_CACHE_AUTH=$(redis_cache_cmd "$REDIS_HEALTH_USER" "$REDIS_HEALTH_PASS" PING)
+HEALTH_CACHE_DEFAULT_AUTH=$(redis_cache_cmd "$REDIS_DEFAULT_USER" "$REDIS_HEALTH_PASS" PING)
+CACHE_DEFAULT_HEALTH_AUTH=$(redis_cmd "$REDIS_HEALTH_USER" "$REDIS_CACHE_DEFAULT_PASS" PING)
+if echo "$HEALTH_CACHE_AUTH" | grep -qi 'WRONGPASS' \
+    && echo "$HEALTH_CACHE_DEFAULT_AUTH" | grep -qi 'WRONGPASS' \
+    && echo "$CACHE_DEFAULT_HEALTH_AUTH" | grep -qi 'WRONGPASS'; then
+    pass "redis-health credentials are valid only on redis-session"
+else
+    fail "redis-health credentials are not isolated (health->cache=${HEALTH_CACHE_AUTH}, health->cache default=${HEALTH_CACHE_DEFAULT_AUTH}, cache default->session health=${CACHE_DEFAULT_HEALTH_AUTH})"
 fi
 
 CS_KEYS=$(redis_cache_cmd "$REDIS_CS_USER" "$REDIS_CS_PASS" KEYS "currency-service:*")
@@ -677,15 +694,21 @@ else
 fi
 
 # ACL DRYRUN checks permission, not capability, so it is used only for denials.
-sg_dryrun_denied() {
+redis_session_dryrun_denied() {
+    local user="$1"
     local out
+    shift
 
-    out=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL DRYRUN "$REDIS_SG_USER" "$@")
+    out=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL DRYRUN "$user" "$@")
     if printf '%s' "$out" | grep -q "no permissions to run the '"; then
-        pass "session-gateway ACL DRYRUN denies $*"
+        pass "${user} ACL DRYRUN denies $*"
     else
-        fail "session-gateway ACL DRYRUN does not deny $* (got: ${out:0:120})"
+        fail "${user} ACL DRYRUN does not deny $* (got: ${out:0:120})"
     fi
+}
+
+sg_dryrun_denied() {
+    redis_session_dryrun_denied "$REDIS_SG_USER" "$@"
 }
 
 sg_dryrun_denied FLUSHALL
@@ -701,6 +724,134 @@ sg_dryrun_denied SCAN 0 MATCH "session:*"
 sg_dryrun_denied CLIENT KILL USER "$REDIS_EA_USER"
 sg_dryrun_denied SCRIPT FLUSH
 sg_dryrun_denied PUBLISH "$VERIFY_KEY" message
+
+section "Redis: Session default user disabled, probes use ${REDIS_HEALTH_USER}"
+
+# The AOF loader replays as default, so default keeps full permissions but is
+# off: no client may authenticate as it, and it has no password.
+SESSION_ACL_LIST=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL LIST | tr -d '\r')
+if printf '%s\n' "$SESSION_ACL_LIST" | grep -qx 'user default off sanitize-payload ~\* &\* +@all'; then
+    pass "redis-session default is off, passwordless and keeps replay permissions"
+else
+    fail "redis-session default is not 'user default off sanitize-payload ~* &* +@all' (got: $(printf '%s\n' "$SESSION_ACL_LIST" | grep '^user default ' | head -c 120))"
+fi
+if printf '%s\n' "$SESSION_ACL_LIST" \
+    | grep -Eqx "user ${REDIS_HEALTH_USER} on sanitize-payload #[0-9a-f]{64} resetchannels -@all \\+ping"; then
+    pass "${REDIS_HEALTH_USER} has one password and only +ping"
+else
+    fail "${REDIS_HEALTH_USER} ACL is not PING-only (got: $(printf '%s\n' "$SESSION_ACL_LIST" | grep "^user ${REDIS_HEALTH_USER} " | head -c 120))"
+fi
+
+WRONG_REDIS_PASS="wrong-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+
+NOAUTH_PING=$(redis_session_noauth PING)
+if printf '%s' "$NOAUTH_PING" | grep -q 'NOAUTH'; then
+    pass "redis-session refuses unauthenticated PING"
+else
+    fail "redis-session accepted an unauthenticated command (got: ${NOAUTH_PING:0:120})"
+fi
+
+session_default_auth_refused() {
+    local label="$1"
+    local out
+    shift
+
+    out=$(redis_session_noauth "$@")
+    if printf '%s' "$out" | grep -q 'WRONGPASS'; then
+        pass "redis-session refuses ${label}"
+    else
+        fail "redis-session did not refuse ${label} (got: ${out:0:120})"
+    fi
+}
+
+session_default_auth_refused "AUTH default with the health password" AUTH "$REDIS_DEFAULT_USER" "$REDIS_HEALTH_PASS"
+session_default_auth_refused "AUTH default with a random password" AUTH "$REDIS_DEFAULT_USER" "$WRONG_REDIS_PASS"
+session_default_auth_refused "password-only AUTH with the health password" AUTH "$REDIS_HEALTH_PASS"
+session_default_auth_refused "HELLO AUTH default with the health password" \
+    HELLO 3 AUTH "$REDIS_DEFAULT_USER" "$REDIS_HEALTH_PASS"
+
+HEALTH_PING=$(redis_cmd "$REDIS_HEALTH_USER" "$REDIS_HEALTH_PASS" PING | tr -d '\r')
+if [ "$HEALTH_PING" = "PONG" ]; then
+    pass "${REDIS_HEALTH_USER} PING returns PONG"
+else
+    fail "${REDIS_HEALTH_USER} PING did not return exactly PONG (got: ${HEALTH_PING:0:120})"
+fi
+
+HEALTH_KEY="${VERIFY_SESSION_KEY}:health"
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" SET "$HEALTH_KEY" ok >/dev/null
+health_denied() {
+    local out
+
+    out=$(redis_cmd "$REDIS_HEALTH_USER" "$REDIS_HEALTH_PASS" "$@")
+    if printf '%s' "$out" | grep -q 'NOPERM'; then
+        pass "${REDIS_HEALTH_USER} denied $1"
+    else
+        fail "${REDIS_HEALTH_USER} NOT denied $* (got: ${out:0:120})"
+    fi
+}
+
+health_denied GET "$HEALTH_KEY"
+health_denied HGETALL "$HEALTH_KEY"
+health_denied EXISTS "$HEALTH_KEY"
+health_denied KEYS "*"
+health_denied SCAN 0
+health_denied SET "${HEALTH_KEY}:write" nope
+health_denied DEL "$HEALTH_KEY"
+health_denied INFO server
+health_denied CONFIG GET maxmemory
+health_denied ACL WHOAMI
+health_denied CLIENT LIST
+health_denied SELECT 1
+HEALTH_KEY_STATE=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" EXISTS "$HEALTH_KEY" "${HEALTH_KEY}:write")
+redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" DEL "$HEALTH_KEY" "${HEALTH_KEY}:write" >/dev/null
+if [ "$HEALTH_KEY_STATE" = "1" ]; then
+    pass "${REDIS_HEALTH_USER} denials left keys unchanged"
+else
+    fail "${REDIS_HEALTH_USER} denials changed keys (EXISTS=${HEALTH_KEY_STATE})"
+fi
+
+for command in FLUSHALL FLUSHDB SHUTDOWN BGREWRITEAOF "CONFIG SET appendonly no" \
+    "ACL SETUSER ${REDIS_HEALTH_USER} +@all" "PUBLISH ${VERIFY_KEY} message" "EVAL return 0"; do
+    # shellcheck disable=SC2086 # Word splitting turns each entry into command arguments.
+    redis_session_dryrun_denied "$REDIS_HEALTH_USER" $command
+done
+
+redis_session_jsonpath() {
+    kubectl get pod -n infrastructure "$REDIS_POD" \
+        -o jsonpath="{range .spec.containers[?(@.name==\"redis-session\")]${1}}{@}{\"\\n\"}{end}"
+}
+
+AUTH_REF=$(redis_session_jsonpath '.env[?(@.name=="REDISCLI_AUTH")].valueFrom.secretKeyRef' \
+    | tr -d '\r')
+if printf '%s' "$AUTH_REF" | grep -q '"key":"health-password"' \
+    && printf '%s' "$AUTH_REF" | grep -q '"name":"redis-session-bootstrap-credentials"'; then
+    pass "redis-session REDISCLI_AUTH is the health password"
+else
+    fail "redis-session REDISCLI_AUTH is not redis-session-bootstrap-credentials[health-password] (got: ${AUTH_REF:0:120})"
+fi
+
+for probe in livenessProbe readinessProbe; do
+    mapfile -t PROBE_ARGS < <(redis_session_jsonpath ".${probe}.exec.command[*]")
+    if [ "${PROBE_ARGS[*]}" != "$REDIS_SESSION_PROBE_COMMAND" ]; then
+        fail "redis-session ${probe} is not '${REDIS_SESSION_PROBE_COMMAND}' (got: ${PROBE_ARGS[*]})"
+        continue
+    fi
+    pass "redis-session ${probe} selects ${REDIS_HEALTH_USER} with -e"
+
+    if PROBE_OUT=$(kubectl exec -n infrastructure "$REDIS_POD" -c redis-session -- "${PROBE_ARGS[@]}" 2>&1) \
+        && [ "$(printf '%s' "$PROBE_OUT" | tr -d '\r')" = "PONG" ]; then
+        pass "redis-session ${probe} command succeeds with the pod credential"
+    else
+        fail "redis-session ${probe} command failed with the pod credential (got: ${PROBE_OUT:0:120})"
+    fi
+
+    if PROBE_OUT=$(kubectl exec -n infrastructure "$REDIS_POD" -c redis-session -- \
+        env REDISCLI_AUTH="$WRONG_REDIS_PASS" "${PROBE_ARGS[@]}" 2>&1); then
+        fail "redis-session ${probe} command exited 0 with a wrong REDISCLI_AUTH (got: ${PROBE_OUT:0:120})"
+    else
+        pass "redis-session ${probe} command exits non-zero with a wrong REDISCLI_AUTH"
+    fi
+done
 
 section "Redis: Break-glass (${REDIS_OPS_USER})"
 
@@ -785,6 +936,7 @@ assert_redis_config redis-cache save ""
 assert_redis_user_absent redis-session "$REDIS_SG_USER" "$REDIS_CS_USER"
 assert_redis_user_absent redis-cache "$REDIS_CS_USER" "$REDIS_SG_USER"
 assert_redis_user_absent redis-cache "$REDIS_CS_USER" "$REDIS_EA_USER"
+assert_redis_user_absent redis-cache "$REDIS_CS_USER" "$REDIS_HEALTH_USER"
 
 OPS_DB15_SET=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 SET "__phase1_flushdb__" "ok")
 OPS_DB15_FLUSH=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 FLUSHDB ASYNC)

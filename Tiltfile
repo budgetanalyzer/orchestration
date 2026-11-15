@@ -380,7 +380,7 @@ create_secret('currency-service-rabbitmq-credentials', DEFAULT_NAMESPACE, {
     'password': rabbitmq_currency_service_password,
 })
 
-redis_session_default_password = os.getenv('REDIS_SESSION_DEFAULT_PASSWORD', 'budget-analyzer-redis-session-default')
+redis_session_health_password = os.getenv('REDIS_SESSION_HEALTH_PASSWORD', 'budget-analyzer-redis-session-health')
 redis_session_ops_password = os.getenv('REDIS_SESSION_OPS_PASSWORD', 'budget-analyzer-redis-session-ops')
 redis_session_gateway_password = os.getenv('REDIS_SESSION_GATEWAY_PASSWORD', 'budget-analyzer-session-gateway-redis')
 redis_ext_authz_password = os.getenv('REDIS_EXT_AUTHZ_PASSWORD', 'budget-analyzer-ext-authz-redis')
@@ -389,7 +389,7 @@ redis_cache_ops_password = os.getenv('REDIS_CACHE_OPS_PASSWORD', 'budget-analyze
 redis_currency_service_password = os.getenv('REDIS_CURRENCY_SERVICE_PASSWORD', 'budget-analyzer-currency-service-redis')
 
 create_secret('redis-session-bootstrap-credentials', INFRA_NAMESPACE, {
-    'default-password': redis_session_default_password,
+    'health-password': redis_session_health_password,
     'ops-password': redis_session_ops_password,
     'session-gateway-password': redis_session_gateway_password,
     'ext-authz-password': redis_ext_authz_password,

@@ -370,7 +370,17 @@ location /api/reports {
    `kubernetes/istio/authorization-policies.yaml` whose NGINX rule lists the
    exact rewritten resource paths, as in
    [Adding a New Resource Route](#adding-a-new-resource-route). `default-deny-all`
-   leaves a workload with no ALLOW rule unreachable.
+   leaves a workload with no ALLOW rule unreachable. The static guard treats
+   every workload under `kubernetes/services/` as an NGINX backend and fails
+   until it has this path-restricted NGINX rule. A workload that is not an
+   NGINX backend needs a reasoned special role in
+   `scripts/guardrails/verify-mesh-authorization.py`; see
+   [Static Contract Guard](../docs/architecture/security-architecture.md#static-contract-guard).
+   The guard also checks the rendered production reference, which must keep
+   every `kubernetes/services/` workload except the standalone frontend. A new
+   workload therefore also needs a reviewed
+   [production app baseline](../kubernetes/production/README.md#application-and-image-baseline)
+   entry.
 
 3. Tilt will reload automatically.
 

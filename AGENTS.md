@@ -153,6 +153,8 @@ Adding a new service:
 - Create manifests in `kubernetes/services/{name}/`
 - Register the service in `Tiltfile`
 - Add NGINX routes when the service owns public resources
+- The static mesh guard treats every `kubernetes/services/` workload as an NGINX backend that needs a path-restricted NGINX ALLOW rule. Before adding a workload with any other caller pattern, read `docs/architecture/security-architecture.md#static-contract-guard`
+- The guard's rendered production check also fails until every `kubernetes/services/` workload except the standalone frontend is in `kubernetes/production/apps/`; changing that baseline follows `kubernetes/production/README.md#application-and-image-baseline`
 - See `docs/architecture/session-edge-authorization-pattern.md` and `nginx/README.md`
 
 Version numbers and concrete dependency selections live in service repos, manifests, and checked-in release inputs, not in this file.

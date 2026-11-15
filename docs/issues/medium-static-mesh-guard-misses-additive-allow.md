@@ -2,8 +2,9 @@
 
 - **Severity:** Medium
 - **Owner:** orchestration
-- **Status:** Open (plan 01 P1)
+- **Status:** Closed 2026-11-15 by static checks; see [Resolution](#resolution)
 - **Source:** 2026-11-09 implementation review F4; independent implementation review C2
+- **Plan:** [Close Additive ALLOW Gaps in the Static Mesh Guard](../plans/static-mesh-additive-allow-guard-plan.md)
 
 ## Problem
 
@@ -63,3 +64,45 @@ Extend the existing Python block. Do not build an Istio policy simulator.
 
 - Both mutations above are fail fixtures and fail.
 - The unmodified policy set passes.
+
+## Resolution
+
+The guard now lives in
+[`scripts/guardrails/verify-mesh-authorization.py`](../../scripts/guardrails/verify-mesh-authorization.py).
+[`scripts/guardrails/verify-static-security-manifests.sh`](../../scripts/guardrails/verify-static-security-manifests.sh)
+runs it on two separate sets. The first is every local `AuthorizationPolicy`
+under `kubernetes/`, with workloads from `kubernetes/services/`. The second is
+the rendered production reference: the `kubernetes/production/istio`,
+`istio-ingress-policies` and `apps` overlays, run with
+`--environment production`. In that set only the standalone
+`budget-analyzer-web` workload and policy may be absent. Scope, the caller
+table and limits live in
+[Static Contract Guard](../architecture/security-architecture.md#static-contract-guard).
+
+The proposed blanket ban on selectorless `ALLOW` policies was not adopted
+because it would reject the existing Envoy metrics grant. Instead, the
+selectorless `default/envoy-metrics-prometheus-policy` is accepted only when
+its spec equals exactly
+`{"action": "ALLOW", "rules": [{"from": [{"source": {"principals": ["cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus"]}}], "to": [{"operation": {"ports": ["15090"]}}]}]}`.
+The policy name exempts nothing. Every other selectorless or empty-selector
+`ALLOW` fails.
+
+Acceptance evidence, which is fixture and static evidence only:
+
+- [`tests/security-guardrails/test-mesh-authorization.py`](../../tests/security-guardrails/test-mesh-authorization.py)
+  first proves that the unmodified local policy set and the unmodified
+  production render pass. It then requires both mutations above to fail with
+  specific diagnostics, locally and in the production render:
+  - "is a broad additive grant over namespace default"
+  - "ingress -> session-gateway auth surface: has no to restriction"
+
+  It also covers broad grants that a production-only overlay adds, a
+  broadened metrics exception, and missing workloads or policies.
+- The `authorization-policy-*` fail fixtures under
+  `tests/security-guardrails/fixtures/fail/` run through the same helper.
+- On 2026-11-15, the focused runner, `--self-test`, the full static suite,
+  `bash -n` and `shellcheck` passed with the pinned PyYAML interpreter.
+
+No live cluster was exercised for this change, and no hosted production
+environment exists. The live mesh boundary proof remains
+`scripts/smoketest/verify-edge-contract.sh` on local Tilt.

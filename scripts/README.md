@@ -307,7 +307,8 @@ scripts/
   `guardrails/requirements-ingress-rate-limit.txt`; create the disposable
   `.cache/phase7-static-tools/pyyaml-venv` environment with the hash-verified
   install documented in `docs/ci-cd.md#security-guardrailsyml`. Its Python
-  checks, including the AuthorizationPolicy and ingress path-hardening scans
+  checks, including the AuthorizationPolicy scan in
+  `guardrails/verify-mesh-authorization.py`, the ingress path-hardening scan
   and `guardrails/verify-edge-headers.py`, use that environment's interpreter
   by default, and `INGRESS_RATE_LIMIT_PYTHON` overrides it. Both the normal and
   `--self-test` runs fail with the setup pointer when the selected interpreter
@@ -494,11 +495,26 @@ getting-started guide.
   image refs, image pinning, secrets-only checks, namespace PSA checks, and
   active setup guidance scans. It also rejects Jaeger/Kiali public-entry drift
   in checked-in manifests and keeps the Kiali auth contract plus the Jaeger
-  internal-only storage/service contract pinned in static review. It requires
-  an empty `default-deny-all` AuthorizationPolicy in `default` and rejects a
-  backend policy rule that admits the NGINX identity without a `to` path
-  restriction or with a service- or version-wide wildcard such as
-  `/<service>/v1/*`. It requires `nginx/includes/backend-headers.conf` to strip
+  internal-only storage/service contract pinned in static review. Through
+  `guardrails/verify-mesh-authorization.py` it checks every local
+  AuthorizationPolicy under `kubernetes/` (outside `kubernetes/production/` and
+  Kustomize patch fragments) as one set against the workloads under
+  `kubernetes/services/`. Separately, it renders the production reference's
+  `kubernetes/production/istio`, `kubernetes/production/istio-ingress-policies`
+  and `kubernetes/production/apps` overlays with the pinned `kubectl` and checks
+  them as one production set with `--environment production`. That set must
+  omit only the standalone `budget-analyzer-web` workload and policy and keep
+  every other `kubernetes/services/` workload. The production result covers the
+  offline reference only. Both sets require one empty `default-deny-all` and the exact
+  selectorless Envoy metrics grant and rejects any other selectorless ALLOW. It
+  rejects rules without explicit approved principals. It also enforces the
+  per-caller limits: NGINX backend paths without a service- or version-wide
+  wildcard such as `/<service>/v1/*`, the Session Gateway auth surface, the
+  internal permission-service and revocation pairs, and narrow metrics scrapes.
+  New workloads are NGINX backends by default. This check is structural and is
+  not an Istio simulation; the scope, caller table and limits live in
+  `docs/architecture/security-architecture.md#static-contract-guard`. It
+  requires `nginx/includes/backend-headers.conf` to strip
   `Cookie` and `Authorization` and send `X-Forwarded-Proto: https`, and
   requires every `/api` proxy location in both NGINX configs to include it.
   It requires both NGINX configs to include `nginx/includes/api-routes.conf`
@@ -525,7 +541,13 @@ getting-started guide.
   `health-password`), and the retired session `default-password` must not
   return. For the local render it also requires the Tiltfile Secret to define
   every key the StatefulSet references. `--self-test` proves each case
-  with a failing fixture, and proves the `redis-session` checks by mutating
+  with a failing fixture, runs
+  `tests/security-guardrails/test-mesh-authorization.py` (baseline-then-mutate
+  AuthorizationPolicy cases with required diagnostics, over local source copies,
+  rendered production copies, and production overlay source copies that must
+  still pass the local check; it ensures the pinned `kubectl` first. Run it
+  directly with the pinned interpreter and `-I` after the gate has installed
+  its tools), and proves the `redis-session` checks by mutating
   copies of the checked-in inputs (re-enabled `default`, extra health grants,
   a probe without `--user` or `-e`, a wrong `REDISCLI_AUTH` key, and a Tilt
   Secret without `health-password`). Its

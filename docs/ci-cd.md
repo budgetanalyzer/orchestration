@@ -251,6 +251,13 @@ workflow then runs:
   and a fail-closed scan proving blanket NGINX rate limiting remains absent
 - pattern scans for image pinning, namespace PSA labels, and lingering
   pipe-to-shell guidance in active setup docs/scripts
+- the structural mesh AuthorizationPolicy caller-contract guard, run
+  separately over the complete local policy set and over the rendered
+  production-reference workload policies, ingress policies, and app workloads;
+  the production set may omit only the standalone frontend. The scope and
+  structural limits live in
+  [Static Contract Guard](architecture/security-architecture.md#static-contract-guard).
+  A pass is offline static evidence, not proof of a running deployment
 
 That directory split is intentional: CI-safe checks live under
 `scripts/guardrails/`, shared installer/bootstrap helpers live under

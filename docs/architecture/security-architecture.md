@@ -279,10 +279,9 @@ Envoy `403` body `RBAC: access denied` instead of reaching the handler.
 Adding a public resource therefore needs its mesh path as well as its NGINX
 location in the shared `nginx/includes/api-routes.conf`. Without the mesh path the route fails closed
 with `403`. The step-by-step procedure lives in
-[`nginx/README.md`](../../nginx/README.md#adding-a-new-resource-route), and
-`scripts/guardrails/verify-static-security-manifests.sh` rejects a backend
-NGINX rule without a path restriction or with a version-wide wildcard, and a
-missing or non-empty `default-deny-all`.
+[`nginx/README.md`](../../nginx/README.md#adding-a-new-resource-route). The
+[static contract guard](#static-contract-guard) checks the policy structure
+offline.
 
 `scripts/smoketest/verify-edge-contract.sh` proves the boundary on the live
 chain with an encoded-path traversal matrix on both lanes, including side-effect
@@ -296,6 +295,114 @@ the sidecar's `403` and the seeded session stays intact.
 Rejecting `;` is the separate control in
 [Ingress Path Hardening](#ingress-path-hardening), and separate internal ports
 remain deferred.
+
+### Static Contract Guard
+
+Istio ALLOW policies are additive. `default-deny-all` does not stop a later
+broad ALLOW, so the guard inspects every granting branch: each extra policy,
+each rule, each `from` alternative, each principal and each `to` alternative.
+`scripts/guardrails/verify-mesh-authorization.py` implements it, and
+`scripts/guardrails/verify-static-security-manifests.sh` runs it on two
+separate sets: the local sources and the rendered production reference. It
+checks structure against an explicit caller contract. It does not simulate
+Istio request evaluation.
+
+Inputs and scope:
+
+- **Policy set.** The guard reads every `AuthorizationPolicy` document under
+  `kubernetes/`, including newly added files, and evaluates them together as
+  one set. It excludes `kubernetes/production/` and files that a Kustomize
+  `patches` entry references. Archives and test fixtures lie outside
+  `kubernetes/`. Duplicate namespace/name identities fail.
+- **Production reference.** The gate renders `kubernetes/production/istio`
+  (the shared workload policies after the frontend deletion patch),
+  `kubernetes/production/istio-ingress-policies` and
+  `kubernetes/production/apps` offline with its pinned `kubectl kustomize`.
+  It checks them as one production set with `--environment production`, never
+  merged with the local sources, so a production-only resource or patch is
+  inspected after render. Its root namespace comes from the shared
+  `kubernetes/istio/istiod-values.yaml`. The only modeled topology difference
+  is the documented one: `budget-analyzer-web` must be absent, because the
+  released frontend bundle is served from `nginx-gateway`. Every other workload
+  in `kubernetes/services/` must be present in the app render. This proves the
+  offline reference only. No hosted environment is checked.
+- **Workloads.** It discovers workloads from the pod-creating manifests under
+  `kubernetes/services/`. Pod template labels drive selector matching, and the
+  service account gives the caller principal
+  `cluster.local/ns/<namespace>/sa/<serviceAccountName>`. A selector matches
+  only when the pod has every listed label, including
+  `app.kubernetes.io/framework`. Workloads must use distinct service accounts.
+- **Namespaces.** The declared mesh scope comes from the checked-in topology:
+  `default` (applications), `istio-ingress`, `istio-egress`, `monitoring`
+  (Prometheus is meshed) and the mesh root namespace. The root is
+  `istio-system` unless `meshConfig.rootNamespace` in
+  `kubernetes/istio/istiod-values.yaml` sets another. An ALLOW policy outside
+  this scope fails, and so does an application workload outside `default`.
+  The guard matches root-namespace selectors against workloads in every
+  namespace.
+
+Policy-level rules:
+
+- An omitted `action` is ALLOW. DENY, CUSTOM and AUDIT policies are left to
+  their own checks, for example ingress path hardening and exact Origin.
+- Exactly one `default/default-deny-all` must exist, with an empty spec. Its
+  name does not exempt a non-empty spec. A non-empty spec fails both as a broken
+  deny-all and as a broad grant.
+- The only other selectorless ALLOW is the exact Envoy metrics contract,
+  `default/envoy-metrics-prometheus-policy`. It must be present. Its spec must
+  equal one `ALLOW` rule for the Prometheus principal on the sole port `15090`,
+  with no selector and no other granting branch. Any other selectorless or
+  empty-selector ALLOW fails as a broad additive grant. In the root namespace
+  it fails as a grant across every mesh namespace.
+- An ALLOW attached through `targetRef` or `targetRefs` fails. So does an ALLOW
+  selector that matches no discovered workload.
+
+Caller contracts. Each workload under `kubernetes/services/` is an NGINX backend
+unless the guard gives it a reasoned special role. Special roles must match a
+discovered workload:
+
+| Workload | Approved caller | Required `to` restriction |
+| --- | --- | --- |
+| `nginx-gateway`, `ext-authz` | Ingress gateway | None (caller-only) |
+| `budget-analyzer-web` (local only; must be absent in production) | `nginx-gateway` | None (caller-only, local frontend) |
+| `session-gateway` | Ingress gateway | Every alternative has paths within `/oauth2/*`, `/login/oauth2/*`, `/logout`, `/logout/*` and `/auth/*` |
+| `session-gateway` | `permission-service` | `DELETE` on `/internal/v1/sessions/users/{*}`, port `8081` |
+| Every backend | `nginx-gateway` | Every alternative has non-empty `paths`, with no `{**}`, non-suffix wildcard, or service- or version-wide wildcard |
+| `permission-service` | `session-gateway` | Only `POST` sync and `GET` authorization path/method pairs |
+| Workloads labeled `app.kubernetes.io/framework: spring-boot` | Prometheus | `GET`, one port and one `[/<prefix>]/actuator/prometheus` path per alternative |
+
+Every rule on a selected workload needs a non-empty `from`. Every `from`
+alternative needs explicit `source.principals`. Other source fields alone do
+not count. Wildcard principals fail. Each principal must be an approved caller
+of every selected workload. Every `to` alternative must satisfy the contract of
+every approved principal in the rule, so a mixed or extra principal cannot pass
+by matching a single contract. A narrower grant passes, but each caller lane in
+the table must remain represented. A new backend without a path-restricted
+NGINX rule fails. A workload that is not an NGINX backend needs a reasoned
+`SPECIAL_ROLES` entry in the guard.
+
+The guard has structural limits. Its backend wildcard heuristic does not
+establish that an allowed path is a public NGINX route. It does not compare
+policy paths with `nginx/includes/api-routes.conf`. It does not evaluate
+`when` conditions, negative operation fields, third-party mesh configuration
+or live cluster state. It does not show that the pinned production images
+work under these policies; see
+[the production reference](../../kubernetes/production/README.md#pinned-image-incompatibilities).
+A pass is fixture and static evidence, not runtime evidence. The live
+boundary proof remains `scripts/smoketest/verify-edge-contract.sh` on local
+Tilt.
+
+`tests/security-guardrails/test-mesh-authorization.py` mutates temporary
+copies of the complete local inputs. Each case first proves that the
+unmodified copy passes, then requires the intended diagnostic. It also renders
+the production reference with the pinned `kubectl` and proves that the
+unmodified render passes. It then mutates temporary rendered copies with both
+issue reproductions, added broad grants, a broadened Envoy metrics exception,
+and missing workloads or policies. Finally it mutates a copy of the production
+overlay sources with an added resource, patches and a dropped frontend deletion
+patch. The local source check must still pass and the production render must
+fail. It also runs the `authorization-policy-*` fail fixtures. The gate's
+`--self-test` runs it.
 
 ---
 

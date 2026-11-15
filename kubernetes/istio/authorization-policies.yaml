@@ -171,6 +171,9 @@ spec:
             ports: ["8086"]
             paths: ["/permission-service/actuator/prometheus"]
 ---
+# Envoy stats: the only selectorless grant besides default-deny-all. The static
+# guard (scripts/guardrails/verify-mesh-authorization.py) accepts it only in
+# exactly this form: the Prometheus principal on sole port 15090.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:

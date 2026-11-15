@@ -18,23 +18,45 @@ a PVC, because auth data must not be evicted.
 The cache was `@Cacheable` on `ExchangeRateService.getExchangeRates`, keyed by
 `currency:startDate:endDate`. Each distinct range stored its own dense,
 forward-filled copy of the overlapping rates, serialized with Jackson default
-typing. The caller chose the keys, and an all-time THB entry measured 5.24 MB.
-During the 2026-11 hardening measurement, one user with the default
-`currencies:read` permission filled the budget with about 100 ordinary reads.
-After that, heartbeats returned `503`, login initiation redirected to
-`/oops`, and uncached exchange-rate reads returned `500` because Spring's
-default cache error handler rethrew the rejected write.
+typing (`NON_FINAL`). Entries had a one-hour TTL. Nothing bounded the entry
+count or the total size:
+
+- The caller chose the keys, roughly (number of days)² per currency.
+- An all-time THB entry measured 5.24 MB, and a 2000-to-today entry 2.6 MB.
+  The 128 MB budget held about 25 all-time entries, against about
+  75,000–87,000 sessions with their indexes.
+
+The 2026-11-09 implementation review (F1) and an independent review (C1)
+rated this High. During the hardening Redis budget measurement, one user with
+the default `currencies:read` permission filled the budget with about 100
+ordinary reads. Large ranges were rejected first with `500`, and small ranges
+then used up the remainder. After that, until the cache TTL expired:
+
+- heartbeats returned `503`;
+- login initiation redirected to `/oops`, intermittently, as expiring keys
+  freed small amounts of memory;
+- uncached exchange-rate reads returned `500`. Neither currency-service nor
+  service-common defined a `CacheErrorHandler`, so Spring's default handler
+  rethrew the rejected cache write after the database read had succeeded.
+
+Deleting the `currency-service:*` keys as `redis-ops` restored login and
+heartbeat immediately. That was a recovery step, not a fix.
 
 The shared instance could not be configured to contain this:
 
 - An eviction policy cannot distinguish cache keys from auth keys.
   `volatile-*` policies evict any key with a TTL, and sessions have TTLs.
 - Logical DBs share one `maxmemory` and policy. ACLs limit commands and keys,
-  not bytes, and key prefixes are only naming.
+  not bytes, and key prefixes are only naming. Cluster sharding is for
+  scaling, not tenant isolation.
 - Raising `maxmemory` moves the threshold but leaves the key space unbounded.
+- Moving cache eviction from `KEYS` to `SCAN` (see
+  [ADR 011](011-hashed-session-keys-host-cookie-absolute-lifetime.md)) changed
+  iteration, not capacity.
 
-The full problem analysis lives in
-[the currency cache issue](../issues/high-currency-cache-exhausts-shared-redis.md).
+This was not a Spring cache limitation. `@Cacheable` memoizes a method by its
+arguments, and here it sat on a method whose arguments were user-chosen
+ranges.
 
 ## Decision
 
@@ -134,9 +156,10 @@ readiness group, because `redis-session` is required for authentication.
 - The cache and auth data still share one `noeviction` budget, so a cache
   defect or a future cache can cause an auth outage again.
 - `currency-service`'s `+scan` grant could still list session key names.
-- This was the issue's preferred option until review. It was rejected because
-  isolation, not only a bounded size, keeps a cache fault from becoming an
-  authentication outage.
+- This was the preferred option in the original problem analysis, which judged
+  a separate instance more than one cache justified. Review rejected it,
+  because isolation, not only a bounded size, keeps a cache fault from
+  becoming an authentication outage.
 
 ### Alternative 2: Change the eviction policy or partition the shared instance
 **Cons:**
@@ -145,7 +168,8 @@ readiness group, because `redis-session` is required for authentication.
 
 ### Alternative 3: In-process cache (Caffeine)
 **Pros:**
-- No Redis dependency for the cache.
+- Removes currency-service's only Redis dependency. ShedLock does not need
+  Redis; it uses its JDBC provider and the PostgreSQL `shedlock` table.
 
 **Cons:**
 - With more than one replica, an import evicts only the local cache, and other
@@ -157,8 +181,10 @@ readiness group, because `redis-session` is required for authentication.
 - Removes a dependency and the stale-write race.
 
 **Cons:**
-- No measurement of the uncached query was recorded. The cache was kept, and
-  the bounded key and fail-open behavior make the cost of keeping it
+- No measurement of the uncached query was recorded. A currency has roughly
+  6k–20k rows, read by an indexed range scan, and the miss cost may be mostly
+  forward-fill and serialization rather than the database. The cache was
+  kept, and the bounded key and fail-open behavior make the cost of keeping it
   predictable.
 
 ### Alternative 5: `CacheErrorHandler` instead of a decorator
@@ -175,9 +201,10 @@ readiness group, because `redis-session` is required for authentication.
 - The number of cache keys is at most the number of `currency_series` rows. The
   recomputed worst case is about 6.6 MiB against the 64 MB budget; see
   [Redis Memory Budgets](../architecture/security-architecture.md#redis-memory-budgets).
-- With `redis-cache` scaled to 0, exchange-rate reads still returned `200`.
-  They took about 2.1 to 2.4 seconds, bounded by the command timeout, and
-  currency-service stayed Ready. Login and heartbeat were unaffected.
+- A cache outage makes exchange-rate reads slower, not failed, and does not
+  affect login or heartbeat; see [Verification](#verification).
+- `currency-service`'s `+scan` grant no longer sees session key names, because
+  those keys are on another instance.
 - `verify-credential-isolation.sh` asserts each instance's exact `maxmemory`,
   eviction policy, `appendonly` and `save` values. It also asserts that
   foreign application users do not exist on either instance.
@@ -186,8 +213,8 @@ readiness group, because `redis-session` is required for authentication.
 - There is more infrastructure to keep aligned: a second TLS leaf, bootstrap
   Secret, ACL, NetworkPolicy, Tilt resource, image-pinning entry and verifier
   coverage, plus two more `.env` passwords.
-- Every request reads and deserializes the currency's whole series, about
-  197 KB for THB, even for a one-day range.
+- Every request reads and deserializes the currency's whole series, a
+  167,590-byte value for THB, even for a one-day range.
 - The serializer is bound to `ExchangeRateSeries`, so the cache manager can
   hold only that type. A second cache with a different value type needs its
   own configuration.
@@ -207,6 +234,35 @@ readiness group, because `redis-session` is required for authentication.
   Kubernetes deployment sets the host, and the local `bootRun` workflow sets
   port `6380`.
 
+## Verification
+
+Verified live on the local Tilt/Kind stack on 2026-11-14, after the cutover,
+with `redis-cache` restarted empty (`maxmemory 64mb`, `allkeys-lru`):
+
+- Only THB was enabled locally. Its full range, a 2001 sub-range, a range
+  ending in 2099 and a future-only range all returned `200`. Together they
+  left exactly one key, `currency-service:exchangeRateSeries::THB`, with a
+  one-hour TTL. `redis-session` held no `currency-service:*` key.
+- The THB entry covers 1981-01-02 to 2026-11-06 (16,745 days). It holds a
+  167,590-byte value, and `MEMORY USAGE` reports 196,696 bytes. The previous
+  all-time THB range entry was 5.24 MB.
+- Baseline `used_memory` was 1,091,840 bytes and final `used_memory`
+  1,462,648 bytes, with `evicted_keys` at 0 throughout.
+- With `redis-cache` scaled to 0:
+  - exchange-rate reads returned `200` in about 2.1 to 2.4 seconds, bounded by
+    the command timeout;
+  - currency-service stayed Ready with no restarts;
+  - `FailOpenCache` logged each `get` and deferred `put` failure;
+  - login initiation (`302`), heartbeat (`200`) and `/auth/v1/user` (`200`)
+    worked.
+- The focused verifiers passed: credential isolation 84/84, network policies
+  77/77, transport encryption 22/22 and runtime hardening 191/191. The
+  pinned-PyYAML smoketest also passed.
+
+The 2026-11-15 worst-case recomputation, sized for the longest possible series
+rather than the largest cached entry, is owned by
+[Redis Memory Budgets](../architecture/security-architecture.md#redis-memory-budgets).
+
 ## Changes During Implementation
 
 The plan's design changed in two places during implementation, and this ADR
@@ -221,7 +277,6 @@ records the implemented behavior.
   traces to `DEBUG`, so an outage does not log one per request.
 
 ## References
-- [Currency cache can exhaust the shared Redis budget](../issues/high-currency-cache-exhausts-shared-redis.md), which records the problem, the resolution and the live measurements
 - [Redis Memory Budgets](../architecture/security-architecture.md#redis-memory-budgets)
 - [Port Reference: Local Infrastructure Forwards](../architecture/port-reference.md#local-infrastructure-forwards)
 - [Local Environment: Redis Local Access](../development/local-environment.md#redis-local-access)
@@ -229,6 +284,8 @@ records the implemented behavior.
 - [service-common Redis Distributed Caching pattern](https://github.com/budgetanalyzer/service-common/blob/main/docs/advanced-patterns.md#redis-distributed-caching)
 - [ADR 015: Reset Local State Instead of Migrating](015-reset-local-state-instead-of-migrating.md)
 - [ADR 017: Cap Exchange-Rate End Dates at Tomorrow](017-exchange-rate-end-date-cap.md), decided in the same change
-- Source: the Redis session/cache split plan and its 2026-11-15 review
-  remediation plan. Both plans were deleted after this ADR was written; see
-  Git history.
+- Source: the 2026-11-09 implementation review (F1) and an independent
+  implementation review (C1), tracked as the issue "Currency cache can
+  exhaust the shared Redis budget", and the Redis session/cache split plan and
+  its 2026-11-15 review remediation plan. The issue and both plans were deleted
+  after this ADR was written; see Git history.

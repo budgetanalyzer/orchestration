@@ -3,8 +3,8 @@
 - **Severity:** Medium (not reproduced)
 - **Owner:** currency-service
 - **Status:** Resolved and verified live on 2026-11-14 during the Redis
-  session/cache split. Found while designing the
-  [currency cache fix](high-currency-cache-exhausts-shared-redis.md); not
+  session/cache split. Found while designing the currency cache fix in
+  [ADR 016](../decisions/016-separate-session-and-cache-redis.md); not
   covered by either security review.
 
 ## Problem

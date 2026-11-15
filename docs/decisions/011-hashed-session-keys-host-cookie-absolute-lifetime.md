@@ -116,8 +116,8 @@ owns the derivation, golden vector and cookie attributes.
 - `SCAN` clearing is not a point-in-time delete. A stale write racing an
   import stays cached until the one-hour TTL, as before.
 - Authenticated cache growth can still exhaust the shared Redis that sessions
-  depend on. See
-  [`high-currency-cache-exhausts-shared-redis`](../issues/high-currency-cache-exhausts-shared-redis.md).
+  depend on. Resolved by
+  [ADR 016](016-separate-session-and-cache-redis.md).
 - The cutover invalidated existing sessions and cookies. Users signed in again,
   and local Redis was flushed rather than migrated.
 - `__Host-` is a browser storage rule. It does not isolate ports on one host

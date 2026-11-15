@@ -13,6 +13,8 @@ IMAGE_PINNING_SCRIPT="${REPO_DIR}/scripts/guardrails/check-image-pinning.sh"
 SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.sh"
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
 INGRESS_RATE_LIMIT_CONFIG_VERIFIER="${REPO_DIR}/scripts/guardrails/verify-ingress-rate-limit-config.sh"
+MESH_AUTHORIZATION_VERIFIER="${REPO_DIR}/scripts/guardrails/verify-mesh-authorization.py"
+MESH_AUTHORIZATION_TESTS="${REPO_DIR}/tests/security-guardrails/test-mesh-authorization.py"
 KUSTOMIZE_RENDER_DIR=""
 REDIS_SESSION_SELF_TEST_DIR=""
 
@@ -92,7 +94,7 @@ OBSERVABILITY_INGRESS_POLICY_PATHS=(
 
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
 EGRESS_GATEWAY_VALUES_FILE="${REPO_DIR}/kubernetes/istio/egress-gateway-values.yaml"
-ISTIO_AUTHORIZATION_POLICIES_FILE="${REPO_DIR}/kubernetes/istio/authorization-policies.yaml"
+APPLICATION_WORKLOADS_DIR="${REPO_DIR}/kubernetes/services"
 ISTIO_TRACING_TELEMETRY_FILE="${REPO_DIR}/kubernetes/istio/tracing-telemetry.yaml"
 JAEGER_MANIFEST_DIR="${REPO_DIR}/kubernetes/monitoring/jaeger"
 JAEGER_SERVICES_FILE="${REPO_DIR}/kubernetes/monitoring/jaeger/services.yaml"
@@ -106,6 +108,8 @@ NGINX_SERVER_CONFIG_FILES=(
 )
 INGRESS_PATH_HARDENING_FILE="${REPO_DIR}/kubernetes/istio/ingress-path-hardening.yaml"
 PRODUCTION_INGRESS_POLICIES_OVERLAY="${REPO_DIR}/kubernetes/production/istio-ingress-policies"
+PRODUCTION_AUTHORIZATION_OVERLAY="${REPO_DIR}/kubernetes/production/istio"
+PRODUCTION_APPS_OVERLAY="${REPO_DIR}/kubernetes/production/apps"
 INGRESS_EXACT_ORIGIN_FILE="${REPO_DIR}/kubernetes/istio/ingress-exact-origin.yaml"
 BROWSER_ROUTE_FILES=(
     "${REPO_DIR}/kubernetes/gateway/app-httproute.yaml"
@@ -142,8 +146,12 @@ Runs the static security guardrail suite:
 - ingress rate-limit policy and production gateway diagnostics render checks
 - Tilt secret/config boundary inventory validation
 - pattern scans for image pinning, namespace PSA labels, and pipe-to-shell guidance
-- Istio AuthorizationPolicy structure: explicit default-deny-all and exact
-  NGINX path allowlists on backend policies
+- Istio AuthorizationPolicy caller contract over every local policy file and
+  kubernetes/services workload, and separately over the rendered production
+  workload and ingress policies and app overlay workloads (only the standalone
+  frontend may be absent): one empty default-deny-all, the exact Envoy metrics
+  exception, no other selectorless ALLOW, explicit approved principals on every
+  rule, and per-caller path limits (structural, not a mesh simulator)
 - NGINX shared route includes: one copy of the API and /api-docs routes and
   the decoded ";" rejection
 - ingress path hardening: DENY of a literal ";" and %3b at any percent-encoding
@@ -157,7 +165,9 @@ Runs the static security guardrail suite:
   PING-only redis-health, `-e --user redis-health` probes and a matching
   Secret contract, locally and in the production render
 
-Use --self-test to assert that the intentional failing fixtures are rejected.
+Use --self-test to assert that the intentional failing fixtures are rejected
+and to run the local and production-render mesh AuthorizationPolicy regression
+cases, which render overlays with the pinned kubectl.
 
 Python checks use .cache/phase7-static-tools/pyyaml-venv/bin/python unless
 INGRESS_RATE_LIMIT_PYTHON selects another interpreter. There is no python3
@@ -1255,116 +1265,18 @@ scan_istio_ext_authz_denial_contract() {
     printf 'Istio ext-authz denial contract scan passed (%s)\n' "${subject}"
 }
 
-# Structural check for the mesh public/internal boundary. Each file is read as
-# a complete policy set: it must contain default-deny-all in default with an
-# empty spec, and every backend policy rule that admits the nginx-gateway
-# identity must restrict paths without a service- or version-wide wildcard.
+# Adapter for the structural mesh caller-contract guard in
+# verify-mesh-authorization.py. Arguments after the subject select its inputs:
+# --source-root for the complete local policy set and kubernetes/services
+# workloads, or explicit --policies/--workloads files such as the rendered
+# production reference with --environment production. The contract and its
+# limits are documented in
+# docs/architecture/security-architecture.md#static-contract-guard.
 scan_istio_authorization_policy_contract() {
     local subject="$1"
     shift
 
-    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'AUTHZ_PY'
-import sys
-from pathlib import Path
-
-import yaml
-
-NGINX_PRINCIPAL = "cluster.local/ns/default/sa/nginx-gateway"
-BACKEND_APPS = ("transaction-service", "currency-service", "permission-service")
-# Fewer than three fixed segments before a wildcard covers a whole service or
-# API version, for example /transaction-service/* or /transaction-service/v1/*.
-MIN_FIXED_SEGMENTS = 3
-
-repo_dir = Path(sys.argv[1])
-failures = []
-
-
-def label(path):
-    try:
-        return str(Path(path).resolve().relative_to(repo_dir))
-    except ValueError:
-        return str(path)
-
-
-def wildcard_problem(path):
-    if not isinstance(path, str) or not path.startswith("/"):
-        return "is not an absolute path"
-    if "{**}" in path:
-        return "uses a multi-segment {**} template"
-    if "*" in path.replace("{*}", "") and not path.endswith("*"):
-        return "uses a non-suffix wildcard"
-    if path.endswith("*") and not path.endswith("{*}"):
-        fixed = [segment for segment in path[:-1].split("/") if segment]
-        if len(fixed) < MIN_FIXED_SEGMENTS:
-            return "is a service- or version-wide wildcard"
-    return None
-
-
-for policy_file in sys.argv[2:]:
-    name = label(policy_file)
-    try:
-        documents = [
-            document
-            for document in yaml.safe_load_all(Path(policy_file).read_text(encoding="utf-8"))
-            if isinstance(document, dict)
-        ]
-    except (OSError, yaml.YAMLError) as error:
-        failures.append(f"{name}: cannot parse: {error}")
-        continue
-
-    policies = [document for document in documents if document.get("kind") == "AuthorizationPolicy"]
-
-    deny_all = [
-        policy
-        for policy in policies
-        if (policy.get("metadata") or {}).get("name") == "default-deny-all"
-        and (policy.get("metadata") or {}).get("namespace") == "default"
-    ]
-    if len(deny_all) != 1:
-        failures.append(f"{name}: expected exactly one default/default-deny-all, found {len(deny_all)}")
-    elif deny_all[0].get("spec") not in ({}, None):
-        failures.append(f"{name}: default-deny-all must have an empty spec, found {deny_all[0].get('spec')!r}")
-
-    nginx_rules_seen = {app: 0 for app in BACKEND_APPS}
-    for policy in policies:
-        spec = policy.get("spec") or {}
-        app = ((spec.get("selector") or {}).get("matchLabels") or {}).get("app")
-        if app not in BACKEND_APPS:
-            continue
-        policy_name = (policy.get("metadata") or {}).get("name", "<unnamed>")
-        for index, rule in enumerate(spec.get("rules") or []):
-            principals = [
-                principal
-                for source in (rule.get("from") or [])
-                for principal in ((source.get("source") or {}).get("principals") or [])
-            ]
-            if NGINX_PRINCIPAL not in principals:
-                continue
-            nginx_rules_seen[app] += 1
-            where = f"{name}: {policy_name} rule {index}"
-            operations = rule.get("to") or []
-            if not operations:
-                failures.append(f"{where}: nginx-gateway rule has no to restriction")
-                continue
-            for op_index, entry in enumerate(operations):
-                paths = (entry.get("operation") or {}).get("paths") or []
-                if not paths:
-                    failures.append(f"{where}: to[{op_index}] does not restrict paths")
-                for path in paths:
-                    problem = wildcard_problem(path)
-                    if problem:
-                        failures.append(f"{where}: path {path!r} {problem}")
-
-    for app, count in nginx_rules_seen.items():
-        if count == 0:
-            failures.append(f"{name}: no {app} policy rule admits nginx-gateway, so the backend contract is not checkable")
-
-if failures:
-    for failure in failures:
-        print(f"  - {failure}", file=sys.stderr)
-    sys.exit(1)
-AUTHZ_PY
-    then
+    if ! "${GUARDRAIL_PYTHON}" -I "${MESH_AUTHORIZATION_VERIFIER}" --label-root "${REPO_DIR}" "$@"; then
         printf '%s Istio AuthorizationPolicy contract scan failed\n' "${subject}" >&2
         return 1
     fi
@@ -2388,6 +2300,16 @@ collect_network_policy_manifest_files() {
         -exec grep -lE "kind:[[:space:]]*['\"]?NetworkPolicy" {} + | sort
 }
 
+render_kustomize_overlay() {
+    local overlay="$1"
+    local output="$2"
+
+    if ! "${STATIC_TOOLS_BIN}/kubectl" kustomize "${overlay}" --load-restrictor=LoadRestrictionsNone > "${output}"; then
+        printf 'ERROR: failed to render Kustomize overlay: %s\n' "${overlay#"${REPO_DIR}"/}" >&2
+        return 1
+    fi
+}
+
 run_repo_pattern_scans() {
     "${IMAGE_PINNING_SCRIPT}"
     scan_namespace_psa_labels_in_files "repo" "${ACTIVE_NAMESPACE_MANIFESTS[@]}"
@@ -2401,7 +2323,7 @@ run_repo_pattern_scans() {
     scan_jaeger_manifest_contract
     scan_istio_ingress_observability_allowances
     scan_istio_ext_authz_denial_contract "repo" "${ISTIOD_VALUES_FILE}"
-    scan_istio_authorization_policy_contract "repo" "${ISTIO_AUTHORIZATION_POLICIES_FILE}"
+    scan_istio_authorization_policy_contract "repo" --source-root "${REPO_DIR}"
     scan_istio_tracing_contract
     scan_nginx_backend_header_contract "repo" "${NGINX_BACKEND_HEADERS_INCLUDE}" "${NGINX_API_ROUTES_INCLUDE}"
     scan_nginx_shared_route_contract "repo" "${NGINX_API_ROUTES_INCLUDE}" "${NGINX_API_DOCS_ROUTES_INCLUDE}" \
@@ -2417,18 +2339,27 @@ run_repo_pattern_scans() {
         "${network_policy_files[@]}"
 
     KUSTOMIZE_RENDER_DIR="$(mktemp -d)"
-    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INGRESS_POLICIES_OVERLAY}" \
-        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
-    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_GATEWAY_ROUTES_OVERLAY}" \
-        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml"
+    render_kustomize_overlay "${PRODUCTION_INGRESS_POLICIES_OVERLAY}" "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+    render_kustomize_overlay "${PRODUCTION_GATEWAY_ROUTES_OVERLAY}" "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml"
     scan_istio_ingress_path_hardening_contract "production render" "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
     scan_istio_ingress_exact_origin_contract "production render" "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml" -- \
         "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
 
-    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${INFRASTRUCTURE_KUSTOMIZATION}" \
-        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/infrastructure.yaml"
-    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INFRASTRUCTURE_OVERLAY}" \
-        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/production-infrastructure.yaml"
+    # The production reference is checked only as rendered, separately from the
+    # local source set: shared policies after the frontend deletion patch, the
+    # ingress policies, and the app overlay workloads.
+    render_kustomize_overlay "${PRODUCTION_AUTHORIZATION_OVERLAY}" \
+        "${KUSTOMIZE_RENDER_DIR}/production-authorization-policies.yaml"
+    render_kustomize_overlay "${PRODUCTION_APPS_OVERLAY}" "${KUSTOMIZE_RENDER_DIR}/production-apps.yaml"
+    scan_istio_authorization_policy_contract "production render" --environment production \
+        --policies "${KUSTOMIZE_RENDER_DIR}/production-authorization-policies.yaml" \
+        "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml" \
+        --workloads "${KUSTOMIZE_RENDER_DIR}/production-apps.yaml" \
+        --expected-workloads "${APPLICATION_WORKLOADS_DIR}" --istiod-values "${ISTIOD_VALUES_FILE}"
+
+    render_kustomize_overlay "${INFRASTRUCTURE_KUSTOMIZATION}" "${KUSTOMIZE_RENDER_DIR}/infrastructure.yaml"
+    render_kustomize_overlay "${PRODUCTION_INFRASTRUCTURE_OVERLAY}" \
+        "${KUSTOMIZE_RENDER_DIR}/production-infrastructure.yaml"
     scan_redis_session_acl_contract "repo" "${TILTFILE}" "${KUSTOMIZE_RENDER_DIR}/infrastructure.yaml"
     scan_redis_session_acl_contract "production render" - "${KUSTOMIZE_RENDER_DIR}/production-infrastructure.yaml"
     rm -rf "${KUSTOMIZE_RENDER_DIR}"
@@ -2470,11 +2401,20 @@ run_self_test() {
     fi
 
     for authz_fixture in "${fixture_dir}"/authorization-policy-*.yaml; do
-        if scan_istio_authorization_policy_contract "self-test" "${authz_fixture}"; then
+        if scan_istio_authorization_policy_contract "self-test" --policies "${authz_fixture}" \
+            --workloads "${APPLICATION_WORKLOADS_DIR}"; then
             echo "self-test ${authz_fixture#"${REPO_DIR}"/} unexpectedly passed" >&2
             self_test_failures=$((self_test_failures + 1))
         fi
     done
+
+    log_step "Mesh AuthorizationPolicy regression cases"
+    # The production cases render overlays with the gate's verified kubectl.
+    ensure_static_tool kubectl
+    if ! PHASE7_STATIC_TOOLS_DIR="${STATIC_TOOLS_DIR}" "${GUARDRAIL_PYTHON}" -I "${MESH_AUTHORIZATION_TESTS}"; then
+        echo "self-test mesh AuthorizationPolicy regression cases failed" >&2
+        self_test_failures=$((self_test_failures + 1))
+    fi
 
     for nginx_fixture in "${fixture_dir}"/nginx-backend-headers-include-*.conf; do
         if scan_nginx_backend_header_contract "self-test" "${nginx_fixture}" "${NGINX_API_ROUTES_INCLUDE}"; then

@@ -1,4 +1,7 @@
 # Intentional failure: default-deny-all is missing.
+# Complete copy of kubernetes/istio/authorization-policies.yaml with one defect,
+# checked against the discovered kubernetes/services workloads.
+# expect: expected exactly one default/default-deny-all, found 0
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
@@ -10,12 +13,20 @@ spec:
       app: transaction-service
   action: ALLOW
   rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
-      to:
-        - operation:
-            paths: ["/transaction-service/v1/transactions", "/transaction-service/v1/transactions/*"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/nginx-gateway
+    to:
+    - operation:
+        paths:
+        - /transaction-service/v1/transactions
+        - /transaction-service/v1/transactions/*
+        - /transaction-service/v1/statement-formats
+        - /transaction-service/v1/statement-formats/*
+        - /transaction-service/v1/views
+        - /transaction-service/v1/views/*
+        - /transaction-service/v3/api-docs
 ---
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
@@ -28,12 +39,18 @@ spec:
       app: currency-service
   action: ALLOW
   rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
-      to:
-        - operation:
-            paths: ["/currency-service/v1/currencies", "/currency-service/v1/currencies/*"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/nginx-gateway
+    to:
+    - operation:
+        paths:
+        - /currency-service/v1/currencies
+        - /currency-service/v1/currencies/*
+        - /currency-service/v1/exchange-rates
+        - /currency-service/v1/exchange-rates/*
+        - /currency-service/v3/api-docs
 ---
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
@@ -46,9 +63,173 @@ spec:
       app: permission-service
   action: ALLOW
   rules:
-    - from:
-        - source:
-            principals: ["cluster.local/ns/default/sa/nginx-gateway"]
-      to:
-        - operation:
-            paths: ["/permission-service/v1/users", "/permission-service/v1/users/*"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/nginx-gateway
+    to:
+    - operation:
+        paths:
+        - /permission-service/v1/users
+        - /permission-service/v1/users/*
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/session-gateway
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /permission-service/internal/v1/users/sync
+    - operation:
+        methods:
+        - GET
+        paths:
+        - /permission-service/internal/v1/users/{*}/authorization
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: budget-analyzer-web-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: budget-analyzer-web
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/nginx-gateway
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: spring-boot-metrics-prometheus-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/framework: spring-boot
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus
+    to:
+    - operation:
+        methods:
+        - GET
+        ports:
+        - '8081'
+        paths:
+        - /actuator/prometheus
+    - operation:
+        methods:
+        - GET
+        ports:
+        - '8082'
+        paths:
+        - /transaction-service/actuator/prometheus
+    - operation:
+        methods:
+        - GET
+        ports:
+        - '8084'
+        paths:
+        - /currency-service/actuator/prometheus
+    - operation:
+        methods:
+        - GET
+        ports:
+        - '8086'
+        paths:
+        - /permission-service/actuator/prometheus
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: envoy-metrics-prometheus-policy
+  namespace: default
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/monitoring/sa/prometheus-stack-kube-prom-prometheus
+    to:
+    - operation:
+        ports:
+        - '15090'
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: nginx-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ext-authz-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ext-authz
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: session-gateway-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: session-gateway
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/istio-ingress/sa/istio-ingress-gateway-istio
+    to:
+    - operation:
+        paths:
+        - /oauth2/*
+        - /login/oauth2/*
+        - /logout
+        - /logout/*
+        - /auth/*
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/default/sa/permission-service
+    to:
+    - operation:
+        ports:
+        - '8081'
+        methods:
+        - DELETE
+        paths:
+        - /internal/v1/sessions/users/{*}

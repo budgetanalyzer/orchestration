@@ -201,6 +201,13 @@ Also run the static security and image-evidence paths when their inputs change:
 ./scripts/security/render-image-scan-inputs.sh --help
 ```
 
+The static gate renders `istio/`, `istio-ingress-policies/`, and `apps/` and
+checks them against the structural mesh caller contract, separately from the
+local sources. Only the standalone frontend workload and policy may be absent.
+The contract is described in
+[Static Contract Guard](../../docs/architecture/security-architecture.md#static-contract-guard).
+A pass does not show that the pinned images run under these policies.
+
 Exact verifier and evidence contracts live in
 [scripts/README.md](../../scripts/README.md) and
 [docs/dependency-automation.md](../../docs/dependency-automation.md).

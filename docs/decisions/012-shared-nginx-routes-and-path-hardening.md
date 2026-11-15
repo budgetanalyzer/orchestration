@@ -118,9 +118,10 @@ owns the procedure.
   location precedence, so shared blocks do not guarantee identical behavior.
 - A successful finite probe set supports the current configuration. It does not
   prove that future parser or route changes are safe.
-- The static mesh guard and path-filter anchor have known gaps. See
-  [`medium-static-mesh-guard-misses-additive-allow`](../issues/medium-static-mesh-guard-misses-additive-allow.md)
-  and [`info-path-hardening-anchor-not-statically-checked`](../issues/info-path-hardening-anchor-not-statically-checked.md).
+- The path-filter anchor has a known gap. See
+  [`info-path-hardening-anchor-not-statically-checked`](../issues/info-path-hardening-anchor-not-statically-checked.md).
+  The static mesh guard's additive-ALLOW gap was closed later; see
+  [ADR 019](019-structural-mesh-authorization-guard.md).
 
 **Neutral:**
 - Separate internal listeners were considered and deferred. See

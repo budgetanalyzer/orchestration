@@ -3,6 +3,7 @@
 - **Severity:** Medium
 - **Owner:** orchestration (`kubernetes/infrastructure/redis-session/`)
 - **Status:** Open
+- **Implementation plan:** [Restore Redis Session Persistence Across AOF Replay](../plans/redis-aof-replay-session-persistence-plan.md)
 - **Source:** live `ACL LOG` inspection, 2026-11-12 (security documentation reorganization follow-up)
 
 ## Problem

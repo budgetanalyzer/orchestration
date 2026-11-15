@@ -11,7 +11,7 @@ CA_CERT="$CERTS_DIR/infra-ca.pem"
 CA_KEY="$CERTS_DIR/infra-ca.key"
 CA_SERIAL="$TEMP_DIR/infra-ca.srl"
 
-SERVICES=(redis postgresql rabbitmq)
+SERVICES=(redis-session redis-cache postgresql rabbitmq)
 
 info() {
     echo "[INFO] $1"
@@ -213,7 +213,8 @@ for service in "${SERVICES[@]}"; do
     generate_service_cert "$service"
 done
 
-recreate_tls_secret "infrastructure" "infra-tls-redis" "$(service_cert_path redis)" "$(service_key_path redis)"
+recreate_tls_secret "infrastructure" "infra-tls-redis-session" "$(service_cert_path redis-session)" "$(service_key_path redis-session)"
+recreate_tls_secret "infrastructure" "infra-tls-redis-cache" "$(service_cert_path redis-cache)" "$(service_key_path redis-cache)"
 recreate_tls_secret "infrastructure" "infra-tls-postgresql" "$(service_cert_path postgresql)" "$(service_key_path postgresql)"
 recreate_tls_secret "infrastructure" "infra-tls-rabbitmq" "$(service_cert_path rabbitmq)" "$(service_key_path rabbitmq)"
 
@@ -225,7 +226,8 @@ echo "=== Setup Complete ==="
 echo
 echo "Generated files:"
 echo "  $CA_CERT"
-echo "  $(service_cert_path redis)"
+echo "  $(service_cert_path redis-session)"
+echo "  $(service_cert_path redis-cache)"
 echo "  $(service_cert_path postgresql)"
 echo "  $(service_cert_path rabbitmq)"
 echo

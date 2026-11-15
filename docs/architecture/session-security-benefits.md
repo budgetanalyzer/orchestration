@@ -3,7 +3,7 @@
 ### 1. **XSS Attack Protection**
 **The Critical Advantage:** Tokens never reach the browser's JavaScript environment at all.
 
-- **Session Pattern:** Session Gateway stores Auth0 tokens server-side in Redis session hashes. Browser only receives HTTP-only session cookies that JavaScript cannot access. ext_authz reads the same session hash for per-request validation.
+- **Session Pattern:** Session Gateway stores Auth0 tokens server-side in `redis-session` session hashes. Browser only receives HTTP-only session cookies that JavaScript cannot access. ext_authz reads the same session hash for per-request validation.
 - **Direct Token:** Browser must store tokens in localStorage or sessionStorage, making them vulnerable to XSS attacks. Any malicious script can steal the token.
 
 **Impact:** Even if an attacker injects malicious JavaScript, they cannot steal authentication credentials.
@@ -12,8 +12,8 @@
 
 The session-based edge authorization architecture creates 3 independent security layers:
 
-1. **Session Gateway** - Validates session cookies, manages token lifecycle, writes session data to Redis
-2. **ext_authz (Envoy)** - Per-request session validation from Redis, header injection
+1. **Session Gateway** - Validates session cookies, manages token lifecycle, writes session data to `redis-session`
+2. **ext_authz (Envoy)** - Per-request session validation from `redis-session`, header injection
 3. **Backend Services** - Data-level authorization
 
 **Why this matters:** If one layer is compromised, others still protect the system.
@@ -38,7 +38,7 @@ Tokens in Authorization headers don't have these browser-level protections.
 
 **Session Pattern:**
 ```
-Browser → Session Cookie → Envoy → ext_authz (Redis lookup) → NGINX → Services
+Browser → Session Cookie → Envoy → ext_authz (redis-session lookup) → NGINX → Services
 ```
 Tokens exist only server-side in Redis. Nothing sensitive on the wire except an opaque session ID.
 
@@ -75,8 +75,8 @@ When a user account is identified as compromised or malicious, the response invo
 **Immediate Actions:**
 
 1. **Session Deletion**
-   - Delete the user's Redis session hash (`session:{sha256(token)}`)
-   - ext_authz immediately rejects subsequent requests (session not found in Redis)
+   - Delete the user's `redis-session` session hash (`session:{sha256(token)}`)
+   - ext_authz immediately rejects subsequent requests (session not found in `redis-session`)
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
 
@@ -85,7 +85,7 @@ When a user account is identified as compromised or malicious, the response invo
 The ext_authz architecture provides **instant revocation by design**:
 
 **How it works:**
-- Delete user's session hash from Redis (`session:{sha256(token)}`)
+- Delete user's session hash from `redis-session` (`session:{sha256(token)}`)
 - ext_authz lookup fails on next request → 401 returned by Envoy
 - Session cookie becomes invalid (no matching session)
 - User redirected to login

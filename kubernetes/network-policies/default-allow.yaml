@@ -428,7 +428,7 @@ spec:
               kubernetes.io/metadata.name: infrastructure
           podSelector:
             matchLabels:
-              app: redis
+              app: redis-session
       ports:
         - protocol: TCP
           port: 6379
@@ -462,7 +462,7 @@ spec:
               kubernetes.io/metadata.name: infrastructure
           podSelector:
             matchLabels:
-              app: redis
+              app: redis-session
       ports:
         - protocol: TCP
           port: 6379
@@ -528,7 +528,7 @@ spec:
               kubernetes.io/metadata.name: infrastructure
           podSelector:
             matchLabels:
-              app: redis
+              app: redis-cache
       ports:
         - protocol: TCP
           port: 6379

@@ -144,7 +144,7 @@ Technology pattern:
 Service topology summary:
 - Frontend: React web application for browser clients
 - Backend workloads: Spring Boot microservices behind NGINX, plus Session Gateway and `ext-authz` on the auth and authorization path
-- Infrastructure: PostgreSQL, Redis, and RabbitMQ in the `infrastructure` namespace; Redis `/data` is PVC-backed through the `redis-data` claim template
+- Infrastructure: PostgreSQL, RabbitMQ, and two Redis instances in the `infrastructure` namespace: `redis-session` holds only sessions, session indexes, and OAuth state for Session Gateway and `ext-authz`; `redis-cache` holds only the shared currency-service cache. Roles and persistence live in `docs/architecture/system-overview.md` and `docs/development/local-environment.md`
 - Monitoring: Prometheus, Grafana, kube-state-metrics, the repo-managed Jaeger v2 backend, and standalone Kiali in `monitoring`; Jaeger and Kiali stay `ClusterIP`-only
 - Ingress and egress: Istio ingress handles browser entry, `ext_authz`, and per-client auth/API rate limiting; Istio egress stays `ClusterIP` with `REGISTRY_ONLY`
 - Exact service ports and exposure rules live in `docs/architecture/port-reference.md`
@@ -225,8 +225,8 @@ Operational guardrails:
 - Follow the resource-based routing pattern for new API endpoints
 - Treat any new public `/api/...` route as incomplete until the shared `nginx/includes/api-routes.conf`, which both `nginx/nginx.k8s.conf` and `nginx/nginx.production.k8s.conf` include, claims it and verification proves it does not fall through to the SPA; read `nginx/README.md#adding-a-new-resource-route` first
 - Keep Spring Boot workloads on the startup/readiness/liveness probe pattern used by the checked-in manifests
-- Keep PostgreSQL, RabbitMQ, and Redis on their repo-owned stateful deployment patterns
-- Redis `/data` is PVC-backed. Do not treat pod replacement or `tilt down` as a Redis reset. Use `./scripts/ops/flush-redis.sh` for a logical reset, or recreate the cluster/runtime when a full clean state is required
+- Keep PostgreSQL, RabbitMQ, and `redis-session` on their repo-owned stateful deployment patterns. Keep `redis-cache` disposable: no PVC, AOF, or RDB snapshots. Do not put session or other durable data on `redis-cache`, and do not put cache data on `redis-session`
+- `redis-session` `/data` is PVC-backed. Do not treat pod replacement or `tilt down` as a session reset. Use `./scripts/ops/flush-redis.sh session` or `./scripts/ops/flush-redis.sh cache` for a logical reset of one instance, or recreate the cluster/runtime when a full clean state is required
 
 Observability rules:
 - Grafana, Prometheus, Jaeger, and Kiali are internal-only in local Tilt and the production reference

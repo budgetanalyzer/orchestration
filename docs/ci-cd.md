@@ -446,7 +446,8 @@ Release image publishing is tag-driven and owned by the source repositories:
   placeholder Auth0 values, mutable image refs, and `imagePullPolicy: Never`,
   uses a client-side Kiali render with deterministic namespace-scoped RBAC,
   verifies
-  the Redis StatefulSet uses a `5Gi` `redis-data` claim template, then applies
+  the `redis-session` StatefulSet uses a `5Gi` `redis-data` claim template and
+  the `redis-cache` Deployment renders without a standalone claim, then applies
   the production image Kyverno policy from
   `kubernetes/kyverno/policies/production/`
 

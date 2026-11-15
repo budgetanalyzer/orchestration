@@ -23,8 +23,9 @@ execute the archive or tagged history.
 - `istio/` removes only the local standalone-frontend policy from the shared
   workload authorization source. `istio-ingress-gateway/` retains shared pod
   security and diagnostics without selecting a production publication type.
-- `infrastructure/` reuses the shared PostgreSQL, RabbitMQ, and Redis StatefulSet
-  baseline and applies the production Redis storage request.
+- `infrastructure/` reuses the shared PostgreSQL, RabbitMQ, and `redis-session`
+  StatefulSet baseline and the disposable `redis-cache` Deployment, and applies
+  the production `redis-session` storage request.
 - `monitoring/` contains the internal-only Grafana override layered onto the
   shared monitoring values.
 - `docs-aggregator/` contains production-reference browser documentation
@@ -46,7 +47,7 @@ production environment has been exercised.
 | Workloads | `kubernetes/services/` | Digest-pinned release images and metadata; frontend image is copied into NGINX | App Kustomize render and production-reference verifier |
 | Ingress and security | Shared gateway pod hardening, authorization policies, `ext-authz`, and rate-limit filter | Kind NodePort is local-only; production publication is unspecified; standalone frontend authorization is deleted | Exact rate-limit comparison plus gateway and authorization structural checks |
 | Routing | `kubernetes/gateway/` and the canonical NGINX variants/includes | Public hostname and static frontend route variant | Route render comparison permits only the hostname change; NGINX routing checks use the canonical files |
-| Persistence | `kubernetes/infrastructure/` StatefulSets and security contexts | Redis request is `5Gi` instead of `1Gi`; storage class and capacity remain unresolved | Infrastructure render comparison permits only Redis sizing |
+| Persistence | `kubernetes/infrastructure/` StatefulSets, the claim-free `redis-cache` Deployment, and security contexts | `redis-session` request is `5Gi` instead of `1Gi`; storage class and capacity remain unresolved | Infrastructure render comparison permits only `redis-session` sizing |
 | Observability | Shared Prometheus, Jaeger, and Kiali inputs | Loopback-oriented Grafana values; no public routes | Offline render checks enforce internal-only Services and namespace-scoped Kiali RBAC |
 | Images | Shared workloads and pinned third-party inputs | Historical app release refs are immutable and reference-only | Image overlay, Kyverno, pinning, and scan-input checks |
 | Frontend delivery | Shared `nginx/nginx.production.k8s.conf` and includes | Production serves built static assets; local keeps Vite plus the atomic `/_prod-smoke/` proof | Production app render, edge checks, and the local frontend smoke path when runtime prerequisites exist |
@@ -83,8 +84,8 @@ or compatibility code. A first hosted deployment starts from empty state; see
   removed `GET .../permissions` path that the mesh now denies, ignores the
   absolute session lifetime, and accepts `GET` heartbeat and logout.
 - `permission-service` has no `POST /internal/v1/users/sync`.
-- `currency-service` clears its cache with `KEYS`, which its narrowed Redis
-  grant denies.
+- `currency-service` clears its cache with `KEYS`, which its narrowed
+  `redis-cache` grant denies.
 - `budget-analyzer-web` sends `GET` heartbeat and logout.
 - The pinned Spring images predate the readiness group membership, safe
   logging defaults and structured audit events.
@@ -185,11 +186,12 @@ It verifies:
   egress, and observability renders;
 - production NGINX and `/api-docs` wiring;
 - route parity except for the declared hostname, authorization parity except
-  for the standalone frontend, and infrastructure parity except for Redis
-  sizing;
+  for the standalone frontend, and infrastructure parity except for
+  `redis-session` sizing;
 - absence of local-only image refs and placeholder hosts;
 - internal-only observability exposure and namespace-scoped Kiali RBAC;
-- Redis StatefulSet persistence and its `5Gi` reference request; and
+- `redis-session` StatefulSet persistence and its `5Gi` reference request,
+  plus the rendered `redis-cache` Deployment without a standalone claim; and
 - the production Kyverno image policy against the rendered app overlay.
 
 Also run the static security and image-evidence paths when their inputs change:
@@ -212,7 +214,7 @@ Any future hosted environment must separately define and verify:
 - ingress publication, client-address preservation, DNS, and firewall policy;
 - storage classes, capacity, encryption at rest, backups, recovery objectives,
   and restore tests;
-- whether a Redis restore invalidates every restored session, because a
+- whether a `redis-session` restore invalidates every restored session, because a
   snapshot revives sessions that were logged out or revoked after it was taken
   and have not yet expired;
 - secret provisioning and rotation, and production identity-provider

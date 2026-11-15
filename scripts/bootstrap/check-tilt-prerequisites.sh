@@ -612,34 +612,34 @@ echo "12. Checking infrastructure TLS secrets..."
 echo "---------------------------------------------"
 
 if [ "$CLUSTER_CONNECTED" = true ]; then
-    PHASE4_MISSING=()
-    PHASE4_INFRA_SECRETS=(infra-ca infra-tls-redis infra-tls-postgresql infra-tls-rabbitmq)
+    INFRA_TLS_MISSING=()
+    INFRA_TLS_SECRETS=(infra-ca infra-tls-redis-session infra-tls-redis-cache infra-tls-postgresql infra-tls-rabbitmq)
 
     if ! kubectl get namespace infrastructure &> /dev/null; then
-        PHASE4_MISSING+=("namespace/infrastructure")
+        INFRA_TLS_MISSING+=("namespace/infrastructure")
     fi
 
     if ! kubectl get secret infra-ca -n default &> /dev/null; then
-        PHASE4_MISSING+=("secret/default/infra-ca")
+        INFRA_TLS_MISSING+=("secret/default/infra-ca")
     fi
 
     if kubectl get namespace infrastructure &> /dev/null; then
-        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
+        for secret_name in "${INFRA_TLS_SECRETS[@]}"; do
             if ! kubectl get secret "$secret_name" -n infrastructure &> /dev/null; then
-                PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+                INFRA_TLS_MISSING+=("secret/infrastructure/$secret_name")
             fi
         done
     else
-        for secret_name in "${PHASE4_INFRA_SECRETS[@]}"; do
-            PHASE4_MISSING+=("secret/infrastructure/$secret_name")
+        for secret_name in "${INFRA_TLS_SECRETS[@]}"; do
+            INFRA_TLS_MISSING+=("secret/infrastructure/$secret_name")
         done
     fi
 
-    if [ ${#PHASE4_MISSING[@]} -eq 0 ]; then
+    if [ ${#INFRA_TLS_MISSING[@]} -eq 0 ]; then
         echo -e "${GREEN}✓${NC} Infrastructure TLS secrets are present"
     else
         echo -e "${RED}✗${NC} Infrastructure TLS prerequisites are missing"
-        for missing in "${PHASE4_MISSING[@]}"; do
+        for missing in "${INFRA_TLS_MISSING[@]}"; do
             echo "  Missing: $missing"
         done
         echo "  Run ./scripts/bootstrap/setup-infra-tls.sh from the human-operated local shell, then rerun this check."

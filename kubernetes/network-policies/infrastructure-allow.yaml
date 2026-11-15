@@ -1,12 +1,12 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-redis-ingress-from-approved-default-workloads
+  name: allow-redis-session-ingress-from-approved-default-workloads
   namespace: infrastructure
 spec:
   podSelector:
     matchLabels:
-      app: redis
+      app: redis-session
   policyTypes:
     - Ingress
   ingress:
@@ -23,6 +23,23 @@ spec:
           podSelector:
             matchLabels:
               app: ext-authz
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-cache-ingress-from-currency-service
+  namespace: infrastructure
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cache
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: default

@@ -4552,7 +4552,7 @@
           {
             "name": "endDate",
             "in": "query",
-            "description": "End date for exchange rates in ISO format",
+            "description": "End date for exchange rates in ISO format. Defaults to today (UTC). Dates after tomorrow (UTC) are treated as tomorrow. A start date after the end date is rejected with 400 before this cap, even when both dates are in the future.",
             "required": false,
             "schema": {
               "type": "string",
@@ -7115,6 +7115,33 @@
             "type": "boolean"
           }
         }
+      },
+      "UserSyncRequest": {
+        "type": "object",
+        "description": "Identity provider profile data for login-time user sync",
+        "properties": {
+          "idpSub": {
+            "type": "string",
+            "description": "Identity provider subject identifier (OIDC sub claim, provider-agnostic)",
+            "example": "auth0|abc123",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "description": "User email",
+            "example": "user@example.com"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "User display name",
+            "example": "Example User"
+          }
+        },
+        "required": [
+          "displayName",
+          "email",
+          "idpSub"
+        ]
       },
       "PagedResponseUserSummaryResponse": {
         "type": "object",

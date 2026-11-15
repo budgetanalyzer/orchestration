@@ -22,7 +22,7 @@ Auth paths: Browser → Istio Ingress → Session Gateway
 
 **Key stages**:
 1. **Istio Ingress**: SSL termination, per-client auth/API throttling, and ext_authz enforcement on `/api/*` paths
-2. **ext_authz**: Session lookup in Redis, header injection (X-User-Id, X-Roles, X-Permissions)
+2. **ext_authz**: Session lookup in `redis-session`, header injection (X-User-Id, X-Roles, X-Permissions)
 3. **NGINX**: Route to appropriate backend service
 4. **Session Gateway**: Auth lifecycle plus the versioned browser JSON endpoints (`/auth/v1/session`, `/auth/v1/user`, `/oauth2/*`, `/login/oauth2/*`, `/logout`)
 
@@ -64,11 +64,11 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 
 ### ext_authz Service - Authorization Layer
 
-**Purpose**: Per-request session validation via Redis lookup
+**Purpose**: Per-request session validation via `redis-session` lookup
 
 **Responsibilities**:
-- Authenticates to Redis with the dedicated `ext-authz` ACL user
-- Validates session tokens by looking up `session:{sha256(token)}` in Redis
+- Authenticates to `redis-session` with the dedicated `ext-authz` ACL user
+- Validates session tokens by looking up `session:{sha256(token)}` in `redis-session`
 - Injects `X-User-Id`, `X-Roles`, `X-Permissions` headers on valid sessions
 - Returns 401 for invalid/expired sessions (request rejected by Istio ingress)
 
@@ -87,7 +87,7 @@ kubectl get pods -l app=ext-authz
 # View ext_authz logs
 kubectl logs deployment/ext-authz
 
-# Check ext_authz liveness and Redis-backed readiness
+# Check ext_authz liveness and redis-session-backed readiness
 kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/livez
 kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/readyz
 ```
@@ -131,7 +131,7 @@ kubectl logs deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as Redis hashes (`session:{sha256(token)}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#backend-services-spring-boot)) — no Auth0 tokens are stored
+- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as `redis-session` hashes (`session:{sha256(token)}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#redis-local-access)) — no Auth0 tokens are stored
 - Issues the host-only `__Host-BA_SESSION` session cookie (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`) to browsers
 - Provides browser session inspection at `GET /auth/v1/user`, state-extending
   heartbeat at `POST /auth/v1/session`, and logout through a top-level form
@@ -151,10 +151,10 @@ kubectl logs deployment/session-gateway
 # Test Session Gateway health
 kubectl exec deployment/session-gateway -- wget -qO- http://localhost:8081/actuator/health
 
-# Check Redis connection (session storage) with the redis-ops ACL user
+# Check the redis-session connection (session storage) with the redis-ops ACL user
 REDIS_OPS_USERNAME=redis-ops
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
-kubectl exec -n infrastructure redis-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning PING
+REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+kubectl exec -n infrastructure redis-session-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning PING
 ```
 
 `redis-ops` is a maintenance identity only. Application paths use the
@@ -416,11 +416,11 @@ The browser session interface shared between Session Gateway and `ext_authz` is 
 - `SESSION_KEY_PREFIX` defaults to `session:` in both repos. Session Gateway writes browser sessions under `session:{sha256(token)}`, and `ext_authz` reads the same Redis namespace.
 - The Redis key suffix is the lowercase hex SHA-256 of the UTF-8 `__Host-BA_SESSION` cookie value, and the `user_sessions:{userId}` index members are the same bare digests. The raw cookie token never appears in Redis key names, index members, the append-only file or logs, and neither service falls back to raw-token keys. Session Gateway owns the derivation and golden vector in its [Hashed Session Keys](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/session-configuration.md#hashed-session-keys) section.
 - Orchestration seeders, load-test fixtures and verifiers derive keys with `session_key_for` and index members with `session_digest_for` from `scripts/lib/redis-cli.sh`. `./scripts/smoketest/verify-session-architecture.sh` statically checks that Session Gateway, `ext_authz` and that helper agree on the shared golden vector, and its live checks fail on any `session:*` key that is not a digest key.
-- Hashing hides the reusable token, not the session count: key names remain visible metadata to Redis operators. A local cluster that holds sessions written before the hashed-key cutover must run `./scripts/ops/flush-redis.sh`; those raw-key sessions are unreachable and users sign in again.
+- Hashing hides the reusable token, not the session count: key names remain visible metadata to Redis operators. A local cluster that holds sessions written before the hashed-key cutover must run `./scripts/ops/flush-redis.sh session`; those raw-key sessions are unreachable and users sign in again.
 - The browser session cookie name defaults to `__Host-BA_SESSION` in both repos. Session Gateway writes that cookie, and `ext_authz` reads it on `/api/*` requests. `./scripts/smoketest/verify-session-architecture.sh` statically checks that both defaults are that name.
 - Orchestration also sets `SESSION_COOKIE_NAME=__Host-BA_SESSION` explicitly on the checked-in `ext-authz` deployment so the live cluster does not depend on the compiled default.
 - The `__Host-` prefix requires `Secure`, `Path=/` and no `Domain` attribute, so the cookie is always host-only and Session Gateway has no domain override. A client must reach the ingress over HTTPS to store it; verifiers that seed a Redis session build the `Cookie` header with this name directly. Session Gateway owns the attribute details in its [Cookie Behavior](https://github.com/budgetanalyzer/session-gateway/blob/main/docs/session-configuration.md#cookie-behavior) section.
-- A local cluster upgraded from the earlier `BA_SESSION` name needs no migration: browsers still holding the old cookie get `401` and sign in again. Run `./scripts/ops/flush-redis.sh` to discard the orphaned sessions at once instead of waiting for their TTL.
+- A local cluster upgraded from the earlier `BA_SESSION` name needs no migration: browsers still holding the old cookie get `401` and sign in again. Run `./scripts/ops/flush-redis.sh session` to discard the orphaned sessions at once instead of waiting for their TTL.
 - Session Gateway owns the session hash contents and expiry behavior, including
   atomic role/permission replacement on a successful heartbeat. `ext_authz`
   only assumes the hash exists, that it contains a parseable `expires_at`
@@ -500,7 +500,7 @@ measurement.
 reads the live values from the ingress Envoy config dump and proves the `401`
 through the real ingress. With `--inject-failures` it also proves the empty
 `503` with `ext-authz` scaled to zero, blocked by a temporary network policy so
-the check hangs, and with Redis stopped; the default run changes no Kubernetes
+the check hangs, and with `redis-session` stopped; the default run changes no Kubernetes
 object and skips those cases. `./scripts/guardrails/verify-static-security-manifests.sh` fails when
 the provider loses `statusOnError`, the `timeout` or `failOpen: false`.
 
@@ -590,23 +590,23 @@ kubectl exec deployment/nginx-gateway -- nginx -t
 kubectl logs deployment/ext-authz
 
 REDIS_OPS_USERNAME=redis-ops
-REDIS_OPS_PASSWORD=$(kubectl get secret redis-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+REDIS_SESSION_OPS_PASSWORD=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
 
-# Verify session exists in Redis; the key is the SHA-256 of the __Host-BA_SESSION cookie value
+# Verify session exists in redis-session; the key is the SHA-256 of the __Host-BA_SESSION cookie value
 SESSION_TOKEN='<__Host-BA_SESSION cookie value>'
 SESSION_KEY="session:$(printf '%s' "$SESSION_TOKEN" | sha256sum | cut -d' ' -f1)"
-kubectl exec -n infrastructure redis-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
+kubectl exec -n infrastructure redis-session-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning HGETALL "$SESSION_KEY"
 
 # Check session storage
-kubectl exec -n infrastructure redis-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
+kubectl exec -n infrastructure redis-session-0 -- redis-cli --tls --cacert /tls-ca/ca.crt --user "$REDIS_OPS_USERNAME" --pass "$REDIS_SESSION_OPS_PASSWORD" --no-auth-warning KEYS "session:*"
 ```
 
 **Session not persisting**:
 ```bash
-# Check Redis is running
-kubectl get pods -n infrastructure -l app=redis
+# Check redis-session is running
+kubectl get pods -n infrastructure -l app=redis-session
 
-# Check Session Gateway Redis connection
+# Check Session Gateway redis-session connection
 kubectl logs deployment/session-gateway | grep -i redis
 
 # Verify session cookie is set

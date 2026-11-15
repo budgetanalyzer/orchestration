@@ -35,7 +35,7 @@ Istio Ingress Gateway
    └─ App/API lane → ext_authz → NGINX Gateway → Backend Services
                                               │
                                               ├─ PostgreSQL
-                                              ├─ Redis
+                                              ├─ Redis (redis-session, redis-cache)
                                               └─ RabbitMQ
 ```
 
@@ -90,7 +90,8 @@ the live validation checklist pass.
                             ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Shared Infrastructure                    │
-│        PostgreSQL • Redis • RabbitMQ • Monitoring           │
+│           PostgreSQL • redis-session • redis-cache          │
+│                    RabbitMQ • Monitoring                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -110,7 +111,7 @@ control plane at the application edge:
 - Istio ingress terminates TLS, applies per-client auth/API limiting, and enforces
   `ext_authz` on browser API traffic.
 - Session Gateway owns OAuth2 login, logout, and browser session renewal.
-- `ext_authz` converts the Redis-backed browser session into trusted identity
+- `ext_authz` converts the `redis-session`-backed browser session into trusted identity
   headers on every API request. Its Go implementation lives in sibling
   `../ext-authz`; orchestration owns the deployment and mesh wiring.
 - NGINX maps resource routes to backend services and load balances the
@@ -131,7 +132,12 @@ for the detailed request-flow and route-ownership contract.
 ### Shared Infrastructure and Observability
 
 - PostgreSQL is the primary relational store.
-- Redis stores browser sessions and selected service caches.
+- Redis runs as two instances with separate roles. `redis-session` is a
+  PVC-backed StatefulSet with AOF and `noeviction` that holds only browser
+  sessions, session indexes, and OAuth2 state for Session Gateway and
+  `ext_authz`. `redis-cache` is a disposable Deployment with no persistence and
+  `allkeys-lru` that holds only the currency-service cache, shared by every
+  currency-service replica. A full cache cannot evict or block session writes.
 - RabbitMQ carries asynchronous inter-service events.
 - Prometheus, Grafana, Jaeger, Kiali, and kube-state-metrics run in the
   `monitoring` namespace and remain internal-only.
@@ -238,8 +244,14 @@ tilt get uiresources
 - **PostgreSQL**: Single instance, multiple databases (local dev)
 
 ### Caching Strategy
-- **Redis distributed cache**: Used by currency-service
-- **Session storage**: Used by session-gateway (Redis hashes, read by ext_authz)
+- **Distributed cache (`redis-cache`)**: Used only by currency-service, which
+  caches one dense exchange-rate series per currency and slices requested
+  ranges in Java, so request date ranges never create cache keys. The cache
+  fails open to PostgreSQL; see
+  [currency-service caching](https://github.com/budgetanalyzer/currency-service/blob/main/docs/configuration.md#caching)
+- **`redis-cache` sizing**: `maxmemory 64mb`; see
+  [Redis Memory Budgets](security-architecture.md#redis-memory-budgets) for the derivation
+- **Session storage (`redis-session`)**: Used by session-gateway (Redis hashes, read by ext_authz)
 - **TTL-based expiration**: Configurable per cache
 - **Cache-aside pattern**: Services manage cache population
 
@@ -292,3 +304,5 @@ grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
 - [013-deferred-mesh-identity-hardening.md](../decisions/013-deferred-mesh-identity-hardening.md) - Deferred mesh identity hardening
 - [014-hsts-without-includesubdomains-or-preload.md](../decisions/014-hsts-without-includesubdomains-or-preload.md) - HSTS flags
 - [015-reset-local-state-instead-of-migrating.md](../decisions/015-reset-local-state-instead-of-migrating.md) - Reset local state instead of migrating
+- [016-separate-session-and-cache-redis.md](../decisions/016-separate-session-and-cache-redis.md) - Separate session and cache Redis, bounded fail-open currency cache
+- [017-exchange-rate-end-date-cap.md](../decisions/017-exchange-rate-end-date-cap.md) - Exchange-rate end date capped at tomorrow

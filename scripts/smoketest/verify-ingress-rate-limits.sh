@@ -88,11 +88,11 @@ cleanup_session() {
     [[ -n "${SESSION_ID}" ]] || return 0
 
     local redis_pod redis_password
-    redis_pod=$(kubectl get pod -n infrastructure -l app=redis -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-    redis_password=$(kubectl get secret redis-bootstrap-credentials -n infrastructure \
+    redis_pod=$(kubectl get pod -n infrastructure -l app=redis-session -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    redis_password=$(kubectl get secret redis-session-bootstrap-credentials -n infrastructure \
         -o jsonpath='{.data.ops-password}' 2>/dev/null | base64 -d 2>/dev/null || true)
     if [[ -n "${redis_pod}" && -n "${redis_password}" ]]; then
-        redis_cli_in_pod infrastructure "${redis_pod}" redis-ops "${redis_password}" \
+        redis_cli_in_pod redis-session infrastructure "${redis_pod}" redis-ops "${redis_password}" \
             DEL "$(session_key_for "${SESSION_ID}")" >/dev/null 2>&1 || true
     fi
 }

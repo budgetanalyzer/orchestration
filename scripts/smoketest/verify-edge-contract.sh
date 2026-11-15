@@ -91,7 +91,7 @@ RBAC_DENIED_BODY="RBAC: access denied"
 ISTIOD_VALUES_FILE="${REPO_DIR}/kubernetes/istio/istiod-values.yaml"
 EXT_AUTHZ_DEPLOYMENT="ext-authz"
 REDIS_NAMESPACE="infrastructure"
-REDIS_STATEFULSET="redis"
+REDIS_STATEFULSET="redis-session"
 BLOCK_POLICY_CRD="clusternetworkpolicies.policy.networking.k8s.io"
 BLOCK_POLICY_NAME="edge-contract-block-ingress-to-ext-authz-$$"
 UNAUTHORIZED_BODY='{"type":"UNAUTHORIZED","message":"Authentication required"}'
@@ -345,9 +345,9 @@ response_is_frontend_shell() {
 seeded_session_present() {
     local exists member
 
-    exists=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    exists=$(redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         EXISTS "$(session_key_for "$SEEDED_SESSION_ID")" 2>/dev/null | tr -d '[:space:]' || true)
-    member=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    member=$(redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         SISMEMBER "user_sessions:${SEEDED_USER_ID}" "$(session_digest_for "$SEEDED_SESSION_ID")" 2>/dev/null | tr -d '[:space:]' || true)
     [[ "$exists" == "1" && "$member" == "1" ]]
 }
@@ -932,7 +932,7 @@ for problem in problems:
 }
 
 seeded_session_hash() {
-    redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         HGETALL "$(session_key_for "$SEEDED_SESSION_ID")" 2>/dev/null || true
 }
 
@@ -1160,13 +1160,13 @@ verify_forged_identity() {
     # Only the session hash feeds ext_authz; no heartbeat runs on this
     # session, so the user's permission-service role is never reloaded.
     empty_key=$(session_key_for "$EMPTY_SESSION_ID")
-    redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         HSET "$empty_key" roles "" permissions "" >/dev/null
-    user_id=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    user_id=$(redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         HGET "$empty_key" user_id | tr -d '[:space:]')
-    roles_length=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    roles_length=$(redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         HSTRLEN "$empty_key" roles | tr -d '[:space:]')
-    permissions_length=$(redis_cli_exec_in_pod "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_OPS_PASSWORD" \
+    permissions_length=$(redis_cli_exec_in_pod redis-session "$REDIS_POD" "$REDIS_USERNAME" "$REDIS_SESSION_OPS_PASSWORD" \
         HSTRLEN "$empty_key" permissions | tr -d '[:space:]')
     if [[ "$user_id" == "$EMPTY_USER_ID" && "$roles_length" == "0" && "$permissions_length" == "0" ]]; then
         pass "Seeded session for ${EMPTY_USER_ID} has empty roles and permissions"

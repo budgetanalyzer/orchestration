@@ -224,7 +224,7 @@ if ! jq -e '
     exit 1
 fi
 
-for infrastructure_resource in postgresql redis rabbitmq; do
+for infrastructure_resource in postgresql redis-cache redis-session rabbitmq; do
     if ! jq -e --arg name "${infrastructure_resource}" '
         .Manifests[]
         | select(.Name == $name)

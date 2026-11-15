@@ -32,6 +32,7 @@ WAIT_TIMEOUT="120s"
 TEMP_LABEL_KEY="verify-transport-encryption-temp"
 TEMP_LABEL_VALUE="true"
 REDIS_SESSION_GATEWAY_USERNAME="session-gateway"
+REDIS_CURRENCY_SERVICE_USERNAME="currency-service"
 POSTGRES_TRANSACTION_USERNAME="transaction_service"
 
 PASSED=0
@@ -322,8 +323,12 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: infrastructure
           podSelector:
-            matchLabels:
-              app: redis
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - redis-cache
+                  - redis-session
       ports:
         - protocol: TCP
           port: 6379
@@ -387,8 +392,12 @@ metadata:
     ${TEMP_LABEL_KEY}: "${TEMP_LABEL_VALUE}"
 spec:
   podSelector:
-    matchLabels:
-      app: redis
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - redis-cache
+          - redis-session
   policyTypes:
     - Ingress
   ingress:
@@ -477,9 +486,10 @@ exit 1
 }
 
 run_redis_tls_ping() {
-    local username="$1"
-    local password="$2"
-    local cacert="${3:-}"
+    local host="$1"
+    local username="$2"
+    local password="$3"
+    local cacert="${4:-}"
 
     if [[ -n "$cacert" ]]; then
         # shellcheck disable=SC2016 # This script is evaluated inside the Redis probe pod.
@@ -487,13 +497,13 @@ run_redis_tls_ping() {
 redis-cli \
     --tls \
     --cacert "$1" \
-    -h redis.infrastructure \
+    -h "$2" \
     -p 6379 \
-    --user "$2" \
-    --pass "$3" \
+    --user "$3" \
+    --pass "$4" \
     --no-auth-warning \
     ping
-' sh "$cacert" "$username" "$password"
+' sh "$cacert" "$host" "$username" "$password"
         return
     fi
 
@@ -501,29 +511,61 @@ redis-cli \
     kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
 redis-cli \
     --tls \
-    -h redis.infrastructure \
+    -h "$1" \
     -p 6379 \
-    --user "$1" \
-    --pass "$2" \
+    --user "$2" \
+    --pass "$3" \
     --no-auth-warning \
     ping
-' sh "$username" "$password"
+' sh "$host" "$username" "$password"
 }
 
 run_redis_plaintext_ping() {
-    local username="$1"
-    local password="$2"
+    local host="$1"
+    local username="$2"
+    local password="$3"
 
     # shellcheck disable=SC2016 # This script is evaluated inside the Redis probe pod.
     kubectl exec -n default "$REDIS_PROBE" -- sh -ceu '
 redis-cli \
-    -h redis.infrastructure \
+    -h "$1" \
     -p 6379 \
-    --user "$1" \
-    --pass "$2" \
+    --user "$2" \
+    --pass "$3" \
     --no-auth-warning \
     ping
-' sh "$username" "$password"
+' sh "$host" "$username" "$password"
+}
+
+verify_redis_tls() {
+    local label="$1"
+    local host="$2"
+    local username="$3"
+    local password="$4"
+    local wrong_ca="$5"
+    local out
+
+    if out=$(run_redis_tls_ping "$host" "$username" "$password" "/tls-ca/ca.crt" 2>&1); then
+        if printf '%s\n' "$out" | grep -qx 'PONG'; then
+            pass "${label} TLS succeeds with the service hostname and infra CA"
+        else
+            fail "${label} TLS returned unexpected output: ${out:0:160}"
+        fi
+    else
+        fail "${label} TLS failed with the service hostname and infra CA: ${out:0:160}"
+    fi
+
+    if out=$(run_redis_plaintext_ping "$host" "$username" "$password" 2>&1); then
+        fail "${label} plaintext unexpectedly succeeded: ${out:0:160}"
+    else
+        pass "${label} rejects plaintext clients on port 6379"
+    fi
+
+    if out=$(run_redis_tls_ping "$host" "$username" "$password" "$wrong_ca" 2>&1); then
+        fail "${label} unexpectedly trusted the wrong CA bundle: ${out:0:160}"
+    else
+        pass "${label} rejects TLS clients that do not trust the infra CA"
+    fi
 }
 
 run_postgresql_verify_full() {
@@ -610,12 +652,15 @@ main() {
 
     require_secret_exists default infra-ca
     require_secret_exists infrastructure infra-ca
-    require_secret_exists infrastructure infra-tls-redis
+    require_secret_exists infrastructure infra-tls-redis-cache
+    require_secret_exists infrastructure infra-tls-redis-session
     require_secret_exists infrastructure infra-tls-postgresql
     require_secret_exists infrastructure infra-tls-rabbitmq
 
-    REDIS_USERNAME="${REDIS_SESSION_GATEWAY_USERNAME}"
-    REDIS_PASSWORD=$(require_secret_value infrastructure redis-bootstrap-credentials session-gateway-password)
+    REDIS_SESSION_USERNAME="${REDIS_SESSION_GATEWAY_USERNAME}"
+    REDIS_SESSION_PASSWORD=$(require_secret_value infrastructure redis-session-bootstrap-credentials session-gateway-password)
+    REDIS_CACHE_USERNAME="${REDIS_CURRENCY_SERVICE_USERNAME}"
+    REDIS_CACHE_PASSWORD=$(require_secret_value infrastructure redis-cache-bootstrap-credentials currency-service-password)
     PG_USERNAME="${POSTGRES_TRANSACTION_USERNAME}"
     PG_PASSWORD=$(require_secret_value default transaction-service-postgresql-credentials password)
     RABBITMQ_POD=$(require_pod infrastructure app=rabbitmq RabbitMQ)
@@ -634,27 +679,10 @@ main() {
 
     section "Redis TLS"
 
-    if out=$(run_redis_tls_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" "/tls-ca/ca.crt" 2>&1); then
-        if printf '%s\n' "$out" | grep -qx 'PONG'; then
-            pass "Redis TLS succeeds with the service hostname and infra CA"
-        else
-            fail "Redis TLS returned unexpected output: ${out:0:160}"
-        fi
-    else
-        fail "Redis TLS failed with the service hostname and infra CA: ${out:0:160}"
-    fi
-
-    if out=$(run_redis_plaintext_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" 2>&1); then
-        fail "Redis plaintext unexpectedly succeeded: ${out:0:160}"
-    else
-        pass "Redis rejects plaintext clients on port 6379"
-    fi
-
-    if out=$(run_redis_tls_ping "$REDIS_USERNAME" "$REDIS_PASSWORD" "$REDIS_WRONG_CA" 2>&1); then
-        fail "Redis unexpectedly trusted the wrong CA bundle: ${out:0:160}"
-    else
-        pass "Redis rejects TLS clients that do not trust the infra CA"
-    fi
+    verify_redis_tls "redis-session" "redis-session.infrastructure" \
+        "$REDIS_SESSION_USERNAME" "$REDIS_SESSION_PASSWORD" "$REDIS_WRONG_CA"
+    verify_redis_tls "redis-cache" "redis-cache.infrastructure" \
+        "$REDIS_CACHE_USERNAME" "$REDIS_CACHE_PASSWORD" "$REDIS_WRONG_CA"
 
     section "PostgreSQL TLS"
 

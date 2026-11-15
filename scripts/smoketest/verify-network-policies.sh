@@ -651,11 +651,11 @@ main() {
     section "Positive: Application -> Infrastructure"
     # ------------------------------------------------------------------
 
-    assert_allow_eventually "session-gateway -> redis:6379" \
-        default "$PROBE_SESSION" redis.infrastructure 6379
+    assert_allow_eventually "session-gateway -> redis-session:6379" \
+        default "$PROBE_SESSION" redis-session.infrastructure 6379
 
-    assert_allow_eventually "ext-authz -> redis:6379" \
-        default "$PROBE_EXTAUTHZ" redis.infrastructure 6379
+    assert_allow_eventually "ext-authz -> redis-session:6379" \
+        default "$PROBE_EXTAUTHZ" redis-session.infrastructure 6379
 
     assert_allow_eventually "transaction-service -> postgresql:5432" \
         default "$PROBE_TXN" postgresql.infrastructure 5432
@@ -666,8 +666,8 @@ main() {
     assert_allow_eventually "currency-service -> rabbitmq:5671" \
         default "$PROBE_CURRENCY" rabbitmq.infrastructure 5671
 
-    assert_allow_eventually "currency-service -> redis:6379" \
-        default "$PROBE_CURRENCY" redis.infrastructure 6379
+    assert_allow_eventually "currency-service -> redis-cache:6379" \
+        default "$PROBE_CURRENCY" redis-cache.infrastructure 6379
 
     assert_allow_eventually "permission-service -> postgresql:5432" \
         default "$PROBE_PERM" postgresql.infrastructure 5432
@@ -784,8 +784,11 @@ main() {
     assert_deny_consistently "unlabeled -> budget-analyzer-web:3000" \
         default "$PROBE_UNLABELED" "$BUDGET_ANALYZER_WEB_IP" 3000
 
-    assert_deny_consistently "unlabeled -> redis:6379" \
-        default "$PROBE_UNLABELED" redis.infrastructure 6379
+    assert_deny_consistently "unlabeled -> redis-session:6379" \
+        default "$PROBE_UNLABELED" redis-session.infrastructure 6379
+
+    assert_deny_consistently "unlabeled -> redis-cache:6379" \
+        default "$PROBE_UNLABELED" redis-cache.infrastructure 6379
 
     assert_deny_consistently "unlabeled -> postgresql:5432" \
         default "$PROBE_UNLABELED" postgresql.infrastructure 5432
@@ -807,8 +810,20 @@ main() {
     # ------------------------------------------------------------------
     # Workloads must not reach services outside their approved edges.
 
-    assert_deny_consistently "transaction-service -> redis:6379" \
-        default "$PROBE_TXN" redis.infrastructure 6379
+    assert_deny_consistently "transaction-service -> redis-session:6379" \
+        default "$PROBE_TXN" redis-session.infrastructure 6379
+
+    assert_deny_consistently "currency-service -> redis-session:6379" \
+        default "$PROBE_CURRENCY" redis-session.infrastructure 6379
+
+    assert_deny_consistently "session-gateway -> redis-cache:6379" \
+        default "$PROBE_SESSION" redis-cache.infrastructure 6379
+
+    assert_deny_consistently "ext-authz -> redis-cache:6379" \
+        default "$PROBE_EXTAUTHZ" redis-cache.infrastructure 6379
+
+    assert_deny_consistently "transaction-service -> redis-cache:6379" \
+        default "$PROBE_TXN" redis-cache.infrastructure 6379
 
     assert_deny_consistently "transaction-service -> rabbitmq:5671" \
         default "$PROBE_TXN" rabbitmq.infrastructure 5671

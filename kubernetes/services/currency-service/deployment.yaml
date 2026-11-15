@@ -79,7 +79,7 @@ spec:
           value: "infra-ca"
         # Redis connection
         - name: SPRING_DATA_REDIS_HOST
-          value: "redis.infrastructure"
+          value: "redis-cache.infrastructure"
         - name: SPRING_DATA_REDIS_PORT
           value: "6379"
         - name: SPRING_DATA_REDIS_USERNAME

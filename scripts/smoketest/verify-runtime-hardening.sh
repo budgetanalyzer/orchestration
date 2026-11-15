@@ -659,7 +659,8 @@ verify_workloads() {
         "default|app=permission-service|permission-service|permission-service|true|true|disabled|true"
         "default|app=session-gateway|session-gateway|session-gateway|true|true|disabled|true"
         "default|app=transaction-service|transaction-service|transaction-service|true|true|disabled|true"
-        "infrastructure|app=redis|redis|redis|true|false|disabled|false"
+        "infrastructure|app=redis-cache|redis-cache|redis-cache|true|false|disabled|false"
+        "infrastructure|app=redis-session|redis-session|redis-session|true|false|disabled|false"
         "infrastructure|app=postgresql|postgresql|postgresql|true|false|disabled|false"
         "infrastructure|app=rabbitmq|rabbitmq|rabbitmq|true|false|disabled|false"
         "istio-ingress|gateway.networking.k8s.io/gateway-name=istio-ingress-gateway|istio ingress gateway|istio-proxy|true|false|retained|true"
@@ -711,18 +712,28 @@ verify_redis_runtime() {
     section "Redis Runtime Specifics"
 
     local namespace="infrastructure"
-    local selector="app=redis"
-    local label="redis"
-    local container="redis"
-    local pod
+    local spec label data_mode pod
+    local specs=(
+        "redis-session|persistent"
+        "redis-cache|disposable"
+    )
 
-    pod=$(require_pod "$namespace" "$selector" "$label")
-    assert_container_user_group "$namespace" "$pod" "$container" "$label" "999" "1000"
-    assert_pod_fs_group "$namespace" "$pod" "$label" "1000"
-    assert_container_mount_path "$namespace" "$pod" "$container" "$label" "redis-tmp" "/tmp"
-    assert_container_mount_path "$namespace" "$pod" "$container" "$label" "redis-data" "/data"
-    assert_empty_dir_volume "$namespace" "$pod" "$label" "redis-tmp"
-    assert_persistent_volume_claim "$namespace" "$pod" "$label" "redis-data" "redis-data-redis-0"
+    for spec in "${specs[@]}"; do
+        IFS='|' read -r label data_mode <<<"$spec"
+        pod=$(require_pod "$namespace" "app=${label}" "$label")
+        assert_container_user_group "$namespace" "$pod" "$label" "$label" "999" "1000"
+        assert_pod_fs_group "$namespace" "$pod" "$label" "1000"
+        assert_container_mount_path "$namespace" "$pod" "$label" "$label" "${label}-tmp" "/tmp"
+        assert_empty_dir_volume "$namespace" "$pod" "$label" "${label}-tmp"
+
+        if [[ "$data_mode" == "persistent" ]]; then
+            assert_container_mount_path "$namespace" "$pod" "$label" "$label" "redis-data" "/data"
+            assert_persistent_volume_claim "$namespace" "$pod" "$label" "redis-data" "redis-data-redis-session-0"
+        else
+            assert_container_mount_path "$namespace" "$pod" "$label" "$label" "redis-cache-data" "/data"
+            assert_empty_dir_volume "$namespace" "$pod" "$label" "redis-cache-data"
+        fi
+    done
 }
 
 verify_postgresql_runtime() {

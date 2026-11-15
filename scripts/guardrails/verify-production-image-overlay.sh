@@ -414,7 +414,7 @@ assert_redis_statefulset_storage_shape() {
             saw_storage_request = 0
         }
         function finish_doc() {
-            if (resource_kind == "StatefulSet" && resource_name == "redis") {
+            if (resource_kind == "StatefulSet" && resource_name == "redis-session") {
                 saw_redis_statefulset = 1
                 if (in_volume_claim_templates && saw_claim_template && saw_storage_request) {
                     redis_storage_ok = 1
@@ -732,20 +732,26 @@ verify_infrastructure_overlay() {
         "rendered production infrastructure is missing StatefulSet/postgresql"
     assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet rabbitmq \
         "rendered production infrastructure is missing StatefulSet/rabbitmq"
-    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet redis \
-        "rendered production infrastructure is missing StatefulSet/redis"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Deployment redis-cache \
+        "rendered production infrastructure is missing Deployment/redis-cache"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" StatefulSet redis-session \
+        "rendered production infrastructure is missing StatefulSet/redis-session"
     assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service postgresql \
         "rendered production infrastructure is missing Service/postgresql"
     assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service rabbitmq \
         "rendered production infrastructure is missing Service/rabbitmq"
-    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service redis \
-        "rendered production infrastructure is missing Service/redis"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service redis-cache \
+        "rendered production infrastructure is missing Service/redis-cache"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" Service redis-session \
+        "rendered production infrastructure is missing Service/redis-session"
     assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap postgresql-init \
         "rendered production infrastructure is missing ConfigMap/postgresql-init"
     assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap rabbitmq-config \
         "rendered production infrastructure is missing ConfigMap/rabbitmq-config"
-    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap redis-acl-bootstrap \
-        "rendered production infrastructure is missing ConfigMap/redis-acl-bootstrap"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap redis-cache-acl-bootstrap \
+        "rendered production infrastructure is missing ConfigMap/redis-cache-acl-bootstrap"
+    assert_yaml_resource "${RENDERED_INFRASTRUCTURE_FILE}" ConfigMap redis-session-acl-bootstrap \
+        "rendered production infrastructure is missing ConfigMap/redis-session-acl-bootstrap"
 
     assert_redis_statefulset_storage_shape "${RENDERED_INFRASTRUCTURE_FILE}"
     assert_not_contains "${RENDERED_INFRASTRUCTURE_FILE}" 'kind:[[:space:]]*PersistentVolumeClaim' \

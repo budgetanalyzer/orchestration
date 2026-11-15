@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cache
+  namespace: infrastructure
+  labels:
+    app: redis-cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-cache
+  template:
+    metadata:
+      labels:
+        app: redis-cache
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis-cache
+          image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+          ports:
+            - name: redis-cache
+              containerPort: 6379
+          command:
+            - /bin/sh
+            - /opt/redis/start-redis.sh
+          env:
+            - name: REDIS_CACHE_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-cache-bootstrap-credentials
+                  key: default-password
+            - name: REDIS_CURRENCY_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-cache-bootstrap-credentials
+                  key: currency-service-password
+            - name: REDIS_CACHE_OPS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-cache-bootstrap-credentials
+                  key: ops-password
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: redis-cache-bootstrap-credentials
+                  key: default-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 999
+          volumeMounts:
+            - name: redis-cache-acl-bootstrap
+              mountPath: /opt/redis
+              readOnly: true
+            - name: redis-cache-tmp
+              mountPath: /tmp
+            - name: redis-cache-data
+              mountPath: /data
+            - name: redis-cache-tls
+              mountPath: /tls
+              readOnly: true
+            - name: redis-cache-ca
+              mountPath: /tls-ca
+              readOnly: true
+          resources:
+            requests:
+              memory: 96Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - --tls
+                - --cacert
+                - /tls-ca/ca.crt
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: redis-cache-acl-bootstrap
+          configMap:
+            name: redis-cache-acl-bootstrap
+            defaultMode: 0555
+        - name: redis-cache-tmp
+          emptyDir: {}
+        # Deliberately disposable cache data: redis-cache is not a stateful data store.
+        - name: redis-cache-data
+          emptyDir: {}
+        - name: redis-cache-tls
+          secret:
+            secretName: infra-tls-redis-cache
+        - name: redis-cache-ca
+          secret:
+            secretName: infra-ca

@@ -39,7 +39,7 @@ complete tagged Git history. Neither is an active deployment path.
 
 - **Frontend**: React/Vite (budget-analyzer-web), served through NGINX in the production reference, Vite dev server locally
 - **API Gateway**: NGINX handles resource routing; Istio ingress handles TLS termination and per-client auth/API rate limiting
-- **Auth**: OAuth2/OIDC with Auth0 via session-gateway, edge session validation via ext-authz (Go), Redis-backed sessions
+- **Auth**: OAuth2/OIDC with Auth0 via session-gateway, edge session validation via ext-authz (Go), sessions on a dedicated `redis-session` instance, separate from the `redis-cache` application cache
 - **Backend**: Spring Boot microservices (transaction-service, currency-service, permission-service) with PostgreSQL, RabbitMQ
 - **Service mesh**: Istio with strict mTLS, network policies, egress gateway for external API calls
 - **Observability**: Prometheus, Grafana, Jaeger, Kiali

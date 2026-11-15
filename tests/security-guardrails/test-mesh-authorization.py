@@ -183,7 +183,7 @@ def write_file(relative, text):
 # Each case: (description, mutation, expected exit, required diagnostics).
 CASES = [
     (
-        "issue repro: namespace-wide ALLOW rules [{}] in the existing file",
+        "ADR 019 repro: namespace-wide ALLOW rules [{}] in the existing file",
         lambda root: append_policy(root, broad()),
         1,
         ["default/broad-allow", "is a broad additive grant over namespace default"],
@@ -285,7 +285,7 @@ CASES = [
         ["duplicate AuthorizationPolicy identity"],
     ),
     (
-        "issue repro: Session Gateway ingress rule without to",
+        "ADR 019 repro: Session Gateway ingress rule without to",
         lambda root: edit(root, "session-gateway-policy", lambda spec: rule(spec, 0).pop("to")),
         1,
         ["session-gateway-policy rules[0]", "ingress -> session-gateway auth surface: has no to restriction",
@@ -736,12 +736,12 @@ def drop_frontend_deletion_patch(root):
 # (description, mutation, required diagnostics). Every case must fail.
 PRODUCTION_RENDER_CASES = [
     (
-        "production issue repro: namespace-wide ALLOW rules [{}]",
+        "production ADR 019 repro: namespace-wide ALLOW rules [{}]",
         append_rendered("authorization.yaml", broad()),
         ["default/broad-allow", "is a broad additive grant over namespace default"],
     ),
     (
-        "production issue repro: Session Gateway ingress rule without to",
+        "production ADR 019 repro: Session Gateway ingress rule without to",
         edit_rendered_policy("session-gateway-policy", lambda spec: rule(spec, 0).pop("to")),
         ["session-gateway-policy rules[0]", "ingress -> session-gateway auth surface: has no to restriction"],
     ),

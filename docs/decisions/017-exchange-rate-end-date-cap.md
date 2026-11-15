@@ -26,8 +26,8 @@ Two callers depend on the end date:
   (`TransactionService.maxAllowedTransactionDate` and
   `ConfigurableCsvStatementExtractor`). Both compute `LocalDate.now().plusDays(1)`.
 
-The full problem analysis lives in
-[the unbounded end date issue](../issues/medium-exchange-rate-end-date-unbounded-response.md).
+The full problem analysis lived in the issue "Exchange-rate end date has no
+upper bound", which was deleted after this ADR was written; see Git history.
 
 ## Decision
 
@@ -114,7 +114,6 @@ in transaction-service. The web client then asks for a rate on that date.
   `test_get_exchange_rates_defaults_omitted_end_date_to_today`.
 
 ## References
-- [Exchange-rate end date has no upper bound](../issues/medium-exchange-rate-end-date-unbounded-response.md)
 - [currency-service `GET /v1/exchange-rates`](https://github.com/budgetanalyzer/currency-service/blob/main/docs/api/README.md#get-v1exchange-rates)
 - [ADR 016: Separate Session and Cache Redis Instances](016-separate-session-and-cache-redis.md)
 - Source: the Redis session/cache split plan, which set the cap at today, and

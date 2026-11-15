@@ -397,7 +397,9 @@ copies of the complete local inputs. Each case first proves that the
 unmodified copy passes, then requires the intended diagnostic. It also renders
 the production reference with the pinned `kubectl` and proves that the
 unmodified render passes. It then mutates temporary rendered copies with both
-issue reproductions, added broad grants, a broadened Envoy metrics exception,
+reproductions from
+[ADR 019](../decisions/019-structural-mesh-authorization-guard.md), added broad
+grants, a broadened Envoy metrics exception,
 and missing workloads or policies. Finally it mutates a copy of the production
 overlay sources with an added resource, patches and a dropped frontend deletion
 patch. The local source check must still pass and the production render must

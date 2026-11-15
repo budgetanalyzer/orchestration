@@ -94,6 +94,18 @@ scripts/
   credentials are isolated across PostgreSQL, RabbitMQ, `redis-session` and
   `redis-cache`, including rejection and absence of each Redis instance's
   foreign users and each instance's exact memory and persistence settings.
+  On `redis-session` it requires `default` to be `off` and passwordless and
+  refuses unauthenticated, password-only and `default` logins. It requires
+  `redis-health` to return exactly `PONG` and be denied key reads and writes
+  and administrative commands. It also checks that both live probes select
+  `redis-health` with `-e`, that each probe command succeeds with the pod
+  credential and exits non-zero with a wrong `REDISCLI_AUTH`, and that the
+  health credential works on neither `redis-cache` user.
+- `smoketest/verify-redis-session-persistence.sh --allow-restart` - Live
+  restart proof that `redis-session` AOF replay keeps scripted session writes
+  and bulk revocations, checked in Redis and at the ingress. It restarts the
+  StatefulSet twice, so it requires the flag and is not part of
+  `smoketest.sh`; see [Smoketest](#smoketest).
 - `smoketest/verify-network-policies.sh` - Proves the live pod-to-pod allowlist,
   including currency-service-only access to `redis-cache` and auth-edge-only
   access to `redis-session`.
@@ -501,8 +513,22 @@ getting-started guide.
   except `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`
   and `100.64.0.0/10`, and, because NetworkPolicies are additive, rejects any
   other `istio-egress` NetworkPolicy, or the egress gateway chart's own policy,
-  that allows 443 to those ranges. `--self-test` proves each case
-  with a failing fixture. Its
+  that allows 443 to those ranges. In the local infrastructure render and the
+  production infrastructure render it requires the `redis-session` ACL to
+  define exactly `session-gateway`, `ext-authz`, `redis-ops`, `redis-health`
+  and `default`, with `default` exactly `reset off ~* &* +@all` and
+  `redis-health` exactly `reset on >${REDIS_SESSION_HEALTH_PASSWORD} +ping`.
+  Both probes must be exactly
+  `redis-cli -e --tls --cacert /tls-ca/ca.crt --user redis-health ping`, every
+  ACL password and `REDISCLI_AUTH` must come from
+  `redis-session-bootstrap-credentials` (`REDISCLI_AUTH` from
+  `health-password`), and the retired session `default-password` must not
+  return. For the local render it also requires the Tiltfile Secret to define
+  every key the StatefulSet references. `--self-test` proves each case
+  with a failing fixture, and proves the `redis-session` checks by mutating
+  copies of the checked-in inputs (re-enabled `default`, extra health grants,
+  a probe without `--user` or `-e`, a wrong `REDISCLI_AUTH` key, and a Tilt
+  Secret without `health-password`). Its
   kubeconform pass validates checked-in Kubernetes resource manifests, skips
   Kustomize patch fragments under `patches/` directories and the schema-v2
   production desired-state manifest as a standalone Kubernetes resource, and
@@ -526,6 +552,55 @@ getting-started guide.
   reach the proxy locations, and that the shared `/api-docs/` fallback keeps
   the docs CSP. The live ingress denies these `;` paths before NGINX, so this
   is where the NGINX layer itself is exercised. It requires Docker and does not
+  contact a Kubernetes cluster.
+- `guardrails/verify-redis-session-aof-replay.sh [--mode legacy|deployed|all]`
+  is the offline AOF replay regression harness for the `redis-session` ACL
+  decision in
+  [ADR 018](../docs/decisions/018-disabled-default-user-for-redis-session-aof-replay.md).
+  Each scenario starts a fresh guest-Docker container from the digest-pinned
+  `redis-session` image with `--network none`, no published ports, a
+  read-only root filesystem and a private, labelled named volume. It drives
+  Redis only through `docker exec redis-cli`, stops it gracefully and starts it
+  again on the same volume with no AOF rewrite in between. Inputs are read, not
+  copied: the ACL comes from the `users.acl` heredoc in
+  `kubernetes/infrastructure/redis-session/start-redis.sh`, and the
+  scripts are `create-session.lua`, `conditional-update.lua`,
+  `delete-user-sessions.lua` and the `CREATE_REQUEST_SCRIPT` text block from
+  `RedisAuthorizationRequestRepository.java`. All four are read from
+  `../session-gateway`, or `SESSION_GATEWAY_DIR`. Application writes run as
+  `session-gateway`. The harness prints the input hashes and fails on missing
+  inputs or on drift in the calling-convention and key-prefix anchors.
+  `legacy` keeps the checked-in `session-gateway`, `ext-authz` and
+  `redis-ops` lines but replaces `default` and `redis-health` with a
+  historical, test-only copy of the pre-fix
+  `user default ... ~* +ping +auth` line. It must reproduce the known
+  outcome: the AOF loader denies `default` writes inside `MULTI`/`EXEC`,
+  creation, refresh and OAuth writes are lost, and the expired-but-present
+  revocation case brings the revoked session back. `deployed` uses the
+  checked-in ACL verbatim, which currently contains
+  `user default reset off ~* &* +@all` and
+  `user redis-health reset on >… +ping`, and requires those exact `ACL LIST`
+  lines. Every write must survive, with
+  identical hashes, index membership and absolute expirations, and the AOF
+  loader must log no denials. Unauthenticated commands, password-only `AUTH`
+  and `AUTH`/`HELLO` as `default` must be refused. `redis-health` may only
+  `PING`. `REDISCLI_AUTH=… redis-cli -e --user redis-health ping` must exit
+  non-zero without credentials, with a wrong password or with password-only
+  AUTH, while the same command without `-e` exits 0. Every case confirms its
+  writes are in the incremental AOF, in the expected single-command or
+  `MULTI`/`EXEC` form, after a completed base rewrite. Bulk revocation runs
+  three independent cases: all members live, one expired key still present,
+  and one member whose key is already gone. The isolated configuration
+  listens on container loopback without TLS. It disables automatic AOF
+  rewrites and RDB snapshots and keeps the deployed `everysec` fsync, so it
+  proves replay semantics, not the crash-loss window. Only the
+  expired-but-present case starts with `--enable-debug-command local` and runs
+  `DEBUG SET-ACTIVE-EXPIRE 0`; never enable `DEBUG` on a live `redis-session`.
+  Synthetic credentials are random for each run, reach containers through a
+  `0600` env file and are never printed. A cleanup trap removes every
+  container, volume and temporary file, and the run asserts that nothing
+  labelled with its run id remains. It requires Docker, takes about 25
+  seconds, and does not change deployment inputs, generate certificates or
   contact a Kubernetes cluster.
 - `guardrails/verify-production-image-overlay.sh` renders
   `kubernetes/production/apps`, `kubernetes/production/infrastructure`, and the
@@ -592,6 +667,60 @@ CI should keep calling the fully static guardrail directly:
 `smoketest/verify-edge-contract.sh` run, which changes no Kubernetes object.
 The edge contract `--inject-failures` cases are not part of the wrapper; run
 them directly.
+
+`smoketest/verify-redis-session-persistence.sh --allow-restart` is the live
+counterpart of `guardrails/verify-redis-session-aof-replay.sh`. It runs
+`kubectl rollout restart statefulset/redis-session`, so no wrapper runs it, and
+without `--allow-restart` it exits 2 before contacting the cluster. Run it only
+after the
+[Redis Session ACL Cutover](../docs/development/local-environment.md#redis-session-acl-cutover).
+Before writing anything it requires the exact local Kind target, one Ready
+`redis-session-0`, the checked-in `default` (`off`, replay permissions) and
+PING-only `redis-health` lines in the live `ACL LIST`, AOF enabled and no
+AOF-loader ACL denials since the pod started. If the fixed ACL is not live, it
+stops without writing or restarting, so it cannot replay pre-cutover history.
+It reads `create-session.lua`, `conditional-update.lua`,
+`delete-user-sessions.lua` and the `CREATE_REQUEST_SCRIPT` text block from
+`../session-gateway` (or `SESSION_GATEWAY_DIR`). It applies the same
+drift anchors as the offline harness and runs the scripts as `session-gateway`
+with the credentials from `redis-session-bootstrap-credentials`. Every
+session, user index and OAuth state key is named from a random run id and
+random session tokens, and it records the `redis-data` PVC UID and volume.
+Each of two rounds runs one `BGREWRITEAOF` (bounded wait,
+`aof_last_bgrewrite_status:ok`) and then one restart:
+
+- Restart 1 seeds a session before the rewrite. After it, the verifier
+  creates a session, refreshes the seed's roles, permissions and expiry, and
+  creates OAuth state.
+- Restart 2 seeds two live sessions for one user, and a 1-second session plus
+  a live session for another user, whose expired key is gone before the
+  rewrite. After it, the verifier bulk-revokes both users.
+
+Before each restart it copies the incremental AOF to a private temporary
+directory and requires creation, refresh and OAuth state to be
+`MULTI`/`EXEC` blocks and both revocations to be top-level commands, then
+deletes the copy. It requires an unchanged AOF manifest immediately before
+restarting, so an unexpected rewrite fails the run instead of hiding the
+incremental replay. Each restart has bounded rollout and readiness waits and
+must produce a new pod UID on the same PVC and volume. After each restart it
+requires log lines showing the same base and incremental files were loaded,
+no AOF-loader `ACL LOG` entries and `default` still `off`. After restart 1 it
+requires identical hashes, index membership and absolute expirations, a
+positive remaining TTL, an `ext-authz` read of the restored session, and that
+the restored sessions authorize `GET /api/v1/currencies` through the ingress
+(200). After restart 2 it requires the revoked keys to stay absent and the
+revoked session cookies to be denied at the ingress (401). It checks the same
+cookies before the revocation (200) and before the restart (401), so a denial
+cannot come from a broken fixture. Ingress requests use normal TLS
+verification against `https://app.budgetanalyzer.localhost` and pass the
+cookie through curl's standard input. The expired-but-present revocation case
+needs `DEBUG`, so it stays offline. The verifier never flushes Redis or prints
+credentials or session tokens. Its exit trap unlinks the keys it created and
+confirms they are gone; every key has a TTL of at most 1800 seconds, so
+residue from an interrupted run expires on its own. Session Gateway and
+`ext-authz` keep running and reconnect after each restart. Each
+`kubectl rollout restart` leaves the standard
+`kubectl.kubernetes.io/restartedAt` annotation on the live pod template.
 
 `smoketest/cleanup-smoketest-residue.sh` is the preflight step. It removes
 only objects a verifier marks as its own, by the verifier's temp label or an

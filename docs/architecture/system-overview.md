@@ -306,3 +306,4 @@ grep "location /api" nginx/nginx.k8s.conf | grep -v "#"
 - [015-reset-local-state-instead-of-migrating.md](../decisions/015-reset-local-state-instead-of-migrating.md) - Reset local state instead of migrating
 - [016-separate-session-and-cache-redis.md](../decisions/016-separate-session-and-cache-redis.md) - Separate session and cache Redis, bounded fail-open currency cache
 - [017-exchange-rate-end-date-cap.md](../decisions/017-exchange-rate-end-date-cap.md) - Exchange-rate end date capped at tomorrow
+- [018-disabled-default-user-for-redis-session-aof-replay.md](../decisions/018-disabled-default-user-for-redis-session-aof-replay.md) - Disabled `redis-session` `default` user for AOF replay

@@ -14,7 +14,7 @@ This document outlines the security architecture for a financial data applicatio
 Repository security posture:
 - Ingress, session, and routing follow the topology described here.
 - Platform security prerequisites: Kind uses Calico instead of `kindnet`, Kyverno is installed and verifiable, the retained smoke policy proves admission is alive, and the checked-in security guardrail suite enforces namespace PSA labels, workload token/`securityContext` baselines, obvious default-credential rejection, and third-party image-digest pinning with narrow system-workload exceptions.
-- Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets. Each Redis application user exists on exactly one instance: `session-gateway` and `ext-authz` on `redis-session`, `currency-service` on `redis-cache`; each instance has its own `default` and `redis-ops` passwords.
+- Credential isolation: per-service PostgreSQL, RabbitMQ, and Redis credentials with dedicated Kubernetes secrets. Each Redis application user exists on exactly one instance: `session-gateway` and `ext-authz` on `redis-session`, `currency-service` on `redis-cache`; each instance has its own `redis-ops` password. `redis-cache` probes authenticate as its own `default` user. On `redis-session`, `default` is disabled with no password, and probes authenticate as a `redis-health` user that may only run `PING` (see the Redis bullets in [High Availability Configuration](#high-availability-configuration)).
 - Known residual risks, including runtime database roles that own their schemas, are listed in [Accepted Risks](#accepted-risks).
 - Network policies: `default`, `infrastructure`, `istio-ingress`, `istio-egress`, and `monitoring` namespaces have repo-owned deny-by-default ingress and egress with explicit allowlists. The `monitoring` namespace has its own baseline for Grafana, Prometheus, Kiali-to-Prometheus/Jaeger/Kubernetes API/Istiod-version flows, and OTLP ingress to Jaeger from approved namespaces. Only documented pod callers can reach each service. The egress gateway's TCP 443 egress excludes `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` and `100.64.0.0/10`, so beneath Envoy's SNI host rules it cannot reach pods, Services, the Kubernetes API, nodes or metadata endpoints on 443. This bounds where the gateway connects, not which caller it serves, and it relies on the CNI enforcing `ipBlock.except` after Service DNAT, as Calico does locally; a hosted CNI must as well. The cluster is IPv4-only, so a dual-stack environment needs a matching IPv6 rule. `verify-static-security-manifests.sh` rejects any `istio-egress` policy that reopens these ranges on 443, and `verify-network-policies.sh` proves the denial live. Kubelet probes and Tilt port-forwards are host-to-pod traffic and still rely on Calico's default host endpoint handling (`defaultEndpointToHostAction=Accept`), not the pod-to-pod allowlists.
 - Istio ingress and egress manifests describe the intended topology: Envoy Gateway is replaced by an Istio-managed ingress gateway (inside the mesh with SPIFFE identity). Istio egress routes approved outbound traffic (Auth0, FRED API) with `REGISTRY_ONLY` blocking unapproved hosts. All ingress-facing services use STRICT mTLS and ingress-scoped `AuthorizationPolicy` rules, `default-deny-all` makes mesh deny-by-default explicit, and backend policies admit NGINX only on exact public resource paths (see [Mesh Public/Internal Boundary](#mesh-publicinternal-boundary)). The narrow Session Gateway/permission-service relationship allows Session Gateway only `POST` on the login user sync and `GET` on the heartbeat authorization lookup and allows `permission-service` to call Session Gateway only for `DELETE /internal/v1/sessions/users/{userId}` bulk revocation. Four per-client local rate-limit policies protect login initiation, login completion, session operations, and APIs before `ext_authz`; NGINX no longer owns blanket API limiting.
@@ -788,14 +788,46 @@ each one before a hosted deployment or an open-signup requirement.
 - One `redis-session` StatefulSet replica; no Sentinel, replication or
   automatic failover is configured
 - `/data` is PVC-backed through the `redis-data` claim template, so the AOF
-  and its base RDB survive a pod restart. Recovery is incomplete, though: AOF
-  replay currently drops the effects of session scripts that make more than
-  one write. A restart therefore loses sessions and OAuth state written since
-  the last AOF rewrite, and those users must log in again (it fails closed).
-  If a user's session index held a session key that had expired but was not
-  yet deleted when a bulk revocation ran, the restart can also undo that
-  revocation. See
-  [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
+  and its base RDB survive a pod restart
+- AOF replay authority: Redis replays the AOF as the `default` user, and
+  `EXEC` re-checks ACLs for every command in a replayed `MULTI`/`EXEC` block.
+  Redis logs session scripts that make more than one write (session creation,
+  heartbeat and permission refresh, OAuth state creation, and some bulk
+  revocations) that way. The checked-in ACL therefore sets
+  `user default reset off ~* &* +@all`. `off` means no client can
+  authenticate as `default`, and it has no password; the full permissions
+  exist only so replay applies those writes. Liveness and readiness probes run
+  `redis-cli -e --user redis-health ping` with `REDISCLI_AUTH` set to the
+  `health-password` key. `redis-health` may run only `PING`, with no key or
+  channel access. `-e` makes a wrong probe credential fail the probe.
+- Restart persistence: a restart restores sessions, session indexes, refreshed
+  roles, permissions and expirations, OAuth state and bulk revocations from
+  the AOF. Absolute expirations are replayed unchanged, so a restart never
+  extends a session or OAuth state, and keys whose expiry passed while Redis
+  was down are gone after the restart as normal expiry. Redis uses its default
+  `appendfsync everysec`, so a crash or node loss can still lose about the
+  last second of writes. Durability is bounded by the single replica and its
+  PVC, not unlimited
+- Validation status: verified on local Kind on 2026-11-15 with the pinned
+  image. `verify-redis-session-persistence.sh --allow-restart` ran two
+  `kubectl rollout restart` cycles on the same PVC. Session creation,
+  heartbeat refresh and OAuth state written after a base rewrite survived with
+  identical hashes, index membership and absolute expirations, and the
+  restored sessions authorized a protected ingress request. Bulk revocations
+  with all members live and with a member already gone held, and the revoked
+  cookies were denied at ingress. No AOF-loader `ACL LOG` denials occurred.
+  `verify-credential-isolation.sh` proved that `default` logins fail and that
+  both probes pass with the health credential and fail with a wrong one. The
+  expired-but-present revocation case needs `DEBUG`, so only the isolated
+  harness (`verify-redis-session-aof-replay.sh`) proves it. The decision and
+  evidence are recorded in
+  [ADR 018](../decisions/018-disabled-default-user-for-redis-session-aof-replay.md).
+  A Redis started with the earlier restricted `default` drops those writes,
+  so the [cutover](../development/local-environment.md#redis-session-acl-cutover)
+  flushed the old instance before the fix first started; that one-time reset
+  logged every user out and dropped pending logins. The production reference
+  uses the same ACL and probes, and the static guardrail checks its render, but
+  it has no runtime validation
 - `redis-session` unavailability fails session validation until it returns
 - One disposable `redis-cache` Deployment replica, shared by every
   currency-service replica. Its unavailability only slows exchange-rate reads,
@@ -901,7 +933,7 @@ local Tilt or the production reference.
 - Key names remain visible metadata to Redis operators; hashing keeps the reusable token out of them. No application cache user exists on `redis-session`, so the `currency-service` `+scan` grant on `redis-cache` cannot list session, session-index or OAuth2-state key names
 - TTL: 15 minutes (configurable via `session.ttl-seconds`), capped by the 8-hour absolute lifetime (`session.max-lifetime-seconds`)
 - Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis-session/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache runs on `redis-cache` and does not share this budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
-- Persistence: AOF for crash recovery. Replay currently drops multi-write session script effects, so a restart loses sessions and OAuth state written since the last AOF rewrite; see [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
+- Persistence: AOF on the PVC. The disabled-but-permitted `default` user lets replay restore multi-write session script effects, verified through live local restarts; fsync and expiry limits apply. See the Redis bullets in [High Availability Configuration](#high-availability-configuration) and [ADR 018](../decisions/018-disabled-default-user-for-redis-session-aof-replay.md)
 
 The derivation of the `redis-session` budget lives in [Redis Memory Budgets](#redis-memory-budgets).
 
@@ -1081,6 +1113,7 @@ containment.
 | Deferred mesh identity hardening | [ADR 013](../decisions/013-deferred-mesh-identity-hardening.md) |
 | HSTS without `includeSubDomains` or `preload` | [ADR 014](../decisions/014-hsts-without-includesubdomains-or-preload.md) |
 | Separate `redis-session` and `redis-cache` instances | [ADR 016](../decisions/016-separate-session-and-cache-redis.md) |
+| Disabled `redis-session` `default` user for AOF replay, `+ping`-only probe user | [ADR 018](../decisions/018-disabled-default-user-for-redis-session-aof-replay.md) |
 
 ---
 

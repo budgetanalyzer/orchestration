@@ -564,9 +564,14 @@ non-secret runtime settings stay on checked-in manifests or ConfigMaps.
 PostgreSQL Step 2 uses a `postgres_admin` bootstrap user plus dedicated service
 users. RabbitMQ Step 3 now bootstraps `rabbitmq-admin` and `currency-service`
 from a definitions file. Redis Step 4 now uses ACL users on two instances. Each
-instance has a restricted `default` user for probes and its own `redis-ops`
-identity; `redis-session` adds the dedicated `session-gateway` and `ext-authz`
-identities, and `redis-cache` adds only `currency-service`.
+instance has its own `redis-ops` identity. `redis-cache` probes authenticate as
+its restricted `default` user and it adds only `currency-service`.
+`redis-session` disables `default`, probes as the PING-only `redis-health`
+user (`REDIS_SESSION_HEALTH_PASSWORD`, Secret key `health-password`) and adds
+the dedicated `session-gateway` and `ext-authz` identities. The retired
+`REDIS_SESSION_DEFAULT_PASSWORD` has no effect; remove it from an existing
+`.env`, or Tilt warns that it is undeclared. Set
+`REDIS_SESSION_HEALTH_PASSWORD` there only to override the default local value.
 
 Current local secret names:
 
@@ -665,7 +670,7 @@ for Spring SSL bundles.
 - `currency-service` uses username `currency-service` on `redis-cache`; direct `bootRun` should set `SPRING_DATA_REDIS_PORT=6380`, `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
 - `ext-authz` uses `REDIS_ADDR=localhost:6379` (`redis-session`), `REDIS_USERNAME=ext-authz`, `REDIS_EXT_AUTHZ_PASSWORD` from `.env`, `REDIS_TLS=true`, and `REDIS_CA_CERT` pointing at the `infra-ca` PEM
 - `redis-ops` is the per-instance maintenance identity for manual `redis-cli` access and `FLUSHALL`; use `redis-cli --tls --cacert ./nginx/certs/infra/infra-ca.pem --user redis-ops --pass "$REDIS_SESSION_OPS_PASSWORD" -h localhost -p 6379 ...` for `redis-session`, or `--pass "$REDIS_CACHE_OPS_PASSWORD" -h localhost -p 6380` for `redis-cache`. `./scripts/ops/redis-browse.sh session|cache` wraps the in-cluster equivalent
-- `default` is probe-only and should not be used by application code
+- On `redis-cache`, `default` is probe-only and should not be used by application code. On `redis-session`, `default` is `off` with no password, so no client can authenticate as it; it keeps `~* &* +@all` only because Redis replays the AOF as `default` (see the Redis bullets in [High Availability Configuration](../architecture/security-architecture.md#high-availability-configuration)). The `redis-session` probes run `redis-cli -e --user redis-health ping` with `REDISCLI_AUTH` from `health-password`; `redis-health` may only `PING`
 - `session-gateway` gets only the commands it issues, including those inside its Lua scripts in `../session-gateway/src/main/resources/redis/`: connection and health (`hello`, `auth`, `client|setinfo`, `ping`, `info`), session and OAuth2 state (`hset`, `hmset`, `hget`, `hgetall`, `expire`, `del`, `unlink`, `type`), the user session index (`sadd`, `srem`, `smembers`) and script execution (`evalsha`, `eval`). It has no administration, key-enumeration or pub/sub access. If Session Gateway starts issuing a new Redis command, add it to `kubernetes/infrastructure/redis-session/start-redis.sh` and confirm `ACL LOG` shows no `session-gateway` denials across login, heartbeat, logout, bulk revocation and OAuth failure. `verify-session-architecture.sh` and `verify-credential-isolation.sh` fail if `+@all` returns
 - `currency-service` exists only on `redis-cache`, is limited to `currency-service:*` keys and has no `KEYS` permission. Cache-wide eviction after an exchange-rate import clears the cache with `SCAN` and `DEL` (see `../currency-service/docs/configuration.md`), so the grant keeps `+scan` and `+del`. Redis ACL key patterns do not filter `SCAN` results, but `redis-cache` holds no session, session-index or OAuth2 state keys, so the scan exposes only cache key names. `verify-credential-isolation.sh` asserts the `KEYS` denial and that each instance rejects the other instance's application users
 - `ACL LOG` routinely shows `client|setinfo` denials for `ext-authz` and `currency-service`. Their Redis clients send `CLIENT SETINFO` on connect, the grants omit it, and both clients continue normally. Treat any other denial for those users as real
@@ -673,7 +678,55 @@ for Spring SSL bundles.
 - `session-gateway` owns the long-lived `session:{sha256(token)}` hashes, keyed by the lowercase hex SHA-256 of the `__Host-BA_SESSION` cookie value (see the [shared session contract](../architecture/session-edge-authorization-pattern.md#shared-session-contract)), plus the temporary `oauth2:state:{state}` OAuth2 request state, while ext-authz reads only the `session:*` namespace
 - active browser sessions use same-origin `POST /auth/v1/session` heartbeats from the frontend; each successful heartbeat refreshes account status and grants from permission-service before atomically extending the `redis-session` session, while a temporary lookup failure returns `503` without extending it; bare `/login` stays frontend-owned and only kicks off the real OAuth2 flow through `/oauth2/authorization/idp`
 - Both instances run with `readOnlyRootFilesystem: true`, and their ACL bootstrap writes `/tmp/users.acl`. The `redis-session` StatefulSet writes its AOF to `/data` on the PVC-backed `redis-data-redis-session-0` claim. Reset local session state with `./scripts/ops/flush-redis.sh session` or by recreating the local cluster/runtime, not by deleting `redis-session-0` or relying on `tilt down`. That helper runs `FLUSHALL` and then `BGREWRITEAOF`, because `FLUSHALL` alone only appends to the AOF and leaves earlier keys, such as pre-cutover raw session tokens, on the PVC.
+- See [Redis session ACL cutover](#redis-session-acl-cutover) before the first `tilt up` with the disabled-`default` ACL
 - The `redis-cache` Deployment is deliberately disposable: `/data` is an `emptyDir`, AOF and RDB snapshots are off, and `allkeys-lru` evicts entries at its memory budget. Losing it only costs currency-service cache misses, which the service [fails open](../../../currency-service/docs/configuration.md#caching) to PostgreSQL. `./scripts/ops/flush-redis.sh cache` clears it without restarting the pod.
+
+#### Redis Session ACL Cutover
+
+The checked-in `redis-session` ACL disables `default` but keeps the replay
+permissions the AOF loader needs. A Redis started with the earlier restricted
+`default` skipped the writes in replayed `MULTI`/`EXEC` blocks but left them
+in the AOF. The first start with the new ACL must not load that history,
+because replaying the skipped writes could restore revoked sessions. Writes
+made after a flush were applied in memory and replay correctly, so session
+writers keep running throughout. Run this once on a cluster whose
+`redis-session` still runs the old ACL:
+
+1. Stop `tilt up` with Ctrl-C. Do not use `tilt down`: it deletes the Redis pod
+   but keeps the PVC, so the next `tilt up` would load the old history under
+   the new ACL. Ctrl-C leaves the old pod running.
+2. Flush the running old instance with `./scripts/ops/flush-redis.sh session`
+   and answer `y`. It runs `FLUSHALL` then `BGREWRITEAOF`. This logs every user
+   out and drops pending logins; users sign in again afterwards.
+3. Record the pod UID and restart count:
+
+   ```bash
+   kubectl get pod redis-session-0 -n infrastructure \
+     -o jsonpath='{.metadata.uid} {.status.containerStatuses[0].restartCount}{"\n"}'
+   ```
+
+4. Immediately before starting Tilt, run the same command. If the UID or
+   restart count changed, the old configuration reloaded its AOF; rerun step 2
+   and record the new values. Then run `tilt up`. It applies the new
+   ConfigMap, Secret and StatefulSet, and the changed pod template restarts
+   Redis with the new ACL.
+5. As `redis-ops`, confirm `ACL GETUSER default` shows the `off` flag, then run
+   `./scripts/smoketest/verify-credential-isolation.sh` and the restart proof
+   `./scripts/smoketest/verify-redis-session-persistence.sh --allow-restart`.
+
+If `tilt down` already deleted the pod, or the pod started with the new ACL
+before the flush, do not restart it to recover. The new ACL has already
+replayed, or will replay, the old history. Flush it with
+`./scripts/ops/flush-redis.sh session` before trusting revocations, or
+recreate the local cluster. Do not revert to the restricted `default` as a
+recovery step; it brings the replay defect back.
+
+The isolated harness and static checks prove the ACL and probe contract. The
+cutover and the live restart proof were completed on local Kind on 2026-11-15;
+the decision and evidence are recorded in
+[ADR 018](../decisions/018-disabled-default-user-for-redis-session-aof-replay.md).
+Run this procedure again only on a cluster whose `redis-session` still runs the
+old ACL.
 
 #### RabbitMQ Local Access
 

@@ -14,6 +14,7 @@ SECRETS_ONLY_SCRIPT="${REPO_DIR}/scripts/guardrails/check-secrets-only-handling.
 PRODUCTION_KYVERNO_VALUES="${REPO_DIR}/deploy/helm-values/kyverno.values.yaml"
 INGRESS_RATE_LIMIT_CONFIG_VERIFIER="${REPO_DIR}/scripts/guardrails/verify-ingress-rate-limit-config.sh"
 KUSTOMIZE_RENDER_DIR=""
+REDIS_SESSION_SELF_TEST_DIR=""
 
 # shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
 # shellcheck source=../lib/pinned-tool-versions.sh
@@ -112,6 +113,20 @@ BROWSER_ROUTE_FILES=(
     "${REPO_DIR}/kubernetes/gateway/auth-httproute.yaml"
 )
 PRODUCTION_GATEWAY_ROUTES_OVERLAY="${REPO_DIR}/kubernetes/production/gateway-routes"
+TILTFILE="${REPO_DIR}/Tiltfile"
+INFRASTRUCTURE_KUSTOMIZATION="${REPO_DIR}/kubernetes/infrastructure"
+PRODUCTION_INFRASTRUCTURE_OVERLAY="${REPO_DIR}/kubernetes/production/infrastructure"
+REDIS_SESSION_START_SCRIPT="${REPO_DIR}/kubernetes/infrastructure/redis-session/start-redis.sh"
+REDIS_SESSION_STATEFULSET="${REPO_DIR}/kubernetes/infrastructure/redis-session/statefulset.yaml"
+REDIS_SESSION_SELF_TEST_MUTANTS=(
+    default-enabled
+    health-extra-command
+    health-key-access
+    readiness-without-user
+    liveness-without-e
+    rediscli-auth-wrong-key
+    tilt-without-health-key
+)
 
 usage() {
     cat <<'EOF'
@@ -138,6 +153,9 @@ Runs the static security guardrail suite:
   the production render
 - istio-egress private destinations: no NetworkPolicy in istio-egress allows
   TCP 443 to private, link-local or carrier-grade NAT ranges
+- redis-session ACL and probes: disabled `default` with replay permissions,
+  PING-only redis-health, `-e --user redis-health` probes and a matching
+  Secret contract, locally and in the production render
 
 Use --self-test to assert that the intentional failing fixtures are rejected.
 
@@ -154,6 +172,9 @@ log_step() {
 cleanup_static_guardrails() {
     if [[ -n "${KUSTOMIZE_RENDER_DIR}" ]]; then
         rm -rf "${KUSTOMIZE_RENDER_DIR}"
+    fi
+    if [[ -n "${REDIS_SESSION_SELF_TEST_DIR}" ]]; then
+        rm -rf "${REDIS_SESSION_SELF_TEST_DIR}"
     fi
 }
 
@@ -2077,6 +2098,291 @@ EGRESS_PRIVATE_PY
     printf '%s istio-egress private-destination contract scan passed\n' "${subject}"
 }
 
+# Usage: scan_redis_session_acl_contract SUBJECT TILTFILE|- MANIFEST...
+# The redis-session ACL must keep `default` disabled with the full permissions
+# the AOF loader needs for replay, limit redis-health to PING, and keep the
+# application and operator users. Both probes must authenticate as
+# redis-health with -e, because without -e redis-cli exits 0 after an
+# authentication failure. Every ACL password must come from the bootstrap
+# Secret, REDISCLI_AUTH must be the health password, and the retired session
+# default password must not return. With a Tiltfile, the Tilt-generated Secret
+# must define every key the StatefulSet references.
+scan_redis_session_acl_contract() {
+    local subject="$1"
+    shift
+
+    if ! "${GUARDRAIL_PYTHON}" -I - "${REPO_DIR}" "$@" <<'REDIS_SESSION_ACL_PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+CONFIGMAP = "redis-session-acl-bootstrap"
+SCRIPT_KEY = "start-redis.sh"
+STATEFULSET = "redis-session"
+CONTAINER = "redis-session"
+SECRET = "redis-session-bootstrap-credentials"
+HEALTH_ENV = "REDIS_SESSION_HEALTH_PASSWORD"
+HEALTH_KEY = "health-password"
+RETIRED_ENV = "REDIS_SESSION_DEFAULT_PASSWORD"
+RETIRED_KEY = "default-password"
+ACL_START = 'cat > "$ACL_FILE" <<EOF'
+EXPECTED_USERS = {"session-gateway", "ext-authz", "redis-ops", "redis-health", "default"}
+DEFAULT_RULES = ["reset", "off", "~*", "&*", "+@all"]
+HEALTH_RULES = ["reset", "on", ">${" + HEALTH_ENV + "}", "+ping"]
+PROBE_COMMAND = ["redis-cli", "-e", "--tls", "--cacert", "/tls-ca/ca.crt", "--user", "redis-health", "ping"]
+
+repo_dir = Path(sys.argv[1])
+tiltfile = sys.argv[2]
+manifests = sys.argv[3:]
+failures = []
+
+
+def label(path):
+    try:
+        return str(Path(path).resolve().relative_to(repo_dir))
+    except ValueError:
+        return str(path)
+
+
+def acl_heredoc(script, name):
+    lines = script.splitlines()
+    starts = [index for index, line in enumerate(lines) if line == ACL_START]
+    if len(starts) != 1:
+        failures.append(f"{name}: expected one '{ACL_START}' ACL heredoc, found {len(starts)}")
+        return None
+    body = []
+    for line in lines[starts[0] + 1:]:
+        if line == "EOF":
+            return body
+        body.append(line)
+    failures.append(f"{name}: ACL heredoc is not terminated")
+    return None
+
+
+def check_script(script, name):
+    for forbidden in (RETIRED_ENV, "requirepass"):
+        if forbidden in script:
+            failures.append(f"{name}: start-redis.sh must not reference {forbidden}")
+    body = acl_heredoc(script, name)
+    if body is None:
+        return set()
+    users = {}
+    for line in body:
+        tokens = line.split()
+        if len(tokens) < 2 or tokens[0] != "user":
+            failures.append(f"{name}: unexpected ACL heredoc line {line!r}")
+            continue
+        if tokens[1] in users:
+            failures.append(f"{name}: ACL user {tokens[1]} is defined more than once")
+        users[tokens[1]] = tokens[2:]
+    if set(users) != EXPECTED_USERS:
+        failures.append(f"{name}: ACL users must be exactly {sorted(EXPECTED_USERS)}, found {sorted(users)}")
+    if "default" in users and users["default"] != DEFAULT_RULES:
+        failures.append(
+            f"{name}: default must be 'user default {' '.join(DEFAULT_RULES)}' "
+            "(disabled for clients, full permissions for AOF replay), "
+            f"found 'user default {' '.join(users['default'])}'"
+        )
+    if "redis-health" in users and users["redis-health"] != HEALTH_RULES:
+        failures.append(
+            f"{name}: redis-health must be 'user redis-health {' '.join(HEALTH_RULES)}' "
+            f"(PING only, no keys or channels), found 'user redis-health {' '.join(users['redis-health'])}'"
+        )
+    return set(re.findall(r"\$\{([A-Z0-9_]+)\}", "\n".join(body)))
+
+
+def secret_ref(env):
+    ref = ((env.get("valueFrom") or {}).get("secretKeyRef")) or {}
+    return ref.get("name"), ref.get("key")
+
+
+def check_statefulset(statefulset, acl_vars, name):
+    containers = [
+        container
+        for container in (((statefulset.get("spec") or {}).get("template") or {}).get("spec") or {}).get("containers") or []
+        if container.get("name") == CONTAINER
+    ]
+    if len(containers) != 1:
+        failures.append(f"{name}: expected one {CONTAINER} container, found {len(containers)}")
+        return set()
+    container = containers[0]
+    env = {item.get("name"): item for item in container.get("env") or []}
+    referenced_keys = set()
+    for item in env.values():
+        secret, key = secret_ref(item)
+        if secret == SECRET:
+            referenced_keys.add(key)
+    if RETIRED_ENV in env or RETIRED_KEY in referenced_keys:
+        failures.append(f"{name}: the retired {RETIRED_ENV}/{RETIRED_KEY} session credential is still wired")
+    for variable in sorted(acl_vars):
+        if variable not in env:
+            failures.append(f"{name}: ACL password variable {variable} is not set on {CONTAINER}")
+        elif secret_ref(env[variable])[0] != SECRET:
+            failures.append(f"{name}: {variable} must come from Secret {SECRET}")
+    for variable in (HEALTH_ENV, "REDISCLI_AUTH"):
+        if variable not in env or secret_ref(env[variable]) != (SECRET, HEALTH_KEY):
+            failures.append(f"{name}: {variable} must come from Secret {SECRET} key {HEALTH_KEY}")
+    for probe in ("livenessProbe", "readinessProbe"):
+        command = (((container.get(probe) or {}).get("exec")) or {}).get("command")
+        if command != PROBE_COMMAND:
+            failures.append(f"{name}: {probe} must run {' '.join(PROBE_COMMAND)!r}, found {command!r}")
+    return referenced_keys
+
+
+def check_tiltfile(path, referenced_keys):
+    name = label(path)
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as error:
+        failures.append(f"{name}: cannot read: {error}")
+        return
+    if RETIRED_ENV in text:
+        failures.append(f"{name}: must not read the retired {RETIRED_ENV}")
+    blocks = re.findall(r"create_secret\('" + re.escape(SECRET) + r"',\s*\w+,\s*\{(.*?)\}\)", text, re.DOTALL)
+    if len(blocks) != 1:
+        failures.append(f"{name}: expected one create_secret('{SECRET}', ...), found {len(blocks)}")
+        return
+    entries = dict(re.findall(r"'([^']+)'\s*:\s*(\w+)", blocks[0]))
+    for key in sorted(referenced_keys - set(entries)):
+        failures.append(f"{name}: {SECRET} does not define key {key} referenced by the StatefulSet")
+    if RETIRED_KEY in entries:
+        failures.append(f"{name}: {SECRET} still defines the retired {RETIRED_KEY}")
+    variable = entries.get(HEALTH_KEY)
+    if variable and not re.search(
+        r"^" + re.escape(variable) + r"\s*=\s*os\.getenv\('" + HEALTH_ENV + r"'", text, re.MULTILINE
+    ):
+        failures.append(f"{name}: {SECRET}[{HEALTH_KEY}] must be read from {HEALTH_ENV}")
+
+
+documents = []
+for manifest in manifests:
+    try:
+        documents.extend(
+            (label(manifest), document)
+            for document in yaml.safe_load_all(Path(manifest).read_text(encoding="utf-8"))
+            if isinstance(document, dict)
+        )
+    except (OSError, yaml.YAMLError) as error:
+        failures.append(f"{label(manifest)}: cannot parse: {error}")
+
+
+def find(kind, resource_name):
+    matches = [
+        (name, document)
+        for name, document in documents
+        if document.get("kind") == kind and (document.get("metadata") or {}).get("name") == resource_name
+    ]
+    if len(matches) != 1:
+        failures.append(f"expected exactly one {kind}/{resource_name}, found {len(matches)}")
+        return None, None
+    return matches[0]
+
+
+configmap_source, configmap = find("ConfigMap", CONFIGMAP)
+statefulset_source, statefulset = find("StatefulSet", STATEFULSET)
+acl_vars = set()
+if configmap is not None:
+    script = (configmap.get("data") or {}).get(SCRIPT_KEY)
+    if not isinstance(script, str):
+        failures.append(f"{configmap_source}: ConfigMap/{CONFIGMAP} has no {SCRIPT_KEY}")
+    else:
+        acl_vars = check_script(script, f"{configmap_source}: ConfigMap/{CONFIGMAP}")
+if statefulset is not None:
+    keys = check_statefulset(statefulset, acl_vars, f"{statefulset_source}: StatefulSet/{STATEFULSET}")
+    if tiltfile != "-":
+        check_tiltfile(tiltfile, keys)
+
+if failures:
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    sys.exit(1)
+REDIS_SESSION_ACL_PY
+    then
+        printf '%s redis-session ACL and probe contract scan failed\n' "${subject}" >&2
+        return 1
+    fi
+
+    printf '%s redis-session ACL and probe contract scan passed\n' "${subject}"
+}
+
+# Self-test input for scan_redis_session_acl_contract: the ConfigMap the
+# infrastructure kustomization generates from START_SCRIPT, plus STATEFULSET.
+write_redis_session_contract_input() {
+    local start_script="$1"
+    local statefulset="$2"
+    local output="$3"
+
+    "${GUARDRAIL_PYTHON}" -I - "${start_script}" "${statefulset}" >"${output}" <<'REDIS_SESSION_INPUT_PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+configmap = {
+    "apiVersion": "v1",
+    "kind": "ConfigMap",
+    "metadata": {"name": "redis-session-acl-bootstrap", "namespace": "infrastructure"},
+    "data": {"start-redis.sh": Path(sys.argv[1]).read_text(encoding="utf-8")},
+}
+sys.stdout.write(yaml.safe_dump(configmap, sort_keys=False))
+sys.stdout.write("---\n")
+sys.stdout.write(Path(sys.argv[2]).read_text(encoding="utf-8"))
+REDIS_SESSION_INPUT_PY
+}
+
+# Applies one named mutation from REDIS_SESSION_SELF_TEST_MUTANTS to the copies
+# in DIR. Fails when the mutation no longer changes its file, so a drifted
+# self-test case cannot pass silently.
+apply_redis_session_mutant() {
+    local name="$1"
+    local dir="$2"
+    local file expression
+
+    case "${name}" in
+        default-enabled)
+            file=start-redis.sh
+            expression='s/^user default reset off /user default reset on /'
+            ;;
+        health-extra-command)
+            file=start-redis.sh
+            expression='s/^\(user redis-health .*\) +ping$/\1 +ping +info/'
+            ;;
+        health-key-access)
+            file=start-redis.sh
+            expression='s/^\(user redis-health .*\) +ping$/\1 ~* +ping/'
+            ;;
+        readiness-without-user)
+            file=statefulset.yaml
+            expression='/readinessProbe:/,/periodSeconds:/{/- --user$/d;/- redis-health$/d;}'
+            ;;
+        liveness-without-e)
+            file=statefulset.yaml
+            expression='/livenessProbe:/,/periodSeconds:/{/- -e$/d;}'
+            ;;
+        rediscli-auth-wrong-key)
+            file=statefulset.yaml
+            expression='/name: REDISCLI_AUTH$/,/key:/s/key: health-password$/key: ops-password/'
+            ;;
+        tilt-without-health-key)
+            file=Tiltfile
+            expression="s/'health-password': redis_session_health_password/'default-password': redis_session_health_password/"
+            ;;
+        *)
+            printf 'unknown redis-session self-test mutant: %s\n' "${name}" >&2
+            return 1
+            ;;
+    esac
+
+    mv "${dir}/${file}" "${dir}/${file}.orig"
+    sed -e "${expression}" "${dir}/${file}.orig" >"${dir}/${file}"
+    if cmp -s "${dir}/${file}" "${dir}/${file}.orig"; then
+        printf 'redis-session self-test mutant %s no longer changes %s\n' "${name}" "${file}" >&2
+        return 1
+    fi
+}
+
 collect_network_policy_manifest_files() {
     find "${REPO_DIR}/kubernetes" -type f \( -name '*.yaml' -o -name '*.yml' \) \
         -exec grep -lE "kind:[[:space:]]*['\"]?NetworkPolicy" {} + | sort
@@ -2118,6 +2424,13 @@ run_repo_pattern_scans() {
     scan_istio_ingress_path_hardening_contract "production render" "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
     scan_istio_ingress_exact_origin_contract "production render" "${KUSTOMIZE_RENDER_DIR}/gateway-routes.yaml" -- \
         "${KUSTOMIZE_RENDER_DIR}/istio-ingress-policies.yaml"
+
+    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${INFRASTRUCTURE_KUSTOMIZATION}" \
+        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/infrastructure.yaml"
+    "${STATIC_TOOLS_BIN}/kubectl" kustomize "${PRODUCTION_INFRASTRUCTURE_OVERLAY}" \
+        --load-restrictor=LoadRestrictionsNone > "${KUSTOMIZE_RENDER_DIR}/production-infrastructure.yaml"
+    scan_redis_session_acl_contract "repo" "${TILTFILE}" "${KUSTOMIZE_RENDER_DIR}/infrastructure.yaml"
+    scan_redis_session_acl_contract "production render" - "${KUSTOMIZE_RENDER_DIR}/production-infrastructure.yaml"
     rm -rf "${KUSTOMIZE_RENDER_DIR}"
     KUSTOMIZE_RENDER_DIR=""
 }
@@ -2221,6 +2534,34 @@ run_self_test() {
             self_test_failures=$((self_test_failures + 1))
         fi
     done
+
+    local redis_dir mutant
+    REDIS_SESSION_SELF_TEST_DIR="$(mktemp -d)"
+    redis_dir="${REDIS_SESSION_SELF_TEST_DIR}"
+    cp "${REDIS_SESSION_START_SCRIPT}" "${REDIS_SESSION_STATEFULSET}" "${TILTFILE}" "${redis_dir}/"
+    write_redis_session_contract_input "${redis_dir}/start-redis.sh" "${redis_dir}/statefulset.yaml" \
+        "${redis_dir}/baseline.yaml"
+    if ! scan_redis_session_acl_contract "self-test baseline" "${redis_dir}/Tiltfile" "${redis_dir}/baseline.yaml"; then
+        echo "self-test redis-session baseline was rejected; the mutants below would prove nothing" >&2
+        self_test_failures=$((self_test_failures + 1))
+    fi
+    for mutant in "${REDIS_SESSION_SELF_TEST_MUTANTS[@]}"; do
+        mkdir "${redis_dir}/${mutant}"
+        cp "${REDIS_SESSION_START_SCRIPT}" "${REDIS_SESSION_STATEFULSET}" "${TILTFILE}" "${redis_dir}/${mutant}/"
+        if ! apply_redis_session_mutant "${mutant}" "${redis_dir}/${mutant}"; then
+            self_test_failures=$((self_test_failures + 1))
+            continue
+        fi
+        write_redis_session_contract_input "${redis_dir}/${mutant}/start-redis.sh" \
+            "${redis_dir}/${mutant}/statefulset.yaml" "${redis_dir}/${mutant}/input.yaml"
+        if scan_redis_session_acl_contract "self-test ${mutant}" "${redis_dir}/${mutant}/Tiltfile" \
+            "${redis_dir}/${mutant}/input.yaml"; then
+            echo "self-test redis-session mutant ${mutant} unexpectedly passed" >&2
+            self_test_failures=$((self_test_failures + 1))
+        fi
+    done
+    rm -rf "${redis_dir}"
+    REDIS_SESSION_SELF_TEST_DIR=""
 
     if (( self_test_failures > 0 )); then
         printf 'Static security guardrail self-test failed (%d unexpected passes)\n' "${self_test_failures}" >&2

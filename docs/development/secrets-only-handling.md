@@ -20,7 +20,7 @@ This repo now enforces a simple boundary:
 | `permission-service-postgresql-credentials` | `password` |
 | `rabbitmq-bootstrap-credentials` | `password`, `definitions.json` |
 | `currency-service-rabbitmq-credentials` | `password` |
-| `redis-session-bootstrap-credentials` | `default-password`, `ops-password`, `session-gateway-password`, `ext-authz-password` |
+| `redis-session-bootstrap-credentials` | `health-password`, `ops-password`, `session-gateway-password`, `ext-authz-password` |
 | `redis-cache-bootstrap-credentials` | `default-password`, `ops-password`, `currency-service-password` |
 | `session-gateway-redis-credentials` | `password` |
 | `ext-authz-redis-credentials` | `password` |
@@ -30,6 +30,11 @@ This repo now enforces a simple boundary:
 mixed-required payload. RabbitMQ boot import expects a single definitions
 document, so the file necessarily includes usernames and the vhost alongside
 the secret values it configures.
+
+`redis-session-bootstrap-credentials[health-password]` is the `redis-health`
+probe password. It replaced the retired session `default-password`, because
+the session `default` user is disabled and has no password. The
+`redis-cache-bootstrap-credentials[default-password]` key is unchanged.
 
 ## Current Local Config Inventory
 

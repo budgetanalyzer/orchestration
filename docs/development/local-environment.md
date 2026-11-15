@@ -658,7 +658,8 @@ for JDBC `sslrootcert`, and
 `INFRA_CA_CERT_PATH="file:$(cd ../orchestration && pwd)/nginx/certs/infra/infra-ca.pem"`
 for Spring SSL bundles.
 
-Redis local access:
+#### Redis Local Access
+
 - Tilt forwards VM-loopback `6379` to `redis-session` and VM-loopback `6380` to `redis-cache`; both Services listen on `6379` in the cluster. See the [port reference](../architecture/port-reference.md)
 - `session-gateway` uses username `session-gateway` on `redis-session`; direct `bootRun` should set `SPRING_DATA_REDIS_PASSWORD=$REDIS_SESSION_GATEWAY_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
 - `currency-service` uses username `currency-service` on `redis-cache`; direct `bootRun` should set `SPRING_DATA_REDIS_PORT=6380`, `SPRING_DATA_REDIS_PASSWORD=$REDIS_CURRENCY_SERVICE_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED=true`, and `SPRING_DATA_REDIS_SSL_BUNDLE=infra-ca`
@@ -674,7 +675,8 @@ Redis local access:
 - Both instances run with `readOnlyRootFilesystem: true`, and their ACL bootstrap writes `/tmp/users.acl`. The `redis-session` StatefulSet writes its AOF to `/data` on the PVC-backed `redis-data-redis-session-0` claim. Reset local session state with `./scripts/ops/flush-redis.sh session` or by recreating the local cluster/runtime, not by deleting `redis-session-0` or relying on `tilt down`. That helper runs `FLUSHALL` and then `BGREWRITEAOF`, because `FLUSHALL` alone only appends to the AOF and leaves earlier keys, such as pre-cutover raw session tokens, on the PVC.
 - The `redis-cache` Deployment is deliberately disposable: `/data` is an `emptyDir`, AOF and RDB snapshots are off, and `allkeys-lru` evicts entries at its memory budget. Losing it only costs currency-service cache misses, which the service [fails open](../../../currency-service/docs/configuration.md#caching) to PostgreSQL. `./scripts/ops/flush-redis.sh cache` clears it without restarting the pod.
 
-RabbitMQ local access:
+#### RabbitMQ Local Access
+
 - Management UI: `http://localhost:15672`
 - Management username: `rabbitmq-admin`
 - Management password: value from `RABBITMQ_BOOTSTRAP_PASSWORD`

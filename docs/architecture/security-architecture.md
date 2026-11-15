@@ -903,6 +903,20 @@ local Tilt or the production reference.
 - Memory budget: `maxmemory 128mb` with `maxmemory-policy noeviction`, set in `kubernetes/infrastructure/redis-session/start-redis.sh` below the 256Mi container limit. Sessions, session indexes and OAuth2 state are never evicted. The currency cache runs on `redis-cache` and does not share this budget. At the budget Redis rejects writes instead of being OOM-killed, so new logins and heartbeat extensions fail closed while existing sessions stay readable until they expire. Anonymous OAuth2-state growth can still block logins until those records expire; see [Accepted Risks](#accepted-risks)
 - Persistence: AOF for crash recovery. Replay currently drops multi-write session script effects, so a restart loses sessions and OAuth state written since the last AOF rewrite; see [the open issue](../issues/medium-redis-aof-replay-drops-scripted-session-writes.md)
 
+The derivation of the `redis-session` budget lives in [Redis Memory Budgets](#redis-memory-budgets).
+
+**Session Cleanup:**
+- Expired sessions automatically removed by Redis TTL
+- Explicit session invalidation on logout (session hash deleted, entry removed from user session index)
+- Bulk session revocation via `DELETE /internal/v1/sessions/users/{userId}` — uses the user session index to delete all sessions without scanning, and the mesh only allows this route from the `permission-service` workload identity
+- Heartbeat invalidation when permission-service reports the account deactivated, deleted, or missing; permission-service failure preserves the finite existing expiry and returns `503` instead of extending cached grants
+
+### Redis Memory Budgets
+
+This section owns the memory budget of each Redis instance and its derivation.
+The paragraph derives the `redis-session` budget; the list item derives the
+`redis-cache` budget.
+
 **Redis memory budget derivation:** `maxmemory` bounds `used_memory`, not RSS.
 The 2026-11-08 local measurement put the worst observed case at the budget at
 134 MB × 1.55 allocator fragmentation (a bulk Lua load; ordinary writes stayed
@@ -925,11 +939,28 @@ deleted the session because `DEL` is not OOM-gated. Repeat the measurement
 when changing the budget, the container limit or the session and OAuth-state
 record shapes.
 
-**Session Cleanup:**
-- Expired sessions automatically removed by Redis TTL
-- Explicit session invalidation on logout (session hash deleted, entry removed from user session index)
-- Bulk session revocation via `DELETE /internal/v1/sessions/users/{userId}` — uses the user session index to delete all sessions without scanning, and the mesh only allows this route from the `permission-service` workload identity
-- Heartbeat invalidation when permission-service reports the account deactivated, deleted, or missing; permission-service failure preserves the finite existing expiry and returns `503` instead of extending cached grants
+- **`redis-cache` sizing**: `maxmemory 64mb` (container request 96Mi, limit
+  128Mi). The worst case is `W = baseline used_memory + N × largest entry`,
+  with `N` the number of rows in `currency_series`, enabled or not, and the
+  largest entry sized for the longest series, counted in days from its first
+  source rate through today. Inputs from 2026-11-15:
+  - Baseline: `1,425,264` bytes, measured on the local stack right after
+    `flush-redis.sh cache` emptied `redis-cache`. A restarted-empty instance
+    measured `1,091,840` bytes on 2026-11-14; the larger value is used.
+  - Bytes per day: `196,696 / 16,745 ≈ 11.75`, from the measured
+    `MEMORY USAGE` of the THB entry (1981-01-02 to 2026-11-06, 16,745 days),
+    which still measured `196,696` bytes on 2026-11-15.
+  - Longest series: JPY, which is disabled locally, from its first source rate
+    on 1971-01-04 through 2026-11-15, 20,405 days. No other
+    `currency_series` row starts earlier; the 21 rows without imported rates
+    have no first source rate.
+  - Largest entry: about `239,689` bytes (20,405 × 11.75). This is an estimate
+    from the measured bytes per day, not a measured JPY entry.
+  - `N = 23`.
+
+  So `W = 1,425,264 + 23 × 239,689 = 6,938,111` bytes (about 6.6 MiB), below
+  half of `maxmemory` (`33,554,432` bytes). Remeasure and raise `maxmemory` to
+  at least `2 × W` if `W` grows past half of it
 
 ### Emergency Admin Containment
 

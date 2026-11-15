@@ -38,7 +38,7 @@ Tokens in Authorization headers don't have these browser-level protections.
 
 **Session Pattern:**
 ```
-Browser → Session Cookie → Envoy → ext_authz (Redis lookup) → NGINX → Services
+Browser → Session Cookie → Envoy → ext_authz (redis-session lookup) → NGINX → Services
 ```
 Tokens exist only server-side in Redis. Nothing sensitive on the wire except an opaque session ID.
 
@@ -75,8 +75,8 @@ When a user account is identified as compromised or malicious, the response invo
 **Immediate Actions:**
 
 1. **Session Deletion**
-   - Delete the user's Redis session hash (`session:{sha256(token)}`)
-   - ext_authz immediately rejects subsequent requests (session not found in Redis)
+   - Delete the user's `redis-session` session hash (`session:{sha256(token)}`)
+   - ext_authz immediately rejects subsequent requests (session not found in `redis-session`)
    - User must re-authenticate to obtain new session
    - **Timeline:** Immediate (next request fails)
 
@@ -85,7 +85,7 @@ When a user account is identified as compromised or malicious, the response invo
 The ext_authz architecture provides **instant revocation by design**:
 
 **How it works:**
-- Delete user's session hash from Redis (`session:{sha256(token)}`)
+- Delete user's session hash from `redis-session` (`session:{sha256(token)}`)
 - ext_authz lookup fails on next request → 401 returned by Envoy
 - Session cookie becomes invalid (no matching session)
 - User redirected to login

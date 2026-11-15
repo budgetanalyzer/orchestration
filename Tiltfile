@@ -13,6 +13,44 @@ load('ext://dotenv', 'dotenv')
 # Copy .env.example to .env and fill in your values
 dotenv()
 
+# Return the keys of an env file, following the dotenv extension's parsing.
+# With include_commented, a commented "# KEY=" line also declares KEY.
+def env_file_keys(path, include_commented=False):
+    keys = []
+    in_quoted_value = False
+    for line in str(read_file(path)).splitlines():
+        if in_quoted_value:
+            if line.rstrip().endswith('"'):
+                in_quoted_value = False
+            continue
+        commented = line.startswith('#')
+        if commented:
+            if not include_commented:
+                continue
+            line = line[1:]
+        parts = line.split('=', 1)
+        if len(parts) < 2:
+            continue
+        key = parts[0].strip()
+        value = parts[1].strip()
+        if not commented and value.startswith('"') and not value.endswith('"'):
+            in_quoted_value = True
+        if key and key.replace('_', '').isalnum() and key not in keys:
+            keys.append(key)
+    return keys
+
+# Name, never print values of, .env keys that .env.example does not declare.
+def warn_undeclared_env_keys():
+    if not os.path.exists('.env'):
+        return
+    declared = env_file_keys('.env.example', include_commented=True)
+    undeclared = [key for key in env_file_keys('.env') if key not in declared]
+    if undeclared:
+        warn('.env contains keys that .env.example does not declare; the Tiltfile ignores them: ' +
+             ', '.join(undeclared))
+
+warn_undeclared_env_keys()
+
 # Load common configuration
 load('./tilt/common.star',
      'WORKSPACE',
@@ -1068,6 +1106,7 @@ local_resource(
             allow-ext-authz-ingress-from-envoy \
             allow-session-gateway-ingress-from-envoy \
             -n default --ignore-not-found
+        kubectl delete networkpolicy allow-redis-ingress-from-approved-default-workloads -n infrastructure --ignore-not-found
         kubectl apply -f kubernetes/network-policies/default-deny.yaml
         kubectl apply -f kubernetes/network-policies/default-allow.yaml
         kubectl apply -f kubernetes/network-policies/infrastructure-deny.yaml

@@ -362,7 +362,7 @@ kubectl exec -it pod/redis-session-0 -n infrastructure -- redis-cli --tls --cace
 - `currency-service` cannot authenticate to AMQP
 - Management UI login fails
 - Boot-time user or permission changes do not appear
-- Queue processes crash in `rabbit_classic_queue_index_v2:recover` after the move to 4.4: the volume was created by the earlier 3.13 broker; recreate it with the one-time reset in [local-environment.md](../development/local-environment.md#backend-services-spring-boot)
+- Queue processes crash in `rabbit_classic_queue_index_v2:recover` after the move to 4.4: the volume was created by the earlier 3.13 broker; recreate it with the one-time reset in [local-environment.md](../development/local-environment.md#rabbitmq-local-access)
 
 **Debug Commands**:
 ```bash
@@ -474,7 +474,7 @@ Browser (https://app.budgetanalyzer.localhost/api/v1/transactions)
     ↓
 Istio Ingress Gateway (30443) - TLS termination, auth/API rate limiting
     ↓
-ext-authz (9002) - Session validation via Redis, injects X-User-Id/X-Roles/X-Permissions
+ext-authz (9002) - Session validation via redis-session, injects X-User-Id/X-Roles/X-Permissions
     ↓ (if valid)
 NGINX Gateway (8080) - route and load balance to backend
     ↓
@@ -555,7 +555,7 @@ curl http://localhost:8084/currency-service/actuator/health/readiness     # Shou
 
 **4. Check ext-authz**
 ```bash
-# Process liveness and Redis-backed readiness
+# Process liveness and redis-session-backed readiness
 curl http://localhost:8090/livez
 curl http://localhost:8090/readyz
 

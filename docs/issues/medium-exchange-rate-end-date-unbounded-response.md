@@ -2,9 +2,8 @@
 
 - **Severity:** Medium (not reproduced)
 - **Owner:** currency-service
-- **Status:** Resolved and verified live on 2026-11-14 in Phase 9 of
-  [split-redis-session-and-cache.md](../plans/split-redis-session-and-cache.md).
-  Found while designing the
+- **Status:** Resolved and verified live on 2026-11-14 during the Redis
+  session/cache split. Found while designing the
   [currency cache fix](high-currency-cache-exhausts-shared-redis.md); not
   covered by either security review.
 
@@ -35,10 +34,10 @@ This conclusion comes from reading the code. It has not been run.
 
 Bound the effective end date at the service layer. Options:
 
-- Clamp it to `min(endDate, today)`. This keeps forward-fill up to today,
-  which is useful for converting recent transactions when the provider data
-  lags, and caps the response by data age.
-- Reject `endDate` after today with a validation error. This is clearer but
+- Clamp it to a near-future cap such as `min(endDate, tomorrow)`. This keeps
+  forward-fill up to the cap, which is useful for converting recent
+  transactions when the provider data lags, and caps the response by data age.
+- Reject `endDate` after the cap with a validation error. This is clearer but
   changes the API contract for existing callers.
 
 Either way, a maximum response is then bounded by the history length (about
@@ -48,20 +47,24 @@ Either way, a maximum response is then bounded by the history length (about
 
 Clamp. currency-service now bounds the range at the service layer:
 
-- The effective end date is `min(endDate, today)`. A missing `endDate` means
-  today; it previously meant the last source rate.
-- "Today" is the UTC date from an injected `java.time.Clock`.
+- The effective end date is `min(endDate, tomorrow)`. "Tomorrow" is the UTC
+  date from an injected `java.time.Clock` plus one day.
+- The cap is tomorrow, not today, because transaction-service accepts
+  transaction dates through tomorrow, and the web client requests rates
+  through its latest transaction date.
+- A missing `endDate` means today; it previously meant the last source rate.
 - When both dates are supplied, `startDate > endDate` is still a
-  `400 INVALID_REQUEST`, checked against the dates as sent, before clamping.
-- A valid future range that becomes empty after clamping returns an empty
-  list, as does a range with no source rate inside it.
+  `400 INVALID_REQUEST`, checked against the dates as sent, before the cap is
+  applied.
+- A range with no source rate inside it returns an empty list, including a
+  valid future range that becomes empty after the cap.
 - After the last source rate, the last rate is forward-filled only up to the
   effective end date.
 
 A maximum response is therefore bounded by the history length, and the
 response is sliced from the per-currency cached series, so the end date no
 longer creates cache keys either. Clamping was chosen over rejection because
-it keeps existing callers working and keeps forward-fill up to today for
+it keeps existing callers working and keeps forward-fill up to the cap for
 converting recent transactions when provider data lags. The endpoint contract
 lives in currency-service
 [docs/api/README.md](https://github.com/budgetanalyzer/currency-service/blob/main/docs/api/README.md#get-v1exchange-rates).
@@ -71,7 +74,8 @@ description.
 
 ### Live verification (2026-11-14)
 
-On the local Tilt/Kind stack, THB requests through the ingress returned:
+This verification predates the tomorrow cap and exercised the earlier cap at
+today. On the local Tilt/Kind stack, THB requests through the ingress returned:
 
 - no `endDate`: `200` with 16,753 daily entries ending today (2026-11-14);
 - `startDate=2026-06-01&endDate=2099-12-31`: `200` with 167 entries ending
@@ -83,6 +87,7 @@ per-currency series.
 
 ## Acceptance
 
-- A request with a far-future `endDate` returns a response bounded by today.
+- A request with a far-future `endDate` returns a response bounded by
+  tomorrow.
   It does not build one entry per day up to that date.
 - The chosen behavior is documented on the endpoint and covered by a test.

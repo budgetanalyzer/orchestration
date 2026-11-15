@@ -70,8 +70,16 @@ echo -e "${YELLOW}Using Redis pod: $REDIS_POD${NC}"
 echo ""
 
 REDIS_INSTANCE_OPS_PASSWORD=$(kubectl get secret "$REDIS_BOOTSTRAP_SECRET" -n infrastructure -o jsonpath='{.data.ops-password}' | base64 -d)
+if [ -z "$REDIS_INSTANCE_OPS_PASSWORD" ]; then
+    echo -e "${RED}ERROR: ${REDIS_BOOTSTRAP_SECRET} is missing ops-password.${NC}" >&2
+    exit 1
+fi
 
-redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" FLUSHALL > /dev/null 2>&1
+flush_reply=$(redis_cli_in_pod "$REDIS_INSTANCE" infrastructure "$REDIS_POD" redis-ops "$REDIS_INSTANCE_OPS_PASSWORD" FLUSHALL 2>&1 | tr -d '\r' || true)
+if [ "$flush_reply" != "OK" ]; then
+    echo -e "${RED}ERROR: FLUSHALL on ${REDIS_INSTANCE} did not return OK: ${flush_reply}${NC}" >&2
+    exit 1
+fi
 
 # The session instance persists AOF data on its PVC. Rewrite it so prior
 # session tokens are removed from the persisted history. The disposable cache

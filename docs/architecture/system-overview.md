@@ -249,14 +249,8 @@ tilt get uiresources
   ranges in Java, so request date ranges never create cache keys. The cache
   fails open to PostgreSQL; see
   [currency-service caching](https://github.com/budgetanalyzer/currency-service/blob/main/docs/configuration.md#caching)
-- **`redis-cache` sizing**: `maxmemory 64mb` (container request 96Mi, limit
-  128Mi). The worst case is `W = baseline used_memory + N × largest entry`,
-  with `N` the number of rows in `currency_series`. Measured locally on
-  2026-11-14: baseline `1,091,840` bytes, largest entry (THB, 1981-01-02 to
-  2026-11-06, 16,745 days) `196,696` bytes from `MEMORY USAGE`, `N = 23`, so
-  `W = 1,091,840 + 23 × 196,696 = 5,615,848` bytes (about 5.4 MiB), below half
-  of `maxmemory` (`33,554,432` bytes). Remeasure and raise `maxmemory` to at least `2 × W` if `W`
-  grows past half of it
+- **`redis-cache` sizing**: `maxmemory 64mb`; see
+  [Redis Memory Budgets](security-architecture.md#redis-memory-budgets) for the derivation
 - **Session storage (`redis-session`)**: Used by session-gateway (Redis hashes, read by ext_authz)
 - **TTL-based expiration**: Configurable per cache
 - **Cache-aside pattern**: Services manage cache population

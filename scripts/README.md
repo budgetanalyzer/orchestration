@@ -92,7 +92,8 @@ scripts/
   first; see [Smoketest](#smoketest) for standalone use and `--dry-run`.
 - `smoketest/verify-credential-isolation.sh` - Proves service and operator
   credentials are isolated across PostgreSQL, RabbitMQ, `redis-session` and
-  `redis-cache`, including rejection of each Redis instance's foreign users.
+  `redis-cache`, including rejection and absence of each Redis instance's
+  foreign users and each instance's exact memory and persistence settings.
 - `smoketest/verify-network-policies.sh` - Proves the live pod-to-pod allowlist,
   including currency-service-only access to `redis-cache` and auth-edge-only
   access to `redis-session`.

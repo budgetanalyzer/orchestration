@@ -64,7 +64,7 @@ kubectl get cm istio -n istio-system -o yaml | grep ext-authz-http
 
 ### ext_authz Service - Authorization Layer
 
-**Purpose**: Per-request session validation via Redis lookup
+**Purpose**: Per-request session validation via `redis-session` lookup
 
 **Responsibilities**:
 - Authenticates to `redis-session` with the dedicated `ext-authz` ACL user
@@ -87,7 +87,7 @@ kubectl get pods -l app=ext-authz
 # View ext_authz logs
 kubectl logs deployment/ext-authz
 
-# Check ext_authz liveness and Redis-backed readiness
+# Check ext_authz liveness and redis-session-backed readiness
 kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/livez
 kubectl exec deployment/ext-authz -- wget -qO- http://localhost:8090/readyz
 ```
@@ -131,7 +131,7 @@ kubectl logs deployment/nginx-gateway
 
 **Responsibilities**:
 - Manages OAuth2 flows with Auth0
-- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as `redis-session` hashes (`session:{sha256(token)}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#backend-services-spring-boot)) — no Auth0 tokens are stored
+- Writes session data (userId, roles, permissions, idp_sub, email, display_name) as `redis-session` hashes (`session:{sha256(token)}`) using the dedicated `session-gateway` ACL user, which is limited to the session keyspaces and the commands Session Gateway issues (see [Redis local access](../development/local-environment.md#redis-local-access)) — no Auth0 tokens are stored
 - Issues the host-only `__Host-BA_SESSION` session cookie (`Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain`) to browsers
 - Provides browser session inspection at `GET /auth/v1/user`, state-extending
   heartbeat at `POST /auth/v1/session`, and logout through a top-level form

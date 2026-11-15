@@ -2,9 +2,8 @@
 
 - **Severity:** High
 - **Owner:** currency-service and orchestration (Redis storage was split)
-- **Status:** Resolved and verified live on 2026-11-14 in Phase 9 of
-  [split-redis-session-and-cache.md](../plans/split-redis-session-and-cache.md).
-  Previously known (plans 03 P11/P13, 04 P1)
+- **Status:** Resolved and verified live on 2026-11-14 during the Redis
+  session/cache split. Previously known (plans 03 P11/P13, 04 P1)
 - **Source:** 2026-11-09 implementation review F1; independent implementation review C1
 
 ## Problem
@@ -175,7 +174,7 @@ was decided as part of the same change.
 The authoritative behavior lives in currency-service
 [configuration.md](https://github.com/budgetanalyzer/currency-service/blob/main/docs/configuration.md#caching).
 
-### Live measurement (Phase 9, 2026-11-14)
+### Live measurement (2026-11-14)
 
 Measured on the local Tilt/Kind stack after the cutover, with `redis-cache`
 restarted empty (`maxmemory 64mb`, `allkeys-lru`):
@@ -184,18 +183,17 @@ restarted empty (`maxmemory 64mb`, `allkeys-lru`):
 - Only THB is enabled locally. Its full range, a 2001 sub-range, a range ending
   in 2099 and a future-only range returned `200` and left exactly one key,
   `currency-service:exchangeRateSeries::THB`, with a one-hour TTL. The range
-  ending in 2099 stopped at today and the future-only range was empty.
+  ending in 2099 stopped at today, the cap at the time, and the future-only
+  range was empty.
   `redis-session` held no `currency-service:*` key.
-- `MEMORY USAGE` of the THB entry (1981-01-02 to 2026-11-06, 16,745 days):
-  `196,696` bytes, a `167,590`-byte value. That is the sum and the largest
-  entry. Final `used_memory` `1,462,648` bytes, `evicted_keys` still `0`. The
-  previous all-time THB range entry was 5.24 MB.
-- `N = 23` rows in `currency_series`. Worst case
-  `W = baseline used_memory + N × largest entry = 1,091,840 + 23 × 196,696 =
-  5,615,848` bytes (about 5.4 MiB), below half of the `64mb` `maxmemory`
-  (`33,554,432` bytes). `maxmemory` stays `64mb` and the container request and
-  limit stay 96Mi and 128Mi. JPY data starts in 1971; at the measured
-  11.7 bytes per day its entry would be about 240 KB, and `W` about 6.6 MB.
+- The THB entry (1981-01-02 to 2026-11-06, 16,745 days) holds a
+  `167,590`-byte value and was the only, and so the largest, entry. Final
+  `used_memory` `1,462,648` bytes, `evicted_keys` still `0`. The previous
+  all-time THB range entry was 5.24 MB.
+- `N = 23` rows in `currency_series`. The worst case `W` computed from this
+  entry was about 5.4 MiB. The 2026-11-15 recomputation below replaces it.
+  `maxmemory` stays `64mb` and the container request and limit stay 96Mi and
+  128Mi.
 - With `redis-cache` scaled to 0, exchange-rate reads returned `200`
   (about 2.1 to 2.4 seconds, bounded by the short command timeout),
   currency-service stayed Ready with no restarts, `FailOpenCache` logged each
@@ -204,7 +202,27 @@ restarted empty (`maxmemory 64mb`, `allkeys-lru`):
   one Ready replica afterwards.
 - Focused verifiers passed: credential isolation 84/84, network policies
   77/77, transport encryption 22/22 and runtime hardening 191/191. The
-  pinned-PyYAML smoketest passed (see the plan's Phase 9 outcome).
+  pinned-PyYAML smoketest passed.
+
+### Worst-case recomputation (2026-11-15)
+
+`W` is now sized for the longest possible series rather than the largest
+cached entry. The inputs are below.
+[Redis Memory Budgets](../architecture/security-architecture.md#redis-memory-budgets)
+owns the derivation.
+
+- Baseline `used_memory`: `1,425,264` bytes, measured right after
+  `flush-redis.sh cache` emptied `redis-cache`.
+- Bytes per day: `196,696 / 16,745 ≈ 11.75`, from the measured THB entry.
+  The THB entry still measured `196,696` bytes.
+- Longest series over all 23 `currency_series` rows, enabled or not: JPY,
+  which is disabled locally, from its first source rate on 1971-01-04 through
+  today, 20,405 days. Only JPY and THB have imported rates.
+- Largest entry: about `239,689` bytes. This is an estimate from the measured
+  bytes per day, not a measured JPY entry.
+- `W = 1,425,264 + 23 × 239,689 = 6,938,111` bytes (about 6.6 MiB), below
+  half of the `64mb` `maxmemory` (`33,554,432` bytes). `maxmemory` is
+  unchanged.
 
 ### Alternative considered
 
@@ -216,13 +234,15 @@ not need Redis; it uses its JDBC provider and the PostgreSQL `shedlock` table.
 
 ## Acceptance
 
-Verified statically by Phases 1 to 8 of the plan and live in Phase 9 (above).
+Verified statically during the Redis session/cache split and live on
+2026-11-14 (above).
 
 - Requests with arbitrary date ranges never create new cache keys. The key
   count is at most the number of enabled currencies.
 - The cache has its own memory budget and `allkeys-lru` policy, so it cannot
-  fill the `redis-session` budget. The measured worst-case cache size is about
-  5.4 MiB against the 64 MB `redis-cache` budget.
+  fill the `redis-session` budget. The recomputed worst-case cache size is
+  about 6.6 MiB against the 64 MB `redis-cache` budget, with the largest entry
+  estimated from measured bytes per day.
 - A failed cache operation returns the database result, not `500`.
 - A currency disabled after its series was cached is rejected immediately.
 - The existing `ExchangeRateServiceIntegrationTest` cases pass, except for

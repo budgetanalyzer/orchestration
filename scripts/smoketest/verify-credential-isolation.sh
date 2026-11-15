@@ -711,12 +711,61 @@ else
     fail "${REDIS_OPS_USER} ACL WHOAMI (${OPS_WHOAMI})"
 fi
 
-OPS_CONFIG=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" CONFIG GET maxmemory)
-if echo "$OPS_CONFIG" | grep -q 'maxmemory'; then
-    pass "${REDIS_OPS_USER} CONFIG GET"
-else
-    fail "${REDIS_OPS_USER} CONFIG GET (${OPS_CONFIG})"
-fi
+# Non-TTY redis-cli prints CONFIG GET as one line for the name and one for the
+# value. Command substitution drops the trailing newline, so an empty value
+# such as save "" renders as the name alone.
+assert_redis_config() {
+    local instance="$1"
+    local parameter="$2"
+    local expected_value="$3"
+    local out
+    local expected
+
+    if [ "$instance" = "redis-session" ]; then
+        out=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" CONFIG GET "$parameter" | tr -d '\r')
+    else
+        out=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" CONFIG GET "$parameter" | tr -d '\r')
+    fi
+    expected=$(printf '%s\n%s\n' "$parameter" "$expected_value")
+
+    if [ "$out" = "$expected" ]; then
+        pass "${instance} ${parameter} is '${expected_value}'"
+    else
+        fail "${instance} ${parameter} is not '${expected_value}' (got: ${out:0:120})"
+    fi
+}
+
+# Non-TTY redis-cli prints a nil reply as an empty line, which command
+# substitution reduces to an empty string. The own-user control proves that
+# ACL GETUSER itself ran, so an empty reply means the user is absent.
+assert_redis_user_absent() {
+    local instance="$1"
+    local own_user="$2"
+    local absent_user="$3"
+    local control
+    local out
+
+    if [ "$instance" = "redis-session" ]; then
+        control=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL GETUSER "$own_user" | tr -d '\r')
+        out=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" ACL GETUSER "$absent_user" | tr -d '\r')
+    else
+        control=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" ACL GETUSER "$own_user" | tr -d '\r')
+        out=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" ACL GETUSER "$absent_user" | tr -d '\r')
+    fi
+
+    if ! printf '%s\n' "$control" | grep -qx 'flags'; then
+        fail "${instance} ACL GETUSER control for ${own_user} did not return a user (got: ${control:0:120})"
+    elif [ -z "$out" ]; then
+        pass "${absent_user} ACL user does not exist on ${instance}"
+    else
+        fail "${absent_user} ACL user exists on ${instance} or ACL GETUSER failed (got: ${out:0:120})"
+    fi
+}
+
+# Expected values come from kubernetes/infrastructure/redis-session/start-redis.sh.
+assert_redis_config redis-session maxmemory 134217728
+assert_redis_config redis-session maxmemory-policy noeviction
+assert_redis_config redis-session appendonly yes
 
 CACHE_OPS_WHOAMI=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" ACL WHOAMI)
 if [ "$CACHE_OPS_WHOAMI" = "$REDIS_OPS_USER" ]; then
@@ -725,12 +774,17 @@ else
     fail "redis-cache ${REDIS_OPS_USER} ACL WHOAMI (${CACHE_OPS_WHOAMI})"
 fi
 
-CACHE_OPS_CONFIG=$(redis_cache_cmd "$REDIS_OPS_USER" "$REDIS_CACHE_OPS_PASS" CONFIG GET maxmemory)
-if echo "$CACHE_OPS_CONFIG" | grep -q 'maxmemory'; then
-    pass "redis-cache ${REDIS_OPS_USER} CONFIG GET"
-else
-    fail "redis-cache ${REDIS_OPS_USER} CONFIG GET (${CACHE_OPS_CONFIG})"
-fi
+# Expected values come from kubernetes/infrastructure/redis-cache/start-redis.sh.
+assert_redis_config redis-cache maxmemory 67108864
+assert_redis_config redis-cache maxmemory-policy allkeys-lru
+assert_redis_config redis-cache appendonly no
+assert_redis_config redis-cache save ""
+
+# WRONGPASS checks above prove the passwords differ; these prove the foreign
+# application users are absent from each instance's ACL.
+assert_redis_user_absent redis-session "$REDIS_SG_USER" "$REDIS_CS_USER"
+assert_redis_user_absent redis-cache "$REDIS_CS_USER" "$REDIS_SG_USER"
+assert_redis_user_absent redis-cache "$REDIS_CS_USER" "$REDIS_EA_USER"
 
 OPS_DB15_SET=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 SET "__phase1_flushdb__" "ok")
 OPS_DB15_FLUSH=$(redis_cmd "$REDIS_OPS_USER" "$REDIS_OPS_PASS" -n 15 FLUSHDB ASYNC)

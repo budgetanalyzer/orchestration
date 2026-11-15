@@ -3,7 +3,7 @@
 - **Severity:** Low
 - **Owner:** permission-service (rename); orchestration (regenerated API docs)
 - **Status:** Open
-- **Source:** 2026-11-14 `split-redis-session-and-cache` Phase 9 API-doc regeneration
+- **Source:** 2026-11-14 Redis split API-doc regeneration
 
 ## Problem
 

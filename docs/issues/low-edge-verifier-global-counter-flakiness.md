@@ -26,10 +26,10 @@ does a sidecar restart that resets the counters.
   traffic.
 - `rbac.denied` exact equality is less fragile than the review implies. Normal
   browser traffic does not trigger semicolon or Origin denials, so it mainly
-  breaks when two verifiers run at once. Keep it exact and rely on the
-  verifier lock from the
-  [fixture ownership issue](medium-edge-verifier-deletes-existing-loadtest-fixture.md)
-  instead of relaxing it to "at least N".
+  breaks when two verifiers run at once. Keep it exact instead of relaxing it
+  to "at least N". If concurrent runs ever need to be excluded, use the
+  verifier lock proposed in the
+  [residue cleanup detection issue](low-cleanup-residue-verifier-detection-regex.md).
 - The Session Gateway counter check has no marker-based equivalent.
 
 ## Proposed fix

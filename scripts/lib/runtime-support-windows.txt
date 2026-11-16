@@ -22,7 +22,7 @@ Go	1.27	2027-08-01	ext-authz: go.mod and Dockerfile golang:1.27-alpine	https://g
 Python	3.12	2028-10-01	ai-session-handler, budget-analyzer-api-tests: .python-version; orchestration: PyYAML guardrail venv	https://devguide.python.org/versions/	Upstream schedules end of life for 2028-10.
 Ubuntu	24.04 LTS	2029-05-01	GitHub Actions runs-on ubuntu-24.04; workspace development VM	https://ubuntu.com/about/release-cycle	Standard security maintenance ends May 2029; ESM requires Ubuntu Pro.
 Kubernetes	1.35	2027-02-28	orchestration: kind-cluster-config.yaml kindest/node	https://kubernetes.io/releases/
-Istio	1.30	2026-12-01	orchestration: Tiltfile and scripts/lib/production-version-contract.sh	https://istio.io/latest/docs/releases/supported-releases/	Upstream expects end of life around Dec 2026 (6 weeks after 1.32).
+Istio	1.32	2027-06-01	orchestration: Tiltfile and scripts/lib/production-version-contract.sh	https://istio.io/latest/docs/releases/supported-releases/	Upstream expects end of life around Jun 2027 ("~Jun 2027"); the first day of that month is recorded.
 RabbitMQ	4.4	2027-07-31	orchestration: kubernetes/infrastructure/rabbitmq/statefulset.yaml	https://www.rabbitmq.com/release-information	Community support end; commercial support needs a license.
 NGINX	1.29	2026-04-14	orchestration: kubernetes/services/nginx-gateway/deployment.yaml; budget-analyzer-web: Dockerfile nginx-unprivileged:1.29.8-alpine	https://nginx.org/en/download.html	Mainline 1.29 ended when 1.30.0 stable was released (https://nginx.org/en/CHANGES-1.30); fixes ship only in 1.30 stable and 1.31 mainline.
 PostgreSQL	16	2028-11-09	orchestration: kubernetes/infrastructure/postgresql/statefulset.yaml	https://www.postgresql.org/support/versioning/

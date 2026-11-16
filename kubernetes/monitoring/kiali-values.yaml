@@ -7,8 +7,8 @@ auth:
 deployment:
   # renovate: datasource=docker depName=quay.io/kiali/kiali
   image_name: quay.io/kiali/kiali
-  image_version: v2.26.0
-  image_digest: sha256:59cce98a9811ce53ff3da771225d1df00f0ca4ae0819311291ae7316349a13e9
+  image_version: v2.34.1
+  image_digest: sha256:88d96c7b7b9bd9ceaf3b2a8097c0b0d2c5ae15f8d3a17017a5f3a163f5115d2c
   image_pull_policy: IfNotPresent
   view_only_mode: true
   cluster_wide_access: false
@@ -40,11 +40,11 @@ external_services:
   tracing:
     enabled: true
     provider: jaeger
-    # Kiali queries traces over the Jaeger gRPC query port, but its v2.26.0
-    # version probe falls back to plain HTTP on the default port if gRPC is
-    # enabled. Our Jaeger HTTP query endpoint lives on 16686, so keep the
-    # gRPC query URL, pin health checks to the HTTP UI/query path, and disable
-    # the broken version probe to stop repeated timeout noise.
+    # Kiali queries traces over the Jaeger gRPC query port, but its version
+    # probe (observed with v2.26.0) falls back to plain HTTP on the default
+    # port if gRPC is enabled. Our Jaeger HTTP query endpoint lives on 16686,
+    # so keep the gRPC query URL, pin health checks to the HTTP UI/query path,
+    # and disable the broken version probe to stop repeated timeout noise.
     internal_url: http://jaeger-query.monitoring:16685/jaeger
     health_check_url: http://jaeger-query.monitoring:16686/jaeger
     use_grpc: true

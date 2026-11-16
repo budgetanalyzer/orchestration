@@ -4,7 +4,7 @@
 # These pins support offline rendering, static validation, and image evidence;
 # they do not identify a live cluster or prescribe a Kubernetes distribution.
 
-export PRODUCTION_VERSION_CONTRACT_EFFECTIVE_DATE="2026-10-18"
+export PRODUCTION_VERSION_CONTRACT_EFFECTIVE_DATE="2026-11-16"
 readonly PRODUCTION_VERSION_CONTRACT_EFFECTIVE_DATE
 
 # Keep the offline render compatibility target aligned with the validated local
@@ -13,15 +13,15 @@ export PRODUCTION_KUBERNETES_VERSION="1.35.8"
 readonly PRODUCTION_KUBERNETES_VERSION
 
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-export PRODUCTION_GATEWAY_API_CRDS_VERSION="v1.5.1"
+export PRODUCTION_GATEWAY_API_CRDS_VERSION="v1.6.1"
 readonly PRODUCTION_GATEWAY_API_CRDS_VERSION
 export PRODUCTION_GATEWAY_API_STANDARD_INSTALL_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/${PRODUCTION_GATEWAY_API_CRDS_VERSION}/standard-install.yaml"
 readonly PRODUCTION_GATEWAY_API_STANDARD_INSTALL_URL
 
-# renovate: datasource=helm depName=base registryUrl=https://istio-release.storage.googleapis.com/charts
-export PRODUCTION_ISTIO_CHART_VERSION="1.30.6"
+# renovate: datasource=helm depName=base registryUrl=https://blob.istio.io/istio-release/charts
+export PRODUCTION_ISTIO_CHART_VERSION="1.32.0"
 readonly PRODUCTION_ISTIO_CHART_VERSION
-export PRODUCTION_ISTIO_HELM_REPO_URL="https://istio-release.storage.googleapis.com/charts"
+export PRODUCTION_ISTIO_HELM_REPO_URL="https://blob.istio.io/istio-release/charts"
 readonly PRODUCTION_ISTIO_HELM_REPO_URL
 
 # renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io
@@ -51,7 +51,7 @@ export PRODUCTION_PROMETHEUS_STACK_HELM_REPO_URL="https://prometheus-community.g
 readonly PRODUCTION_PROMETHEUS_STACK_HELM_REPO_URL
 
 # renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
-export PRODUCTION_KIALI_CHART_VERSION="2.26.0"
+export PRODUCTION_KIALI_CHART_VERSION="2.34.1"
 readonly PRODUCTION_KIALI_CHART_VERSION
 export PRODUCTION_KIALI_HELM_REPO_URL="https://kiali.org/helm-charts"
 readonly PRODUCTION_KIALI_HELM_REPO_URL

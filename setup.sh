@@ -299,11 +299,11 @@ print_success "Gateway API CRDs reconciled (${PHASE7_GATEWAY_API_VERSION})"
 print_step "Setting up Istio Helm repository..."
 
 if helm repo list 2>/dev/null | grep -q "^istio"; then
-    helm repo add istio https://istio-release.storage.googleapis.com/charts --force-update >/dev/null
+    helm repo add istio https://blob.istio.io/istio-release/charts --force-update >/dev/null
     helm repo update istio >/dev/null
     print_success "Istio Helm repository refreshed"
 else
-    helm repo add istio https://istio-release.storage.googleapis.com/charts >/dev/null
+    helm repo add istio https://blob.istio.io/istio-release/charts >/dev/null
     helm repo update istio >/dev/null
     print_success "Istio Helm repository added and refreshed"
 fi

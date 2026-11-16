@@ -420,13 +420,14 @@ The locked runtime contract is:
 - UI posture: `view_only_mode: true`
 - RBAC posture: non-cluster-wide, limited to `default`, `monitoring`,
   `istio-system`, `istio-ingress`, and `istio-egress`
-- image: Kiali `2.26.0`, pinned by digest
+- image: Kiali `2.34.1`, pinned by digest
 - integrations:
   internal Prometheus URL, Jaeger query gRPC URL on `16685`, and Jaeger HTTP
   health URL on `16686`
-- Jaeger version probe: explicitly disabled because Kiali `2.26.0` falls back
-  to `http://<host>/jaeger` on port `80` when `use_grpc: true`, which does not
-  match this repo's Jaeger query service contract
+- Jaeger version probe: explicitly disabled because Kiali (observed with
+  `2.26.0`) falls back to `http://<host>/jaeger` on port `80` when
+  `use_grpc: true`, which does not match this repo's Jaeger query service
+  contract
 - operator access:
 
 ```bash
@@ -450,9 +451,9 @@ The repo-owned Jaeger/Kiali wiring is intentionally split by protocol:
   keeps the component-health probe on Jaeger's HTTP query/UI endpoint.
 - `disable_version_check: true`
   suppresses Kiali's broken Jaeger version probe for this topology. Upstream
-  Kiali `2.26.0` strips the gRPC port and retries the version fetch over plain
-  HTTP on the default port, which would otherwise generate repeated timeout
-  noise against `http://jaeger-query.monitoring/jaeger`.
+  Kiali (observed with `2.26.0`) strips the gRPC port and retries the version
+  fetch over plain HTTP on the default port, which would otherwise generate
+  repeated timeout noise against `http://jaeger-query.monitoring/jaeger`.
 
 ## Security Compliance
 
@@ -502,7 +503,7 @@ post-renderer before apply.
 | `prometheus-operator/prometheus-operator` | v0.90.1 | pinned |
 | `prometheus-operator/prometheus-config-reloader` | v0.90.1 | pinned |
 | `kube-state-metrics/kube-state-metrics` | v2.20.0 | pinned |
-| `quay.io/kiali/kiali` | v2.26.0 | pinned |
+| `quay.io/kiali/kiali` | v2.34.1 | pinned |
 
 kube-prometheus-stack remains on chart `83.4.3`. Its bundled
 kube-state-metrics subchart `7.2.2` still renders

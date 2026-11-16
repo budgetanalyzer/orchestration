@@ -919,11 +919,11 @@ local_resource(
 local_resource(
     'istio-base',
     cmd='''
-        # renovate: datasource=helm depName=base registryUrl=https://istio-release.storage.googleapis.com/charts
-        helm upgrade --install istio-base istio/base \
+        # renovate: datasource=helm depName=base registryUrl=https://blob.istio.io/istio-release/charts
+        helm upgrade --install istio-base base --repo https://blob.istio.io/istio-release/charts \
             --namespace istio-system \
             --create-namespace \
-            --version 1.30.6 \
+            --version 1.32.0 \
             --wait
     ''',
     resource_deps=['kyverno-ready'],
@@ -936,10 +936,10 @@ local_resource(
 local_resource(
     'istio-cni',
     cmd='''
-        # renovate: datasource=helm depName=cni registryUrl=https://istio-release.storage.googleapis.com/charts
-        helm upgrade --install istio-cni istio/cni \
+        # renovate: datasource=helm depName=cni registryUrl=https://blob.istio.io/istio-release/charts
+        helm upgrade --install istio-cni cni --repo https://blob.istio.io/istio-release/charts \
             --namespace istio-system \
-            --version 1.30.6 \
+            --version 1.32.0 \
             --values kubernetes/istio/cni-common-values.yaml \
             --values kubernetes/istio/cni-kind-values.yaml \
             --wait
@@ -957,15 +957,15 @@ local_resource(
 local_resource(
     'istiod',
     cmd='''
-        # renovate: datasource=helm depName=istiod registryUrl=https://istio-release.storage.googleapis.com/charts
-        helm upgrade --install istiod istio/istiod \
+        # renovate: datasource=helm depName=istiod registryUrl=https://blob.istio.io/istio-release/charts
+        helm upgrade --install istiod istiod --repo https://blob.istio.io/istio-release/charts \
             --namespace istio-system \
-            --version 1.30.6 \
+            --version 1.32.0 \
             --values kubernetes/istio/istiod-values.yaml \
             --wait
     ''',
     deps=['kubernetes/istio/istiod-values.yaml'],
-    resource_deps=['istio-cni'],
+    resource_deps=['istio-cni', 'gateway-api-crds'],
     labels=['infrastructure'],
 )
 
@@ -1146,7 +1146,7 @@ local_resource(
         # renovate: datasource=helm depName=kiali-server registryUrl=https://kiali.org/helm-charts
         helm upgrade --install kiali kiali/kiali-server \
             --namespace monitoring \
-            --version 2.26.0 \
+            --version 2.34.1 \
             --values kubernetes/monitoring/kiali-values.yaml \
             --post-renderer scripts/ops/post-render-kiali-server.sh \
             --wait --timeout 5m
@@ -1207,7 +1207,7 @@ local_resource(
 )
 
 # Istio ingress gateway — auto-provisioned from the Gateway API resource.
-# Istio 1.30.6 supports declarative deployment/service customization through
+# Istio 1.32.0 supports declarative deployment/service customization through
 # Gateway spec.infrastructure.parametersRef, so Tilt applies the ConfigMap and
 # Gateway and then waits for the generated workload to settle.
 local_resource(
@@ -1273,8 +1273,8 @@ local_resource(
     labels=['infrastructure'],
 )
 
-# Egress gateway installed directly from istio/gateway 1.30.6.
-# The 1.30.6 chart accepts the required service.type=ClusterIP input under
+# Egress gateway installed directly from istio/gateway 1.32.0.
+# The 1.32.0 chart accepts the required service.type=ClusterIP input under
 # the repo's Helm v3.22.1 toolchain, so the vendored manifest path is removed.
 local_resource(
     'istio-egress-gateway',
@@ -1289,10 +1289,10 @@ local_resource(
             kubectl delete deployment,serviceaccount,role,rolebinding,service,hpa istio-egress-gateway \
                 -n istio-egress --ignore-not-found
         fi
-        # renovate: datasource=helm depName=gateway registryUrl=https://istio-release.storage.googleapis.com/charts
-        helm upgrade --install istio-egress-gateway istio/gateway \
+        # renovate: datasource=helm depName=gateway registryUrl=https://blob.istio.io/istio-release/charts
+        helm upgrade --install istio-egress-gateway gateway --repo https://blob.istio.io/istio-release/charts \
             --namespace istio-egress \
-            --version 1.30.6 \
+            --version 1.32.0 \
             --values kubernetes/istio/egress-gateway-values.yaml \
             --wait
         kubectl rollout status deployment/istio-egress-gateway -n istio-egress --timeout=120s

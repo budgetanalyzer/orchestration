@@ -20,7 +20,7 @@ PHASE7_KYVERNO_CLI_VERSION="v1.18.0"
 # renovate: datasource=github-releases depName=mikefarah/yq
 PHASE7_YQ_VERSION="v4.54.1"
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-PHASE7_GATEWAY_API_VERSION="v1.5.1"
+PHASE7_GATEWAY_API_VERSION="v1.6.1"
 # renovate: datasource=github-releases depName=projectcalico/calico
 PHASE7_CALICO_VERSION="v3.33.0"
 

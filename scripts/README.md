@@ -126,7 +126,8 @@ scripts/
   `exec`, and seeds and removes the synthetic fixture inside the Postgres and
   `redis-session` pods. Only `--inject-failures` changes Kubernetes objects, and the
   script's `require_inject_failures` guard stops any such change without the
-  flag. Its Public/Internal Boundary section seeds one synthetic user and
+  flag. It refuses to start while `.loadtest/session-pool.txt` exists,
+  because its teardown would remove that fixture. Its Public/Internal Boundary section seeds one synthetic user and
   session with `loadtest/seed-loadtest-users.sh --count 1`, sends the
   encoded-path traversal matrix with `curl --path-as-is` on the NGINX lane
   (`/api/v1/{users,transactions,currencies}/` toward permission-service
@@ -136,8 +137,7 @@ scripts/
   unchanged seeded user row and a surviving seeded session. A 2xx passes only
   when it is byte-identical to the public frontend shell from `GET /`. It then
   proves the public routes, OpenAPI routes, heartbeat and login start still
-  work, and removes the fixture with `loadtest/teardown-loadtest.sh`. It
-  refuses to run while another load-test fixture is active. Its Semicolon
+  work, and removes the fixture with `loadtest/teardown-loadtest.sh`. Its Semicolon
   Rejection section seeds the same fixture and sends literal `;`, `%3b`,
   `%3B`, `%253b`, `%253B`, `%25253b` and `%25253B` probes on both lanes,
   including the `DELETE`

@@ -436,11 +436,6 @@ verify_public_internal_boundary() {
 
     section "Public/Internal Boundary"
 
-    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
-        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
-        return
-    fi
-
     POSTGRES_POD=$(require_postgres_pod)
     REDIS_POD=$(require_redis_pod)
     load_redis_ops_credentials
@@ -660,11 +655,6 @@ verify_semicolon_rejection() {
     local -a segments=()
 
     section "Semicolon Rejection"
-
-    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
-        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
-        return
-    fi
 
     POSTGRES_POD=$(require_postgres_pod)
     REDIS_POD=$(require_redis_pod)
@@ -967,11 +957,6 @@ verify_origin_enforcement() {
 
     section "Origin"
 
-    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
-        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
-        return
-    fi
-
     problem=$(ingress_origin_config_problem)
     if [[ -z "$problem" ]]; then
         pass "Generated ${ORIGIN_POLICY} RBAC config denies missing, empty, null, foreign, same-site, suffixed, repeated and Fetch-Metadata-only Origin, and admits only the exact origin on ${APP_ORIGIN#https://}"
@@ -1143,11 +1128,6 @@ verify_forged_identity() {
     local empty_key user_id roles_length permissions_length status content_type
 
     section "Forged Identity"
-
-    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
-        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
-        return
-    fi
 
     POSTGRES_POD=$(require_postgres_pod)
     REDIS_POD=$(require_redis_pod)
@@ -1446,10 +1426,6 @@ verify_authorization_failure() {
 
     section "Authorization Failure"
 
-    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
-        fail "A load-test fixture is already active (${LOADTEST_POOL_FILE}); teardown would remove it. Finish or tear it down first."
-        return
-    fi
     if [[ "$INJECT_FAILURES" == true ]] && ! kubectl get crd "$BLOCK_POLICY_CRD" >/dev/null 2>&1; then
         fail "${BLOCK_POLICY_CRD} is missing; the pinned Calico manifest installs it and the hang case needs it"
         return
@@ -1649,6 +1625,15 @@ main() {
     done
 
     assert_local_kind_target
+
+    # Every section seeds and tears down usr_loadtest_* data by pattern, so a
+    # fixture seeded outside this run would be deleted.
+    if [[ -f "${REPO_DIR}/${LOADTEST_POOL_FILE}" ]]; then
+        printf 'ERROR: A load-test fixture is already active (%s); teardown would remove it. Finish or tear it down first.\n' \
+            "$LOADTEST_POOL_FILE" >&2
+        exit 1
+    fi
+
     WORK_DIR=$(mktemp -d)
 
     if [[ -n "$REPORT_FILE" ]]; then

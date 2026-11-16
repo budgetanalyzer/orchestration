@@ -4,7 +4,6 @@
 - **Owner:** orchestration
 - **Status:** Open. This is follow-up work next to the hardening plans, not an unmet plan requirement.
 - **Source:** 2026-11-09 implementation review O2
-- **Related:** [edge verifier deletes existing load-test fixture](medium-edge-verifier-deletes-existing-loadtest-fixture.md)
 
 ## Problem
 
@@ -28,8 +27,8 @@ Confirmed by reading the source; not tested against live processes.
 
 ## Proposed fix
 
-Replace the heuristic with the same lock or run-ownership contract used for
-load-test fixture ownership. Do not extend the regex.
+Replace the heuristic with a verifier run lock that verifiers take and cleanup
+checks. Do not extend the regex.
 
 ## Acceptance
 

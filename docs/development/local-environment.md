@@ -35,7 +35,12 @@ npm install
 
 The Istio ingress and egress hardening path now installs the Istio egress gateway directly from Helm again. The
 repo uses Helm for `istio-base`, `istio/cni`, `istiod`, and `istio/gateway`
-`1.30.6`. Local Tilt installs `istio/cni` with
+`1.32.0`. Each Tilt Istio resource installs its chart directly with
+`--repo https://blob.istio.io/istio-release/charts` instead of a local Helm
+alias. The charts default their images to the `docker.io/istio` hub. Istio 1.30
+was the last line published to the retired
+`istio-release.storage.googleapis.com` chart repository and the
+`gcr.io/istio-release` and `registry.istio.io/release` image hubs. Local Tilt installs `istio/cni` with
 `kubernetes/istio/cni-common-values.yaml` plus
 `kubernetes/istio/cni-kind-values.yaml` so Kind + Calico use the chart's
 standard `/etc/cni/net.d` and `/opt/cni/bin` paths. No production Kubernetes
@@ -49,6 +54,23 @@ the shared `kubernetes/istio/ingress-gateway-config.yaml` and the local-only
 security and rate-limit diagnostics; the local overlay alone selects NodePort
 `30443`. The production reference reuses the shared source without choosing a
 publication Service type.
+
+After an Istio control-plane upgrade, restart every pod that has an
+`istio-proxy` container so no data-plane proxy stays behind the control plane.
+Find those pods from their specs, not from namespace injection labels:
+
+```bash
+kubectl get pods -A -o json | jq -r '.items[]
+  | select([.spec.containers[]?, .spec.initContainers[]?] | any(.name == "istio-proxy"))
+  | "\(.metadata.namespace)/\(.metadata.name)"'
+```
+
+The set includes the Prometheus pod in `monitoring`. Its sidecar comes from a
+pod-template annotation in `kubernetes/monitoring/prometheus-stack-values.yaml`,
+not from a namespace label, so a namespace-based restart misses it. Use
+`kubectl rollout restart` for Deployments, and delete the Prometheus pod so its
+operator-managed StatefulSet recreates it with the same PVC. Then confirm that
+every `proxyv2` image matches the installed Istio version.
 
 ## Checkout Shape
 

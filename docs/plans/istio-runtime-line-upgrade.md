@@ -41,6 +41,23 @@ Plan-wide constraints:
   interpreter is missing, create it as described in `docs/ci-cd.md#security-guardrailsyml`.
 - Validate any changed shell script with `bash -n` and `shellcheck`.
 
+Execution decisions (plan owner, 2026-11-16):
+
+- **Direct live upgrade.** The running local cluster moves from 1.30.6 to the target in one
+  in-place Helm step, through Tilt. There is no transient intermediate-minor step. The plan owner
+  accepts that this skips upstream's one-minor in-place path, and that the data plane is outside
+  the supported proxy skew until Phase 3 restarts every sidecar. If the direct move leaves the
+  control plane or ingress unrecoverable through repo-owned fixes, stop and report. Only the human
+  may decide to recreate the cluster.
+- **Tilt is stopped for Phase 2.** The Istio, Gateway API and Kiali Tilt resources carry their
+  pins in `local_resource` commands, so saving a pin edit while `tilt up` runs would immediately
+  mutate the cluster. Before Phase 2, the human stops `tilt up` with Ctrl-C, not `tilt down`, so
+  the cluster keeps running. After Phase 2 completes, the human restarts `tilt up`, which
+  reconciles every resource to the checked-in pins. Phase 3 starts only after that restart.
+- The old chart repository has Istio outage tests on 2026-11-17 and 2026-12-08/09 and shuts down
+  on 2026-12-16 (see the evidence file). Do not restart `tilt up` on the old pins during an outage
+  window.
+
 ## Phase 1: Compatibility Review And Target Selection
 
 ### Workspace
@@ -104,10 +121,9 @@ No pin, manifest or Tiltfile changes. No cluster mutation.
    - Kiali chart `PRODUCTION_KIALI_CHART_VERSION` compatibility with the target Istio version, from
      Kiali's version-compatibility table.
    - Published `linux/arm64` artifacts for `pilot`, `proxyv2` and `install-cni`.
-4. Decide how to move the running local cluster. Upstream documents in-place Helm upgrades from the
-   previous minor. If the target skips a minor, the recommended live path is a transient,
-   diagnostic-labelled in-place step through the latest 1.31 patch, followed by Tilt reconciling to
-   the checked-in target. Record the chosen path.
+4. Record the live path from the execution decisions above: Tilt stopped for Phase 2, a direct
+   in-place move to the target when the human restarts `tilt up`, and the Phase 3 sidecar restart.
+   Record any pod whose sidecar is outside the supported skew today.
 5. Write the evidence file. It must contain the selected Istio version, the selected Gateway API
    version, the live upgrade path, a per-surface impact table, and the required follow-up edits for
    Phase 2.
@@ -118,10 +134,16 @@ If a 1.32 blocker cannot be resolved within this plan's constraints, select the 
 at or above 1.31.4 and record why. If both lines have a blocker that needs a policy relaxation or a
 sibling service change, stop and report it instead of continuing.
 
+The first Phase 1 attempt already wrote the evidence file, and the plan owner then aligned it with
+the execution decisions. On a retry, verify it against this plan and re-check upstream for a newer
+1.32 patch or Kiali chart. Do not repeat research that is still current.
+
 ### Validation
 
 The evidence file exists. Every surface listed in step 3 has an explicit outcome (no impact,
-config edit needed, or blocker) with a source link. `git status` shows only the evidence file.
+config edit needed, or blocker) with a source link. The evidence file contains no transient
+intermediate-minor step and no open sequencing question. `git status` shows only the evidence file
+and this plan.
 
 ### Completion criteria
 
@@ -136,20 +158,24 @@ upstream research.
 
 ### Goal
 
-Move every checked-in Istio and coupled Gateway API pin to the Phase 1 selection, apply any
-required configuration edits, and pass the offline guardrails.
+Move every checked-in Istio pin, the coupled Gateway API and Kiali pins, and the Istio chart
+repository to the Phase 1 selection. Apply any required configuration edits, and pass the offline
+guardrails while Tilt is stopped.
 
 ### Scope
 
-`Tiltfile` chart versions and version comments, `scripts/lib/production-version-contract.sh`, the
-Gateway API version in both `production-version-contract.sh` and `pinned-tool-versions.sh` when
-Phase 1 selected a change, and any `kubernetes/istio/` or values-file edits listed in the evidence
-file.
+- `Tiltfile`: the Istio, Gateway API ordering and Kiali resources, their Renovate annotations and
+  their version comments
+- `scripts/lib/production-version-contract.sh` and `scripts/lib/pinned-tool-versions.sh`
+- `setup.sh`: the Istio Helm repository URL only. This is a file edit; never run `setup.sh`
+- `kubernetes/monitoring/kiali-values.yaml` and `scripts/ops/post-render-kiali-server.sh`
+- Any other `kubernetes/istio/` or values-file edit listed in the evidence file
 
 ### Non-goals
 
-No cluster mutation. No changes to Pod Security version labels. Documentation prose updates belong
-to Phase 4, except where a guardrail reads the text.
+No cluster mutation, and no `tilt` command that triggers, enables or starts resources. No changes
+to Pod Security version labels. Documentation prose updates belong to Phase 4, except where a
+guardrail reads the text.
 
 ### Required context
 
@@ -162,20 +188,34 @@ to Phase 4, except where a guardrail reads the text.
 
 ### Execution steps
 
-1. Replace every `1.30.6` Istio chart version in `Tiltfile` (`istio-base`, `istio-cni`, `istiod`,
-   egress `gateway`) and `PRODUCTION_ISTIO_CHART_VERSION` with the selected version. Keep the
-   `# renovate:` annotations intact.
-2. Update the Tiltfile comments that name the Istio version.
-3. If Phase 1 selected a new Gateway API version, update `PHASE7_GATEWAY_API_VERSION` and
+1. Prerequisite: `tilt up` is not running. `pgrep -x tilt` must print nothing. If Tilt is running,
+   stop before saving any edit and report that the human must stop `tilt up` with Ctrl-C, not
+   `tilt down`.
+2. Replace every `1.30.6` Istio chart version in `Tiltfile` (`istio-base`, `istio-cni`, `istiod`,
+   egress `gateway`) and `PRODUCTION_ISTIO_CHART_VERSION` with the selected version.
+3. Move the Istio chart repository as the evidence file specifies. Each Istio `helm upgrade` in the
+   `Tiltfile` names its chart with `--repo <new repository>` instead of the `istio/<chart>` Helm
+   alias, so no resource depends on alias registration or resource order. Update every Istio
+   `# renovate:` annotation's `registryUrl`, `PRODUCTION_ISTIO_HELM_REPO_URL` and the `setup.sh`
+   repository URL. Keep each annotation within 320 characters of its `--version` flag, which the
+   `renovate.json` Tiltfile Helm regex requires.
+4. Add `gateway-api-crds` to the `istiod` resource's `resource_deps`. This guarantees that a
+   fresh `tilt up` applies the selected Gateway API CRDs before the new istiod starts and checks
+   its minimum CRD versions.
+5. Update the Tiltfile comments that name the Istio version.
+6. If Phase 1 selected a new Gateway API version, update `PHASE7_GATEWAY_API_VERSION` and
    `PRODUCTION_GATEWAY_API_CRDS_VERSION` together.
-4. Apply the configuration edits from the evidence file.
-5. Bump `PRODUCTION_VERSION_CONTRACT_EFFECTIVE_DATE` to the date of the change.
-6. Run the offline validations below and fix the failures without relaxing a check.
+7. Apply the remaining configuration edits from the evidence file, including the Kiali chart,
+   image and comment edits.
+8. Bump `PRODUCTION_VERSION_CONTRACT_EFFECTIVE_DATE` to the date of the change.
+9. Run the offline validations below and fix the failures without relaxing a check.
 
 ### Implementation notes
 
 Use `rg` to confirm that no checked-in non-archive, non-plan file still selects the old Istio
-version. Leave historical references in `docs/archive/` and `archive/oci/` unchanged.
+version or the old chart repository. The stale, non-gating `tests/setup-flow` and
+`tests/security-preflight` references may stay. Leave historical references in `docs/archive/` and
+`archive/oci/` unchanged.
 
 ### Validation
 
@@ -187,16 +227,22 @@ INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
 ./scripts/guardrails/verify-production-image-overlay.sh
 ./scripts/guardrails/check-image-pinning.sh
 ./scripts/security/render-image-scan-inputs.sh   # confirm it renders with the new chart version
+./scripts/smoketest/verify-monitoring-rendered-manifests.sh   # renders the selected Kiali chart
+rg -n '1\.30\.6|istio-release\.storage\.googleapis\.com' --glob '!docs/archive/**' \
+  --glob '!archive/**' --glob '!docs/plans/**' --glob '!tests/**'
+# Expect only the Phase 4 documentation lines listed in the evidence file.
 ```
 
-Run `bash -n` and `shellcheck` on every changed shell script.
+Run `bash -n` and `shellcheck` on every changed shell script, including `setup.sh` and
+`scripts/ops/post-render-kiali-server.sh`. Confirm with `pgrep -x tilt` that Tilt is still stopped.
 
 ### Completion criteria
 
-All checked-in active Istio selections name one version, the Gateway API pins agree, and every
-offline validation above passes.
+All checked-in active Istio selections name one version and the new chart repository. The Gateway
+API and Kiali pins agree across their files. Every offline validation above passes, and the cluster
+has not been changed. The phase summary tells the human to restart `tilt up` before Phase 3.
 
-## Phase 3: Live Local Upgrade And Edge Verification
+## Phase 3: Live Local Reconcile And Edge Verification
 
 ### Workspace
 
@@ -204,19 +250,21 @@ offline validation above passes.
 
 ### Goal
 
-Upgrade the running local Kind cluster to the selected Istio version, roll every meshed workload
-and gateway onto the new proxy, and prove that the edge, authorization, rate-limit, egress and
-tracing contracts still hold.
+Confirm that the human's restarted `tilt up` moved the running local Kind cluster directly to the
+selected Istio, Gateway API and Kiali versions. Roll every sidecar and gateway onto the new proxy,
+and prove that the edge, authorization, rate-limit, egress and tracing contracts still hold.
 
 ### Scope
 
-Live `kind-kind` cluster only, through Tilt and the Phase 1 upgrade path.
+Live `kind-kind` cluster only. Tilt owns the Helm releases and CRDs; this phase restarts workloads
+and verifies.
 
 ### Non-goals
 
-No cluster recreation, no `setup.sh`, and no certificate operations. No checked-in changes except
-fixes for defects the live proof finds. Those fixes must be repo-owned and must be re-run through
-the Phase 2 offline validations.
+No cluster recreation, no `setup.sh`, and no certificate operations. No hand-run `helm upgrade` or
+`kubectl apply` of Istio, Gateway API or Kiali releases. No checked-in changes except fixes for
+defects the live proof finds. Those fixes must be repo-owned and must be re-run through the Phase 2
+offline validations.
 
 ### Required context
 
@@ -228,27 +276,35 @@ the Phase 2 offline validations.
 
 ### Execution steps
 
-1. Prerequisite: the human has `tilt up` running and the stack is healthy. If it is not, stop and
-   report this rather than starting it yourself.
+1. Prerequisite: the human restarted `tilt up` after Phase 2, and Tilt has finished its first pass.
+   `tilt get uiresources` must show no resource in error or still pending. If Tilt is not running,
+   or `helm list -n istio-system` still shows the old chart version, stop and report this rather
+   than starting or triggering Tilt yourself.
 2. Run `./scripts/bootstrap/check-local-runtime.sh`. Apply the `kind-kind` context, loopback API,
    no-proxy and Ready-node checks from `AGENTS.md`.
-3. Record the pre-upgrade `helm list -n istio-system` and `helm list -n istio-egress`, plus the
-   proxy versions from the pod images.
-4. If the evidence file requires a transient intermediate minor, run the labelled diagnostic
-   `helm upgrade` steps for `base`, `cni` and `istiod`, then the egress `gateway`, at that patch,
-   with the same values files Tilt uses. Verify that istiod and the gateways are Ready.
-5. Trigger the Tilt resources (`gateway-api-crds` if changed, `istio-base`, `istio-cni`, `istiod`,
-   `istio-egress-gateway`) with `tilt trigger`, so that the cluster reconciles to the checked-in
-   target.
-6. Restart meshed workloads in `default` and any other injected namespace. Confirm that the
-   auto-provisioned ingress gateway and the egress gateway run the target proxy version, and that
-   no pod still runs the old proxy.
-7. Run the live verifiers below. Fix repo-owned defects and re-run.
+3. Confirm that Tilt reached the checked-in state. `helm list -n istio-system` and
+   `helm list -n istio-egress` show the selected Istio chart, and `helm list -n monitoring` shows
+   the selected Kiali chart. Every Gateway API CRD carries the selected `bundle-version`. istiod
+   and `istio-cni-node` run the selected `pilot` and `install-cni` images, and istiod logs no
+   Gateway API minimum-CRD-version warning.
+4. Restart sidecars immediately, because the data plane is outside the supported skew until this
+   step completes. Find every pod that has an `istio-proxy` container or init container in any
+   namespace, from the pod specs rather than from namespace injection labels. Restart each owner
+   with `kubectl rollout restart`, including `istio-ingress-gateway-istio` in `istio-ingress`. The
+   operator-managed Prometheus pod in `monitoring` gets its sidecar from a pod-template annotation
+   in `kubernetes/monitoring/prometheus-stack-values.yaml`, not from a namespace label. Delete that
+   pod so its StatefulSet recreates it with its PVC. Wait for every rollout.
+5. Confirm that every `proxyv2` image in the cluster is the selected version, and that no pod runs
+   an older proxy.
+6. Run the live verifiers below. Fix repo-owned defects, re-run the Phase 2 offline validations,
+   let Tilt reconcile the change, and re-run the live verifiers.
 
 ### Implementation notes
 
 Use `tilt get uiresources`, `kubectl get pods -A` and `kubectl logs` for diagnosis. Do not leave
-any Helm release, CRD or workload on a version that differs from the checked-in pins.
+any Helm release, CRD or workload on a version that differs from the checked-in pins. If the direct
+move leaves istiod, the CNI or the ingress gateway unhealthy and no repo-owned fix restores it, stop
+and report the state. The human decides whether to recreate the cluster.
 
 ### Validation
 
@@ -259,6 +315,7 @@ any Helm release, CRD or workload on a version that differs from the checked-in 
 ./scripts/smoketest/verify-edge-browser-hardening.sh
 ./scripts/smoketest/verify-session-architecture.sh
 ./scripts/smoketest/verify-istio-tracing-config.sh
+./scripts/smoketest/verify-monitoring-runtime.sh
 INGRESS_RATE_LIMIT_PYTHON=.cache/phase7-static-tools/pyyaml-venv/bin/python \
   ./scripts/smoketest/verify-security-guardrails.sh
 ```
@@ -269,8 +326,8 @@ only.
 
 ### Completion criteria
 
-Every Helm release and proxy in the cluster runs the selected version, and every live verifier
-above passes against it.
+Every Helm release, CRD bundle and proxy in the cluster matches the checked-in pins, and every live
+verifier above passes against them.
 
 ## Phase 4: Documentation, Support Window And Closeout
 
@@ -306,7 +363,11 @@ No edits to `docs/archive/`, `docs/decisions/` or `archive/oci/`. No NGINX chang
    (the gateway hardening bullet and the Envoy local-rate-limit paragraph), plus any other active
    doc that `rg` shows naming the old Istio version.
 2. Move any durable behavior change recorded in the evidence file into its owner doc, following
-   `docs/OWNERSHIP.md`.
+   `docs/OWNERSHIP.md`. At minimum, `docs/development/local-environment.md` records two facts:
+   - The new Istio chart repository and the `docker.io/istio` image hub.
+   - The upgrade rule. After an Istio control-plane upgrade, restart every pod that has an
+     `istio-proxy` container, found from pod specs. This includes the Prometheus pod, whose sidecar
+     comes from a pod-template annotation rather than a namespace label.
 3. Update the Istio row in `scripts/lib/runtime-support-windows.txt` with the new line, its support
    end and the source URL. When upstream gives only a month, record the first day of that month and
    explain the derivation in the note column.

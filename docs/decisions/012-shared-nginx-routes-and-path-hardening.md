@@ -118,9 +118,16 @@ owns the procedure.
   location precedence, so shared blocks do not guarantee identical behavior.
 - A successful finite probe set supports the current configuration. It does not
   prove that future parser or route changes are safe.
-- The path-filter anchor has a known gap. See
-  [`info-path-hardening-anchor-not-statically-checked`](../issues/info-path-hardening-anchor-not-statically-checked.md).
-  The static mesh guard's additive-ALLOW gap was closed later; see
+- The path filter is inserted before `envoy.filters.http.ext_authz`, which
+  Istio generates only from the `CUSTOM` `ext-authz-at-ingress` policy and its
+  `ext-authz-http` provider. If that filter is absent, the patch silently does
+  not apply, on either lane. The live edge verifier catches this because it
+  requires the path filter ahead of `ext_authz`. The static suite checks only
+  that the patch names that anchor, not that the policy and provider that
+  generate it exist. This is accepted: losing `ext_authz` is the larger failure
+  and would be noticed first. Revisit if the static suite gains a cheap way to
+  assert the anchor. Source: 2026-11-09 independent implementation review C8.
+- The static mesh guard's additive-ALLOW gap was closed later; see
   [ADR 019](019-structural-mesh-authorization-guard.md).
 
 **Neutral:**

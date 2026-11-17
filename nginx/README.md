@@ -563,7 +563,14 @@ new production includes to that list and render through `production-routes.sh`.
   this and the three directives, and
   `../scripts/guardrails/verify-nginx-backend-headers.sh` proves the stripping
   against an echo upstream in a disposable container. A backend that needs a
-  browser cookie is a contract change, not a per-route override.
+  browser cookie is a contract change, not a per-route override. The include
+  also hides the backends' `X-Frame-Options`, `X-Content-Type-Options` and
+  `X-XSS-Protection` (the Spring Security defaults), so the server-level
+  `security-headers-*-csp.conf` include is their only source on API responses;
+  the same harness proves this against the echo upstream's response headers.
+  `/api` locations must not declare `add_header`: they rely on inheriting the
+  server-level security headers, and a location-level `add_header` would drop
+  them, leaving the response with no frame or `nosniff` header at all.
 
 ## Production Considerations
 

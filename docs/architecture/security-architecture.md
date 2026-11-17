@@ -752,7 +752,13 @@ exact HTTPS IdP origin, allowing the top-level form POST logout and its IdP redi
 The shared offline renderer derives that origin from Tilt's `AUTH0_ISSUER_URI`
 or the production reference's `REFERENCE_AUTH0_ISSUER_URI`; it rejects missing,
 non-HTTPS, wildcard and malformed issuer input. No profile sends the deprecated
-`X-XSS-Protection` header. `form-action` does not stop hostile pages
+`X-XSS-Protection` header. The edge owns frame, `nosniff` and
+`X-XSS-Protection` policy: NGINX hides the backends' copies of those headers,
+so API responses carry exactly one `X-Frame-Options: SAMEORIGIN`, exactly one
+`X-Content-Type-Options: nosniff` and no `X-XSS-Protection`.
+`verify-nginx-backend-headers.sh` proves this offline and
+`verify-edge-contract.sh` proves it live on `/api/v1/currencies` through the
+ingress. `form-action` does not stop hostile pages
 submitting to the application; the
 [exact-Origin ingress rule](session-edge-authorization-pattern.md#exact-origin-ingress-rule)
 denies those. Under the strict CSP, Chromium blocked an app-page form to a

@@ -135,7 +135,11 @@ Redis, apply a temporary ClusterNetworkPolicy and may delete ext-authz pods.
 
 Sections:
   Response Headers          One exact HSTS value on app, API, session and login;
-                            forged forwarding fields cannot change redirect_uri.
+                            the API response carries exactly one
+                            X-Frame-Options: SAMEORIGIN, exactly one
+                            X-Content-Type-Options: nosniff and no
+                            X-XSS-Protection; forged forwarding fields cannot
+                            change redirect_uri.
   Public/Internal Boundary  Seeds one synthetic user and session, sends the
                             encoded-path traversal matrix on the NGINX lane and
                             the direct Session Gateway lane with
@@ -1565,6 +1569,7 @@ verify_response_headers() {
     section "Response Headers"
     seed_fixture
     local path method status expected headers location
+    local header_name expected_value wanted seen
     local -a origin_args
     for path in / /api/v1/currencies /auth/v1/session /oauth2/authorization/idp; do
         method=GET
@@ -1580,6 +1585,27 @@ verify_response_headers() {
             fail "${path}: expected ${expected} and one exact HSTS value; got ${status}, ${headers:-missing}"
         fi
         record "headers" "$method" "$path" "$status" "hsts=${headers:-missing}"
+
+        # NGINX hides the backend's framework defaults, so the edge security
+        # headers are the only source of these on a real API response.
+        [[ "$path" == /api/v1/currencies ]] || continue
+        for header_name in X-Frame-Options X-Content-Type-Options X-XSS-Protection; do
+            case "$header_name" in
+                X-Frame-Options) expected_value=SAMEORIGIN ;;
+                X-Content-Type-Options) expected_value=nosniff ;;
+                *) expected_value="" ;;
+            esac
+            wanted="exactly one ${header_name}: ${expected_value}"
+            [[ -n "$expected_value" ]] || wanted="no ${header_name}"
+            seen=$(sed -n "s/^${header_name}:[[:space:]]*//Ip" "${WORK_DIR}/headers" \
+                | tr -d '\r' | paste -sd, -)
+            if [[ "$seen" == "$expected_value" ]]; then
+                pass "${path}: ${wanted}"
+            else
+                fail "${path}: expected ${wanted}; got ${seen:-none}"
+            fi
+            record "headers" "$method" "$path" "$status" "${header_name,,}=${seen:-none}"
+        done
     done
 
     # Exercise each field alone as well as together: Forwarded takes precedence

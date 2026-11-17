@@ -1,8 +1,10 @@
-# NGINX Backend Frame Policy And Shared Docker Harness Plan
+# NGINX Backend Security Header Ownership And Shared Docker Harness Plan
 
 Resolve two issues in one change:
 - `docs/issues/low-duplicate-x-frame-options.md` is the defect that justifies
-  the work.
+  the work. The same fix also covers the backends' duplicate
+  `X-Content-Type-Options` and their `X-XSS-Protection`, which were found while
+  planning.
 - `docs/issues/info-duplicated-nginx-docker-harnesses.md` is the maintenance
   refactor. Its own condition is "the next time either script changes", and the
   frame-policy proof changes `scripts/guardrails/verify-nginx-backend-headers.sh`.
@@ -12,9 +14,12 @@ The refactor goes first so the new proof lands on the shared harness:
    `scripts/guardrails/verify-nginx-backend-headers.sh` and
    `scripts/guardrails/verify-nginx-shared-routes.sh` into
    `scripts/lib/nginx-docker-harness.sh` without changing behavior.
-2. Add `proxy_hide_header X-Frame-Options;` to
-   `nginx/includes/backend-headers.conf` so the edge's `SAMEORIGIN` is the
-   only value on API responses. Prove it offline in the backend header harness.
+2. Add `proxy_hide_header` for `X-Frame-Options`, `X-Content-Type-Options`
+   and `X-XSS-Protection` to `nginx/includes/backend-headers.conf`. The edge's
+   security-header includes then become the only source of these headers on
+   API responses: exactly one `SAMEORIGIN`, exactly one `nosniff`, and no
+   `X-XSS-Protection`, which the edge profiles deliberately omit. Prove it
+   offline in the backend header harness.
 3. Prove it on the live local stack through the ingress, then close the
    issues.
 
@@ -23,7 +28,12 @@ Evidence captured while planning (2026-11-17):
   `currency-service` returned `x-frame-options: DENY`, the Spring Security
   default. The same request through NGINX (`127.0.0.1:8080/api/v1/currencies`)
   returned both `x-frame-options: DENY` and `X-Frame-Options: SAMEORIGIN`. That
-  confirms the issue.
+  confirms the issue. The same response also carried
+  `x-content-type-options: nosniff` twice (backend and edge) and the backend's
+  `x-xss-protection: 0`.
+- The ingress HTTPRoutes (`kubernetes/gateway/*-httproute.yaml`) set only
+  `Strict-Transport-Security` on responses. They neither add nor remove these
+  three headers, so the browser sees exactly what NGINX sends.
 - The backend header harness passed with 7 passed and 0 failed, and the shared
   routes harness with 26 passed and 0 failed.
 - The static NGINX backend header scan in
@@ -34,13 +44,19 @@ Evidence captured while planning (2026-11-17):
 - No aggregate smoketest, Tilt resource or GitHub workflow invokes either
   NGINX harness.
 
-Out of scope. Record these as follow-up candidates and do not fix them here:
-- API responses also carry a second, identical
-  `X-Content-Type-Options: nosniff` from the backends.
-- API responses carry the backends' `X-XSS-Protection: 0`.
+Hiding these headers makes the edge the only source of them. If an API
+location ever declares its own `add_header`, NGINX stops inheriting the
+server-level security headers, and that location would then send no frame or
+`nosniff` header at all. Today `nginx/includes/api-routes.conf` declares no
+`add_header`, but no static guardrail enforces that. This plan documents the
+constraint but does not add a static rule. The offline harness and the live
+`/api/v1/currencies` check are the proofs.
 
-Do not change Spring defaults in `service-common` for this; the edge owns frame
-policy. Follow `AGENTS.md`:
+Session Gateway lanes (`/auth/*`, `/oauth2/*`) bypass NGINX and are not
+affected by this change.
+
+Do not change Spring defaults in `service-common` for this; the edge owns
+these browser security headers. Follow `AGENTS.md`:
 - Shell scripts must pass `bash -n` and `shellcheck`.
 - Run the static suite with the pinned PyYAML interpreter.
 - Run cluster mutations only after the local Kind target checks pass.
@@ -200,7 +216,7 @@ duplication issue.
 - `nginx/includes/`, the NGINX configs and `docs/issues/low-duplicate-x-frame-options.md`
   are unchanged.
 
-## Phase 2: Hide Backend X-Frame-Options And Prove It Offline
+## Phase 2: Hide Backend Security Headers And Prove It Offline
 
 ### Workspace
 
@@ -208,16 +224,19 @@ duplication issue.
 
 ### Goal
 
-Make NGINX drop the backends' `X-Frame-Options` on every API route, so the
-edge's server-level `SAMEORIGIN` is the only value. First show that the
-extended backend header harness fails without the fix, then show it passes with
-the fix.
+Make NGINX drop the backends' `X-Frame-Options`, `X-Content-Type-Options` and
+`X-XSS-Protection` on every API route. The edge's server-level headers then
+become the only source: exactly one `X-Frame-Options: SAMEORIGIN`, exactly one
+`X-Content-Type-Options: nosniff`, and no `X-XSS-Protection`. First show that
+the extended backend header harness fails without the fix, then show it passes
+with the fix.
 
 ### Scope
 
 - `scripts/guardrails/verify-nginx-backend-headers.sh`: extend the fixture,
   probe and assertions
-- `nginx/includes/backend-headers.conf`: add `proxy_hide_header X-Frame-Options;`
+- `nginx/includes/backend-headers.conf`: add the three `proxy_hide_header`
+  directives
 - `nginx/README.md`: the `backend-headers.conf` bullet
 - `docs/architecture/security-architecture.md`: the browser header paragraph
   that covers the CSP profiles and `X-XSS-Protection`
@@ -227,10 +246,12 @@ the fix.
 
 - Reloading NGINX, restarting pods or any other cluster mutation (Phase 3)
 - Live verifier changes (Phase 3)
-- Hiding `X-Content-Type-Options` or `X-XSS-Protection`, or changing any
-  `security-headers-*.conf` include
-- Adding a static guardrail rule for `proxy_hide_header`. The offline harness
-  and live verifier are the proofs.
+- Changing any `security-headers-*.conf` include, or hiding any other backend
+  header such as `Cache-Control`, `Pragma` or `Strict-Transport-Security`.
+  The ingress HTTPRoutes own HSTS.
+- Adding a static guardrail rule for `proxy_hide_header`, or for `add_header`
+  in API locations. The offline harness and live verifier are the proofs, and
+  the `add_header` constraint is documented instead.
 - Changing Spring Security defaults in sibling repos
 
 ### Required context
@@ -249,38 +270,63 @@ the fix.
 ### Execution steps
 
 1. Extend the harness fixture:
-   - In `echo.js`, set the response header `X-Frame-Options: DENY` before
-     returning, to stand in for the Spring Security default.
+   - In `echo.js`, set the response headers `X-Frame-Options: DENY`,
+     `X-Content-Type-Options: nosniff` and `X-XSS-Protection: 0` before
+     returning. These are the Spring Security defaults observed live.
    - In the `127.0.0.1:8080` server only, add
-     `add_header X-Frame-Options "SAMEORIGIN" always;` at server level. Add a
-     comment saying it stands in for the server-level
-     `security-headers-*-csp.conf` include.
+     `add_header X-Frame-Options "SAMEORIGIN" always;` and
+     `add_header X-Content-Type-Options "nosniff" always;` at server level. Add
+     a comment saying they stand in for the server-level
+     `security-headers-*-csp.conf` include, which sends no
+     `X-XSS-Protection`.
 2. Extend `probe`, or add a sibling helper, so the caller can read the response
    headers as well as the echo body. Existing request-header parsing
    (`has_name`, `value_of`) and the printed header-name list must stay
-   unchanged. Count response header lines case-insensitively and strip `\r`.
-3. Add two assertions:
-   - Control location: the response carries two `X-Frame-Options` values, one
-     `DENY` and one `SAMEORIGIN`. This proves the stand-in can see the
-     conflict.
-   - Include location: the response carries exactly one `X-Frame-Options`, and
-     its value is `SAMEORIGIN`.
+   unchanged. Match and count response header lines case-insensitively and
+   strip `\r`.
+3. Add six assertions:
+   - Control location:
+     - two `X-Frame-Options` values, `DENY` and `SAMEORIGIN`
+     - two `X-Content-Type-Options` values, both `nosniff`
+     - `X-XSS-Protection: 0` present
+
+     These prove the stand-in can see each backend header.
+   - Include location:
+     - exactly one `X-Frame-Options`, valued `SAMEORIGIN`
+     - exactly one `X-Content-Type-Options`, valued `nosniff`
+     - no `X-XSS-Protection`
 4. Red check: run the harness before changing the include. It must exit `1`,
-   with exactly the include-location frame assertion failing (8 passed, 1
-   failed). Save this output outside the repository as evidence.
-5. Add `proxy_hide_header X-Frame-Options;` to `backend-headers.conf` with a
-   short comment. The comment should say that backends send their framework
-   default, which conflicts with the edge policy, and that the edge owns frame
-   policy through the security-header includes and CSP `frame-ancestors`.
-6. Green check: the harness must exit `0` with 9 passed and 0 failed.
+   with exactly the three include-location response-header assertions failing
+   (10 passed, 3 failed). Save this output outside the repository as evidence.
+5. Add these lines to `backend-headers.conf`:
+
+   ```nginx
+   proxy_hide_header X-Frame-Options;
+   proxy_hide_header X-Content-Type-Options;
+   proxy_hide_header X-XSS-Protection;
+   ```
+
+   Add a short comment. It should say that backends send their framework
+   defaults, which duplicate or conflict with the edge policy, and that the
+   edge owns these headers through the server-level security-header includes.
+   It should also say that an API location which declares its own
+   `add_header` stops inheriting those server-level headers and would then
+   send none of them.
+6. Green check: the harness must exit `0` with 13 passed and 0 failed.
 7. Update docs:
-   - `nginx/README.md` `backend-headers.conf` bullet: say the include also
-     hides the backends' `X-Frame-Options` and that the harness proves it.
+   - `nginx/README.md` `backend-headers.conf` bullet:
+     - The include hides the backends' `X-Frame-Options`,
+       `X-Content-Type-Options` and `X-XSS-Protection`, and the harness proves
+       it.
+     - `/api` locations must not declare `add_header`, because they rely on
+       inheriting the server-level security headers.
    - `docs/architecture/security-architecture.md` browser header paragraph:
-     add one sentence saying the edge owns frame policy and NGINX hides backend
-     `X-Frame-Options` so API responses carry only `SAMEORIGIN`.
-   - `scripts/README.md` backend header harness bullet: add the frame-policy
-     assertion.
+     add one or two sentences. The edge owns frame, `nosniff` and
+     `X-XSS-Protection` policy. NGINX hides the backends' copies, so API
+     responses carry exactly one `SAMEORIGIN`, exactly one `nosniff` and no
+     `X-XSS-Protection`.
+   - `scripts/README.md` backend header harness bullet: add the
+     response-header assertions.
 
 ### Implementation notes
 
@@ -291,12 +337,14 @@ the fix.
   here.
 - `proxy_hide_header` affects only the response from the upstream. Server-level
   `add_header ... always` headers are still added afterwards.
+- `proxy_hide_header` matches header names case-insensitively, so it removes the
+  backends' lowercase `x-frame-options` etc.
 
 ### Validation
 
 - `bash -n` and `shellcheck` (plain and `-x`) on the harness and library are
   clean.
-- Red run: 8 passed and 1 failed (step 4). Green run: 9 passed and 0 failed
+- Red run: 10 passed and 3 failed (step 4). Green run: 13 passed and 0 failed
   (step 6). The 7 original `[PASS]` lines are unchanged from the Phase 1
   output.
 - `./scripts/guardrails/verify-nginx-shared-routes.sh` still exits `0` with 26
@@ -310,12 +358,15 @@ the fix.
 
 ### Completion criteria
 
-- `backend-headers.conf` contains exactly one
-  `proxy_hide_header X-Frame-Options;`, and no other directive changed.
-- The harness shows the conflict at the control location and exactly one
-  `SAMEORIGIN` through the include. The red and green runs are recorded.
-- Docs describe the hiding, the static suite and shared routes harness pass, and
-  no cluster mutation was made.
+- `backend-headers.conf` contains exactly one `proxy_hide_header` for each of
+  `X-Frame-Options`, `X-Content-Type-Options` and `X-XSS-Protection`. No other
+  directive changed.
+- At the control location the harness sees the backend copies of all three
+  headers. Through the include it sees exactly one `SAMEORIGIN`, exactly one
+  `nosniff` and no `X-XSS-Protection`. The red and green runs are recorded.
+- Docs describe the hiding and the no-`add_header` constraint for `/api`
+  locations. The static suite and shared routes harness pass, and no cluster
+  mutation was made.
 
 ## Phase 3: Live Proof Through The Ingress And Issue Closeout
 
@@ -325,10 +376,13 @@ the fix.
 
 ### Goal
 
-Load the changed include into the running local NGINX. Add a live assertion
-that a real backend API response through the ingress carries exactly one
-`X-Frame-Options: SAMEORIGIN`. Run the live edge verifier, then delete the
-X-Frame-Options issue.
+Load the changed include into the running local NGINX. Add live assertions
+that a real backend API response through the ingress carries:
+- exactly one `X-Frame-Options: SAMEORIGIN`
+- exactly one `X-Content-Type-Options: nosniff`
+- no `X-XSS-Protection`
+
+Run the live edge verifier, then delete the X-Frame-Options issue.
 
 ### Scope
 
@@ -339,8 +393,8 @@ X-Frame-Options issue.
 
 ### Non-goals
 
-- Checking `X-Frame-Options` on Session Gateway lanes (`/auth/*`,
-  `/oauth2/*`). They do not pass through NGINX.
+- Checking these headers on Session Gateway lanes (`/auth/*`, `/oauth2/*`).
+  They do not pass through NGINX.
 - `--inject-failures`, pod restarts, `kubectl apply` of ConfigMaps or any
   manual live drift
 - Fixing `low-edge-verifier-global-counter-flakiness.md`
@@ -368,25 +422,29 @@ X-Frame-Options issue.
    If any prerequisite fails, stop and report it. Do not work around it.
 2. Confirm the live ConfigMap carries the change:
    `kubectl get configmap nginx-gateway-includes -o jsonpath='{.data.backend-headers\.conf}'`
-   must contain `proxy_hide_header X-Frame-Options;`. If it does not, run
-   `tilt trigger nginx-gateway` once and recheck. If it is still missing, stop.
+   must contain all three `proxy_hide_header` lines. If it does not, run
+   `tilt trigger nginx-gateway` once and recheck. If they are still missing,
+   stop.
 3. Before reloading, record the live red state from inside the pod:
    `kubectl exec deployment/nginx-gateway -c nginx -- sh -c 'curl -s -o /dev/null -D - --max-time 5 -H "X-User-Id: usr_probe" -H "X-Permissions: currencies:read" http://127.0.0.1:8080/api/v1/currencies'`.
-   Note how many `X-Frame-Options` values it returns. If the pod already
-   restarted onto the new include, record that instead.
-4. Poll for up to 120 s until
-   `/etc/nginx/includes/backend-headers.conf` in the pod contains the new
-   directive. Then run `kubectl exec deployment/nginx-gateway -c nginx --
-   nginx -t`, and if it passes, `... -- nginx -s reload`. Repeat the step 3
-   probe: it must return exactly one `X-Frame-Options: SAMEORIGIN`.
+   Record the `X-Frame-Options`, `X-Content-Type-Options` and
+   `X-XSS-Protection` lines it returns. If the pod already restarted onto the
+   new include, record that instead.
+4. Poll for up to 120 s until `/etc/nginx/includes/backend-headers.conf` in the
+   pod contains all three directives. Then run
+   `kubectl exec deployment/nginx-gateway -c nginx -- nginx -t`, and if it
+   passes, `... -- nginx -s reload`. Repeat the step 3 probe. It must return
+   exactly one `X-Frame-Options: SAMEORIGIN`, exactly one
+   `X-Content-Type-Options: nosniff` and no `X-XSS-Protection`.
 5. In `verify_response_headers`, for the `/api/v1/currencies` iteration only,
-   read every `X-Frame-Options` line from `${WORK_DIR}/headers`
-   (case-insensitive, `\r` stripped).
-   - Pass when there is exactly one value and it is `SAMEORIGIN`.
-   - Otherwise fail with the values seen.
-   - `record` the result in the section's existing style.
+   read the `X-Frame-Options`, `X-Content-Type-Options` and `X-XSS-Protection`
+   lines from `${WORK_DIR}/headers` (case-insensitive, `\r` stripped).
+   - Add three pass/fail assertions: exactly one `SAMEORIGIN`, exactly one
+     `nosniff`, and no `X-XSS-Protection`.
+   - On failure, print the values seen.
+   - `record` each result in the section's existing style.
 
-   Add the frame-policy check to the Response Headers `usage` line.
+   Add these checks to the Response Headers `usage` line.
 6. Delete `docs/issues/low-duplicate-x-frame-options.md`. Then
    `rg -n "low-duplicate-x-frame-options" --glob '!docs/plans/**'` must return
    nothing.
@@ -405,10 +463,10 @@ X-Frame-Options issue.
   `scripts/smoketest/verify-edge-contract.sh` are clean.
 - The step 3 and step 4 in-pod probes show the before and after header counts.
 - `./scripts/smoketest/verify-edge-contract.sh` (no flags) exits `0`, and the
-  new Response Headers assertion passes. Unrelated global-counter sections can
+  three new Response Headers assertions pass. Unrelated global-counter sections can
   fail from concurrent browser traffic. If one does, rerun once with no
   browser tabs open, and report both runs faithfully.
-- Both offline harnesses still pass, with 9 passed and 0 failed and 26 passed
+- Both offline harnesses still pass, with 13 passed and 0 failed and 26 passed
   and 0 failed.
 - The static suite passes with the pinned interpreter.
 - `git status --short` shows only:
@@ -424,8 +482,9 @@ X-Frame-Options issue.
 ### Completion criteria
 
 - The running local NGINX serves the new include. API responses through the
-  ingress carry exactly one `X-Frame-Options: SAMEORIGIN`.
-- `verify-edge-contract.sh` asserts it and passes on the live stack.
+  ingress carry exactly one `X-Frame-Options: SAMEORIGIN`, exactly one
+  `X-Content-Type-Options: nosniff` and no `X-XSS-Protection`.
+- `verify-edge-contract.sh` asserts all three and passes on the live stack.
 - Both issue files are deleted, and nothing outside `docs/plans/` references
   either one.
 - No manual drift remains. The only cluster action was the documented

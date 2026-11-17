@@ -13,6 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+source "${SCRIPT_DIR}/../lib/nginx-docker-harness.sh"
 INCLUDES_DIR="${REPO_DIR}/nginx/includes"
 DEPLOYMENT_FILE="${REPO_DIR}/kubernetes/services/nginx-gateway/deployment.yaml"
 DOCS_CSP_INCLUDE="${INCLUDES_DIR}/security-headers-docs-csp.conf"
@@ -27,8 +29,6 @@ RESOLVER_HOST="kube-dns.kube-system.svc.cluster.local"
 
 PASSED=0
 FAILED=0
-WORK_DIR=""
-CONTAINER_ID=""
 
 usage() {
     cat <<'EOF'
@@ -64,58 +64,7 @@ esac
 pass() { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
 fail() { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
 
-stop_container() {
-    if [[ -n "${CONTAINER_ID}" ]]; then
-        docker rm -f "${CONTAINER_ID}" >/dev/null 2>&1 || true
-        CONTAINER_ID=""
-    fi
-}
-
-cleanup() {
-    set +e
-    stop_container
-    if [[ -n "${WORK_DIR}" ]]; then
-        rm -rf "${WORK_DIR}"
-    fi
-}
-
-trap cleanup EXIT
-
-nginx_image() {
-    local image
-
-    image=$(sed -nE 's#^[[:space:]]*image:[[:space:]]*(nginxinc/nginx-unprivileged[^[:space:]]*).*$#\1#p' \
-        "${DEPLOYMENT_FILE}" | head -n 1)
-    if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
-        printf 'ERROR: nginx-gateway image in %s is not digest-pinned: %s\n' \
-            "${DEPLOYMENT_FILE#"${REPO_DIR}"/}" "${image:-<missing>}" >&2
-        exit 1
-    fi
-    printf '%s\n' "${image}"
-}
-
-start_container() {
-    local image="$1" config="$2" attempt
-
-    CONTAINER_ID=$(docker run --detach --network none --read-only \
-        --add-host "${RESOLVER_HOST}:127.0.0.1" \
-        --tmpfs /tmp --entrypoint nginx \
-        -v "${config}:/etc/nginx/nginx.conf:ro" \
-        -v "${INCLUDES_DIR}:/etc/nginx/includes:ro" \
-        "${image}" -g 'daemon off;')
-
-    for ((attempt = 1; attempt <= 20; attempt++)); do
-        if docker exec "${CONTAINER_ID}" curl --silent --fail --max-time 2 \
-            -o /dev/null http://127.0.0.1:8080/health 2>/dev/null; then
-            return 0
-        fi
-        sleep 0.5
-    done
-
-    printf 'ERROR: disposable NGINX did not start\n' >&2
-    docker logs "${CONTAINER_ID}" >&2 || true
-    exit 1
-}
+trap nginx_harness_cleanup EXIT
 
 # Sends one request with the path as-is and prints the status line, the
 # response headers and the body, separated by a blank line. Proxied routes wait
@@ -123,7 +72,7 @@ start_container() {
 probe() {
     local path="$1"
 
-    { docker exec "${CONTAINER_ID}" curl --silent --path-as-is --max-time 15 \
+    { docker exec "${NGINX_HARNESS_CONTAINER_ID}" curl --silent --path-as-is --max-time 15 \
         -D - "http://127.0.0.1:8080${path}" || true; } | tr -d '\r'
 }
 
@@ -183,13 +132,16 @@ verify_config() {
     local image="$1" config="$2" docs_csp response status
 
     printf '\n=== %s ===\n' "${config#"${REPO_DIR}"/}"
-    start_container "${image}" "${config}"
+    nginx_harness_start "${image}" http://127.0.0.1:8080/health \
+        --add-host "${RESOLVER_HOST}:127.0.0.1" \
+        -v "${config}:/etc/nginx/nginx.conf:ro" \
+        -v "${INCLUDES_DIR}:/etc/nginx/includes:ro"
 
-    if docker exec "${CONTAINER_ID}" nginx -t >/dev/null 2>&1; then
+    if docker exec "${NGINX_HARNESS_CONTAINER_ID}" nginx -t >/dev/null 2>&1; then
         pass "nginx -t passes with the mounted includes"
     else
         fail "nginx -t fails with the mounted includes"
-        docker exec "${CONTAINER_ID}" nginx -t >&2 || true
+        docker exec "${NGINX_HARNESS_CONTAINER_ID}" nginx -t >&2 || true
     fi
 
     assert_semicolon_rejected "/api/v1/transactions;x"
@@ -224,16 +176,13 @@ verify_config() {
         fail "Shared /api-docs/ fallback -> ${status:-none} without the docs CSP"
     fi
 
-    stop_container
+    nginx_harness_stop
 }
 
 main() {
     local image config
 
-    if ! command -v docker >/dev/null 2>&1; then
-        printf 'ERROR: required command not found: docker\n' >&2
-        exit 1
-    fi
+    nginx_harness_require_docker
     for config in "${NGINX_CONFIGS[@]}" "${INCLUDES_DIR}/api-routes.conf" "${INCLUDES_DIR}/api-docs-routes.conf"; do
         if [[ ! -f "${config}" ]]; then
             printf 'ERROR: missing %s\n' "${config#"${REPO_DIR}"/}" >&2
@@ -241,7 +190,7 @@ main() {
         fi
     done
 
-    image=$(nginx_image)
+    image=$(nginx_harness_image "${DEPLOYMENT_FILE}")
     printf '=== NGINX Shared Routes (disposable %s) ===\n' "${image%%@*}"
 
     for config in "${NGINX_CONFIGS[@]}"; do

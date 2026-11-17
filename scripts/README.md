@@ -563,8 +563,14 @@ getting-started guide.
   requests to an njs echo upstream. It asserts the upstream receives no
   `Cookie` or `Authorization`, receives `X-Forwarded-Proto: https` and still
   receives the identity headers, with a control location proving the echo would
-  see the cookie. It requires Docker, prints header names only, and does not
-  contact a Kubernetes cluster.
+  see the cookie. The echo upstream also returns the Spring Security defaults
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
+  `X-XSS-Protection: 0`; the harness asserts the client receives exactly one
+  `X-Frame-Options: SAMEORIGIN`, exactly one `X-Content-Type-Options: nosniff`
+  and no `X-XSS-Protection` through the include, while the control location
+  shows the backend copies. It requires Docker, prints header names only, and
+  does not contact a Kubernetes cluster. It uses `lib/nginx-docker-harness.sh` for image
+  selection and the disposable container lifecycle.
 - `guardrails/verify-nginx-shared-routes.sh` starts one disposable,
   network-less container per complete NGINX config (`nginx/nginx.k8s.conf`
   and `nginx/nginx.production.k8s.conf`) from the same digest-pinned
@@ -574,7 +580,8 @@ getting-started guide.
   reach the proxy locations, and that the shared `/api-docs/` fallback keeps
   the docs CSP. The live ingress denies these `;` paths before NGINX, so this
   is where the NGINX layer itself is exercised. It requires Docker and does not
-  contact a Kubernetes cluster.
+  contact a Kubernetes cluster. It uses `lib/nginx-docker-harness.sh` for image
+  selection and the disposable container lifecycle.
 - `guardrails/verify-redis-session-aof-replay.sh [--mode legacy|deployed|all]`
   is the offline AOF replay regression harness for the `redis-session` ACL
   decision in

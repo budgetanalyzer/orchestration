@@ -4,12 +4,16 @@
 # disposable container from the digest-pinned nginx-gateway image, with no
 # network, the checked-in nginx/includes/backend-headers.conf and an njs echo
 # upstream. It then sends synthetic credential, identity and forwarding headers
-# and asserts what the upstream receives. It prints header names only.
+# and asserts what the upstream receives. The upstream also returns the Spring
+# Security default response headers, and the harness asserts what the client
+# receives. It prints header names only.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091 # Repo-local library path is resolved dynamically from SCRIPT_DIR.
+source "${SCRIPT_DIR}/../lib/nginx-docker-harness.sh"
 INCLUDE_FILE="${REPO_DIR}/nginx/includes/backend-headers.conf"
 DEPLOYMENT_FILE="${REPO_DIR}/kubernetes/services/nginx-gateway/deployment.yaml"
 
@@ -19,8 +23,6 @@ PROBE_PERMISSIONS="transactions:read"
 
 PASSED=0
 FAILED=0
-WORK_DIR=""
-CONTAINER_ID=""
 
 usage() {
     cat <<'EOF'
@@ -33,6 +35,10 @@ requests to an njs echo upstream in the same container. It asserts that the
 upstream receives no Cookie or Authorization header, receives
 X-Forwarded-Proto: https and still receives the identity headers. A control
 location without the include proves the echo upstream would see the cookie.
+The upstream returns X-Frame-Options: DENY, X-Content-Type-Options: nosniff
+and X-XSS-Protection: 0. Through the include the client must receive exactly
+one X-Frame-Options: SAMEORIGIN, exactly one X-Content-Type-Options: nosniff
+and no X-XSS-Protection. The control location must show the backend copies.
 Requires docker. Prints header names only and leaves no container behind.
 
 Options:
@@ -56,33 +62,10 @@ esac
 pass() { printf '  [PASS] %s\n' "$1"; PASSED=$((PASSED + 1)); }
 fail() { printf '  [FAIL] %s\n' "$1" >&2; FAILED=$((FAILED + 1)); }
 
-cleanup() {
-    set +e
-    if [[ -n "${CONTAINER_ID}" ]]; then
-        docker rm -f "${CONTAINER_ID}" >/dev/null 2>&1
-    fi
-    if [[ -n "${WORK_DIR}" ]]; then
-        rm -rf "${WORK_DIR}"
-    fi
-}
-
-trap cleanup EXIT
-
-nginx_image() {
-    local image
-
-    image=$(sed -nE 's#^[[:space:]]*image:[[:space:]]*(nginxinc/nginx-unprivileged[^[:space:]]*).*$#\1#p' \
-        "${DEPLOYMENT_FILE}" | head -n 1)
-    if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
-        printf 'ERROR: nginx-gateway image in %s is not digest-pinned: %s\n' \
-            "${DEPLOYMENT_FILE#"${REPO_DIR}"/}" "${image:-<missing>}" >&2
-        exit 1
-    fi
-    printf '%s\n' "${image}"
-}
+trap nginx_harness_cleanup EXIT
 
 write_fixture() {
-    cat >"${WORK_DIR}/nginx.conf" <<'EOF'
+    cat >"${NGINX_HARNESS_WORK_DIR}/nginx.conf" <<'EOF'
 load_module modules/ngx_http_js_module.so;
 pid /tmp/nginx.pid;
 error_log /dev/stderr warn;
@@ -101,6 +84,11 @@ http {
     # Mirrors an API route: variable proxy_pass, rewrite, shared include.
     server {
         listen 127.0.0.1:8080;
+
+        # Stand-in for the server-level security-headers-*-csp.conf include,
+        # which sends no X-XSS-Protection.
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
 
         location /api/v1/transactions {
             set $transaction_backend "http://127.0.0.1:9000";
@@ -126,14 +114,18 @@ http {
 EOF
 
     # Header names are lowercased and sorted. Only the non-secret forwarding
-    # and synthetic identity values are echoed so they can be compared.
-    cat >"${WORK_DIR}/echo.js" <<'EOF'
+    # and synthetic identity values are echoed so they can be compared. The
+    # response carries the Spring Security default security headers.
+    cat >"${NGINX_HARNESS_WORK_DIR}/echo.js" <<'EOF'
 function headers(r) {
     var names = Object.keys(r.headersIn).map(function (n) { return n.toLowerCase(); }).sort();
     var lines = names.map(function (n) { return 'name=' + n; });
     ['X-Forwarded-Proto', 'X-User-Id', 'X-Roles', 'X-Permissions'].forEach(function (h) {
         lines.push('value.' + h.toLowerCase() + '=' + (r.headersIn[h] || ''));
     });
+    r.headersOut['X-Frame-Options'] = 'DENY';
+    r.headersOut['X-Content-Type-Options'] = 'nosniff';
+    r.headersOut['X-XSS-Protection'] = '0';
     r.return(200, lines.join('\n') + '\n');
 }
 
@@ -141,34 +133,14 @@ export default { headers };
 EOF
 }
 
-start_container() {
-    local image="$1" attempt
-
-    CONTAINER_ID=$(docker run --detach --network none --read-only \
-        --tmpfs /tmp --entrypoint nginx \
-        -v "${WORK_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro" \
-        -v "${WORK_DIR}/echo.js:/etc/nginx/echo/echo.js:ro" \
-        -v "${INCLUDE_FILE}:/etc/nginx/includes/backend-headers.conf:ro" \
-        "${image}" -g 'daemon off;')
-
-    for ((attempt = 1; attempt <= 20; attempt++)); do
-        if docker exec "${CONTAINER_ID}" curl --silent --fail --max-time 2 \
-            -o /dev/null http://127.0.0.1:9000/ready 2>/dev/null; then
-            return 0
-        fi
-        sleep 0.5
-    done
-
-    printf 'ERROR: disposable NGINX did not start\n' >&2
-    docker logs "${CONTAINER_ID}" >&2 || true
-    exit 1
-}
-
-# Sends one request through the stand-in NGINX and prints the echo body.
+# Sends one request through the stand-in NGINX. Extra curl arguments follow
+# the path. Without them it prints the echo body.
 probe() {
     local path="$1"
 
-    docker exec "${CONTAINER_ID}" curl --silent --show-error --fail --max-time 5 \
+    shift
+    docker exec "${NGINX_HARNESS_CONTAINER_ID}" curl --silent --show-error --fail --max-time 5 \
+        "$@" \
         -H 'Cookie: __Host-BA_SESSION=synthetic-session-not-real; other=synthetic' \
         -H 'Cookie: second=synthetic' \
         -H 'Authorization: Bearer synthetic-token-not-real' \
@@ -177,6 +149,38 @@ probe() {
         -H "X-Roles: ${PROBE_ROLES}" \
         -H "X-Permissions: ${PROBE_PERMISSIONS}" \
         "http://127.0.0.1:8080${path}"
+}
+
+# Sends the same request and prints only the response header lines, without \r.
+probe_response_headers() {
+    probe "$1" --output /dev/null --dump-header - | tr -d '\r'
+}
+
+# Prints the values of every response header line named $2, case-insensitively.
+response_values() {
+    awk -v name="$2" '
+        BEGIN { name = tolower(name) }
+        {
+            i = index($0, ":")
+            if (i > 0 && tolower(substr($0, 1, i - 1)) == name) {
+                value = substr($0, i + 1)
+                sub(/^[ \t]+/, "", value)
+                sub(/[ \t]+$/, "", value)
+                print value
+            }
+        }' <<<"$1"
+}
+
+# Passes when the sorted values of response header $2 equal $3, one per line.
+# An empty $3 means the header must be absent.
+assert_response_values() {
+    local headers="$1" name="$2" expected="$3" label="$4"
+
+    if [[ "$(response_values "${headers}" "${name}" | LC_ALL=C sort)" == "${expected}" ]]; then
+        pass "${label}"
+    else
+        fail "${label}"
+    fi
 }
 
 has_name() {
@@ -206,25 +210,24 @@ assert_value() {
 }
 
 main() {
-    local image body control
+    local image body control headers
 
-    if ! command -v docker >/dev/null 2>&1; then
-        printf 'ERROR: required command not found: docker\n' >&2
-        exit 1
-    fi
+    nginx_harness_require_docker
     if [[ ! -f "${INCLUDE_FILE}" ]]; then
         printf 'ERROR: missing %s\n' "${INCLUDE_FILE#"${REPO_DIR}"/}" >&2
         exit 1
     fi
 
-    image=$(nginx_image)
-    WORK_DIR=$(mktemp -d)
-    chmod 755 "${WORK_DIR}"
+    image=$(nginx_harness_image "${DEPLOYMENT_FILE}")
+    nginx_harness_make_work_dir
     write_fixture
-    chmod 644 "${WORK_DIR}/nginx.conf" "${WORK_DIR}/echo.js"
+    chmod 644 "${NGINX_HARNESS_WORK_DIR}/nginx.conf" "${NGINX_HARNESS_WORK_DIR}/echo.js"
 
     printf '=== NGINX Backend Header Contract (disposable %s) ===\n' "${image%%@*}"
-    start_container "${image}"
+    nginx_harness_start "${image}" http://127.0.0.1:9000/ready \
+        -v "${NGINX_HARNESS_WORK_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro" \
+        -v "${NGINX_HARNESS_WORK_DIR}/echo.js:/etc/nginx/echo/echo.js:ro" \
+        -v "${INCLUDE_FILE}:/etc/nginx/includes/backend-headers.conf:ro"
 
     control=$(probe "/control")
     if has_name "${control}" "cookie" && has_name "${control}" "authorization"; then
@@ -244,6 +247,22 @@ main() {
     assert_value "${body}" "x-user-id" "${PROBE_USER_ID}" "Shared include forwards X-User-Id"
     assert_value "${body}" "x-roles" "${PROBE_ROLES}" "Shared include forwards X-Roles"
     assert_value "${body}" "x-permissions" "${PROBE_PERMISSIONS}" "Shared include forwards X-Permissions"
+
+    headers=$(probe_response_headers "/control")
+    assert_response_values "${headers}" "x-frame-options" $'DENY\nSAMEORIGIN' \
+        "Control location returns the backend X-Frame-Options: DENY and the edge SAMEORIGIN"
+    assert_response_values "${headers}" "x-content-type-options" $'nosniff\nnosniff' \
+        "Control location returns the backend and edge X-Content-Type-Options: nosniff"
+    assert_response_values "${headers}" "x-xss-protection" "0" \
+        "Control location returns the backend X-XSS-Protection: 0"
+
+    headers=$(probe_response_headers "/api/v1/transactions")
+    assert_response_values "${headers}" "x-frame-options" "SAMEORIGIN" \
+        "Shared include returns exactly one X-Frame-Options: SAMEORIGIN"
+    assert_response_values "${headers}" "x-content-type-options" "nosniff" \
+        "Shared include returns exactly one X-Content-Type-Options: nosniff"
+    assert_response_values "${headers}" "x-xss-protection" "" \
+        "Shared include returns no X-XSS-Protection"
 
     printf '\n=== Summary ===\n'
     printf '  Passed: %d\n  Failed: %d\n' "${PASSED}" "${FAILED}"

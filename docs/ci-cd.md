@@ -409,8 +409,10 @@ Release image publishing is tag-driven and owned by the source repositories:
   Docker build, so secret-scope or credential failures surface before the
   slower image build step starts
 - `budget-analyzer-web` keeps `Dockerfile` for the local Vite/Tilt path and
-  uses `Dockerfile.production` for the GHCR release image built by its own
-  `.github/workflows/publish-release.yml`
+  uses `Dockerfile.production` to build the assets-only GHCR release image in
+  its own `.github/workflows/publish-release.yml`; the image runs no NGINX, and
+  [`nginx/README.md#frontend-release-image-contract`](../nginx/README.md#frontend-release-image-contract)
+  owns its contract
 - `ext-authz` publishes from
   `budgetanalyzer/ext-authz/.github/workflows/publish-release.yml`
 - on `push` of a strict `vX.Y.Z` tag, the workflows publish the stripped

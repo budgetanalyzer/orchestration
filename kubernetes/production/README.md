@@ -129,7 +129,9 @@ kubectl kustomize kubernetes/production/apps \
 
 The overlay intentionally serves the released frontend bundle from
 `nginx-gateway`, keeps browser auth routes on Session Gateway, and keeps API
-traffic on the NGINX lane. It does not manage production secret values or the
+traffic on the NGINX lane. The assets-only frontend release image contract
+lives in
+[`nginx/README.md#frontend-release-image-contract`](../../nginx/README.md#frontend-release-image-contract). It does not manage production secret values or the
 environment-specific `session-gateway-idp-config` ConfigMap. That ConfigMap
 must supply `AUTH0_CLIENT_ID`, `AUTH0_ISSUER_URI`, `IDP_AUDIENCE`,
 `IDP_LOGOUT_RETURN_TO`, and `IDP_REDIRECT_URI`. Set `IDP_REDIRECT_URI` to the

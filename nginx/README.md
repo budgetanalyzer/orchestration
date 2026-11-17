@@ -239,6 +239,32 @@ That file expects a normal root-mounted frontend production build under
 `/usr/share/nginx/html`. It is not a header-only toggle layered on top of the
 dev route graph.
 
+### Frontend Release Image Contract
+
+`nginx-gateway` is the only NGINX that serves the frontend. The
+`budget-analyzer-web` release image is an assets-only carrier: the production
+app overlay runs it as the `web-assets` init container, which copies the
+image's `/usr/share/nginx/html` into a shared volume with `cp -R` as UID/GID
+`101`. The gateway mounts that volume at `/usr/share/nginx/html` and serves it
+with `nginx/nginx.production.k8s.conf`, which owns the SPA fallback, immutable
+`/assets/` caching, no-store application routes and the strict CSP.
+
+A frontend release image must:
+
+- be built from `budget-analyzer-web/Dockerfile.production` and published for
+  `linux/arm64`, pinned by the digest of a multi-arch index;
+- contain the root-mounted `npm run build` output (`index.html` at the root,
+  plus `assets/`) at `/usr/share/nginx/html`. The path name is historical and
+  stays unchanged so the overlay's copy command works across releases;
+- provide POSIX `sh` and `cp` on `PATH`;
+- copy successfully as UID/GID `101` with a read-only root filesystem, all
+  capabilities dropped and no privilege escalation; the image's default user
+  is `101:101`;
+- contain no NGINX or other server and expose no ports.
+
+Changing the pinned release image follows
+[`kubernetes/production/README.md#release-order`](../kubernetes/production/README.md#release-order).
+
 The production route verifier does not rely on text inspection alone for that cutover
 file. It stages `nginx/nginx.production.k8s.conf` inside the running
 `nginx-gateway` pod, mirrors the pod's mounted include files into a temporary
